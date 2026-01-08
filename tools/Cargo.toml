@@ -21,3 +21,8 @@ schemars.workspace = true
 validator.workspace = true
 chrono.workspace = true
 tempfile.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+adapters = { path = "../adapters" }
+

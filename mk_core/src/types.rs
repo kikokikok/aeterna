@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 /// Knowledge types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]

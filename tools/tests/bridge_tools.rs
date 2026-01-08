@@ -1,7 +1,9 @@
+use async_trait::async_trait;
 use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeType};
+use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use sync::bridge::SyncManager;
@@ -9,8 +11,6 @@ use sync::state::SyncState;
 use sync::state_persister::SyncStatePersister;
 use tools::bridge::{SyncNowTool, SyncStatusTool};
 use tools::tools::Tool;
-use async_trait::async_trait;
-use serde_json::json;
 
 struct MockPersister;
 
@@ -19,7 +19,10 @@ impl SyncStatePersister for MockPersister {
     async fn load(&self) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         Ok(SyncState::default())
     }
-    async fn save(&self, _state: &SyncState) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn save(
+        &self,
+        _state: &SyncState,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
 }
@@ -30,27 +33,26 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
     let repo_dir = tempfile::tempdir()?;
     let knowledge_repo = Arc::new(GitRepository::new(repo_dir.path())?);
     let memory_manager = Arc::new(MemoryManager::new());
-    
+
     use memory::providers::MockProvider;
-    memory_manager.register_provider(
-        mk_core::types::MemoryLayer::Project,
-        Box::new(MockProvider::new())
-    ).await;
+    memory_manager
+        .register_provider(
+            mk_core::types::MemoryLayer::Project,
+            Box::new(MockProvider::new()),
+        )
+        .await;
 
     let persister = Arc::new(MockPersister);
-    
-    let sync_manager = Arc::new(SyncManager::new(
-        memory_manager,
-        knowledge_repo.clone(),
-        persister,
-    ).await?);
+
+    let sync_manager =
+        Arc::new(SyncManager::new(memory_manager, knowledge_repo.clone(), persister).await?);
 
     let sync_now_tool = SyncNowTool::new(sync_manager.clone());
     let sync_status_tool = SyncStatusTool::new(sync_manager.clone());
 
     // WHEN initial sync status is requested
     let status_resp = sync_status_tool.call(json!({})).await?;
-    
+
     // THEN it should be healthy and have zero stats
     assert!(status_resp["success"].as_bool().unwrap());
     assert!(status_resp["healthy"].as_bool().unwrap());

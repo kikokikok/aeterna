@@ -3,7 +3,7 @@
 //! 8 MCP tools for memory-knowledge system.
 
 pub mod bridge;
-pub mod memory;
 pub mod knowledge;
+pub mod memory;
 pub mod server;
 pub mod tools;
