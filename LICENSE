@@ -1,0 +1,79 @@
+Apache License
+Version 2.0, January 2004
+http://www.apache.org/licenses/
+
+TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+1. Definitions.
+"License" shall mean the terms and conditions for use, reproduction,
+and distribution as defined by Sections 1 through 9 of this document.
+
+"Licensor" shall mean the copyright owner or entity authorized by
+the License that is granting the License.
+
+"Legal Entity" shall mean the union of the Licensor and all other
+entities that control, are controlled by, or are under common
+control with the Licensor. For the purposes of this definition,
+"control" means (i) the power, direct or indirect, to cause the
+direction or management of such entity, whether by contract or
+otherwise, or (ii) ownership of fifty percent (50%) or more of the
+outstanding shares, or (iii) the ability to exercise the power of
+direction or management of such entity, as such entity, by contract or
+otherwise, or (iv) the ability to appoint or remove the majority
+of the directors or persons governing such entity. "Legal Entity"
+shall not include You, to the extent that You are a sole proprietor
+or sole stockholder, in which case You are a "Legal Entity."
+
+"Contributor" shall mean Licensor and any individual or Legal Entity
+on behalf of whom a Contribution has been received by Licensor and
+subsequently incorporated within the Product.
+
+"Contribution" shall mean any work of authorship that is
+intentionally submitted to Licensor for inclusion in the Product by the
+Contributor or on behalf of the Contributor.
+
+"Product" shall mean the software, documentation, and other artifacts
+provided by Licensor.
+
+2. Grant of Copyright License. Subject to the terms and
+conditions of this License, each Contributor hereby grants to You a
+perpetual, worldwide, non-exclusive, no-charge, royalty-free,
+irrevocable copyright license to reproduce, prepare Derivative Works of,
+publicly display, publicly perform, sublicense, and distribute the Product and such
+Derivative Works in Source or Object form.
+
+3. Conditions.
+3.1. Redistribution.
+You may reproduce and distribute copies of the Product or portions
+thereof in any medium, with or without modifications, and in Source
+or Object form, provided that You:
+(a) include a copy of this License with each such copy; and
+(b) give all recipients a copy of this License; and
+(c) retain all copyright, patent, trademark, and attribution
+notices from the Product, except those stating that they are provided
+by You; and
+(d) clearly mark all modifications to the original Product and the
+dates of any modifications.
+
+3.2. NO WARRANTY.
+THE PRODUCT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE LICENSOR OR CONTRIBUTORS BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THE PRODUCT,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+4. Limitation.
+IN NO EVENT AND UNDER NO CIRCUMSTANCES SHALL THE LICENSOR OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING OUT OF OR IN
+CONNECTION WITH THE PRODUCT OR THE USE OR INABILITY TO USE THE PRODUCT
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE, REGARDLESS OF
+WHETHER SUCH LIABILITY ARISES FROM (I) CONTRACT, (II) TORT, (III)
+NEGLIGENCE, OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THE PRODUCT,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
