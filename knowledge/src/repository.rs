@@ -28,11 +28,11 @@ impl GitRepository {
         if !root_path.exists() {
             std::fs::create_dir_all(&root_path)?;
         }
-        
+
         if Repository::open(&root_path).is_err() {
             Repository::init(&root_path)?;
         }
-        
+
         Ok(Self { root_path })
     }
 
@@ -46,43 +46,105 @@ impl GitRepository {
         self.root_path.join(layer_dir).join(path)
     }
 
-    fn commit(&self, message: &str) -> Result<String, RepositoryError> {
+    pub fn commit(&self, message: &str) -> Result<String, RepositoryError> {
         let repo = Repository::open(&self.root_path)?;
         let mut index = repo.index()?;
         index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
         index.write()?;
-        
+
         let tree_id = index.write_tree()?;
         let tree = repo.find_tree(tree_id)?;
-        
-        let sig = repo.signature().or_else(|_| Signature::now("Aeterna", "system@aeterna.ai"))?;
-        
+
+        let sig = repo
+            .signature()
+            .or_else(|_| Signature::now("Aeterna", "system@aeterna.ai"))?;
+
         let parent_commit = match repo.head() {
             Ok(head) => Some(head.peel_to_commit()?),
             Err(_) => None,
         };
-        
+
         let parents = match &parent_commit {
             Some(c) => vec![c],
             None => vec![],
         };
-        
-        let commit_id = repo.commit(
-            Some("HEAD"),
-            &sig,
-            &sig,
-            message,
-            &tree,
-            &parents,
-        )?;
-        
+
+        let commit_id = repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents)?;
+
         Ok(commit_id.to_string())
+    }
+
+    pub fn get_head_commit_sync(&self) -> Result<Option<String>, RepositoryError> {
+        let repo = Repository::open(&self.root_path)?;
+        match repo.head() {
+            Ok(head) => Ok(Some(head.peel_to_commit()?.id().to_string())),
+            Err(_) => Ok(None),
+        }
+    }
+
+    pub async fn get_by_path(&self, path: &str) -> Result<Option<KnowledgeEntry>, RepositoryError> {
+        for layer in [
+            KnowledgeLayer::Company,
+            KnowledgeLayer::Org,
+            KnowledgeLayer::Team,
+            KnowledgeLayer::Project,
+        ] {
+            if let Some(entry) = self.get(layer, path).await? {
+                return Ok(Some(entry));
+            }
+        }
+        Ok(None)
     }
 }
 
 #[async_trait]
 impl KnowledgeRepository for GitRepository {
     type Error = RepositoryError;
+
+    async fn get_head_commit(&self) -> Result<Option<String>, Self::Error> {
+        self.get_head_commit_sync()
+    }
+
+    async fn get_affected_items(
+        &self,
+        since_commit: &str,
+    ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
+        let repo = Repository::open(&self.root_path)?;
+        let from_obj = repo.revparse_single(since_commit)?;
+        let from_commit = from_obj.peel_to_commit()?;
+        let from_tree = from_commit.tree()?;
+
+        let head = repo.head()?.peel_to_commit()?;
+        let head_tree = head.tree()?;
+
+        let diff = repo.diff_tree_to_tree(Some(&from_tree), Some(&head_tree), None)?;
+        let mut affected = Vec::new();
+
+        diff.foreach(
+            &mut |delta, _| {
+                if let Some(path) = delta.new_file().path().and_then(|p| p.to_str()) {
+                    let parts: Vec<&str> = path.split('/').collect();
+                    if parts.len() >= 2 {
+                        let layer = match parts[0] {
+                            "company" => KnowledgeLayer::Company,
+                            "org" => KnowledgeLayer::Org,
+                            "team" => KnowledgeLayer::Team,
+                            "project" => KnowledgeLayer::Project,
+                            _ => return true,
+                        };
+                        let inner_path = parts[1..].join("/");
+                        affected.push((layer, inner_path));
+                    }
+                }
+                true
+            },
+            None,
+            None,
+            None,
+        )?;
+
+        Ok(affected)
+    }
 
     async fn get(
         &self,
@@ -96,13 +158,11 @@ impl KnowledgeRepository for GitRepository {
 
         let content = tokio::fs::read_to_string(&full_path).await?;
         let repo = Repository::open(&self.root_path)?;
-        
+
         let mut revwalk = repo.revwalk()?;
         revwalk.push_head().ok();
-        
-        let commit_hash = revwalk.next()
-            .transpose()?
-            .map(|id| id.to_string());
+
+        let commit_hash = revwalk.next().transpose()?.map(|id| id.to_string());
 
         Ok(Some(KnowledgeEntry {
             path: path.to_string(),
@@ -116,16 +176,12 @@ impl KnowledgeRepository for GitRepository {
         }))
     }
 
-    async fn store(
-        &self,
-        entry: KnowledgeEntry,
-        message: &str,
-    ) -> Result<String, Self::Error> {
+    async fn store(&self, entry: KnowledgeEntry, message: &str) -> Result<String, Self::Error> {
         let full_path = self.resolve_path(entry.layer, &entry.path);
         if let Some(parent) = full_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        
+
         tokio::fs::write(&full_path, entry.content).await?;
         self.commit(message)
     }
@@ -153,13 +209,14 @@ impl KnowledgeRepository for GitRepository {
             .filter(|e| e.file_type().is_file())
         {
             let path = entry.path();
-            let relative_path = path.strip_prefix(&layer_path)
+            let relative_path = path
+                .strip_prefix(&layer_path)
                 .map_err(|_| RepositoryError::InvalidPath(path.to_string_lossy().into_owned()))?;
-            
-            if relative_path.to_string_lossy().starts_with(prefix) {
-                if let Some(ke) = self.get(layer, &relative_path.to_string_lossy()).await? {
-                    entries.push(ke);
-                }
+
+            if relative_path.to_string_lossy().starts_with(prefix)
+                && let Some(ke) = self.get(layer, &relative_path.to_string_lossy()).await?
+            {
+                entries.push(ke);
             }
         }
 
@@ -191,7 +248,7 @@ mod tests {
     async fn test_git_repository_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         let dir = tempdir()?;
         let repo = GitRepository::new(dir.path())?;
-        
+
         let entry = KnowledgeEntry {
             path: "test.md".to_string(),
             content: "hello world".to_string(),
@@ -202,20 +259,21 @@ mod tests {
             author: None,
             updated_at: chrono::Utc::now().timestamp(),
         };
-        
+
         repo.store(entry.clone(), "initial commit").await?;
-        
+
         let retrieved = repo.get(KnowledgeLayer::Project, "test.md").await?;
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().content, "hello world");
-        
+
         let list = repo.list(KnowledgeLayer::Project, "").await?;
         assert_eq!(list.len(), 1);
-        
-        repo.delete(KnowledgeLayer::Project, "test.md", "delete file").await?;
+
+        repo.delete(KnowledgeLayer::Project, "test.md", "delete file")
+            .await?;
         let after_delete = repo.get(KnowledgeLayer::Project, "test.md").await?;
         assert!(after_delete.is_none());
-        
+
         Ok(())
     }
 }

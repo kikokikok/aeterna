@@ -4,8 +4,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+pub type ProviderMap = HashMap<
+    MemoryLayer,
+    Box<dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
+>;
+
 pub struct MemoryManager {
-    providers: Arc<RwLock<HashMap<MemoryLayer, Box<dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>>>>,
+    providers: Arc<RwLock<ProviderMap>>,
 }
 
 impl MemoryManager {
@@ -14,11 +19,23 @@ impl MemoryManager {
             providers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
+}
 
+impl Default for MemoryManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MemoryManager {
     pub async fn register_provider(
         &self,
         layer: MemoryLayer,
-        provider: Box<dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
+        provider: Box<
+            dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>>
+                + Send
+                + Sync,
+        >,
     ) {
         let mut providers = self.providers.write().await;
         providers.insert(layer, provider);
@@ -34,7 +51,10 @@ impl MemoryManager {
         let mut all_results = Vec::new();
 
         for (layer, provider) in providers.iter() {
-            match provider.search(query_vector.clone(), limit, filters.clone()).await {
+            match provider
+                .search(query_vector.clone(), limit, filters.clone())
+                .await
+            {
                 Ok(results) => {
                     for mut entry in results {
                         entry.layer = *layer;
@@ -56,8 +76,34 @@ impl MemoryManager {
         entry: MemoryEntry,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
-        let provider = providers.get(&layer).ok_or("No provider registered for layer")?;
+        let provider = providers
+            .get(&layer)
+            .ok_or("No provider registered for layer")?;
         provider.add(entry).await
+    }
+
+    pub async fn delete_from_layer(
+        &self,
+        layer: MemoryLayer,
+        id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let providers = self.providers.read().await;
+        let provider = providers
+            .get(&layer)
+            .ok_or("No provider registered for layer")?;
+        provider.delete(id).await
+    }
+
+    pub async fn get_from_layer(
+        &self,
+        layer: MemoryLayer,
+        id: &str,
+    ) -> Result<Option<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
+        let providers = self.providers.read().await;
+        let provider = providers
+            .get(&layer)
+            .ok_or("No provider registered for layer")?;
+        provider.get(id).await
     }
 }
 
@@ -72,8 +118,12 @@ mod tests {
         let agent_provider = Box::new(MockProvider::new());
         let session_provider = Box::new(MockProvider::new());
 
-        manager.register_provider(MemoryLayer::Agent, agent_provider).await;
-        manager.register_provider(MemoryLayer::Session, session_provider).await;
+        manager
+            .register_provider(MemoryLayer::Agent, agent_provider)
+            .await;
+        manager
+            .register_provider(MemoryLayer::Session, session_provider)
+            .await;
 
         let agent_entry = MemoryEntry {
             id: "agent_1".to_string(),
@@ -95,11 +145,20 @@ mod tests {
             updated_at: 0,
         };
 
-        manager.add_to_layer(MemoryLayer::Agent, agent_entry).await.unwrap();
-        manager.add_to_layer(MemoryLayer::Session, session_entry).await.unwrap();
+        manager
+            .add_to_layer(MemoryLayer::Agent, agent_entry)
+            .await
+            .unwrap();
+        manager
+            .add_to_layer(MemoryLayer::Session, session_entry)
+            .await
+            .unwrap();
 
-        let results = manager.search_hierarchical(vec![], 10, HashMap::new()).await.unwrap();
-        
+        let results = manager
+            .search_hierarchical(vec![], 10, HashMap::new())
+            .await
+            .unwrap();
+
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].id, "agent_1");
         assert_eq!(results[1].id, "session_1");

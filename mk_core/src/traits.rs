@@ -85,4 +85,11 @@ pub trait KnowledgeRepository: Send + Sync {
         path: &str,
         message: &str,
     ) -> Result<String, Self::Error>;
+
+    async fn get_head_commit(&self) -> Result<Option<String>, Self::Error>;
+
+    async fn get_affected_items(
+        &self,
+        since_commit: &str,
+    ) -> Result<Vec<(crate::types::KnowledgeLayer, String)>, Self::Error>;
 }

@@ -17,6 +17,12 @@ impl MockProvider {
     }
 }
 
+impl Default for MockProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl MemoryProviderAdapter for MockProvider {
     type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -90,12 +96,21 @@ impl MemoryProviderAdapter for MockProvider {
         results.sort_by(|a, b| a.id.cmp(&b.id));
 
         let start_index = if let Some(c) = cursor {
-            results.iter().position(|e| e.id == c).map(|p| p + 1).unwrap_or(0)
+            results
+                .iter()
+                .position(|e| e.id == c)
+                .map(|p| p + 1)
+                .unwrap_or(0)
         } else {
             0
         };
 
-        let page = results.iter().skip(start_index).take(limit).cloned().collect::<Vec<_>>();
+        let page = results
+            .iter()
+            .skip(start_index)
+            .take(limit)
+            .cloned()
+            .collect::<Vec<_>>();
         let next_cursor = if page.len() == limit && results.len() > start_index + limit {
             page.last().map(|e| e.id.clone())
         } else {
