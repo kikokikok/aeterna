@@ -5,3 +5,5 @@
 pub mod episodic;
 pub mod procedural;
 pub mod working;
+pub mod providers;
+pub mod manager;

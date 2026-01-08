@@ -5,7 +5,7 @@ edition = "2024"
 description = "Configuration management for the Memory-Knowledge system"
 
 [dependencies]
-core.workspace = true
+mk_core.workspace = true
 errors.workspace = true
 serde.workspace = true
 serde_json.workspace = true

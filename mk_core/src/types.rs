@@ -167,3 +167,55 @@ pub struct MemoryEntry {
     pub created_at: i64,
     pub updated_at: i64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeEntry {
+    pub path: String,
+    pub content: String,
+    pub layer: KnowledgeLayer,
+    pub kind: KnowledgeType,
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+    pub commit_hash: Option<String>,
+    pub author: Option<String>,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Policy {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub layer: KnowledgeLayer,
+    pub rules: Vec<PolicyRule>,
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyRule {
+    pub id: String,
+    pub target: ConstraintTarget,
+    pub operator: ConstraintOperator,
+    pub value: serde_json::Value,
+    pub severity: ConstraintSeverity,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidationResult {
+    pub is_valid: bool,
+    pub violations: Vec<PolicyViolation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyViolation {
+    pub rule_id: String,
+    pub policy_id: String,
+    pub severity: ConstraintSeverity,
+    pub message: String,
+    pub context: std::collections::HashMap<String, serde_json::Value>,
+}
