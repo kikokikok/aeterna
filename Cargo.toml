@@ -13,20 +13,14 @@ members = [
     "errors"
 ]
 
-[workspace.package]
-edition = "2024"
+[workspace.lints.rust]
+unused_imports = "warn"
+dead_code = "allow"
 
 [workspace.lints.clippy]
-# Enable all warnings
-warn = [
-    "all",
-    "pedantic",
-]
-
-# Deny bad practices
-deny = [
-    "unsafe_code",
-]
+all = "warn"
+pedantic = "warn"
+unsafe_code = "deny"
 
 [workspace.dependencies]
 # Local workspace crates
@@ -44,17 +38,17 @@ errors = { path = "./errors" }
 # Shared dependencies across all crates
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-thiserror = "1.0"
+thiserror = "2.0.17"
 anyhow = "1.0"
 tokio = { version = "1.35", features = ["full"] }
 uuid = { version = "1.6", features = ["serde", "v4"] }
 sha2 = "0.10"
-notify = "6.1"
+notify = "8.2.0"
 tempfile = "3.9"
 serde_yaml = "0.9"
-toml = "0.8"
+toml = "0.9.10+spec-1.1.0"
 tracing = { version = "0.1", features = ["log"] }
-validator = "0.16"
+validator = "0.20.0"
 schemars = { version = "0.8" }
 async-trait = "0.1"
 
