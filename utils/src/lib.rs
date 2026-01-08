@@ -8,7 +8,6 @@
 //! - Uses UUID v4 with serde support
 //! - Validates inputs with comprehensive error messages
 
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -17,7 +16,7 @@ use uuid::Uuid;
 /// # Examples
 ///
 /// ```
-/// use memory_knowledge_utils::compute_content_hash;
+/// use utils::compute_content_hash;
 ///
 /// let hash = compute_content_hash("hello world");
 /// assert_eq!(hash.len(), 64);
@@ -67,19 +66,22 @@ pub fn generate_uuid() -> String {
 /// Validate memory layer string
 #[must_use]
 pub fn is_valid_layer(layer: &str) -> bool {
-    matches!(layer, "agent|user|session|project|team|org|company")
+    matches!(
+        layer,
+        "agent" | "user" | "session" | "project" | "team" | "org" | "company"
+    )
 }
 
 /// Validate knowledge type string
 #[must_use]
 pub fn is_valid_knowledge_type(ktype: &str) -> bool {
-    matches!(ktype, "adr|policy|pattern|spec")
+    matches!(ktype, "adr" | "policy" | "pattern" | "spec")
 }
 
 /// Validate knowledge layer string
 #[must_use]
 pub fn is_valid_knowledge_layer(layer: &str) -> bool {
-    matches!(layer, "company|org|team|project")
+    matches!(layer, "company" | "org" | "team" | "project")
 }
 
 /// Get layer precedence value for memory layers

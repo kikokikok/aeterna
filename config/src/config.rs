@@ -23,7 +23,7 @@ use validator::Validate;
 ///
 /// ## Usage
 /// ```rust,no_run
-/// use memory_knowledge_config::Config;
+/// use config::Config;
 ///
 /// let config = Config::default();
 /// println!("PostgreSQL host: {}", config.providers.postgres.host);
@@ -81,7 +81,7 @@ impl Default for Config {
 ///
 /// ## Usage
 /// ```rust,no_run
-/// use memory_knowledge_config::ProviderConfig;
+/// use config::ProviderConfig;
 ///
 /// let providers = ProviderConfig::default();
 /// assert_eq!(providers.postgres.host, "localhost");
@@ -381,7 +381,7 @@ pub struct SyncConfig {
 
     /// Conflict resolution strategy
     #[serde(default = "default_sync_conflict_resolution")]
-    #[validate(custom = "validate_conflict_resolution")]
+    #[validate(custom(function = "validate_conflict_resolution"))]
     pub conflict_resolution: String,
 }
 
@@ -517,7 +517,7 @@ pub struct ObservabilityConfig {
 
     /// Logging level
     #[serde(default = "default_observability_logging_level")]
-    #[validate(custom = "validate_logging_level")]
+    #[validate(custom(function = "validate_logging_level"))]
     pub logging_level: String,
 
     /// Metrics server port
