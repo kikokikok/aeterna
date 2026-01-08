@@ -1,0 +1,69 @@
+[workspace]
+resolver = "2"
+members = [
+    "core",
+    "memory",
+    "knowledge",
+    "sync",
+    "tools",
+    "adapters",
+    "storage",
+    "config",
+    "utils",
+    "errors"
+]
+
+[workspace.package]
+edition = "2024"
+
+[workspace.lints.clippy]
+# Enable all warnings
+warn = [
+    "all",
+    "pedantic",
+]
+
+# Deny bad practices
+deny = [
+    "unsafe_code",
+]
+
+[workspace.dependencies]
+# Local workspace crates
+core = { path = "./core" }
+memory = { path = "./memory" }
+knowledge = { path = "./knowledge" }
+sync = { path = "./sync" }
+tools = { path = "./tools" }
+adapters = { path = "./adapters" }
+storage = { path = "./storage" }
+config = { path = "./config" }
+utils = { path = "./utils" }
+errors = { path = "./errors" }
+
+# Shared dependencies across all crates
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+anyhow = "1.0"
+tokio = { version = "1.35", features = ["full"] }
+uuid = { version = "1.6", features = ["serde", "v4"] }
+sha2 = "0.10"
+notify = "6.1"
+tempfile = "3.9"
+serde_yaml = "0.9"
+toml = "0.8"
+tracing = { version = "0.1", features = ["log"] }
+validator = "0.16"
+schemars = { version = "0.8" }
+async-trait = "0.1"
+
+[workspace.metadata.tarpaulin]
+all-features = true
+workspace = true
+timeout = "120"
+out = ["Html", "Json"]
+
+[workspace.metadata.mutants]
+timeout = 30
+jobs = 4

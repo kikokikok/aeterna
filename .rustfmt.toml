@@ -1,0 +1,27 @@
+# Rustfmt configuration for Memory-Knowledge System
+#
+# Follows Rust Edition 2024 and Microsoft Pragmatic Rust Guidelines
+
+max_width = 100
+tab_spaces = 4
+hard_tabs = false
+edition = "2024"
+newline_style = "Unix"
+use_field_init_shorthand = true
+use_try_shorthand = true
+reorder_imports = true
+reorder_modules = true
+remove_nested_parens = true
+trailing_comma = "Never"
+trailing_semicolon = true
+version = "Two"
+wrap_comments = true
+comment_width = 80
+normalize_comments = true
+normalize_doc_attributes = true
+format_code_in_doc_comments = true
+format_strings = true
+format_macro_matchers = true
+format_macro_bodies = true
+chain_width = 60
+spaces_around_ranges = false
