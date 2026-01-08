@@ -1,78 +1,78 @@
 # Implementation Tasks
 
 ## 1. MCP Server Setup
-- [ ] 1.1 Create server.rs in tools/ crate
-- [ ] 1.2 Define MCPServer struct
-- [ ] 1.3 Implement tool registry (Map<tool_name, handler>)
+- [x] 1.1 Create server.rs in tools/ crate
+- [x] 1.2 Define MCPServer struct
+- [x] 1.3 Implement tool registry (Map<tool_name, handler>)
 - [ ] 1.4 Implement JSON-RPC message handling
 - [ ] 1.5 Implement request/response parsing
 - [ ] 1.6 Implement async request handler with tokio
-- [ ] 1.7 Implement tool discovery endpoint
-- [ ] 1.8 Write unit tests for MCP server
+- [x] 1.7 Implement tool discovery endpoint
+- [x] 1.8 Write unit tests for MCP server
 
 ## 2. Tool Registration
-- [ ] 2.1 Define ToolDefinition struct
-- [ ] 2.2 Define ToolHandler trait
-- [ ] 2.3 Implement register_tool() method
-- [ ] 2.4 Implement list_tools() method
-- [ ] 2.5 Implement get_tool() method
-- [ ] 2.6 Write unit tests for tool registration
+- [x] 2.1 Define ToolDefinition struct
+- [x] 2.2 Define ToolHandler trait
+- [x] 2.3 Implement register_tool() method
+- [x] 2.4 Implement list_tools() method
+- [x] 2.5 Implement get_tool() method
+- [x] 2.6 Write unit tests for tool registration
 
 ## 3. JSON Schema Generation
-- [ ] 3.1 Use schemars crate for schema generation
-- [ ] 3.2 Implement generate_schema<T>() function
-- [ ] 3.3 Add custom schema derivations
-- [ ] 3.4 Validate schemas against JSON Schema spec
-- [ ] 3.5 Write unit tests for schema generation
+- [x] 3.1 Use schemars crate for schema generation
+- [x] 3.2 Implement generate_schema<T>() function
+- [x] 3.3 Add custom schema derivations
+- [x] 3.4 Validate schemas against JSON Schema spec
+- [x] 3.5 Write unit tests for schema generation
 
 ## 4. Memory Tools - Implementation
-- [ ] 4.1 Implement memory_add tool
-- [ ] 4.2 Define AddMemoryInput struct with validation
-- [ ] 4.3 Call MemoryManager.add()
-- [ ] 4.4 Handle errors and translate to MCP response
-- [ ] 4.5 Implement memory_search tool
-- [ ] 4.6 Define SearchMemoryInput struct with validation
-- [ ] 4.7 Call MemoryManager.search()
-- [ ] 4.8 Handle layer filtering and threshold
-- [ ] 4.9 Implement memory_delete tool
-- [ ] 4.10 Define DeleteMemoryInput struct with validation
-- [ ] 4.11 Call MemoryManager.delete()
-- [ ] 4.12 Write unit tests for all memory tools
+- [x] 4.1 Implement memory_add tool
+- [x] 4.2 Define AddMemoryInput struct with validation
+- [x] 4.3 Call MemoryManager.add()
+- [x] 4.4 Handle errors and translate to MCP response
+- [x] 4.5 Implement memory_search tool
+- [x] 4.6 Define SearchMemoryInput struct with validation
+- [x] 4.7 Call MemoryManager.search()
+- [x] 4.8 Handle layer filtering and threshold
+- [x] 4.9 Implement memory_delete tool
+- [x] 4.10 Define DeleteMemoryInput struct with validation
+- [x] 4.11 Call MemoryManager.delete()
+- [x] 4.12 Write unit tests for all memory tools
 
 ## 5. Knowledge Tools - Implementation
-- [ ] 5.1 Implement knowledge_query tool
-- [ ] 5.2 Define QueryKnowledgeInput struct with validation
-- [ ] 5.3 Call KnowledgeManager.query()
-- [ ] 5.4 Handle filtering (type, layer, status, tags)
-- [ ] 5.5 Implement knowledge_check tool
-- [ ] 5.6 Define CheckConstraintsInput struct with validation
-- [ ] 5.7 Call KnowledgeManager.check_constraints()
-- [ ] 5.8 Aggregate violations by severity
-- [ ] 5.9 Implement knowledge_show tool
-- [ ] 5.10 Define GetKnowledgeInput struct with validation
-- [ ] 5.11 Call KnowledgeManager.get()
-- [ ] 5.12 Handle includeConstraints and includeHistory flags
-- [ ] 5.13 Write unit tests for all knowledge tools
+- [x] 5.1 Implement knowledge_query tool
+- [x] 5.2 Define QueryKnowledgeInput struct with validation
+- [x] 5.3 Call KnowledgeManager.query()
+- [x] 5.4 Handle filtering (type, layer, status, tags)
+- [x] 5.5 Implement knowledge_check tool
+- [x] 5.6 Define CheckConstraintsInput struct with validation
+- [x] 5.7 Call KnowledgeManager.check_constraints()
+- [x] 5.8 Aggregate violations by severity
+- [x] 5.9 Implement knowledge_show tool
+- [x] 5.10 Define GetKnowledgeInput struct with validation
+- [x] 5.11 Call KnowledgeManager.get()
+- [x] 5.12 Handle includeConstraints and includeHistory flags
+- [x] 5.13 Write unit tests for all knowledge tools
 
 ## 6. Sync Tools - Implementation
-- [ ] 6.1 Implement sync_now tool
-- [ ] 6.2 Define SyncNowInput struct with validation
-- [ ] 6.3 Call SyncManager.full_sync()
-- [ ] 6.4 Handle force and types/layers filtering
-- [ ] 6.5 Implement sync_status tool
-- [ ] 6.6 Define no input required
-- [ ] 6.7 Call SyncManager.get_status()
-- [ ] 6.8 Return lastSyncAt, lastCommit, stats
-- [ ] 6.9 Write unit tests for all sync tools
+- [x] 6.1 Implement sync_now tool
+- [x] 6.2 Define SyncNowInput struct with validation
+- [x] 6.3 Call SyncManager.full_sync()
+- [x] 6.4 Handle force and types/layers filtering
+- [x] 6.5 Implement sync_status tool
+- [x] 6.6 Define no input required
+- [x] 6.7 Call SyncManager.get_status()
+- [x] 6.8 Return lastSyncAt, lastCommit, stats
+- [x] 6.9 Write unit tests for all sync tools
 
 ## 7. Error Handling
-- [ ] 7.1 Implement ToolError enum
-- [ ] 7.2 Define all 7 error codes: INVALID_INPUT, NOT_FOUND, PROVIDER_ERROR, RATE_LIMITED, UNAUTHORIZED, TIMEOUT, CONFLICT
-- [ ] 7.3 Implement MCPErrorResponse struct
-- [ ] 7.4 Implement error translation from domain errors
-- [ ] 7.5 Set retryable flags on each error type
-- [ ] 7.6 Add detailed error context in details field
-- [ ] 7.7 Write unit tests for error handling
+- [x] 7.1 Implement ToolError enum
+- [x] 7.2 Define all 7 error codes: INVALID_INPUT, NOT_FOUND, PROVIDER_ERROR, RATE_LIMITED, UNAUTHORIZED, TIMEOUT, CONFLICT
+- [x] 7.3 Implement MCPErrorResponse struct
+- [x] 7.4 Implement error translation from domain errors
+- [x] 7.5 Set retryable flags on each error type
+- [x] 7.6 Add detailed error context in details field
+- [x] 7.7 Write unit tests for error handling
 
 ## 8. Input Validation
 - [ ] 8.1 Use validator crate for struct validation

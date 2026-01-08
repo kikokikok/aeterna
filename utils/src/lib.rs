@@ -36,10 +36,8 @@ pub fn compute_knowledge_hash(item: &serde_json::Value) -> String {
     let mut hasher = Sha256::new();
 
     // Extract fields for hashing
-    if let Some(content) = item.get("content") {
-        if let Some(content_str) = content.as_str() {
-            hasher.update(content_str.as_bytes());
-        }
+    if let Some(content_str) = item.get("content").and_then(|c| c.as_str()) {
+        hasher.update(content_str.as_bytes());
     }
 
     if let Some(constraints) = item.get("constraints") {
@@ -48,10 +46,8 @@ pub fn compute_knowledge_hash(item: &serde_json::Value) -> String {
         hasher.update(constraints_json.as_bytes());
     }
 
-    if let Some(status) = item.get("status") {
-        if let Some(status_str) = status.as_str() {
-            hasher.update(status_str.as_bytes());
-        }
+    if let Some(status_str) = item.get("status").and_then(|s| s.as_str()) {
+        hasher.update(status_str.as_bytes());
     }
 
     format!("{:x}", hasher.finalize())
