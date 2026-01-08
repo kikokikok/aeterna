@@ -56,37 +56,3 @@ pub trait MemoryProviderAdapter: Send + Sync {
         cursor: Option<String>,
     ) -> Result<(Vec<crate::types::MemoryEntry>, Option<String>), Self::Error>;
 }
-
-/// Provider adapter for memory storage
-#[async_trait]
-pub trait MemoryProviderAdapter: Send + Sync {
-    type Error;
-
-    /// Add a memory entry to the provider
-    async fn add(&self, entry: crate::types::MemoryEntry) -> Result<String, Self::Error>;
-
-    /// Search for memories matching a query
-    async fn search(
-        &self,
-        query_vector: Vec<f32>,
-        limit: usize,
-        filters: std::collections::HashMap<String, serde_json::Value>,
-    ) -> Result<Vec<crate::types::MemoryEntry>, Self::Error>;
-
-    /// Get a specific memory by ID
-    async fn get(&self, id: &str) -> Result<Option<crate::types::MemoryEntry>, Self::Error>;
-
-    /// Update an existing memory
-    async fn update(&self, entry: crate::types::MemoryEntry) -> Result<(), Self::Error>;
-
-    /// Delete a memory by ID
-    async fn delete(&self, id: &str) -> Result<(), Self::Error>;
-
-    /// List memories with pagination
-    async fn list(
-        &self,
-        layer: crate::types::MemoryLayer,
-        limit: usize,
-        cursor: Option<String>,
-    ) -> Result<(Vec<crate::types::MemoryEntry>, Option<String>), Self::Error>;
-}

@@ -155,3 +155,15 @@ impl MemoryLayer {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryEntry {
+    pub id: String,
+    pub content: String,
+    pub embedding: Option<Vec<f32>>,
+    pub layer: MemoryLayer,
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
