@@ -10,6 +10,8 @@ use tracing::{error, info, warn};
 /// Configuration reload event.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConfigReloadEvent {
+    Ready,
+
     /// Configuration file changed
     Changed(PathBuf),
 
@@ -20,7 +22,10 @@ pub enum ConfigReloadEvent {
     Created(PathBuf),
 
     /// Configuration reload error
-    Error { path: PathBuf, error: String },
+    Error {
+        path: PathBuf,
+        error: String,
+    },
 }
 
 /// Watch a configuration file for changes and emit reload events.
@@ -73,7 +78,10 @@ pub enum ConfigReloadEvent {
 pub async fn watch_config(
     config_path: &Path,
 ) -> Result<
-    (tokio::sync::mpsc::Sender<ConfigReloadEvent>, tokio::sync::mpsc::Receiver<ConfigReloadEvent>),
+    (
+        tokio::sync::mpsc::Sender<ConfigReloadEvent>,
+        tokio::sync::mpsc::Receiver<ConfigReloadEvent>,
+    ),
     Box<dyn std::error::Error>,
 > {
     let config_path = config_path.to_path_buf();
@@ -86,8 +94,8 @@ pub async fn watch_config(
     }
 
     let (tx, rx) = tokio::sync::mpsc::channel(100);
-    let tx_clone = tx.clone();
-    let path_clone = config_path.clone();
+    let tx_task = tx.clone();
+    let path_task = config_path.clone();
 
     tokio::spawn(async move {
         let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
@@ -102,9 +110,9 @@ pub async fn watch_config(
                 let error_msg = format!("Failed to create file watcher: {}", e);
                 error!("{}", error_msg);
 
-                let _ = tx_clone
+                let _ = tx_task
                     .send(ConfigReloadEvent::Error {
-                        path: path_clone,
+                        path: path_task,
                         error: error_msg,
                     })
                     .await;
@@ -113,56 +121,64 @@ pub async fn watch_config(
             }
         };
 
-        match watcher.watch(&config_path, RecursiveMode::NonRecursive) {
-            Ok(_) => info!("Watching config file: {:?}", config_path),
-            Err(e) => {
-                let error_msg = format!("Failed to watch config file: {}", e);
-                error!("{}", error_msg);
+        if let Err(e) = watcher.watch(&config_path, RecursiveMode::NonRecursive) {
+            let error_msg = format!("Failed to watch config file: {}", e);
+            error!("{}", error_msg);
 
-                let _ = tx_clone
-                    .send(ConfigReloadEvent::Error {
-                        path: path_clone,
-                        error: error_msg,
-                    })
-                    .await;
+            let _ = tx_task
+                .send(ConfigReloadEvent::Error {
+                    path: path_task,
+                    error: error_msg,
+                })
+                .await;
 
-                return;
-            }
+            return;
         }
 
-        while let Some(event_result) = event_rx.recv().await {
-            match event_result {
-                Ok(event) => {
-                    if !event.paths.is_empty() {
-                        let path = event.paths[0].clone();
-                        let event = match event.kind {
-                            EventKind::Create(_) => {
-                                info!("Config file created: {:?}", path);
-                                ConfigReloadEvent::Created(path)
-                            }
-                            EventKind::Modify(_) => {
-                                info!("Config file modified: {:?}", path);
-                                ConfigReloadEvent::Changed(path)
-                            }
-                            EventKind::Remove(_) => {
-                                warn!("Config file removed: {:?}", path);
-                                ConfigReloadEvent::Removed(path)
-                            }
-                            _ => {
-                                debug!("Ignoring event: {:?}", event.kind);
-                                continue;
-                            }
-                        };
+        info!("Watching config file: {:?}", config_path);
 
-                        if let Err(e) = tx_clone.send(event).await {
-                            error!("Failed to send config reload event: {}", e);
-                        }
-                    } else {
-                        debug!("Ignoring event with no paths: {:?}", event.kind);
-                    }
+        let _ = tx_task.send(ConfigReloadEvent::Ready).await;
+
+        loop {
+            tokio::select! {
+                _ = tx_task.closed() => {
+                    debug!("Receiver dropped, stopping watcher for {:?}", config_path);
+                    break;
                 }
-                Err(e) => {
-                    warn!("Watch error: {}", e);
+                event_result = event_rx.recv() => {
+                    let Some(event_result) = event_result else {
+                        break;
+                    };
+
+                    match event_result {
+                        Ok(event) => {
+                            if !event.paths.is_empty() {
+                                let path = event.paths[0].clone();
+                                let reload_event = match event.kind {
+                                    EventKind::Create(_) | EventKind::Modify(_) => {
+                                        info!("Config file updated: {:?}", path);
+                                        ConfigReloadEvent::Changed(path)
+                                    }
+                                    EventKind::Remove(_) => {
+                                        warn!("Config file removed: {:?}", path);
+                                        ConfigReloadEvent::Removed(path)
+                                    }
+                                    _ => {
+                                        debug!("Ignoring event: {:?}", event.kind);
+                                        continue;
+                                    }
+                                };
+
+                                if let Err(e) = tx_task.send(reload_event).await {
+                                    error!("Failed to send config reload event: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Watch error: {}", e);
+                        }
+                    }
                 }
             }
         }
@@ -176,7 +192,7 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::NamedTempFile;
-    use tokio::time::{sleep, Duration};
+    use tokio::time::Duration;
 
     #[test]
     fn test_config_reload_event_created() {
@@ -210,10 +226,13 @@ mod tests {
             error: "Test error".to_string(),
         };
         assert!(matches!(event, ConfigReloadEvent::Error { .. }));
-        assert_eq!(event, ConfigReloadEvent::Error {
-            path,
-            error: "Test error".to_string(),
-        });
+        assert_eq!(
+            event,
+            ConfigReloadEvent::Error {
+                path,
+                error: "Test error".to_string(),
+            }
+        );
     }
 
     #[tokio::test]
@@ -240,12 +259,14 @@ mod tests {
             error: "Test error".to_string(),
         };
         assert!(matches!(event, ConfigReloadEvent::Error { .. }));
-        assert_eq!(event, ConfigReloadEvent::Error {
-            path,
-            error: "Test error".to_string(),
-        });
+        assert_eq!(
+            event,
+            ConfigReloadEvent::Error {
+                path,
+                error: "Test error".to_string(),
+            }
+        );
     }
-
 
     #[tokio::test]
     async fn test_watch_config_emits_events() {
@@ -258,44 +279,60 @@ host = "testhost"
 
         let (_tx, mut rx) = watch_config(temp_file.path()).await.unwrap();
 
-        let event = rx.recv().await;
-        assert!(event.is_some());
+        let ready_event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("Timeout waiting for Ready event")
+            .expect("No event received");
+        assert_eq!(ready_event, ConfigReloadEvent::Ready);
 
-        fs::write(temp_file.path(), config_content).unwrap();
-        sleep(Duration::from_millis(100)).await;
+        fs::write(temp_file.path(), "[providers.postgres]\nhost = \"updated\"").unwrap();
 
-        let event = rx.recv().await;
-        assert!(event.is_some());
+        let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("Timeout waiting for config change event")
+            .expect("No event received");
 
-        match event.unwrap() {
+        match event {
             ConfigReloadEvent::Changed(path) => {
-                assert_eq!(path, temp_file.path());
+                assert_eq!(
+                    path.canonicalize().unwrap(),
+                    temp_file.path().canonicalize().unwrap()
+                );
             }
-            _ => panic!("Expected Changed event"),
+            _ => panic!("Expected Changed event, got {:?}", event),
         }
     }
 
     #[tokio::test]
     async fn test_watch_config_handles_create() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let config_content = r#"
-[providers.postgres]
-host = "testhost"
-"#;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
 
-        fs::write(temp_file.path(), config_content).unwrap();
+        fs::write(&config_path, "initial").unwrap();
 
-        let (_tx, mut rx) = watch_config(temp_file.path()).await.unwrap();
+        let (_tx, mut rx) = watch_config(&config_path).await.unwrap();
 
-        let event = rx.recv().await;
-        assert!(event.is_some());
+        let ready_event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("Timeout waiting for Ready event")
+            .expect("No event received");
+        assert_eq!(ready_event, ConfigReloadEvent::Ready);
 
-        let path = temp_file.path();
-        match event.unwrap() {
-            ConfigReloadEvent::Created(created_path) => {
-                assert_eq!(created_path, path);
+        fs::write(&config_path, "updated").unwrap();
+
+        let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("Timeout waiting for config change event")
+            .expect("No event received");
+
+        match event {
+            ConfigReloadEvent::Changed(path) => {
+                assert_eq!(
+                    path.canonicalize().unwrap(),
+                    config_path.canonicalize().unwrap()
+                );
             }
-            _ => panic!("Expected Created event"),
+            _ => panic!("Expected Changed event, got {:?}", event),
         }
     }
 }

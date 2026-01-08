@@ -142,12 +142,11 @@ pub fn load_from_file(path: &Path) -> Result<Config, ConfigFileError> {
 mod tests {
     use super::*;
     use std::fs;
-    use std::io::Write;
     use tempfile::NamedTempFile;
 
     #[test]
     fn test_load_from_toml() {
-        let mut file = NamedTempFile::new().unwrap();
+        let file = NamedTempFile::new().unwrap();
         let path = file.path().with_extension("toml");
 
         let toml_content = r#"
@@ -195,7 +194,7 @@ logging_level = "debug"
 
     #[test]
     fn test_load_from_yaml() {
-        let mut file = NamedTempFile::new().unwrap();
+        let file = NamedTempFile::new().unwrap();
         let path = file.path().with_extension("yaml");
 
         let yaml_content = r#"
@@ -238,7 +237,7 @@ observability:
 
     #[test]
     fn test_load_from_file_unsupported() {
-        let mut file = NamedTempFile::new().unwrap();
+        let file = NamedTempFile::new().unwrap();
         let path = file.path().with_extension("json");
         fs::write(&path, "{}").unwrap();
 
@@ -258,7 +257,7 @@ observability:
 
     #[test]
     fn test_load_from_file_auto_detect_toml() {
-        let mut file = NamedTempFile::new().unwrap();
+        let file = NamedTempFile::new().unwrap();
         let path = file.path().with_extension("toml");
         let toml_content = r#"
 [providers.postgres]
@@ -272,7 +271,7 @@ host = "autohost"
 
     #[test]
     fn test_load_from_file_auto_detect_yaml() {
-        let mut file = NamedTempFile::new().unwrap();
+        let file = NamedTempFile::new().unwrap();
         let path = file.path().with_extension("yaml");
         let yaml_content = r#"
 providers:
@@ -287,7 +286,7 @@ providers:
 
     #[test]
     fn test_load_from_toml_invalid() {
-        let mut file = NamedTempFile::new().unwrap();
+        let file = NamedTempFile::new().unwrap();
         let path = file.path().with_extension("toml");
         let invalid_toml = r#"
 [invalid
@@ -300,7 +299,7 @@ providers:
 
     #[test]
     fn test_load_from_yaml_invalid() {
-        let mut file = NamedTempFile::new().unwrap();
+        let file = NamedTempFile::new().unwrap();
         let path = file.path().with_extension("yaml");
         let invalid_yaml = r#"
 invalid: [unmatched
