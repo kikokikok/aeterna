@@ -1,17 +1,18 @@
-use std::sync::Arc;
+use crate::tools::Tool;
 use async_trait::async_trait;
-use serde::Deserialize;
-use schemars::JsonSchema;
-use serde_json::{json, Value};
 use mk_core::traits::KnowledgeRepository;
 use mk_core::types::KnowledgeLayer;
-use crate::tools::Tool;
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::{Value, json};
+use std::sync::Arc;
+use validator::Validate;
 
 pub struct KnowledgeQueryTool {
     repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Deserialize, JsonSchema, Validate)]
 pub struct KnowledgeQueryArgs {
     pub layer: KnowledgeLayer,
     #[serde(default)]
@@ -19,7 +20,9 @@ pub struct KnowledgeQueryArgs {
 }
 
 impl KnowledgeQueryTool {
-    pub fn new(repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>) -> Self {
+    pub fn new(
+        repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+    ) -> Self {
         Self { repository }
     }
 }
@@ -41,6 +44,7 @@ impl Tool for KnowledgeQueryTool {
 
     async fn call(&self, args: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let args: KnowledgeQueryArgs = serde_json::from_value(args)?;
+        args.validate()?;
         let entries = self.repository.list(args.layer, &args.prefix).await?;
 
         Ok(json!({
@@ -55,14 +59,16 @@ pub struct KnowledgeShowTool {
     repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Deserialize, JsonSchema, Validate)]
 pub struct KnowledgeShowArgs {
     pub layer: KnowledgeLayer,
     pub path: String,
 }
 
 impl KnowledgeShowTool {
-    pub fn new(repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>) -> Self {
+    pub fn new(
+        repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+    ) -> Self {
         Self { repository }
     }
 }
@@ -84,6 +90,7 @@ impl Tool for KnowledgeShowTool {
 
     async fn call(&self, args: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let args: KnowledgeShowArgs = serde_json::from_value(args)?;
+        args.validate()?;
         let entry = self.repository.get(args.layer, &args.path).await?;
 
         match entry {
@@ -101,7 +108,7 @@ impl Tool for KnowledgeShowTool {
 
 pub struct KnowledgeCheckTool;
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Deserialize, JsonSchema, Validate)]
 pub struct KnowledgeCheckArgs {
     pub content: String,
     #[serde(default)]
@@ -129,7 +136,9 @@ impl Tool for KnowledgeCheckTool {
         serde_json::to_value(schema).unwrap()
     }
 
-    async fn call(&self, _args: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(&self, args: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let args: KnowledgeCheckArgs = serde_json::from_value(args)?;
+        args.validate()?;
         Ok(json!({
             "success": true,
             "isValid": true,
