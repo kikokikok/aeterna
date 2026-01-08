@@ -3,7 +3,7 @@
 //! Implementation of hierarchical memory storage and retrieval.
 
 pub mod episodic;
-pub mod procedural;
-pub mod working;
-pub mod providers;
 pub mod manager;
+pub mod procedural;
+pub mod providers;
+pub mod working;

@@ -14,3 +14,5 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 async-trait.workspace = true
+sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "chrono", "json"] }
+chrono = { version = "0.4", features = ["serde"] }

@@ -37,7 +37,7 @@ use validator::Validate;
 ///
 /// ## Validation
 /// All nested configurations must pass their own validation rules.
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default)]
 pub struct Config {
     /// Storage provider configurations (PostgreSQL, Qdrant, Redis)
     #[serde(default)]
@@ -54,17 +54,6 @@ pub struct Config {
     /// Observability configuration (metrics, tracing, logging)
     #[serde(default)]
     pub observability: ObservabilityConfig,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            providers: ProviderConfig::default(),
-            sync: SyncConfig::default(),
-            tools: ToolConfig::default(),
-            observability: ObservabilityConfig::default(),
-        }
-    }
 }
 
 /// Configuration for storage providers.
@@ -91,7 +80,7 @@ impl Default for Config {
 /// - `postgres`: PostgreSQL connection configuration
 /// - `qdrant`: Qdrant vector database configuration
 /// - `redis`: Redis caching configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default)]
 pub struct ProviderConfig {
     /// PostgreSQL connection configuration
     #[serde(default)]
@@ -104,16 +93,6 @@ pub struct ProviderConfig {
     /// Redis caching configuration
     #[serde(default)]
     pub redis: RedisConfig,
-}
-
-impl Default for ProviderConfig {
-    fn default() -> Self {
-        Self {
-            postgres: PostgresConfig::default(),
-            qdrant: QdrantConfig::default(),
-            redis: RedisConfig::default(),
-        }
-    }
 }
 
 /// PostgreSQL configuration.
