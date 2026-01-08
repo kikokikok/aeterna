@@ -1,0 +1,28 @@
+# Rust
+/target/
+Cargo.lock
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# Testing
+/.cargo/
+.cargo/coverage
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Temporary
+*.tmp
+*.temp

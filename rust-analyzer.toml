@@ -1,0 +1,28 @@
+# rust-analyzer configuration for Memory-Knowledge System
+#
+# Ensures proper IDE support with correct Rust edition and workspace
+
+# Target directory for workspace members
+cargo.loadOutDirsFromCheck = false
+# cargo.loadOutDirsCheck = true
+
+# Enable proc-macro support
+procMacro.enable = true
+
+# Use workspace edition
+cargo.features = "all"
+
+# Diagnostics configuration
+[diagnostics]
+# Enable all recommended lints
+disabled = [
+    "proc-macro-misuse-impl-trait",
+    "non-snake-case",
+]
+enableExperimental = [
+    "proc-macro-misuse-impl-trait",
+]
+
+[cargo]
+# Build all targets by default
+buildScripts.useRustcWrapper = true

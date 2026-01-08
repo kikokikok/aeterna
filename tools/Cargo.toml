@@ -1,0 +1,18 @@
+[package]
+name = "tools"
+version = "0.1.0"
+edition = "2024"
+description = "MCP tool interface implementation"
+
+[dependencies]
+mk_core.workspace = true
+memory.workspace = true
+knowledge.workspace = true
+utils.workspace = true
+errors.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+async-trait.workspace = true
