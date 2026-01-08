@@ -1,5 +1,5 @@
 [package]
-name = "core"
+name = "mk_core"
 version = "0.1.0"
 edition = "2024"
 description = "Shared types and traits for the Memory-Knowledge system"

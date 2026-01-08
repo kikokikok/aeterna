@@ -38,11 +38,14 @@ pub enum ConfigFileError {
 ///
 /// ## Usage
 /// ```rust,no_run
+/// use config::load_from_toml;
 /// use std::path::Path;
-/// use memory_knowledge_config::load_from_toml;
 ///
-/// let config = load_from_toml(Path::new("config.toml"))?;
-/// println!("PostgreSQL host: {}", config.providers.postgres.host);
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let config = load_from_toml(Path::new("config.toml"))?;
+///     println!("PostgreSQL host: {}", config.providers.postgres.host);
+///     Ok(())
+/// }
 /// ```
 ///
 /// ## Error Handling
@@ -52,7 +55,7 @@ pub enum ConfigFileError {
 /// - Missing required fields
 pub fn load_from_toml(path: &Path) -> Result<Config, ConfigFileError> {
     let contents = std::fs::read_to_string(path)
-        .map_err(|e| ConfigFileError::FileNotFound(path.display().to_string()))?;
+        .map_err(|_e| ConfigFileError::FileNotFound(path.display().to_string()))?;
 
     let config: Config =
         toml::from_str(&contents).map_err(|e| ConfigFileError::TomlParse(e.to_string()))?;
@@ -69,11 +72,14 @@ pub fn load_from_toml(path: &Path) -> Result<Config, ConfigFileError> {
 ///
 /// ## Usage
 /// ```rust,no_run
+/// use config::load_from_yaml;
 /// use std::path::Path;
-/// use memory_knowledge_config::load_from_yaml;
 ///
-/// let config = load_from_yaml(Path::new("config.yaml"))?;
-/// println!("PostgreSQL host: {}", config.providers.postgres.host);
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let config = load_from_yaml(Path::new("config.yaml"))?;
+///     println!("PostgreSQL host: {}", config.providers.postgres.host);
+///     Ok(())
+/// }
 /// ```
 ///
 /// ## Error Handling
@@ -83,7 +89,7 @@ pub fn load_from_toml(path: &Path) -> Result<Config, ConfigFileError> {
 /// - Missing required fields
 pub fn load_from_yaml(path: &Path) -> Result<Config, ConfigFileError> {
     let contents = std::fs::read_to_string(path)
-        .map_err(|e| ConfigFileError::FileNotFound(path.display().to_string()))?;
+        .map_err(|_e| ConfigFileError::FileNotFound(path.display().to_string()))?;
 
     let config: Config =
         serde_yaml::from_str(&contents).map_err(|e| ConfigFileError::YamlParse(e.to_string()))?;
@@ -105,10 +111,13 @@ pub fn load_from_yaml(path: &Path) -> Result<Config, ConfigFileError> {
 ///
 /// ## Usage
 /// ```rust,no_run
+/// use config::load_from_file;
 /// use std::path::Path;
-/// use memory_knowledge_config::load_from_file;
 ///
-/// let config = load_from_file(Path::new("config.yaml"))?;
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let config = load_from_file(Path::new("config.yaml"))?;
+///     Ok(())
+/// }
 /// ```
 ///
 /// ## Error Handling

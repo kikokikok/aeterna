@@ -1,35 +1,35 @@
 # Implementation Tasks
 
 ## 1. Provider Adapter Interface
-- [ ] 1.1 Define `MemoryProviderAdapter` trait in `core/` crate
-- [ ] 1.2 Define `ProviderCapabilities` struct
-- [ ] 1.3 Define `ProviderConfig` struct
-- [ ] 1.4 Define all input/output structs for provider methods
-- [ ] 1.5 Define `HealthCheckResult` struct
-- [ ] 1.6 Define `MemoryErrorCode` enum
+- [x] 1.1 Define `MemoryProviderAdapter` trait in `core/` crate
+- [x] 1.2 Define `ProviderCapabilities` struct
+- [x] 1.3 Define `ProviderConfig` struct
+- [x] 1.4 Define all input/output structs for provider methods
+- [x] 1.5 Define `HealthCheckResult` struct
+- [x] 1.6 Define `MemoryErrorCode` enum
 
 ## 2. Mock Provider Implementation
-- [ ] 2.1 Create `mock_provider.rs` in `memory/` crate
-- [ ] 2.2 Implement in-memory storage using HashMap
-- [ ] 2.3 Implement all `MemoryProviderAdapter` methods
-- [ ] 2.4 Implement embedding generation (return fixed vectors)
-- [ ] 2.5 Add metrics collection (latency, operations, errors)
-- [ ] 2.6 Write unit tests for mock provider
+- [x] 2.1 Create `mock_provider.rs` in `memory/` crate
+- [x] 2.2 Implement in-memory storage using HashMap
+- [x] 2.3 Implement all `MemoryProviderAdapter` methods
+- [x] 2.4 Implement embedding generation (return fixed vectors)
+- [x] 2.5 Add metrics collection (latency, operations, errors)
+- [x] 2.6 Write unit tests for mock provider
 
 ## 3. Memory Manager Core
-- [ ] 3.1 Create `memory_manager.rs` in `memory/` crate
-- [ ] 3.2 Implement `MemoryManager` struct with provider field
-- [ ] 3.3 Implement `new()` constructor
-- [ ] 3.4 Implement `initialize()` method
-- [ ] 3.5 Implement `shutdown()` method
-- [ ] 3.6 Implement `health_check()` method
+- [x] 3.1 Create `memory_manager.rs` in `memory/` crate
+- [x] 3.2 Implement `MemoryManager` struct with provider field
+- [x] 3.3 Implement `new()` constructor
+- [x] 3.4 Implement `initialize()` method
+- [x] 3.5 Implement `shutdown()` method
+- [x] 3.6 Implement `health_check()` method
 
 ## 4. Layer Resolution
-- [ ] 4.1 Implement `get_accessible_layers(identifiers: &LayerIdentifiers) -> Vec<MemoryLayer>`
-- [ ] 4.2 Implement `get_layer_precedence(layer: &MemoryLayer) -> u8`
-- [ ] 4.3 Implement `merge_search_results()` function
-- [ ] 4.4 Implement layer access control validation
-- [ ] 4.5 Write unit tests for layer resolution logic
+- [x] 4.1 Implement `get_accessible_layers(identifiers: &LayerIdentifiers) -> Vec<MemoryLayer>`
+- [x] 4.2 Implement `get_layer_precedence(layer: &MemoryLayer) -> u8`
+- [x] 4.3 Implement `merge_search_results()` function
+- [x] 4.4 Implement layer access control validation
+- [x] 4.5 Write unit tests for layer resolution logic
 
 ## 5. Memory Operations - Add
 - [ ] 5.1 Implement validation for `AddMemoryInput`

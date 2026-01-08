@@ -5,7 +5,7 @@ edition = "2024"
 description = "Provider and ecosystem adapters"
 
 [dependencies]
-core.workspace = true
+mk_core.workspace = true
 utils.workspace = true
 errors.workspace = true
 serde.workspace = true

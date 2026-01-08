@@ -56,3 +56,33 @@ pub trait MemoryProviderAdapter: Send + Sync {
         cursor: Option<String>,
     ) -> Result<(Vec<crate::types::MemoryEntry>, Option<String>), Self::Error>;
 }
+
+#[async_trait]
+pub trait KnowledgeRepository: Send + Sync {
+    type Error;
+
+    async fn get(
+        &self,
+        layer: crate::types::KnowledgeLayer,
+        path: &str,
+    ) -> Result<Option<crate::types::KnowledgeEntry>, Self::Error>;
+
+    async fn store(
+        &self,
+        entry: crate::types::KnowledgeEntry,
+        message: &str,
+    ) -> Result<String, Self::Error>;
+
+    async fn list(
+        &self,
+        layer: crate::types::KnowledgeLayer,
+        prefix: &str,
+    ) -> Result<Vec<crate::types::KnowledgeEntry>, Self::Error>;
+
+    async fn delete(
+        &self,
+        layer: crate::types::KnowledgeLayer,
+        path: &str,
+        message: &str,
+    ) -> Result<String, Self::Error>;
+}

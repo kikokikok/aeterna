@@ -2,12 +2,9 @@
 //!
 //! Watches configuration files for changes and reloads configuration automatically.
 
-use crate::config::Config;
-use crate::file_loader::{load_from_file, ConfigFileError};
-use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use tracing::debug;
 use tracing::{error, info, warn};
 
 /// Configuration reload event.
@@ -36,13 +33,13 @@ pub enum ConfigReloadEvent {
 ///
 /// ## Usage
 /// ```rust,no_run
-/// use memory_knowledge_config::watch_config;
+/// use config::{watch_config, hot_reload::ConfigReloadEvent};
 /// use tokio::signal;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     let config_path = std::path::Path::new("config.toml");
-///     let (tx, mut rx) = watch_config(&config_path)?;
+///     let (_tx, mut rx) = watch_config(&config_path).await?;
 ///
 ///     loop {
 ///         tokio::select! {
@@ -93,7 +90,13 @@ pub async fn watch_config(
     let path_clone = config_path.clone();
 
     tokio::spawn(async move {
-        let mut watcher = match RecommendedWatcher::new() {
+        let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
+        let mut watcher = match RecommendedWatcher::new(
+            move |res| {
+                let _ = event_tx.blocking_send(res);
+            },
+            notify::Config::default(),
+        ) {
             Ok(w) => w,
             Err(e) => {
                 let error_msg = format!("Failed to create file watcher: {}", e);
@@ -110,7 +113,7 @@ pub async fn watch_config(
             }
         };
 
-        match watcher.watch(config_path, RecursiveMode::NonRecursive) {
+        match watcher.watch(&config_path, RecursiveMode::NonRecursive) {
             Ok(_) => info!("Watching config file: {:?}", config_path),
             Err(e) => {
                 let error_msg = format!("Failed to watch config file: {}", e);
@@ -127,27 +130,11 @@ pub async fn watch_config(
             }
         }
 
-        let mut event_stream = match watcher.event_stream() {
-            Ok(stream) => stream,
-            Err(e) => {
-                let error_msg = format!("Failed to get event stream: {}", e);
-                error!("{}", error_msg);
-
-                let _ = tx_clone
-                    .send(ConfigReloadEvent::Error {
-                        path: path_clone,
-                        error: error_msg,
-                    })
-                    .await;
-
-                return;
-            }
-        };
-
-        while let Some(event_result) = event_stream.recv().await {
+        while let Some(event_result) = event_rx.recv().await {
             match event_result {
                 Ok(event) => {
-                    if let Some(path) = event.path {
+                    if !event.paths.is_empty() {
+                        let path = event.paths[0].clone();
                         let event = match event.kind {
                             EventKind::Create(_) => {
                                 info!("Config file created: {:?}", path);
@@ -170,6 +157,8 @@ pub async fn watch_config(
                         if let Err(e) = tx_clone.send(event).await {
                             error!("Failed to send config reload event: {}", e);
                         }
+                    } else {
+                        debug!("Ignoring event with no paths: {:?}", event.kind);
                     }
                 }
                 Err(e) => {
@@ -186,7 +175,6 @@ pub async fn watch_config(
 mod tests {
     use super::*;
     use std::fs;
-    use std::io::Write;
     use tempfile::NamedTempFile;
     use tokio::time::{sleep, Duration};
 
@@ -194,7 +182,7 @@ mod tests {
     fn test_config_reload_event_created() {
         let path = PathBuf::from("/test/config.toml");
         let event = ConfigReloadEvent::Created(path.clone());
-        assert!(matches!(event, ConfigReloadEvent::Created(_))));
+        assert!(matches!(event, ConfigReloadEvent::Created(_)));
         assert_eq!(event, ConfigReloadEvent::Created(path));
     }
 
@@ -202,7 +190,7 @@ mod tests {
     fn test_config_reload_event_removed() {
         let path = PathBuf::from("/test/config.toml");
         let event = ConfigReloadEvent::Removed(path.clone());
-        assert!(matches!(event, ConfigReloadEvent::Removed(_))));
+        assert!(matches!(event, ConfigReloadEvent::Removed(_)));
         assert_eq!(event, ConfigReloadEvent::Removed(path));
     }
 
@@ -210,7 +198,7 @@ mod tests {
     fn test_config_reload_event_changed() {
         let path = PathBuf::from("/test/config.toml");
         let event = ConfigReloadEvent::Changed(path.clone());
-        assert!(matches!(event, ConfigReloadEvent::Changed(_))));
+        assert!(matches!(event, ConfigReloadEvent::Changed(_)));
         assert_eq!(event, ConfigReloadEvent::Changed(path));
     }
 
@@ -221,7 +209,7 @@ mod tests {
             path: path.clone(),
             error: "Test error".to_string(),
         };
-        assert!(matches!(event, ConfigReloadEvent::Error { .. })));
+        assert!(matches!(event, ConfigReloadEvent::Error { .. }));
         assert_eq!(event, ConfigReloadEvent::Error {
             path,
             error: "Test error".to_string(),
@@ -229,29 +217,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_config_reload_event_created() {
+    async fn test_tokio_config_reload_event_created() {
         let path = PathBuf::from("/test/config.toml");
         let event = ConfigReloadEvent::Created(path.clone());
-        assert!(matches!(event, ConfigReloadEvent::Created(_))));
+        assert!(matches!(event, ConfigReloadEvent::Created(_)));
         assert_eq!(event, ConfigReloadEvent::Created(path));
     }
 
     #[tokio::test]
-    async fn test_config_reload_event_removed() {
+    async fn test_tokio_config_reload_event_removed() {
         let path = PathBuf::from("/test/config.toml");
         let event = ConfigReloadEvent::Removed(path.clone());
-        assert!(matches!(event, ConfigReloadEvent::Removed(_))));
+        assert!(matches!(event, ConfigReloadEvent::Removed(_)));
         assert_eq!(event, ConfigReloadEvent::Removed(path));
     }
 
     #[tokio::test]
-    async fn test_config_reload_event_error() {
+    async fn test_tokio_config_reload_event_error() {
         let path = PathBuf::from("/test/config.toml");
         let event = ConfigReloadEvent::Error {
             path: path.clone(),
             error: "Test error".to_string(),
         };
-        assert!(matches!(event, ConfigReloadEvent::Error { .. })));
+        assert!(matches!(event, ConfigReloadEvent::Error { .. }));
         assert_eq!(event, ConfigReloadEvent::Error {
             path,
             error: "Test error".to_string(),
@@ -261,7 +249,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_watch_config_emits_events() {
-        let mut temp_file = NamedTempFile::new().unwrap();
+        let temp_file = NamedTempFile::new().unwrap();
         let config_content = r#"
 [providers.postgres]
 host = "testhost"
@@ -289,7 +277,7 @@ host = "testhost"
 
     #[tokio::test]
     async fn test_watch_config_handles_create() {
-        let mut temp_file = NamedTempFile::new().unwrap();
+        let temp_file = NamedTempFile::new().unwrap();
         let config_content = r#"
 [providers.postgres]
 host = "testhost"

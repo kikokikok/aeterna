@@ -5,7 +5,7 @@ edition = "2024"
 description = "Sync bridge implementation"
 
 [dependencies]
-core.workspace = true
+mk_core.workspace = true
 memory.workspace = true
 knowledge.workspace = true
 utils.workspace = true

@@ -28,10 +28,13 @@ use std::env;
 ///
 /// ## Usage
 /// ```rust,no_run
-/// use memory_knowledge_config::load_from_env;
+/// use config::load_from_env;
 ///
-/// let config = load_from_env()?;
-/// println!("PostgreSQL host: {}", config.providers.postgres.host);
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let config = load_from_env()?;
+///     println!("PostgreSQL host: {}", config.providers.postgres.host);
+///     Ok(())
+/// }
 /// ```
 ///
 /// ## Environment Variables
@@ -160,13 +163,15 @@ fn load_observability_from_env() -> Result<ObservabilityConfig, Box<dyn std::err
     })
 }
 
-fn parse_env<T>(key: &str) -> Result<T, T::Err>
+fn parse_env<T>(key: &str) -> Result<T, Box<dyn std::error::Error>>
 where
     T: std::str::FromStr,
+    T::Err: std::error::Error + Send + Sync + 'static,
 {
-    env::var(key)
-        .map_err(|_| T::Err {})
-        .and_then(|s| s.parse::<T>())
+    match env::var(key) {
+        Ok(s) => s.parse::<T>().map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+        Err(e) => Err(Box::new(e) as Box<dyn std::error::Error>),
+    }
 }
 
 #[cfg(test)]
@@ -186,18 +191,22 @@ mod tests {
 
     #[test]
     fn test_load_from_env_overrides() {
-        env::set_var("PG_HOST", "testhost");
-        env::set_var("PG_PORT", "9999");
-        env::set_var("SY_ENABLED", "false");
+        unsafe {
+            env::set_var("PG_HOST", "testhost");
+            env::set_var("PG_PORT", "9999");
+            env::set_var("SY_ENABLED", "false");
+        }
 
         let config = load_from_env().unwrap();
         assert_eq!(config.providers.postgres.host, "testhost");
         assert_eq!(config.providers.postgres.port, 9999);
         assert_eq!(config.sync.enabled, false);
 
-        env::remove_var("PG_HOST");
-        env::remove_var("PG_PORT");
-        env::remove_var("SY_ENABLED");
+        unsafe {
+            env::remove_var("PG_HOST");
+            env::remove_var("PG_PORT");
+            env::remove_var("SY_ENABLED");
+        }
     }
 
     #[test]
@@ -208,37 +217,47 @@ mod tests {
 
     #[test]
     fn test_parse_env_valid_string() {
-        env::set_var("TEST_VAR", "test_value");
+        unsafe { env::set_var("TEST_VAR", "test_value"); }
         let result: Result<String, _> = parse_env("TEST_VAR");
         assert_eq!(result.unwrap(), "test_value");
-        env::remove_var("TEST_VAR");
+        unsafe { env::remove_var("TEST_VAR"); }
     }
 
     #[test]
     fn test_parse_env_valid_number() {
-        env::set_var("TEST_VAR", "123");
+        unsafe { env::set_var("TEST_VAR", "123"); }
         let result: Result<u32, _> = parse_env("TEST_VAR");
         assert_eq!(result.unwrap(), 123);
-        env::remove_var("TEST_VAR");
+        unsafe { env::remove_var("TEST_VAR"); }
+    }
+
+    #[test]
+    fn test_parse_env_valid_number_with_parse_env() {
+        unsafe { env::set_var("TEST_VAR", "123"); }
+        let result: Result<u32, _> = parse_env("TEST_VAR");
+        assert_eq!(result.unwrap(), 123);
+        unsafe { env::remove_var("TEST_VAR"); }
     }
 
     #[test]
     fn test_parse_env_invalid_number() {
-        env::set_var("TEST_VAR", "not_a_number");
+        unsafe { env::set_var("TEST_VAR", "not_a_number"); }
         let result: Result<u32, _> = parse_env("TEST_VAR");
         assert!(result.is_err());
-        env::remove_var("TEST_VAR");
+        unsafe { env::remove_var("TEST_VAR"); }
     }
 
     #[test]
     fn test_load_postgres_from_env() {
-        env::set_var("PG_HOST", "customhost");
-        env::set_var("PG_PORT", "5433");
-        env::set_var("PG_DATABASE", "testdb");
-        env::set_var("PG_USERNAME", "testuser");
-        env::set_var("PG_PASSWORD", "testpass");
-        env::set_var("PG_POOL_SIZE", "20");
-        env::set_var("PG_TIMEOUT_SECONDS", "60");
+        unsafe {
+            env::set_var("PG_HOST", "customhost");
+            env::set_var("PG_PORT", "5433");
+            env::set_var("PG_DATABASE", "testdb");
+            env::set_var("PG_USERNAME", "testuser");
+            env::set_var("PG_PASSWORD", "testpass");
+            env::set_var("PG_POOL_SIZE", "20");
+            env::set_var("PG_TIMEOUT_SECONDS", "60");
+        }
 
         let postgres = load_postgres_from_env().unwrap();
         assert_eq!(postgres.host, "customhost");
@@ -249,21 +268,25 @@ mod tests {
         assert_eq!(postgres.pool_size, 20);
         assert_eq!(postgres.timeout_seconds, 60);
 
-        env::remove_var("PG_HOST");
-        env::remove_var("PG_PORT");
-        env::remove_var("PG_DATABASE");
-        env::remove_var("PG_USERNAME");
-        env::remove_var("PG_PASSWORD");
-        env::remove_var("PG_POOL_SIZE");
-        env::remove_var("PG_TIMEOUT_SECONDS");
+        unsafe {
+            env::remove_var("PG_HOST");
+            env::remove_var("PG_PORT");
+            env::remove_var("PG_DATABASE");
+            env::remove_var("PG_USERNAME");
+            env::remove_var("PG_PASSWORD");
+            env::remove_var("PG_POOL_SIZE");
+            env::remove_var("PG_TIMEOUT_SECONDS");
+        }
     }
 
     #[test]
     fn test_load_qdrant_from_env() {
-        env::set_var("QD_HOST", "qdranthost");
-        env::set_var("QD_PORT", "7333");
-        env::set_var("QD_COLLECTION", "test_collection");
-        env::set_var("QD_TIMEOUT_SECONDS", "45");
+        unsafe {
+            env::set_var("QD_HOST", "qdranthost");
+            env::set_var("QD_PORT", "7333");
+            env::set_var("QD_COLLECTION", "test_collection");
+            env::set_var("QD_TIMEOUT_SECONDS", "45");
+        }
 
         let qdrant = load_qdrant_from_env().unwrap();
         assert_eq!(qdrant.host, "qdranthost");
@@ -271,19 +294,23 @@ mod tests {
         assert_eq!(qdrant.collection, "test_collection");
         assert_eq!(qdrant.timeout_seconds, 45);
 
-        env::remove_var("QD_HOST");
-        env::remove_var("QD_PORT");
-        env::remove_var("QD_COLLECTION");
-        env::remove_var("QD_TIMEOUT_SECONDS");
+        unsafe {
+            env::remove_var("QD_HOST");
+            env::remove_var("QD_PORT");
+            env::remove_var("QD_COLLECTION");
+            env::remove_var("QD_TIMEOUT_SECONDS");
+        }
     }
 
     #[test]
     fn test_load_redis_from_env() {
-        env::set_var("RD_HOST", "redishost");
-        env::set_var("RD_PORT", "6380");
-        env::set_var("RD_DB", "1");
-        env::set_var("RD_POOL_SIZE", "15");
-        env::set_var("RD_TIMEOUT_SECONDS", "45");
+        unsafe {
+            env::set_var("RD_HOST", "redishost");
+            env::set_var("RD_PORT", "6380");
+            env::set_var("RD_DB", "1");
+            env::set_var("RD_POOL_SIZE", "15");
+            env::set_var("RD_TIMEOUT_SECONDS", "45");
+        }
 
         let redis = load_redis_from_env().unwrap();
         assert_eq!(redis.host, "redishost");
@@ -292,10 +319,12 @@ mod tests {
         assert_eq!(redis.pool_size, 15);
         assert_eq!(redis.timeout_seconds, 45);
 
-        env::remove_var("RD_HOST");
-        env::remove_var("RD_PORT");
-        env::remove_var("RD_DB");
-        env::remove_var("RD_POOL_SIZE");
-        env::remove_var("RD_TIMEOUT_SECONDS");
+        unsafe {
+            env::remove_var("RD_HOST");
+            env::remove_var("RD_PORT");
+            env::remove_var("RD_DB");
+            env::remove_var("RD_POOL_SIZE");
+            env::remove_var("RD_TIMEOUT_SECONDS");
+        }
     }
 }
