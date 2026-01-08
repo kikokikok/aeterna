@@ -1,0 +1,20 @@
+[package]
+name = "config"
+version = "0.1.0"
+edition = "2024"
+description = "Configuration management for the Memory-Knowledge system"
+
+[dependencies]
+core.workspace = true
+errors.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+toml.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+validator.workspace = true
+notify.workspace = true
+tempfile.workspace = true

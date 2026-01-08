@@ -1,0 +1,15 @@
+repos:
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: rustfmt
+        entry: rustfmt --check -- --config-path rustfmt.toml
+        files: \.rs$
+      - id: clippy
+        name: clippy
+        entry: cargo clippy --all-targets -- -D warnings
+        files: \.rs$
+      - id: cargo-test
+        name: cargo test
+        entry: cargo test --workspace
+        files: \.rs$

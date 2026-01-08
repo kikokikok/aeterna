@@ -1,0 +1,17 @@
+[package]
+name = "core"
+version = "0.1.0"
+edition = "2024"
+description = "Shared types and traits for the Memory-Knowledge system"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+validator.workspace = true
+schemars.workspace = true
+async-trait.workspace = true
