@@ -1,6 +1,4 @@
-use mk_core::types::{
-    KnowledgeLayer, Policy, PolicyViolation, ValidationResult,
-};
+use mk_core::types::{KnowledgeLayer, Policy, PolicyViolation, ValidationResult};
 use std::collections::HashMap;
 
 pub struct GovernanceEngine {
@@ -13,12 +11,17 @@ impl GovernanceEngine {
             policies: HashMap::new(),
         }
     }
+}
 
+impl Default for GovernanceEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl GovernanceEngine {
     pub fn add_policy(&mut self, policy: Policy) {
-        self.policies
-            .entry(policy.layer)
-            .or_default()
-            .push(policy);
+        self.policies.entry(policy.layer).or_default().push(policy);
     }
 
     pub fn validate(
@@ -27,7 +30,7 @@ impl GovernanceEngine {
         context: &HashMap<String, serde_json::Value>,
     ) -> ValidationResult {
         let mut violations = Vec::new();
-        
+
         let layers = vec![
             KnowledgeLayer::Company,
             KnowledgeLayer::Org,
@@ -45,7 +48,7 @@ impl GovernanceEngine {
                     }
                 }
             }
-            
+
             if layer == target_layer {
                 break;
             }
@@ -75,7 +78,7 @@ mod tests {
     #[test]
     fn test_governance_engine_hierarchy() {
         let mut engine = GovernanceEngine::new();
-        
+
         let company_policy = Policy {
             id: "p1".to_string(),
             name: "Company Standards".to_string(),
@@ -91,12 +94,12 @@ mod tests {
             }],
             metadata: HashMap::new(),
         };
-        
+
         engine.add_policy(company_policy);
-        
+
         let context = HashMap::new();
         let result = engine.validate(KnowledgeLayer::Project, &context);
-        
+
         assert!(result.is_valid);
     }
 }

@@ -9,8 +9,7 @@
 //! 4. Default values (lowest priority)
 
 use crate::config::{
-    Config, ObservabilityConfig, PostgresConfig, QdrantConfig, RedisConfig,
-    SyncConfig, ToolConfig,
+    Config, ObservabilityConfig, PostgresConfig, QdrantConfig, RedisConfig, SyncConfig, ToolConfig,
 };
 
 /// Merge multiple configuration sources with precedence.
@@ -189,7 +188,7 @@ fn merge_postgres(
         base.username.clone_from(&override_config.username);
     }
     if !override_config.password.is_empty() && override_config.password != base.password {
-        changes.push(format!("providers.postgres.password = ***"));
+        changes.push("providers.postgres.password = ***".to_string());
         base.password.clone_from(&override_config.password);
     }
     if override_config.pool_size != 10 && override_config.pool_size != base.pool_size {
@@ -199,7 +198,9 @@ fn merge_postgres(
         ));
         base.pool_size = override_config.pool_size;
     }
-    if override_config.timeout_seconds != 30 && override_config.timeout_seconds != base.timeout_seconds {
+    if override_config.timeout_seconds != 30
+        && override_config.timeout_seconds != base.timeout_seconds
+    {
         changes.push(format!(
             "providers.postgres.timeout_seconds = {}",
             override_config.timeout_seconds
@@ -222,14 +223,18 @@ fn merge_qdrant(
         changes.push(format!("providers.qdrant.port = {}", override_config.port));
         base.port = override_config.port;
     }
-    if override_config.collection != "memory_embeddings" && override_config.collection != base.collection {
+    if override_config.collection != "memory_embeddings"
+        && override_config.collection != base.collection
+    {
         changes.push(format!(
             "providers.qdrant.collection = {}",
             override_config.collection
         ));
         base.collection.clone_from(&override_config.collection);
     }
-    if override_config.timeout_seconds != 30 && override_config.timeout_seconds != base.timeout_seconds {
+    if override_config.timeout_seconds != 30
+        && override_config.timeout_seconds != base.timeout_seconds
+    {
         changes.push(format!(
             "providers.qdrant.timeout_seconds = {}",
             override_config.timeout_seconds
@@ -263,7 +268,9 @@ fn merge_redis(
         ));
         base.pool_size = override_config.pool_size;
     }
-    if override_config.timeout_seconds != 30 && override_config.timeout_seconds != base.timeout_seconds {
+    if override_config.timeout_seconds != 30
+        && override_config.timeout_seconds != base.timeout_seconds
+    {
         changes.push(format!(
             "providers.redis.timeout_seconds = {}",
             override_config.timeout_seconds
@@ -282,7 +289,9 @@ fn merge_sync(
         changes.push(format!("sync.enabled = {}", override_config.enabled));
         base.enabled = override_config.enabled;
     }
-    if override_config.sync_interval_seconds != 60 && override_config.sync_interval_seconds != base.sync_interval_seconds {
+    if override_config.sync_interval_seconds != 60
+        && override_config.sync_interval_seconds != base.sync_interval_seconds
+    {
         changes.push(format!(
             "sync.sync_interval_seconds = {}",
             override_config.sync_interval_seconds
@@ -300,7 +309,9 @@ fn merge_sync(
         ));
         base.checkpoint_enabled = override_config.checkpoint_enabled;
     }
-    if override_config.conflict_resolution != "prefer_knowledge" && override_config.conflict_resolution != base.conflict_resolution {
+    if override_config.conflict_resolution != "prefer_knowledge"
+        && override_config.conflict_resolution != base.conflict_resolution
+    {
         changes.push(format!(
             "sync.conflict_resolution = {}",
             override_config.conflict_resolution
@@ -339,7 +350,9 @@ fn merge_tools(
         }
         base.api_key.clone_from(&override_config.api_key);
     }
-    if override_config.rate_limit_requests_per_minute != 60 && override_config.rate_limit_requests_per_minute != base.rate_limit_requests_per_minute {
+    if override_config.rate_limit_requests_per_minute != 60
+        && override_config.rate_limit_requests_per_minute != base.rate_limit_requests_per_minute
+    {
         changes.push(format!(
             "tools.rate_limit_requests_per_minute = {}",
             override_config.rate_limit_requests_per_minute
@@ -368,7 +381,9 @@ fn merge_observability(
         ));
         base.tracing_enabled = override_config.tracing_enabled;
     }
-    if override_config.logging_level != "info" && override_config.logging_level != base.logging_level {
+    if override_config.logging_level != "info"
+        && override_config.logging_level != base.logging_level
+    {
         changes.push(format!(
             "observability.logging_level = {}",
             override_config.logging_level

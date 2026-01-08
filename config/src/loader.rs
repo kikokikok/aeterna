@@ -83,12 +83,12 @@ use std::env;
 /// - `OB_LOGGING_LEVEL`: Logging level (trace/debug/info/warn/error, default: "info")
 /// - `OB_METRICS_PORT`: Metrics server port (default: 9090)
 pub fn load_from_env() -> Result<Config, Box<dyn std::error::Error>> {
-    let mut config = Config::default();
-
-    config.providers = load_provider_from_env()?;
-    config.sync = load_sync_from_env()?;
-    config.tools = load_tools_from_env()?;
-    config.observability = load_observability_from_env()?;
+    let config = Config {
+        providers: load_provider_from_env()?,
+        sync: load_sync_from_env()?,
+        tools: load_tools_from_env()?,
+        observability: load_observability_from_env()?,
+    };
 
     Ok(config)
 }
@@ -169,7 +169,9 @@ where
     T::Err: std::error::Error + Send + Sync + 'static,
 {
     match env::var(key) {
-        Ok(s) => s.parse::<T>().map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+        Ok(s) => s
+            .parse::<T>()
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Err(e) => Err(Box::new(e) as Box<dyn std::error::Error>),
     }
 }
@@ -180,6 +182,14 @@ mod tests {
 
     #[test]
     fn test_load_from_env_defaults() {
+        unsafe {
+            env::remove_var("PG_HOST");
+            env::remove_var("QD_HOST");
+            env::remove_var("RD_HOST");
+            env::remove_var("SY_ENABLED");
+            env::remove_var("TL_PORT");
+            env::remove_var("OB_LOGGING_LEVEL");
+        }
         let config = load_from_env().unwrap();
         assert_eq!(config.providers.postgres.host, "localhost");
         assert_eq!(config.providers.qdrant.host, "localhost");
@@ -217,34 +227,50 @@ mod tests {
 
     #[test]
     fn test_parse_env_valid_string() {
-        unsafe { env::set_var("TEST_VAR", "test_value"); }
+        unsafe {
+            env::set_var("TEST_VAR", "test_value");
+        }
         let result: Result<String, _> = parse_env("TEST_VAR");
         assert_eq!(result.unwrap(), "test_value");
-        unsafe { env::remove_var("TEST_VAR"); }
+        unsafe {
+            env::remove_var("TEST_VAR");
+        }
     }
 
     #[test]
     fn test_parse_env_valid_number() {
-        unsafe { env::set_var("TEST_VAR", "123"); }
+        unsafe {
+            env::set_var("TEST_VAR", "123");
+        }
         let result: Result<u32, _> = parse_env("TEST_VAR");
         assert_eq!(result.unwrap(), 123);
-        unsafe { env::remove_var("TEST_VAR"); }
+        unsafe {
+            env::remove_var("TEST_VAR");
+        }
     }
 
     #[test]
     fn test_parse_env_valid_number_with_parse_env() {
-        unsafe { env::set_var("TEST_VAR", "123"); }
+        unsafe {
+            env::set_var("TEST_VAR", "123");
+        }
         let result: Result<u32, _> = parse_env("TEST_VAR");
         assert_eq!(result.unwrap(), 123);
-        unsafe { env::remove_var("TEST_VAR"); }
+        unsafe {
+            env::remove_var("TEST_VAR");
+        }
     }
 
     #[test]
     fn test_parse_env_invalid_number() {
-        unsafe { env::set_var("TEST_VAR", "not_a_number"); }
+        unsafe {
+            env::set_var("TEST_VAR", "not_a_number");
+        }
         let result: Result<u32, _> = parse_env("TEST_VAR");
         assert!(result.is_err());
-        unsafe { env::remove_var("TEST_VAR"); }
+        unsafe {
+            env::remove_var("TEST_VAR");
+        }
     }
 
     #[test]
@@ -260,13 +286,6 @@ mod tests {
         }
 
         let postgres = load_postgres_from_env().unwrap();
-        assert_eq!(postgres.host, "customhost");
-        assert_eq!(postgres.port, 5433);
-        assert_eq!(postgres.database, "testdb");
-        assert_eq!(postgres.username, "testuser");
-        assert_eq!(postgres.password, "testpass");
-        assert_eq!(postgres.pool_size, 20);
-        assert_eq!(postgres.timeout_seconds, 60);
 
         unsafe {
             env::remove_var("PG_HOST");
@@ -277,6 +296,14 @@ mod tests {
             env::remove_var("PG_POOL_SIZE");
             env::remove_var("PG_TIMEOUT_SECONDS");
         }
+
+        assert_eq!(postgres.host, "customhost");
+        assert_eq!(postgres.port, 5433);
+        assert_eq!(postgres.database, "testdb");
+        assert_eq!(postgres.username, "testuser");
+        assert_eq!(postgres.password, "testpass");
+        assert_eq!(postgres.pool_size, 20);
+        assert_eq!(postgres.timeout_seconds, 60);
     }
 
     #[test]

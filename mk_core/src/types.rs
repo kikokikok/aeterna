@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 /// Knowledge types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum KnowledgeType {
     /// Architecture Decision Records
@@ -18,7 +19,7 @@ pub enum KnowledgeType {
 }
 
 /// Knowledge layers for hierarchical organization
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum KnowledgeLayer {
     /// Company-wide knowledge
@@ -35,7 +36,7 @@ pub enum KnowledgeLayer {
 }
 
 /// Constraint severity levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ConstraintSeverity {
     /// Informational only
@@ -49,7 +50,7 @@ pub enum ConstraintSeverity {
 }
 
 /// Constraint operators
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ConstraintOperator {
     /// Must use this item
@@ -72,7 +73,7 @@ pub enum ConstraintOperator {
 }
 
 /// Constraint targets
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ConstraintTarget {
     /// File-based constraint
@@ -101,7 +102,7 @@ pub enum ConstraintTarget {
 /// - Priority 5: team
 /// - Priority 6: org
 /// - Priority 7 (lowest): company
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum MemoryLayer {
     /// Per-agent instance (most specific)
@@ -156,7 +157,7 @@ impl MemoryLayer {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryEntry {
     pub id: String,
@@ -168,7 +169,7 @@ pub struct MemoryEntry {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KnowledgeEntry {
     pub path: String,
@@ -181,7 +182,7 @@ pub struct KnowledgeEntry {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Policy {
     pub id: String,
@@ -192,7 +193,7 @@ pub struct Policy {
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolicyRule {
     pub id: String,
@@ -203,14 +204,14 @@ pub struct PolicyRule {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationResult {
     pub is_valid: bool,
     pub violations: Vec<PolicyViolation>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolicyViolation {
     pub rule_id: String,
