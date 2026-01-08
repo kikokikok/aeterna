@@ -1,0 +1,10 @@
+[package]
+name = "errors"
+version = "0.1.0"
+edition = "2024"
+description = "Error handling framework for the Memory-Knowledge system"
+
+[dependencies]
+thiserror.workspace = true
+serde.workspace = true
+tracing.workspace = true

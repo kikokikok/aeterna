@@ -1,0 +1,15 @@
+[package]
+name = "utils"
+version = "0.1.0"
+edition = "2024"
+description = "Utility functions for the Memory-Knowledge system"
+
+[dependencies]
+core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
