@@ -12,13 +12,13 @@ use sync::state_persister::SyncStatePersister;
 use tokio::sync::RwLock;
 
 struct MockStorage {
-    data: Arc<RwLock<HashMap<String, Vec<u8>>>>,
+    data: Arc<RwLock<HashMap<String, Vec<u8>>>>
 }
 
 impl MockStorage {
     fn new() -> Self {
         Self {
-            data: Arc::new(RwLock::new(HashMap::new())),
+            data: Arc::new(RwLock::new(HashMap::new()))
         }
     }
 }
@@ -50,7 +50,7 @@ impl StorageBackend for MockStorage {
 }
 
 pub struct SimplePersister {
-    storage: Arc<MockStorage>,
+    storage: Arc<MockStorage>
 }
 
 #[async_trait]
@@ -58,13 +58,13 @@ impl SyncStatePersister for SimplePersister {
     async fn load(&self) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         match self.storage.retrieve("sync_state").await? {
             Some(data) => Ok(serde_json::from_slice(&data)?),
-            None => Ok(SyncState::default()),
+            None => Ok(SyncState::default())
         }
     }
 
     async fn save(
         &self,
-        state: &SyncState,
+        state: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let data = serde_json::to_vec(state)?;
         self.storage.store("sync_state", &data).await?;
@@ -79,20 +79,20 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
     let knowledge_repo = Arc::new(GitRepository::new(repo_dir.path())?);
 
     let memory_manager = Arc::new(MemoryManager::new());
-    let mock_provider = Box::new(MockProvider::new());
+    let mock_provider = MockProvider::new();
     memory_manager
-        .register_provider(MemoryLayer::Project, mock_provider)
+        .register_provider(MemoryLayer::Project, Box::new(mock_provider))
         .await;
 
     let storage = Arc::new(MockStorage::new());
     let persister = Arc::new(SimplePersister {
-        storage: storage.clone(),
+        storage: storage.clone()
     });
 
     let sync_manager = SyncManager::new(
         memory_manager.clone(),
         knowledge_repo.clone(),
-        persister.clone(),
+        persister.clone()
     )
     .await?;
 
@@ -105,7 +105,7 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
         metadata: HashMap::new(),
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     knowledge_repo.store(entry.clone(), "first commit").await?;
 
@@ -167,23 +167,23 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
     let repo_dir = tempfile::tempdir()?;
     let knowledge_repo = Arc::new(GitRepository::new(repo_dir.path())?);
     let memory_manager = Arc::new(MemoryManager::new());
-    let mock_provider = Box::new(MockProvider::new());
+    let mock_provider = MockProvider::new();
     memory_manager
-        .register_provider(MemoryLayer::Project, mock_provider)
+        .register_provider(MemoryLayer::Project, Box::new(mock_provider))
         .await;
 
     let storage = Arc::new(MockStorage::new());
     let persister = Arc::new(SimplePersister {
-        storage: storage.clone(),
+        storage: storage.clone()
     });
 
     let sync_manager = Arc::new(
         SyncManager::new(
             memory_manager.clone(),
             knowledge_repo.clone(),
-            persister.clone(),
+            persister.clone()
         )
-        .await?,
+        .await?
     );
 
     // AND initial knowledge
@@ -195,7 +195,7 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
         metadata: HashMap::new(),
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     knowledge_repo.store(entry.clone(), "first commit").await?;
 

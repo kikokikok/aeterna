@@ -17,7 +17,7 @@ pub struct JsonRpcRequest {
     pub jsonrpc: String,
     pub id: Value,
     pub method: String,
-    pub params: Option<Value>,
+    pub params: Option<Value>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,7 +27,7 @@ pub struct JsonRpcResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRpcError>,
+    pub error: Option<JsonRpcError>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -35,7 +35,7 @@ pub struct JsonRpcError {
     pub code: i32,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
+    pub data: Option<Value>
 }
 
 impl JsonRpcError {
@@ -43,7 +43,7 @@ impl JsonRpcError {
         Self {
             code: -32602,
             message: message.into(),
-            data: None,
+            data: None
         }
     }
 
@@ -51,7 +51,7 @@ impl JsonRpcError {
         Self {
             code: -32601,
             message: message.into(),
-            data: None,
+            data: None
         }
     }
 
@@ -59,7 +59,7 @@ impl JsonRpcError {
         Self {
             code: -32000,
             message: message.into(),
-            data: None,
+            data: None
         }
     }
 
@@ -67,7 +67,7 @@ impl JsonRpcError {
         Self {
             code: -32001,
             message: message.into(),
-            data: None,
+            data: None
         }
     }
 }
@@ -77,7 +77,7 @@ impl JsonRpcError {
 /// Handles tool discovery and execution with integrated timeouts and tracing.
 pub struct McpServer {
     registry: ToolRegistry,
-    timeout_duration: Duration,
+    timeout_duration: Duration
 }
 
 impl McpServer {
@@ -86,8 +86,8 @@ impl McpServer {
         memory_manager: Arc<MemoryManager>,
         sync_manager: Arc<SyncManager>,
         knowledge_repository: Arc<
-            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
-        >,
+            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>
+        >
     ) -> Self {
         let mut registry = ToolRegistry::new();
 
@@ -96,10 +96,10 @@ impl McpServer {
         registry.register(Box::new(MemoryDeleteTool::new(memory_manager)));
 
         registry.register(Box::new(KnowledgeQueryTool::new(
-            knowledge_repository.clone(),
+            knowledge_repository.clone()
         )));
         registry.register(Box::new(KnowledgeShowTool::new(
-            knowledge_repository.clone(),
+            knowledge_repository.clone()
         )));
         registry.register(Box::new(KnowledgeCheckTool::new()));
 
@@ -108,7 +108,7 @@ impl McpServer {
 
         Self {
             registry,
-            timeout_duration: Duration::from_secs(30),
+            timeout_duration: Duration::from_secs(30)
         }
     }
 
@@ -141,7 +141,7 @@ impl McpServer {
                     jsonrpc: "2.0".to_string(),
                     id: Value::Null,
                     result: None,
-                    error: Some(JsonRpcError::request_timeout("Request timed out")),
+                    error: Some(JsonRpcError::request_timeout("Request timed out"))
                 }
             }
         }
@@ -164,7 +164,7 @@ impl McpServer {
                         "version": "0.1.0"
                     }
                 })),
-                error: None,
+                error: None
             },
             "tools/list" => {
                 let tools = self.registry.list_tools();
@@ -172,7 +172,7 @@ impl McpServer {
                     jsonrpc: "2.0".to_string(),
                     id: request.id,
                     result: Some(serde_json::to_value(tools).unwrap()),
-                    error: None,
+                    error: None
                 }
             }
             "tools/call" => {
@@ -183,7 +183,7 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: None,
-                            error: Some(JsonRpcError::invalid_params("Invalid params")),
+                            error: Some(JsonRpcError::invalid_params("Invalid params"))
                         };
                     }
                 };
@@ -195,7 +195,7 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: None,
-                            error: Some(JsonRpcError::invalid_params("Missing tool name")),
+                            error: Some(JsonRpcError::invalid_params("Missing tool name"))
                         };
                     }
                 };
@@ -212,7 +212,7 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: Some(result),
-                            error: None,
+                            error: None
                         }
                     }
                     Err(e) => {
@@ -229,7 +229,7 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: None,
-                            error: Some(rpc_error),
+                            error: Some(rpc_error)
                         }
                     }
                 }
@@ -240,7 +240,7 @@ impl McpServer {
                     jsonrpc: "2.0".to_string(),
                     id: request.id,
                     result: None,
-                    error: Some(JsonRpcError::method_not_found("Method not found")),
+                    error: Some(JsonRpcError::method_not_found("Method not found"))
                 }
             }
         }

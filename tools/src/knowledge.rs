@@ -9,19 +9,19 @@ use std::sync::Arc;
 use validator::Validate;
 
 pub struct KnowledgeQueryTool {
-    repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+    repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
 }
 
 #[derive(Deserialize, JsonSchema, Validate)]
 pub struct KnowledgeQueryArgs {
     pub layer: KnowledgeLayer,
     #[serde(default)]
-    pub prefix: String,
+    pub prefix: String
 }
 
 impl KnowledgeQueryTool {
     pub fn new(
-        repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+        repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
     ) -> Self {
         Self { repository }
     }
@@ -56,18 +56,18 @@ impl Tool for KnowledgeQueryTool {
 }
 
 pub struct KnowledgeShowTool {
-    repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+    repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
 }
 
 #[derive(Deserialize, JsonSchema, Validate)]
 pub struct KnowledgeShowArgs {
     pub layer: KnowledgeLayer,
-    pub path: String,
+    pub path: String
 }
 
 impl KnowledgeShowTool {
     pub fn new(
-        repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+        repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
     ) -> Self {
         Self { repository }
     }
@@ -101,7 +101,7 @@ impl Tool for KnowledgeShowTool {
             None => Ok(json!({
                 "success": false,
                 "error": "Entry not found"
-            })),
+            }))
         }
     }
 }
@@ -112,7 +112,7 @@ pub struct KnowledgeCheckTool;
 pub struct KnowledgeCheckArgs {
     pub content: String,
     #[serde(default)]
-    pub context: std::collections::HashMap<String, String>,
+    pub context: std::collections::HashMap<String, String>
 }
 
 impl KnowledgeCheckTool {
