@@ -5,8 +5,7 @@ use qdrant_client::{
     Qdrant,
     qdrant::{
         Distance, PointId, PointStruct, ScoredPoint, Value as QdrantValue, VectorParams,
-        VectorsConfig, point_id::PointIdOptions, vectors_config::Config,
-        vectors_output::VectorsOptions as FinalVectorsOptions
+        VectorsConfig, point_id::PointIdOptions, vectors_config::Config
     }
 };
 use serde_json::{Value, json};
