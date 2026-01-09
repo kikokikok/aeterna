@@ -9,7 +9,7 @@
 //! 4. Default values (lowest priority)
 
 use crate::config::{
-    Config, ObservabilityConfig, PostgresConfig, QdrantConfig, RedisConfig, SyncConfig, ToolConfig,
+    Config, ObservabilityConfig, PostgresConfig, QdrantConfig, RedisConfig, SyncConfig, ToolConfig
 };
 
 /// Merge multiple configuration sources with precedence.
@@ -22,7 +22,7 @@ use crate::config::{
 ///
 /// ## Usage
 /// ```rust,no_run
-/// use config::{Config, merge_configs, load_from_file, load_from_env};
+/// use config::{Config, load_from_env, load_from_file, merge_configs};
 /// use std::path::Path;
 ///
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -30,22 +30,14 @@ use crate::config::{
 ///     let from_file = load_from_file(Path::new("config.toml"))?;
 ///     let from_env = load_from_env()?;
 ///
-///     let _config = merge_configs(
-///         defaults,
-///         from_file,
-///         "file",
-///         from_env,
-///         "env",
-///         None,
-///         "cli",
-///     );
+///     let _config = merge_configs(defaults, from_file, "file", from_env, "env", None, "cli");
 ///     Ok(())
 /// }
 /// ```
 ///
 /// ## Deep Merge
-/// Performs deep merge on nested structures (providers, sync, tools, observability).
-/// String fields are overridden, not concatenated.
+/// Performs deep merge on nested structures (providers, sync, tools,
+/// observability). String fields are overridden, not concatenated.
 pub fn merge_configs(
     defaults: Config,
     file_config: Config,
@@ -53,7 +45,7 @@ pub fn merge_configs(
     env_config: Config,
     env_source_name: &str,
     cli_config: Option<Config>,
-    cli_source_name: &str,
+    cli_source_name: &str
 ) -> Config {
     let mut config = defaults;
 
@@ -75,7 +67,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_postgres,
         &override_config.providers.postgres,
         source_name,
-        &mut changes,
+        &mut changes
     );
     if !changes.is_empty() {
         base.providers.postgres = temp_postgres;
@@ -87,7 +79,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_qdrant,
         &override_config.providers.qdrant,
         source_name,
-        &mut qdrant_changes,
+        &mut qdrant_changes
     );
     if !qdrant_changes.is_empty() {
         base.providers.qdrant = temp_qdrant;
@@ -100,7 +92,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_redis,
         &override_config.providers.redis,
         source_name,
-        &mut redis_changes,
+        &mut redis_changes
     );
     if !redis_changes.is_empty() {
         base.providers.redis = temp_redis;
@@ -113,7 +105,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_sync,
         &override_config.sync,
         source_name,
-        &mut sync_changes,
+        &mut sync_changes
     );
     if !sync_changes.is_empty() {
         base.sync = temp_sync;
@@ -126,7 +118,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_tools,
         &override_config.tools,
         source_name,
-        &mut tool_changes,
+        &mut tool_changes
     );
     if !tool_changes.is_empty() {
         base.tools = temp_tools;
@@ -139,7 +131,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_obs,
         &override_config.observability,
         source_name,
-        &mut obs_changes,
+        &mut obs_changes
     );
     if !obs_changes.is_empty() {
         base.observability = temp_obs;
@@ -157,7 +149,7 @@ fn merge_postgres(
     base: &mut PostgresConfig,
     override_config: &PostgresConfig,
     _source: &str,
-    changes: &mut Vec<String>,
+    changes: &mut Vec<String>
 ) {
     if override_config.host != "localhost" && override_config.host != base.host {
         changes.push(format!(
@@ -213,7 +205,7 @@ fn merge_qdrant(
     base: &mut QdrantConfig,
     override_config: &QdrantConfig,
     _source: &str,
-    changes: &mut Vec<String>,
+    changes: &mut Vec<String>
 ) {
     if override_config.host != "localhost" && override_config.host != base.host {
         changes.push(format!("providers.qdrant.host = {}", override_config.host));
@@ -247,7 +239,7 @@ fn merge_redis(
     base: &mut RedisConfig,
     override_config: &RedisConfig,
     _source: &str,
-    changes: &mut Vec<String>,
+    changes: &mut Vec<String>
 ) {
     if override_config.host != "localhost" && override_config.host != base.host {
         changes.push(format!("providers.redis.host = {}", override_config.host));
@@ -283,7 +275,7 @@ fn merge_sync(
     base: &mut SyncConfig,
     override_config: &SyncConfig,
     _source: &str,
-    changes: &mut Vec<String>,
+    changes: &mut Vec<String>
 ) {
     if override_config.enabled != base.enabled {
         changes.push(format!("sync.enabled = {}", override_config.enabled));
@@ -325,7 +317,7 @@ fn merge_tools(
     base: &mut ToolConfig,
     override_config: &ToolConfig,
     _source: &str,
-    changes: &mut Vec<String>,
+    changes: &mut Vec<String>
 ) {
     if override_config.enabled != base.enabled {
         changes.push(format!("tools.enabled = {}", override_config.enabled));
@@ -339,7 +331,7 @@ fn merge_tools(
         changes.push(format!("tools.port = {}", override_config.port));
         base.port = override_config.port;
     }
-    if override_config.api_key.is_some() && override_config.api_key != base.api_key {
+    if override_config.api_key != base.api_key {
         match (&override_config.api_key, &base.api_key) {
             (Some(_), None) => changes.push("tools.api_key = ***".to_string()),
             (None, Some(_)) => changes.push("tools.api_key = (none)".to_string()),
@@ -365,7 +357,7 @@ fn merge_observability(
     base: &mut ObservabilityConfig,
     override_config: &ObservabilityConfig,
     _source: &str,
-    changes: &mut Vec<String>,
+    changes: &mut Vec<String>
 ) {
     if override_config.metrics_enabled != base.metrics_enabled {
         changes.push(format!(
@@ -447,7 +439,7 @@ mod tests {
             env_config,
             "env",
             None,
-            "cli",
+            "cli"
         );
 
         assert_eq!(merged.providers.postgres.host, "file_host");
@@ -544,9 +536,152 @@ mod tests {
             env_config,
             "env",
             Some(cli_config),
-            "cli",
+            "cli"
         );
 
         assert_eq!(merged.providers.postgres.host, "cli_host");
+    }
+
+    #[test]
+    fn test_merge_qdrant() {
+        let mut base = QdrantConfig {
+            host: "base_host".to_string(),
+            port: 6333,
+            collection: "base_collection".to_string(),
+            ..Default::default()
+        };
+
+        let override_config = QdrantConfig {
+            host: "override_host".to_string(),
+            port: 9999,
+            collection: "override_collection".to_string(),
+            ..Default::default()
+        };
+
+        let mut changes = Vec::new();
+        merge_qdrant(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(base.host, "override_host");
+        assert_eq!(base.port, 9999);
+        assert_eq!(base.collection, "override_collection");
+        assert_eq!(changes.len(), 3);
+    }
+
+    #[test]
+    fn test_merge_redis() {
+        let mut base = RedisConfig {
+            host: "base_host".to_string(),
+            port: 6379,
+            db: 0,
+            ..Default::default()
+        };
+
+        let override_config = RedisConfig {
+            host: "override_host".to_string(),
+            port: 9999,
+            db: 1,
+            ..Default::default()
+        };
+
+        let mut changes = Vec::new();
+        merge_redis(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(base.host, "override_host");
+        assert_eq!(base.port, 9999);
+        assert_eq!(base.db, 1);
+        assert_eq!(changes.len(), 3);
+    }
+
+    #[test]
+    fn test_merge_observability() {
+        let mut base = ObservabilityConfig {
+            metrics_enabled: true,
+            tracing_enabled: true,
+            logging_level: "info".to_string(),
+            metrics_port: 9090
+        };
+
+        let override_config = ObservabilityConfig {
+            metrics_enabled: false,
+            tracing_enabled: false,
+            logging_level: "debug".to_string(),
+            metrics_port: 9999
+        };
+
+        let mut changes = Vec::new();
+        merge_observability(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(base.metrics_enabled, false);
+        assert_eq!(base.tracing_enabled, false);
+        assert_eq!(base.logging_level, "debug");
+        assert_eq!(base.metrics_port, 9999);
+        assert_eq!(changes.len(), 4);
+    }
+
+    #[test]
+    fn test_merge_with_default_values() {
+        let mut base = PostgresConfig {
+            host: "localhost".to_string(),
+            port: 5432,
+            database: "memory_knowledge".to_string(),
+            username: "postgres".to_string(),
+            password: "".to_string(),
+            pool_size: 10,
+            timeout_seconds: 30
+        };
+
+        let override_config = PostgresConfig {
+            host: "localhost".to_string(),
+            port: 5432,
+            database: "memory_knowledge".to_string(),
+            username: "postgres".to_string(),
+            password: "".to_string(),
+            pool_size: 10,
+            timeout_seconds: 30
+        };
+
+        let mut changes = Vec::new();
+        merge_postgres(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(changes.len(), 0);
+    }
+
+    #[test]
+    fn test_merge_tools_without_api_key() {
+        let mut base = ToolConfig {
+            api_key: None,
+            ..Default::default()
+        };
+
+        let override_config = ToolConfig {
+            api_key: None,
+            ..Default::default()
+        };
+
+        let mut changes = Vec::new();
+        merge_tools(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(base.api_key, None);
+        assert_eq!(changes.len(), 0);
+    }
+
+    #[test]
+    fn test_merge_tools_remove_api_key() {
+        let mut base = ToolConfig {
+            api_key: Some("old_key".to_string()),
+            ..Default::default()
+        };
+
+        let override_config = ToolConfig {
+            api_key: None,
+            ..Default::default()
+        };
+
+        let mut changes = Vec::new();
+        merge_tools(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(base.api_key, None);
+        assert_eq!(changes.len(), 1);
+        assert!(changes[0].contains("api_key = (none)"));
     }
 }

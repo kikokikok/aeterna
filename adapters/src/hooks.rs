@@ -27,7 +27,7 @@ impl ContextHooks for MemoryContextHooks {
         &self,
         _session_id: &str,
         _tool_name: &str,
-        _params: serde_json::Value,
+        _params: serde_json::Value
     ) -> anyhow::Result<()> {
         Ok(())
     }

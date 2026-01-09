@@ -32,84 +32,84 @@
 - [x] 4.5 Write unit tests for layer resolution logic
 
 ## 5. Memory Operations - Add
-- [ ] 5.1 Implement validation for `AddMemoryInput`
-- [ ] 5.2 Implement layer identifier validation
-- [ ] 5.3 Implement `add()` method with embedding generation
-- [ ] 5.4 Implement metadata merging
-- [ ] 5.5 Return `AddMemoryOutput` with generated memory ID
-- [ ] 5.6 Write unit tests for add operation
+- [x] 5.1 Implement validation for `AddMemoryInput`
+- [x] 5.2 Implement layer identifier validation
+- [x] 5.3 Implement `add()` method with embedding generation
+- [x] 5.4 Implement metadata merging
+- [x] 5.5 Return `AddMemoryOutput` with generated memory ID
+- [x] 5.6 Write unit tests for add operation
 
 ## 6. Memory Operations - Search
-- [ ] 6.1 Implement query embedding generation
-- [ ] 6.2 Implement concurrent layer search using `tokio::spawn`
-- [ ] 6.3 Implement similarity threshold filtering
-- [ ] 6.4 Implement metadata filtering
-- [ ] 6.5 Implement result deduplication by content similarity
-- [ ] 6.6 Implement result sorting by layer precedence and score
-- [ ] 6.7 Write unit tests for search operation
+- [x] 6.1 Implement query embedding generation
+- [x] 6.2 Implement concurrent layer search using `tokio::spawn`
+- [x] 6.3 Implement similarity threshold filtering
+- [x] 6.4 Implement metadata filtering
+- [x] 6.5 Implement result deduplication by content similarity
+- [x] 6.6 Implement result sorting by layer precedence and score
+- [x] 6.7 Write unit tests for search operation
 
 ## 7. Memory Operations - Get
-- [ ] 7.1 Implement `get()` method to fetch memory by ID
-- [ ] 7.2 Handle not found case (return null)
-- [ ] 7.3 Write unit tests for get operation
+- [x] 7.1 Implement `get()` method to fetch memory by ID
+- [x] 7.2 Handle not found case (return null)
+- [x] 7.3 Write unit tests for get operation
 
 ## 8. Memory Operations - Update
-- [ ] 8.1 Implement `update()` method with partial updates
-- [ ] 8.2 Re-generate embedding if content changed
-- [ ] 8.3 Merge metadata with existing metadata
-- [ ] 8.4 Update timestamp
-- [ ] 8.5 Handle memory not found error
-- [ ] 8.6 Write unit tests for update operation
+- [x] 8.1 Implement `update()` method with partial updates
+- [x] 8.2 Re-generate embedding if content changed
+- [x] 8.3 Merge metadata with existing metadata
+- [x] 8.4 Update timestamp
+- [x] 8.5 Handle memory not found error
+- [x] 8.6 Write unit tests for update operation
 
 ## 9. Memory Operations - Delete
-- [ ] 9.1 Implement `delete()` method
-- [ ] 9.2 Remove from provider
-- [ ] 9.3 Return success status
-- [ ] 9.4 Write unit tests for delete operation
+- [x] 9.1 Implement `delete()` method
+- [x] 9.2 Remove from provider
+- [x] 9.3 Return success status
+- [x] 9.4 Write unit tests for delete operation
 
 ## 10. Memory Operations - List
-- [ ] 10.1 Implement `list()` method with pagination
-- [ ] 10.2 Implement cursor-based pagination
-- [ ] 10.3 Implement metadata filtering
-- [ ] 10.4 Return `ListMemoriesOutput` with next cursor
-- [ ] 10.5 Write unit tests for list operation
+- [x] 10.1 Implement `list()` method with pagination
+- [x] 10.2 Implement cursor-based pagination
+- [x] 10.3 Implement metadata filtering
+- [x] 10.4 Return `ListMemoriesOutput` with next cursor
+- [x] 10.5 Write unit tests for list operation
 
 ## 11. Qdrant Provider
-- [ ] 11.1 Create `qdrant_provider.rs` in `storage/` crate
-- [ ] 11.2 Initialize Qdrant client
-- [ ] 11.3 Create collections per memory layer
-- [ ] 11.4 Implement `add()` method with vector upsert
-- [ ] 11.5 Implement `search()` method with vector similarity
-- [ ] 11.6 Implement `get()` method with point retrieval
-- [ ] 11.7 Implement `update()` method with point update
-- [ ] 11.8 Implement `delete()` method with point deletion
-- [ ] 11.9 Implement metadata filtering via Qdrant filters
-- [ ] 11.10 Implement layer isolation via collections
-- [ ] 11.11 Write integration tests for Qdrant provider
+- [x] 11.1 Create `qdrant_provider.rs` in `storage/` crate
+- [x] 11.2 Initialize Qdrant client
+- [x] 11.3 Create collections per memory layer
+- [x] 11.4 Implement `add()` method with vector upsert
+- [x] 11.5 Implement `search()` method with vector similarity
+- [x] 11.6 Implement `get()` method with point retrieval
+- [x] 11.7 Implement `update()` method with point update
+- [x] 11.8 Implement `delete()` method with point deletion
+- [x] 11.9 Implement metadata filtering via Qdrant filters
+- [x] 11.10 Implement layer isolation via collections
+- [x] 11.11 Write integration tests for Qdrant provider
 
 ## 12. Embedding Service
-- [ ] 12.1 Create `embedding_service.rs` in `utils/` crate
-- [ ] 12.2 Define `EmbeddingProvider` trait
-- [ ] 12.3 Implement OpenAI embedding provider
-- [ ] 12.4 Implement caching for embeddings (Redis)
-- [ ] 12.5 Implement batch embedding for efficiency
-- [ ] 12.6 Write unit tests for embedding service
+- [x] 12.1 Create `embedding_service.rs` in `utils/` crate
+- [x] 12.2 Define `EmbeddingProvider` trait
+- [x] 12.3 Implement OpenAI embedding provider
+- [x] 12.4 Implement caching for embeddings (Redis)
+- [x] 12.5 Implement batch embedding for efficiency
+- [x] 12.6 Write unit tests for embedding service
 
 ## 13. Error Handling
-- [ ] 13.1 Implement all error variants from spec
-- [ ] 13.2 Add retry logic with exponential backoff
-- [ ] 13.3 Implement error translation from provider errors
-- [ ] 13.4 Add detailed error context in `details` field
-- [ ] 13.5 Set retryable flags on each error type
-- [ ] 13.6 Write unit tests for error handling
+- [x] 13.1 Implement all error variants from spec
+- [x] 13.2 Add retry logic with exponential backoff
+- [x] 13.3 Implement error translation from provider errors
+- [x] 13.4 Add detailed error context in `details` field
+- [x] 13.5 Set retryable flags on each error type
+- [x] 13.6 Write unit tests for error handling
 
 ## 14. Observability
-- [ ] 14.1 Integrate OpenTelemetry for distributed tracing
-- [ ] 14.2 Add Prometheus metrics for operations
-- [ ] 14.3 Emit metrics: memory.operations.total, memory.operations.errors, memory.operations.latency
-- [ ] 14.4 Emit metrics: memory.search.results, memory.storage.size by layer
-- [ ] 14.5 Add structured logging with tracing spans
-- [ ] 14.6 Configure metric histograms with appropriate buckets
+- [x] 14.1 Integrate OpenTelemetry for distributed tracing
+- [x] 14.2 Add Prometheus metrics for operations
+- [x] 14.3 Emit metrics: memory.operations.total, memory.operations.errors, memory.operations.latency
+- [x] 14.4 Emit metrics: memory.search.results, memory.storage.size by layer
+- [x] 14.5 Add structured logging with tracing spans
+- [x] 14.6 Configure metric histograms with appropriate buckets
 
 ## 15. Integration Tests
 - [ ] 15.1 Create integration test suite

@@ -12,29 +12,29 @@ pub struct SyncManager {
     memory_manager: Arc<MemoryManager>,
     knowledge_repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
     persister: Arc<dyn SyncStatePersister>,
-    state: Arc<RwLock<SyncState>>,
+    state: Arc<RwLock<SyncState>>
 }
 
 impl SyncManager {
     pub async fn new(
         memory_manager: Arc<MemoryManager>,
         knowledge_repo: Arc<
-            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
+            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>
         >,
-        persister: Arc<dyn SyncStatePersister>,
+        persister: Arc<dyn SyncStatePersister>
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let state = persister.load().await?;
         Ok(Self {
             memory_manager,
             knowledge_repo,
             persister,
-            state: Arc::new(RwLock::new(state)),
+            state: Arc::new(RwLock::new(state))
         })
     }
 
     pub async fn run_sync_cycle(
         &self,
-        staleness_threshold_mins: u32,
+        staleness_threshold_mins: u32
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(trigger) = self.check_triggers(staleness_threshold_mins).await? {
             tracing::info!("Sync triggered by {:?}", trigger);
@@ -64,7 +64,7 @@ impl SyncManager {
 
         let last_commit = match &state.last_knowledge_commit {
             Some(c) => c.clone(),
-            None => return self.sync_all_internal(&mut state, start_time).await,
+            None => return self.sync_all_internal(&mut state, start_time).await
         };
 
         let head_commit = self.knowledge_repo.get_head_commit().await?;
@@ -87,6 +87,7 @@ impl SyncManager {
                             .await?;
                         state.knowledge_hashes.remove(&path);
                         state.pointer_mapping.remove(&memory_id);
+                        state.knowledge_layers.remove(&path);
                     }
                     continue;
                 }
@@ -95,7 +96,7 @@ impl SyncManager {
                         knowledge_id: path,
                         error: e.to_string(),
                         failed_at: chrono::Utc::now().timestamp(),
-                        retry_count: 0,
+                        retry_count: 0
                     });
                     continue;
                 }
@@ -106,7 +107,7 @@ impl SyncManager {
                     knowledge_id: entry.path.clone(),
                     error: e.to_string(),
                     failed_at: chrono::Utc::now().timestamp(),
-                    retry_count: 0,
+                    retry_count: 0
                 });
             }
         }
@@ -131,7 +132,7 @@ impl SyncManager {
     async fn sync_all_internal(
         &self,
         state: &mut SyncState,
-        start_time: std::time::Instant,
+        start_time: std::time::Instant
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let head_commit = self.knowledge_repo.get_head_commit().await?;
         let mut sync_errors = Vec::new();
@@ -140,7 +141,7 @@ impl SyncManager {
             mk_core::types::KnowledgeLayer::Company,
             mk_core::types::KnowledgeLayer::Org,
             mk_core::types::KnowledgeLayer::Team,
-            mk_core::types::KnowledgeLayer::Project,
+            mk_core::types::KnowledgeLayer::Project
         ] {
             let entries = match self.knowledge_repo.list(layer, "").await {
                 Ok(e) => e,
@@ -149,7 +150,7 @@ impl SyncManager {
                         knowledge_id: format!("layer:{layer:?}"),
                         error: e.to_string(),
                         failed_at: chrono::Utc::now().timestamp(),
-                        retry_count: 0,
+                        retry_count: 0
                     });
                     continue;
                 }
@@ -161,7 +162,7 @@ impl SyncManager {
                         knowledge_id: entry.path.clone(),
                         error: e.to_string(),
                         failed_at: chrono::Utc::now().timestamp(),
-                        retry_count: 0,
+                        retry_count: 0
                     });
                 }
             }
@@ -180,7 +181,7 @@ impl SyncManager {
 
     pub async fn check_triggers(
         &self,
-        staleness_threshold_mins: u32,
+        staleness_threshold_mins: u32
     ) -> Result<Option<SyncTrigger>, Box<dyn std::error::Error + Send + Sync>> {
         let state = self.state.read().await;
 
@@ -190,13 +191,13 @@ impl SyncManager {
                 if head != *last {
                     return Ok(Some(SyncTrigger::CommitMismatch {
                         last_commit: last.clone(),
-                        head_commit: head,
+                        head_commit: head
                     }));
                 }
             } else {
                 return Ok(Some(SyncTrigger::CommitMismatch {
                     last_commit: "none".to_string(),
-                    head_commit: head,
+                    head_commit: head
                 }));
             }
         }
@@ -207,7 +208,7 @@ impl SyncManager {
             if elapsed_mins >= staleness_threshold_mins as i64 {
                 return Ok(Some(SyncTrigger::Staleness {
                     last_sync_at: last_sync,
-                    threshold_mins: staleness_threshold_mins,
+                    threshold_mins: staleness_threshold_mins
                 }));
             }
         } else {
@@ -219,7 +220,7 @@ impl SyncManager {
 
     pub async fn resolve_conflicts(
         &self,
-        conflicts: Vec<SyncConflict>,
+        conflicts: Vec<SyncConflict>
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut state = self.state.write().await;
 
@@ -228,23 +229,25 @@ impl SyncManager {
                 SyncConflict::HashMismatch { knowledge_id, .. }
                 | SyncConflict::MissingPointer { knowledge_id, .. } => {
                     state.knowledge_hashes.remove(&knowledge_id);
-                    if let Some(entry) = self
-                        .knowledge_repo
-                        .get(mk_core::types::KnowledgeLayer::Company, &knowledge_id)
-                        .await?
-                    {
+                    // Get the layer from our stored mapping
+                    let layer = state
+                        .knowledge_layers
+                        .get(&knowledge_id)
+                        .cloned()
+                        .unwrap_or(mk_core::types::KnowledgeLayer::Company);
+                    if let Some(entry) = self.knowledge_repo.get(layer, &knowledge_id).await? {
                         self.sync_entry(&entry, &mut state).await?;
                     }
                 }
                 SyncConflict::OrphanedPointer {
                     memory_id,
-                    knowledge_id,
+                    knowledge_id
                 } => {
                     for layer in [
                         mk_core::types::MemoryLayer::Company,
                         mk_core::types::MemoryLayer::Org,
                         mk_core::types::MemoryLayer::Team,
-                        mk_core::types::MemoryLayer::Project,
+                        mk_core::types::MemoryLayer::Project
                     ] {
                         let _ = self
                             .memory_manager
@@ -253,6 +256,7 @@ impl SyncManager {
                     }
                     state.knowledge_hashes.remove(&knowledge_id);
                     state.pointer_mapping.remove(&memory_id);
+                    state.knowledge_layers.remove(&knowledge_id);
                 }
             }
         }
@@ -262,16 +266,20 @@ impl SyncManager {
     }
 
     pub async fn detect_conflicts(
-        &self,
+        &self
     ) -> Result<Vec<SyncConflict>, Box<dyn std::error::Error + Send + Sync>> {
         let state = self.state.read().await;
         let mut conflicts = Vec::new();
 
         for (memory_id, knowledge_id) in &state.pointer_mapping {
-            let entry_res = self
-                .knowledge_repo
-                .get(mk_core::types::KnowledgeLayer::Company, knowledge_id)
-                .await;
+            // Get the layer from our stored mapping
+            let layer = state
+                .knowledge_layers
+                .get(knowledge_id)
+                .cloned()
+                .unwrap_or(mk_core::types::KnowledgeLayer::Company);
+
+            let entry_res = self.knowledge_repo.get(layer, knowledge_id).await;
 
             match entry_res {
                 Ok(Some(k_entry)) => {
@@ -285,7 +293,7 @@ impl SyncManager {
                             knowledge_id: knowledge_id.clone(),
                             memory_id: memory_id.clone(),
                             expected_hash: exp.clone(),
-                            actual_hash,
+                            actual_hash
                         });
                     }
 
@@ -294,7 +302,7 @@ impl SyncManager {
                         Ok(None) => {
                             conflicts.push(SyncConflict::MissingPointer {
                                 knowledge_id: knowledge_id.clone(),
-                                expected_memory_id: memory_id.clone(),
+                                expected_memory_id: memory_id.clone()
                             });
                         }
                         Ok(Some(m_entry)) => {
@@ -304,7 +312,7 @@ impl SyncManager {
                                     knowledge_id: knowledge_id.clone(),
                                     memory_id: memory_id.clone(),
                                     expected_hash: "summary_mismatch".to_string(),
-                                    actual_hash: "summary_mismatch".to_string(),
+                                    actual_hash: "summary_mismatch".to_string()
                                 });
                             }
                         }
@@ -316,14 +324,14 @@ impl SyncManager {
                 Ok(None) => {
                     conflicts.push(SyncConflict::OrphanedPointer {
                         memory_id: memory_id.clone(),
-                        knowledge_id: knowledge_id.clone(),
+                        knowledge_id: knowledge_id.clone()
                     });
                 }
                 Err(e) => tracing::error!(
                     "Error fetching knowledge {} for conflict detection: {}",
                     knowledge_id,
                     e
-                ),
+                )
             }
         }
 
@@ -333,7 +341,7 @@ impl SyncManager {
     fn find_memory_id_by_knowledge_id(
         &self,
         knowledge_id: &str,
-        state: &SyncState,
+        state: &SyncState
     ) -> Option<String> {
         state
             .pointer_mapping
@@ -345,7 +353,7 @@ impl SyncManager {
     async fn sync_entry(
         &self,
         entry: &KnowledgeEntry,
-        state: &mut SyncState,
+        state: &mut SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let content_hash = utils::compute_content_hash(&entry.content);
         let knowledge_id = &entry.path;
@@ -363,13 +371,13 @@ impl SyncManager {
             content_hash: content_hash.clone(),
             synced_at: chrono::Utc::now().timestamp(),
             source_layer: entry.layer,
-            is_orphaned: false,
+            is_orphaned: false
         };
 
         let metadata = KnowledgePointerMetadata {
             kind: "knowledge_pointer".to_string(),
             knowledge_pointer: pointer,
-            tags: Vec::new(),
+            tags: Vec::new()
         };
 
         let metadata_map = match serde_json::to_value(metadata)? {
@@ -380,7 +388,7 @@ impl SyncManager {
                 }
                 hmap
             }
-            _ => return Err("Failed to serialize metadata".into()),
+            _ => return Err("Failed to serialize metadata".into())
         };
 
         let memory_entry = MemoryEntry {
@@ -390,7 +398,7 @@ impl SyncManager {
             layer: memory_layer,
             metadata: metadata_map,
             created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp()
         };
 
         self.memory_manager
@@ -403,6 +411,9 @@ impl SyncManager {
         state
             .pointer_mapping
             .insert(format!("ptr_{knowledge_id}"), knowledge_id.clone());
+        state
+            .knowledge_layers
+            .insert(knowledge_id.clone(), entry.layer);
         state.stats.total_items_synced += 1;
 
         Ok(())
@@ -417,10 +428,18 @@ impl SyncManager {
         )
     }
 
+    pub(crate) fn find_memory_id_by_knowledge_id_for_test(
+        &self,
+        knowledge_id: &str,
+        state: &SyncState
+    ) -> Option<String> {
+        self.find_memory_id_by_knowledge_id(knowledge_id, state)
+    }
+
     pub async fn start_background_sync(
         self: Arc<Self>,
         interval_secs: u64,
-        staleness_threshold_mins: u32,
+        staleness_threshold_mins: u32
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
@@ -431,5 +450,250 @@ impl SyncManager {
                 }
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeType};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_generate_summary() {
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            persister: Arc::new(MockPersister::new()),
+            state: Arc::new(RwLock::new(SyncState::default()))
+        };
+
+        let entry = KnowledgeEntry {
+            path: "test.md".to_string(),
+            content: "First line\nSecond line\nThird line".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 1234567890
+        };
+
+        let summary = sync_manager.generate_summary(&entry);
+        assert_eq!(summary, "[Spec] test.md\n\nFirst line");
+    }
+
+    #[test]
+    fn test_generate_summary_empty_content() {
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            persister: Arc::new(MockPersister::new()),
+            state: Arc::new(RwLock::new(SyncState::default()))
+        };
+
+        let entry = KnowledgeEntry {
+            path: "empty.md".to_string(),
+            content: "".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Adr,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 1234567890
+        };
+
+        let summary = sync_manager.generate_summary(&entry);
+        assert_eq!(summary, "[Adr] empty.md\n\n");
+    }
+
+    #[test]
+    fn test_find_memory_id_by_knowledge_id() {
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            persister: Arc::new(MockPersister::new()),
+            state: Arc::new(RwLock::new(SyncState::default()))
+        };
+
+        let mut state = SyncState::default();
+        state
+            .pointer_mapping
+            .insert("ptr_test".to_string(), "test.md".to_string());
+        state
+            .pointer_mapping
+            .insert("ptr_other".to_string(), "other.md".to_string());
+
+        let memory_id = sync_manager.find_memory_id_by_knowledge_id("test.md", &state);
+        assert_eq!(memory_id, Some("ptr_test".to_string()));
+
+        let memory_id = sync_manager.find_memory_id_by_knowledge_id("nonexistent.md", &state);
+        assert_eq!(memory_id, None);
+    }
+
+    struct MockKnowledgeRepository;
+
+    impl MockKnowledgeRepository {
+        fn new() -> Self {
+            Self
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl KnowledgeRepository for MockKnowledgeRepository {
+        type Error = knowledge::repository::RepositoryError;
+
+        async fn store(
+            &self,
+            _entry: KnowledgeEntry,
+            _message: &str
+        ) -> Result<String, Self::Error> {
+            Ok("mock_commit_hash".to_string())
+        }
+
+        async fn get(
+            &self,
+            _layer: KnowledgeLayer,
+            _path: &str
+        ) -> Result<Option<KnowledgeEntry>, Self::Error> {
+            Ok(None)
+        }
+
+        async fn list(
+            &self,
+            _layer: KnowledgeLayer,
+            _prefix: &str
+        ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+            Ok(Vec::new())
+        }
+
+        async fn delete(
+            &self,
+            _layer: KnowledgeLayer,
+            _path: &str,
+            _message: &str
+        ) -> Result<String, Self::Error> {
+            Ok("mock_delete_commit_hash".to_string())
+        }
+
+        async fn get_head_commit(&self) -> Result<Option<String>, Self::Error> {
+            Ok(None)
+        }
+
+        async fn get_affected_items(
+            &self,
+            _from_commit: &str
+        ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
+            Ok(Vec::new())
+        }
+    }
+
+    struct MockPersister;
+
+    impl MockPersister {
+        fn new() -> Self {
+            Self
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl SyncStatePersister for MockPersister {
+        async fn load(&self) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(SyncState::default())
+        }
+
+        async fn save(
+            &self,
+            _state: &SyncState
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_standalone_generate_summary() {
+        struct TestSyncManager;
+        impl TestSyncManager {
+            fn generate_summary(&self, entry: &KnowledgeEntry) -> String {
+                format!(
+                    "[{:?}] {}\n\n{}",
+                    entry.kind,
+                    entry.path,
+                    entry.content.lines().next().unwrap_or("")
+                )
+            }
+        }
+
+        let sync_manager = TestSyncManager;
+
+        let entry = KnowledgeEntry {
+            path: "test.md".to_string(),
+            content: "First line\nSecond line\nThird line".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 1234567890
+        };
+
+        let summary = sync_manager.generate_summary(&entry);
+        assert_eq!(summary, "[Spec] test.md\n\nFirst line");
+    }
+
+    #[test]
+    fn test_standalone_generate_summary_empty_content() {
+        struct TestSyncManager;
+        impl TestSyncManager {
+            fn generate_summary(&self, entry: &KnowledgeEntry) -> String {
+                format!(
+                    "[{:?}] {}\n\n{}",
+                    entry.kind,
+                    entry.path,
+                    entry.content.lines().next().unwrap_or("")
+                )
+            }
+        }
+
+        let sync_manager = TestSyncManager;
+
+        let entry = KnowledgeEntry {
+            path: "empty.md".to_string(),
+            content: "".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Adr,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 1234567890
+        };
+
+        let summary = sync_manager.generate_summary(&entry);
+        assert_eq!(summary, "[Adr] empty.md\n\n");
+    }
+
+    #[test]
+    fn test_state_find_memory_id_by_knowledge_id() {
+        let mut state = SyncState::default();
+        state
+            .pointer_mapping
+            .insert("ptr_test".to_string(), "test.md".to_string());
+        state
+            .pointer_mapping
+            .insert("ptr_other".to_string(), "other.md".to_string());
+
+        let memory_id = state
+            .pointer_mapping
+            .iter()
+            .find(|(_, kid)| **kid == "test.md")
+            .map(|(mid, _)| mid.clone());
+        assert_eq!(memory_id, Some("ptr_test".to_string()));
+
+        let memory_id = state
+            .pointer_mapping
+            .iter()
+            .find(|(_, kid)| **kid == "nonexistent.md")
+            .map(|(mid, _)| mid.clone());
+        assert_eq!(memory_id, None);
     }
 }
