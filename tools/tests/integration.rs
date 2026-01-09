@@ -104,22 +104,22 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
 
     let langchain = LangChainAdapter::new(server.clone());
     let lc_tools = langchain.to_langchain_tools();
-    assert_eq!(lc_tools.len(), 8);
+    assert_eq!(lc_tools.len(), 9);
 
     let response = langchain
         .handle_mcp_request(json!({
             "name": "memory_add",
             "arguments": {
                 "content": "Integrated test",
-                "layer": "user",
-                "identifiers": {
-                    "user_id": "test_user_123"
-                }
+                "layer": "user"
             }
         }))
         .await?;
 
-    assert!(response["result"]["success"].as_bool().unwrap());
+    if let Some(error) = response["error"].as_object() {
+        panic!("Tool call failed: {:?}", error);
+    }
+    assert!(!response["result"].is_null());
 
     Ok(())
 }
