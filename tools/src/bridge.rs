@@ -90,7 +90,10 @@ impl Tool for SyncStatusTool {
         })
     }
 
-    async fn call(&self, _params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let state = self.sync_manager.get_state().await;
 
         Ok(json!({

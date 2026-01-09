@@ -1,7 +1,6 @@
 use crate::pointer::{KnowledgePointer, KnowledgePointerMetadata, map_layer};
 use crate::state::{SyncConflict, SyncFailure, SyncState, SyncTrigger};
 use crate::state_persister::SyncStatePersister;
-use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{KnowledgeEntry, MemoryEntry};
@@ -11,7 +10,7 @@ use tokio::sync::RwLock;
 
 pub struct SyncManager {
     memory_manager: Arc<MemoryManager>,
-    knowledge_repo: Arc<GitRepository>,
+    knowledge_repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
     persister: Arc<dyn SyncStatePersister>,
     state: Arc<RwLock<SyncState>>,
 }
@@ -19,7 +18,9 @@ pub struct SyncManager {
 impl SyncManager {
     pub async fn new(
         memory_manager: Arc<MemoryManager>,
-        knowledge_repo: Arc<GitRepository>,
+        knowledge_repo: Arc<
+            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
+        >,
         persister: Arc<dyn SyncStatePersister>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let state = persister.load().await?;
@@ -227,7 +228,11 @@ impl SyncManager {
                 SyncConflict::HashMismatch { knowledge_id, .. }
                 | SyncConflict::MissingPointer { knowledge_id, .. } => {
                     state.knowledge_hashes.remove(&knowledge_id);
-                    if let Some(entry) = self.knowledge_repo.get_by_path(&knowledge_id).await? {
+                    if let Some(entry) = self
+                        .knowledge_repo
+                        .get(mk_core::types::KnowledgeLayer::Company, &knowledge_id)
+                        .await?
+                    {
                         self.sync_entry(&entry, &mut state).await?;
                     }
                 }
@@ -263,7 +268,10 @@ impl SyncManager {
         let mut conflicts = Vec::new();
 
         for (memory_id, knowledge_id) in &state.pointer_mapping {
-            let entry_res = self.knowledge_repo.get_by_path(knowledge_id).await;
+            let entry_res = self
+                .knowledge_repo
+                .get(mk_core::types::KnowledgeLayer::Company, knowledge_id)
+                .await;
 
             match entry_res {
                 Ok(Some(k_entry)) => {
