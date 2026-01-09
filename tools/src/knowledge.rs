@@ -1,7 +1,8 @@
 use crate::tools::Tool;
 use async_trait::async_trait;
-use knowledge::repository::GitRepository;
+use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
+use mk_core::types::MemoryEntry;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -9,11 +10,13 @@ use std::sync::Arc;
 use validator::Validate;
 
 pub struct KnowledgeGetTool {
-    repo: Arc<GitRepository>
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
 }
 
 impl KnowledgeGetTool {
-    pub fn new(repo: Arc<GitRepository>) -> Self {
+    pub fn new(
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+    ) -> Self {
         Self { repo }
     }
 }
@@ -63,11 +66,13 @@ impl Tool for KnowledgeGetTool {
 }
 
 pub struct KnowledgeListTool {
-    repo: Arc<GitRepository>
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
 }
 
 impl KnowledgeListTool {
-    pub fn new(repo: Arc<GitRepository>) -> Self {
+    pub fn new(
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+    ) -> Self {
         Self { repo }
     }
 }
@@ -118,12 +123,19 @@ impl Tool for KnowledgeListTool {
 }
 
 pub struct KnowledgeQueryTool {
-    repo: Arc<GitRepository>
+    memory_manager: Arc<MemoryManager>,
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
 }
 
 impl KnowledgeQueryTool {
-    pub fn new(repo: Arc<GitRepository>) -> Self {
-        Self { repo }
+    pub fn new(
+        memory_manager: Arc<MemoryManager>,
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+    ) -> Self {
+        Self {
+            memory_manager,
+            repo
+        }
     }
 }
 
@@ -142,7 +154,7 @@ impl Tool for KnowledgeQueryTool {
     }
 
     fn description(&self) -> &str {
-        "Search for knowledge entries across layers."
+        "Search for knowledge entries across layers using semantic or keyword search."
     }
 
     fn input_schema(&self) -> Value {
@@ -182,10 +194,28 @@ impl Tool for KnowledgeQueryTool {
             }
         }
 
-        let results = self
+        let vector_results: Vec<MemoryEntry> = self
+            .memory_manager
+            .search_text_with_threshold(
+                &p.query,
+                p.limit.unwrap_or(10),
+                0.7,
+                std::collections::HashMap::new()
+            )
+            .await
+            .unwrap_or_default();
+
+        let repo_results = self
             .repo
             .search(&p.query, layers, p.limit.unwrap_or(10))
             .await?;
-        Ok(json!({ "success": true, "results": results }))
+
+        Ok(json!({
+            "success": true,
+            "results": {
+                "semantic": vector_results,
+                "keyword": repo_results
+            }
+        }))
     }
 }

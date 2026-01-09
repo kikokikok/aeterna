@@ -1,6 +1,8 @@
 use crate::pointer::{KnowledgePointer, KnowledgePointerMetadata, map_layer};
-use crate::state::{SyncConflict, SyncFailure, SyncState, SyncTrigger};
+use crate::state::{FederationConflict, SyncConflict, SyncFailure, SyncState, SyncTrigger};
 use crate::state_persister::SyncStatePersister;
+use knowledge::federation::FederationProvider;
+use knowledge::governance::GovernanceEngine;
 use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{KnowledgeEntry, MemoryEntry};
@@ -11,6 +13,8 @@ use tokio::sync::RwLock;
 pub struct SyncManager {
     memory_manager: Arc<MemoryManager>,
     knowledge_repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+    governance_engine: Arc<GovernanceEngine>,
+    federation_manager: Option<Arc<dyn FederationProvider>>,
     persister: Arc<dyn SyncStatePersister>,
     state: Arc<RwLock<SyncState>>
 }
@@ -21,12 +25,16 @@ impl SyncManager {
         knowledge_repo: Arc<
             dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>
         >,
+        governance_engine: Arc<GovernanceEngine>,
+        federation_manager: Option<Arc<dyn FederationProvider>>,
         persister: Arc<dyn SyncStatePersister>
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let state = persister.load().await?;
         Ok(Self {
             memory_manager,
             knowledge_repo,
+            governance_engine,
+            federation_manager,
             persister,
             state: Arc::new(RwLock::new(state))
         })
@@ -39,7 +47,13 @@ impl SyncManager {
         if let Some(trigger) = self.check_triggers(staleness_threshold_mins).await? {
             tracing::info!("Sync triggered by {:?}", trigger);
 
+            if let Some(fed_manager) = &self.federation_manager {
+                self.sync_federation(fed_manager.as_ref()).await?;
+            }
+
             self.sync_incremental().await?;
+
+            self.prune_failed_items(30).await?;
 
             let conflicts = self.detect_conflicts().await?;
             if !conflicts.is_empty() {
@@ -51,6 +65,54 @@ impl SyncManager {
             }
         }
 
+        Ok(())
+    }
+
+    pub async fn sync_federation(
+        &self,
+        fed_manager: &dyn FederationProvider
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        tracing::info!("Starting federation sync");
+        let mut state = self.state.write().await;
+        let upstreams = fed_manager.config().upstreams.clone();
+
+        for upstream in upstreams {
+            let upstream_id = upstream.id.clone();
+
+            let target_path = self
+                .knowledge_repo
+                .root_path()
+                .unwrap_or_else(|| std::path::PathBuf::from("data/knowledge"))
+                .join("federated")
+                .join(&upstream_id);
+
+            match fed_manager.sync_upstream(&upstream_id, &target_path).await {
+                Ok(_) => {
+                    tracing::info!("Successfully synced upstream: {}", upstream_id);
+                    state
+                        .federation_conflicts
+                        .retain(|c| c.upstream_id != upstream_id);
+                }
+                Err(knowledge::repository::RepositoryError::InvalidPath(msg))
+                    if msg.contains("conflict") || msg.contains("upstream") =>
+                {
+                    tracing::error!("Federation conflict for upstream {}: {}", upstream_id, msg);
+                    state
+                        .federation_conflicts
+                        .retain(|c| c.upstream_id != upstream_id);
+                    state.federation_conflicts.push(FederationConflict {
+                        upstream_id: upstream_id.clone(),
+                        reason: msg,
+                        detected_at: chrono::Utc::now().timestamp()
+                    });
+                }
+                Err(e) => {
+                    tracing::error!("Error syncing upstream {}: {}", upstream_id, e);
+                }
+            }
+        }
+
+        self.persister.save(&state).await?;
         Ok(())
     }
 
@@ -218,6 +280,27 @@ impl SyncManager {
         Ok(None)
     }
 
+    pub async fn resolve_federation_conflict(
+        &self,
+        upstream_id: &str,
+        resolution: &str
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut state = self.state.write().await;
+
+        state
+            .federation_conflicts
+            .retain(|c| c.upstream_id != upstream_id);
+
+        tracing::info!(
+            "Resolved federation conflict for {}: {}",
+            upstream_id,
+            resolution
+        );
+
+        self.persister.save(&state).await?;
+        Ok(())
+    }
+
     pub async fn resolve_conflicts(
         &self,
         conflicts: Vec<SyncConflict>
@@ -350,11 +433,41 @@ impl SyncManager {
             .map(|(mid, _)| mid.clone())
     }
 
-    async fn sync_entry(
+    pub async fn sync_entry(
         &self,
         entry: &KnowledgeEntry,
         state: &mut SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut context = HashMap::new();
+        context.insert("path".to_string(), serde_json::json!(entry.path));
+        context.insert("content".to_string(), serde_json::json!(entry.content));
+
+        let validation = self.governance_engine.validate(entry.layer, &context);
+        if !validation.is_valid {
+            state.stats.total_governance_blocks += 1;
+            for violation in validation.violations {
+                if violation.severity == mk_core::types::ConstraintSeverity::Block {
+                    state.failed_items.push(SyncFailure {
+                        knowledge_id: entry.path.clone(),
+                        error: format!("Governance violation (BLOCK): {}", violation.message),
+                        failed_at: chrono::Utc::now().timestamp(),
+                        retry_count: 0
+                    });
+                    return Err(format!(
+                        "Governance violation (BLOCK) for {}: {}",
+                        entry.path, violation.message
+                    )
+                    .into());
+                }
+                tracing::warn!(
+                    "Governance violation ({:?}) for {}: {}",
+                    violation.severity,
+                    entry.path,
+                    violation.message
+                );
+            }
+        }
+
         let content_hash = utils::compute_content_hash(&entry.content);
         let knowledge_id = &entry.path;
 
@@ -428,7 +541,33 @@ impl SyncManager {
         )
     }
 
-    pub(crate) fn find_memory_id_by_knowledge_id_for_test(
+    pub async fn prune_failed_items(
+        &self,
+        days_old: i64
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut state = self.state.write().await;
+        let now = chrono::Utc::now().timestamp();
+        let threshold = days_old * 24 * 60 * 60;
+
+        let before_count = state.failed_items.len();
+        state
+            .failed_items
+            .retain(|f| (now - f.failed_at) < threshold);
+
+        let pruned = before_count - state.failed_items.len();
+        if pruned > 0 {
+            tracing::info!(
+                "Pruned {} failed items older than {} days",
+                pruned,
+                days_old
+            );
+            self.persister.save(&state).await?;
+        }
+
+        Ok(())
+    }
+
+    pub fn find_memory_id_by_knowledge_id_for_test(
         &self,
         knowledge_id: &str,
         state: &SyncState
@@ -464,6 +603,8 @@ mod tests {
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
             persister: Arc::new(MockPersister::new()),
             state: Arc::new(RwLock::new(SyncState::default()))
         };
@@ -488,6 +629,8 @@ mod tests {
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
             persister: Arc::new(MockPersister::new()),
             state: Arc::new(RwLock::new(SyncState::default()))
         };
@@ -512,6 +655,8 @@ mod tests {
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
             persister: Arc::new(MockPersister::new()),
             state: Arc::new(RwLock::new(SyncState::default()))
         };
@@ -585,6 +730,19 @@ mod tests {
             _from_commit: &str
         ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
             Ok(Vec::new())
+        }
+
+        async fn search(
+            &self,
+            _query: &str,
+            _layers: Vec<KnowledgeLayer>,
+            _limit: usize
+        ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+            Ok(Vec::new())
+        }
+
+        fn root_path(&self) -> Option<std::path::PathBuf> {
+            None
         }
     }
 

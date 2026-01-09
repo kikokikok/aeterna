@@ -85,6 +85,10 @@ impl GitRepository {
         }
     }
 
+    pub fn root_path(&self) -> &std::path::Path {
+        &self.root_path
+    }
+
     pub async fn get_by_path(&self, path: &str) -> Result<Option<KnowledgeEntry>, RepositoryError> {
         for layer in [
             KnowledgeLayer::Company,
@@ -262,6 +266,10 @@ impl KnowledgeRepository for GitRepository {
             }
         }
         Ok(results)
+    }
+
+    fn root_path(&self) -> Option<std::path::PathBuf> {
+        Some(self.root_path.clone())
     }
 }
 
