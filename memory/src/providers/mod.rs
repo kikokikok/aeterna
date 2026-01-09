@@ -1,3 +1,5 @@
+pub mod qdrant;
+
 use async_trait::async_trait;
 use mk_core::traits::MemoryProviderAdapter;
 use mk_core::types::{MemoryEntry, MemoryLayer};
@@ -6,13 +8,13 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub struct MockProvider {
-    entries: Arc<RwLock<HashMap<String, MemoryEntry>>>,
+    entries: Arc<RwLock<HashMap<String, MemoryEntry>>>
 }
 
 impl MockProvider {
     pub fn new() -> Self {
         Self {
-            entries: Arc::new(RwLock::new(HashMap::new())),
+            entries: Arc::new(RwLock::new(HashMap::new()))
         }
     }
 }
@@ -38,7 +40,7 @@ impl MemoryProviderAdapter for MockProvider {
         &self,
         _query_vector: Vec<f32>,
         limit: usize,
-        filters: HashMap<String, serde_json::Value>,
+        filters: HashMap<String, serde_json::Value>
     ) -> Result<Vec<MemoryEntry>, Self::Error> {
         let entries = self.entries.read().await;
         let results: Vec<MemoryEntry> = entries
@@ -82,7 +84,7 @@ impl MemoryProviderAdapter for MockProvider {
         &self,
         layer: MemoryLayer,
         limit: usize,
-        cursor: Option<String>,
+        cursor: Option<String>
     ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
         let entries = self.entries.read().await;
         let mut results: Vec<MemoryEntry> = entries
@@ -136,7 +138,7 @@ mod tests {
             layer: MemoryLayer::Agent,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         provider.add(entry.clone()).await.unwrap();

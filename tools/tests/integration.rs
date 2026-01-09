@@ -21,7 +21,7 @@ impl KnowledgeRepository for MockKnowledgeRepo {
     async fn get(
         &self,
         _layer: KnowledgeLayer,
-        _path: &str,
+        _path: &str
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
         Ok(None)
     }
@@ -33,7 +33,7 @@ impl KnowledgeRepository for MockKnowledgeRepo {
     async fn list(
         &self,
         _layer: KnowledgeLayer,
-        _prefix: &str,
+        _prefix: &str
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         Ok(vec![])
     }
@@ -42,7 +42,7 @@ impl KnowledgeRepository for MockKnowledgeRepo {
         &self,
         _layer: KnowledgeLayer,
         _path: &str,
-        _message: &str,
+        _message: &str
     ) -> Result<String, Self::Error> {
         Ok("hash".to_string())
     }
@@ -53,7 +53,7 @@ impl KnowledgeRepository for MockKnowledgeRepo {
 
     async fn get_affected_items(
         &self,
-        _since_commit: &str,
+        _since_commit: &str
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         Ok(vec![])
     }
@@ -68,7 +68,7 @@ impl SyncStatePersister for MockPersister {
     }
     async fn save(
         &self,
-        _state: &SyncState,
+        _state: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
@@ -86,16 +86,16 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
         SyncManager::new(
             memory_manager.clone(),
             knowledge_repo.clone(),
-            Arc::new(MockPersister),
+            Arc::new(MockPersister)
         )
         .await
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?,
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
     );
 
     let server = Arc::new(McpServer::new(
         memory_manager,
         sync_manager,
-        knowledge_repo.clone(),
+        knowledge_repo.clone()
     ));
 
     let opencode = OpenCodeAdapter::new(server.clone());
@@ -111,7 +111,10 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
             "name": "memory_add",
             "arguments": {
                 "content": "Integrated test",
-                "layer": "user"
+                "layer": "user",
+                "identifiers": {
+                    "user_id": "test_user_123"
+                }
             }
         }))
         .await?;
@@ -129,10 +132,10 @@ async fn test_server_timeout() -> anyhow::Result<()> {
         SyncManager::new(
             memory_manager.clone(),
             knowledge_repo.clone(),
-            Arc::new(MockPersister),
+            Arc::new(MockPersister)
         )
         .await
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?,
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
     );
 
     let server = McpServer::new(memory_manager, sync_manager, knowledge_repo)
@@ -142,7 +145,7 @@ async fn test_server_timeout() -> anyhow::Result<()> {
         jsonrpc: "2.0".to_string(),
         id: json!(1),
         method: "tools/list".to_string(),
-        params: None,
+        params: None
     };
 
     let response = server.handle_request(request).await;

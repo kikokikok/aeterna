@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tools::server::McpServer;
 
 pub struct LangChainAdapter {
-    server: Arc<McpServer>,
+    server: Arc<McpServer>
 }
 
 impl LangChainAdapter {
@@ -22,7 +22,7 @@ impl LangChainAdapter {
                 if let Some(obj) = schema.as_object_mut() {
                     obj.insert(
                         "$schema".to_string(),
-                        json!("http://json-schema.org/draft-07/schema#"),
+                        json!("http://json-schema.org/draft-07/schema#")
                     );
                     obj.insert("additionalProperties".to_string(), json!(false));
                 }
