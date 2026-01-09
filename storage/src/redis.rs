@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use errors::StorageError;
 use redis::AsyncCommands;
 
@@ -30,33 +31,30 @@ impl RedisStorage {
         })
     }
 
-    pub async fn get(&mut self, key: &str) -> Result<Option<String>, StorageError> {
-        self.connection_manager
-            .get(key)
-            .await
-            .map_err(|e| StorageError::QueryError {
-                backend: "Redis".to_string(),
-                reason: e.to_string()
-            })
+    pub async fn get(&self, key: &str) -> Result<Option<String>, StorageError> {
+        let mut conn = self.connection_manager.clone();
+        conn.get(key).await.map_err(|e| StorageError::QueryError {
+            backend: "Redis".to_string(),
+            reason: e.to_string()
+        })
     }
 
     pub async fn set(
-        &mut self,
+        &self,
         key: &str,
         value: &str,
         ttl_seconds: Option<usize>
     ) -> Result<(), StorageError> {
+        let mut conn = self.connection_manager.clone();
         if let Some(ttl) = ttl_seconds {
-            self.connection_manager
-                .set_ex(key, value, ttl as u64)
+            conn.set_ex(key, value, ttl as u64)
                 .await
                 .map_err(|e| StorageError::QueryError {
                     backend: "Redis".to_string(),
                     reason: e.to_string()
                 })
         } else {
-            self.connection_manager
-                .set(key, value)
+            conn.set(key, value)
                 .await
                 .map_err(|e| StorageError::QueryError {
                     backend: "Redis".to_string(),
@@ -65,9 +63,32 @@ impl RedisStorage {
         }
     }
 
-    pub async fn delete(&mut self, key: &str) -> Result<(), StorageError> {
-        self.connection_manager
-            .del(key)
+    pub async fn delete_key(&self, key: &str) -> Result<(), StorageError> {
+        let mut conn = self.connection_manager.clone();
+        conn.del(key).await.map_err(|e| StorageError::QueryError {
+            backend: "Redis".to_string(),
+            reason: e.to_string()
+        })
+    }
+
+    pub async fn exists_key(&self, key: &str) -> Result<bool, StorageError> {
+        let mut conn = self.connection_manager.clone();
+        conn.exists(key)
+            .await
+            .map_err(|e| StorageError::QueryError {
+                backend: "Redis".to_string(),
+                reason: e.to_string()
+            })
+    }
+}
+
+#[async_trait]
+impl mk_core::traits::StorageBackend for RedisStorage {
+    type Error = StorageError;
+
+    async fn store(&self, key: &str, value: &[u8]) -> Result<(), Self::Error> {
+        let mut conn = self.connection_manager.clone();
+        conn.set(key, value)
             .await
             .map_err(|e| StorageError::QueryError {
                 backend: "Redis".to_string(),
@@ -75,13 +96,19 @@ impl RedisStorage {
             })
     }
 
-    pub async fn exists(&mut self, key: &str) -> Result<bool, StorageError> {
-        self.connection_manager
-            .exists(key)
-            .await
-            .map_err(|e| StorageError::QueryError {
-                backend: "Redis".to_string(),
-                reason: e.to_string()
-            })
+    async fn retrieve(&self, key: &str) -> Result<Option<Vec<u8>>, Self::Error> {
+        let mut conn = self.connection_manager.clone();
+        conn.get(key).await.map_err(|e| StorageError::QueryError {
+            backend: "Redis".to_string(),
+            reason: e.to_string()
+        })
+    }
+
+    async fn delete(&self, key: &str) -> Result<(), Self::Error> {
+        self.delete_key(key).await
+    }
+
+    async fn exists(&self, key: &str) -> Result<bool, Self::Error> {
+        self.exists_key(key).await
     }
 }

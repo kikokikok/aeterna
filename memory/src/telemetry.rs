@@ -97,6 +97,33 @@ impl MemoryTelemetry {
             gauge!("memory_cache_hit_rate", hit_rate);
         }
     }
+
+    pub fn record_promotion_attempt(&self, from_layer: &str, target_layer: &str) {
+        counter!("memory_promotion_attempts_total", 1,
+            "from_layer" => from_layer.to_string(),
+            "target_layer" => target_layer.to_string()
+        );
+    }
+
+    pub fn record_promotion_success(&self, from_layer: &str, target_layer: &str) {
+        counter!("memory_promotion_success_total", 1,
+            "from_layer" => from_layer.to_string(),
+            "target_layer" => target_layer.to_string()
+        );
+    }
+
+    pub fn record_promotion_blocked(&self, from_layer: &str, reason: &str) {
+        counter!("memory_promotion_blocked_total", 1,
+            "from_layer" => from_layer.to_string(),
+            "reason" => reason.to_string()
+        );
+    }
+
+    pub fn record_governance_redaction(&self, layer: &str) {
+        counter!("memory_governance_redactions_total", 1,
+            "layer" => layer.to_string()
+        );
+    }
 }
 
 pub fn init_telemetry() -> Result<MemoryTelemetry, Box<dyn std::error::Error + Send + Sync>> {

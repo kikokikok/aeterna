@@ -1,3 +1,5 @@
+use crate::governance::GovernanceService;
+use crate::telemetry::MemoryTelemetry;
 use mk_core::traits::EmbeddingService;
 use mk_core::traits::MemoryProviderAdapter;
 use mk_core::types::{MemoryEntry, MemoryLayer};
@@ -14,14 +16,18 @@ pub struct MemoryManager {
     providers: Arc<RwLock<ProviderMap>>,
     embedding_service: Option<
         Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
-    >
+    >,
+    governance_service: Arc<GovernanceService>,
+    telemetry: Arc<MemoryTelemetry>
 }
 
 impl MemoryManager {
     pub fn new() -> Self {
         Self {
             providers: Arc::new(RwLock::new(HashMap::new())),
-            embedding_service: None
+            embedding_service: None,
+            governance_service: Arc::new(GovernanceService::new()),
+            telemetry: Arc::new(MemoryTelemetry::new())
         }
     }
 
@@ -32,6 +38,11 @@ impl MemoryManager {
         >
     ) -> Self {
         self.embedding_service = Some(embedding_service);
+        self
+    }
+
+    pub fn with_telemetry(mut self, telemetry: Arc<MemoryTelemetry>) -> Self {
+        self.telemetry = telemetry;
         self
     }
 }
@@ -62,27 +73,42 @@ impl MemoryManager {
         limit: usize,
         filters: HashMap<String, serde_json::Value>
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
+        let start = std::time::Instant::now();
         let providers = self.providers.read().await;
         let mut all_results = Vec::new();
 
         for (layer, provider) in providers.iter() {
+            let layer_str = format!("{:?}", layer);
+            let _span = self.telemetry.record_operation_start("search", &layer_str);
             match provider
                 .search(query_vector.clone(), limit, filters.clone())
                 .await
             {
                 Ok(results) => {
+                    self.telemetry.record_operation_success(
+                        "search",
+                        &layer_str,
+                        start.elapsed().as_millis() as f64
+                    );
                     for mut entry in results {
                         entry.layer = *layer;
                         all_results.push(entry);
                     }
                 }
-                Err(e) => tracing::error!("Error searching layer {:?}: {}", layer, e)
+                Err(e) => {
+                    self.telemetry
+                        .record_operation_failure("search", &layer_str, &e.to_string());
+                    tracing::error!("Error searching layer {:?}: {}", layer, e)
+                }
             }
         }
 
         all_results.sort_by(|a, b| a.layer.precedence().cmp(&b.layer.precedence()));
 
-        Ok(all_results.into_iter().take(limit).collect())
+        let final_results: Vec<MemoryEntry> = all_results.into_iter().take(limit).collect();
+        self.telemetry
+            .record_search_operation(final_results.len(), query_vector.len());
+        Ok(final_results)
     }
 
     pub async fn search_with_threshold(
@@ -145,13 +171,38 @@ impl MemoryManager {
     pub async fn add_to_layer(
         &self,
         layer: MemoryLayer,
-        entry: MemoryEntry
+        mut entry: MemoryEntry
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let start = std::time::Instant::now();
+        let layer_str = format!("{:?}", layer);
+        let _span = self.telemetry.record_operation_start("add", &layer_str);
+
+        let original_content = entry.content.clone();
+        entry.content = self.governance_service.redact_pii(&entry.content);
+        if entry.content != original_content {
+            self.telemetry.record_governance_redaction(&layer_str);
+        }
+
         let providers = self.providers.read().await;
         let provider = providers
             .get(&layer)
             .ok_or("No provider registered for layer")?;
-        provider.add(entry).await
+
+        match provider.add(entry).await {
+            Ok(id) => {
+                self.telemetry.record_operation_success(
+                    "add",
+                    &layer_str,
+                    start.elapsed().as_millis() as f64
+                );
+                Ok(id)
+            }
+            Err(e) => {
+                self.telemetry
+                    .record_operation_failure("add", &layer_str, &e.to_string());
+                Err(e)
+            }
+        }
     }
 
     pub async fn delete_from_layer(
@@ -198,8 +249,11 @@ impl MemoryManager {
         use crate::promotion::PromotionService;
         let promotion_service = PromotionService::new(Arc::new(MemoryManager {
             providers: self.providers.clone(),
-            embedding_service: self.embedding_service.clone()
-        }));
+            embedding_service: self.embedding_service.clone(),
+            governance_service: self.governance_service.clone(),
+            telemetry: self.telemetry.clone()
+        }))
+        .with_telemetry(self.telemetry.clone());
 
         promotion_service
             .promote_layer_memories(layer, &mk_core::types::LayerIdentifiers::default())
