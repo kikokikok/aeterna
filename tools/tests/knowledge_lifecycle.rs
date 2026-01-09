@@ -66,9 +66,15 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
     let persister = Arc::new(DatabasePersister::new(storage, "sync_key".to_string()));
 
     let sync_manager = Arc::new(
-        SyncManager::new(memory_manager.clone(), repo.clone(), persister)
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?
+        SyncManager::new(
+            memory_manager.clone(),
+            repo.clone(),
+            Arc::new(knowledge::governance::GovernanceEngine::new()),
+            None,
+            persister
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?
     );
 
     let server = McpServer::new(memory_manager, sync_manager, repo.clone());
@@ -110,7 +116,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
     );
     let result = response.result.unwrap();
     assert!(result["success"].as_bool().unwrap());
-    assert_eq!(result["results"].as_array().unwrap().len(), 1);
+    assert_eq!(result["results"]["keyword"].as_array().unwrap().len(), 1);
 
     // WHEN we fetch the specific entry via MCP tool
     let request = JsonRpcRequest {

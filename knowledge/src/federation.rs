@@ -22,23 +22,34 @@ pub struct KnowledgeManifest {
     pub items: HashMap<String, String>
 }
 
+#[async_trait::async_trait]
+pub trait FederationProvider: Send + Sync {
+    fn config(&self) -> &FederationConfig;
+    async fn fetch_upstream_manifest(
+        &self,
+        upstream_id: &str
+    ) -> Result<KnowledgeManifest, RepositoryError>;
+    async fn sync_upstream(
+        &self,
+        upstream_id: &str,
+        target_path: &std::path::Path
+    ) -> Result<(), RepositoryError>;
+}
+
 pub struct FederationManager {
     config: FederationConfig
 }
 
-impl FederationManager {
-    pub fn new(config: FederationConfig) -> Self {
-        Self { config }
+#[async_trait::async_trait]
+impl FederationProvider for FederationManager {
+    fn config(&self) -> &FederationConfig {
+        &self.config
     }
 
-    pub async fn fetch_upstream_manifest(
+    async fn fetch_upstream_manifest(
         &self,
         upstream_id: &str
     ) -> Result<KnowledgeManifest, RepositoryError> {
-        // GIVEN an upstream ID
-        // WHEN fetching the manifest
-        // THEN return the deserialized manifest
-
         let _upstream = self
             .config
             .upstreams
@@ -54,15 +65,11 @@ impl FederationManager {
         })
     }
 
-    pub async fn sync_upstream(
+    async fn sync_upstream(
         &self,
         upstream_id: &str,
         target_path: &std::path::Path
     ) -> Result<(), RepositoryError> {
-        // GIVEN an upstream ID and target path
-        // WHEN syncing from upstream
-        // THEN clone or fetch the repository to the target path
-
         let upstream = self
             .config
             .upstreams
@@ -92,5 +99,11 @@ impl FederationManager {
         }
 
         Ok(())
+    }
+}
+
+impl FederationManager {
+    pub fn new(config: FederationConfig) -> Self {
+        Self { config }
     }
 }

@@ -44,8 +44,16 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
 
     let persister = Arc::new(MockPersister);
 
-    let sync_manager =
-        Arc::new(SyncManager::new(memory_manager, knowledge_repo.clone(), persister).await?);
+    let sync_manager = Arc::new(
+        SyncManager::new(
+            memory_manager,
+            knowledge_repo.clone(),
+            Arc::new(knowledge::governance::GovernanceEngine::new()),
+            None,
+            persister
+        )
+        .await?
+    );
 
     let sync_now_tool = SyncNowTool::new(sync_manager.clone());
     let sync_status_tool = SyncStatusTool::new(sync_manager.clone());

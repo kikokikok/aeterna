@@ -32,7 +32,7 @@ impl Tool for MemoryAddTool {
     }
 
     fn description(&self) -> &str {
-        "Add a new memory to a specific layer."
+        "Store a piece of information in memory for future reference."
     }
 
     fn input_schema(&self) -> Value {

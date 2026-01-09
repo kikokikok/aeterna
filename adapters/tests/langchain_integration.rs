@@ -55,6 +55,19 @@ impl KnowledgeRepository for MockRepo {
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         Ok(vec![])
     }
+
+    async fn search(
+        &self,
+        _query: &str,
+        _layers: Vec<KnowledgeLayer>,
+        _limit: usize
+    ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+        Ok(vec![])
+    }
+
+    fn root_path(&self) -> Option<std::path::PathBuf> {
+        None
+    }
 }
 
 struct MockPersister;
@@ -83,6 +96,8 @@ async fn setup_server() -> Arc<McpServer> {
         SyncManager::new(
             memory_manager.clone(),
             repo.clone(),
+            Arc::new(knowledge::governance::GovernanceEngine::new()),
+            None,
             Arc::new(MockPersister)
         )
         .await

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use knowledge::governance::GovernanceEngine;
 use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
@@ -77,6 +78,7 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
     // GIVEN a SyncManager with mock storage and repositories
     let repo_dir = tempfile::tempdir()?;
     let knowledge_repo = Arc::new(GitRepository::new(repo_dir.path())?);
+    let governance_engine = Arc::new(GovernanceEngine::new());
 
     let memory_manager = Arc::new(MemoryManager::new());
     let mock_provider = MockProvider::new();
@@ -92,6 +94,8 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
     let sync_manager = SyncManager::new(
         memory_manager.clone(),
         knowledge_repo.clone(),
+        governance_engine.clone(),
+        None,
         persister.clone()
     )
     .await?;
@@ -166,6 +170,7 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
     // GIVEN a SyncManager with mock storage
     let repo_dir = tempfile::tempdir()?;
     let knowledge_repo = Arc::new(GitRepository::new(repo_dir.path())?);
+    let governance_engine = Arc::new(GovernanceEngine::new());
     let memory_manager = Arc::new(MemoryManager::new());
     let mock_provider = MockProvider::new();
     memory_manager
@@ -181,6 +186,8 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
         SyncManager::new(
             memory_manager.clone(),
             knowledge_repo.clone(),
+            governance_engine.clone(),
+            None,
             persister.clone()
         )
         .await?
@@ -215,6 +222,80 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
 
     handle.abort();
     assert!(synced, "Background sync should have picked up the change");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // GIVEN a SyncManager with a blocking policy
+    let repo_dir = tempfile::tempdir()?;
+    let knowledge_repo = Arc::new(GitRepository::new(repo_dir.path())?);
+    let mut governance_engine = GovernanceEngine::new();
+
+    governance_engine.add_policy(mk_core::types::Policy {
+        id: "p1".to_string(),
+        name: "No Secrets".to_string(),
+        description: None,
+        layer: KnowledgeLayer::Company,
+        rules: vec![mk_core::types::PolicyRule {
+            id: "r1".to_string(),
+            target: mk_core::types::ConstraintTarget::Code,
+            operator: mk_core::types::ConstraintOperator::MustNotMatch,
+            value: serde_json::json!("SECRET"),
+            severity: mk_core::types::ConstraintSeverity::Block,
+            message: "No secrets allowed".to_string()
+        }],
+        metadata: HashMap::new()
+    });
+
+    let memory_manager = Arc::new(MemoryManager::new());
+    let mock_provider = MockProvider::new();
+    memory_manager
+        .register_provider(MemoryLayer::Project, Box::new(mock_provider))
+        .await;
+
+    let storage = Arc::new(MockStorage::new());
+    let persister = Arc::new(SimplePersister {
+        storage: storage.clone()
+    });
+
+    let sync_manager = SyncManager::new(
+        memory_manager.clone(),
+        knowledge_repo.clone(),
+        Arc::new(governance_engine),
+        None,
+        persister.clone()
+    )
+    .await?;
+
+    // AND knowledge containing a secret
+    let entry = KnowledgeEntry {
+        path: "secret.md".to_string(),
+        content: "My SECRET is 12345".to_string(),
+        layer: KnowledgeLayer::Company,
+        kind: KnowledgeType::Spec,
+        metadata: HashMap::new(),
+        commit_hash: None,
+        author: None,
+        updated_at: chrono::Utc::now().timestamp()
+    };
+    knowledge_repo
+        .store(entry.clone(), "commit with secret")
+        .await?;
+
+    // WHEN syncing
+    let mut state = SyncState::default();
+    let result = sync_manager.sync_entry(&entry, &mut state).await;
+
+    // THEN sync fails for that item
+    assert!(result.is_err());
+    assert!(
+        state
+            .failed_items
+            .iter()
+            .any(|f| f.error.contains("Governance violation (BLOCK)"))
+    );
 
     Ok(())
 }
