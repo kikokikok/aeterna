@@ -1,11 +1,9 @@
 use crate::tools::Tool;
 use async_trait::async_trait;
 use memory::manager::MemoryManager;
-use mk_core::types::{MemoryEntry, MemoryLayer};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::HashMap;
 use std::sync::Arc;
 use validator::Validate;
 
@@ -22,14 +20,9 @@ impl MemoryAddTool {
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct MemoryAddParams {
     pub content: String,
-    #[serde(default = "default_layer")]
-    pub layer: MemoryLayer,
-    pub tags: Option<Vec<String>>,
-    pub metadata: Option<HashMap<String, Value>>
-}
-
-fn default_layer() -> MemoryLayer {
-    MemoryLayer::User
+    pub layer: String,
+    #[serde(default)]
+    pub metadata: serde_json::Map<String, Value>
 }
 
 #[async_trait]
@@ -39,24 +32,18 @@ impl Tool for MemoryAddTool {
     }
 
     fn description(&self) -> &str {
-        "Store a piece of information in memory for future reference."
+        "Add a new memory to a specific layer."
     }
 
     fn input_schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "content": { "type": "string", "description": "The content to remember" },
-                "layer": {
-                    "type": "string",
-                    "enum": ["agent", "user", "session", "project", "team", "org", "company"],
-                    "default": "user",
-                    "description": "Memory scope"
-                },
-                "tags": { "type": "array", "items": { "type": "string" } },
+                "content": { "type": "string" },
+                "layer": { "type": "string" },
                 "metadata": { "type": "object" }
             },
-            "required": ["content"]
+            "required": ["content", "layer"]
         })
     }
 
@@ -64,28 +51,28 @@ impl Tool for MemoryAddTool {
         let p: MemoryAddParams = serde_json::from_value(params)?;
         p.validate()?;
 
-        let mut metadata = p.metadata.unwrap_or_default();
-        if let Some(tags) = p.tags {
-            metadata.insert("tags".to_string(), json!(tags));
-        }
-
-        let entry = MemoryEntry {
-            id: utils::generate_uuid(),
+        let layer = match p.layer.to_lowercase().as_str() {
+            "agent" => mk_core::types::MemoryLayer::Agent,
+            "user" => mk_core::types::MemoryLayer::User,
+            "session" => mk_core::types::MemoryLayer::Session,
+            "project" => mk_core::types::MemoryLayer::Project,
+            "team" => mk_core::types::MemoryLayer::Team,
+            "org" => mk_core::types::MemoryLayer::Org,
+            "company" => mk_core::types::MemoryLayer::Company,
+            _ => return Err(format!("Unknown layer: {}", p.layer).into())
+        };
+        let entry = mk_core::types::MemoryEntry {
+            id: uuid::Uuid::new_v4().to_string(),
             content: p.content,
             embedding: None,
-            layer: p.layer,
-            metadata,
+            layer,
+            metadata: p.metadata.into_iter().collect(),
             created_at: chrono::Utc::now().timestamp(),
             updated_at: chrono::Utc::now().timestamp()
         };
 
-        let memory_id = self.memory_manager.add_to_layer(p.layer, entry).await?;
-
-        Ok(json!({
-            "success": true,
-            "memoryId": memory_id,
-            "message": "Memory stored successfully"
-        }))
+        let id = self.memory_manager.add_to_layer(layer, entry).await?;
+        Ok(json!({ "success": true, "memoryId": id }))
     }
 }
 
@@ -102,19 +89,10 @@ impl MemorySearchTool {
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct MemorySearchParams {
     pub query: String,
-    pub layers: Option<Vec<MemoryLayer>>,
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-    #[serde(default = "default_threshold")]
-    pub threshold: f32,
-    pub tags: Option<Vec<String>>
-}
-
-fn default_limit() -> usize {
-    10
-}
-fn default_threshold() -> f32 {
-    0.7
+    pub limit: Option<usize>,
+    pub threshold: Option<f32>,
+    #[serde(default)]
+    pub filters: serde_json::Map<String, Value>
 }
 
 #[async_trait]
@@ -124,24 +102,17 @@ impl Tool for MemorySearchTool {
     }
 
     fn description(&self) -> &str {
-        "Search your memory for relevant past information."
+        "Search for memories across layers."
     }
 
     fn input_schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "query": { "type": "string", "description": "Search query" },
-                "layers": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "enum": ["agent", "user", "session", "project", "team", "org", "company"]
-                    }
-                },
-                "limit": { "type": "integer", "default": 10 },
-                "threshold": { "type": "number", "default": 0.7 },
-                "tags": { "type": "array", "items": { "type": "string" } }
+                "query": { "type": "string" },
+                "limit": { "type": "integer" },
+                "threshold": { "type": "number" },
+                "filters": { "type": "object" }
             },
             "required": ["query"]
         })
@@ -151,47 +122,19 @@ impl Tool for MemorySearchTool {
         let p: MemorySearchParams = serde_json::from_value(params)?;
         p.validate()?;
 
-        let mut filters = HashMap::new();
-        if let Some(tags) = p.tags {
-            filters.insert("tags".to_string(), json!(tags));
-        }
+        let limit = p.limit.unwrap_or(10);
+        let threshold = p.threshold.unwrap_or(0.0);
+        let filters = p.filters.into_iter().collect();
 
         let results = self
             .memory_manager
-            .search_hierarchical(vec![], p.limit, filters)
+            .search_text_with_threshold(&p.query, limit, threshold, filters)
             .await?;
-
-        let output_results: Vec<Value> = results
-            .into_iter()
-            .filter_map(|r| {
-                let score = r
-                    .metadata
-                    .get("score")
-                    .and_then(|s| s.as_f64())
-                    .unwrap_or(1.0);
-
-                if score >= p.threshold as f64 {
-                    Some(json!({
-                        "content": r.content,
-                        "layer": r.layer,
-                        "score": score,
-                        "memoryId": r.id,
-                        "tags": r.metadata.get("tags")
-                    }))
-                } else {
-                    None
-                }
-            })
-            .collect();
 
         Ok(json!({
             "success": true,
-            "results": output_results,
-            "totalCount": output_results.len(),
-            "searchedLayers": p.layers.unwrap_or_else(|| vec![
-                MemoryLayer::Agent, MemoryLayer::User, MemoryLayer::Session,
-                MemoryLayer::Project, MemoryLayer::Team, MemoryLayer::Org, MemoryLayer::Company
-            ])
+            "results": results,
+            "totalCount": results.len()
         }))
     }
 }
@@ -209,7 +152,7 @@ impl MemoryDeleteTool {
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct MemoryDeleteParams {
     pub memory_id: String,
-    pub layer: MemoryLayer
+    pub layer: String
 }
 
 #[async_trait]
@@ -219,20 +162,17 @@ impl Tool for MemoryDeleteTool {
     }
 
     fn description(&self) -> &str {
-        "Delete a memory that is no longer relevant."
+        "Delete a memory from a specific layer."
     }
 
     fn input_schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "memory_id": { "type": "string" },
-                "layer": {
-                    "type": "string",
-                    "enum": ["agent", "user", "session", "project", "team", "org", "company"]
-                }
+                "id": { "type": "string" },
+                "layer": { "type": "string" }
             },
-            "required": ["memory_id", "layer"]
+            "required": ["id", "layer"]
         })
     }
 
@@ -240,13 +180,83 @@ impl Tool for MemoryDeleteTool {
         let p: MemoryDeleteParams = serde_json::from_value(params)?;
         p.validate()?;
 
+        let layer = match p.layer.to_lowercase().as_str() {
+            "agent" => mk_core::types::MemoryLayer::Agent,
+            "user" => mk_core::types::MemoryLayer::User,
+            "session" => mk_core::types::MemoryLayer::Session,
+            "project" => mk_core::types::MemoryLayer::Project,
+            "team" => mk_core::types::MemoryLayer::Team,
+            "org" => mk_core::types::MemoryLayer::Org,
+            "company" => mk_core::types::MemoryLayer::Company,
+            _ => return Err(format!("Unknown layer: {}", p.layer).into())
+        };
         self.memory_manager
-            .delete_from_layer(p.layer, &p.memory_id)
+            .delete_from_layer(layer, &p.memory_id)
             .await?;
+        Ok(json!({ "success": true }))
+    }
+}
+
+pub struct MemoryCloseTool {
+    memory_manager: Arc<MemoryManager>
+}
+
+impl MemoryCloseTool {
+    pub fn new(memory_manager: Arc<MemoryManager>) -> Self {
+        Self { memory_manager }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+pub struct MemoryCloseParams {
+    pub id: String,
+    pub target: CloseTarget
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum CloseTarget {
+    Session,
+    Agent
+}
+
+#[async_trait]
+impl Tool for MemoryCloseTool {
+    fn name(&self) -> &str {
+        "memory_close"
+    }
+
+    fn description(&self) -> &str {
+        "Close a session or agent, triggering memory promotion and cleanup."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "id": { "type": "string", "description": "Session or Agent ID" },
+                "target": {
+                    "type": "string",
+                    "enum": ["session", "agent"],
+                    "description": "What to close"
+                }
+            },
+            "required": ["id", "target"]
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: MemoryCloseParams = serde_json::from_value(params)?;
+        p.validate()?;
+
+        match p.target {
+            CloseTarget::Session => self.memory_manager.close_session(&p.id).await?,
+            CloseTarget::Agent => self.memory_manager.close_agent(&p.id).await?
+        }
 
         Ok(json!({
             "success": true,
-            "message": "Memory deleted successfully"
+            "message": format!("{:?} closed successfully", p.target)
         }))
     }
 }

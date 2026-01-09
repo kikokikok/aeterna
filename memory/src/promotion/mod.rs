@@ -1,10 +1,14 @@
+use crate::governance::GovernanceService;
 use crate::manager::MemoryManager;
+use crate::telemetry::MemoryTelemetry;
 use anyhow::{Context, Result};
 use mk_core::types::{MemoryEntry, MemoryLayer};
 use std::sync::Arc;
 
 pub struct PromotionService {
     memory_manager: Arc<MemoryManager>,
+    governance_service: Arc<GovernanceService>,
+    telemetry: Arc<MemoryTelemetry>,
     promotion_threshold: f32,
     promote_important: bool
 }
@@ -13,9 +17,16 @@ impl PromotionService {
     pub fn new(memory_manager: Arc<MemoryManager>) -> Self {
         Self {
             memory_manager,
+            governance_service: Arc::new(GovernanceService::new()),
+            telemetry: Arc::new(MemoryTelemetry::new()),
             promotion_threshold: 0.8,
             promote_important: true
         }
+    }
+
+    pub fn with_telemetry(mut self, telemetry: Arc<MemoryTelemetry>) -> Self {
+        self.telemetry = telemetry;
+        self
     }
 
     pub fn with_threshold(mut self, threshold: f32) -> Self {
@@ -33,6 +44,71 @@ impl PromotionService {
             return Ok(None);
         }
 
+        let metadata_value = serde_json::to_value(&entry.metadata).unwrap_or(serde_json::json!({}));
+        if !self
+            .governance_service
+            .can_promote(&entry.content, &metadata_value)
+        {
+            tracing::info!("Memory {} promotion blocked by governance", entry.id);
+            self.telemetry
+                .record_promotion_blocked(&format!("{:?}", entry.layer), "governance");
+            return Ok(None);
+        }
+
+        let score = self.calculate_importance_score(entry);
+
+        if score >= self.promotion_threshold {
+            if let Some(target) = self.determine_target_layer(entry.layer) {
+                self.telemetry.record_promotion_attempt(
+                    &format!("{:?}", entry.layer),
+                    &format!("{:?}", target)
+                );
+                tracing::info!(
+                    "Promoting memory {} from {:?} to {:?} (score: {:.2})",
+                    entry.id,
+                    entry.layer,
+                    target,
+                    score
+                );
+
+                let mut promoted_entry = entry.clone();
+                promoted_entry.id = format!("{}_promoted", entry.id);
+                promoted_entry.layer = target;
+                let original_content = entry.content.clone();
+                promoted_entry.content = self.governance_service.redact_pii(&entry.content);
+
+                if promoted_entry.content != original_content {
+                    self.telemetry
+                        .record_governance_redaction(&format!("{:?}", target));
+                }
+
+                promoted_entry.metadata.insert(
+                    "original_memory_id".to_string(),
+                    serde_json::json!(entry.id)
+                );
+                promoted_entry.metadata.insert(
+                    "promoted_at".to_string(),
+                    serde_json::json!(chrono::Utc::now().timestamp())
+                );
+                promoted_entry
+                    .metadata
+                    .insert("promotion_score".to_string(), serde_json::json!(score));
+
+                let new_id = self
+                    .memory_manager
+                    .add_to_layer(target, promoted_entry)
+                    .await
+                    .map_err(|e| anyhow::anyhow!(e))
+                    .context("Failed to add promoted memory to target layer")?;
+
+                self.telemetry.record_promotion_success(
+                    &format!("{:?}", entry.layer),
+                    &format!("{:?}", target)
+                );
+                return Ok(Some(new_id));
+            }
+        }
+
         let score = self.calculate_importance_score(entry);
 
         if score >= self.promotion_threshold {
@@ -48,6 +124,7 @@ impl PromotionService {
                 let mut promoted_entry = entry.clone();
                 promoted_entry.id = format!("{}_promoted", entry.id);
                 promoted_entry.layer = target;
+                promoted_entry.content = self.governance_service.redact_pii(&entry.content);
                 promoted_entry.metadata.insert(
                     "original_memory_id".to_string(),
                     serde_json::json!(entry.id)
@@ -216,30 +293,61 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_calculate_importance_score() {
+    async fn test_promotion_blocked_by_governance() {
         let manager = Arc::new(MemoryManager::new());
         let service = PromotionService::new(manager);
 
         let entry = MemoryEntry {
-            id: "test".to_string(),
-            content: "content".to_string(),
+            id: "mem_sensitive".to_string(),
+            content: "secret stuff".to_string(),
             embedding: None,
             layer: MemoryLayer::Session,
             metadata: {
                 let mut m = HashMap::new();
-                m.insert("score".to_string(), serde_json::json!(0.5));
-                m.insert("access_count".to_string(), serde_json::json!(10));
-                m.insert(
-                    "last_accessed_at".to_string(),
-                    serde_json::json!(chrono::Utc::now().timestamp())
-                );
+                m.insert("score".to_string(), serde_json::json!(1.0));
+                m.insert("sensitive".to_string(), serde_json::json!(true));
                 m
             },
             created_at: 0,
             updated_at: 0
         };
 
-        let score = service.calculate_importance_score(&entry);
-        assert!((score - 0.7).abs() < 0.01);
+        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_promotion_redacts_pii() {
+        let manager = Arc::new(MemoryManager::new());
+        let mock_session = Box::new(MockProvider::new());
+        let mock_project = Box::new(MockProvider::new());
+        manager
+            .register_provider(MemoryLayer::Session, mock_session)
+            .await;
+        manager
+            .register_provider(MemoryLayer::Project, mock_project)
+            .await;
+
+        let service = PromotionService::new(manager.clone()).with_threshold(0.0);
+
+        let entry = MemoryEntry {
+            id: "mem_pii".to_string(),
+            content: "Contact user@example.com".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Session,
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        assert!(result.is_some());
+
+        let promoted = manager
+            .get_from_layer(MemoryLayer::Project, result.unwrap().as_str())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(promoted.content, "Contact [REDACTED]");
     }
 }

@@ -54,8 +54,12 @@ schemars = { version = "0.8" }
 async-trait = "0.1"
 git2 = "0.20.3"
 walkdir = "2.4"
+strum = { version = "0.26", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 redis = { version = "1.0.2", features = ["tokio-comp", "json", "connection-manager"] }
+regex = "1.10"
+metrics = { version = "0.21" }
+metrics-exporter-prometheus = { version = "0.12" }
 
 [workspace.metadata.tarpaulin]
 all-features = true
