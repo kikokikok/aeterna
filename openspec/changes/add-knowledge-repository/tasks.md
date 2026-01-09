@@ -25,13 +25,13 @@
 - [x] 4.2 Implement UpstreamConfig struct
 - [x] 4.3 Implement fetch_upstream_manifest() method
 - [x] 4.4 Implement sync_upstream() method
-- [ ] 4.5 Implement conflict detection between upstream and local
+- [x] 4.5 Implement conflict detection between upstream and local
 
 ## 5. Observability
 - [x] 5.1 Add Prometheus metrics for knowledge operations
 - [x] 5.2 Emit metrics: knowledge_operations_total, knowledge_violations_total
-- [ ] 5.3 Add tracing spans for Git operations
+- [x] 5.3 Add tracing spans for Git operations
 
 ## 6. Integration
 - [x] 6.1 Register knowledge tools in `tools/src/server.rs`
-- [ ] 6.2 Write integration tests for full knowledge lifecycle
+- [x] 6.2 Write integration tests for full knowledge lifecycle
