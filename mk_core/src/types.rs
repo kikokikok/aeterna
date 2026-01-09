@@ -103,7 +103,19 @@ pub enum ConstraintTarget {
 /// - Priority 5: team
 /// - Priority 6: org
 /// - Priority 7 (lowest): company
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    strum::EnumString,
+    strum::Display,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum MemoryLayer {
     /// Per-agent instance (most specific)

@@ -28,6 +28,7 @@ opentelemetry_sdk = { version = "0.21", features = ["metrics", "trace"] }
 prometheus = { version = "0.13" }
 metrics = { version = "0.21" }
 metrics-exporter-prometheus = { version = "0.12" }
+regex = "1.12.2"
 
 [dev-dependencies]
 testcontainers = "0.26"
