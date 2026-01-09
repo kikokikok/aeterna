@@ -21,5 +21,5 @@ pub mod types;
 // Re-export commonly used types for convenience
 pub use types::{
     ConstraintOperator, ConstraintSeverity, ConstraintTarget, KnowledgeLayer, KnowledgeType,
-    MemoryLayer,
+    MemoryLayer
 };

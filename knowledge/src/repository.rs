@@ -15,11 +15,11 @@ pub enum RepositoryError {
     #[error("Invalid path: {0}")]
     InvalidPath(String),
     #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
+    Serialization(#[from] serde_json::Error)
 }
 
 pub struct GitRepository {
-    root_path: PathBuf,
+    root_path: PathBuf
 }
 
 impl GitRepository {
@@ -41,7 +41,7 @@ impl GitRepository {
             KnowledgeLayer::Company => "company",
             KnowledgeLayer::Org => "org",
             KnowledgeLayer::Team => "team",
-            KnowledgeLayer::Project => "project",
+            KnowledgeLayer::Project => "project"
         };
         self.root_path.join(layer_dir).join(path)
     }
@@ -61,12 +61,12 @@ impl GitRepository {
 
         let parent_commit = match repo.head() {
             Ok(head) => Some(head.peel_to_commit()?),
-            Err(_) => None,
+            Err(_) => None
         };
 
         let parents = match &parent_commit {
             Some(c) => vec![c],
-            None => vec![],
+            None => vec![]
         };
 
         let commit_id = repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents)?;
@@ -78,7 +78,7 @@ impl GitRepository {
         let repo = Repository::open(&self.root_path)?;
         match repo.head() {
             Ok(head) => Ok(Some(head.peel_to_commit()?.id().to_string())),
-            Err(_) => Ok(None),
+            Err(_) => Ok(None)
         }
     }
 
@@ -87,7 +87,7 @@ impl GitRepository {
             KnowledgeLayer::Company,
             KnowledgeLayer::Org,
             KnowledgeLayer::Team,
-            KnowledgeLayer::Project,
+            KnowledgeLayer::Project
         ] {
             if let Some(entry) = self.get(layer, path).await? {
                 return Ok(Some(entry));
@@ -107,7 +107,7 @@ impl KnowledgeRepository for GitRepository {
 
     async fn get_affected_items(
         &self,
-        since_commit: &str,
+        since_commit: &str
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         let repo = Repository::open(&self.root_path)?;
         let from_obj = repo.revparse_single(since_commit)?;
@@ -130,7 +130,7 @@ impl KnowledgeRepository for GitRepository {
                             "org" => KnowledgeLayer::Org,
                             "team" => KnowledgeLayer::Team,
                             "project" => KnowledgeLayer::Project,
-                            _ => return true,
+                            _ => return true
                         };
                         let inner_path = parts[1..].join("/");
                         affected.push((layer, inner_path));
@@ -140,7 +140,7 @@ impl KnowledgeRepository for GitRepository {
             },
             None,
             None,
-            None,
+            None
         )?;
 
         Ok(affected)
@@ -149,7 +149,7 @@ impl KnowledgeRepository for GitRepository {
     async fn get(
         &self,
         layer: KnowledgeLayer,
-        path: &str,
+        path: &str
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
         let full_path = self.resolve_path(layer, path);
         if !full_path.exists() {
@@ -172,7 +172,7 @@ impl KnowledgeRepository for GitRepository {
             metadata: std::collections::HashMap::new(),
             commit_hash,
             author: None,
-            updated_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp()
         }))
     }
 
@@ -189,13 +189,13 @@ impl KnowledgeRepository for GitRepository {
     async fn list(
         &self,
         layer: KnowledgeLayer,
-        prefix: &str,
+        prefix: &str
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         let layer_path = match layer {
             KnowledgeLayer::Company => self.root_path.join("company"),
             KnowledgeLayer::Org => self.root_path.join("org"),
             KnowledgeLayer::Team => self.root_path.join("team"),
-            KnowledgeLayer::Project => self.root_path.join("project"),
+            KnowledgeLayer::Project => self.root_path.join("project")
         };
 
         if !layer_path.exists() {
@@ -227,7 +227,7 @@ impl KnowledgeRepository for GitRepository {
         &self,
         layer: KnowledgeLayer,
         path: &str,
-        message: &str,
+        message: &str
     ) -> Result<String, Self::Error> {
         let full_path = self.resolve_path(layer, path);
         if full_path.exists() {
@@ -257,7 +257,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp()
         };
 
         repo.store(entry.clone(), "initial commit").await?;

@@ -9,7 +9,7 @@ pub struct KnowledgePointer {
     pub content_hash: String,
     pub synced_at: i64,
     pub source_layer: KnowledgeLayer,
-    pub is_orphaned: bool,
+    pub is_orphaned: bool
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,7 +18,7 @@ pub struct KnowledgePointerMetadata {
     #[serde(rename = "type")]
     pub kind: String,
     pub knowledge_pointer: KnowledgePointer,
-    pub tags: Vec<String>,
+    pub tags: Vec<String>
 }
 
 impl Default for KnowledgePointerMetadata {
@@ -31,9 +31,9 @@ impl Default for KnowledgePointerMetadata {
                 content_hash: String::new(),
                 synced_at: 0,
                 source_layer: KnowledgeLayer::Company,
-                is_orphaned: false,
+                is_orphaned: false
             },
-            tags: Vec::new(),
+            tags: Vec::new()
         }
     }
 }
@@ -43,6 +43,6 @@ pub fn map_layer(knowledge_layer: KnowledgeLayer) -> MemoryLayer {
         KnowledgeLayer::Company => MemoryLayer::Company,
         KnowledgeLayer::Org => MemoryLayer::Org,
         KnowledgeLayer::Team => MemoryLayer::Team,
-        KnowledgeLayer::Project => MemoryLayer::Project,
+        KnowledgeLayer::Project => MemoryLayer::Project
     }
 }

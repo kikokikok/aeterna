@@ -1,6 +1,7 @@
 //! # Configuration Structures
 //!
-//! This module defines all configuration structures for the Memory-Knowledge system.
+//! This module defines all configuration structures for the Memory-Knowledge
+//! system.
 //!
 //! All configuration structures:
 //! - Use `serde` for serialization/deserialization
@@ -13,7 +14,8 @@ use validator::Validate;
 
 /// Main configuration structure for the Memory-Knowledge system.
 ///
-/// This is the top-level configuration that aggregates all subsystem configurations.
+/// This is the top-level configuration that aggregates all subsystem
+/// configurations.
 ///
 /// # M-CANONICAL-DOCS
 ///
@@ -30,7 +32,8 @@ use validator::Validate;
 /// ```
 ///
 /// ## Fields
-/// - `providers`: Configuration for storage backends (PostgreSQL, Qdrant, Redis)
+/// - `providers`: Configuration for storage backends (PostgreSQL, Qdrant,
+///   Redis)
 /// - `sync`: Configuration for memory-knowledge synchronization
 /// - `tools`: Configuration for MCP server tools
 /// - `observability`: Configuration for metrics and tracing
@@ -53,7 +56,7 @@ pub struct Config {
 
     /// Observability configuration (metrics, tracing, logging)
     #[serde(default)]
-    pub observability: ObservabilityConfig,
+    pub observability: ObservabilityConfig
 }
 
 /// Configuration for storage providers.
@@ -92,7 +95,7 @@ pub struct ProviderConfig {
 
     /// Redis caching configuration
     #[serde(default)]
-    pub redis: RedisConfig,
+    pub redis: RedisConfig
 }
 
 /// PostgreSQL configuration.
@@ -100,7 +103,8 @@ pub struct ProviderConfig {
 /// # M-CANONICAL-DOCS
 ///
 /// ## Purpose
-/// Manages connection settings for PostgreSQL, the primary data storage backend.
+/// Manages connection settings for PostgreSQL, the primary data storage
+/// backend.
 ///
 /// ## Fields
 /// - `host`: Database server hostname (default: "localhost")
@@ -145,7 +149,7 @@ pub struct PostgresConfig {
     /// Connection timeout in seconds
     #[serde(default = "default_postgres_timeout")]
     #[validate(range(min = 1, max = 300))]
-    pub timeout_seconds: u64,
+    pub timeout_seconds: u64
 }
 
 fn default_postgres_host() -> String {
@@ -185,7 +189,7 @@ impl Default for PostgresConfig {
             username: default_postgres_username(),
             password: default_postgres_password(),
             pool_size: default_postgres_pool_size(),
-            timeout_seconds: default_postgres_timeout(),
+            timeout_seconds: default_postgres_timeout()
         }
     }
 }
@@ -222,7 +226,7 @@ pub struct QdrantConfig {
     /// Request timeout in seconds
     #[serde(default = "default_qdrant_timeout")]
     #[validate(range(min = 1, max = 300))]
-    pub timeout_seconds: u64,
+    pub timeout_seconds: u64
 }
 
 fn default_qdrant_host() -> String {
@@ -247,7 +251,7 @@ impl Default for QdrantConfig {
             host: default_qdrant_host(),
             port: default_qdrant_port(),
             collection: default_qdrant_collection(),
-            timeout_seconds: default_qdrant_timeout(),
+            timeout_seconds: default_qdrant_timeout()
         }
     }
 }
@@ -290,7 +294,7 @@ pub struct RedisConfig {
     /// Connection timeout in seconds
     #[serde(default = "default_redis_timeout")]
     #[validate(range(min = 1, max = 300))]
-    pub timeout_seconds: u64,
+    pub timeout_seconds: u64
 }
 
 fn default_redis_host() -> String {
@@ -320,7 +324,7 @@ impl Default for RedisConfig {
             port: default_redis_port(),
             db: default_redis_db(),
             pool_size: default_redis_pool_size(),
-            timeout_seconds: default_redis_timeout(),
+            timeout_seconds: default_redis_timeout()
         }
     }
 }
@@ -337,7 +341,8 @@ impl Default for RedisConfig {
 /// - `sync_interval_seconds`: Sync interval (default: 60, range: 10-3600)
 /// - `batch_size`: Number of items per sync batch (default: 100, range: 1-1000)
 /// - `checkpoint_enabled`: Enable checkpointing for rollback (default: true)
-/// - `conflict_resolution`: Strategy for conflict resolution (default: "prefer_knowledge")
+/// - `conflict_resolution`: Strategy for conflict resolution (default:
+///   "prefer_knowledge")
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SyncConfig {
     /// Enable/disable automatic synchronization
@@ -361,7 +366,7 @@ pub struct SyncConfig {
     /// Conflict resolution strategy
     #[serde(default = "default_sync_conflict_resolution")]
     #[validate(custom(function = "validate_conflict_resolution"))]
-    pub conflict_resolution: String,
+    pub conflict_resolution: String
 }
 
 fn default_sync_enabled() -> bool {
@@ -388,8 +393,8 @@ fn validate_conflict_resolution(value: &str) -> Result<(), validator::Validation
     match value {
         "prefer_knowledge" | "prefer_memory" | "manual" => Ok(()),
         _ => Err(validator::ValidationError::new(
-            "Invalid conflict resolution strategy",
-        )),
+            "Invalid conflict resolution strategy"
+        ))
     }
 }
 
@@ -400,7 +405,7 @@ impl Default for SyncConfig {
             sync_interval_seconds: default_sync_interval(),
             batch_size: default_sync_batch_size(),
             checkpoint_enabled: default_sync_checkpoint(),
-            conflict_resolution: default_sync_conflict_resolution(),
+            conflict_resolution: default_sync_conflict_resolution()
         }
     }
 }
@@ -441,7 +446,7 @@ pub struct ToolConfig {
     /// Rate limit: requests per minute
     #[serde(default = "default_tools_rate_limit")]
     #[validate(range(min = 1, max = 1000))]
-    pub rate_limit_requests_per_minute: u32,
+    pub rate_limit_requests_per_minute: u32
 }
 
 fn default_tools_enabled() -> bool {
@@ -467,7 +472,7 @@ impl Default for ToolConfig {
             host: default_tools_host(),
             port: default_tools_port(),
             api_key: None,
-            rate_limit_requests_per_minute: default_tools_rate_limit(),
+            rate_limit_requests_per_minute: default_tools_rate_limit()
         }
     }
 }
@@ -502,7 +507,7 @@ pub struct ObservabilityConfig {
     /// Metrics server port
     #[serde(default = "default_observability_metrics_port")]
     #[validate(range(min = 1, max = 65535))]
-    pub metrics_port: u16,
+    pub metrics_port: u16
 }
 
 fn default_observability_metrics_enabled() -> bool {
@@ -524,7 +529,7 @@ fn default_observability_metrics_port() -> u16 {
 fn validate_logging_level(value: &str) -> Result<(), validator::ValidationError> {
     match value {
         "trace" | "debug" | "info" | "warn" | "error" => Ok(()),
-        _ => Err(validator::ValidationError::new("Invalid logging level")),
+        _ => Err(validator::ValidationError::new("Invalid logging level"))
     }
 }
 
@@ -534,7 +539,7 @@ impl Default for ObservabilityConfig {
             metrics_enabled: default_observability_metrics_enabled(),
             tracing_enabled: default_observability_tracing_enabled(),
             logging_level: default_observability_logging_level(),
-            metrics_port: default_observability_metrics_port(),
+            metrics_port: default_observability_metrics_port()
         }
     }
 }

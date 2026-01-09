@@ -23,6 +23,9 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
         .call(json!({
             "content": "User prefers Rust",
             "layer": "user",
+            "identifiers": {
+                "user_id": "test_user_123"
+            },
             "tags": ["coding"]
         }))
         .await?;
@@ -34,7 +37,7 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
     // WHEN searching memory
     let search_resp = search_tool
         .call(json!({
-            "query": "coding preferences"
+            "query": "rust"
         }))
         .await?;
 
@@ -57,7 +60,7 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
     // AND search should return empty
     let search_resp = search_tool
         .call(json!({
-            "query": "coding preferences"
+            "query": "rust"
         }))
         .await?;
     assert_eq!(search_resp["totalCount"], 0);

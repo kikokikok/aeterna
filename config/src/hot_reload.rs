@@ -1,6 +1,7 @@
 //! # Configuration Hot Reload
 //!
-//! Watches configuration files for changes and reloads configuration automatically.
+//! Watches configuration files for changes and reloads configuration
+//! automatically.
 
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
@@ -24,8 +25,8 @@ pub enum ConfigReloadEvent {
     /// Configuration reload error
     Error {
         path: PathBuf,
-        error: String,
-    },
+        error: String
+    }
 }
 
 /// Watch a configuration file for changes and emit reload events.
@@ -33,12 +34,12 @@ pub enum ConfigReloadEvent {
 /// # M-CANONICAL-DOCS
 ///
 /// ## Purpose
-/// Monitors configuration file for changes and automatically reloads configuration.
-/// Uses `notify` crate for cross-platform file system watching.
+/// Monitors configuration file for changes and automatically reloads
+/// configuration. Uses `notify` crate for cross-platform file system watching.
 ///
 /// ## Usage
 /// ```rust,no_run
-/// use config::{watch_config, hot_reload::ConfigReloadEvent};
+/// use config::{hot_reload::ConfigReloadEvent, watch_config};
 /// use tokio::signal;
 ///
 /// #[tokio::main]
@@ -76,20 +77,20 @@ pub enum ConfigReloadEvent {
 /// ## Performance
 /// Uses debouncing to avoid multiple reload events for single file change.
 pub async fn watch_config(
-    config_path: &Path,
+    config_path: &Path
 ) -> Result<
     (
         tokio::sync::mpsc::Sender<ConfigReloadEvent>,
-        tokio::sync::mpsc::Receiver<ConfigReloadEvent>,
+        tokio::sync::mpsc::Receiver<ConfigReloadEvent>
     ),
-    Box<dyn std::error::Error>,
+    Box<dyn std::error::Error>
 > {
     let config_path = config_path.to_path_buf();
 
     if !config_path.exists() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Config file not found: {:?}", config_path),
+            format!("Config file not found: {:?}", config_path)
         )));
     }
 
@@ -103,7 +104,7 @@ pub async fn watch_config(
             move |res| {
                 let _ = event_tx.blocking_send(res);
             },
-            notify::Config::default(),
+            notify::Config::default()
         ) {
             Ok(w) => w,
             Err(e) => {
@@ -113,7 +114,7 @@ pub async fn watch_config(
                 let _ = tx_task
                     .send(ConfigReloadEvent::Error {
                         path: path_task,
-                        error: error_msg,
+                        error: error_msg
                     })
                     .await;
 
@@ -128,7 +129,7 @@ pub async fn watch_config(
             let _ = tx_task
                 .send(ConfigReloadEvent::Error {
                     path: path_task,
-                    error: error_msg,
+                    error: error_msg
                 })
                 .await;
 
@@ -223,14 +224,14 @@ mod tests {
         let path = PathBuf::from("/test/config.toml");
         let event = ConfigReloadEvent::Error {
             path: path.clone(),
-            error: "Test error".to_string(),
+            error: "Test error".to_string()
         };
         assert!(matches!(event, ConfigReloadEvent::Error { .. }));
         assert_eq!(
             event,
             ConfigReloadEvent::Error {
                 path,
-                error: "Test error".to_string(),
+                error: "Test error".to_string()
             }
         );
     }
@@ -256,14 +257,14 @@ mod tests {
         let path = PathBuf::from("/test/config.toml");
         let event = ConfigReloadEvent::Error {
             path: path.clone(),
-            error: "Test error".to_string(),
+            error: "Test error".to_string()
         };
         assert!(matches!(event, ConfigReloadEvent::Error { .. }));
         assert_eq!(
             event,
             ConfigReloadEvent::Error {
                 path,
-                error: "Test error".to_string(),
+                error: "Test error".to_string()
             }
         );
     }
@@ -299,7 +300,7 @@ host = "testhost"
                     temp_file.path().canonicalize().unwrap()
                 );
             }
-            _ => panic!("Expected Changed event, got {:?}", event),
+            _ => panic!("Expected Changed event, got {:?}", event)
         }
     }
 
@@ -332,7 +333,7 @@ host = "testhost"
                     config_path.canonicalize().unwrap()
                 );
             }
-            _ => panic!("Expected Changed event, got {:?}", event),
+            _ => panic!("Expected Changed event, got {:?}", event)
         }
     }
 }

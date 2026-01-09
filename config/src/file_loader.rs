@@ -26,7 +26,7 @@ pub enum ConfigFileError {
     NoExtension,
 
     #[error("Unsupported config file format: {0}")]
-    UnsupportedFormat(String),
+    UnsupportedFormat(String)
 }
 
 /// Load configuration from TOML file.
@@ -102,7 +102,8 @@ pub fn load_from_yaml(path: &Path) -> Result<Config, ConfigFileError> {
 /// # M-CANONICAL-DOCS
 ///
 /// ## Purpose
-/// Loads configuration from file, automatically detecting format from extension.
+/// Loads configuration from file, automatically detecting format from
+/// extension.
 ///
 /// ## Supported Formats
 /// - `.toml`: TOML format
@@ -134,7 +135,7 @@ pub fn load_from_file(path: &Path) -> Result<Config, ConfigFileError> {
     match extension.to_lowercase().as_str() {
         "toml" => load_from_toml(path),
         "yaml" | "yml" => load_from_yaml(path),
-        other => Err(ConfigFileError::UnsupportedFormat(other.to_string())),
+        other => Err(ConfigFileError::UnsupportedFormat(other.to_string()))
     }
 }
 

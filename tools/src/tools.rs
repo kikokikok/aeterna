@@ -5,20 +5,22 @@ use std::collections::HashMap;
 
 /// Core trait for implementing MCP (Model Context Protocol) tools.
 ///
-/// Tools provide a standardized interface for AI agents to interact with system capabilities.
-/// Each tool defines its name, description, input schema, and execution logic.
+/// Tools provide a standardized interface for AI agents to interact with system
+/// capabilities. Each tool defines its name, description, input schema, and
+/// execution logic.
 ///
 /// # M-CANONICAL-DOCS
 ///
 /// ## Purpose
-/// Defines the contract that all tools must implement to be registered and invoked through the tool registry.
-/// Enables pluggable, type-safe tool execution with JSON Schema validation.
+/// Defines the contract that all tools must implement to be registered and
+/// invoked through the tool registry. Enables pluggable, type-safe tool
+/// execution with JSON Schema validation.
 ///
 /// ## Usage
 /// ```rust,no_run
 /// use async_trait::async_trait;
 /// use serde_json::Value;
-/// use tools::Tool;
+/// use tools::tools::Tool;
 ///
 /// struct MyCustomTool;
 ///
@@ -67,7 +69,8 @@ pub trait Tool: Send + Sync {
 /// # M-CANONICAL-DOCS
 ///
 /// ## Purpose
-/// Provides standardized error classification for tool operations, enabling proper error handling and retry logic.
+/// Provides standardized error classification for tool operations, enabling
+/// proper error handling and retry logic.
 ///
 /// ## Variants
 /// - `InvalidInput`: Input validation failed (non-retryable)
@@ -88,7 +91,7 @@ pub enum ToolErrorCode {
     Unauthorized,
     Timeout,
     Conflict,
-    InternalError,
+    InternalError
 }
 
 /// Generic response wrapper for tool execution results.
@@ -96,26 +99,26 @@ pub enum ToolErrorCode {
 /// # M-CANONICAL-DOCS
 ///
 /// ## Purpose
-/// Provides a consistent response format for all tool operations, enabling success/failure detection
-/// and structured error handling across all tools.
+/// Provides a consistent response format for all tool operations, enabling
+/// success/failure detection and structured error handling across all tools.
 ///
 /// ## Usage
 /// ```rust,no_run
-/// use tools::tools::ToolResponse;
 /// use serde_json::json;
+/// use tools::tools::{ToolError, ToolErrorCode, ToolResponse};
 ///
 /// // Success response
 /// let success = ToolResponse::<String> {
 ///     success: true,
 ///     data: Some("result data".to_string()),
-///     error: None,
+///     error: None
 /// };
 ///
 /// // Error response
 /// let error = ToolResponse::<()> {
 ///     success: false,
 ///     data: None,
-///     error: Some(ToolError::new(ToolErrorCode::NotFound, "Not found")),
+///     error: Some(ToolError::new(ToolErrorCode::NotFound, "Not found"))
 /// };
 /// ```
 ///
@@ -129,7 +132,7 @@ pub struct ToolResponse<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<ToolError>,
+    pub error: Option<ToolError>
 }
 
 /// Detailed error information for tool failures.
@@ -137,8 +140,9 @@ pub struct ToolResponse<T> {
 /// # M-CANONICAL-DOCS
 ///
 /// ## Purpose
-/// Encapsulates error details including error code, message, retryability status, and optional context.
-/// Enables consumers to make informed decisions about error handling and retries.
+/// Encapsulates error details including error code, message, retryability
+/// status, and optional context. Enables consumers to make informed decisions
+/// about error handling and retries.
 ///
 /// ## Usage
 /// ```rust,no_run
@@ -169,7 +173,7 @@ pub struct ToolError {
     pub message: String,
     pub retryable: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<Value>,
+    pub details: Option<Value>
 }
 
 impl ToolError {
@@ -182,7 +186,7 @@ impl ToolError {
             code,
             message: message.into(),
             retryable,
-            details: None,
+            details: None
         }
     }
 
@@ -197,8 +201,9 @@ impl ToolError {
 /// # M-CANONICAL-DOCS
 ///
 /// ## Purpose
-/// Provides a centralized mechanism for registering, discovering, and invoking tools.
-/// Enables dynamic tool management and type-safe execution across the system.
+/// Provides a centralized mechanism for registering, discovering, and invoking
+/// tools. Enables dynamic tool management and type-safe execution across the
+/// system.
 ///
 /// ## Usage
 /// ```rust,no_run
@@ -206,6 +211,18 @@ impl ToolError {
 /// use async_trait::async_trait;
 /// use serde_json::{json, Value};
 /// use std::error::Error;
+///
+/// struct MyTool;
+///
+/// #[async_trait]
+/// impl Tool for MyTool {
+///     fn name(&self) -> &str { "my_tool" }
+///     fn description(&self) -> &str { "My example tool" }
+///     fn input_schema(&self) -> Value { json!({}) }
+///     async fn call(&self, _params: Value) -> Result<Value, Box<dyn Error + Send + Sync>> {
+///         Ok(json!({ "result": "success" }))
+///     }
+/// }
 ///
 /// // Create registry
 /// let mut registry = ToolRegistry::new();
@@ -215,9 +232,6 @@ impl ToolError {
 ///
 /// // List available tools
 /// let tools: Vec<ToolDefinition> = registry.list_tools();
-///
-/// // Invoke a tool
-/// let result = registry.call("my_tool", json!({ "input": "data" })).await;
 /// ```
 ///
 /// ## Methods
@@ -226,14 +240,14 @@ impl ToolError {
 /// - `call`: Invokes a registered tool with the given parameters
 /// - `list_tools`: Returns metadata for all registered tools
 pub struct ToolRegistry {
-    tools: HashMap<String, Box<dyn Tool>>,
+    tools: HashMap<String, Box<dyn Tool>>
 }
 
 #[allow(clippy::new_without_default)]
 impl Default for ToolRegistry {
     fn default() -> Self {
         Self {
-            tools: HashMap::new(),
+            tools: HashMap::new()
         }
     }
 }
@@ -250,7 +264,7 @@ impl ToolRegistry {
     pub async fn call(
         &self,
         name: &str,
-        params: Value,
+        params: Value
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let tool = self
             .tools
@@ -265,7 +279,7 @@ impl ToolRegistry {
             .map(|t| ToolDefinition {
                 name: t.name().to_string(),
                 description: t.description().to_string(),
-                input_schema: t.input_schema(),
+                input_schema: t.input_schema()
             })
             .collect()
     }
@@ -305,5 +319,5 @@ impl ToolRegistry {
 pub struct ToolDefinition {
     pub name: String,
     pub description: String,
-    pub input_schema: Value,
+    pub input_schema: Value
 }

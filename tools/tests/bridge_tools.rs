@@ -21,7 +21,7 @@ impl SyncStatePersister for MockPersister {
     }
     async fn save(
         &self,
-        _state: &SyncState,
+        _state: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
@@ -38,7 +38,7 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
     memory_manager
         .register_provider(
             mk_core::types::MemoryLayer::Project,
-            Box::new(MockProvider::new()),
+            Box::new(MockProvider::new())
         )
         .await;
 
@@ -67,7 +67,7 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
         metadata: HashMap::new(),
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     knowledge_repo.store(entry, "commit").await?;
 
