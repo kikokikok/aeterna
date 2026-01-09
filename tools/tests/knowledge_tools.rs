@@ -1,17 +1,17 @@
 use knowledge::repository::GitRepository;
 use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeType};
+use serde_json::json;
 use std::sync::Arc;
 use tempfile::tempdir;
 use tools::knowledge::{KnowledgeQueryTool, KnowledgeShowTool};
 use tools::tools::Tool;
-use serde_json::json;
 
 #[tokio::test]
 async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // GIVEN a GitRepository and tools
     let dir = tempdir()?;
     let repo = Arc::new(GitRepository::new(dir.path())?);
-    
+
     let query_tool = KnowledgeQueryTool::new(repo.clone());
     let show_tool = KnowledgeShowTool::new(repo.clone());
 
@@ -29,10 +29,12 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
     mk_core::traits::KnowledgeRepository::store(repo.as_ref(), entry, "initial docs").await?;
 
     // WHEN querying knowledge
-    let query_resp = query_tool.call(json!({
-        "layer": "project",
-        "prefix": "architecture"
-    })).await?;
+    let query_resp = query_tool
+        .call(json!({
+            "layer": "project",
+            "prefix": "architecture"
+        }))
+        .await?;
 
     // THEN it should find the entry
     assert!(query_resp["success"].as_bool().unwrap());
@@ -40,14 +42,19 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
     assert_eq!(query_resp["results"][0]["path"], "architecture/core.md");
 
     // WHEN showing specific knowledge
-    let show_resp = show_tool.call(json!({
-        "layer": "project",
-        "path": "architecture/core.md"
-    })).await?;
+    let show_resp = show_tool
+        .call(json!({
+            "layer": "project",
+            "path": "architecture/core.md"
+        }))
+        .await?;
 
     // THEN it should return the full content
     assert!(show_resp["success"].as_bool().unwrap());
-    assert_eq!(show_resp["entry"]["content"], "# Core Architecture\nHierarchical memory system.");
+    assert_eq!(
+        show_resp["entry"]["content"],
+        "# Core Architecture\nHierarchical memory system."
+    );
 
     Ok(())
 }
