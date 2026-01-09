@@ -93,3 +93,16 @@ pub trait KnowledgeRepository: Send + Sync {
         since_commit: &str,
     ) -> Result<Vec<(crate::types::KnowledgeLayer, String)>, Self::Error>;
 }
+
+#[async_trait]
+pub trait ContextHooks: Send + Sync {
+    async fn on_session_start(&self, session_id: &str) -> anyhow::Result<()>;
+    async fn on_session_end(&self, session_id: &str) -> anyhow::Result<()>;
+    async fn on_message(&self, session_id: &str, message: &str) -> anyhow::Result<()>;
+    async fn on_tool_use(
+        &self,
+        session_id: &str,
+        tool_name: &str,
+        params: serde_json::Value,
+    ) -> anyhow::Result<()>;
+}

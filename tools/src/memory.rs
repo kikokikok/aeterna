@@ -156,21 +156,23 @@ impl Tool for MemorySearchTool {
             filters.insert("tags".to_string(), json!(tags));
         }
 
-        let results = self.memory_manager.search_hierarchical(
-            vec![], 
-            p.limit,
-            filters
-        ).await?;
+        let results = self
+            .memory_manager
+            .search_hierarchical(vec![], p.limit, filters)
+            .await?;
 
-        let output_results: Vec<Value> = results.into_iter().map(|r| {
-            json!({
-                "content": r.content,
-                "layer": r.layer,
-                "score": 1.0, 
-                "memoryId": r.id,
-                "tags": r.metadata.get("tags")
+        let output_results: Vec<Value> = results
+            .into_iter()
+            .map(|r| {
+                json!({
+                    "content": r.content,
+                    "layer": r.layer,
+                    "score": 1.0,
+                    "memoryId": r.id,
+                    "tags": r.metadata.get("tags")
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(json!({
             "success": true,
@@ -228,7 +230,9 @@ impl Tool for MemoryDeleteTool {
         let p: MemoryDeleteParams = serde_json::from_value(params)?;
         p.validate()?;
 
-        self.memory_manager.delete_from_layer(p.layer, &p.memory_id).await?;
+        self.memory_manager
+            .delete_from_layer(p.layer, &p.memory_id)
+            .await?;
 
         Ok(json!({
             "success": true,

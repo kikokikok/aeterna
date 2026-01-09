@@ -3,6 +3,57 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+/// Core trait for implementing MCP (Model Context Protocol) tools.
+///
+/// Tools provide a standardized interface for AI agents to interact with system capabilities.
+/// Each tool defines its name, description, input schema, and execution logic.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Defines the contract that all tools must implement to be registered and invoked through the tool registry.
+/// Enables pluggable, type-safe tool execution with JSON Schema validation.
+///
+/// ## Usage
+/// ```rust,no_run
+/// use async_trait::async_trait;
+/// use serde_json::Value;
+/// use tools::Tool;
+///
+/// struct MyCustomTool;
+///
+/// #[async_trait]
+/// impl Tool for MyCustomTool {
+///     fn name(&self) -> &str {
+///         "my_custom_tool"
+///     }
+///
+///     fn description(&self) -> &str {
+///         "Does something useful"
+///     }
+///
+///     fn input_schema(&self) -> Value {
+///         serde_json::json!({
+///             "type": "object",
+///             "properties": {
+///                 "input": { "type": "string" }
+///             },
+///             "required": ["input"]
+///         })
+///     }
+///
+///     async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+///         // Process params and return result
+///         Ok(serde_json::json!({ "result": "success" }))
+///     }
+/// }
+/// ```
+///
+/// ## Methods
+/// - `name`: Unique identifier for the tool
+/// - `description`: Human-readable description of what the tool does
+/// - `input_schema`: JSON Schema defining valid input parameters
+/// - `call`: Async execution method that processes input and returns output
 #[async_trait]
 pub trait Tool: Send + Sync {
     fn name(&self) -> &str;
@@ -11,6 +62,67 @@ pub trait Tool: Send + Sync {
     async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>>;
 }
 
+/// Error codes for tool execution failures.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Provides standardized error classification for tool operations, enabling proper error handling and retry logic.
+///
+/// ## Variants
+/// - `InvalidInput`: Input validation failed (non-retryable)
+/// - `NotFound`: Requested resource not found (non-retryable)
+/// - `ProviderError`: External provider or service failure (retryable)
+/// - `RateLimited`: Request rate limit exceeded (retryable)
+/// - `Unauthorized`: Authentication/authorization failure (non-retryable)
+/// - `Timeout`: Operation timed out (retryable)
+/// - `Conflict`: Concurrent modification or state conflict (retryable)
+/// - `InternalError`: Unexpected system error (non-retryable)
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ToolErrorCode {
+    InvalidInput,
+    NotFound,
+    ProviderError,
+    RateLimited,
+    Unauthorized,
+    Timeout,
+    Conflict,
+    InternalError,
+}
+
+/// Generic response wrapper for tool execution results.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Provides a consistent response format for all tool operations, enabling success/failure detection
+/// and structured error handling across all tools.
+///
+/// ## Usage
+/// ```rust,no_run
+/// use tools::tools::ToolResponse;
+/// use serde_json::json;
+///
+/// // Success response
+/// let success = ToolResponse::<String> {
+///     success: true,
+///     data: Some("result data".to_string()),
+///     error: None,
+/// };
+///
+/// // Error response
+/// let error = ToolResponse::<()> {
+///     success: false,
+///     data: None,
+///     error: Some(ToolError::new(ToolErrorCode::NotFound, "Not found")),
+/// };
+/// ```
+///
+/// ## Fields
+/// - `success`: Indicates whether the operation succeeded
+/// - `data`: Result data on success (omitted on failure)
+/// - `error`: Error details on failure (omitted on success)
 #[derive(Serialize, Deserialize)]
 pub struct ToolResponse<T> {
     pub success: bool,
@@ -20,22 +132,115 @@ pub struct ToolResponse<T> {
     pub error: Option<ToolError>,
 }
 
+/// Detailed error information for tool failures.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Encapsulates error details including error code, message, retryability status, and optional context.
+/// Enables consumers to make informed decisions about error handling and retries.
+///
+/// ## Usage
+/// ```rust,no_run
+/// use tools::tools::{ToolError, ToolErrorCode};
+/// use serde_json::json;
+///
+/// // Basic error
+/// let error = ToolError::new(ToolErrorCode::InvalidInput, "Missing required field");
+///
+/// // Error with details
+/// let error = ToolError::new(ToolErrorCode::NotFound, "Resource not found")
+///     .with_details(json!({ "resource_id": "123" }));
+///
+/// // Check if retryable
+/// if error.retryable {
+///     // Retry logic
+/// }
+/// ```
+///
+/// ## Fields
+/// - `code`: Standardized error code for classification
+/// - `message`: Human-readable error description
+/// - `retryable`: Whether the operation can be safely retried
+/// - `details`: Additional context for debugging (optional)
 #[derive(Serialize, Deserialize)]
 pub struct ToolError {
-    pub code: String,
+    pub code: ToolErrorCode,
     pub message: String,
     pub retryable: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<Value>,
 }
 
+impl ToolError {
+    pub fn new(code: ToolErrorCode, message: impl Into<String>) -> Self {
+        let retryable = matches!(
+            code,
+            ToolErrorCode::RateLimited | ToolErrorCode::Timeout | ToolErrorCode::ProviderError
+        );
+        Self {
+            code,
+            message: message.into(),
+            retryable,
+            details: None,
+        }
+    }
+
+    pub fn with_details(mut self, details: Value) -> Self {
+        self.details = Some(details);
+        self
+    }
+}
+
+/// Central registry for managing and invoking tools.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Provides a centralized mechanism for registering, discovering, and invoking tools.
+/// Enables dynamic tool management and type-safe execution across the system.
+///
+/// ## Usage
+/// ```rust,no_run
+/// use tools::tools::{ToolRegistry, Tool, ToolDefinition};
+/// use async_trait::async_trait;
+/// use serde_json::{json, Value};
+/// use std::error::Error;
+///
+/// // Create registry
+/// let mut registry = ToolRegistry::new();
+///
+/// // Register tools
+/// registry.register(Box::new(MyTool));
+///
+/// // List available tools
+/// let tools: Vec<ToolDefinition> = registry.list_tools();
+///
+/// // Invoke a tool
+/// let result = registry.call("my_tool", json!({ "input": "data" })).await;
+/// ```
+///
+/// ## Methods
+/// - `new`: Creates an empty tool registry
+/// - `register`: Registers a tool by its unique name
+/// - `call`: Invokes a registered tool with the given parameters
+/// - `list_tools`: Returns metadata for all registered tools
 pub struct ToolRegistry {
     tools: HashMap<String, Box<dyn Tool>>,
 }
 
-impl ToolRegistry {
-    pub fn new() -> Self {
+#[allow(clippy::new_without_default)]
+impl Default for ToolRegistry {
+    fn default() -> Self {
         Self {
             tools: HashMap::new(),
         }
+    }
+}
+
+impl ToolRegistry {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn register(&mut self, tool: Box<dyn Tool>) {
@@ -47,7 +252,10 @@ impl ToolRegistry {
         name: &str,
         params: Value,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        let tool = self.tools.get(name).ok_or(format!("Tool {} not found", name))?;
+        let tool = self
+            .tools
+            .get(name)
+            .ok_or(format!("Tool {} not found", name))?;
         tool.call(params).await
     }
 
@@ -63,6 +271,36 @@ impl ToolRegistry {
     }
 }
 
+/// Metadata definition for a registered tool.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Provides tool discovery information without exposing implementation details.
+/// Used for tool listing, documentation generation, and client UI.
+///
+/// ## Usage
+/// ```rust,no_run
+/// use tools::tools::ToolDefinition;
+/// use serde_json::json;
+///
+/// let definition = ToolDefinition {
+///     name: "my_tool".to_string(),
+///     description: "Does something useful".to_string(),
+///     input_schema: json!({
+///         "type": "object",
+///         "properties": {
+///             "input": { "type": "string" }
+///         },
+///         "required": ["input"]
+///     }),
+/// };
+/// ```
+///
+/// ## Fields
+/// - `name`: Unique tool identifier used for invocation
+/// - `description`: Human-readable description of tool purpose
+/// - `input_schema`: JSON Schema defining valid input parameters
 #[derive(Serialize, Deserialize)]
 pub struct ToolDefinition {
     pub name: String,
