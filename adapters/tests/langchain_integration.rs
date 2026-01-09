@@ -19,7 +19,7 @@ impl KnowledgeRepository for MockRepo {
     async fn get(
         &self,
         _layer: KnowledgeLayer,
-        _path: &str,
+        _path: &str
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
         Ok(None)
     }
@@ -31,7 +31,7 @@ impl KnowledgeRepository for MockRepo {
     async fn list(
         &self,
         _layer: KnowledgeLayer,
-        _prefix: &str,
+        _prefix: &str
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         Ok(vec![])
     }
@@ -40,7 +40,7 @@ impl KnowledgeRepository for MockRepo {
         &self,
         _layer: KnowledgeLayer,
         _path: &str,
-        _message: &str,
+        _message: &str
     ) -> Result<String, Self::Error> {
         Ok("hash".to_string())
     }
@@ -51,7 +51,7 @@ impl KnowledgeRepository for MockRepo {
 
     async fn get_affected_items(
         &self,
-        _since_commit: &str,
+        _since_commit: &str
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         Ok(vec![])
     }
@@ -66,7 +66,7 @@ impl sync::state_persister::SyncStatePersister for MockPersister {
     }
     async fn save(
         &self,
-        _state: &SyncState,
+        _state: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
@@ -83,10 +83,10 @@ async fn setup_server() -> Arc<McpServer> {
         SyncManager::new(
             memory_manager.clone(),
             repo.clone(),
-            Arc::new(MockPersister),
+            Arc::new(MockPersister)
         )
         .await
-        .unwrap(),
+        .unwrap()
     );
 
     Arc::new(McpServer::new(memory_manager, sync_manager, repo))
@@ -126,7 +126,10 @@ async fn test_langchain_adapter_request_handling() {
         "name": "memory_add",
         "arguments": {
             "content": "test content",
-            "layer": "user"
+            "layer": "user",
+            "identifiers": {
+                "user_id": "test_user_123"
+            }
         }
     });
 

@@ -8,7 +8,7 @@ use sync::bridge::SyncManager;
 use validator::Validate;
 
 pub struct SyncNowTool {
-    sync_manager: Arc<SyncManager>,
+    sync_manager: Arc<SyncManager>
 }
 
 impl SyncNowTool {
@@ -20,7 +20,7 @@ impl SyncNowTool {
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct SyncNowparams {
     #[serde(default)]
-    pub force: bool,
+    pub force: bool
 }
 
 #[async_trait]
@@ -64,7 +64,7 @@ impl Tool for SyncNowTool {
 }
 
 pub struct SyncStatusTool {
-    sync_manager: Arc<SyncManager>,
+    sync_manager: Arc<SyncManager>
 }
 
 impl SyncStatusTool {
@@ -92,7 +92,7 @@ impl Tool for SyncStatusTool {
 
     async fn call(
         &self,
-        _params: Value,
+        _params: Value
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let state = self.sync_manager.get_state().await;
 

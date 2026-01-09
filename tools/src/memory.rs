@@ -10,7 +10,7 @@ use std::sync::Arc;
 use validator::Validate;
 
 pub struct MemoryAddTool {
-    memory_manager: Arc<MemoryManager>,
+    memory_manager: Arc<MemoryManager>
 }
 
 impl MemoryAddTool {
@@ -25,7 +25,7 @@ pub struct MemoryAddParams {
     #[serde(default = "default_layer")]
     pub layer: MemoryLayer,
     pub tags: Option<Vec<String>>,
-    pub metadata: Option<HashMap<String, Value>>,
+    pub metadata: Option<HashMap<String, Value>>
 }
 
 fn default_layer() -> MemoryLayer {
@@ -76,7 +76,7 @@ impl Tool for MemoryAddTool {
             layer: p.layer,
             metadata,
             created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp()
         };
 
         let memory_id = self.memory_manager.add_to_layer(p.layer, entry).await?;
@@ -90,7 +90,7 @@ impl Tool for MemoryAddTool {
 }
 
 pub struct MemorySearchTool {
-    memory_manager: Arc<MemoryManager>,
+    memory_manager: Arc<MemoryManager>
 }
 
 impl MemorySearchTool {
@@ -107,7 +107,7 @@ pub struct MemorySearchParams {
     pub limit: usize,
     #[serde(default = "default_threshold")]
     pub threshold: f32,
-    pub tags: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>
 }
 
 fn default_limit() -> usize {
@@ -163,14 +163,24 @@ impl Tool for MemorySearchTool {
 
         let output_results: Vec<Value> = results
             .into_iter()
-            .map(|r| {
-                json!({
-                    "content": r.content,
-                    "layer": r.layer,
-                    "score": 1.0,
-                    "memoryId": r.id,
-                    "tags": r.metadata.get("tags")
-                })
+            .filter_map(|r| {
+                let score = r
+                    .metadata
+                    .get("score")
+                    .and_then(|s| s.as_f64())
+                    .unwrap_or(1.0);
+
+                if score >= p.threshold as f64 {
+                    Some(json!({
+                        "content": r.content,
+                        "layer": r.layer,
+                        "score": score,
+                        "memoryId": r.id,
+                        "tags": r.metadata.get("tags")
+                    }))
+                } else {
+                    None
+                }
             })
             .collect();
 
@@ -187,7 +197,7 @@ impl Tool for MemorySearchTool {
 }
 
 pub struct MemoryDeleteTool {
-    memory_manager: Arc<MemoryManager>,
+    memory_manager: Arc<MemoryManager>
 }
 
 impl MemoryDeleteTool {
@@ -199,7 +209,7 @@ impl MemoryDeleteTool {
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct MemoryDeleteParams {
     pub memory_id: String,
-    pub layer: MemoryLayer,
+    pub layer: MemoryLayer
 }
 
 #[async_trait]
