@@ -99,6 +99,8 @@ pub trait KnowledgeRepository: Send + Sync {
         layers: Vec<crate::types::KnowledgeLayer>,
         limit: usize
     ) -> Result<Vec<crate::types::KnowledgeEntry>, Self::Error>;
+
+    fn root_path(&self) -> Option<std::path::PathBuf>;
 }
 
 #[async_trait]

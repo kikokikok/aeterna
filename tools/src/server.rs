@@ -1,8 +1,9 @@
-use crate::bridge::{SyncNowTool, SyncStatusTool};
+use crate::bridge::{ResolveFederationConflictTool, SyncNowTool, SyncStatusTool};
 use crate::knowledge::{KnowledgeGetTool, KnowledgeListTool, KnowledgeQueryTool};
 use crate::memory::{MemoryAddTool, MemoryCloseTool, MemoryDeleteTool, MemorySearchTool};
 use crate::tools::{ToolDefinition, ToolRegistry};
 use memory::manager::MemoryManager;
+use mk_core::traits::KnowledgeRepository;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -84,14 +85,16 @@ impl McpServer {
     pub fn new(
         memory_manager: Arc<MemoryManager>,
         sync_manager: Arc<SyncManager>,
-        knowledge_repository: Arc<knowledge::repository::GitRepository>
+        knowledge_repository: Arc<
+            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>
+        >
     ) -> Self {
         let mut registry = ToolRegistry::new();
 
         registry.register(Box::new(MemoryAddTool::new(memory_manager.clone())));
         registry.register(Box::new(MemorySearchTool::new(memory_manager.clone())));
         registry.register(Box::new(MemoryDeleteTool::new(memory_manager.clone())));
-        registry.register(Box::new(MemoryCloseTool::new(memory_manager)));
+        registry.register(Box::new(MemoryCloseTool::new(memory_manager.clone())));
 
         registry.register(Box::new(KnowledgeGetTool::new(
             knowledge_repository.clone()
@@ -100,11 +103,13 @@ impl McpServer {
             knowledge_repository.clone()
         )));
         registry.register(Box::new(KnowledgeQueryTool::new(
+            memory_manager.clone(),
             knowledge_repository.clone()
         )));
 
         registry.register(Box::new(SyncNowTool::new(sync_manager.clone())));
-        registry.register(Box::new(SyncStatusTool::new(sync_manager)));
+        registry.register(Box::new(SyncStatusTool::new(sync_manager.clone())));
+        registry.register(Box::new(ResolveFederationConflictTool::new(sync_manager)));
 
         Self {
             registry,
