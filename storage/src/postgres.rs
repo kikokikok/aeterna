@@ -6,11 +6,11 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum PostgresError {
     #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(#[from] sqlx::Error)
 }
 
 pub struct PostgresBackend {
-    pool: Pool<Postgres>,
+    pool: Pool<Postgres>
 }
 
 impl PostgresBackend {
@@ -25,7 +25,7 @@ impl PostgresBackend {
                 id TEXT PRIMARY KEY,
                 data JSONB NOT NULL,
                 updated_at BIGINT NOT NULL
-            )",
+            )"
         )
         .execute(&self.pool)
         .await?;
@@ -42,7 +42,7 @@ impl StorageBackend for PostgresBackend {
         sqlx::query(
             "INSERT INTO sync_state (id, data, updated_at)
              VALUES ($1, $2, $3)
-             ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = $3",
+             ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = $3"
         )
         .bind(key)
         .bind(serde_json::from_slice::<serde_json::Value>(value).unwrap_or_default())

@@ -24,7 +24,7 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
         metadata: std::collections::HashMap::new(),
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     mk_core::traits::KnowledgeRepository::store(repo.as_ref(), entry, "initial docs").await?;
 

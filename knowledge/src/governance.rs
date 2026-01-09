@@ -2,13 +2,13 @@ use mk_core::types::{KnowledgeLayer, Policy, PolicyViolation, ValidationResult};
 use std::collections::HashMap;
 
 pub struct GovernanceEngine {
-    policies: HashMap<KnowledgeLayer, Vec<Policy>>,
+    policies: HashMap<KnowledgeLayer, Vec<Policy>>
 }
 
 impl GovernanceEngine {
     pub fn new() -> Self {
         Self {
-            policies: HashMap::new(),
+            policies: HashMap::new()
         }
     }
 }
@@ -27,7 +27,7 @@ impl GovernanceEngine {
     pub fn validate(
         &self,
         target_layer: KnowledgeLayer,
-        context: &HashMap<String, serde_json::Value>,
+        context: &HashMap<String, serde_json::Value>
     ) -> ValidationResult {
         let mut violations = Vec::new();
 
@@ -56,7 +56,7 @@ impl GovernanceEngine {
 
         ValidationResult {
             is_valid: violations.is_empty(),
-            violations,
+            violations
         }
     }
 
@@ -64,7 +64,7 @@ impl GovernanceEngine {
         &self,
         _policy: &Policy,
         _rule: &mk_core::types::PolicyRule,
-        _context: &HashMap<String, serde_json::Value>,
+        _context: &HashMap<String, serde_json::Value>
     ) -> Option<PolicyViolation> {
         None
     }
@@ -90,9 +90,9 @@ mod tests {
                 operator: ConstraintOperator::MustExist,
                 value: serde_json::Value::Null,
                 severity: ConstraintSeverity::Block,
-                message: "Config must exist".to_string(),
+                message: "Config must exist".to_string()
             }],
-            metadata: HashMap::new(),
+            metadata: HashMap::new()
         };
 
         engine.add_policy(company_policy);
