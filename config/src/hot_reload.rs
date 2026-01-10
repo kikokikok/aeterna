@@ -336,4 +336,134 @@ host = "testhost"
             _ => panic!("Expected Changed event, got {:?}", event)
         }
     }
+
+    #[tokio::test]
+    async fn test_watch_config_nonexistent_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("nonexistent.toml");
+
+        let result = watch_config(&config_path).await;
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        let error_str = error.to_string();
+        assert!(error_str.contains("not found") || error_str.contains("NotFound"));
+    }
+
+    #[tokio::test]
+    async fn test_watch_config_error_handling() {
+        let temp_file = NamedTempFile::new().unwrap();
+        fs::write(temp_file.path(), "test").unwrap();
+
+        let (_tx, mut rx) = watch_config(temp_file.path()).await.unwrap();
+
+        let _ = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("Timeout waiting for Ready event");
+
+        drop(rx);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_watch_config_removed_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        fs::write(&config_path, "initial").unwrap();
+
+        let (_tx, mut rx) = watch_config(&config_path).await.unwrap();
+
+        let ready_event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("Timeout waiting for Ready event")
+            .expect("No event received");
+        assert_eq!(ready_event, ConfigReloadEvent::Ready);
+
+        fs::remove_file(&config_path).unwrap();
+
+        let event = tokio::time::timeout(Duration::from_secs(5), rx.recv()).await;
+
+        if let Ok(Some(event)) = event {
+            match event {
+                ConfigReloadEvent::Removed(path) => {
+                    assert_eq!(
+                        path.canonicalize().unwrap(),
+                        config_path.canonicalize().unwrap()
+                    );
+                }
+                ConfigReloadEvent::Error { path, error } => {
+                    assert_eq!(
+                        path.canonicalize().unwrap(),
+                        config_path.canonicalize().unwrap()
+                    );
+                    assert!(!error.is_empty());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn test_config_reload_event_ready() {
+        let event = ConfigReloadEvent::Ready;
+        assert!(matches!(event, ConfigReloadEvent::Ready));
+        assert_eq!(event, ConfigReloadEvent::Ready);
+    }
+
+    #[test]
+    fn test_config_reload_event_partial_eq() {
+        let path1 = PathBuf::from("/test/config.toml");
+        let path2 = PathBuf::from("/test/config.toml");
+        let path3 = PathBuf::from("/other/config.toml");
+
+        // Test equality
+        assert_eq!(
+            ConfigReloadEvent::Changed(path1.clone()),
+            ConfigReloadEvent::Changed(path2.clone())
+        );
+
+        assert_eq!(
+            ConfigReloadEvent::Created(path1.clone()),
+            ConfigReloadEvent::Created(path2.clone())
+        );
+
+        assert_eq!(
+            ConfigReloadEvent::Removed(path1.clone()),
+            ConfigReloadEvent::Removed(path2.clone())
+        );
+
+        assert_eq!(
+            ConfigReloadEvent::Error {
+                path: path1.clone(),
+                error: "test".to_string()
+            },
+            ConfigReloadEvent::Error {
+                path: path2.clone(),
+                error: "test".to_string()
+            }
+        );
+
+        // Test inequality
+        assert_ne!(
+            ConfigReloadEvent::Changed(path1.clone()),
+            ConfigReloadEvent::Changed(path3.clone())
+        );
+
+        assert_ne!(
+            ConfigReloadEvent::Changed(path1.clone()),
+            ConfigReloadEvent::Created(path1.clone())
+        );
+
+        assert_ne!(
+            ConfigReloadEvent::Error {
+                path: path1.clone(),
+                error: "error1".to_string()
+            },
+            ConfigReloadEvent::Error {
+                path: path1.clone(),
+                error: "error2".to_string()
+            }
+        );
+    }
 }

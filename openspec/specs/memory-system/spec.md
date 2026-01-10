@@ -45,14 +45,20 @@ The system SHALL redact personally identifiable information (PII) from memory co
 #### Scenario: Redact email from content
 - **WHEN** a memory is being evaluated for promotion
 - **AND** the content contains an email address (e.g., "user@example.com")
-- **THEN** the system SHALL replace the email with `[REDACTED]`
+- **THEN** the system SHALL replace the email with `[REDACTED_EMAIL]`
+
+#### Scenario: Redact phone number from content
+- **WHEN** a memory is being evaluated for promotion
+- **AND** the content contains a phone number (e.g., "123-456-7890")
+- **THEN** the system SHALL replace the phone number with `[REDACTED_PHONE]`
 
 ### Requirement: Sensitivity Check
 The system SHALL prevent promotion of memories marked as sensitive or private.
 
 #### Scenario: Block promotion of sensitive memory
 - **WHEN** a memory is marked as `sensitive: true` or `private: true` in metadata
-- **THEN** the system SHALL NOT promote this memory to higher layers, regardless of its importance score.
+- **THEN** the system SHALL NOT promote this memory to higher layers
+- **AND** record telemetry for the promotion block.
 
 ### Requirement: Performance Telemetry
 The system SHALL track and emit metrics for key memory operations.

@@ -19,6 +19,26 @@ pub enum KnowledgeType {
     Spec
 }
 
+/// Knowledge status
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum KnowledgeStatus {
+    /// Initial draft state
+    Draft,
+
+    /// Proposed change
+    Proposed,
+
+    /// Accepted/Active state
+    Accepted,
+
+    /// Deprecated but still present
+    Deprecated,
+
+    /// Superseded by a newer item
+    Superseded
+}
+
 /// Knowledge layers for hierarchical organization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -290,6 +310,7 @@ pub struct KnowledgeEntry {
     pub content: String,
     pub layer: KnowledgeLayer,
     pub kind: KnowledgeType,
+    pub status: KnowledgeStatus,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub commit_hash: Option<String>,
     pub author: Option<String>,
@@ -439,6 +460,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             commit_hash: Some("abc123".to_string()),
             author: Some("Alice".to_string()),
+            status: KnowledgeStatus::Accepted,
             updated_at: 1234567890
         };
 
@@ -580,5 +602,112 @@ mod tests {
 
         let result = identifiers.validate();
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_memory_layer_display_name() {
+        assert_eq!(MemoryLayer::Agent.display_name(), "Agent");
+        assert_eq!(MemoryLayer::User.display_name(), "User");
+        assert_eq!(MemoryLayer::Session.display_name(), "Session");
+        assert_eq!(MemoryLayer::Project.display_name(), "Project");
+        assert_eq!(MemoryLayer::Team.display_name(), "Team");
+        assert_eq!(MemoryLayer::Org.display_name(), "Organization");
+        assert_eq!(MemoryLayer::Company.display_name(), "Company");
+    }
+
+    #[test]
+    fn test_validate_agent_id_valid() {
+        let agent_id = "agent_123".to_string();
+        let result = validate_agent_id(&&agent_id);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_agent_id_empty() {
+        let agent_id = "".to_string();
+        let result = validate_agent_id(&&agent_id);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_agent_id_too_long() {
+        let agent_id = "a".repeat(101);
+        let result = validate_agent_id(&&agent_id);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_session_id_empty() {
+        let id = "".to_string();
+        assert!(validate_session_id(&&id).is_err());
+    }
+
+    #[test]
+    fn test_validate_project_id_empty() {
+        let id = "".to_string();
+        assert!(validate_project_id(&&id).is_err());
+    }
+
+    #[test]
+    fn test_validate_team_id_empty() {
+        let id = "".to_string();
+        assert!(validate_team_id(&&id).is_err());
+    }
+
+    #[test]
+    fn test_validate_org_id_empty() {
+        let id = "".to_string();
+        assert!(validate_org_id(&&id).is_err());
+    }
+
+    #[test]
+    fn test_validate_company_id_empty() {
+        let id = "".to_string();
+        assert!(validate_company_id(&&id).is_err());
+    }
+
+    #[test]
+    fn test_memory_layer_from_str() {
+        use std::str::FromStr;
+        assert_eq!(MemoryLayer::from_str("Agent").unwrap(), MemoryLayer::Agent);
+        assert_eq!(
+            MemoryLayer::from_str("Session").unwrap(),
+            MemoryLayer::Session
+        );
+        assert!(MemoryLayer::from_str("Invalid").is_err());
+    }
+
+    #[test]
+    fn test_memory_layer_display() {
+        assert_eq!(format!("{}", MemoryLayer::Agent), "Agent");
+        assert_eq!(format!("{}", MemoryLayer::User), "User");
+        assert_eq!(format!("{}", MemoryLayer::Session), "Session");
+        assert_eq!(format!("{}", MemoryLayer::Project), "Project");
+        assert_eq!(format!("{}", MemoryLayer::Team), "Team");
+        assert_eq!(format!("{}", MemoryLayer::Org), "Org");
+        assert_eq!(format!("{}", MemoryLayer::Company), "Company");
+    }
+
+    #[test]
+    fn test_memory_layer_from_str_comprehensive() {
+        use std::str::FromStr;
+        assert_eq!(MemoryLayer::from_str("Agent").unwrap(), MemoryLayer::Agent);
+        assert_eq!(MemoryLayer::from_str("User").unwrap(), MemoryLayer::User);
+        assert_eq!(
+            MemoryLayer::from_str("Session").unwrap(),
+            MemoryLayer::Session
+        );
+        assert_eq!(
+            MemoryLayer::from_str("Project").unwrap(),
+            MemoryLayer::Project
+        );
+        assert_eq!(MemoryLayer::from_str("Team").unwrap(), MemoryLayer::Team);
+        assert_eq!(MemoryLayer::from_str("Org").unwrap(), MemoryLayer::Org);
+        assert_eq!(
+            MemoryLayer::from_str("Company").unwrap(),
+            MemoryLayer::Company
+        );
+        assert!(MemoryLayer::from_str("Invalid").is_err());
+        assert!(MemoryLayer::from_str("").is_err());
     }
 }

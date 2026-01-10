@@ -7,7 +7,7 @@ use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{
     ConstraintOperator, ConstraintSeverity, ConstraintTarget, KnowledgeEntry, KnowledgeLayer,
-    KnowledgeType, Policy, PolicyRule
+    KnowledgeStatus, KnowledgeType, Policy, PolicyRule
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -177,6 +177,7 @@ async fn test_sync_governance_telemetry() {
         layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
         metadata: HashMap::new(),
+        status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,
         updated_at: chrono::Utc::now().timestamp()

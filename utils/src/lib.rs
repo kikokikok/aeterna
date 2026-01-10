@@ -80,6 +80,20 @@ pub fn is_valid_knowledge_layer(layer: &str) -> bool {
     matches!(layer, "company" | "org" | "team" | "project")
 }
 
+/// Redact PII from content string
+///
+/// Currently redacts emails and simple phone numbers.
+#[must_use]
+pub fn redact_pii(content: &str) -> String {
+    let email_re = regex::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap();
+    let result = email_re.replace_all(content, "[REDACTED_EMAIL]");
+
+    let phone_re = regex::Regex::new(r"\d{3}-\d{3}-\d{4}").unwrap();
+    phone_re
+        .replace_all(&result, "[REDACTED_PHONE]")
+        .to_string()
+}
+
 /// Get layer precedence value for memory layers
 #[must_use]
 pub fn get_layer_precedence(layer: &str) -> u8 {
@@ -125,5 +139,58 @@ mod tests {
     fn test_layer_validation_invalid() {
         assert!(!is_valid_layer("invalid"));
         assert!(!is_valid_layer("agent-user"));
+    }
+
+    #[test]
+    fn test_redact_pii() {
+        let content = "Contact alice@example.com at 123-456-7890.";
+        let redacted = redact_pii(content);
+        assert_eq!(redacted, "Contact [REDACTED_EMAIL] at [REDACTED_PHONE].");
+    }
+
+    #[test]
+    fn test_compute_knowledge_hash() {
+        let item = serde_json::json!({
+            "content": "test content",
+            "status": "accepted",
+            "constraints": ["rule1"]
+        });
+        let hash = compute_knowledge_hash(&item);
+        assert_eq!(hash.len(), 64);
+
+        let item2 = serde_json::json!({
+            "content": "test content",
+            "status": "accepted",
+            "constraints": ["rule1"]
+        });
+        assert_eq!(hash, compute_knowledge_hash(&item2));
+
+        let item3 = serde_json::json!({
+            "content": "different content",
+            "status": "accepted",
+            "constraints": ["rule1"]
+        });
+        assert_ne!(hash, compute_knowledge_hash(&item3));
+    }
+
+    #[test]
+    fn test_is_valid_knowledge_type() {
+        assert!(is_valid_knowledge_type("adr"));
+        assert!(is_valid_knowledge_type("policy"));
+        assert!(!is_valid_knowledge_type("unknown"));
+    }
+
+    #[test]
+    fn test_is_valid_knowledge_layer() {
+        assert!(is_valid_knowledge_layer("project"));
+        assert!(is_valid_knowledge_layer("company"));
+        assert!(!is_valid_knowledge_layer("user"));
+    }
+
+    #[test]
+    fn test_get_layer_precedence() {
+        assert_eq!(get_layer_precedence("agent"), 1);
+        assert_eq!(get_layer_precedence("company"), 7);
+        assert_eq!(get_layer_precedence("unknown"), 7);
     }
 }

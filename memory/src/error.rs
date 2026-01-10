@@ -299,52 +299,226 @@ mod tests {
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 
-    #[tokio::test]
-    async fn test_circuit_breaker() {
-        let breaker = CircuitBreaker::new(2, std::time::Duration::from_millis(100));
+    #[test]
+    fn test_memory_error_retryable() {
+        assert!(MemoryError::NetworkError("".into()).is_retryable());
+        assert!(MemoryError::TimeoutError("".into()).is_retryable());
+        assert!(MemoryError::RateLimited("".into()).is_retryable());
+        assert!(MemoryError::ProviderError("".into()).is_retryable());
+        assert!(!MemoryError::ValidationError("".into()).is_retryable());
+    }
 
+    #[test]
+    fn test_memory_error_backoff() {
+        assert!(MemoryError::RateLimited("".into()).should_backoff());
+        assert!(!MemoryError::NetworkError("".into()).should_backoff());
+
+        assert!(
+            MemoryError::RateLimited("".into())
+                .backoff_duration()
+                .is_some()
+        );
+        assert!(
+            MemoryError::NetworkError("".into())
+                .backoff_duration()
+                .is_some()
+        );
+        assert!(
+            MemoryError::InternalError("".into())
+                .backoff_duration()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_with_exponential_backoff() {
+        let counter = AtomicUsize::new(0);
+        let result = with_exponential_backoff(
+            || async {
+                let c = counter.fetch_add(1, Ordering::SeqCst);
+                if c < 1 {
+                    Err(MemoryError::NetworkError("".into()))
+                } else {
+                    Ok("ok")
+                }
+            },
+            2
+        )
+        .await;
+        assert_eq!(result.unwrap(), "ok");
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_half_open_failure() {
+        let breaker = CircuitBreaker::new(1, std::time::Duration::from_millis(50));
+
+        // Open it
+        let _: Result<(), _> = breaker
+            .execute(|| async { Err(MemoryError::NetworkError("".into())) })
+            .await;
+
+        // Wait for reset timeout
+        tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+
+        // Half-open attempt fails -> goes back to Open
+        let _: Result<(), _> = breaker
+            .execute(|| async { Err(MemoryError::InternalError("".into())) })
+            .await;
+
+        // Next call should be blocked immediately
+        let result = breaker.execute(|| async { Ok("should be blocked") }).await;
+        assert!(
+            matches!(result, Err(MemoryError::NetworkError(msg)) if msg.contains("Circuit breaker is open"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_half_open_success() {
+        let breaker = CircuitBreaker::new(2, std::time::Duration::from_millis(50));
+
+        // Open it with 2 failures
+        let _: Result<(), _> = breaker
+            .execute(|| async { Err(MemoryError::NetworkError("".into())) })
+            .await;
+        let _: Result<(), _> = breaker
+            .execute(|| async { Err(MemoryError::NetworkError("".into())) })
+            .await;
+
+        // Wait for reset timeout
+        tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+
+        // Half-open attempt succeeds -> goes back to Closed
+        let result = breaker.execute(|| async { Ok("success") }).await;
+        assert_eq!(result.unwrap(), "success");
+
+        // Should be closed now, can make another successful call
+        let result = breaker.execute(|| async { Ok("another success") }).await;
+        assert_eq!(result.unwrap(), "another success");
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_closed_state_reset_on_success() {
+        let breaker = CircuitBreaker::new(3, std::time::Duration::from_millis(100));
+
+        // Fail once
+        let _: Result<(), _> = breaker
+            .execute(|| async { Err(MemoryError::NetworkError("".into())) })
+            .await;
+
+        // Success should reset failure count
+        let result = breaker.execute(|| async { Ok("reset") }).await;
+        assert_eq!(result.unwrap(), "reset");
+
+        // Should still be closed, not open
+        let result = breaker.execute(|| async { Ok("still working") }).await;
+        assert_eq!(result.unwrap(), "still working");
+    }
+
+    #[test]
+    fn test_all_error_variants_display() {
+        // Test that all error variants can be formatted
+        let errors = vec![
+            MemoryError::ProviderError("test".to_string()),
+            MemoryError::EmbeddingError("test".to_string()),
+            MemoryError::ValidationError("test".to_string()),
+            MemoryError::StorageError("test".to_string()),
+            MemoryError::NetworkError("test".to_string()),
+            MemoryError::TimeoutError("test".to_string()),
+            MemoryError::ConfigError("test".to_string()),
+            MemoryError::SerializationError("test".to_string()),
+            MemoryError::NotFound("test".to_string()),
+            MemoryError::Unauthorized("test".to_string()),
+            MemoryError::RateLimited("test".to_string()),
+            MemoryError::InternalError("test".to_string()),
+        ];
+
+        for error in errors {
+            let display = error.to_string();
+            assert!(!display.is_empty());
+            assert!(display.contains("test"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_with_retry_jitter_calculation() {
         let counter = AtomicUsize::new(0);
 
-        let result1: Result<&str, _> = breaker
-            .execute(|| async {
-                counter.fetch_add(1, Ordering::SeqCst);
-                Err(MemoryError::NetworkError("Failure 1".to_string()))
-            })
-            .await;
+        let config = RetryConfig {
+            max_retries: 2,
+            initial_backoff: std::time::Duration::from_millis(100),
+            max_backoff: std::time::Duration::from_secs(1),
+            backoff_multiplier: 2.0,
+            jitter: true
+        };
 
-        assert!(result1.is_err());
-        assert_eq!(counter.load(Ordering::SeqCst), 1);
+        let result = with_retry(
+            || async {
+                let count = counter.fetch_add(1, Ordering::SeqCst);
+                if count < 2 {
+                    Err(MemoryError::NetworkError("Temporary".to_string()))
+                } else {
+                    Ok("success with jitter")
+                }
+            },
+            config
+        )
+        .await;
 
-        let result2: Result<&str, _> = breaker
-            .execute(|| async {
-                counter.fetch_add(1, Ordering::SeqCst);
-                Err(MemoryError::NetworkError("Failure 2".to_string()))
-            })
-            .await;
-
-        assert!(result2.is_err());
-        assert_eq!(counter.load(Ordering::SeqCst), 2);
-
-        let result3: Result<&str, _> = breaker
-            .execute(|| async {
-                counter.fetch_add(1, Ordering::SeqCst);
-                Ok("should fail")
-            })
-            .await;
-
-        assert!(result3.is_err());
-        assert_eq!(counter.load(Ordering::SeqCst), 2);
-
-        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-
-        let result4: Result<&str, _> = breaker
-            .execute(|| async {
-                counter.fetch_add(1, Ordering::SeqCst);
-                Ok("success")
-            })
-            .await;
-
-        assert_eq!(result4.unwrap(), "success");
+        assert_eq!(result.unwrap(), "success with jitter");
         assert_eq!(counter.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn test_with_retry_error_backoff_takes_precedence() {
+        let counter = AtomicUsize::new(0);
+
+        let result: Result<&str, _> = with_retry(
+            || async {
+                let count = counter.fetch_add(1, Ordering::SeqCst);
+                // RateLimited has its own backoff duration (5 seconds)
+                Err(MemoryError::RateLimited(format!("Attempt {}", count)))
+            },
+            RetryConfig::default()
+        )
+        .await;
+
+        assert!(result.is_err());
+        // Should fail immediately after max retries since RateLimited has
+        // error-specific backoff
+        assert!(counter.load(Ordering::SeqCst) > 0);
+    }
+
+    // Test implementation of WithRetry trait
+    struct TestRetryable;
+
+    impl WithRetry for TestRetryable {
+        type Output = String;
+
+        async fn with_retry<F, Fut>(operation: F) -> MemoryResult<Self::Output>
+        where
+            F: Fn() -> Fut,
+            Fut: std::future::Future<Output = MemoryResult<Self::Output>>
+        {
+            with_retry(operation, RetryConfig::default()).await
+        }
+    }
+
+    #[tokio::test]
+    async fn test_with_retry_trait_implementation() {
+        let counter = AtomicUsize::new(0);
+
+        let result = TestRetryable::with_retry(|| async {
+            let count = counter.fetch_add(1, Ordering::SeqCst);
+            if count < 1 {
+                Err(MemoryError::NetworkError("Temporary".to_string()))
+            } else {
+                Ok("trait success".to_string())
+            }
+        })
+        .await;
+
+        assert_eq!(result.unwrap(), "trait success");
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 }

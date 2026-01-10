@@ -32,3 +32,51 @@ impl ContextHooks for MemoryContextHooks {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_memory_context_hooks_new() {
+        let hooks = MemoryContextHooks::new();
+        let _ = hooks;
+    }
+
+    #[tokio::test]
+    async fn test_memory_context_hooks_methods() {
+        let hooks = MemoryContextHooks::new();
+
+        assert!(hooks.on_session_start("test-session").await.is_ok());
+        assert!(hooks.on_session_end("test-session").await.is_ok());
+        assert!(
+            hooks
+                .on_message("test-session", "test message")
+                .await
+                .is_ok()
+        );
+        assert!(
+            hooks
+                .on_tool_use("test-session", "test_tool", json!({}))
+                .await
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn test_context_hooks_trait_implementation() {
+        use mk_core::traits::ContextHooks;
+
+        fn assert_implements_context_hooks<T: ContextHooks>() {}
+
+        assert_implements_context_hooks::<MemoryContextHooks>();
+    }
+
+    #[test]
+    fn test_hooks_send_sync_bounds() {
+        fn assert_send_sync<T: Send + Sync>() {}
+
+        assert_send_sync::<MemoryContextHooks>();
+    }
+}

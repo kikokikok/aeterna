@@ -40,7 +40,7 @@ use validator::Validate;
 ///
 /// ## Validation
 /// All nested configurations must pass their own validation rules.
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default, PartialEq)]
 pub struct Config {
     /// Storage provider configurations (PostgreSQL, Qdrant, Redis)
     #[serde(default)]
@@ -49,6 +49,10 @@ pub struct Config {
     /// Memory-knowledge synchronization configuration
     #[serde(default)]
     pub sync: SyncConfig,
+
+    /// Memory system configuration
+    #[serde(default)]
+    pub memory: MemoryConfig,
 
     /// MCP tool interface configuration
     #[serde(default)]
@@ -83,7 +87,7 @@ pub struct Config {
 /// - `postgres`: PostgreSQL connection configuration
 /// - `qdrant`: Qdrant vector database configuration
 /// - `redis`: Redis caching configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default, PartialEq)]
 pub struct ProviderConfig {
     /// PostgreSQL connection configuration
     #[serde(default)]
@@ -114,7 +118,7 @@ pub struct ProviderConfig {
 /// - `password`: Database password (required, should use environment variable)
 /// - `pool_size`: Maximum connections in pool (default: 10, range: 1-100)
 /// - `timeout_seconds`: Connection timeout (default: 30, range: 1-300)
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
 pub struct PostgresConfig {
     /// Database server hostname
     #[serde(default = "default_postgres_host")]
@@ -206,7 +210,7 @@ impl Default for PostgresConfig {
 /// - `port`: Qdrant server port (default: 6333)
 /// - `collection`: Default collection name (required)
 /// - `timeout_seconds`: Request timeout (default: 30, range: 1-300)
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
 pub struct QdrantConfig {
     /// Qdrant server hostname
     #[serde(default = "default_qdrant_host")]
@@ -269,7 +273,7 @@ impl Default for QdrantConfig {
 /// - `db`: Redis database number (default: 0, range: 0-15)
 /// - `pool_size`: Maximum connections in pool (default: 10, range: 1-100)
 /// - `timeout_seconds`: Connection timeout (default: 30, range: 1-300)
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
 pub struct RedisConfig {
     /// Redis server hostname
     #[serde(default = "default_redis_host")]
@@ -343,7 +347,7 @@ impl Default for RedisConfig {
 /// - `checkpoint_enabled`: Enable checkpointing for rollback (default: true)
 /// - `conflict_resolution`: Strategy for conflict resolution (default:
 ///   "prefer_knowledge")
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
 pub struct SyncConfig {
     /// Enable/disable automatic synchronization
     #[serde(default = "default_sync_enabled")]
@@ -423,7 +427,7 @@ impl Default for SyncConfig {
 /// - `port`: Server port (default: 8080)
 /// - `api_key`: API key for authentication (optional)
 /// - `rate_limit_requests_per_minute`: Rate limit (default: 60, range: 1-1000)
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
 pub struct ToolConfig {
     /// Enable/disable MCP server
     #[serde(default = "default_tools_enabled")]
@@ -489,7 +493,7 @@ impl Default for ToolConfig {
 /// - `tracing_enabled`: Enable distributed tracing (default: true)
 /// - `logging_level`: Log level (default: "info")
 /// - `metrics_port`: Metrics server port (default: 9090)
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
 pub struct ObservabilityConfig {
     /// Enable metrics collection
     #[serde(default = "default_observability_metrics_enabled")]
@@ -540,6 +544,36 @@ impl Default for ObservabilityConfig {
             tracing_enabled: default_observability_tracing_enabled(),
             logging_level: default_observability_logging_level(),
             metrics_port: default_observability_metrics_port()
+        }
+    }
+}
+
+/// Memory system configuration.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Manages configuration for the memory system, including promotion thresholds.
+///
+/// ## Fields
+/// - `promotion_threshold`: Threshold for memory promotion (default: 0.8,
+///   range: 0.0-1.0)
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
+pub struct MemoryConfig {
+    /// Threshold for memory promotion
+    #[serde(default = "default_promotion_threshold")]
+    #[validate(range(min = 0.0, max = 1.0))]
+    pub promotion_threshold: f32
+}
+
+fn default_promotion_threshold() -> f32 {
+    0.8
+}
+
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self {
+            promotion_threshold: default_promotion_threshold()
         }
     }
 }

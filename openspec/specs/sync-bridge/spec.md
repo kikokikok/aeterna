@@ -15,6 +15,122 @@ related:
 
 This document specifies the Sync Bridge component: the mechanism that keeps Memory and Knowledge systems aligned through pointer architecture and delta synchronization.
 
+## Purpose
+
+The Sync Bridge maintains consistency between Memory and Knowledge systems, ensuring that AI agents can efficiently access authoritative organizational knowledge while benefiting from semantic search performance.
+
+## Requirements
+
+### Requirement: Persistent Sync State
+The system SHALL maintain persistent state for tracking synchronization between memory and knowledge systems.
+
+#### Scenario: Save state on successful sync
+- **WHEN** a sync operation completes successfully
+- **THEN** system SHALL save SyncState with lastSyncAt
+- **AND** system SHALL save lastKnowledgeCommit hash
+- **AND** system SHALL save knowledgeHashes mapping
+- **AND** system SHALL save pointerMapping
+
+#### Scenario: Load state on startup
+- **WHEN** system starts
+- **THEN** system SHALL load existing SyncState if available
+- **AND** system SHALL initialize empty state if none exists
+
+### Requirement: Delta Detection
+The system SHALL detect changes between knowledge repository and last sync state using hash-based comparison.
+
+#### Scenario: Detect new items
+- **WHEN** knowledge manifest has new IDs not in stored hashes
+- **THEN** system SHALL add items to delta.added
+
+#### Scenario: Detect updated items
+- **WHEN** knowledge manifest item ID exists but hash differs
+- **THEN** system SHALL add items to delta.updated
+
+#### Scenario: Detect deleted items
+- **WHEN** stored hash ID not found in knowledge manifest
+- **THEN** system SHALL add ID to delta.deleted
+
+### Requirement: Pointer Memory Generation
+The system SHALL generate pointer memories that summarize knowledge items for efficient storage and retrieval.
+
+#### Scenario: Create pointer content
+- **WHEN** creating a pointer for a knowledge item
+- **THEN** system SHALL include knowledge title and summary in content
+- **AND** system SHALL include type indicator ([ADR], [SPEC], etc.)
+- **AND** system SHALL include knowledge item ID as reference
+
+### Requirement: Multiple Sync Methods
+The system SHALL provide multiple sync methods for different use cases.
+
+#### Scenario: Full sync execution
+- **WHEN** running full sync
+- **THEN** system SHALL create checkpoint before starting
+- **THEN** system SHALL process all additions, updates, and deletions
+- **THEN** system SHALL rollback on catastrophic failure
+
+#### Scenario: Incremental sync execution
+- **WHEN** running incremental sync
+- **THEN** system SHALL process only items affected since lastKnowledgeCommit
+
+### Requirement: Conflict Detection
+The system SHALL detect and report conflicts between memory pointers and knowledge items.
+
+#### Scenario: Detect hash mismatch
+- **WHEN** memory pointer contentHash differs from knowledge item hash
+- **THEN** system SHALL create conflict with type='hash_mismatch'
+
+#### Scenario: Detect orphaned pointer
+- **WHEN** memory pointer references deleted knowledge item
+- **THEN** system SHALL create conflict with type='orphaned_pointer'
+
+### Requirement: Automated Conflict Resolution
+The system SHALL apply default resolution strategies to detected conflicts.
+
+#### Scenario: Resolve hash mismatch
+- **WHEN** resolving hash_mismatch conflict
+- **THEN** system SHALL update memory pointer from knowledge
+
+#### Scenario: Resolve orphaned pointer
+- **WHEN** resolving orphaned_pointer conflict
+- **THEN** system SHALL delete memory pointer
+
+### Requirement: Sync Triggers
+The system SHALL evaluate conditions to determine when sync should run.
+
+#### Scenario: Trigger on staleness
+- **WHEN** checking sync with stalenessThreshold reached
+- **THEN** system SHALL return true for sync trigger
+
+### Requirement: Atomic Checkpoints
+The system SHALL create checkpoints before sync operations and support rollback on failure.
+
+#### Scenario: Rollback on failure
+- **WHEN** sync operation fails catastrophically
+- **THEN** system SHALL restore SyncState from checkpoint
+
+### Requirement: Observability
+The system SHALL emit metrics and logs for all sync operations.
+
+#### Scenario: Emit sync metrics
+- **WHEN** sync operation completes
+- **THEN** system SHALL emit counters for synced items and duration
+
+### Requirement: Error Handling
+The system SHALL provide specific error codes and recovery strategies.
+
+#### Scenario: Handle knowledge unavailable
+- **WHEN** knowledge repository cannot be accessed
+- **THEN** system SHALL return KNOWLEDGE_UNAVAILABLE error
+- **AND** system SHALL retry with exponential backoff
+
+### Requirement: Performance Targets
+The system SHALL meet performance targets for sync operations.
+
+#### Scenario: Efficient delta detection
+- **WHEN** detecting delta for 1000 items
+- **THEN** operation SHALL complete in < 5 seconds
+
 ## Table of Contents
 
 1. [Overview](#overview)

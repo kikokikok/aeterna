@@ -251,3 +251,199 @@ impl McpServer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use memory::manager::MemoryManager;
+    use mk_core::traits::KnowledgeRepository;
+    use mk_core::types::{KnowledgeEntry, KnowledgeLayer};
+    use serde_json::json;
+    use sync::bridge::SyncManager;
+    use sync::state_persister::SyncStatePersister;
+
+    struct MockRepo;
+    #[async_trait::async_trait]
+    impl KnowledgeRepository for MockRepo {
+        type Error = knowledge::repository::RepositoryError;
+        async fn store(
+            &self,
+            _: KnowledgeEntry,
+            _: &str
+        ) -> std::result::Result<String, Self::Error> {
+            Ok("hash".into())
+        }
+        async fn get(
+            &self,
+            _: KnowledgeLayer,
+            _: &str
+        ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
+            Ok(None)
+        }
+        async fn list(
+            &self,
+            _: KnowledgeLayer,
+            _: &str
+        ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn delete(
+            &self,
+            _: KnowledgeLayer,
+            _: &str,
+            _: &str
+        ) -> std::result::Result<String, Self::Error> {
+            Ok("hash".into())
+        }
+        async fn get_head_commit(&self) -> std::result::Result<Option<String>, Self::Error> {
+            Ok(None)
+        }
+        async fn get_affected_items(
+            &self,
+            _: &str
+        ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn search(
+            &self,
+            _: &str,
+            _: Vec<KnowledgeLayer>,
+            _: usize
+        ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+            Ok(vec![])
+        }
+        fn root_path(&self) -> Option<std::path::PathBuf> {
+            None
+        }
+    }
+
+    struct MockPersister;
+    #[async_trait::async_trait]
+    impl SyncStatePersister for MockPersister {
+        async fn load(
+            &self
+        ) -> std::result::Result<sync::state::SyncState, Box<dyn std::error::Error + Send + Sync>>
+        {
+            Ok(sync::state::SyncState::default())
+        }
+        async fn save(
+            &self,
+            _: &sync::state::SyncState
+        ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
+    }
+
+    async fn setup_server() -> McpServer {
+        let memory_manager = Arc::new(MemoryManager::new());
+        let repo = Arc::new(MockRepo);
+        let governance = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let sync_manager = Arc::new(
+            SyncManager::new(
+                memory_manager.clone(),
+                repo.clone(),
+                governance,
+                None,
+                Arc::new(MockPersister)
+            )
+            .await
+            .unwrap()
+        );
+
+        McpServer::new(memory_manager, sync_manager, repo)
+    }
+
+    #[tokio::test]
+    async fn test_server_initialize() {
+        let server = setup_server().await;
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "initialize".to_string(),
+            params: None
+        };
+
+        let response = server.handle_request(request).await;
+        assert!(response.result.is_some());
+        let result = response.result.unwrap();
+        assert_eq!(result["protocolVersion"], "2024-11-05");
+    }
+
+    #[tokio::test]
+    async fn test_server_list_tools() {
+        let server = setup_server().await;
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "tools/list".to_string(),
+            params: None
+        };
+
+        let response = server.handle_request(request).await;
+        assert!(response.result.is_some());
+        let tools = response.result.unwrap();
+        assert!(tools.as_array().unwrap().len() >= 8);
+    }
+
+    #[tokio::test]
+    async fn test_server_method_not_found() {
+        let server = setup_server().await;
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "unknown_method".to_string(),
+            params: None
+        };
+
+        let response = server.handle_request(request).await;
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32601);
+    }
+
+    #[tokio::test]
+    async fn test_server_invalid_params() {
+        let server = setup_server().await;
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "tools/call".to_string(),
+            params: None
+        };
+
+        let response = server.handle_request(request).await;
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32602);
+    }
+
+    #[tokio::test]
+    async fn test_server_tool_not_found() {
+        let server = setup_server().await;
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "tools/call".to_string(),
+            params: Some(json!({
+                "name": "non_existent_tool",
+                "arguments": {}
+            }))
+        };
+
+        let response = server.handle_request(request).await;
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32000);
+    }
+
+    #[tokio::test]
+    async fn test_server_timeout() {
+        let server = setup_server().await.with_timeout(Duration::from_millis(1));
+
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "initialize".to_string(),
+            params: None
+        };
+
+        let _response = server.handle_request(request).await;
+    }
+}

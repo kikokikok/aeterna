@@ -1,21 +1,14 @@
-use regex::Regex;
 use serde_json::Value;
 
-pub struct GovernanceService {
-    email_regex: Regex
-}
+pub struct GovernanceService {}
 
 impl GovernanceService {
     pub fn new() -> Self {
-        Self {
-            email_regex: Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap()
-        }
+        Self {}
     }
 
     pub fn redact_pii(&self, content: &str) -> String {
-        self.email_regex
-            .replace_all(content, "[REDACTED]")
-            .to_string()
+        utils::redact_pii(content)
     }
 
     pub fn is_sensitive(&self, metadata: &Value) -> bool {
@@ -62,7 +55,7 @@ mod tests {
         let service = GovernanceService::new();
         let content = "Contact me at user@example.com for details.";
         let redacted = service.redact_pii(content);
-        assert_eq!(redacted, "Contact me at [REDACTED] for details.");
+        assert_eq!(redacted, "Contact me at [REDACTED_EMAIL] for details.");
     }
 
     #[test]
@@ -88,5 +81,24 @@ mod tests {
 
         let metadata_sensitive = json!({ "sensitive": true });
         assert!(!service.can_promote(content, &metadata_sensitive));
+    }
+
+    #[test]
+    fn test_governance_default() {
+        let _ = GovernanceService::default();
+    }
+
+    #[test]
+    fn test_is_sensitive_non_object() {
+        let service = GovernanceService::new();
+        assert!(!service.is_sensitive(&json!("not an object")));
+        assert!(!service.is_sensitive(&json!(null)));
+    }
+
+    #[test]
+    fn test_is_sensitive_mixed_types() {
+        let service = GovernanceService::new();
+        assert!(!service.is_sensitive(&json!({ "sensitive": "true" })));
+        assert!(!service.is_sensitive(&json!({ "private": 123 })));
     }
 }

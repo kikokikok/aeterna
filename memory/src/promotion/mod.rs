@@ -9,8 +9,9 @@ pub struct PromotionService {
     memory_manager: Arc<MemoryManager>,
     governance_service: Arc<GovernanceService>,
     telemetry: Arc<MemoryTelemetry>,
-    promotion_threshold: f32,
-    promote_important: bool
+    config: config::MemoryConfig,
+    promote_important: bool,
+    cleanup_after_promotion: bool
 }
 
 impl PromotionService {
@@ -19,9 +20,15 @@ impl PromotionService {
             memory_manager,
             governance_service: Arc::new(GovernanceService::new()),
             telemetry: Arc::new(MemoryTelemetry::new()),
-            promotion_threshold: 0.8,
-            promote_important: true
+            config: config::MemoryConfig::default(),
+            promote_important: true,
+            cleanup_after_promotion: false
         }
+    }
+
+    pub fn with_config(mut self, config: config::MemoryConfig) -> Self {
+        self.config = config;
+        self
     }
 
     pub fn with_telemetry(mut self, telemetry: Arc<MemoryTelemetry>) -> Self {
@@ -29,13 +36,13 @@ impl PromotionService {
         self
     }
 
-    pub fn with_threshold(mut self, threshold: f32) -> Self {
-        self.promotion_threshold = threshold;
+    pub fn with_promote_important(mut self, promote: bool) -> Self {
+        self.promote_important = promote;
         self
     }
 
-    pub fn with_promote_important(mut self, promote: bool) -> Self {
-        self.promote_important = promote;
+    pub fn with_cleanup(mut self, cleanup: bool) -> Self {
+        self.cleanup_after_promotion = cleanup;
         self
     }
 
@@ -57,7 +64,7 @@ impl PromotionService {
 
         let score = self.calculate_importance_score(entry);
 
-        if score >= self.promotion_threshold {
+        if score >= self.config.promotion_threshold {
             if let Some(target) = self.determine_target_layer(entry.layer) {
                 self.telemetry.record_promotion_attempt(
                     &format!("{:?}", entry.layer),
@@ -101,49 +108,23 @@ impl PromotionService {
                     .map_err(|e| anyhow::anyhow!(e))
                     .context("Failed to add promoted memory to target layer")?;
 
+                if self.cleanup_after_promotion {
+                    self.memory_manager
+                        .delete_from_layer(entry.layer, &entry.id)
+                        .await
+                        .map_err(|e| anyhow::anyhow!(e))
+                        .context("Failed to cleanup source memory after promotion")?;
+                    tracing::info!(
+                        "Cleaned up source memory {} from {:?}",
+                        entry.id,
+                        entry.layer
+                    );
+                }
+
                 self.telemetry.record_promotion_success(
                     &format!("{:?}", entry.layer),
                     &format!("{:?}", target)
                 );
-                return Ok(Some(new_id));
-            }
-        }
-
-        let score = self.calculate_importance_score(entry);
-
-        if score >= self.promotion_threshold {
-            if let Some(target) = self.determine_target_layer(entry.layer) {
-                tracing::info!(
-                    "Promoting memory {} from {:?} to {:?} (score: {:.2})",
-                    entry.id,
-                    entry.layer,
-                    target,
-                    score
-                );
-
-                let mut promoted_entry = entry.clone();
-                promoted_entry.id = format!("{}_promoted", entry.id);
-                promoted_entry.layer = target;
-                promoted_entry.content = self.governance_service.redact_pii(&entry.content);
-                promoted_entry.metadata.insert(
-                    "original_memory_id".to_string(),
-                    serde_json::json!(entry.id)
-                );
-                promoted_entry.metadata.insert(
-                    "promoted_at".to_string(),
-                    serde_json::json!(chrono::Utc::now().timestamp())
-                );
-                promoted_entry
-                    .metadata
-                    .insert("promotion_score".to_string(), serde_json::json!(score));
-
-                let new_id = self
-                    .memory_manager
-                    .add_to_layer(target, promoted_entry)
-                    .await
-                    .map_err(|e| anyhow::anyhow!(e))
-                    .context("Failed to add promoted memory to target layer")?;
-
                 return Ok(Some(new_id));
             }
         }
@@ -229,7 +210,9 @@ mod tests {
             .register_provider(MemoryLayer::Project, mock_project)
             .await;
 
-        let service = PromotionService::new(manager.clone()).with_threshold(0.7);
+        let service = PromotionService::new(manager.clone()).with_config(config::MemoryConfig {
+            promotion_threshold: 0.7
+        });
 
         let entry = MemoryEntry {
             id: "mem_1".to_string(),
@@ -272,7 +255,9 @@ mod tests {
     #[tokio::test]
     async fn test_evaluate_and_promote_low_score() {
         let manager = Arc::new(MemoryManager::new());
-        let service = PromotionService::new(manager).with_threshold(0.8);
+        let service = PromotionService::new(manager).with_config(config::MemoryConfig {
+            promotion_threshold: 0.8
+        });
 
         let entry = MemoryEntry {
             id: "mem_low".to_string(),
@@ -328,7 +313,9 @@ mod tests {
             .register_provider(MemoryLayer::Project, mock_project)
             .await;
 
-        let service = PromotionService::new(manager.clone()).with_threshold(0.0);
+        let service = PromotionService::new(manager.clone()).with_config(config::MemoryConfig {
+            promotion_threshold: 0.0
+        });
 
         let entry = MemoryEntry {
             id: "mem_pii".to_string(),
@@ -348,6 +335,93 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(promoted.content, "Contact [REDACTED]");
+        assert_eq!(promoted.content, "Contact [REDACTED_EMAIL]");
+    }
+
+    #[tokio::test]
+    async fn test_promotion_cleanup() {
+        let manager = Arc::new(MemoryManager::new());
+        let mock_session = Box::new(MockProvider::new());
+        let mock_project = Box::new(MockProvider::new());
+        manager
+            .register_provider(MemoryLayer::Session, mock_session)
+            .await;
+        manager
+            .register_provider(MemoryLayer::Project, mock_project)
+            .await;
+
+        let service = PromotionService::new(manager.clone())
+            .with_config(config::MemoryConfig {
+                promotion_threshold: 0.0
+            })
+            .with_cleanup(true);
+
+        let entry = MemoryEntry {
+            id: "mem_cleanup".to_string(),
+            content: "cleanup test".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Session,
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        manager
+            .add_to_layer(MemoryLayer::Session, entry.clone())
+            .await
+            .unwrap();
+
+        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        assert!(result.is_some());
+
+        let promoted = manager
+            .get_from_layer(MemoryLayer::Project, result.unwrap().as_str())
+            .await
+            .unwrap();
+        assert!(promoted.is_some());
+
+        let original = manager
+            .get_from_layer(MemoryLayer::Session, "mem_cleanup")
+            .await
+            .unwrap();
+        assert!(original.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_with_promote_important_false() {
+        let manager = Arc::new(MemoryManager::new());
+        let service = PromotionService::new(manager).with_promote_important(false);
+
+        let entry = MemoryEntry {
+            id: "test".to_string(),
+            content: "test".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Session,
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_determine_target_layer_none() {
+        let manager = Arc::new(MemoryManager::new());
+        let service = PromotionService::new(manager);
+
+        let entry = MemoryEntry {
+            id: "test".to_string(),
+            content: "test".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        assert!(result.is_none());
     }
 }
