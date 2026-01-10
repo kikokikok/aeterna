@@ -190,7 +190,7 @@ impl MemoryLayer {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Validate, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, Validate, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerIdentifiers {
     #[validate(custom(function = "validate_agent_id"))]
@@ -291,7 +291,7 @@ fn validate_company_id(company_id: &&String) -> Result<(), validator::Validation
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryEntry {
     pub id: String,
@@ -303,7 +303,7 @@ pub struct MemoryEntry {
     pub updated_at: i64
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KnowledgeEntry {
     pub path: String,
@@ -317,7 +317,7 @@ pub struct KnowledgeEntry {
     pub updated_at: i64
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Policy {
     pub id: String,
@@ -328,7 +328,7 @@ pub struct Policy {
     pub metadata: std::collections::HashMap<String, serde_json::Value>
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolicyRule {
     pub id: String,
@@ -339,14 +339,14 @@ pub struct PolicyRule {
     pub message: String
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationResult {
     pub is_valid: bool,
     pub violations: Vec<PolicyViolation>
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolicyViolation {
     pub rule_id: String,
