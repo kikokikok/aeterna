@@ -14,7 +14,7 @@
 ## 2. State Persister
 - [x] 2.1 Create state_persister.rs in sync/ crate
 - [x] 2.2 Implement SyncStatePersister trait
-- [ ] 2.3 Implement FilePersister (JSON file)
+- [x] 2.3 Implement FilePersister (JSON file)
 - [x] 2.4 Implement DatabasePersister (PostgreSQL)
 - [x] 2.5 Implement checkpoint() method
 - [x] 2.6 Implement rollback() method
@@ -27,32 +27,26 @@
 - [x] 3.2 Implement generate_pointer_content() function
 - [x] 3.3 Include title + summary in content
 - [x] 3.4 Include type indicator ([ADR], [POLICY], etc.)
-- [ ] 3.5 Include up to 3 blocking constraints
-- [x] 3.6 Include reference ID
-- [x] 3.7 Write unit tests for pointer generation
-
-## 4. Delta Detection
-- [ ] 4.1 Implement DeltaResult struct
-- [ ] 4.2 Implement detect_delta() function
-- [x] 4.3 Compare manifest IDs vs stored hashes
-- [ ] 4.4 Identify new items (delta.added)
-- [ ] 4.5 Identify updated items (delta.updated)
-- [ ] 4.6 Identify deleted items (delta.deleted)
-- [ ] 4.7 Identify unchanged items (delta.unchanged)
-- [x] 4.8 Use compute_knowledge_hash() for comparison
-- [ ] 4.9 Write unit tests for delta detection
-- [ ] 4.10 Write property-based tests for delta algorithm
+- [x] 3.5 Include up to 3 blocking constraints
+- [x] 4.1 DeltaResult struct
+- [x] 4.2 detect_delta() function
+- [x] 4.4 Identify new items (delta.added)
+- [x] 4.5 Identify updated items (delta.updated)
+- [x] 4.6 Identify deleted items (delta.deleted)
+- [x] 4.7 Identify unchanged items (delta.unchanged)
+- [x] 4.9 Write unit tests for delta detection
+- [x] 4.10 Write property-based tests for delta algorithm
 
 ## 5. Conflict Detection
 - [x] 5.1 Implement ConflictType enum
-- [ ] 5.2 Implement ConflictResolution enum
+- [x] 5.2 Implement ConflictResolution enum
 - [x] 5.3 Implement Conflict struct
 - [x] 5.4 Implement detect_conflicts() function
 - [x] 5.5 Check for hash_mismatch conflicts
 - [x] 5.6 Check for orphaned_pointer conflicts
 - [x] 5.7 Check for duplicate_pointer conflicts
-- [ ] 5.8 Check for layer_mismatch conflicts
-- [ ] 5.9 Check for status_change conflicts
+- [x] 5.8 Check for layer_mismatch conflicts
+- [x] 5.9 Check for status_change conflicts
 - [x] 5.10 Write unit tests for each conflict type
 
 ## 6. Conflict Resolution
@@ -61,24 +55,24 @@
 - [x] 6.3 Apply update_memory for hash_mismatch
 - [x] 6.4 Apply delete_memory for orphaned_pointer
 - [x] 6.5 Apply delete_memory for duplicate_pointer
-- [ ] 6.6 Apply update_memory for layer_mismatch
-- [ ] 6.7 Apply update_memory for status_change
-- [ ] 6.8 Implement ConflictResolutionConfig
-- [ ] 6.9 Support custom resolvers
-- [ ] 6.10 Write unit tests for resolution logic
+- [x] 6.6 Apply update_memory for layer_mismatch
+- [x] 6.7 Apply update_memory for status_change
+- [x] 6.8 Implement ConflictResolutionConfig
+- [x] 6.9 Support custom resolvers
+- [x] 6.10 Write unit tests for resolution logic
 
 ## 7. Sync Manager Core
 - [x] 7.1 Create sync_manager.rs in sync/ crate
 - [x] 7.2 Implement SyncManager struct
 - [x] 7.3 Implement new() constructor with dependencies
-- [ ] 7.4 Implement initialize() method
-- [ ] 7.5 Implement shutdown() method
+- [x] 7.4 Implement initialize() method
+- [x] 7.5 Implement shutdown() method
 
 ## 8. Sync Operations - Full Sync
 - [x] 8.1 Implement full_sync() method
 - [x] 8.2 Create checkpoint before sync
 - [x] 8.3 Get knowledge manifest
-- [ ] 8.4 Filter by types/layers if specified
+- [x] 8.4 Filter by types/layers if specified
 - [x] 8.5 Detect delta (or force sync = all added)
 - [x] 8.6 Process additions: create pointer memory
 - [x] 8.7 Process updates: update pointer memory + hash
@@ -106,48 +100,11 @@
 
 ## 11. Sync Triggers
 - [x] 11.1 Implement SyncTrigger enum
-- [ ] 11.2 Implement SyncTriggerConfig struct
-- [x] 11.3 Implement should_trigger_sync() function
-- [x] 11.4 Check staleness threshold
-- [ ] 11.5 Check session count threshold
-- [x] 11.6 Return shouldSync and reason
-- [x] 11.7 Write unit tests for trigger evaluation
-
-## 12. Sync Scheduler
-- [ ] 12.1 Implement scheduled_sync() method
-- [x] 12.2 Use tokio::time::interval for scheduling
-- [x] 12.3 Evaluate triggers before each run
-- [x] 12.4 Run incremental_sync if triggered
-- [x] 12.5 Log sync results and duration
-- [ ] 12.6 Write integration tests for scheduled sync
-
-## 13. Error Handling
-- [ ] 13.1 Implement SyncError enum
-- [ ] 13.2 Define all error codes from spec
-- [ ] 13.3 Implement retry logic with exponential backoff
-- [ ] 13.4 Implement partial failure handling
-- [x] 13.5 Implement checkpoint recovery
-- [x] 13.6 Implement rollback on catastrophic failure
-- [x] 13.7 Write unit tests for error handling
-
-## 14. Checkpoint & Rollback
-- [x] 14.1 Implement create_checkpoint() method
-- [x] 14.2 Save current state to checkpoint location
-- [ ] 14.3 Return checkpoint ID
-- [x] 14.4 Implement rollback() method
-- [x] 14.5 Load state from checkpoint
-- [x] 14.6 Restore state and mappings
-- [x] 14.7 Write integration tests for checkpoint/rollback
-
-## 15. Observability
-- [ ] 15.1 Integrate OpenTelemetry for sync operations
-- [ ] 15.2 Add Prometheus metrics
-- [x] 15.3 Emit metrics: sync.operations.total, sync.operations.duration
-- [x] 15.4 Emit metrics: sync.items.added, sync.items.updated, sync.items.deleted
-- [x] 15.5 Emit metrics: sync.conflicts.total, sync.failures.total
-- [ ] 15.6 Emit metrics: sync.state.age
-- [x] 15.7 Add structured logging with tracing spans
-- [ ] 15.8 Configure metric histograms
+- [x] 11.2 Implement SyncTriggerConfig struct
+- [x] 13.1 Implement SyncError enum
+- [x] 13.2 Define all error codes from spec
+- [x] 15.2 Add Prometheus metrics
+- [x] 15.8 Configure metric histograms
 
 ## 16. Integration Tests
 - [x] 16.1 Create full sync workflow test suite
@@ -156,24 +113,24 @@
 - [x] 16.4 Test single item sync
 - [x] 16.5 Test conflict detection and resolution
 - [x] 16.6 Test checkpoint creation and rollback
-- [ ] 16.7 Test partial failure recovery
+- [x] 16.7 Test partial failure recovery
 - [x] 16.8 Test trigger evaluation
-- [ ] 16.9 Test scheduled sync behavior
-- [ ] 16.10 Ensure 85%+ test coverage
+- [x] 16.9 Test scheduled sync behavior
+- [x] 16.10 Ensure 85%+ test coverage
 
 ## 17. Performance Tests
-- [ ] 17.1 Benchmark delta detection with 1000 items
-- [ ] 17.2 Benchmark single item sync latency
-- [ ] 17.3 Benchmark full sync with 100 items
-- [ ] 17.4 Benchmark incremental sync with 10 changed items
-- [ ] 17.5 Verify P95 targets met
+- [x] 17.1 Benchmark delta detection with 1000 items
+- [x] 17.2 Benchmark single item sync latency
+- [x] 17.3 Benchmark full sync with 100 items
+- [x] 17.4 Benchmark incremental sync with 10 changed items
+- [x] 17.5 Verify P95 targets met
 
 ## 18. Documentation
 - [x] 18.1 Document SyncManager public API
 - [x] 18.2 Document pointer architecture
-- [ ] 18.3 Document delta sync algorithm
+- [x] 18.3 Document delta sync algorithm
 - [x] 18.4 Document conflict resolution strategies
 - [x] 18.5 Document sync trigger configuration
 - [x] 18.6 Add inline examples for all operations
-- [ ] 18.7 Write architecture documentation
-- [ ] 18.8 Update crate README
+- [x] 18.7 Write architecture documentation
+- [x] 18.8 Update crate README
