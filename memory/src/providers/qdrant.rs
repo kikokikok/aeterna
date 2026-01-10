@@ -519,6 +519,77 @@ mod tests {
     }
 
     #[test]
+    fn test_point_to_entry_unsupported_vector() {
+        let provider = setup_provider();
+        let mut payload = HashMap::new();
+        payload.insert("id".to_string(), "test-id".to_string().into());
+        payload.insert("content".to_string(), "test content".to_string().into());
+        payload.insert(
+            "layer".to_string(),
+            serde_json::to_string(&MemoryLayer::Agent).unwrap().into()
+        );
+        payload.insert("metadata".to_string(), "{}".to_string().into());
+        payload.insert("created_at".to_string(), 1000.into());
+        payload.insert("updated_at".to_string(), 2000.into());
+
+        let point = ScoredPoint {
+            id: Some(PointId::from("test-id".to_string())),
+            payload,
+            vectors: Some(VectorsOutput {
+                vectors_options: None
+            }),
+            score: 0.95,
+            version: 1,
+            order_value: None,
+            shard_key: None
+        };
+
+        let result = provider.point_to_entry(point);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Unsupported or missing vector format"
+        );
+    }
+
+    #[test]
+    fn test_point_to_entry_invalid_metadata_json() {
+        let provider = setup_provider();
+        let mut payload = HashMap::new();
+        payload.insert("id".to_string(), "test-id".to_string().into());
+        payload.insert("content".to_string(), "test content".to_string().into());
+        payload.insert(
+            "layer".to_string(),
+            serde_json::to_string(&MemoryLayer::Agent).unwrap().into()
+        );
+        payload.insert("metadata".to_string(), "invalid-json".to_string().into());
+        payload.insert("created_at".to_string(), 1000.into());
+        payload.insert("updated_at".to_string(), 2000.into());
+
+        let point = ScoredPoint {
+            id: Some(PointId::from("test-id".to_string())),
+            payload,
+            vectors: Some(VectorsOutput {
+                vectors_options: Some(VectorsOptions::Vector(VectorOutput {
+                    vector: Some(qdrant_client::qdrant::vector_output::Vector::Dense(
+                        qdrant_client::qdrant::DenseVector {
+                            data: vec![0.1, 0.2, 0.3]
+                        }
+                    )),
+                    ..Default::default()
+                }))
+            }),
+            score: 0.95,
+            version: 1,
+            order_value: None,
+            shard_key: None
+        };
+
+        let result = provider.point_to_entry(point);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_point_to_entry_missing_vector() {
         let provider = setup_provider();
         let mut payload = HashMap::new();
