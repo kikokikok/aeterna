@@ -47,6 +47,9 @@ impl GitRepository {
     }
 
     pub fn commit(&self, message: &str) -> Result<String, RepositoryError> {
+        let span = tracing::info_span!("knowledge_commit", message = %message);
+        let _enter = span.enter();
+
         let repo = Repository::open(&self.root_path)?;
         let mut index = repo.index()?;
         index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
@@ -80,6 +83,10 @@ impl GitRepository {
             Ok(head) => Ok(Some(head.peel_to_commit()?.id().to_string())),
             Err(_) => Ok(None)
         }
+    }
+
+    pub fn root_path(&self) -> &std::path::Path {
+        &self.root_path
     }
 
     pub async fn get_by_path(&self, path: &str) -> Result<Option<KnowledgeEntry>, RepositoryError> {
@@ -146,6 +153,7 @@ impl KnowledgeRepository for GitRepository {
         Ok(affected)
     }
 
+    #[tracing::instrument(skip(self), fields(path = %path, layer = ?layer))]
     async fn get(
         &self,
         layer: KnowledgeLayer,
@@ -169,6 +177,7 @@ impl KnowledgeRepository for GitRepository {
             content,
             layer,
             kind: KnowledgeType::Spec,
+            status: mk_core::types::KnowledgeStatus::Accepted,
             metadata: std::collections::HashMap::new(),
             commit_hash,
             author: None,
@@ -176,6 +185,7 @@ impl KnowledgeRepository for GitRepository {
         }))
     }
 
+    #[tracing::instrument(skip(self, entry), fields(path = %entry.path, layer = ?entry.layer))]
     async fn store(&self, entry: KnowledgeEntry, message: &str) -> Result<String, Self::Error> {
         let full_path = self.resolve_path(entry.layer, &entry.path);
         if let Some(parent) = full_path.parent() {
@@ -237,6 +247,31 @@ impl KnowledgeRepository for GitRepository {
             Ok(String::new())
         }
     }
+
+    async fn search(
+        &self,
+        query: &str,
+        layers: Vec<KnowledgeLayer>,
+        limit: usize
+    ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+        let mut results = Vec::new();
+        for layer in layers {
+            let entries = self.list(layer, "").await?;
+            for entry in entries {
+                if entry.content.contains(query) || entry.path.contains(query) {
+                    results.push(entry);
+                }
+                if results.len() >= limit {
+                    return Ok(results);
+                }
+            }
+        }
+        Ok(results)
+    }
+
+    fn root_path(&self) -> Option<std::path::PathBuf> {
+        Some(self.root_path.clone())
+    }
 }
 
 #[cfg(test)]
@@ -254,6 +289,7 @@ mod tests {
             content: "hello world".to_string(),
             layer: KnowledgeLayer::Project,
             kind: KnowledgeType::Spec,
+            status: mk_core::types::KnowledgeStatus::Draft,
             metadata: std::collections::HashMap::new(),
             commit_hash: None,
             author: None,

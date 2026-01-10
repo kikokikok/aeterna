@@ -92,6 +92,15 @@ pub trait KnowledgeRepository: Send + Sync {
         &self,
         since_commit: &str
     ) -> Result<Vec<(crate::types::KnowledgeLayer, String)>, Self::Error>;
+
+    async fn search(
+        &self,
+        query: &str,
+        layers: Vec<crate::types::KnowledgeLayer>,
+        limit: usize
+    ) -> Result<Vec<crate::types::KnowledgeEntry>, Self::Error>;
+
+    fn root_path(&self) -> Option<std::path::PathBuf>;
 }
 
 #[async_trait]

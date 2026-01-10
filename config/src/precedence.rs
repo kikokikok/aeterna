@@ -684,4 +684,150 @@ mod tests {
         assert_eq!(changes.len(), 1);
         assert!(changes[0].contains("api_key = (none)"));
     }
+
+    #[test]
+    fn test_merge_configs_no_changes() {
+        let defaults = Config::default();
+        let file_config = Config::default();
+        let env_config = Config::default();
+
+        let merged = merge_configs(
+            defaults,
+            file_config,
+            "file",
+            env_config,
+            "env",
+            None,
+            "cli"
+        );
+
+        assert_eq!(merged, Config::default());
+    }
+
+    #[test]
+    fn test_merge_configs_partial_changes() {
+        let defaults = Config {
+            providers: ProviderConfig {
+                postgres: PostgresConfig {
+                    host: "default_host".to_string(),
+                    port: 5432,
+                    ..Default::default()
+                },
+                qdrant: QdrantConfig {
+                    host: "default_qdrant".to_string(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let file_config = Config {
+            providers: ProviderConfig {
+                postgres: PostgresConfig {
+                    host: "file_host".to_string(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let env_config = Config {
+            providers: ProviderConfig {
+                qdrant: QdrantConfig {
+                    host: "env_qdrant".to_string(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let merged = merge_configs(
+            defaults,
+            file_config,
+            "file",
+            env_config,
+            "env",
+            None,
+            "cli"
+        );
+
+        assert_eq!(merged.providers.postgres.host, "file_host");
+        assert_eq!(merged.providers.postgres.port, 5432);
+        assert_eq!(merged.providers.qdrant.host, "env_qdrant");
+    }
+
+    #[test]
+    fn test_merge_postgres_no_changes() {
+        let mut base = PostgresConfig::default();
+        let override_config = PostgresConfig::default();
+        let mut changes = Vec::new();
+
+        merge_postgres(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(changes.len(), 0);
+        assert_eq!(base, PostgresConfig::default());
+    }
+
+    #[test]
+    fn test_merge_qdrant_no_changes() {
+        let mut base = QdrantConfig::default();
+        let override_config = QdrantConfig::default();
+        let mut changes = Vec::new();
+
+        merge_qdrant(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(changes.len(), 0);
+        assert_eq!(base, QdrantConfig::default());
+    }
+
+    #[test]
+    fn test_merge_redis_no_changes() {
+        let mut base = RedisConfig::default();
+        let override_config = RedisConfig::default();
+        let mut changes = Vec::new();
+
+        merge_redis(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(changes.len(), 0);
+        assert_eq!(base, RedisConfig::default());
+    }
+
+    #[test]
+    fn test_merge_sync_no_changes() {
+        let mut base = SyncConfig::default();
+        let override_config = SyncConfig::default();
+        let mut changes = Vec::new();
+
+        merge_sync(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(changes.len(), 0);
+        assert_eq!(base, SyncConfig::default());
+    }
+
+    #[test]
+    fn test_merge_tools_no_changes() {
+        let mut base = ToolConfig::default();
+        let override_config = ToolConfig::default();
+        let mut changes = Vec::new();
+
+        merge_tools(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(changes.len(), 0);
+        assert_eq!(base, ToolConfig::default());
+    }
+
+    #[test]
+    fn test_merge_observability_no_changes() {
+        let mut base = ObservabilityConfig::default();
+        let override_config = ObservabilityConfig::default();
+        let mut changes = Vec::new();
+
+        merge_observability(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(changes.len(), 0);
+        assert_eq!(base, ObservabilityConfig::default());
+    }
 }

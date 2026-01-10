@@ -1,30 +1,150 @@
 use crate::tools::Tool;
 use async_trait::async_trait;
+use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
-use mk_core::types::KnowledgeLayer;
+use mk_core::types::MemoryEntry;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::sync::Arc;
 use validator::Validate;
 
-pub struct KnowledgeQueryTool {
-    repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+pub struct KnowledgeGetTool {
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
 }
 
-#[derive(Deserialize, JsonSchema, Validate)]
-pub struct KnowledgeQueryArgs {
-    pub layer: KnowledgeLayer,
+impl KnowledgeGetTool {
+    pub fn new(
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+    ) -> Self {
+        Self { repo }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+pub struct KnowledgeGetParams {
+    pub path: String,
+    pub layer: String
+}
+
+#[async_trait]
+impl Tool for KnowledgeGetTool {
+    fn name(&self) -> &str {
+        "knowledge_get"
+    }
+
+    fn description(&self) -> &str {
+        "Retrieve a specific knowledge entry by path and layer."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "path": { "type": "string" },
+                "layer": { "type": "string" }
+            },
+            "required": ["path", "layer"]
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: KnowledgeGetParams = serde_json::from_value(params)?;
+        p.validate()?;
+
+        let layer = match p.layer.to_lowercase().as_str() {
+            "company" => mk_core::types::KnowledgeLayer::Company,
+            "org" => mk_core::types::KnowledgeLayer::Org,
+            "team" => mk_core::types::KnowledgeLayer::Team,
+            "project" => mk_core::types::KnowledgeLayer::Project,
+            _ => return Err(format!("Unknown layer: {}", p.layer).into())
+        };
+
+        let entry = self.repo.get(layer, &p.path).await?;
+        Ok(json!({ "success": true, "entry": entry }))
+    }
+}
+
+pub struct KnowledgeListTool {
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+}
+
+impl KnowledgeListTool {
+    pub fn new(
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+    ) -> Self {
+        Self { repo }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+pub struct KnowledgeListParams {
+    pub layer: String,
     #[serde(default)]
     pub prefix: String
 }
 
+#[async_trait]
+impl Tool for KnowledgeListTool {
+    fn name(&self) -> &str {
+        "knowledge_list"
+    }
+
+    fn description(&self) -> &str {
+        "List knowledge entries in a specific layer, optionally filtered by prefix."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "layer": { "type": "string" },
+                "prefix": { "type": "string" }
+            },
+            "required": ["layer"]
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: KnowledgeListParams = serde_json::from_value(params)?;
+        p.validate()?;
+
+        let layer = match p.layer.to_lowercase().as_str() {
+            "company" => mk_core::types::KnowledgeLayer::Company,
+            "org" => mk_core::types::KnowledgeLayer::Org,
+            "team" => mk_core::types::KnowledgeLayer::Team,
+            "project" => mk_core::types::KnowledgeLayer::Project,
+            _ => return Err(format!("Unknown layer: {}", p.layer).into())
+        };
+
+        let entries = self.repo.list(layer, &p.prefix).await?;
+        Ok(json!({ "success": true, "entries": entries }))
+    }
+}
+
+pub struct KnowledgeQueryTool {
+    memory_manager: Arc<MemoryManager>,
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+}
+
 impl KnowledgeQueryTool {
     pub fn new(
-        repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+        memory_manager: Arc<MemoryManager>,
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
     ) -> Self {
-        Self { repository }
+        Self {
+            memory_manager,
+            repo
+        }
     }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+pub struct KnowledgeQueryParams {
+    pub query: String,
+    #[serde(default)]
+    pub layers: Vec<String>,
+    pub limit: Option<usize>
 }
 
 #[async_trait]
@@ -34,115 +154,68 @@ impl Tool for KnowledgeQueryTool {
     }
 
     fn description(&self) -> &str {
-        "Search knowledge entries by layer and path prefix"
+        "Search for knowledge entries across layers using semantic or keyword search."
     }
 
     fn input_schema(&self) -> Value {
-        let schema = schemars::schema_for!(KnowledgeQueryArgs);
-        serde_json::to_value(schema).unwrap()
+        json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string" },
+                "layers": { "type": "array", "items": { "type": "string" } },
+                "limit": { "type": "integer" }
+            },
+            "required": ["query"]
+        })
     }
 
-    async fn call(&self, args: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        let args: KnowledgeQueryArgs = serde_json::from_value(args)?;
-        args.validate()?;
-        let entries = self.repository.list(args.layer, &args.prefix).await?;
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: KnowledgeQueryParams = serde_json::from_value(params)?;
+        p.validate()?;
 
-        Ok(json!({
-            "success": true,
-            "totalCount": entries.len(),
-            "results": entries
-        }))
-    }
-}
-
-pub struct KnowledgeShowTool {
-    repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
-}
-
-#[derive(Deserialize, JsonSchema, Validate)]
-pub struct KnowledgeShowArgs {
-    pub layer: KnowledgeLayer,
-    pub path: String
-}
-
-impl KnowledgeShowTool {
-    pub fn new(
-        repository: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
-    ) -> Self {
-        Self { repository }
-    }
-}
-
-#[async_trait]
-impl Tool for KnowledgeShowTool {
-    fn name(&self) -> &str {
-        "knowledge_show"
-    }
-
-    fn description(&self) -> &str {
-        "Retrieve full content and metadata for a specific knowledge entry"
-    }
-
-    fn input_schema(&self) -> Value {
-        let schema = schemars::schema_for!(KnowledgeShowArgs);
-        serde_json::to_value(schema).unwrap()
-    }
-
-    async fn call(&self, args: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        let args: KnowledgeShowArgs = serde_json::from_value(args)?;
-        args.validate()?;
-        let entry = self.repository.get(args.layer, &args.path).await?;
-
-        match entry {
-            Some(e) => Ok(json!({
-                "success": true,
-                "entry": e
-            })),
-            None => Ok(json!({
-                "success": false,
-                "error": "Entry not found"
-            }))
+        let mut layers = Vec::new();
+        if p.layers.is_empty() {
+            layers = vec![
+                mk_core::types::KnowledgeLayer::Company,
+                mk_core::types::KnowledgeLayer::Org,
+                mk_core::types::KnowledgeLayer::Team,
+                mk_core::types::KnowledgeLayer::Project,
+            ];
+        } else {
+            for l in &p.layers {
+                let layer = match l.to_lowercase().as_str() {
+                    "company" => mk_core::types::KnowledgeLayer::Company,
+                    "org" => mk_core::types::KnowledgeLayer::Org,
+                    "team" => mk_core::types::KnowledgeLayer::Team,
+                    "project" => mk_core::types::KnowledgeLayer::Project,
+                    _ => continue
+                };
+                layers.push(layer);
+            }
         }
-    }
-}
 
-pub struct KnowledgeCheckTool;
+        let vector_results: Vec<MemoryEntry> = self
+            .memory_manager
+            .search_text_with_threshold(
+                &p.query,
+                p.limit.unwrap_or(10),
+                0.7,
+                std::collections::HashMap::new()
+            )
+            .await
+            .unwrap_or_default();
 
-#[derive(Deserialize, JsonSchema, Validate)]
-pub struct KnowledgeCheckArgs {
-    pub content: String,
-    #[serde(default)]
-    pub context: std::collections::HashMap<String, String>
-}
+        let repo_results = self
+            .repo
+            .search(&p.query, layers, p.limit.unwrap_or(10))
+            .await?;
 
-impl KnowledgeCheckTool {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl Tool for KnowledgeCheckTool {
-    fn name(&self) -> &str {
-        "knowledge_check"
-    }
-
-    fn description(&self) -> &str {
-        "Check content against organizational policies and knowledge constraints (Stub)"
-    }
-
-    fn input_schema(&self) -> Value {
-        let schema = schemars::schema_for!(KnowledgeCheckArgs);
-        serde_json::to_value(schema).unwrap()
-    }
-
-    async fn call(&self, args: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        let args: KnowledgeCheckArgs = serde_json::from_value(args)?;
-        args.validate()?;
         Ok(json!({
             "success": true,
-            "isValid": true,
-            "violations": []
+            "results": {
+                "semantic": vector_results,
+                "keyword": repo_results
+            }
         }))
     }
 }

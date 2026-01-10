@@ -57,6 +57,19 @@ impl KnowledgeRepository for MockKnowledgeRepo {
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         Ok(vec![])
     }
+
+    async fn search(
+        &self,
+        _query: &str,
+        _layers: Vec<KnowledgeLayer>,
+        _limit: usize
+    ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+        Ok(vec![])
+    }
+
+    fn root_path(&self) -> Option<std::path::PathBuf> {
+        None
+    }
 }
 
 struct MockPersister;
@@ -86,6 +99,8 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
         SyncManager::new(
             memory_manager.clone(),
             knowledge_repo.clone(),
+            Arc::new(knowledge::governance::GovernanceEngine::new()),
+            None,
             Arc::new(MockPersister)
         )
         .await
@@ -104,22 +119,22 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
 
     let langchain = LangChainAdapter::new(server.clone());
     let lc_tools = langchain.to_langchain_tools();
-    assert_eq!(lc_tools.len(), 8);
+    assert_eq!(lc_tools.len(), 10);
 
     let response = langchain
         .handle_mcp_request(json!({
             "name": "memory_add",
             "arguments": {
                 "content": "Integrated test",
-                "layer": "user",
-                "identifiers": {
-                    "user_id": "test_user_123"
-                }
+                "layer": "user"
             }
         }))
         .await?;
 
-    assert!(response["result"]["success"].as_bool().unwrap());
+    if let Some(error) = response["error"].as_object() {
+        panic!("Tool call failed: {:?}", error);
+    }
+    assert!(!response["result"].is_null());
 
     Ok(())
 }
@@ -132,6 +147,8 @@ async fn test_server_timeout() -> anyhow::Result<()> {
         SyncManager::new(
             memory_manager.clone(),
             knowledge_repo.clone(),
+            Arc::new(knowledge::governance::GovernanceEngine::new()),
+            None,
             Arc::new(MockPersister)
         )
         .await

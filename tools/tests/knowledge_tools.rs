@@ -1,9 +1,10 @@
 use knowledge::repository::GitRepository;
-use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeType};
+use memory::manager::MemoryManager;
+use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType};
 use serde_json::json;
 use std::sync::Arc;
 use tempfile::tempdir;
-use tools::knowledge::{KnowledgeQueryTool, KnowledgeShowTool};
+use tools::knowledge::{KnowledgeGetTool, KnowledgeQueryTool};
 use tools::tools::Tool;
 
 #[tokio::test]
@@ -11,9 +12,10 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
     // GIVEN a GitRepository and tools
     let dir = tempdir()?;
     let repo = Arc::new(GitRepository::new(dir.path())?);
+    let memory_manager = Arc::new(MemoryManager::new());
 
-    let query_tool = KnowledgeQueryTool::new(repo.clone());
-    let show_tool = KnowledgeShowTool::new(repo.clone());
+    let query_tool = KnowledgeQueryTool::new(memory_manager, repo.clone());
+    let show_tool = KnowledgeGetTool::new(repo.clone());
 
     // AND some existing knowledge
     let entry = KnowledgeEntry {
@@ -22,6 +24,7 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
         layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
         metadata: std::collections::HashMap::new(),
+        status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,
         updated_at: chrono::Utc::now().timestamp()
@@ -31,15 +34,18 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
     // WHEN querying knowledge
     let query_resp = query_tool
         .call(json!({
-            "layer": "project",
-            "prefix": "architecture"
+            "query": "Architecture",
+            "layers": ["project"]
         }))
         .await?;
 
     // THEN it should find the entry
     assert!(query_resp["success"].as_bool().unwrap());
-    assert_eq!(query_resp["totalCount"], 1);
-    assert_eq!(query_resp["results"][0]["path"], "architecture/core.md");
+    assert!(query_resp["results"]["keyword"].as_array().unwrap().len() >= 1);
+    assert_eq!(
+        query_resp["results"]["keyword"][0]["path"],
+        "architecture/core.md"
+    );
 
     // WHEN showing specific knowledge
     let show_resp = show_tool

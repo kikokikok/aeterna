@@ -11,22 +11,61 @@ related:
   - 05-adapter-architecture.md
 ---
 
-# Memory System Specification
+## Purpose
 
-This document specifies the Memory System component: a hierarchical, provider-agnostic semantic memory store for AI agents.
+The Memory System provides a hierarchical, provider-agnostic semantic memory store for AI agents, enabling long-term learning and knowledge retention across different scopes (agent, user, session, project, etc.).
+## Requirements
+### Requirement: Memory Promotion
+The system SHALL support promoting memories from volatile layers (Agent, Session) to persistent layers (User, Project, Team, Org, Company) based on an importance threshold.
 
-## Table of Contents
+#### Scenario: Promote important session memory to project layer
+- **WHEN** a session memory entry has an importance score >= `promotionThreshold` (default 0.8)
+- **AND** the `promoteImportant` flag is enabled
+- **THEN** the system SHALL create a copy of this memory in the Project layer
+- **AND** link it to the original session memory via metadata
 
-1. [Overview](#overview)
-2. [Layer Hierarchy](#layer-hierarchy)
-3. [Memory Entry Schema](#memory-entry-schema)
-4. [Core Operations](#core-operations)
-5. [Layer Resolution](#layer-resolution)
-6. [Provider Adapter Interface](#provider-adapter-interface)
-7. [Memory Lifecycle](#memory-lifecycle)
-8. [Error Handling](#error-handling)
+### Requirement: Importance Scoring
+The system SHALL provide a default algorithm to calculate an importance score for memory entries.
 
----
+#### Scenario: Score based on frequency and recency
+- **WHEN** a memory is accessed or updated
+- **THEN** the system SHALL update its `access_count` and `last_accessed_at` metadata
+- **AND** recalculate its importance score using a combination of frequency (access count) and recency.
+
+### Requirement: Promotion Trigger
+The system SHALL trigger memory promotion checks at specific lifecycle events.
+
+#### Scenario: Promotion check at session end
+- **WHEN** a session is closed
+- **THEN** the system SHALL evaluate all memories in that session for promotion.
+
+### Requirement: PII Redaction
+The system SHALL redact personally identifiable information (PII) from memory content before it is promoted to persistent layers.
+
+#### Scenario: Redact email from content
+- **WHEN** a memory is being evaluated for promotion
+- **AND** the content contains an email address (e.g., "user@example.com")
+- **THEN** the system SHALL replace the email with `[REDACTED_EMAIL]`
+
+#### Scenario: Redact phone number from content
+- **WHEN** a memory is being evaluated for promotion
+- **AND** the content contains a phone number (e.g., "123-456-7890")
+- **THEN** the system SHALL replace the phone number with `[REDACTED_PHONE]`
+
+### Requirement: Sensitivity Check
+The system SHALL prevent promotion of memories marked as sensitive or private.
+
+#### Scenario: Block promotion of sensitive memory
+- **WHEN** a memory is marked as `sensitive: true` or `private: true` in metadata
+- **THEN** the system SHALL NOT promote this memory to higher layers
+- **AND** record telemetry for the promotion block.
+
+### Requirement: Performance Telemetry
+The system SHALL track and emit metrics for key memory operations.
+
+#### Scenario: Track search latency
+- **WHEN** a semantic search is performed
+- **THEN** the system SHALL record the operation latency and emit it to the configured metrics provider.
 
 ## Overview
 
