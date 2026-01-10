@@ -30,6 +30,13 @@ pub struct SyncManager {
 }
 
 impl SyncManager {
+    #[tracing::instrument(skip(
+        memory_manager,
+        knowledge_repo,
+        governance_engine,
+        federation_manager,
+        persister
+    ))]
     pub async fn new(
         memory_manager: Arc<MemoryManager>,
         knowledge_repo: Arc<
@@ -54,6 +61,7 @@ impl SyncManager {
         })
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn initialize(&self) -> Result<()> {
         tracing::info!("Initializing SyncManager");
 
@@ -75,6 +83,7 @@ impl SyncManager {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn shutdown(&self) -> Result<()> {
         tracing::info!("Shutting down SyncManager");
         let state = self.state.read().await;
@@ -86,6 +95,7 @@ impl SyncManager {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn scheduled_sync(&self, staleness_threshold_mins: u32) -> Result<()> {
         if let Some(trigger) = self.check_triggers(staleness_threshold_mins).await? {
             tracing::info!("Scheduled sync triggered by {:?}", trigger);
@@ -96,6 +106,7 @@ impl SyncManager {
 }
 
 impl SyncManager {
+    #[tracing::instrument(skip(self))]
     pub async fn run_sync_cycle(&self, staleness_threshold_mins: u32) -> Result<()> {
         if let Some(trigger) = self.check_triggers(staleness_threshold_mins).await? {
             tracing::info!("Sync triggered by {:?}", trigger);
@@ -249,6 +260,7 @@ impl SyncManager {
         self.state.read().await.clone()
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn sync_incremental(&self) -> Result<()> {
         let mut state = self.state.write().await;
         let start_time = std::time::Instant::now();
@@ -322,6 +334,7 @@ impl SyncManager {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn sync_all(&self) -> Result<()> {
         let mut state = self.state.write().await;
         let start_time = std::time::Instant::now();
@@ -967,18 +980,29 @@ impl SyncManager {
         Ok(delta)
     }
 
+    #[tracing::instrument(skip(self, rx))]
     pub async fn start_background_sync(
         self: Arc<Self>,
         interval_secs: u64,
-        staleness_threshold_mins: u32
+        staleness_threshold_mins: u32,
+        mut rx: tokio::sync::watch::Receiver<bool>
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
             loop {
-                interval.tick().await;
-                if let Err(e) = self.run_sync_cycle(staleness_threshold_mins).await {
-                    metrics::counter!("sync.background.errors", 1);
-                    tracing::error!("Background sync error: {}", e);
+                tokio::select! {
+                    _ = interval.tick() => {
+                        if let Err(e) = self.run_sync_cycle(staleness_threshold_mins).await {
+                            metrics::counter!("sync.background.errors", 1);
+                            tracing::error!("Background sync error: {}", e);
+                        }
+                    }
+                    _ = rx.changed() => {
+                        if *rx.borrow() {
+                            tracing::info!("Background sync shutting down");
+                            break;
+                        }
+                    }
                 }
             }
         })
@@ -1396,5 +1420,1439 @@ mod tests {
             count, duration
         );
         assert!(duration.as_secs() < 5);
+    }
+
+    #[tokio::test]
+    async fn test_sync_federation_general_error() {
+        use std::sync::OnceLock;
+        let sync_manager = SyncManager::new(
+            Arc::new(MemoryManager::new()),
+            Arc::new(MockKnowledgeRepository::new()),
+            Arc::new(GovernanceEngine::new()),
+            None,
+            Arc::new(MockPersister)
+        )
+        .await
+        .unwrap();
+
+        struct ErrorFed {
+            config: knowledge::federation::FederationConfig
+        }
+        impl ErrorFed {
+            fn new() -> Self {
+                Self {
+                    config: knowledge::federation::FederationConfig {
+                        upstreams: vec![knowledge::federation::UpstreamConfig {
+                            id: "upstream1".to_string(),
+                            url: "http://test".to_string(),
+                            branch: "main".to_string(),
+                            auth_token: None
+                        }],
+                        sync_interval_secs: 60
+                    }
+                }
+            }
+        }
+        #[async_trait::async_trait]
+        impl FederationProvider for ErrorFed {
+            fn config(&self) -> &knowledge::federation::FederationConfig {
+                &self.config
+            }
+            async fn fetch_upstream_manifest(
+                &self,
+                _id: &str
+            ) -> std::result::Result<
+                knowledge::federation::KnowledgeManifest,
+                knowledge::repository::RepositoryError
+            > {
+                Ok(knowledge::federation::KnowledgeManifest {
+                    version: "1".to_string(),
+                    items: HashMap::new()
+                })
+            }
+            async fn sync_upstream(
+                &self,
+                _id: &str,
+                _p: &std::path::Path
+            ) -> std::result::Result<(), knowledge::repository::RepositoryError> {
+                Err(knowledge::repository::RepositoryError::InvalidPath(
+                    "something went wrong".to_string()
+                ))
+            }
+        }
+
+        let fed = ErrorFed::new();
+        let result = sync_manager.sync_federation(&fed).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_background_sync_shutdown_with_receiver() {
+        let sync_manager = Arc::new(SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(SyncState::default())),
+            checkpoint: Arc::new(RwLock::new(None))
+        });
+
+        let (tx, rx) = tokio::sync::watch::channel(false);
+        let handle = sync_manager.start_background_sync(1, 60, rx).await;
+
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        tx.send(true).unwrap();
+
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_background_sync_runs_cycle() {
+        let sync_manager = Arc::new(
+            SyncManager::new(
+                Arc::new(MemoryManager::new()),
+                Arc::new(MockKnowledgeRepository::new()),
+                Arc::new(GovernanceEngine::new()),
+                None,
+                Arc::new(MockPersister)
+            )
+            .await
+            .unwrap()
+        );
+
+        let (tx, rx) = tokio::sync::watch::channel(false);
+        let handle = sync_manager.start_background_sync(1, 0, rx).await;
+
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        tx.send(true).unwrap();
+        handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_initialize_shutdown() {
+        let sync_manager = SyncManager::new(
+            Arc::new(MemoryManager::new()),
+            Arc::new(MockKnowledgeRepository::new()),
+            Arc::new(GovernanceEngine::new()),
+            None,
+            Arc::new(MockPersister)
+        )
+        .await
+        .unwrap();
+
+        sync_manager.initialize().await.unwrap();
+        sync_manager.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_rollback() {
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(SyncState::default())),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        {
+            let mut state = sync_manager.state.write().await;
+            state.version = "before".to_string();
+        }
+
+        sync_manager.create_checkpoint().await;
+
+        {
+            let mut state = sync_manager.state.write().await;
+            state.version = "after".to_string();
+        }
+
+        sync_manager.rollback().await.unwrap();
+
+        let state = sync_manager.state.read().await;
+        assert_eq!(state.version, "before");
+    }
+
+    #[tokio::test]
+    async fn test_sync_entry_governance_block() {
+        use mk_core::types::{
+            ConstraintOperator, ConstraintSeverity, ConstraintTarget, Policy, PolicyRule
+        };
+
+        let mut engine = GovernanceEngine::new();
+        engine.add_policy(Policy {
+            id: "p1".to_string(),
+            name: "Banned Word".to_string(),
+            description: None,
+            layer: KnowledgeLayer::Company,
+            rules: vec![PolicyRule {
+                id: "r1".to_string(),
+                target: ConstraintTarget::Code,
+                operator: ConstraintOperator::MustNotMatch,
+                value: serde_json::json!("BANNED"),
+                severity: ConstraintSeverity::Block,
+                message: "BANNED word found".to_string()
+            }],
+            metadata: HashMap::new()
+        });
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(engine),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(SyncState::default())),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let entry = KnowledgeEntry {
+            path: "test.md".to_string(),
+            content: "This is BANNED content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0
+        };
+
+        let mut state = SyncState::default();
+        let result = sync_manager.sync_entry(&entry, &mut state).await;
+
+        assert!(matches!(result, Err(SyncError::GovernanceBlock(_))));
+        assert_eq!(state.stats.total_governance_blocks, 1);
+    }
+
+    #[tokio::test]
+    async fn test_check_triggers_manual() {
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(SyncState::default())),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let trigger = sync_manager.check_triggers(60).await.unwrap();
+        assert!(matches!(trigger, Some(SyncTrigger::Manual)));
+    }
+
+    #[tokio::test]
+    async fn test_detect_delta_comprehensive() {
+        let mut state = SyncState::default();
+        state.knowledge_hashes.insert(
+            "unchanged.md".to_string(),
+            utils::compute_content_hash("content")
+        );
+        state
+            .knowledge_hashes
+            .insert("updated.md".to_string(), "old_hash".to_string());
+        state
+            .knowledge_hashes
+            .insert("deleted.md".to_string(), "some_hash".to_string());
+
+        let mut repo = MockRepoWithEntries::new();
+        repo.add_entry(KnowledgeEntry {
+            path: "unchanged.md".to_string(),
+            content: "content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0
+        });
+        repo.add_entry(KnowledgeEntry {
+            path: "updated.md".to_string(),
+            content: "new_content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0
+        });
+        repo.add_entry(KnowledgeEntry {
+            path: "added.md".to_string(),
+            content: "new".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0
+        });
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(repo),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let state_guard = sync_manager.state.read().await;
+        let delta = sync_manager.detect_delta(&state_guard).await.unwrap();
+        assert_eq!(delta.added.len(), 1);
+        assert_eq!(delta.updated.len(), 1);
+        assert_eq!(delta.deleted.len(), 1);
+        assert_eq!(delta.unchanged.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_sync_all_basic() {
+        let memory = Arc::new(MemoryManager::new());
+        memory
+            .register_provider(
+                mk_core::types::MemoryLayer::Project,
+                Box::new(memory::providers::MockProvider::new())
+            )
+            .await;
+
+        let mut repo = MockRepoWithEntries::new();
+        repo.add_entry(KnowledgeEntry {
+            path: "test.md".to_string(),
+            content: "content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0
+        });
+
+        let sync_manager = SyncManager {
+            memory_manager: memory.clone(),
+            knowledge_repo: Arc::new(repo),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(SyncState::default())),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        sync_manager.sync_all().await.unwrap();
+
+        let state = sync_manager.state.read().await;
+        assert!(state.pointer_mapping.contains_key("ptr_test.md"));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_orphaned_conflict() {
+        let memory = Arc::new(MemoryManager::new());
+        memory
+            .register_provider(
+                mk_core::types::MemoryLayer::Project,
+                Box::new(memory::providers::MockProvider::new())
+            )
+            .await;
+
+        let m_id = "ptr_orphaned".to_string();
+        memory
+            .add_to_layer(
+                mk_core::types::MemoryLayer::Project,
+                MemoryEntry {
+                    id: m_id.clone(),
+                    content: "content".to_string(),
+                    embedding: None,
+                    layer: mk_core::types::MemoryLayer::Project,
+                    metadata: HashMap::new(),
+                    created_at: 0,
+                    updated_at: 0
+                }
+            )
+            .await
+            .unwrap();
+
+        let mut state = SyncState::default();
+        state
+            .pointer_mapping
+            .insert(m_id.clone(), "old.md".to_string());
+        state
+            .knowledge_layers
+            .insert("old.md".to_string(), KnowledgeLayer::Project);
+
+        let sync_manager = SyncManager {
+            memory_manager: memory.clone(),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let conflicts = vec![SyncConflict::OrphanedPointer {
+            memory_id: m_id.clone(),
+            knowledge_id: "old.md".to_string()
+        }];
+
+        sync_manager.resolve_conflicts(conflicts).await.unwrap();
+
+        let state = sync_manager.state.read().await;
+        assert!(!state.pointer_mapping.contains_key(&m_id));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_hash_mismatch_conflict() {
+        let memory = Arc::new(MemoryManager::new());
+        memory
+            .register_provider(
+                mk_core::types::MemoryLayer::Project,
+                Box::new(memory::providers::MockProvider::new())
+            )
+            .await;
+
+        let k_id = "mismatch.md".to_string();
+        let m_id = format!("ptr_{}", k_id);
+
+        let mut state = SyncState::default();
+        state.pointer_mapping.insert(m_id.clone(), k_id.clone());
+        state
+            .knowledge_hashes
+            .insert(k_id.clone(), "old_hash".to_string());
+        state
+            .knowledge_layers
+            .insert(k_id.clone(), KnowledgeLayer::Project);
+
+        let mut repo = MockRepoWithEntries::new();
+        repo.add_entry(KnowledgeEntry {
+            path: k_id.clone(),
+            content: "new content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0
+        });
+
+        let sync_manager = SyncManager {
+            memory_manager: memory.clone(),
+            knowledge_repo: Arc::new(repo),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let conflicts = vec![SyncConflict::HashMismatch {
+            knowledge_id: k_id.clone(),
+            memory_id: m_id.clone(),
+            expected_hash: "old_hash".to_string(),
+            actual_hash: utils::compute_content_hash("new content")
+        }];
+
+        sync_manager.resolve_conflicts(conflicts).await.unwrap();
+
+        let state = sync_manager.state.read().await;
+        assert_eq!(
+            state.knowledge_hashes.get(&k_id).unwrap(),
+            &utils::compute_content_hash("new content")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_resolve_missing_pointer_conflict() {
+        let memory = Arc::new(MemoryManager::new());
+        memory
+            .register_provider(
+                mk_core::types::MemoryLayer::Project,
+                Box::new(memory::providers::MockProvider::new())
+            )
+            .await;
+
+        let k_id = "missing.md".to_string();
+        let m_id = format!("ptr_{}", k_id);
+
+        let mut state = SyncState::default();
+        state
+            .knowledge_layers
+            .insert(k_id.clone(), KnowledgeLayer::Project);
+
+        let mut repo = MockRepoWithEntries::new();
+        repo.add_entry(KnowledgeEntry {
+            path: k_id.clone(),
+            content: "content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0
+        });
+
+        let sync_manager = SyncManager {
+            memory_manager: memory.clone(),
+            knowledge_repo: Arc::new(repo),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let conflicts = vec![SyncConflict::MissingPointer {
+            knowledge_id: k_id.clone(),
+            expected_memory_id: m_id.clone()
+        }];
+
+        sync_manager.resolve_conflicts(conflicts).await.unwrap();
+
+        let state = sync_manager.state.read().await;
+        assert!(state.pointer_mapping.contains_key(&m_id));
+    }
+
+    #[tokio::test]
+    async fn test_prune_failed_items() {
+        let mut state = SyncState::default();
+        state.failed_items.push(SyncFailure {
+            knowledge_id: "old_fail.md".to_string(),
+            error: "err".to_string(),
+            failed_at: chrono::Utc::now().timestamp() - (40 * 24 * 60 * 60),
+            retry_count: 0
+        });
+        state.failed_items.push(SyncFailure {
+            knowledge_id: "new_fail.md".to_string(),
+            error: "err".to_string(),
+            failed_at: chrono::Utc::now().timestamp(),
+            retry_count: 0
+        });
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        sync_manager.prune_failed_items(30).await.unwrap();
+
+        let state = sync_manager.state.read().await;
+        assert_eq!(state.failed_items.len(), 1);
+        assert_eq!(state.failed_items[0].knowledge_id, "new_fail.md");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_detection_error() {
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(SyncState::default())),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let conflicts = vec![SyncConflict::DetectionError {
+            target_id: "test".to_string(),
+            error: "some error".to_string()
+        }];
+
+        let result = sync_manager.resolve_conflicts(conflicts).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_scheduled_sync_no_trigger() {
+        let mut state = SyncState::default();
+        state.last_sync_at = Some(chrono::Utc::now().timestamp());
+        state.last_knowledge_commit = Some("commit".to_string());
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        sync_manager.scheduled_sync(120).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_sync_incremental_with_changes() {
+        let memory = Arc::new(MemoryManager::new());
+        memory
+            .register_provider(
+                mk_core::types::MemoryLayer::Project,
+                Box::new(memory::providers::MockProvider::new())
+            )
+            .await;
+
+        let k_id = "existing.md".to_string();
+        let m_id = format!("ptr_{}", k_id);
+
+        let mut state = SyncState::default();
+        state.last_knowledge_commit = Some("old_commit".to_string());
+        state.last_sync_at = Some(chrono::Utc::now().timestamp() - 3600);
+        state.pointer_mapping.insert(m_id.clone(), k_id.clone());
+        state
+            .knowledge_hashes
+            .insert(k_id.clone(), "old_hash".to_string());
+        state
+            .knowledge_layers
+            .insert(k_id.clone(), KnowledgeLayer::Project);
+
+        memory
+            .add_to_layer(
+                mk_core::types::MemoryLayer::Project,
+                MemoryEntry {
+                    id: m_id.clone(),
+                    content: "old".to_string(),
+                    embedding: None,
+                    layer: mk_core::types::MemoryLayer::Project,
+                    metadata: HashMap::new(),
+                    created_at: 0,
+                    updated_at: 0
+                }
+            )
+            .await
+            .unwrap();
+
+        struct IncrementalRepo;
+        #[async_trait::async_trait]
+        impl KnowledgeRepository for IncrementalRepo {
+            type Error = knowledge::repository::RepositoryError;
+            async fn store(
+                &self,
+                _e: KnowledgeEntry,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("".to_string())
+            }
+            async fn get(
+                &self,
+                _l: KnowledgeLayer,
+                p: &str
+            ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
+                if p == "existing.md" {
+                    Ok(Some(KnowledgeEntry {
+                        path: p.to_string(),
+                        content: "updated content".to_string(),
+                        layer: KnowledgeLayer::Project,
+                        kind: KnowledgeType::Spec,
+                        status: KnowledgeStatus::Accepted,
+                        metadata: HashMap::new(),
+                        commit_hash: None,
+                        author: None,
+                        updated_at: 0
+                    }))
+                } else {
+                    Ok(None)
+                }
+            }
+            async fn list(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Ok(Vec::new())
+            }
+            async fn delete(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("".to_string())
+            }
+            async fn get_head_commit(&self) -> std::result::Result<Option<String>, Self::Error> {
+                Ok(Some("new_commit".to_string()))
+            }
+            async fn get_affected_items(
+                &self,
+                _f: &str
+            ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
+                Ok(vec![(KnowledgeLayer::Project, "existing.md".to_string())])
+            }
+            async fn search(
+                &self,
+                _q: &str,
+                _l: Vec<KnowledgeLayer>,
+                _li: usize
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Ok(Vec::new())
+            }
+            fn root_path(&self) -> Option<std::path::PathBuf> {
+                None
+            }
+        }
+
+        let sync_manager = SyncManager {
+            memory_manager: memory.clone(),
+            knowledge_repo: Arc::new(IncrementalRepo),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        sync_manager.sync_incremental().await.unwrap();
+
+        let state = sync_manager.state.read().await;
+        assert_eq!(state.last_knowledge_commit, Some("new_commit".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_sync_incremental_deletion() {
+        let memory = Arc::new(MemoryManager::new());
+        memory
+            .register_provider(
+                mk_core::types::MemoryLayer::Project,
+                Box::new(memory::providers::MockProvider::new())
+            )
+            .await;
+
+        let k_id = "deleted.md".to_string();
+        let m_id = format!("ptr_{}", k_id);
+
+        let mut state = SyncState::default();
+        state.last_knowledge_commit = Some("old_commit".to_string());
+        state.pointer_mapping.insert(m_id.clone(), k_id.clone());
+        state
+            .knowledge_hashes
+            .insert(k_id.clone(), "hash".to_string());
+        state
+            .knowledge_layers
+            .insert(k_id.clone(), KnowledgeLayer::Project);
+
+        memory
+            .add_to_layer(
+                mk_core::types::MemoryLayer::Project,
+                MemoryEntry {
+                    id: m_id.clone(),
+                    content: "content".to_string(),
+                    embedding: None,
+                    layer: mk_core::types::MemoryLayer::Project,
+                    metadata: HashMap::new(),
+                    created_at: 0,
+                    updated_at: 0
+                }
+            )
+            .await
+            .unwrap();
+
+        struct DeletingRepo;
+        #[async_trait::async_trait]
+        impl KnowledgeRepository for DeletingRepo {
+            type Error = knowledge::repository::RepositoryError;
+            async fn store(
+                &self,
+                _e: KnowledgeEntry,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("".to_string())
+            }
+            async fn get(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str
+            ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
+                Ok(None)
+            }
+            async fn list(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Ok(Vec::new())
+            }
+            async fn delete(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("".to_string())
+            }
+            async fn get_head_commit(&self) -> std::result::Result<Option<String>, Self::Error> {
+                Ok(Some("new_commit".to_string()))
+            }
+            async fn get_affected_items(
+                &self,
+                _f: &str
+            ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
+                Ok(vec![(KnowledgeLayer::Project, "deleted.md".to_string())])
+            }
+            async fn search(
+                &self,
+                _q: &str,
+                _l: Vec<KnowledgeLayer>,
+                _li: usize
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Ok(Vec::new())
+            }
+            fn root_path(&self) -> Option<std::path::PathBuf> {
+                None
+            }
+        }
+
+        let sync_manager = SyncManager {
+            memory_manager: memory.clone(),
+            knowledge_repo: Arc::new(DeletingRepo),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        sync_manager.sync_incremental().await.unwrap();
+
+        let state = sync_manager.state.read().await;
+        assert!(!state.pointer_mapping.contains_key(&m_id));
+        assert!(!state.knowledge_hashes.contains_key(&k_id));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_federation_conflict() {
+        let mut state = SyncState::default();
+        state
+            .federation_conflicts
+            .push(crate::state::FederationConflict {
+                upstream_id: "upstream1".to_string(),
+                reason: "conflict".to_string(),
+                detected_at: 0
+            });
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        sync_manager
+            .resolve_federation_conflict("upstream1", "manual fix")
+            .await
+            .unwrap();
+
+        let state = sync_manager.state.read().await;
+        assert!(state.federation_conflicts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_check_triggers_commit_mismatch() {
+        struct RepoWithHead(String);
+        #[async_trait::async_trait]
+        impl KnowledgeRepository for RepoWithHead {
+            type Error = knowledge::repository::RepositoryError;
+            async fn store(
+                &self,
+                _e: KnowledgeEntry,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("".to_string())
+            }
+            async fn get(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str
+            ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
+                Ok(None)
+            }
+            async fn list(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Ok(Vec::new())
+            }
+            async fn delete(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("".to_string())
+            }
+            async fn get_head_commit(&self) -> std::result::Result<Option<String>, Self::Error> {
+                Ok(Some(self.0.clone()))
+            }
+            async fn get_affected_items(
+                &self,
+                _f: &str
+            ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
+                Ok(Vec::new())
+            }
+            async fn search(
+                &self,
+                _q: &str,
+                _l: Vec<KnowledgeLayer>,
+                _li: usize
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Ok(Vec::new())
+            }
+            fn root_path(&self) -> Option<std::path::PathBuf> {
+                None
+            }
+        }
+
+        let mut state = SyncState::default();
+        state.last_knowledge_commit = Some("old".to_string());
+        state.last_sync_at = Some(chrono::Utc::now().timestamp());
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(RepoWithHead("new".to_string())),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let trigger = sync_manager.check_triggers(120).await.unwrap();
+        assert!(matches!(trigger, Some(SyncTrigger::CommitMismatch { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_check_triggers_staleness() {
+        struct RepoWithHead(String);
+        #[async_trait::async_trait]
+        impl KnowledgeRepository for RepoWithHead {
+            type Error = knowledge::repository::RepositoryError;
+            async fn store(
+                &self,
+                _e: KnowledgeEntry,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("".to_string())
+            }
+            async fn get(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str
+            ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
+                Ok(None)
+            }
+            async fn list(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Ok(Vec::new())
+            }
+            async fn delete(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("".to_string())
+            }
+            async fn get_head_commit(&self) -> std::result::Result<Option<String>, Self::Error> {
+                Ok(Some(self.0.clone()))
+            }
+            async fn get_affected_items(
+                &self,
+                _f: &str
+            ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
+                Ok(Vec::new())
+            }
+            async fn search(
+                &self,
+                _q: &str,
+                _l: Vec<KnowledgeLayer>,
+                _li: usize
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Ok(Vec::new())
+            }
+            fn root_path(&self) -> Option<std::path::PathBuf> {
+                None
+            }
+        }
+
+        let mut state = SyncState::default();
+        state.last_knowledge_commit = Some("same".to_string());
+        state.last_sync_at = Some(chrono::Utc::now().timestamp() - 3600);
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(RepoWithHead("same".to_string())),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let trigger = sync_manager.check_triggers(30).await.unwrap();
+        assert!(matches!(trigger, Some(SyncTrigger::Staleness { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_run_sync_cycle_with_trigger() {
+        let memory = Arc::new(MemoryManager::new());
+        memory
+            .register_provider(
+                mk_core::types::MemoryLayer::Project,
+                Box::new(memory::providers::MockProvider::new())
+            )
+            .await;
+
+        let sync_manager = SyncManager {
+            memory_manager: memory,
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(SyncState::default())),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        sync_manager.run_sync_cycle(60).await.unwrap();
+
+        let state = sync_manager.state.read().await;
+        assert!(state.last_sync_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_resolve_status_change_conflict() {
+        let memory = Arc::new(MemoryManager::new());
+        memory
+            .register_provider(
+                mk_core::types::MemoryLayer::Project,
+                Box::new(memory::providers::MockProvider::new())
+            )
+            .await;
+
+        let k_id = "deprecated.md".to_string();
+        let m_id = format!("ptr_{}", k_id);
+
+        let mut state = SyncState::default();
+        state.pointer_mapping.insert(m_id.clone(), k_id.clone());
+        state
+            .knowledge_layers
+            .insert(k_id.clone(), KnowledgeLayer::Project);
+
+        let mut repo = MockRepoWithEntries::new();
+        repo.add_entry(KnowledgeEntry {
+            path: k_id.clone(),
+            content: "content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Deprecated,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0
+        });
+
+        let sync_manager = SyncManager {
+            memory_manager: memory.clone(),
+            knowledge_repo: Arc::new(repo),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let conflicts = vec![SyncConflict::StatusChange {
+            knowledge_id: k_id.clone(),
+            memory_id: m_id.clone(),
+            new_status: KnowledgeStatus::Deprecated
+        }];
+
+        sync_manager.resolve_conflicts(conflicts).await.unwrap();
+
+        let mem_entry = memory
+            .get_from_layer(mk_core::types::MemoryLayer::Project, &m_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(mem_entry.content.contains("[Deprecated]"));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_layer_mismatch_conflict() {
+        let memory = Arc::new(MemoryManager::new());
+        memory
+            .register_provider(
+                mk_core::types::MemoryLayer::Project,
+                Box::new(memory::providers::MockProvider::new())
+            )
+            .await;
+        memory
+            .register_provider(
+                mk_core::types::MemoryLayer::Org,
+                Box::new(memory::providers::MockProvider::new())
+            )
+            .await;
+
+        let k_id = "moved.md".to_string();
+        let m_id = format!("ptr_{}", k_id);
+
+        let mut state = SyncState::default();
+        state.pointer_mapping.insert(m_id.clone(), k_id.clone());
+        state
+            .knowledge_layers
+            .insert(k_id.clone(), KnowledgeLayer::Project);
+
+        memory
+            .add_to_layer(
+                mk_core::types::MemoryLayer::Project,
+                MemoryEntry {
+                    id: m_id.clone(),
+                    content: "old".to_string(),
+                    embedding: None,
+                    layer: mk_core::types::MemoryLayer::Project,
+                    metadata: HashMap::new(),
+                    created_at: 0,
+                    updated_at: 0
+                }
+            )
+            .await
+            .unwrap();
+
+        let mut repo = MockRepoWithEntries::new();
+        repo.add_entry(KnowledgeEntry {
+            path: k_id.clone(),
+            content: "content".to_string(),
+            layer: KnowledgeLayer::Org,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0
+        });
+
+        let sync_manager = SyncManager {
+            memory_manager: memory.clone(),
+            knowledge_repo: Arc::new(repo),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let conflicts = vec![SyncConflict::LayerMismatch {
+            knowledge_id: k_id.clone(),
+            memory_id: m_id.clone(),
+            expected_layer: KnowledgeLayer::Project,
+            actual_layer: KnowledgeLayer::Org
+        }];
+
+        sync_manager.resolve_conflicts(conflicts).await.unwrap();
+
+        assert!(
+            memory
+                .get_from_layer(mk_core::types::MemoryLayer::Project, &m_id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            memory
+                .get_from_layer(mk_core::types::MemoryLayer::Org, &m_id)
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_resolve_duplicate_pointer_conflict() {
+        let memory = Arc::new(MemoryManager::new());
+        memory
+            .register_provider(
+                mk_core::types::MemoryLayer::Project,
+                Box::new(memory::providers::MockProvider::new())
+            )
+            .await;
+
+        let k_id = "duplicate.md".to_string();
+        let m_id1 = "ptr_1".to_string();
+        let m_id2 = "ptr_2".to_string();
+
+        let mut state = SyncState::default();
+        state.pointer_mapping.insert(m_id1.clone(), k_id.clone());
+        state.pointer_mapping.insert(m_id2.clone(), k_id.clone());
+        state
+            .knowledge_layers
+            .insert(k_id.clone(), KnowledgeLayer::Project);
+
+        let mut repo = MockRepoWithEntries::new();
+        repo.add_entry(KnowledgeEntry {
+            path: k_id.clone(),
+            content: "content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0
+        });
+
+        let sync_manager = SyncManager {
+            memory_manager: memory.clone(),
+            knowledge_repo: Arc::new(repo),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let conflicts = vec![SyncConflict::DuplicatePointer {
+            knowledge_id: k_id.clone(),
+            memory_ids: vec![m_id1.clone(), m_id2.clone()]
+        }];
+
+        sync_manager.resolve_conflicts(conflicts).await.unwrap();
+
+        let state = sync_manager.state.read().await;
+        assert!(state.pointer_mapping.contains_key(&format!("ptr_{}", k_id)));
+    }
+
+    #[tokio::test]
+    async fn test_check_triggers_no_last_commit() {
+        // Given: State with no last_knowledge_commit and no last_sync_at
+        let state = SyncState::default();
+
+        let mut repo = MockRepoWithEntries::new();
+        repo.add_entry(KnowledgeEntry {
+            path: "test.md".to_string(),
+            content: "content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: Some("abc123".to_string()),
+            author: None,
+            updated_at: 0
+        });
+
+        struct MockRepoWithCommit;
+        #[async_trait::async_trait]
+        impl KnowledgeRepository for MockRepoWithCommit {
+            type Error = knowledge::repository::RepositoryError;
+            async fn store(
+                &self,
+                _e: KnowledgeEntry,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("hash".to_string())
+            }
+            async fn get(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str
+            ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
+                Ok(None)
+            }
+            async fn list(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Ok(Vec::new())
+            }
+            async fn delete(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("hash".to_string())
+            }
+            async fn get_head_commit(&self) -> std::result::Result<Option<String>, Self::Error> {
+                Ok(Some("abc123".to_string()))
+            }
+            async fn get_affected_items(
+                &self,
+                _f: &str
+            ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
+                Ok(Vec::new())
+            }
+            async fn search(
+                &self,
+                _q: &str,
+                _l: Vec<KnowledgeLayer>,
+                _li: usize
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Ok(Vec::new())
+            }
+            fn root_path(&self) -> Option<std::path::PathBuf> {
+                None
+            }
+        }
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockRepoWithCommit),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(state)),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        // When: check_triggers is called
+        let trigger = sync_manager.check_triggers(60).await.unwrap();
+
+        // Then: Should detect commit mismatch with "none" as last commit
+        assert!(matches!(
+            trigger,
+            Some(SyncTrigger::CommitMismatch {
+                last_commit,
+                head_commit
+            }) if last_commit == "none" && head_commit == "abc123"
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_find_memory_id_wrapper() {
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(SyncState::default())),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        let mut state = SyncState::default();
+        state
+            .pointer_mapping
+            .insert("ptr_test".to_string(), "test.md".to_string());
+
+        // When: calling the test wrapper
+        let result = sync_manager.find_memory_id_by_knowledge_id_for_test("test.md", &state);
+
+        // Then: Should find the mapping
+        assert_eq!(result, Some("ptr_test".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_sync_all_with_list_error() {
+        struct MockRepoListError;
+        #[async_trait::async_trait]
+        impl KnowledgeRepository for MockRepoListError {
+            type Error = knowledge::repository::RepositoryError;
+            async fn store(
+                &self,
+                _e: KnowledgeEntry,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("hash".to_string())
+            }
+            async fn get(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str
+            ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
+                Ok(None)
+            }
+            async fn list(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Err(knowledge::repository::RepositoryError::InvalidPath(
+                    "test error".to_string()
+                ))
+            }
+            async fn delete(
+                &self,
+                _l: KnowledgeLayer,
+                _p: &str,
+                _m: &str
+            ) -> std::result::Result<String, Self::Error> {
+                Ok("hash".to_string())
+            }
+            async fn get_head_commit(&self) -> std::result::Result<Option<String>, Self::Error> {
+                Ok(Some("abc".to_string()))
+            }
+            async fn get_affected_items(
+                &self,
+                _f: &str
+            ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
+                Ok(Vec::new())
+            }
+            async fn search(
+                &self,
+                _q: &str,
+                _l: Vec<KnowledgeLayer>,
+                _li: usize
+            ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
+                Ok(Vec::new())
+            }
+            fn root_path(&self) -> Option<std::path::PathBuf> {
+                None
+            }
+        }
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockRepoListError),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(SyncState::default())),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        // When: sync_all is called with repo returning list errors
+        sync_manager.sync_all().await.unwrap();
+
+        // Then: State should contain failed items for each layer
+        let state = sync_manager.state.read().await;
+        assert!(
+            state.failed_items.len() >= 4,
+            "Expected failed items for each layer, got {}",
+            state.failed_items.len()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rollback_no_checkpoint() {
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            state: Arc::new(RwLock::new(SyncState::default())),
+            checkpoint: Arc::new(RwLock::new(None))
+        };
+
+        // When: rollback is called with no checkpoint
+        let result = sync_manager.rollback().await;
+
+        // Then: Should succeed (no-op)
+        assert!(result.is_ok());
     }
 }
