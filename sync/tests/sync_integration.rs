@@ -209,7 +209,8 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
     knowledge_repo.store(entry.clone(), "first commit").await?;
 
     // WHEN starting background sync with short interval
-    let handle = sync_manager.clone().start_background_sync(1, 0).await;
+    let (_tx, rx) = tokio::sync::watch::channel(false);
+    let handle = sync_manager.clone().start_background_sync(1, 0, rx).await;
 
     // THEN after some time, the item should be synced
     let mut synced = false;
