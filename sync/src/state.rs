@@ -58,6 +58,12 @@ pub enum SyncConflict {
         memory_id: String,
         new_status: mk_core::types::KnowledgeStatus
     },
+    LayerMismatch {
+        knowledge_id: String,
+        memory_id: String,
+        expected_layer: mk_core::types::KnowledgeLayer,
+        actual_layer: mk_core::types::KnowledgeLayer
+    },
     DetectionError {
         target_id: String,
         error: String
