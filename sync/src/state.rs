@@ -48,6 +48,19 @@ pub enum SyncConflict {
     MissingPointer {
         knowledge_id: String,
         expected_memory_id: String
+    },
+    DuplicatePointer {
+        knowledge_id: String,
+        memory_ids: Vec<String>
+    },
+    StatusChange {
+        knowledge_id: String,
+        memory_id: String,
+        new_status: mk_core::types::KnowledgeStatus
+    },
+    DetectionError {
+        target_id: String,
+        error: String
     }
 }
 

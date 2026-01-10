@@ -1,6 +1,6 @@
 use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
-use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeType};
+use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType};
 use serde_json::json;
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -24,6 +24,7 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
         layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
         metadata: std::collections::HashMap::new(),
+        status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,
         updated_at: chrono::Utc::now().timestamp()

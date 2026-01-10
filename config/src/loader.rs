@@ -14,8 +14,8 @@
 //! - `OB_*`: Observability settings
 
 use crate::config::{
-    Config, ObservabilityConfig, PostgresConfig, ProviderConfig, QdrantConfig, RedisConfig,
-    SyncConfig, ToolConfig
+    Config, MemoryConfig, ObservabilityConfig, PostgresConfig, ProviderConfig, QdrantConfig,
+    RedisConfig, SyncConfig, ToolConfig
 };
 use std::env;
 
@@ -90,6 +90,7 @@ pub fn load_from_env() -> Result<Config, Box<dyn std::error::Error>> {
     let config = Config {
         providers: load_provider_from_env()?,
         sync: load_sync_from_env()?,
+        memory: load_memory_from_env()?,
         tools: load_tools_from_env()?,
         observability: load_observability_from_env()?
     };
@@ -144,6 +145,12 @@ fn load_sync_from_env() -> Result<SyncConfig, Box<dyn std::error::Error>> {
         checkpoint_enabled: parse_env("SY_CHECKPOINT_ENABLED").unwrap_or(true),
         conflict_resolution: env::var("SY_CONFLICT_RESOLUTION")
             .unwrap_or_else(|_| "prefer_knowledge".to_string())
+    })
+}
+
+fn load_memory_from_env() -> Result<MemoryConfig, Box<dyn std::error::Error>> {
+    Ok(MemoryConfig {
+        promotion_threshold: parse_env("MK_PROMOTION_THRESHOLD").unwrap_or(0.8)
     })
 }
 

@@ -107,3 +107,73 @@ impl FederationManager {
         Self { config }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_federation_config_serialization() {
+        let config = FederationConfig {
+            upstreams: vec![UpstreamConfig {
+                id: "test".to_string(),
+                url: "https://github.com/test/repo".to_string(),
+                branch: "main".to_string(),
+                auth_token: Some("secret".to_string())
+            }],
+            sync_interval_secs: 3600
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let decoded: FederationConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded.upstreams.len(), 1);
+        assert_eq!(decoded.upstreams[0].id, "test");
+        assert_eq!(decoded.sync_interval_secs, 3600);
+    }
+
+    #[tokio::test]
+    async fn test_fetch_upstream_manifest_not_found() {
+        let manager = FederationManager::new(FederationConfig {
+            upstreams: vec![],
+            sync_interval_secs: 60
+        });
+
+        let result = manager.fetch_upstream_manifest("nonexistent").await;
+        assert!(result.is_err());
+        match result {
+            Err(RepositoryError::InvalidPath(msg)) => assert!(msg.contains("Upstream not found")),
+            _ => panic!("Expected InvalidPath error")
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sync_upstream_not_found() {
+        let manager = FederationManager::new(FederationConfig {
+            upstreams: vec![],
+            sync_interval_secs: 60
+        });
+
+        let result = manager
+            .sync_upstream("nonexistent", std::path::Path::new("/tmp"))
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_knowledge_manifest_serialization() {
+        let mut items = HashMap::new();
+        items.insert("key1".to_string(), "hash1".to_string());
+
+        let manifest = KnowledgeManifest {
+            version: "1.0".to_string(),
+            items
+        };
+
+        let json = serde_json::to_string(&manifest).unwrap();
+        let decoded: KnowledgeManifest = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded.version, "1.0");
+        assert_eq!(decoded.items.get("key1").unwrap(), "hash1");
+    }
+}

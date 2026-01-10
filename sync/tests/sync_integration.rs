@@ -4,7 +4,7 @@ use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
 use mk_core::traits::{KnowledgeRepository, StorageBackend};
-use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeType, MemoryLayer};
+use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, MemoryLayer};
 use std::collections::HashMap;
 use std::sync::Arc;
 use sync::bridge::SyncManager;
@@ -106,6 +106,7 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
         content: "initial content".to_string(),
         layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
+        status: KnowledgeStatus::Accepted,
         metadata: HashMap::new(),
         commit_hash: None,
         author: None,
@@ -199,6 +200,7 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
         content: "initial content".to_string(),
         layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
+        status: KnowledgeStatus::Accepted,
         metadata: HashMap::new(),
         commit_hash: None,
         author: None,
@@ -275,6 +277,7 @@ async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error
         content: "My SECRET is 12345".to_string(),
         layer: KnowledgeLayer::Company,
         kind: KnowledgeType::Spec,
+        status: KnowledgeStatus::Draft,
         metadata: HashMap::new(),
         commit_hash: None,
         author: None,
