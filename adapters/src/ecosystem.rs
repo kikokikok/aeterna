@@ -50,3 +50,27 @@ impl EcosystemAdapter for OpenCodeAdapter {
         Ok(serde_json::to_value(response)?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_opencode_adapter_name() {
+        fn assert_ecosystem_adapter<T: EcosystemAdapter>() {}
+
+        assert_ecosystem_adapter::<OpenCodeAdapter>();
+    }
+
+    #[test]
+    fn test_ecosystem_adapter_trait_bounds() {
+        fn assert_send_sync<T: Send + Sync>() {}
+
+        assert_send_sync::<OpenCodeAdapter>();
+    }
+
+    #[test]
+    fn test_opencode_adapter_method_signatures() {
+        let _: fn(Arc<McpServer>) -> OpenCodeAdapter = OpenCodeAdapter::new;
+    }
+}

@@ -80,7 +80,7 @@ impl EmbeddingService for OpenAIEmbeddingService {
         }
 
         if let Some(redis) = &self.redis {
-            let mut redis = redis.write().await;
+            let redis = redis.write().await;
             let key = format!("emb:{}:{}", self.model, text);
             if let Ok(Some(cached_json)) = redis.get(&key).await {
                 if let Ok(embedding) = serde_json::from_str::<Vec<f32>>(&cached_json) {
@@ -111,7 +111,7 @@ impl EmbeddingService for OpenAIEmbeddingService {
         }
 
         if let Some(redis) = &self.redis {
-            let mut redis = redis.write().await;
+            let redis = redis.write().await;
             let key = format!("emb:{}:{}", self.model, text);
             if let Ok(json) = serde_json::to_string(&embedding) {
                 let _ = redis.set(&key, &json, Some(86400)).await;

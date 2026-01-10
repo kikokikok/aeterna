@@ -112,3 +112,110 @@ impl mk_core::traits::StorageBackend for RedisStorage {
         self.exists_key(key).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use errors::StorageError;
+
+    // Test error type conversions and patterns
+    #[test]
+    fn test_storage_error_display() {
+        let conn_error = StorageError::ConnectionError {
+            backend: "Redis".to_string(),
+            reason: "Connection refused".to_string()
+        };
+
+        let query_error = StorageError::QueryError {
+            backend: "Redis".to_string(),
+            reason: "Command failed".to_string()
+        };
+
+        assert_eq!(
+            conn_error.to_string(),
+            "Connection to Redis failed: Connection refused"
+        );
+
+        assert_eq!(
+            query_error.to_string(),
+            "Query on Redis failed: Command failed"
+        );
+    }
+
+    // Test RedisStorage struct creation (without actual connection)
+    #[tokio::test]
+    async fn test_redis_storage_error_handling() {
+        // This test verifies that invalid connection strings produce appropriate errors
+        // Note: We can't easily mock the redis client, but we can verify error types
+
+        // Test with obviously invalid URL
+        let result = RedisStorage::new("not-a-valid-url").await;
+        assert!(result.is_err());
+
+        if let Err(StorageError::ConnectionError { backend, .. }) = result {
+            assert_eq!(backend, "Redis");
+        } else {
+            panic!("Expected ConnectionError for invalid URL");
+        }
+    }
+
+    // Test StorageBackend trait implementation consistency
+    #[test]
+    fn test_storage_backend_trait_bounds() {
+        use mk_core::traits::StorageBackend;
+
+        // This is a compile-time test to ensure RedisStorage implements StorageBackend
+        fn assert_storage_backend<T: StorageBackend>() {}
+
+        // If this compiles, RedisStorage implements StorageBackend
+        assert_storage_backend::<RedisStorage>();
+    }
+
+    // Test error message formatting for different scenarios
+    #[test]
+    fn test_error_messages_include_backend_name() {
+        let errors = vec![
+            StorageError::ConnectionError {
+                backend: "Redis".to_string(),
+                reason: "test".to_string()
+            },
+            StorageError::QueryError {
+                backend: "Redis".to_string(),
+                reason: "test".to_string()
+            },
+            StorageError::SerializationError {
+                error_type: "JSON".to_string(),
+                reason: "test".to_string()
+            },
+            StorageError::NotFound {
+                backend: "Redis".to_string(),
+                id: "key123".to_string()
+            },
+            StorageError::TransactionError {
+                backend: "Redis".to_string(),
+                reason: "test".to_string()
+            },
+        ];
+
+        for error in errors {
+            let msg = error.to_string();
+            assert!(
+                msg.contains("Redis") || msg.contains("JSON"),
+                "Error message should contain backend or error type: {}",
+                msg
+            );
+        }
+    }
+
+    // Test that RedisStorage methods have correct signatures
+    #[test]
+    fn test_method_signatures() {
+        // This is a compile-time check
+        use async_trait::async_trait;
+
+        // Verify RedisStorage has the expected method signature
+        // The existence of the method is verified by compilation
+        // We can't easily test async method signatures in a unit test
+        let _ = RedisStorage::new;
+    }
+}

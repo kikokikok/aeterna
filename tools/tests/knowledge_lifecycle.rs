@@ -3,7 +3,7 @@ use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
 use mk_core::traits::{KnowledgeRepository, StorageBackend};
-use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeType, MemoryLayer};
+use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, MemoryLayer};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -86,6 +86,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
         metadata: HashMap::new(),
+        status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,
         updated_at: chrono::Utc::now().timestamp()
