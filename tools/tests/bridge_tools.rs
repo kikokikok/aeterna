@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
-use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeType};
+use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -44,8 +44,16 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
 
     let persister = Arc::new(MockPersister);
 
-    let sync_manager =
-        Arc::new(SyncManager::new(memory_manager, knowledge_repo.clone(), persister).await?);
+    let sync_manager = Arc::new(
+        SyncManager::new(
+            memory_manager,
+            knowledge_repo.clone(),
+            Arc::new(knowledge::governance::GovernanceEngine::new()),
+            None,
+            persister
+        )
+        .await?
+    );
 
     let sync_now_tool = SyncNowTool::new(sync_manager.clone());
     let sync_status_tool = SyncStatusTool::new(sync_manager.clone());
@@ -65,6 +73,7 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
         layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
         metadata: HashMap::new(),
+        status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,
         updated_at: chrono::Utc::now().timestamp()

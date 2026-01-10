@@ -3,6 +3,7 @@
 //! These tests use testcontainers to spin up a Redis instance.
 
 use errors::StorageError;
+use mk_core::traits::StorageBackend;
 use storage::redis::RedisStorage;
 use testcontainers::ContainerAsync;
 use testcontainers::runners::AsyncRunner;
@@ -22,7 +23,7 @@ async fn setup_redis_container()
 async fn test_redis_basic_operations() {
     match setup_redis_container().await {
         Ok((_container, connection_url)) => {
-            let mut redis = RedisStorage::new(&connection_url)
+            let redis = RedisStorage::new(&connection_url)
                 .await
                 .expect("Failed to create Redis storage");
 
@@ -64,7 +65,7 @@ async fn test_redis_basic_operations() {
 async fn test_redis_ttl_expiration() {
     match setup_redis_container().await {
         Ok((_container, connection_url)) => {
-            let mut redis = RedisStorage::new(&connection_url)
+            let redis = RedisStorage::new(&connection_url)
                 .await
                 .expect("Failed to create Redis storage");
 
@@ -95,7 +96,7 @@ async fn test_redis_ttl_expiration() {
 async fn test_redis_without_ttl() {
     match setup_redis_container().await {
         Ok((_container, connection_url)) => {
-            let mut redis = RedisStorage::new(&connection_url)
+            let redis = RedisStorage::new(&connection_url)
                 .await
                 .expect("Failed to create Redis storage");
 
@@ -118,7 +119,7 @@ async fn test_redis_without_ttl() {
 async fn test_redis_get_nonexistent_key() {
     match setup_redis_container().await {
         Ok((_container, connection_url)) => {
-            let mut redis = RedisStorage::new(&connection_url)
+            let redis = RedisStorage::new(&connection_url)
                 .await
                 .expect("Failed to create Redis storage");
 

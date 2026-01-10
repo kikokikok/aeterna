@@ -1,3 +1,5 @@
+use crate::governance::GovernanceService;
+use crate::telemetry::MemoryTelemetry;
 use mk_core::traits::EmbeddingService;
 use mk_core::traits::MemoryProviderAdapter;
 use mk_core::types::{MemoryEntry, MemoryLayer};
@@ -14,15 +16,26 @@ pub struct MemoryManager {
     providers: Arc<RwLock<ProviderMap>>,
     embedding_service: Option<
         Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
-    >
+    >,
+    governance_service: Arc<GovernanceService>,
+    telemetry: Arc<MemoryTelemetry>,
+    config: config::MemoryConfig
 }
 
 impl MemoryManager {
     pub fn new() -> Self {
         Self {
             providers: Arc::new(RwLock::new(HashMap::new())),
-            embedding_service: None
+            embedding_service: None,
+            governance_service: Arc::new(GovernanceService::new()),
+            telemetry: Arc::new(MemoryTelemetry::new()),
+            config: config::MemoryConfig::default()
         }
+    }
+
+    pub fn with_config(mut self, config: config::MemoryConfig) -> Self {
+        self.config = config;
+        self
     }
 
     pub fn with_embedding_service(
@@ -32,6 +45,11 @@ impl MemoryManager {
         >
     ) -> Self {
         self.embedding_service = Some(embedding_service);
+        self
+    }
+
+    pub fn with_telemetry(mut self, telemetry: Arc<MemoryTelemetry>) -> Self {
+        self.telemetry = telemetry;
         self
     }
 }
@@ -62,27 +80,42 @@ impl MemoryManager {
         limit: usize,
         filters: HashMap<String, serde_json::Value>
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
+        let start = std::time::Instant::now();
         let providers = self.providers.read().await;
         let mut all_results = Vec::new();
 
         for (layer, provider) in providers.iter() {
+            let layer_str = format!("{:?}", layer);
+            let _span = self.telemetry.record_operation_start("search", &layer_str);
             match provider
                 .search(query_vector.clone(), limit, filters.clone())
                 .await
             {
                 Ok(results) => {
+                    self.telemetry.record_operation_success(
+                        "search",
+                        &layer_str,
+                        start.elapsed().as_millis() as f64
+                    );
                     for mut entry in results {
                         entry.layer = *layer;
                         all_results.push(entry);
                     }
                 }
-                Err(e) => tracing::error!("Error searching layer {:?}: {}", layer, e)
+                Err(e) => {
+                    self.telemetry
+                        .record_operation_failure("search", &layer_str, &e.to_string());
+                    tracing::error!("Error searching layer {:?}: {}", layer, e)
+                }
             }
         }
 
         all_results.sort_by(|a, b| a.layer.precedence().cmp(&b.layer.precedence()));
 
-        Ok(all_results.into_iter().take(limit).collect())
+        let final_results: Vec<MemoryEntry> = all_results.into_iter().take(limit).collect();
+        self.telemetry
+            .record_search_operation(final_results.len(), query_vector.len());
+        Ok(final_results)
     }
 
     pub async fn search_with_threshold(
@@ -145,13 +178,38 @@ impl MemoryManager {
     pub async fn add_to_layer(
         &self,
         layer: MemoryLayer,
-        entry: MemoryEntry
+        mut entry: MemoryEntry
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let start = std::time::Instant::now();
+        let layer_str = format!("{:?}", layer);
+        let _span = self.telemetry.record_operation_start("add", &layer_str);
+
+        let original_content = entry.content.clone();
+        entry.content = self.governance_service.redact_pii(&entry.content);
+        if entry.content != original_content {
+            self.telemetry.record_governance_redaction(&layer_str);
+        }
+
         let providers = self.providers.read().await;
         let provider = providers
             .get(&layer)
             .ok_or("No provider registered for layer")?;
-        provider.add(entry).await
+
+        match provider.add(entry).await {
+            Ok(id) => {
+                self.telemetry.record_operation_success(
+                    "add",
+                    &layer_str,
+                    start.elapsed().as_millis() as f64
+                );
+                Ok(id)
+            }
+            Err(e) => {
+                self.telemetry
+                    .record_operation_failure("add", &layer_str, &e.to_string());
+                Err(e)
+            }
+        }
     }
 
     pub async fn delete_from_layer(
@@ -175,7 +233,31 @@ impl MemoryManager {
         let provider = providers
             .get(&layer)
             .ok_or("No provider registered for layer")?;
-        provider.get(id).await
+
+        let entry = provider.get(id).await?;
+
+        if let Some(mut entry) = entry {
+            let now = chrono::Utc::now().timestamp();
+            let count = entry
+                .metadata
+                .get("access_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                + 1;
+
+            entry
+                .metadata
+                .insert("access_count".to_string(), serde_json::json!(count));
+            entry
+                .metadata
+                .insert("last_accessed_at".to_string(), serde_json::json!(now));
+            entry.updated_at = now;
+
+            provider.update(entry.clone()).await?;
+            Ok(Some(entry))
+        } else {
+            Ok(None)
+        }
     }
 
     pub async fn list_all_from_layer(
@@ -191,6 +273,33 @@ impl MemoryManager {
         Ok(result)
     }
 
+    pub async fn promote_memory(
+        &self,
+        id: &str,
+        source_layer: MemoryLayer,
+        target_layer: MemoryLayer
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let entry = self
+            .get_from_layer(source_layer, id)
+            .await?
+            .ok_or_else(|| format!("Memory {} not found in layer {:?}", id, source_layer))?;
+
+        let mut promoted_entry = entry.clone();
+        promoted_entry.id = format!("{}_promoted", entry.id);
+        promoted_entry.layer = target_layer;
+
+        let now = chrono::Utc::now().timestamp();
+        promoted_entry.metadata.insert(
+            "original_memory_id".to_string(),
+            serde_json::json!(entry.id)
+        );
+        promoted_entry
+            .metadata
+            .insert("promoted_at".to_string(), serde_json::json!(now));
+
+        self.add_to_layer(target_layer, promoted_entry).await
+    }
+
     pub async fn promote_important_memories(
         &self,
         layer: MemoryLayer
@@ -198,13 +307,23 @@ impl MemoryManager {
         use crate::promotion::PromotionService;
         let promotion_service = PromotionService::new(Arc::new(MemoryManager {
             providers: self.providers.clone(),
-            embedding_service: self.embedding_service.clone()
-        }));
+            embedding_service: self.embedding_service.clone(),
+            governance_service: self.governance_service.clone(),
+            telemetry: self.telemetry.clone(),
+            config: self.config.clone()
+        }))
+        .with_config(self.config.clone())
+        .with_telemetry(self.telemetry.clone());
 
         promotion_service
             .promote_layer_memories(layer, &mk_core::types::LayerIdentifiers::default())
             .await
-            .map_err(|e| e.into())
+            .map_err(|e| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.to_string()
+                )) as Box<dyn std::error::Error + Send + Sync>
+            })
     }
 
     pub async fn close_session(
@@ -385,6 +504,206 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_add_to_layer_with_governance() {
+        let manager = MemoryManager::new();
+        let provider = Box::new(MockProvider::new());
+        manager.register_provider(MemoryLayer::User, provider).await;
+
+        let entry = MemoryEntry {
+            id: "mem_1".to_string(),
+            content: "Contact user@example.com".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        manager
+            .add_to_layer(MemoryLayer::User, entry)
+            .await
+            .unwrap();
+
+        let retrieved = manager
+            .get_from_layer(MemoryLayer::User, "mem_1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(retrieved.content, "Contact [REDACTED_EMAIL]");
+    }
+
+    #[tokio::test]
+    async fn test_delete_from_layer() {
+        let manager = MemoryManager::new();
+        let provider = Box::new(MockProvider::new());
+        manager.register_provider(MemoryLayer::User, provider).await;
+
+        let entry = MemoryEntry {
+            id: "mem_1".to_string(),
+            content: "test".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        manager
+            .add_to_layer(MemoryLayer::User, entry)
+            .await
+            .unwrap();
+        manager
+            .delete_from_layer(MemoryLayer::User, "mem_1")
+            .await
+            .unwrap();
+
+        let retrieved = manager
+            .get_from_layer(MemoryLayer::User, "mem_1")
+            .await
+            .unwrap();
+        assert!(retrieved.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_promote_memory_manual() {
+        let manager = MemoryManager::new();
+        let mock_session = Box::new(MockProvider::new());
+        let mock_project = Box::new(MockProvider::new());
+        manager
+            .register_provider(MemoryLayer::Session, mock_session)
+            .await;
+        manager
+            .register_provider(MemoryLayer::Project, mock_project)
+            .await;
+
+        let entry = MemoryEntry {
+            id: "session_mem".to_string(),
+            content: "to be promoted".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Session,
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        manager
+            .add_to_layer(MemoryLayer::Session, entry)
+            .await
+            .unwrap();
+        manager
+            .promote_memory("session_mem", MemoryLayer::Session, MemoryLayer::Project)
+            .await
+            .unwrap();
+
+        let promoted = manager
+            .get_from_layer(MemoryLayer::Project, "session_mem_promoted")
+            .await
+            .unwrap();
+        assert!(promoted.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_search_precedence_ordering() {
+        let manager = MemoryManager::new();
+        let agent_provider = Box::new(MockProvider::new());
+        let user_provider = Box::new(MockProvider::new());
+
+        manager
+            .register_provider(MemoryLayer::Agent, agent_provider)
+            .await;
+        manager
+            .register_provider(MemoryLayer::User, user_provider)
+            .await;
+
+        let agent_entry = MemoryEntry {
+            id: "agent_high_priority".to_string(),
+            content: "agent content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Agent,
+            metadata: {
+                let mut map = HashMap::new();
+                map.insert("score".to_string(), serde_json::json!(0.5));
+                map
+            },
+            created_at: 0,
+            updated_at: 0
+        };
+
+        let user_entry = MemoryEntry {
+            id: "user_high_similarity".to_string(),
+            content: "user content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            metadata: {
+                let mut map = HashMap::new();
+                map.insert("score".to_string(), serde_json::json!(0.9));
+                map
+            },
+            created_at: 0,
+            updated_at: 0
+        };
+
+        manager
+            .add_to_layer(MemoryLayer::Agent, agent_entry)
+            .await
+            .unwrap();
+        manager
+            .add_to_layer(MemoryLayer::User, user_entry)
+            .await
+            .unwrap();
+
+        let results = manager
+            .search_hierarchical(vec![], 10, HashMap::new())
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].id, "agent_high_priority");
+        assert_eq!(results[1].id, "user_high_similarity");
+    }
+
+    #[tokio::test]
+    async fn test_close_session_triggers_promotion() {
+        let manager = MemoryManager::new().with_config(config::MemoryConfig {
+            promotion_threshold: 0.5
+        });
+        let mock_session = Box::new(MockProvider::new());
+        let mock_project = Box::new(MockProvider::new());
+        manager
+            .register_provider(MemoryLayer::Session, mock_session)
+            .await;
+        manager
+            .register_provider(MemoryLayer::Project, mock_project)
+            .await;
+
+        let entry = MemoryEntry {
+            id: "important".to_string(),
+            content: "highly important".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Session,
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("score".to_string(), serde_json::json!(1.0));
+                m
+            },
+            created_at: 0,
+            updated_at: 0
+        };
+
+        manager
+            .add_to_layer(MemoryLayer::Session, entry)
+            .await
+            .unwrap();
+        manager.close_session("some_id").await.unwrap();
+
+        let promoted = manager
+            .list_all_from_layer(MemoryLayer::Project)
+            .await
+            .unwrap();
+        assert!(!promoted.is_empty());
+    }
+
+    #[tokio::test]
     async fn test_search_text_with_threshold_requires_embedding_service() {
         let manager = MemoryManager::new();
         let provider = Box::new(MockProvider::new());
@@ -402,5 +721,314 @@ mod tests {
                 .to_string()
                 .contains("Embedding service not configured")
         );
+    }
+
+    #[tokio::test]
+    async fn test_hierarchical_search_provider_error() {
+        struct FailingProvider;
+        #[async_trait::async_trait]
+        impl mk_core::traits::MemoryProviderAdapter for FailingProvider {
+            type Error = Box<dyn std::error::Error + Send + Sync>;
+            async fn add(&self, _e: MemoryEntry) -> Result<String, Self::Error> {
+                Ok("id".to_string())
+            }
+            async fn get(&self, _id: &str) -> Result<Option<MemoryEntry>, Self::Error> {
+                Ok(None)
+            }
+            async fn search(
+                &self,
+                _v: Vec<f32>,
+                _l: usize,
+                _f: HashMap<String, serde_json::Value>
+            ) -> Result<Vec<MemoryEntry>, Self::Error> {
+                Err("search failed".into())
+            }
+            async fn update(&self, _e: MemoryEntry) -> Result<(), Self::Error> {
+                Ok(())
+            }
+            async fn delete(&self, _id: &str) -> Result<(), Self::Error> {
+                Ok(())
+            }
+            async fn list(
+                &self,
+                _l: MemoryLayer,
+                _lim: usize,
+                _c: Option<String>
+            ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
+                Ok((vec![], None))
+            }
+        }
+
+        let manager = MemoryManager::new();
+        manager
+            .register_provider(MemoryLayer::Agent, Box::new(FailingProvider))
+            .await;
+
+        let results = manager
+            .search_hierarchical(vec![0.0], 10, HashMap::new())
+            .await
+            .unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_close_agent_triggers_promotion() {
+        let manager = MemoryManager::new().with_config(config::MemoryConfig {
+            promotion_threshold: 0.5,
+            ..Default::default()
+        });
+        let mock_agent = Box::new(MockProvider::new());
+        let mock_user = Box::new(MockProvider::new());
+        manager
+            .register_provider(MemoryLayer::Agent, mock_agent)
+            .await;
+        manager
+            .register_provider(MemoryLayer::User, mock_user)
+            .await;
+
+        let entry = MemoryEntry {
+            id: "agent_mem".to_string(),
+            content: "agent memory content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Agent,
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("score".to_string(), serde_json::json!(1.0));
+                m
+            },
+            created_at: 0,
+            updated_at: 0
+        };
+
+        manager
+            .add_to_layer(MemoryLayer::Agent, entry)
+            .await
+            .unwrap();
+        manager.close_agent("agent_id").await.unwrap();
+
+        let promoted = manager
+            .list_all_from_layer(MemoryLayer::User)
+            .await
+            .unwrap();
+        assert!(!promoted.is_empty());
+        assert_eq!(
+            promoted[0].metadata.get("original_memory_id").unwrap(),
+            "agent_mem"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_text_with_threshold_success() {
+        use crate::embedding::mock::MockEmbeddingService;
+        let manager =
+            MemoryManager::new().with_embedding_service(Arc::new(MockEmbeddingService::new(1536)));
+
+        let provider = Box::new(MockProvider::new());
+        manager.register_provider(MemoryLayer::User, provider).await;
+
+        let entry = MemoryEntry {
+            id: "text_mem".to_string(),
+            content: "some text content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("score".to_string(), serde_json::json!(0.9));
+                m
+            },
+            created_at: 0,
+            updated_at: 0
+        };
+
+        manager
+            .add_to_layer(MemoryLayer::User, entry)
+            .await
+            .unwrap();
+
+        let results = manager
+            .search_text_with_threshold("query", 10, 0.5, HashMap::new())
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "text_mem");
+    }
+
+    #[tokio::test]
+    async fn test_with_telemetry_and_default() {
+        let telemetry = Arc::new(MemoryTelemetry::new());
+        let manager = MemoryManager::default().with_telemetry(telemetry);
+        assert!(manager.embedding_service.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_add_to_layer_no_provider() {
+        let manager = MemoryManager::new();
+        let entry = MemoryEntry {
+            id: "test".to_string(),
+            content: "test".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        let result = manager.add_to_layer(MemoryLayer::User, entry).await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "No provider registered for layer"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_with_threshold_provider_error() {
+        struct FailingProvider;
+        #[async_trait::async_trait]
+        impl mk_core::traits::MemoryProviderAdapter for FailingProvider {
+            type Error = Box<dyn std::error::Error + Send + Sync>;
+            async fn add(&self, _e: MemoryEntry) -> Result<String, Self::Error> {
+                Ok("id".into())
+            }
+            async fn get(&self, _id: &str) -> Result<Option<MemoryEntry>, Self::Error> {
+                Ok(None)
+            }
+            async fn search(
+                &self,
+                _v: Vec<f32>,
+                _l: usize,
+                _f: HashMap<String, serde_json::Value>
+            ) -> Result<Vec<MemoryEntry>, Self::Error> {
+                Err("search failed".into())
+            }
+            async fn update(&self, _e: MemoryEntry) -> Result<(), Self::Error> {
+                Ok(())
+            }
+            async fn delete(&self, _id: &str) -> Result<(), Self::Error> {
+                Ok(())
+            }
+            async fn list(
+                &self,
+                _l: MemoryLayer,
+                _lim: usize,
+                _c: Option<String>
+            ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
+                Ok((vec![], None))
+            }
+        }
+
+        let manager = MemoryManager::new();
+        manager
+            .register_provider(MemoryLayer::User, Box::new(FailingProvider))
+            .await;
+
+        let results = manager
+            .search_with_threshold(vec![0.0], 10, 0.5, HashMap::new())
+            .await
+            .unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_promote_important_memories_error_mapping() {
+        struct ErrorProvider;
+        #[async_trait::async_trait]
+        impl mk_core::traits::MemoryProviderAdapter for ErrorProvider {
+            type Error = Box<dyn std::error::Error + Send + Sync>;
+            async fn add(&self, _e: MemoryEntry) -> Result<String, Self::Error> {
+                Ok("id".into())
+            }
+            async fn get(&self, _id: &str) -> Result<Option<MemoryEntry>, Self::Error> {
+                Ok(None)
+            }
+            async fn search(
+                &self,
+                _v: Vec<f32>,
+                _l: usize,
+                _f: HashMap<String, serde_json::Value>
+            ) -> Result<Vec<MemoryEntry>, Self::Error> {
+                Err("list failed".into())
+            }
+            async fn update(&self, _e: MemoryEntry) -> Result<(), Self::Error> {
+                Ok(())
+            }
+            async fn delete(&self, _id: &str) -> Result<(), Self::Error> {
+                Ok(())
+            }
+            async fn list(
+                &self,
+                _l: MemoryLayer,
+                _lim: usize,
+                _c: Option<String>
+            ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
+                Err("list failed".into())
+            }
+        }
+
+        let manager = MemoryManager::new();
+        manager
+            .register_provider(MemoryLayer::Session, Box::new(ErrorProvider))
+            .await;
+
+        let result = manager
+            .promote_important_memories(MemoryLayer::Session)
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_add_to_layer_provider_error() {
+        struct FailingAddProvider;
+        #[async_trait::async_trait]
+        impl mk_core::traits::MemoryProviderAdapter for FailingAddProvider {
+            type Error = Box<dyn std::error::Error + Send + Sync>;
+            async fn add(&self, _e: MemoryEntry) -> Result<String, Self::Error> {
+                Err("add failed".into())
+            }
+            async fn get(&self, _id: &str) -> Result<Option<MemoryEntry>, Self::Error> {
+                Ok(None)
+            }
+            async fn search(
+                &self,
+                _v: Vec<f32>,
+                _l: usize,
+                _f: HashMap<String, serde_json::Value>
+            ) -> Result<Vec<MemoryEntry>, Self::Error> {
+                Ok(vec![])
+            }
+            async fn update(&self, _e: MemoryEntry) -> Result<(), Self::Error> {
+                Ok(())
+            }
+            async fn delete(&self, _id: &str) -> Result<(), Self::Error> {
+                Ok(())
+            }
+            async fn list(
+                &self,
+                _l: MemoryLayer,
+                _lim: usize,
+                _c: Option<String>
+            ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
+                Ok((vec![], None))
+            }
+        }
+
+        let manager = MemoryManager::new();
+        manager
+            .register_provider(MemoryLayer::User, Box::new(FailingAddProvider))
+            .await;
+
+        let entry = MemoryEntry {
+            id: "test".to_string(),
+            content: "test".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        let result = manager.add_to_layer(MemoryLayer::User, entry).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "add failed");
     }
 }

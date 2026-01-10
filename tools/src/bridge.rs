@@ -98,14 +98,76 @@ impl Tool for SyncStatusTool {
 
         Ok(json!({
             "success": true,
-            "healthy": state.failed_items.is_empty(),
+            "healthy": state.failed_items.is_empty() && state.federation_conflicts.is_empty(),
             "lastSyncAt": state.last_sync_at,
             "failedItems": state.failed_items.len(),
+            "federationConflicts": state.federation_conflicts,
             "stats": {
                 "totalSyncs": state.stats.total_syncs,
                 "totalItemsSynced": state.stats.total_items_synced,
+                "totalConflicts": state.stats.total_conflicts,
+                "totalGovernanceBlocks": state.stats.total_governance_blocks,
                 "avgSyncDurationMs": state.stats.avg_sync_duration_ms
             }
+        }))
+    }
+}
+
+pub struct ResolveFederationConflictTool {
+    sync_manager: Arc<SyncManager>
+}
+
+impl ResolveFederationConflictTool {
+    pub fn new(sync_manager: Arc<SyncManager>) -> Self {
+        Self { sync_manager }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+pub struct ResolveFederationConflictParams {
+    pub upstream_id: String,
+    pub resolution: String
+}
+
+#[async_trait]
+impl Tool for ResolveFederationConflictTool {
+    fn name(&self) -> &str {
+        "knowledge_resolve_conflict"
+    }
+
+    fn description(&self) -> &str {
+        "Resolve a federation conflict by choosing a resolution strategy (ours, theirs, manual)."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "upstream_id": {
+                    "type": "string",
+                    "description": "ID of the upstream with conflict"
+                },
+                "resolution": {
+                    "type": "string",
+                    "description": "Resolution strategy: ours, theirs, or manual",
+                    "enum": ["ours", "theirs", "manual"]
+                }
+            },
+            "required": ["upstream_id", "resolution"]
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: ResolveFederationConflictParams = serde_json::from_value(params)?;
+        p.validate()?;
+
+        self.sync_manager
+            .resolve_federation_conflict(&p.upstream_id, &p.resolution)
+            .await?;
+
+        Ok(json!({
+            "success": true,
+            "message": format!("Conflict for {} resolved as {}", p.upstream_id, p.resolution)
         }))
     }
 }

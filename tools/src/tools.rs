@@ -321,3 +321,85 @@ pub struct ToolDefinition {
     pub description: String,
     pub input_schema: Value
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestTool {
+        name: String
+    }
+
+    #[async_trait]
+    impl Tool for TestTool {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn description(&self) -> &str {
+            "Test tool"
+        }
+        fn input_schema(&self) -> Value {
+            serde_json::json!({})
+        }
+        async fn call(
+            &self,
+            _params: Value
+        ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(serde_json::json!({"result": "success"}))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tool_registry_operations() {
+        let mut registry = ToolRegistry::new();
+
+        registry.register(Box::new(TestTool {
+            name: "tool1".to_string()
+        }));
+        registry.register(Box::new(TestTool {
+            name: "tool2".to_string()
+        }));
+
+        let tools = registry.list_tools();
+        assert_eq!(tools.len(), 2);
+        assert!(tools.iter().any(|t| t.name == "tool1"));
+        assert!(tools.iter().any(|t| t.name == "tool2"));
+
+        let result = registry.call("tool1", serde_json::json!({})).await.unwrap();
+        assert_eq!(result["result"], "success");
+
+        let err = registry.call("nonexistent", serde_json::json!({})).await;
+        assert!(err.is_err());
+        assert!(err.unwrap_err().to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_tool_registry_duplicate_registration() {
+        let mut registry = ToolRegistry::new();
+
+        registry.register(Box::new(TestTool {
+            name: "same".to_string()
+        }));
+        registry.register(Box::new(TestTool {
+            name: "same".to_string()
+        }));
+
+        let tools = registry.list_tools();
+        assert_eq!(tools.len(), 1);
+    }
+
+    #[test]
+    fn test_tool_error_retryability() {
+        let err = ToolError::new(ToolErrorCode::RateLimited, "Too many requests");
+        assert!(err.retryable);
+
+        let err = ToolError::new(ToolErrorCode::InvalidInput, "Bad params");
+        assert!(!err.retryable);
+
+        let err = ToolError::new(ToolErrorCode::NotFound, "Not found");
+        assert!(!err.retryable);
+
+        let err = ToolError::new(ToolErrorCode::Timeout, "Timed out");
+        assert!(err.retryable);
+    }
+}
