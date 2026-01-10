@@ -146,10 +146,103 @@ mod tests {
         let retrieved = provider.get("test1").await.unwrap().unwrap();
         assert_eq!(retrieved.content, "hello world");
 
+        let mut updated = entry.clone();
+        updated.content = "updated".to_string();
+        provider.update(updated).await.unwrap();
+        assert_eq!(
+            provider.get("test1").await.unwrap().unwrap().content,
+            "updated"
+        );
+
         let (list, _) = provider.list(MemoryLayer::Agent, 10, None).await.unwrap();
         assert_eq!(list.len(), 1);
 
         provider.delete("test1").await.unwrap();
         assert!(provider.get("test1").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_mock_provider_update_nonexistent() {
+        let provider = MockProvider::new();
+        let entry = MemoryEntry {
+            id: "ghost".to_string(),
+            content: "ghost".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Agent,
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+        assert!(provider.update(entry).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_mock_provider_search() {
+        let provider = MockProvider::new();
+        let entry1 = MemoryEntry {
+            id: "1".to_string(),
+            content: "one".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Agent,
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("type".to_string(), serde_json::json!("a"));
+                m
+            },
+            created_at: 0,
+            updated_at: 0
+        };
+        let entry2 = MemoryEntry {
+            id: "2".to_string(),
+            content: "two".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Agent,
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("type".to_string(), serde_json::json!("b"));
+                m
+            },
+            created_at: 0,
+            updated_at: 0
+        };
+
+        provider.add(entry1).await.unwrap();
+        provider.add(entry2).await.unwrap();
+
+        let mut filters = HashMap::new();
+        filters.insert("type".to_string(), serde_json::json!("a"));
+
+        let results = provider.search(vec![], 10, filters).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "1");
+    }
+
+    #[tokio::test]
+    async fn test_mock_provider_list_pagination() {
+        let provider = MockProvider::new();
+        for i in 0..5 {
+            let entry = MemoryEntry {
+                id: format!("{}", i),
+                content: format!("content {}", i),
+                embedding: None,
+                layer: MemoryLayer::Agent,
+                metadata: HashMap::new(),
+                created_at: 0,
+                updated_at: 0
+            };
+            provider.add(entry).await.unwrap();
+        }
+
+        let (page1, cursor) = provider.list(MemoryLayer::Agent, 2, None).await.unwrap();
+        assert_eq!(page1.len(), 2);
+        assert!(cursor.is_some());
+
+        let (page2, cursor2) = provider.list(MemoryLayer::Agent, 2, cursor).await.unwrap();
+        assert_eq!(page2.len(), 2);
+        assert!(cursor2.is_some());
+
+        let (page3, cursor3) = provider.list(MemoryLayer::Agent, 2, cursor2).await.unwrap();
+        assert_eq!(page3.len(), 1);
+        assert!(cursor3.is_none());
     }
 }

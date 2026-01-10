@@ -1,6 +1,7 @@
 use crate::state::SyncState;
 use async_trait::async_trait;
 use mk_core::traits::StorageBackend;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[async_trait]
@@ -8,6 +9,39 @@ pub trait SyncStatePersister: Send + Sync {
     async fn load(&self) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>>;
     async fn save(&self, state: &SyncState)
     -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+}
+
+pub struct FilePersister {
+    file_path: PathBuf
+}
+
+impl FilePersister {
+    pub fn new(file_path: PathBuf) -> Self {
+        Self { file_path }
+    }
+}
+
+#[async_trait]
+impl SyncStatePersister for FilePersister {
+    async fn load(&self) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
+        match tokio::fs::read(&self.file_path).await {
+            Ok(data) => Ok(serde_json::from_slice(&data)?),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(SyncState::default()),
+            Err(e) => Err(e.into())
+        }
+    }
+
+    async fn save(
+        &self,
+        state: &SyncState
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let data = serde_json::to_vec_pretty(state)?;
+        if let Some(parent) = self.file_path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(&self.file_path, data).await?;
+        Ok(())
+    }
 }
 
 pub struct DatabasePersister<S: StorageBackend> {
@@ -87,6 +121,31 @@ mod tests {
         async fn exists(&self, key: &str) -> Result<bool, Self::Error> {
             Ok(self.data.read().await.contains_key(key))
         }
+    }
+
+    #[tokio::test]
+    async fn test_file_persister_save_and_load() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("sync_state.json");
+        let persister = FilePersister::new(file_path);
+
+        let mut state = SyncState::default();
+        state.stats.total_syncs = 10;
+
+        persister.save(&state).await.unwrap();
+
+        let loaded_state = persister.load().await.unwrap();
+        assert_eq!(loaded_state.stats.total_syncs, 10);
+    }
+
+    #[tokio::test]
+    async fn test_file_persister_load_default() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("nonexistent.json");
+        let persister = FilePersister::new(file_path);
+
+        let state = persister.load().await.unwrap();
+        assert_eq!(state, SyncState::default());
     }
 
     #[tokio::test]

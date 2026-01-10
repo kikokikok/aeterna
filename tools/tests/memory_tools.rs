@@ -9,7 +9,10 @@ use tools::tools::Tool;
 #[tokio::test]
 async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // GIVEN a MemoryManager and tools
-    let memory_manager = Arc::new(MemoryManager::new());
+    let memory_manager = Arc::new(
+        MemoryManager::new()
+            .with_embedding_service(Arc::new(memory::embedding::MockEmbeddingService::new(1536)))
+    );
     memory_manager
         .register_provider(MemoryLayer::User, Box::new(MockProvider::new()))
         .await;
