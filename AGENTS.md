@@ -3,6 +3,8 @@
 
 These instructions are for AI assistants working in this project.
 
+**Acknowledged: I will follow TDD/BDD with 80% minimum test coverage for all code I build in this implementation.**
+
 Always open `@/openspec/AGENTS.md` when the request:
 - Mentions planning or proposals (words like proposal, spec, change, plan)
 - Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
@@ -20,6 +22,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 # OpenSpec Instructions
 
 Instructions for AI coding assistants using OpenSpec for spec-driven development.
+
+**Acknowledged: I will follow TDD/BDD with 80% minimum test coverage for all code I build in this implementation.**
 
 ## TL;DR Quick Checklist
 

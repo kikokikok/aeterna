@@ -76,6 +76,7 @@ impl MemoryManager {
 
     pub async fn search_hierarchical(
         &self,
+        ctx: mk_core::types::TenantContext,
         query_vector: Vec<f32>,
         limit: usize,
         filters: HashMap<String, serde_json::Value>
@@ -88,7 +89,7 @@ impl MemoryManager {
             let layer_str = format!("{:?}", layer);
             let _span = self.telemetry.record_operation_start("search", &layer_str);
             match provider
-                .search(query_vector.clone(), limit, filters.clone())
+                .search(ctx.clone(), query_vector.clone(), limit, filters.clone())
                 .await
             {
                 Ok(results) => {
@@ -120,6 +121,7 @@ impl MemoryManager {
 
     pub async fn search_with_threshold(
         &self,
+        ctx: mk_core::types::TenantContext,
         query_vector: Vec<f32>,
         limit: usize,
         threshold: f32,
@@ -130,7 +132,7 @@ impl MemoryManager {
 
         for (layer, provider) in providers.iter() {
             match provider
-                .search(query_vector.clone(), limit, filters.clone())
+                .search(ctx.clone(), query_vector.clone(), limit, filters.clone())
                 .await
             {
                 Ok(results) => {
@@ -159,6 +161,7 @@ impl MemoryManager {
 
     pub async fn search_text_with_threshold(
         &self,
+        ctx: mk_core::types::TenantContext,
         query_text: &str,
         limit: usize,
         threshold: f32,
@@ -171,12 +174,13 @@ impl MemoryManager {
 
         let query_vector = embedding_service.embed(query_text).await?;
 
-        self.search_with_threshold(query_vector, limit, threshold, filters)
+        self.search_with_threshold(ctx, query_vector, limit, threshold, filters)
             .await
     }
 
     pub async fn add_to_layer(
         &self,
+        ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
         mut entry: MemoryEntry
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
@@ -195,7 +199,7 @@ impl MemoryManager {
             .get(&layer)
             .ok_or("No provider registered for layer")?;
 
-        match provider.add(entry).await {
+        match provider.add(ctx, entry).await {
             Ok(id) => {
                 self.telemetry.record_operation_success(
                     "add",
@@ -214,6 +218,7 @@ impl MemoryManager {
 
     pub async fn delete_from_layer(
         &self,
+        ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
         id: &str
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -221,11 +226,12 @@ impl MemoryManager {
         let provider = providers
             .get(&layer)
             .ok_or("No provider registered for layer")?;
-        provider.delete(id).await
+        provider.delete(ctx, id).await
     }
 
     pub async fn get_from_layer(
         &self,
+        ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
         id: &str
     ) -> Result<Option<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
@@ -234,7 +240,7 @@ impl MemoryManager {
             .get(&layer)
             .ok_or("No provider registered for layer")?;
 
-        let entry = provider.get(id).await?;
+        let entry = provider.get(ctx.clone(), id).await?;
 
         if let Some(mut entry) = entry {
             let now = chrono::Utc::now().timestamp();
@@ -253,7 +259,7 @@ impl MemoryManager {
                 .insert("last_accessed_at".to_string(), serde_json::json!(now));
             entry.updated_at = now;
 
-            provider.update(entry.clone()).await?;
+            provider.update(ctx, entry.clone()).await?;
             Ok(Some(entry))
         } else {
             Ok(None)
@@ -262,6 +268,7 @@ impl MemoryManager {
 
     pub async fn list_all_from_layer(
         &self,
+        ctx: mk_core::types::TenantContext,
         layer: MemoryLayer
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
@@ -269,18 +276,21 @@ impl MemoryManager {
             .get(&layer)
             .ok_or("No provider registered for layer")?;
 
-        let result = provider.search(vec![0.0; 0], 1000, HashMap::new()).await?;
+        let result = provider
+            .search(ctx, vec![0.0; 0], 1000, HashMap::new())
+            .await?;
         Ok(result)
     }
 
     pub async fn promote_memory(
         &self,
+        ctx: mk_core::types::TenantContext,
         id: &str,
         source_layer: MemoryLayer,
         target_layer: MemoryLayer
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let entry = self
-            .get_from_layer(source_layer, id)
+            .get_from_layer(ctx.clone(), source_layer, id)
             .await?
             .ok_or_else(|| format!("Memory {} not found in layer {:?}", id, source_layer))?;
 
@@ -297,11 +307,12 @@ impl MemoryManager {
             .metadata
             .insert("promoted_at".to_string(), serde_json::json!(now));
 
-        self.add_to_layer(target_layer, promoted_entry).await
+        self.add_to_layer(ctx, target_layer, promoted_entry).await
     }
 
     pub async fn promote_important_memories(
         &self,
+        ctx: mk_core::types::TenantContext,
         layer: MemoryLayer
     ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         use crate::promotion::PromotionService;
@@ -316,7 +327,7 @@ impl MemoryManager {
         .with_telemetry(self.telemetry.clone());
 
         promotion_service
-            .promote_layer_memories(layer, &mk_core::types::LayerIdentifiers::default())
+            .promote_layer_memories(ctx, layer, &mk_core::types::LayerIdentifiers::default())
             .await
             .map_err(|e| {
                 Box::new(std::io::Error::new(
@@ -328,14 +339,15 @@ impl MemoryManager {
 
     pub async fn close_session(
         &self,
+        ctx: mk_core::types::TenantContext,
         session_id: &str
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("Closing session: {}", session_id);
 
-        self.promote_important_memories(MemoryLayer::Session)
+        self.promote_important_memories(ctx.clone(), MemoryLayer::Session)
             .await?;
 
-        self.delete_from_layer(MemoryLayer::Session, session_id)
+        self.delete_from_layer(ctx, MemoryLayer::Session, session_id)
             .await?;
 
         Ok(())
@@ -343,26 +355,40 @@ impl MemoryManager {
 
     pub async fn close_agent(
         &self,
+        ctx: mk_core::types::TenantContext,
         agent_id: &str
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("Closing agent: {}", agent_id);
 
-        self.promote_important_memories(MemoryLayer::Agent).await?;
+        self.promote_important_memories(ctx.clone(), MemoryLayer::Agent)
+            .await?;
 
-        self.delete_from_layer(MemoryLayer::Agent, agent_id).await?;
+        self.delete_from_layer(ctx, MemoryLayer::Agent, agent_id)
+            .await?;
 
         Ok(())
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::providers::MockProvider;
+    use mk_core::types::TenantContext;
+
+    pub(crate) fn test_ctx() -> TenantContext {
+        use std::str::FromStr;
+        TenantContext {
+            tenant_id: mk_core::types::TenantId::from_str("test-tenant").unwrap(),
+            user_id: mk_core::types::UserId::from_str("test-user").unwrap(),
+            agent_id: None
+        }
+    }
 
     #[tokio::test]
     async fn test_hierarchical_search() {
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         let agent_provider = Box::new(MockProvider::new());
         let session_provider = Box::new(MockProvider::new());
 
@@ -394,16 +420,16 @@ mod tests {
         };
 
         manager
-            .add_to_layer(MemoryLayer::Agent, agent_entry)
+            .add_to_layer(ctx.clone(), MemoryLayer::Agent, agent_entry)
             .await
             .unwrap();
         manager
-            .add_to_layer(MemoryLayer::Session, session_entry)
+            .add_to_layer(ctx.clone(), MemoryLayer::Session, session_entry)
             .await
             .unwrap();
 
         let results = manager
-            .search_hierarchical(vec![], 10, HashMap::new())
+            .search_hierarchical(ctx, vec![], 10, HashMap::new())
             .await
             .unwrap();
 
@@ -415,6 +441,7 @@ mod tests {
     #[tokio::test]
     async fn test_search_with_threshold() {
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         let provider = Box::new(MockProvider::new());
 
         manager.register_provider(MemoryLayer::User, provider).await;
@@ -448,16 +475,16 @@ mod tests {
         };
 
         manager
-            .add_to_layer(MemoryLayer::User, entry_high_score)
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry_high_score)
             .await
             .unwrap();
         manager
-            .add_to_layer(MemoryLayer::User, entry_low_score)
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry_low_score)
             .await
             .unwrap();
 
         let results = manager
-            .search_with_threshold(vec![], 10, 0.7, HashMap::new())
+            .search_with_threshold(ctx.clone(), vec![], 10, 0.7, HashMap::new())
             .await
             .unwrap();
 
@@ -465,7 +492,7 @@ mod tests {
         assert_eq!(results[0].id, "high_score");
 
         let results = manager
-            .search_with_threshold(vec![], 10, 0.3, HashMap::new())
+            .search_with_threshold(ctx, vec![], 10, 0.3, HashMap::new())
             .await
             .unwrap();
 
@@ -475,6 +502,7 @@ mod tests {
     #[tokio::test]
     async fn test_search_with_threshold_no_score_in_metadata() {
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         let provider = Box::new(MockProvider::new());
 
         manager.register_provider(MemoryLayer::User, provider).await;
@@ -490,12 +518,12 @@ mod tests {
         };
 
         manager
-            .add_to_layer(MemoryLayer::User, entry)
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
             .await
             .unwrap();
 
         let results = manager
-            .search_with_threshold(vec![], 10, 0.8, HashMap::new())
+            .search_with_threshold(ctx, vec![], 10, 0.8, HashMap::new())
             .await
             .unwrap();
 
@@ -506,6 +534,7 @@ mod tests {
     #[tokio::test]
     async fn test_add_to_layer_with_governance() {
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         let provider = Box::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -520,12 +549,12 @@ mod tests {
         };
 
         manager
-            .add_to_layer(MemoryLayer::User, entry)
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
             .await
             .unwrap();
 
         let retrieved = manager
-            .get_from_layer(MemoryLayer::User, "mem_1")
+            .get_from_layer(ctx, MemoryLayer::User, "mem_1")
             .await
             .unwrap()
             .unwrap();
@@ -535,6 +564,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_from_layer() {
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         let provider = Box::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -549,16 +579,16 @@ mod tests {
         };
 
         manager
-            .add_to_layer(MemoryLayer::User, entry)
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
             .await
             .unwrap();
         manager
-            .delete_from_layer(MemoryLayer::User, "mem_1")
+            .delete_from_layer(ctx.clone(), MemoryLayer::User, "mem_1")
             .await
             .unwrap();
 
         let retrieved = manager
-            .get_from_layer(MemoryLayer::User, "mem_1")
+            .get_from_layer(ctx, MemoryLayer::User, "mem_1")
             .await
             .unwrap();
         assert!(retrieved.is_none());
@@ -567,6 +597,7 @@ mod tests {
     #[tokio::test]
     async fn test_promote_memory_manual() {
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         let mock_session = Box::new(MockProvider::new());
         let mock_project = Box::new(MockProvider::new());
         manager
@@ -587,16 +618,21 @@ mod tests {
         };
 
         manager
-            .add_to_layer(MemoryLayer::Session, entry)
+            .add_to_layer(ctx.clone(), MemoryLayer::Session, entry)
             .await
             .unwrap();
         manager
-            .promote_memory("session_mem", MemoryLayer::Session, MemoryLayer::Project)
+            .promote_memory(
+                ctx.clone(),
+                "session_mem",
+                MemoryLayer::Session,
+                MemoryLayer::Project
+            )
             .await
             .unwrap();
 
         let promoted = manager
-            .get_from_layer(MemoryLayer::Project, "session_mem_promoted")
+            .get_from_layer(ctx, MemoryLayer::Project, "session_mem_promoted")
             .await
             .unwrap();
         assert!(promoted.is_some());
@@ -605,6 +641,7 @@ mod tests {
     #[tokio::test]
     async fn test_search_precedence_ordering() {
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         let agent_provider = Box::new(MockProvider::new());
         let user_provider = Box::new(MockProvider::new());
 
@@ -644,16 +681,16 @@ mod tests {
         };
 
         manager
-            .add_to_layer(MemoryLayer::Agent, agent_entry)
+            .add_to_layer(ctx.clone(), MemoryLayer::Agent, agent_entry)
             .await
             .unwrap();
         manager
-            .add_to_layer(MemoryLayer::User, user_entry)
+            .add_to_layer(ctx.clone(), MemoryLayer::User, user_entry)
             .await
             .unwrap();
 
         let results = manager
-            .search_hierarchical(vec![], 10, HashMap::new())
+            .search_hierarchical(ctx, vec![], 10, HashMap::new())
             .await
             .unwrap();
 
@@ -667,6 +704,7 @@ mod tests {
         let manager = MemoryManager::new().with_config(config::MemoryConfig {
             promotion_threshold: 0.5
         });
+        let ctx = test_ctx();
         let mock_session = Box::new(MockProvider::new());
         let mock_project = Box::new(MockProvider::new());
         manager
@@ -691,13 +729,13 @@ mod tests {
         };
 
         manager
-            .add_to_layer(MemoryLayer::Session, entry)
+            .add_to_layer(ctx.clone(), MemoryLayer::Session, entry)
             .await
             .unwrap();
-        manager.close_session("some_id").await.unwrap();
+        manager.close_session(ctx.clone(), "some_id").await.unwrap();
 
         let promoted = manager
-            .list_all_from_layer(MemoryLayer::Project)
+            .list_all_from_layer(ctx, MemoryLayer::Project)
             .await
             .unwrap();
         assert!(!promoted.is_empty());
@@ -706,12 +744,13 @@ mod tests {
     #[tokio::test]
     async fn test_search_text_with_threshold_requires_embedding_service() {
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         let provider = Box::new(MockProvider::new());
 
         manager.register_provider(MemoryLayer::User, provider).await;
 
         let result = manager
-            .search_text_with_threshold("test query", 10, 0.7, HashMap::new())
+            .search_text_with_threshold(ctx, "test query", 10, 0.7, HashMap::new())
             .await;
 
         assert!(result.is_err());
@@ -729,28 +768,46 @@ mod tests {
         #[async_trait::async_trait]
         impl mk_core::traits::MemoryProviderAdapter for FailingProvider {
             type Error = Box<dyn std::error::Error + Send + Sync>;
-            async fn add(&self, _e: MemoryEntry) -> Result<String, Self::Error> {
+            async fn add(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _e: MemoryEntry
+            ) -> Result<String, Self::Error> {
                 Ok("id".to_string())
             }
-            async fn get(&self, _id: &str) -> Result<Option<MemoryEntry>, Self::Error> {
+            async fn get(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _id: &str
+            ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
             async fn search(
                 &self,
+                _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
                 _f: HashMap<String, serde_json::Value>
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("search failed".into())
             }
-            async fn update(&self, _e: MemoryEntry) -> Result<(), Self::Error> {
+            async fn update(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _e: MemoryEntry
+            ) -> Result<(), Self::Error> {
                 Ok(())
             }
-            async fn delete(&self, _id: &str) -> Result<(), Self::Error> {
+            async fn delete(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _id: &str
+            ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn list(
                 &self,
+                _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
                 _c: Option<String>
@@ -760,12 +817,13 @@ mod tests {
         }
 
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         manager
             .register_provider(MemoryLayer::Agent, Box::new(FailingProvider))
             .await;
 
         let results = manager
-            .search_hierarchical(vec![0.0], 10, HashMap::new())
+            .search_hierarchical(ctx, vec![0.0], 10, HashMap::new())
             .await
             .unwrap();
         assert!(results.is_empty());
@@ -777,6 +835,7 @@ mod tests {
             promotion_threshold: 0.5,
             ..Default::default()
         });
+        let ctx = test_ctx();
         let mock_agent = Box::new(MockProvider::new());
         let mock_user = Box::new(MockProvider::new());
         manager
@@ -801,13 +860,13 @@ mod tests {
         };
 
         manager
-            .add_to_layer(MemoryLayer::Agent, entry)
+            .add_to_layer(ctx.clone(), MemoryLayer::Agent, entry)
             .await
             .unwrap();
-        manager.close_agent("agent_id").await.unwrap();
+        manager.close_agent(ctx.clone(), "agent_id").await.unwrap();
 
         let promoted = manager
-            .list_all_from_layer(MemoryLayer::User)
+            .list_all_from_layer(ctx, MemoryLayer::User)
             .await
             .unwrap();
         assert!(!promoted.is_empty());
@@ -822,6 +881,7 @@ mod tests {
         use crate::embedding::mock::MockEmbeddingService;
         let manager =
             MemoryManager::new().with_embedding_service(Arc::new(MockEmbeddingService::new(1536)));
+        let ctx = test_ctx();
 
         let provider = Box::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
@@ -841,12 +901,12 @@ mod tests {
         };
 
         manager
-            .add_to_layer(MemoryLayer::User, entry)
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
             .await
             .unwrap();
 
         let results = manager
-            .search_text_with_threshold("query", 10, 0.5, HashMap::new())
+            .search_text_with_threshold(ctx, "query", 10, 0.5, HashMap::new())
             .await
             .unwrap();
         assert_eq!(results.len(), 1);
@@ -863,6 +923,7 @@ mod tests {
     #[tokio::test]
     async fn test_add_to_layer_no_provider() {
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         let entry = MemoryEntry {
             id: "test".to_string(),
             content: "test".to_string(),
@@ -873,7 +934,7 @@ mod tests {
             updated_at: 0
         };
 
-        let result = manager.add_to_layer(MemoryLayer::User, entry).await;
+        let result = manager.add_to_layer(ctx, MemoryLayer::User, entry).await;
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -887,28 +948,46 @@ mod tests {
         #[async_trait::async_trait]
         impl mk_core::traits::MemoryProviderAdapter for FailingProvider {
             type Error = Box<dyn std::error::Error + Send + Sync>;
-            async fn add(&self, _e: MemoryEntry) -> Result<String, Self::Error> {
+            async fn add(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _e: MemoryEntry
+            ) -> Result<String, Self::Error> {
                 Ok("id".into())
             }
-            async fn get(&self, _id: &str) -> Result<Option<MemoryEntry>, Self::Error> {
+            async fn get(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _id: &str
+            ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
             async fn search(
                 &self,
+                _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
                 _f: HashMap<String, serde_json::Value>
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("search failed".into())
             }
-            async fn update(&self, _e: MemoryEntry) -> Result<(), Self::Error> {
+            async fn update(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _e: MemoryEntry
+            ) -> Result<(), Self::Error> {
                 Ok(())
             }
-            async fn delete(&self, _id: &str) -> Result<(), Self::Error> {
+            async fn delete(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _id: &str
+            ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn list(
                 &self,
+                _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
                 _c: Option<String>
@@ -918,12 +997,13 @@ mod tests {
         }
 
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         manager
             .register_provider(MemoryLayer::User, Box::new(FailingProvider))
             .await;
 
         let results = manager
-            .search_with_threshold(vec![0.0], 10, 0.5, HashMap::new())
+            .search_with_threshold(ctx, vec![0.0], 10, 0.5, HashMap::new())
             .await
             .unwrap();
         assert!(results.is_empty());
@@ -935,28 +1015,46 @@ mod tests {
         #[async_trait::async_trait]
         impl mk_core::traits::MemoryProviderAdapter for ErrorProvider {
             type Error = Box<dyn std::error::Error + Send + Sync>;
-            async fn add(&self, _e: MemoryEntry) -> Result<String, Self::Error> {
+            async fn add(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _e: MemoryEntry
+            ) -> Result<String, Self::Error> {
                 Ok("id".into())
             }
-            async fn get(&self, _id: &str) -> Result<Option<MemoryEntry>, Self::Error> {
+            async fn get(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _id: &str
+            ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
             async fn search(
                 &self,
+                _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
                 _f: HashMap<String, serde_json::Value>
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("list failed".into())
             }
-            async fn update(&self, _e: MemoryEntry) -> Result<(), Self::Error> {
+            async fn update(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _e: MemoryEntry
+            ) -> Result<(), Self::Error> {
                 Ok(())
             }
-            async fn delete(&self, _id: &str) -> Result<(), Self::Error> {
+            async fn delete(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _id: &str
+            ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn list(
                 &self,
+                _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
                 _c: Option<String>
@@ -966,12 +1064,13 @@ mod tests {
         }
 
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         manager
             .register_provider(MemoryLayer::Session, Box::new(ErrorProvider))
             .await;
 
         let result = manager
-            .promote_important_memories(MemoryLayer::Session)
+            .promote_important_memories(ctx, MemoryLayer::Session)
             .await;
         assert!(result.is_err());
     }
@@ -982,28 +1081,46 @@ mod tests {
         #[async_trait::async_trait]
         impl mk_core::traits::MemoryProviderAdapter for FailingAddProvider {
             type Error = Box<dyn std::error::Error + Send + Sync>;
-            async fn add(&self, _e: MemoryEntry) -> Result<String, Self::Error> {
+            async fn add(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _e: MemoryEntry
+            ) -> Result<String, Self::Error> {
                 Err("add failed".into())
             }
-            async fn get(&self, _id: &str) -> Result<Option<MemoryEntry>, Self::Error> {
+            async fn get(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _id: &str
+            ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
             async fn search(
                 &self,
+                _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
                 _f: HashMap<String, serde_json::Value>
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Ok(vec![])
             }
-            async fn update(&self, _e: MemoryEntry) -> Result<(), Self::Error> {
+            async fn update(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _e: MemoryEntry
+            ) -> Result<(), Self::Error> {
                 Ok(())
             }
-            async fn delete(&self, _id: &str) -> Result<(), Self::Error> {
+            async fn delete(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _id: &str
+            ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn list(
                 &self,
+                _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
                 _c: Option<String>
@@ -1013,6 +1130,7 @@ mod tests {
         }
 
         let manager = MemoryManager::new();
+        let ctx = test_ctx();
         manager
             .register_provider(MemoryLayer::User, Box::new(FailingAddProvider))
             .await;
@@ -1027,7 +1145,7 @@ mod tests {
             updated_at: 0
         };
 
-        let result = manager.add_to_layer(MemoryLayer::User, entry).await;
+        let result = manager.add_to_layer(ctx, MemoryLayer::User, entry).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().to_string(), "add failed");
     }

@@ -54,60 +54,62 @@ Company A (Tenant)
 | Hybrid | Working/Session memory only | Episodic+, Knowledge, Governance |
 | Remote | None | All |
 
-### 2. ReBAC Implementation (OpenFGA)
+### 2. ReBAC Implementation (Permit.io + OPA/Cedar)
 
-Using OpenFGA for relationship-based access control:
+Using Permit.io SDK with self-hosted OPA engine for relationship-based access control:
 
-```fga
-model
-  schema 1.1
+**Policy Model (OPA Rego)**:
+```rego
+package aeterna.authz
 
-type user
+default allow = false
 
-type company
-  relations
-    define admin: [user]
-    define member: [user] or admin
+allow {
+    input.action == "read"
+    resource_owners[input.user]
+}
 
-type organization
-  relations
-    define parent: [company]
-    define admin: [user] or admin from parent
-    define architect: [user] or admin
-    define member: [user] or architect
+allow {
+    input.action == "write"
+    input.resource_type == "knowledge_item"
+    can_propose[input.user]
+}
 
-type team
-  relations
-    define parent: [organization]
-    define lead: [user] or admin from parent
-    define architect: [user, agent] or architect from parent
-    define member: [user] or lead
+allow {
+    input.action == "approve"
+    input.resource_type == "knowledge_item"
+    is_architect_or_lead
+}
 
-type project
-  relations
-    define parent: [team]
-    define owner: [user] or lead from parent
-    define contributor: [user] or owner
-    define viewer: [user] or contributor
+resource_owners[owner] {
+    data.relationships[input.resource_type][input.resource_id].owner == owner
+}
 
-type knowledge_item
-  relations
-    define parent: [project, team, organization, company]
-    define can_propose: contributor from parent
-    define can_approve: architect from parent or lead from parent
-    define can_reject: architect from parent
-    define can_view: viewer from parent
+can_propose[user] {
+    data.roles[user].type == "contributor"
+}
 
-type memory_entry
-  relations
-    define parent: [project, team, user]
-    define can_promote: contributor from parent
-    define can_view: viewer from parent
-
-type agent
-  relations
-    define acts_as: [user]  # Agent can act on behalf of user
+is_architect_or_lead {
+    data.roles[input.user].type in ["architect", "lead"]
+}
 ```
+
+**Alternative: Cedar Policy** (if Cedar chosen over OPA):
+```cedar
+permit(principal == User::"alice", action == Action::"read", resource == KnowledgeItem::"item-123");
+
+permit(principal, action == Action::"write", resource)
+    when { has_role(principal, "contributor", resource) };
+
+permit(principal, action == Action::"approve", resource)
+    when { has_role(principal, "architect", resource) || has_role(principal, "lead", resource) };
+```
+
+**Permit.io Integration**:
+- Self-hosted Permit.io policy decision point (PDP) with OPA/Cedar backend
+- Permit.io SDK for relationship management (user-role-resource tuples)
+- Policy as code: Rego/Cedar files versioned in knowledge repository
+- API for architects to update policies without deployment
 
 **Roles & Permissions**:
 
@@ -170,47 +172,53 @@ enum GovernanceEvent {
 ### 5. Hybrid Deployment Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                     CENTRAL SERVER                                │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐                  │
-│  │ Knowledge  │  │ Governance │  │   Event    │                  │
-│  │ Repository │  │   Engine   │  │   Stream   │                  │
-│  └────────────┘  └────────────┘  └────────────┘                  │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐                  │
-│  │  Episodic  │  │  OpenFGA   │  │   Batch    │                  │
-│  │   Memory   │  │   Server   │  │   Jobs     │                  │
-│  └────────────┘  └────────────┘  └────────────┘                  │
-└──────────────────────────────────────────────────────────────────┘
-                              │
-                    ┌─────────┴─────────┐
-                    │   Sync Protocol   │
-                    │   (gRPC/REST)     │
-                    └─────────┬─────────┘
-                              │
-┌──────────────────────────────────────────────────────────────────┐
-│                     LOCAL DEVELOPER                               │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐                  │
-│  │  Working   │  │  Session   │  │   Local    │                  │
-│  │  Memory    │  │  Memory    │  │   Cache    │                  │
-│  └────────────┘  └────────────┘  └────────────┘                  │
-│  ┌────────────────────────────────────────────┐                  │
-│  │          OpenCode Plugin                    │                  │
-│  │     (MCP Server + Session Manager)          │                  │
-│  └────────────────────────────────────────────┘                  │
-└──────────────────────────────────────────────────────────────────┘
-```
+ ┌──────────────────────────────────────────────────────────────────┐
+ │                     CENTRAL SERVER                                │
+ │  ┌────────────┐  ┌────────────┐  ┌────────────┐                  │
+ │  │ Knowledge  │  │ Governance │  │   Event    │                  │
+ │  │ Repository │  │   Engine   │  │   Stream   │                  │
+ │  └────────────┘  └────────────┘  └────────────┘                  │
+ │  ┌────────────┐  ┌────────────┐  ┌────────────┐                  │
+ │  │  Episodic  │  │   OPA/Cedar│  │   Batch    │                  │
+ │  │   Memory   │  │   Engine   │  │   Jobs     │                  │
+ │  └────────────┘  └────────────┘  └────────────┘                  │
+ │  ┌────────────┐                                                 │
+ │  │ Permit.io  │  ← Policy Decision Point (PDP)                   │
+ │  │    SDK     │                                                 │
+ │  └────────────┘                                                 │
+ └──────────────────────────────────────────────────────────────────┘
+                               │
+                     ┌─────────┴─────────┐
+                     │   Sync Protocol   │
+                     │   (gRPC/REST)     │
+                     └─────────┬─────────┘
+                               │
+ ┌──────────────────────────────────────────────────────────────────┐
+ │                     LOCAL DEVELOPER                               │
+ │  ┌────────────┐  ┌────────────┐  ┌────────────┐                  │
+ │  │  Working   │  │  Session   │  │   Local    │                  │
+ │  │  Memory    │  │  Memory    │  │   Cache    │                  │
+ │  └────────────┘  └────────────┘  └────────────┘                  │
+ │  ┌────────────────────────────────────────────┐                  │
+ │  │          OpenCode Plugin                    │                  │
+ │  │     (MCP Server + Session Manager)          │                  │
+ │  └────────────────────────────────────────────┘                  │
+ └──────────────────────────────────────────────────────────────────┘
+ ```
 
 ### Alternatives Considered
 
-1. **Casbin vs OpenFGA**: OpenFGA chosen for native relationship modeling and Google Zanzibar lineage
-2. **Kafka vs Redis Streams**: Redis Streams chosen for simplicity and existing Redis dependency
-3. **PostgreSQL RLS vs Application-level tenancy**: Application-level chosen for flexibility, RLS as optional enhancement
+1. **Permit.io vs OpenFGA vs Casbin**: Permit.io chosen for managed policy-as-code, OPA/Cedar ecosystem support, and self-hosting flexibility
+2. **OPA vs Cedar**: OPA chosen for maturity (Cedar available as alternative)
+3. **Kafka vs Redis Streams**: Redis Streams chosen for simplicity and existing Redis dependency
+4. **PostgreSQL RLS vs Application-level tenancy**: Application-level chosen for flexibility, RLS as optional enhancement
 
 ## Risks / Trade-offs
 
 | Risk | Mitigation |
 |------|------------|
-| OpenFGA operational complexity | Embed mode for small deployments, external for scale |
+| Self-hosted OPA/Ceder complexity | Docker deployment with Helm charts, monitoring setup |
+| Permit.io SDK learning curve | Clear docs, reference implementations |
 | Drift detection latency | Tiered approach (real-time for simple, batch for complex) |
 | Hybrid sync conflicts | Conflict resolution with clear precedence rules |
 | LLM costs for semantic analysis | Sampling + caching + configurable frequency |
@@ -218,14 +226,15 @@ enum GovernanceEvent {
 ## Migration Plan
 
 1. **Phase 1**: Add tenant context to all operations (non-breaking, optional)
-2. **Phase 2**: Add OpenFGA integration with default permissive policies
+2. **Phase 2**: Add Permit.io SDK + OPA/Cedar integration with default permissive policies
 3. **Phase 3**: Add drift detection (real-time simple checks)
 4. **Phase 4**: Add batch analysis and reporting
 5. **Phase 5**: Add hybrid sync protocol
 
 ## Open Questions
 
-- [ ] OpenFGA embedded vs external deployment threshold?
+- [ ] OPA vs Cedar for policy engine (OPA recommended)?
+- [ ] Permit.io policy storage location (PostgreSQL vs knowledge repo)?
 - [ ] Drift score thresholds for alerting?
 - [ ] LLM provider for semantic analysis (same as embeddings)?
 - [ ] Event retention policy?

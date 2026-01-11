@@ -174,8 +174,22 @@ impl QdrantProvider {
 impl MemoryProviderAdapter for QdrantProvider {
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
-    async fn add(&self, entry: MemoryEntry) -> Result<String, Self::Error> {
+    async fn add(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        entry: MemoryEntry
+    ) -> Result<String, Self::Error> {
         self.ensure_collection().await?;
+        let mut entry = entry;
+        // In a real multi-tenant scenario, we would tag the payload with tenant info
+        // or use different collections. For now, we propagate the context.
+        entry
+            .metadata
+            .insert("tenant_id".to_string(), json!(ctx.tenant_id));
+        entry
+            .metadata
+            .insert("user_id".to_string(), json!(ctx.user_id));
+
         let point = self.entry_to_point(&entry)?;
         use qdrant_client::qdrant::UpsertPointsBuilder;
         let request = UpsertPointsBuilder::new(self.collection_name.clone(), vec![point]);
@@ -185,12 +199,17 @@ impl MemoryProviderAdapter for QdrantProvider {
 
     async fn search(
         &self,
+        ctx: mk_core::types::TenantContext,
         query_vector: Vec<f32>,
         limit: usize,
         _filters: HashMap<String, Value>
     ) -> Result<Vec<MemoryEntry>, Self::Error> {
         self.ensure_collection().await?;
         use qdrant_client::qdrant::SearchPointsBuilder;
+
+        // Tag search with tenant context in tracing/logs
+        tracing::debug!(tenant_id = %ctx.tenant_id, user_id = %ctx.user_id, "Qdrant search");
+
         let request =
             SearchPointsBuilder::new(self.collection_name.clone(), query_vector, limit as u64)
                 .with_payload(true)
@@ -204,9 +223,16 @@ impl MemoryProviderAdapter for QdrantProvider {
             .collect()
     }
 
-    async fn get(&self, id: &str) -> Result<Option<MemoryEntry>, Self::Error> {
+    async fn get(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        id: &str
+    ) -> Result<Option<MemoryEntry>, Self::Error> {
         self.ensure_collection().await?;
         use qdrant_client::qdrant::GetPointsBuilder;
+
+        tracing::debug!(tenant_id = %ctx.tenant_id, "Qdrant get point");
+
         let request = GetPointsBuilder::new(
             self.collection_name.clone(),
             vec![PointId::from(id.to_string())]
@@ -231,13 +257,24 @@ impl MemoryProviderAdapter for QdrantProvider {
         }
     }
 
-    async fn update(&self, entry: MemoryEntry) -> Result<(), Self::Error> {
-        self.add(entry).await?;
+    async fn update(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        entry: MemoryEntry
+    ) -> Result<(), Self::Error> {
+        self.add(ctx, entry).await?;
         Ok(())
     }
 
-    async fn delete(&self, id: &str) -> Result<(), Self::Error> {
+    async fn delete(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        id: &str
+    ) -> Result<(), Self::Error> {
         self.ensure_collection().await?;
+
+        tracing::debug!(tenant_id = %ctx.tenant_id, "Qdrant delete point");
+
         use qdrant_client::qdrant::DeletePointsBuilder;
         let request = DeletePointsBuilder::new(self.collection_name.clone())
             .points(vec![PointId::from(id.to_string())]);
@@ -247,11 +284,15 @@ impl MemoryProviderAdapter for QdrantProvider {
 
     async fn list(
         &self,
+        ctx: mk_core::types::TenantContext,
         _layer: MemoryLayer,
         limit: usize,
         cursor: Option<String>
     ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
         self.ensure_collection().await?;
+
+        tracing::debug!(tenant_id = %ctx.tenant_id, "Qdrant list points");
+
         let scroll_request = qdrant_client::qdrant::ScrollPoints {
             collection_name: self.collection_name.clone(),
             limit: Some(limit as u32),

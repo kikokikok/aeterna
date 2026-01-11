@@ -127,7 +127,6 @@ mod tests {
     // Test StorageBackend trait implementation
     #[test]
     fn test_storage_backend_trait_implementation() {
-        use async_trait::async_trait;
         use mk_core::traits::StorageBackend;
 
         // Compile-time check that PostgresBackend implements StorageBackend

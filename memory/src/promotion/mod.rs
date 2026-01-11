@@ -46,7 +46,11 @@ impl PromotionService {
         self
     }
 
-    pub async fn evaluate_and_promote(&self, entry: &MemoryEntry) -> Result<Option<String>> {
+    pub async fn evaluate_and_promote(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        entry: &MemoryEntry
+    ) -> Result<Option<String>> {
         if !self.promote_important {
             return Ok(None);
         }
@@ -103,14 +107,14 @@ impl PromotionService {
 
                 let new_id = self
                     .memory_manager
-                    .add_to_layer(target, promoted_entry)
+                    .add_to_layer(ctx.clone(), target, promoted_entry)
                     .await
                     .map_err(|e| anyhow::anyhow!(e))
                     .context("Failed to add promoted memory to target layer")?;
 
                 if self.cleanup_after_promotion {
                     self.memory_manager
-                        .delete_from_layer(entry.layer, &entry.id)
+                        .delete_from_layer(ctx, entry.layer, &entry.id)
                         .await
                         .map_err(|e| anyhow::anyhow!(e))
                         .context("Failed to cleanup source memory after promotion")?;
@@ -163,18 +167,19 @@ impl PromotionService {
 
     pub async fn promote_layer_memories(
         &self,
+        ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
         _identifiers: &mk_core::types::LayerIdentifiers
     ) -> Result<Vec<String>> {
         let entries = self
             .memory_manager
-            .list_all_from_layer(layer)
+            .list_all_from_layer(ctx.clone(), layer)
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
 
         let mut promoted_ids = Vec::new();
         for entry in entries {
-            if let Some(new_id) = self.evaluate_and_promote(&entry).await? {
+            if let Some(new_id) = self.evaluate_and_promote(ctx.clone(), &entry).await? {
                 promoted_ids.push(new_id);
             }
         }
@@ -193,6 +198,7 @@ impl PromotionService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manager::tests::test_ctx;
     use crate::providers::MockProvider;
     use mk_core::types::MemoryEntry;
     use std::collections::HashMap;
@@ -200,6 +206,7 @@ mod tests {
     #[tokio::test]
     async fn test_evaluate_and_promote_high_score() {
         let manager = Arc::new(MemoryManager::new());
+        let ctx = test_ctx();
         let mock_session = Box::new(MockProvider::new());
         let mock_project = Box::new(MockProvider::new());
 
@@ -233,12 +240,15 @@ mod tests {
             updated_at: 0
         };
 
-        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        let result = service
+            .evaluate_and_promote(ctx.clone(), &entry)
+            .await
+            .unwrap();
         assert!(result.is_some());
         assert!(result.unwrap().contains("mem_1_promoted"));
 
         let promoted = manager
-            .get_from_layer(MemoryLayer::Project, "mem_1_promoted")
+            .get_from_layer(ctx.clone(), MemoryLayer::Project, "mem_1_promoted")
             .await
             .unwrap();
         assert!(promoted.is_some());
@@ -255,6 +265,7 @@ mod tests {
     #[tokio::test]
     async fn test_evaluate_and_promote_low_score() {
         let manager = Arc::new(MemoryManager::new());
+        let ctx = test_ctx();
         let service = PromotionService::new(manager).with_config(config::MemoryConfig {
             promotion_threshold: 0.8
         });
@@ -273,13 +284,14 @@ mod tests {
             updated_at: 0
         };
 
-        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();
         assert!(result.is_none());
     }
 
     #[tokio::test]
     async fn test_promotion_blocked_by_governance() {
         let manager = Arc::new(MemoryManager::new());
+        let ctx = test_ctx();
         let service = PromotionService::new(manager);
 
         let entry = MemoryEntry {
@@ -297,13 +309,14 @@ mod tests {
             updated_at: 0
         };
 
-        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();
         assert!(result.is_none());
     }
 
     #[tokio::test]
     async fn test_promotion_redacts_pii() {
         let manager = Arc::new(MemoryManager::new());
+        let ctx = test_ctx();
         let mock_session = Box::new(MockProvider::new());
         let mock_project = Box::new(MockProvider::new());
         manager
@@ -327,11 +340,14 @@ mod tests {
             updated_at: 0
         };
 
-        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        let result = service
+            .evaluate_and_promote(ctx.clone(), &entry)
+            .await
+            .unwrap();
         assert!(result.is_some());
 
         let promoted = manager
-            .get_from_layer(MemoryLayer::Project, result.unwrap().as_str())
+            .get_from_layer(ctx, MemoryLayer::Project, result.unwrap().as_str())
             .await
             .unwrap()
             .unwrap();
@@ -341,6 +357,7 @@ mod tests {
     #[tokio::test]
     async fn test_promotion_cleanup() {
         let manager = Arc::new(MemoryManager::new());
+        let ctx = test_ctx();
         let mock_session = Box::new(MockProvider::new());
         let mock_project = Box::new(MockProvider::new());
         manager
@@ -367,21 +384,24 @@ mod tests {
         };
 
         manager
-            .add_to_layer(MemoryLayer::Session, entry.clone())
+            .add_to_layer(ctx.clone(), MemoryLayer::Session, entry.clone())
             .await
             .unwrap();
 
-        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        let result = service
+            .evaluate_and_promote(ctx.clone(), &entry)
+            .await
+            .unwrap();
         assert!(result.is_some());
 
         let promoted = manager
-            .get_from_layer(MemoryLayer::Project, result.unwrap().as_str())
+            .get_from_layer(ctx.clone(), MemoryLayer::Project, result.unwrap().as_str())
             .await
             .unwrap();
         assert!(promoted.is_some());
 
         let original = manager
-            .get_from_layer(MemoryLayer::Session, "mem_cleanup")
+            .get_from_layer(ctx, MemoryLayer::Session, "mem_cleanup")
             .await
             .unwrap();
         assert!(original.is_none());
@@ -390,6 +410,7 @@ mod tests {
     #[tokio::test]
     async fn test_with_promote_important_false() {
         let manager = Arc::new(MemoryManager::new());
+        let ctx = test_ctx();
         let service = PromotionService::new(manager).with_promote_important(false);
 
         let entry = MemoryEntry {
@@ -402,13 +423,14 @@ mod tests {
             updated_at: 0
         };
 
-        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();
         assert!(result.is_none());
     }
 
     #[tokio::test]
     async fn test_determine_target_layer_none() {
         let manager = Arc::new(MemoryManager::new());
+        let ctx = test_ctx();
         let service = PromotionService::new(manager);
 
         let entry = MemoryEntry {
@@ -421,7 +443,7 @@ mod tests {
             updated_at: 0
         };
 
-        let result = service.evaluate_and_promote(&entry).await.unwrap();
+        let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();
         assert!(result.is_none());
     }
 }

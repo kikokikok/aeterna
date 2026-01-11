@@ -3,7 +3,7 @@ use adapters::langchain::LangChainAdapter;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
 use mk_core::traits::KnowledgeRepository;
-use mk_core::types::{KnowledgeEntry, KnowledgeLayer, MemoryLayer};
+use mk_core::types::{KnowledgeEntry, KnowledgeLayer, MemoryLayer, TenantContext};
 use serde_json::json;
 use std::sync::Arc;
 use sync::bridge::SyncManager;
@@ -18,18 +18,25 @@ impl KnowledgeRepository for MockRepo {
 
     async fn get(
         &self,
+        _ctx: TenantContext,
         _layer: KnowledgeLayer,
         _path: &str
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
         Ok(None)
     }
 
-    async fn store(&self, _entry: KnowledgeEntry, _message: &str) -> Result<String, Self::Error> {
+    async fn store(
+        &self,
+        _ctx: TenantContext,
+        _entry: KnowledgeEntry,
+        _message: &str
+    ) -> Result<String, Self::Error> {
         Ok("hash".to_string())
     }
 
     async fn list(
         &self,
+        _ctx: TenantContext,
         _layer: KnowledgeLayer,
         _prefix: &str
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
@@ -38,6 +45,7 @@ impl KnowledgeRepository for MockRepo {
 
     async fn delete(
         &self,
+        _ctx: TenantContext,
         _layer: KnowledgeLayer,
         _path: &str,
         _message: &str
@@ -45,12 +53,13 @@ impl KnowledgeRepository for MockRepo {
         Ok("hash".to_string())
     }
 
-    async fn get_head_commit(&self) -> Result<Option<String>, Self::Error> {
+    async fn get_head_commit(&self, _ctx: TenantContext) -> Result<Option<String>, Self::Error> {
         Ok(Some("head".to_string()))
     }
 
     async fn get_affected_items(
         &self,
+        _ctx: TenantContext,
         _since_commit: &str
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         Ok(vec![])
@@ -58,6 +67,7 @@ impl KnowledgeRepository for MockRepo {
 
     async fn search(
         &self,
+        _ctx: TenantContext,
         _query: &str,
         _layers: Vec<KnowledgeLayer>,
         _limit: usize
@@ -74,11 +84,15 @@ struct MockPersister;
 
 #[async_trait::async_trait]
 impl sync::state_persister::SyncStatePersister for MockPersister {
-    async fn load(&self) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
+    async fn load(
+        &self,
+        _tenant_id: &mk_core::types::TenantId
+    ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         Ok(SyncState::default())
     }
     async fn save(
         &self,
+        _tenant_id: &mk_core::types::TenantId,
         _state: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
@@ -138,13 +152,14 @@ async fn test_langchain_adapter_request_handling() {
     let lc_adapter = LangChainAdapter::new(server);
 
     let request = json!({
+        "tenantContext": {
+            "tenantId": "test_tenant",
+            "userId": "test_user"
+        },
         "name": "memory_add",
         "arguments": {
             "content": "test content",
-            "layer": "user",
-            "identifiers": {
-                "user_id": "test_user_123"
-            }
+            "layer": "user"
         }
     });
 

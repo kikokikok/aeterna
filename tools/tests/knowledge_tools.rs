@@ -29,11 +29,19 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
         author: None,
         updated_at: chrono::Utc::now().timestamp()
     };
-    mk_core::traits::KnowledgeRepository::store(repo.as_ref(), entry, "initial docs").await?;
+    let tenant_id = mk_core::types::TenantId::new("t1".into()).unwrap();
+    let user_id = mk_core::types::UserId::new("u1".into()).unwrap();
+    let ctx = mk_core::types::TenantContext::new(tenant_id, user_id);
+
+    mk_core::traits::KnowledgeRepository::store(repo.as_ref(), ctx, entry, "initial docs").await?;
 
     // WHEN querying knowledge
     let query_resp = query_tool
         .call(json!({
+            "tenantContext": {
+                "tenantId": "t1",
+                "userId": "u1"
+            },
             "query": "Architecture",
             "layers": ["project"]
         }))
@@ -50,6 +58,10 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
     // WHEN showing specific knowledge
     let show_resp = show_tool
         .call(json!({
+            "tenantContext": {
+                "tenantId": "t1",
+                "userId": "u1"
+            },
             "layer": "project",
             "path": "architecture/core.md"
         }))
