@@ -11,7 +11,7 @@ OpenSpec-compliant Memory-Knowledge System specification implementation. Provide
   - Qdrant 1.12+ (Semantic, Archival vectors)
 - **Embedding**: rust-genai 0.4+ (multi-provider: OpenAI, Anthropic, Gemini, Z.AI)
 - **API**: OpenSpec v1.0.0 protocol
-- **Testing**: TDD/BDD with tarpaulin, proptest, cargo-mutants
+- **Testing**: TDD/BDD with tarpaulin, proptest, cargo-mutants (MANDATORY 80% MINIMUM COVERAGE)
 
 ## Project Conventions
 
@@ -37,9 +37,9 @@ OpenSpec-compliant Memory-Knowledge System specification implementation. Provide
 - **Knowledge Sources**: Pluggable providers (Git, NotebookLM, Dust.tt, Perplexity, Custom MCP)
 - **OpenSpec Protocol**: Standardized endpoints for universal compatibility
 
-### Testing Strategy
+### Testing Strategy (CRITICAL)
 - **Test-Driven Development**: Write tests before code (RED-GREEN-REFACTOR)
-- **Coverage Thresholds**: 80%+ overall, 85%+ core logic
+- **Coverage Thresholds**: 80%+ overall (MANDATORY), 85%+ core logic
 - **Property-Based Testing**: Critical algorithms (promotion scoring, similarity metrics, confidence aggregation)
 - **Mutation Testing**: 90%+ mutants killed for critical code paths
 - **Testability**: All external dependencies behind trait abstractions for easy mocking
@@ -69,7 +69,7 @@ MCP-compatible tool contracts enabling universal compatibility with AI agent fra
 ## Important Constraints
 
 ### Testing Requirements (Non-Negotiable)
-- **Minimum 80% test coverage** enforced in CI/CD
+- **Minimum 80% test coverage** enforced in CI/CD (STRICT REQUIREMENT)
 - **Property-based tests** for all critical algorithms (promotion score, similarity metrics)
 - **Mutation testing** with 90%+ mutants killed
 - **Test fixtures** for all external API responses (deterministic, versioned)

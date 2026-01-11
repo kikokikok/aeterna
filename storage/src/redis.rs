@@ -211,7 +211,6 @@ mod tests {
     #[test]
     fn test_method_signatures() {
         // This is a compile-time check
-        use async_trait::async_trait;
 
         // Verify RedisStorage has the expected method signature
         // The existence of the method is verified by compilation

@@ -2,7 +2,7 @@
 
 use memory::providers::qdrant::QdrantProvider;
 use mk_core::traits::MemoryProviderAdapter;
-use mk_core::types::{MemoryEntry, MemoryLayer};
+use mk_core::types::{MemoryEntry, MemoryLayer, TenantContext};
 use qdrant_client::{Qdrant, config::QdrantConfig};
 use std::collections::HashMap;
 use testcontainers::{
@@ -10,6 +10,10 @@ use testcontainers::{
     core::{ContainerPort, WaitFor},
     runners::AsyncRunner
 };
+
+fn test_ctx() -> TenantContext {
+    TenantContext::default()
+}
 
 #[tokio::test]
 async fn test_qdrant_full_lifecycle() {
@@ -42,6 +46,8 @@ async fn test_qdrant_full_lifecycle() {
         .await
         .expect("Failed to create collection");
 
+    let ctx = test_ctx();
+
     for i in 0..5 {
         let entry = MemoryEntry {
             id: format!("id_{}", i),
@@ -52,12 +58,15 @@ async fn test_qdrant_full_lifecycle() {
             created_at: 1000 + i as i64,
             updated_at: 1000 + i as i64
         };
-        provider.add(entry).await.expect("Failed to add entry");
+        provider
+            .add(ctx.clone(), entry)
+            .await
+            .expect("Failed to add entry");
     }
 
     let query = vec![0.25; 128];
     let search_results = provider
-        .search(query, 10, HashMap::new())
+        .search(ctx.clone(), query, 10, HashMap::new())
         .await
         .expect("Search failed");
     assert!(search_results.len() >= 2);
@@ -66,7 +75,7 @@ async fn test_qdrant_full_lifecycle() {
     assert!(first_id == "id_2" || first_id == "id_3");
 
     let entry = provider
-        .get("id_0")
+        .get(ctx.clone(), "id_0")
         .await
         .expect("Get failed")
         .expect("Entry not found");
@@ -75,26 +84,29 @@ async fn test_qdrant_full_lifecycle() {
     let mut entry_to_update = entry;
     entry_to_update.content = "Updated content".to_string();
     provider
-        .update(entry_to_update)
+        .update(ctx.clone(), entry_to_update)
         .await
         .expect("Update failed");
 
     let updated = provider
-        .get("id_0")
+        .get(ctx.clone(), "id_0")
         .await
         .expect("Get failed")
         .expect("Entry not found");
     assert_eq!(updated.content, "Updated content");
 
     let (list, next_cursor) = provider
-        .list(MemoryLayer::User, 2, None)
+        .list(ctx.clone(), MemoryLayer::User, 2, None)
         .await
         .expect("List failed");
     assert_eq!(list.len(), 2);
     assert!(next_cursor.is_some());
 
-    provider.delete("id_0").await.expect("Delete failed");
-    let deleted = provider.get("id_0").await.expect("Get failed");
+    provider
+        .delete(ctx.clone(), "id_0")
+        .await
+        .expect("Delete failed");
+    let deleted = provider.get(ctx, "id_0").await.expect("Get failed");
     assert!(deleted.is_none());
 }
 
@@ -133,7 +145,8 @@ async fn test_qdrant_error_conditions() {
         created_at: 0,
         updated_at: 0
     };
-    let result = provider.add(entry_no_emb).await;
+    let ctx = test_ctx();
+    let result = provider.add(ctx, entry_no_emb).await;
     assert!(result.is_err());
     assert!(
         result
@@ -143,8 +156,11 @@ async fn test_qdrant_error_conditions() {
     );
 
     provider.ensure_collection().await.unwrap();
+    let ctx = test_ctx();
     let wrong_dim_query = vec![1.0; 64];
-    let result = provider.search(wrong_dim_query, 10, HashMap::new()).await;
+    let result = provider
+        .search(ctx, wrong_dim_query, 10, HashMap::new())
+        .await;
     assert!(result.is_err());
 }
 
@@ -189,12 +205,17 @@ async fn test_qdrant_complex_metadata() {
         updated_at: 123456789
     };
 
+    let ctx = test_ctx();
     provider
-        .add(entry.clone())
+        .add(ctx.clone(), entry.clone())
         .await
         .expect("Failed to add entry with metadata");
 
-    let retrieved = provider.get("meta_1").await.expect("Get failed").unwrap();
+    let retrieved = provider
+        .get(ctx, "meta_1")
+        .await
+        .expect("Get failed")
+        .unwrap();
     assert_eq!(
         retrieved
             .metadata

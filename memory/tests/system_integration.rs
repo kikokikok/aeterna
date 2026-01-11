@@ -5,7 +5,7 @@
 
 use memory::manager::MemoryManager;
 use memory::providers::qdrant::QdrantProvider;
-use mk_core::types::{MemoryEntry, MemoryLayer};
+use mk_core::types::{MemoryEntry, MemoryLayer, TenantContext};
 use qdrant_client::{Qdrant, config::QdrantConfig};
 use std::collections::HashMap;
 use storage::postgres::PostgresBackend;
@@ -17,6 +17,10 @@ use testcontainers::{
 };
 use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::redis::Redis;
+
+fn test_ctx() -> TenantContext {
+    TenantContext::default()
+}
 
 async fn setup_postgres() -> Result<(ContainerAsync<Postgres>, String), Box<dyn std::error::Error>>
 {
@@ -95,13 +99,15 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         updated_at: 1736400000
     };
 
+    let ctx = test_ctx();
+
     manager
-        .add_to_layer(MemoryLayer::User, entry.clone())
+        .add_to_layer(ctx.clone(), MemoryLayer::User, entry.clone())
         .await
         .map_err(|e| e.to_string())?;
 
     let retrieved = manager
-        .get_from_layer(MemoryLayer::User, "system_msg_1")
+        .get_from_layer(ctx.clone(), MemoryLayer::User, "system_msg_1")
         .await
         .map_err(|e| e.to_string())?;
     assert!(retrieved.is_some());
@@ -109,7 +115,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
     assert_eq!(retrieved.content, entry.content);
 
     let search_results = manager
-        .search_hierarchical(vec![0.1; 128], 1, HashMap::new())
+        .search_hierarchical(ctx.clone(), vec![0.1; 128], 1, HashMap::new())
         .await
         .map_err(|e| e.to_string())?;
     assert_eq!(search_results.len(), 1);
@@ -158,19 +164,19 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         .await;
 
     manager
-        .add_to_layer(MemoryLayer::Session, session_entry)
+        .add_to_layer(ctx.clone(), MemoryLayer::Session, session_entry)
         .await
         .map_err(|e| e.to_string())?;
 
     let promoted_ids = manager
-        .promote_important_memories(MemoryLayer::Session)
+        .promote_important_memories(ctx.clone(), MemoryLayer::Session)
         .await
         .map_err(|e| e.to_string())?;
     assert_eq!(promoted_ids.len(), 1);
     assert!(promoted_ids[0].contains("session_important_promoted"));
 
     let promoted_entry = manager
-        .get_from_layer(MemoryLayer::Project, &promoted_ids[0])
+        .get_from_layer(ctx, MemoryLayer::Project, &promoted_ids[0])
         .await
         .map_err(|e| e.to_string())?;
     assert!(promoted_entry.is_some());
