@@ -1,0 +1,313 @@
+# OpenCode Integration Specification
+
+## ADDED Requirements
+
+### Requirement: NPM Plugin Package
+
+The system SHALL provide an NPM package `@aeterna/opencode-plugin` that integrates with OpenCode using the official `@opencode-ai/plugin` SDK.
+
+The plugin MUST:
+- Export a default Plugin function conforming to OpenCode's Plugin type
+- Register all Aeterna tools as OpenCode tools
+- Implement lifecycle hooks for deep integration
+- Support configuration via `.aeterna/config.toml`
+
+#### Scenario: Plugin installation
+- **WHEN** a user runs `npm install -D @aeterna/opencode-plugin`
+- **THEN** the plugin SHALL be available for OpenCode configuration
+- **AND** the plugin SHALL be compatible with the current OpenCode version
+
+#### Scenario: Plugin initialization
+- **WHEN** OpenCode starts with the Aeterna plugin configured
+- **THEN** the plugin SHALL initialize an Aeterna client
+- **AND** the plugin SHALL register all tools and hooks
+- **AND** the plugin SHALL start a session context
+
+#### Scenario: Plugin configuration via opencode.jsonc
+- **WHEN** the user adds `"plugin": ["@aeterna/opencode-plugin"]` to opencode.jsonc
+- **THEN** OpenCode SHALL load and initialize the Aeterna plugin
+- **AND** all Aeterna tools SHALL be available to the AI
+
+### Requirement: Tool Registration
+
+The system SHALL register all 8 Aeterna tools as OpenCode tools using the `tool()` helper from `@opencode-ai/plugin/tool`.
+
+| Tool Name | Description |
+|-----------|-------------|
+| `aeterna_memory_add` | Add memory entry with content, layer, tags, importance |
+| `aeterna_memory_search` | Search memories with semantic similarity |
+| `aeterna_memory_get` | Retrieve specific memory by ID |
+| `aeterna_memory_promote` | Promote memory to higher layer |
+| `aeterna_knowledge_query` | Query knowledge repository |
+| `aeterna_knowledge_propose` | Propose new knowledge item |
+| `aeterna_sync_status` | Check sync status |
+| `aeterna_governance_status` | Check governance state |
+
+#### Scenario: Tool schema definition
+- **WHEN** OpenCode requests tool definitions
+- **THEN** the plugin SHALL return Zod-based schemas for each tool
+- **AND** each schema SHALL include descriptions for all parameters
+
+#### Scenario: Memory add tool invocation
+- **WHEN** the AI invokes `aeterna_memory_add` with content
+- **THEN** the plugin SHALL create a memory entry in Aeterna
+- **AND** the plugin SHALL return confirmation with memory ID and computed importance
+
+#### Scenario: Knowledge query tool invocation
+- **WHEN** the AI invokes `aeterna_knowledge_query` with a query
+- **THEN** the plugin SHALL search the knowledge repository
+- **AND** the plugin SHALL return formatted results with relevance scores
+
+### Requirement: Chat Message Hook
+
+The system SHALL implement the `chat.message` hook to inject relevant knowledge and memories into user messages before they are sent to the LLM.
+
+#### Scenario: Knowledge injection on chat
+- **WHEN** a user sends a message to the AI
+- **THEN** the plugin SHALL query relevant knowledge based on message content
+- **AND** the plugin SHALL prepend knowledge context to the message parts
+- **AND** the LLM SHALL receive the enriched context
+
+#### Scenario: Memory recall on chat
+- **WHEN** a user sends a message referencing previous work
+- **THEN** the plugin SHALL search session and episodic memories
+- **AND** the plugin SHALL include relevant memories in the context
+
+#### Scenario: Empty context handling
+- **WHEN** no relevant knowledge or memories are found
+- **THEN** the plugin SHALL NOT modify the message parts
+- **AND** the original message SHALL pass through unchanged
+
+### Requirement: System Prompt Transform Hook
+
+The system SHALL implement the `experimental.chat.system.transform` hook to add project context to the AI's system prompt.
+
+#### Scenario: Project context injection
+- **WHEN** a chat session is active
+- **THEN** the plugin SHALL add project, team, and org context to the system prompt
+- **AND** the plugin SHALL include active policies and recent learnings
+
+#### Scenario: Guidance for Aeterna tools
+- **WHEN** the system prompt is transformed
+- **THEN** the plugin SHALL include instructions for using Aeterna tools
+- **AND** the AI SHALL be guided to capture useful patterns with `aeterna_memory_add`
+
+### Requirement: Tool Execute Before Hook
+
+The system SHALL implement the `tool.execute.before` hook to validate and enrich tool arguments before execution.
+
+#### Scenario: Aeterna tool argument enrichment
+- **WHEN** an Aeterna tool is about to be executed
+- **THEN** the plugin SHALL enrich arguments with session context
+- **AND** the plugin SHALL validate arguments against governance policies
+
+#### Scenario: Permission pre-check
+- **WHEN** `aeterna_knowledge_propose` is about to be executed
+- **THEN** the plugin SHALL verify the user has proposal permissions
+- **AND** the plugin SHALL add proposer identity to the arguments
+
+### Requirement: Tool Execute After Hook
+
+The system SHALL implement the `tool.execute.after` hook to capture tool executions as working memory.
+
+#### Scenario: Tool execution capture
+- **WHEN** any tool execution completes
+- **THEN** the plugin SHALL record the execution in Aeterna
+- **AND** the plugin SHALL include tool name, arguments, output, and timestamp
+
+#### Scenario: Significance detection
+- **WHEN** a tool execution is captured
+- **THEN** the plugin SHALL analyze the execution for significance
+- **AND** significant executions SHALL be flagged for promotion
+
+#### Scenario: Error pattern detection
+- **WHEN** a tool execution follows a previous error
+- **THEN** the plugin SHALL detect the error-resolution pattern
+- **AND** the plugin SHALL flag the pattern as significant
+
+### Requirement: Permission Hook
+
+The system SHALL implement the `permission.ask` hook to integrate with Aeterna's governance system.
+
+#### Scenario: Knowledge proposal permission
+- **WHEN** `aeterna_knowledge_propose` requires permission
+- **THEN** the plugin SHALL check the user's role in Aeterna
+- **AND** the plugin SHALL deny if user lacks proposal permissions
+
+#### Scenario: Sensitive operation permission
+- **WHEN** a tool accesses team or org level resources
+- **THEN** the plugin SHALL verify scope-appropriate permissions
+- **AND** the plugin SHALL log permission checks for audit
+
+### Requirement: Event Hook
+
+The system SHALL implement the `event` hook to handle session lifecycle events.
+
+#### Scenario: Session end event
+- **WHEN** an OpenCode session ends
+- **THEN** the plugin SHALL call `client.sessionEnd()`
+- **AND** the plugin SHALL promote significant memories to session layer
+- **AND** the plugin SHALL generate a session summary
+
+#### Scenario: Session start event
+- **WHEN** a new OpenCode session starts
+- **THEN** the plugin SHALL initialize session context
+- **AND** the plugin SHALL subscribe to governance notifications
+
+### Requirement: MCP Server Alternative
+
+The system SHALL provide an MCP server as an alternative integration method for remote or hybrid deployments.
+
+The MCP server MUST:
+- Support stdio transport for local use
+- Support HTTP transport for remote use
+- Expose all 8 Aeterna tools via MCP protocol
+- Expose knowledge and memory resources
+
+#### Scenario: MCP stdio transport
+- **WHEN** MCP server is configured with local type
+- **THEN** OpenCode SHALL spawn the `aeterna-mcp` process
+- **AND** communicate via stdin/stdout using JSON-RPC
+
+#### Scenario: MCP HTTP transport
+- **WHEN** MCP server is configured with remote type
+- **THEN** OpenCode SHALL connect to the configured URL
+- **AND** authenticate using Bearer token
+
+#### Scenario: MCP tool invocation
+- **WHEN** OpenCode invokes an Aeterna tool via MCP
+- **THEN** the MCP server SHALL translate to internal operation
+- **AND** return results in MCP-compliant format
+
+### Requirement: Automatic Session Capture
+
+The system SHALL automatically capture session context during OpenCode coding sessions without requiring explicit user action.
+
+Capture events:
+- Tool invocations and their results
+- Chat messages with significant content
+- File modifications (via tool execution context)
+
+#### Scenario: Automatic working memory creation
+- **WHEN** a tool execution completes
+- **THEN** the plugin SHALL create a working memory entry
+- **AND** the memory SHALL include execution context and outcome
+
+#### Scenario: Session summary generation
+- **WHEN** a session ends
+- **THEN** the plugin SHALL analyze all captured memories
+- **AND** the plugin SHALL generate a session summary memory
+- **AND** significant memories SHALL be promoted to session layer
+
+### Requirement: Significance Detection
+
+The system SHALL automatically detect significant learnings that warrant promotion from working memory to session memory.
+
+Significance criteria:
+- **Error resolution**: Error followed by successful outcome
+- **Repeated pattern**: Similar queries 3+ times
+- **Novel approach**: Solution differs from existing knowledge
+- **Explicit capture**: User explicitly called `aeterna_memory_add`
+
+#### Scenario: Error resolution detection
+- **WHEN** a successful outcome follows an error in the session
+- **THEN** the plugin SHALL flag the resolution as significant
+- **AND** auto-promote the error-solution pair
+
+#### Scenario: Repeated pattern detection
+- **WHEN** similar queries are detected 3+ times
+- **THEN** the plugin SHALL consolidate into a single memory
+- **AND** flag for promotion
+
+### Requirement: Knowledge Context Injection
+
+The system SHALL proactively inject relevant knowledge into chat context based on the conversation.
+
+#### Scenario: Semantic knowledge matching
+- **WHEN** a user message is processed
+- **THEN** the plugin SHALL query knowledge with semantic similarity
+- **AND** return top-N matches above threshold
+
+#### Scenario: Scoped knowledge priority
+- **WHEN** multiple knowledge items match
+- **THEN** project-level knowledge SHALL have highest priority
+- **AND** team, org, company knowledge SHALL follow in order
+
+#### Scenario: Context token limits
+- **WHEN** injecting knowledge context
+- **THEN** the plugin SHALL respect configured token limits
+- **AND** truncate or omit lower-priority items as needed
+
+### Requirement: Governance Notifications
+
+The system SHALL subscribe to governance events and surface relevant notifications.
+
+Notification types:
+- `ProposalApproved`: Knowledge proposal approved
+- `ProposalRejected`: Proposal rejected with reason
+- `DriftDetected`: Semantic drift detected in project
+
+#### Scenario: Governance event subscription
+- **WHEN** a session starts
+- **THEN** the plugin SHALL subscribe to project governance events
+- **AND** unsubscribe when session ends
+
+#### Scenario: Notification surfacing
+- **WHEN** a governance event is received
+- **THEN** the plugin SHALL surface the notification to the user
+- **AND** include relevant context and suggested actions
+
+### Requirement: Project Initialization
+
+The system SHALL provide CLI commands to initialize Aeterna for OpenCode projects.
+
+#### Scenario: Project initialization
+- **WHEN** a user runs `npx aeterna init --opencode`
+- **THEN** the system SHALL create `opencode.jsonc` with plugin config
+- **AND** create `.aeterna/config.toml` with project settings
+- **AND** update `.gitignore` to exclude local files
+
+#### Scenario: Existing project detection
+- **WHEN** `opencode.jsonc` already exists
+- **THEN** the system SHALL merge Aeterna plugin configuration
+- **AND** preserve existing settings
+
+### Requirement: Configuration Management
+
+The system SHALL support configuration via `.aeterna/config.toml` for project-specific settings.
+
+Configuration options:
+- `capture.enabled`: Enable/disable automatic capture
+- `capture.sensitivity`: Capture sensitivity (low/medium/high)
+- `capture.auto_promote`: Enable auto-promotion
+- `knowledge.injection_enabled`: Enable knowledge injection
+- `knowledge.max_items`: Max items to inject
+- `knowledge.threshold`: Similarity threshold
+- `governance.notifications`: Enable governance notifications
+
+#### Scenario: Configuration loading
+- **WHEN** the plugin initializes
+- **THEN** the plugin SHALL load configuration from `.aeterna/config.toml`
+- **AND** apply default values for missing settings
+
+#### Scenario: Configuration validation
+- **WHEN** configuration is loaded
+- **THEN** the plugin SHALL validate all settings
+- **AND** report errors for invalid configurations
+
+### Requirement: Dual Integration Support
+
+The system SHALL support both NPM plugin and MCP server integration methods simultaneously.
+
+#### Scenario: Plugin-only mode
+- **WHEN** only the NPM plugin is configured
+- **THEN** all features SHALL work via plugin hooks
+
+#### Scenario: MCP-only mode
+- **WHEN** only the MCP server is configured
+- **THEN** tools SHALL be available but hooks limited to MCP capabilities
+
+#### Scenario: Hybrid mode
+- **WHEN** both plugin and MCP are configured
+- **THEN** the plugin SHALL handle local operations
+- **AND** MCP SHALL handle remote knowledge/governance sync
