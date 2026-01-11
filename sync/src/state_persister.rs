@@ -89,7 +89,11 @@ where
         tenant_id: &mk_core::types::TenantId
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         let key = self.get_key(tenant_id);
-        match self.storage.retrieve(&key).await? {
+        let ctx = mk_core::types::TenantContext::new(
+            tenant_id.clone(),
+            mk_core::types::UserId::default()
+        );
+        match self.storage.retrieve(ctx, &key).await? {
             Some(data) => Ok(serde_json::from_slice(&data)?),
             None => Ok(SyncState::default())
         }
@@ -102,7 +106,11 @@ where
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let key = self.get_key(tenant_id);
         let data = serde_json::to_vec(state)?;
-        self.storage.store(&key, &data).await?;
+        let ctx = mk_core::types::TenantContext::new(
+            tenant_id.clone(),
+            mk_core::types::UserId::default()
+        );
+        self.storage.store(ctx, &key, &data).await?;
         Ok(())
     }
 }
@@ -131,7 +139,12 @@ mod tests {
     impl StorageBackend for MockStorage {
         type Error = std::io::Error;
 
-        async fn store(&self, key: &str, value: &[u8]) -> Result<(), Self::Error> {
+        async fn store(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            key: &str,
+            value: &[u8]
+        ) -> Result<(), Self::Error> {
             self.data
                 .write()
                 .await
@@ -139,16 +152,28 @@ mod tests {
             Ok(())
         }
 
-        async fn retrieve(&self, key: &str) -> Result<Option<Vec<u8>>, Self::Error> {
+        async fn retrieve(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            key: &str
+        ) -> Result<Option<Vec<u8>>, Self::Error> {
             Ok(self.data.read().await.get(key).cloned())
         }
 
-        async fn delete(&self, key: &str) -> Result<(), Self::Error> {
+        async fn delete(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            key: &str
+        ) -> Result<(), Self::Error> {
             self.data.write().await.remove(key);
             Ok(())
         }
 
-        async fn exists(&self, key: &str) -> Result<bool, Self::Error> {
+        async fn exists(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            key: &str
+        ) -> Result<bool, Self::Error> {
             Ok(self.data.read().await.contains_key(key))
         }
     }
@@ -264,28 +289,45 @@ mod tests {
         impl StorageBackend for ErrorStorage {
             type Error = std::io::Error;
 
-            async fn store(&self, _key: &str, _value: &[u8]) -> Result<(), Self::Error> {
+            async fn store(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _key: &str,
+                _value: &[u8]
+            ) -> Result<(), Self::Error> {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "storage error"
                 ))
             }
 
-            async fn retrieve(&self, _key: &str) -> Result<Option<Vec<u8>>, Self::Error> {
+            async fn retrieve(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _key: &str
+            ) -> Result<Option<Vec<u8>>, Self::Error> {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "storage error"
                 ))
             }
 
-            async fn delete(&self, _key: &str) -> Result<(), Self::Error> {
+            async fn delete(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _key: &str
+            ) -> Result<(), Self::Error> {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "storage error"
                 ))
             }
 
-            async fn exists(&self, _key: &str) -> Result<bool, Self::Error> {
+            async fn exists(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _key: &str
+            ) -> Result<bool, Self::Error> {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "storage error"

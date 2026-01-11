@@ -38,7 +38,12 @@ impl PostgresBackend {
 impl StorageBackend for PostgresBackend {
     type Error = PostgresError;
 
-    async fn store(&self, key: &str, value: &[u8]) -> Result<(), Self::Error> {
+    async fn store(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str,
+        value: &[u8]
+    ) -> Result<(), Self::Error> {
         sqlx::query(
             "INSERT INTO sync_state (id, data, updated_at)
              VALUES ($1, $2, $3)
@@ -53,7 +58,11 @@ impl StorageBackend for PostgresBackend {
         Ok(())
     }
 
-    async fn retrieve(&self, key: &str) -> Result<Option<Vec<u8>>, Self::Error> {
+    async fn retrieve(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<Option<Vec<u8>>, Self::Error> {
         let row: Option<(serde_json::Value,)> =
             sqlx::query_as("SELECT data FROM sync_state WHERE id = $1")
                 .bind(key)
@@ -63,7 +72,11 @@ impl StorageBackend for PostgresBackend {
         Ok(row.and_then(|(v,)| serde_json::to_vec(&v).ok()))
     }
 
-    async fn delete(&self, key: &str) -> Result<(), Self::Error> {
+    async fn delete(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<(), Self::Error> {
         sqlx::query("DELETE FROM sync_state WHERE id = $1")
             .bind(key)
             .execute(&self.pool)
@@ -72,7 +85,11 @@ impl StorageBackend for PostgresBackend {
         Ok(())
     }
 
-    async fn exists(&self, key: &str) -> Result<bool, Self::Error> {
+    async fn exists(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<bool, Self::Error> {
         let row: Option<(i64,)> = sqlx::query_as("SELECT 1 FROM sync_state WHERE id = $1")
             .bind(key)
             .fetch_optional(&self.pool)

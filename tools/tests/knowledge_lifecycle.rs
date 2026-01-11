@@ -28,7 +28,12 @@ impl MockStorage {
 impl StorageBackend for MockStorage {
     type Error = std::io::Error;
 
-    async fn store(&self, key: &str, value: &[u8]) -> Result<(), Self::Error> {
+    async fn store(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str,
+        value: &[u8]
+    ) -> Result<(), Self::Error> {
         self.data
             .write()
             .await
@@ -36,16 +41,28 @@ impl StorageBackend for MockStorage {
         Ok(())
     }
 
-    async fn retrieve(&self, key: &str) -> Result<Option<Vec<u8>>, Self::Error> {
+    async fn retrieve(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<Option<Vec<u8>>, Self::Error> {
         Ok(self.data.read().await.get(key).cloned())
     }
 
-    async fn delete(&self, key: &str) -> Result<(), Self::Error> {
+    async fn delete(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<(), Self::Error> {
         self.data.write().await.remove(key);
         Ok(())
     }
 
-    async fn exists(&self, key: &str) -> Result<bool, Self::Error> {
+    async fn exists(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<bool, Self::Error> {
         Ok(self.data.read().await.contains_key(key))
     }
 }

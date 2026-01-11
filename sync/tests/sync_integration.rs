@@ -31,7 +31,7 @@ impl MockStorage {
 impl StorageBackend for MockStorage {
     type Error = std::io::Error;
 
-    async fn store(&self, key: &str, value: &[u8]) -> Result<(), Self::Error> {
+    async fn store(&self, _ctx: TenantContext, key: &str, value: &[u8]) -> Result<(), Self::Error> {
         self.data
             .write()
             .await
@@ -39,16 +39,20 @@ impl StorageBackend for MockStorage {
         Ok(())
     }
 
-    async fn retrieve(&self, key: &str) -> Result<Option<Vec<u8>>, Self::Error> {
+    async fn retrieve(
+        &self,
+        _ctx: TenantContext,
+        key: &str
+    ) -> Result<Option<Vec<u8>>, Self::Error> {
         Ok(self.data.read().await.get(key).cloned())
     }
 
-    async fn delete(&self, key: &str) -> Result<(), Self::Error> {
+    async fn delete(&self, _ctx: TenantContext, key: &str) -> Result<(), Self::Error> {
         self.data.write().await.remove(key);
         Ok(())
     }
 
-    async fn exists(&self, key: &str) -> Result<bool, Self::Error> {
+    async fn exists(&self, _ctx: TenantContext, key: &str) -> Result<bool, Self::Error> {
         Ok(self.data.read().await.contains_key(key))
     }
 }
@@ -61,9 +65,10 @@ pub struct SimplePersister {
 impl SyncStatePersister for SimplePersister {
     async fn load(
         &self,
-        _tenant_id: &TenantId
+        tenant_id: &TenantId
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
-        match self.storage.retrieve("sync_state").await? {
+        let ctx = TenantContext::new(tenant_id.clone(), mk_core::types::UserId::default());
+        match self.storage.retrieve(ctx, "sync_state").await? {
             Some(data) => Ok(serde_json::from_slice(&data)?),
             None => Ok(SyncState::default())
         }
@@ -71,11 +76,12 @@ impl SyncStatePersister for SimplePersister {
 
     async fn save(
         &self,
-        _tenant_id: &TenantId,
+        tenant_id: &TenantId,
         state: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let ctx = TenantContext::new(tenant_id.clone(), mk_core::types::UserId::default());
         let data = serde_json::to_vec(state)?;
-        self.storage.store("sync_state", &data).await?;
+        self.storage.store(ctx, "sync_state", &data).await?;
         Ok(())
     }
 }
@@ -127,7 +133,8 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
     sync_manager.sync_all(TenantContext::default()).await?;
 
     // THEN sync state is persisted
-    assert!(storage.exists("sync_state").await?);
+    let ctx = TenantContext::default();
+    assert!(storage.exists(ctx, "sync_state").await?);
     let tenant_id = TenantId::default();
     let state = persister.load(&tenant_id).await?;
     assert_eq!(state.stats.total_items_synced, 1);

@@ -113,11 +113,7 @@ impl SyncManager {
         let states = self.states.read().await;
         for (tenant_id, state) in states.iter() {
             self.persister.save(tenant_id, state).await.map_err(|e| {
-                tracing::error!(
-                    "Failed to save state during shutdown for tenant {}: {}",
-                    tenant_id,
-                    e
-                );
+                tracing::error!("Failed to persist state for tenant {}: {}", tenant_id, e);
                 SyncError::Persistence(e.to_string())
             })?;
         }

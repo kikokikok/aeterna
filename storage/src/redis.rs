@@ -86,7 +86,12 @@ impl RedisStorage {
 impl mk_core::traits::StorageBackend for RedisStorage {
     type Error = StorageError;
 
-    async fn store(&self, key: &str, value: &[u8]) -> Result<(), Self::Error> {
+    async fn store(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str,
+        value: &[u8]
+    ) -> Result<(), Self::Error> {
         let mut conn = self.connection_manager.clone();
         conn.set(key, value)
             .await
@@ -96,7 +101,11 @@ impl mk_core::traits::StorageBackend for RedisStorage {
             })
     }
 
-    async fn retrieve(&self, key: &str) -> Result<Option<Vec<u8>>, Self::Error> {
+    async fn retrieve(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<Option<Vec<u8>>, Self::Error> {
         let mut conn = self.connection_manager.clone();
         conn.get(key).await.map_err(|e| StorageError::QueryError {
             backend: "Redis".to_string(),
@@ -104,11 +113,19 @@ impl mk_core::traits::StorageBackend for RedisStorage {
         })
     }
 
-    async fn delete(&self, key: &str) -> Result<(), Self::Error> {
+    async fn delete(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<(), Self::Error> {
         self.delete_key(key).await
     }
 
-    async fn exists(&self, key: &str) -> Result<bool, Self::Error> {
+    async fn exists(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<bool, Self::Error> {
         self.exists_key(key).await
     }
 }

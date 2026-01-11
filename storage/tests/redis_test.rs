@@ -4,6 +4,7 @@
 
 use errors::StorageError;
 use mk_core::traits::StorageBackend;
+use mk_core::types::{TenantContext, TenantId, UserId};
 use storage::redis::RedisStorage;
 use testcontainers::ContainerAsync;
 use testcontainers::runners::AsyncRunner;
@@ -27,6 +28,10 @@ async fn test_redis_basic_operations() {
                 .await
                 .expect("Failed to create Redis storage");
 
+            let ctx = TenantContext::new(
+                TenantId::new("test-tenant".to_string()).unwrap(),
+                UserId::default()
+            );
             let set_result = redis.set("test_key", "test_value", Some(60)).await;
             assert!(set_result.is_ok(), "Set operation should succeed");
 
@@ -38,14 +43,14 @@ async fn test_redis_basic_operations() {
                 "Retrieved value should match"
             );
 
-            let exists_result = redis.exists("test_key").await;
+            let exists_result = redis.exists(ctx.clone(), "test_key").await;
             assert!(exists_result.is_ok(), "Exists operation should succeed");
             assert!(exists_result.unwrap(), "Key should exist");
 
-            let delete_result = redis.delete("test_key").await;
+            let delete_result = redis.delete(ctx.clone(), "test_key").await;
             assert!(delete_result.is_ok(), "Delete operation should succeed");
 
-            let exists_after_delete = redis.exists("test_key").await;
+            let exists_after_delete = redis.exists(ctx, "test_key").await;
             assert!(
                 exists_after_delete.is_ok(),
                 "Exists operation should succeed"
@@ -69,10 +74,14 @@ async fn test_redis_ttl_expiration() {
                 .await
                 .expect("Failed to create Redis storage");
 
+            let ctx = TenantContext::new(
+                TenantId::new("test-tenant".to_string()).unwrap(),
+                UserId::default()
+            );
             let set_result = redis.set("ttl_key", "ttl_value", Some(1)).await;
             assert!(set_result.is_ok(), "Set with TTL should succeed");
 
-            let exists_immediately = redis.exists("ttl_key").await;
+            let exists_immediately = redis.exists(ctx.clone(), "ttl_key").await;
             assert!(
                 exists_immediately.is_ok() && exists_immediately.unwrap(),
                 "Key should exist immediately"
@@ -80,7 +89,7 @@ async fn test_redis_ttl_expiration() {
 
             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-            let exists_after_ttl = redis.exists("ttl_key").await;
+            let exists_after_ttl = redis.exists(ctx, "ttl_key").await;
             assert!(
                 exists_after_ttl.is_ok() && !exists_after_ttl.unwrap(),
                 "Key should not exist after TTL"
@@ -100,10 +109,14 @@ async fn test_redis_without_ttl() {
                 .await
                 .expect("Failed to create Redis storage");
 
+            let ctx = TenantContext::new(
+                TenantId::new("test-tenant".to_string()).unwrap(),
+                UserId::default()
+            );
             let set_result = redis.set("no_ttl_key", "persistent_value", None).await;
             assert!(set_result.is_ok(), "Set without TTL should succeed");
 
-            let exists_result = redis.exists("no_ttl_key").await;
+            let exists_result = redis.exists(ctx, "no_ttl_key").await;
             assert!(
                 exists_result.is_ok() && exists_result.unwrap(),
                 "Key should exist"
