@@ -8,13 +8,26 @@ use serde::{Deserialize, Serialize};
 pub trait StorageBackend: Send + Sync {
     type Error;
 
-    async fn store(&self, key: &str, value: &[u8]) -> Result<(), Self::Error>;
+    async fn store(
+        &self,
+        ctx: crate::types::TenantContext,
+        key: &str,
+        value: &[u8]
+    ) -> Result<(), Self::Error>;
 
-    async fn retrieve(&self, key: &str) -> Result<Option<Vec<u8>>, Self::Error>;
+    async fn retrieve(
+        &self,
+        ctx: crate::types::TenantContext,
+        key: &str
+    ) -> Result<Option<Vec<u8>>, Self::Error>;
 
-    async fn delete(&self, key: &str) -> Result<(), Self::Error>;
+    async fn delete(&self, ctx: crate::types::TenantContext, key: &str) -> Result<(), Self::Error>;
 
-    async fn exists(&self, key: &str) -> Result<bool, Self::Error>;
+    async fn exists(
+        &self,
+        ctx: crate::types::TenantContext,
+        key: &str
+    ) -> Result<bool, Self::Error>;
 }
 
 /// Health check capability for service monitoring
