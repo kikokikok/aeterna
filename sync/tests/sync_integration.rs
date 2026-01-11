@@ -4,7 +4,10 @@ use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
 use mk_core::traits::{KnowledgeRepository, StorageBackend};
-use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, MemoryLayer};
+use mk_core::types::{
+    KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, MemoryLayer, TenantContext,
+    TenantId
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use sync::bridge::SyncManager;
@@ -56,7 +59,10 @@ pub struct SimplePersister {
 
 #[async_trait]
 impl SyncStatePersister for SimplePersister {
-    async fn load(&self) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
+    async fn load(
+        &self,
+        _tenant_id: &TenantId
+    ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         match self.storage.retrieve("sync_state").await? {
             Some(data) => Ok(serde_json::from_slice(&data)?),
             None => Ok(SyncState::default())
@@ -65,6 +71,7 @@ impl SyncStatePersister for SimplePersister {
 
     async fn save(
         &self,
+        _tenant_id: &TenantId,
         state: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let data = serde_json::to_vec(state)?;
@@ -112,14 +119,17 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
         author: None,
         updated_at: chrono::Utc::now().timestamp()
     };
-    knowledge_repo.store(entry.clone(), "first commit").await?;
+    knowledge_repo
+        .store(TenantContext::default(), entry.clone(), "first commit")
+        .await?;
 
     // WHEN performing full sync
-    sync_manager.sync_all().await?;
+    sync_manager.sync_all(TenantContext::default()).await?;
 
     // THEN sync state is persisted
     assert!(storage.exists("sync_state").await?);
-    let state = persister.load().await?;
+    let tenant_id = TenantId::default();
+    let state = persister.load(&tenant_id).await?;
     assert_eq!(state.stats.total_items_synced, 1);
     assert!(state.last_knowledge_commit.is_some());
 
@@ -128,36 +138,50 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
         content: "updated content".to_string(),
         ..entry.clone()
     };
-    knowledge_repo.store(updated_entry, "second commit").await?;
+    knowledge_repo
+        .store(TenantContext::default(), updated_entry, "second commit")
+        .await?;
 
     // AND performing incremental sync
-    sync_manager.sync_incremental().await?;
+    sync_manager
+        .sync_incremental(TenantContext::default())
+        .await?;
 
     // THEN sync state is updated
-    let state = persister.load().await?;
+    let state = persister.load(&tenant_id).await?;
     assert_eq!(state.stats.total_items_synced, 2);
     assert_eq!(state.stats.total_syncs, 2);
 
     // WHEN triggering sync cycle (manual)
-    sync_manager.run_sync_cycle(0).await?;
+    sync_manager
+        .run_sync_cycle(TenantContext::default(), 0)
+        .await?;
 
-    let _ = sync_manager.detect_conflicts().await?;
+    let _ = sync_manager
+        .detect_conflicts(TenantContext::default())
+        .await?;
 
     // WHEN corrupting memory (missing pointer)
     let memory_id = format!("ptr_{}", entry.path);
     memory_manager
-        .delete_from_layer(MemoryLayer::Project, &memory_id)
+        .delete_from_layer(TenantContext::default(), MemoryLayer::Project, &memory_id)
         .await?;
 
     // THEN conflict is detected
-    let conflicts = sync_manager.detect_conflicts().await?;
+    let conflicts = sync_manager
+        .detect_conflicts(TenantContext::default())
+        .await?;
     assert_eq!(conflicts.len(), 1);
 
     // WHEN resolving conflicts
-    sync_manager.resolve_conflicts(conflicts).await?;
+    sync_manager
+        .resolve_conflicts(TenantContext::default(), conflicts)
+        .await?;
 
     // THEN conflict is resolved
-    let conflicts = sync_manager.detect_conflicts().await?;
+    let conflicts = sync_manager
+        .detect_conflicts(TenantContext::default())
+        .await?;
     if !conflicts.is_empty() {
         println!("Final conflicts: {:?}", conflicts);
     }
@@ -206,17 +230,23 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
         author: None,
         updated_at: chrono::Utc::now().timestamp()
     };
-    knowledge_repo.store(entry.clone(), "first commit").await?;
+    knowledge_repo
+        .store(TenantContext::default(), entry.clone(), "first commit")
+        .await?;
 
     // WHEN starting background sync with short interval
     let (_tx, rx) = tokio::sync::watch::channel(false);
-    let handle = sync_manager.clone().start_background_sync(1, 0, rx).await;
+    let handle = sync_manager
+        .clone()
+        .start_background_sync(TenantContext::default(), 1, 0, rx)
+        .await;
 
     // THEN after some time, the item should be synced
     let mut synced = false;
+    let tenant_id = TenantId::default();
     for _ in 0..10 {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        let state = persister.load().await?;
+        let state = persister.load(&tenant_id).await?;
         if state.stats.total_items_synced > 0 {
             synced = true;
             break;
@@ -285,12 +315,18 @@ async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error
         updated_at: chrono::Utc::now().timestamp()
     };
     knowledge_repo
-        .store(entry.clone(), "commit with secret")
+        .store(
+            TenantContext::default(),
+            entry.clone(),
+            "commit with secret"
+        )
         .await?;
 
     // WHEN syncing
     let mut state = SyncState::default();
-    let result = sync_manager.sync_entry(&entry, &mut state).await;
+    let result = sync_manager
+        .sync_entry(TenantContext::default(), &entry, &mut state)
+        .await;
 
     // THEN sync fails for that item
     assert!(result.is_err());

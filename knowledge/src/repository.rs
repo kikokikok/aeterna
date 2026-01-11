@@ -89,14 +89,18 @@ impl GitRepository {
         &self.root_path
     }
 
-    pub async fn get_by_path(&self, path: &str) -> Result<Option<KnowledgeEntry>, RepositoryError> {
+    pub async fn get_by_path(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        path: &str
+    ) -> Result<Option<KnowledgeEntry>, RepositoryError> {
         for layer in [
             KnowledgeLayer::Company,
             KnowledgeLayer::Org,
             KnowledgeLayer::Team,
             KnowledgeLayer::Project
         ] {
-            if let Some(entry) = self.get(layer, path).await? {
+            if let Some(entry) = self.get(ctx.clone(), layer, path).await? {
                 return Ok(Some(entry));
             }
         }
@@ -108,12 +112,16 @@ impl GitRepository {
 impl KnowledgeRepository for GitRepository {
     type Error = RepositoryError;
 
-    async fn get_head_commit(&self) -> Result<Option<String>, Self::Error> {
+    async fn get_head_commit(
+        &self,
+        _ctx: mk_core::types::TenantContext
+    ) -> Result<Option<String>, Self::Error> {
         self.get_head_commit_sync()
     }
 
     async fn get_affected_items(
         &self,
+        _ctx: mk_core::types::TenantContext,
         since_commit: &str
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         let repo = Repository::open(&self.root_path)?;
@@ -153,9 +161,10 @@ impl KnowledgeRepository for GitRepository {
         Ok(affected)
     }
 
-    #[tracing::instrument(skip(self), fields(path = %path, layer = ?layer))]
+    #[tracing::instrument(skip(self, _ctx), fields(path = %path, layer = ?layer, tenant = %_ctx.tenant_id.as_str()))]
     async fn get(
         &self,
+        _ctx: mk_core::types::TenantContext,
         layer: KnowledgeLayer,
         path: &str
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
@@ -185,8 +194,13 @@ impl KnowledgeRepository for GitRepository {
         }))
     }
 
-    #[tracing::instrument(skip(self, entry), fields(path = %entry.path, layer = ?entry.layer))]
-    async fn store(&self, entry: KnowledgeEntry, message: &str) -> Result<String, Self::Error> {
+    #[tracing::instrument(skip(self, _ctx, entry), fields(path = %entry.path, layer = ?entry.layer, tenant = %_ctx.tenant_id.as_str()))]
+    async fn store(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        entry: KnowledgeEntry,
+        message: &str
+    ) -> Result<String, Self::Error> {
         let full_path = self.resolve_path(entry.layer, &entry.path);
         if let Some(parent) = full_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
@@ -198,6 +212,7 @@ impl KnowledgeRepository for GitRepository {
 
     async fn list(
         &self,
+        ctx: mk_core::types::TenantContext,
         layer: KnowledgeLayer,
         prefix: &str
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
@@ -224,7 +239,9 @@ impl KnowledgeRepository for GitRepository {
                 .map_err(|_| RepositoryError::InvalidPath(path.to_string_lossy().into_owned()))?;
 
             if relative_path.to_string_lossy().starts_with(prefix)
-                && let Some(ke) = self.get(layer, &relative_path.to_string_lossy()).await?
+                && let Some(ke) = self
+                    .get(ctx.clone(), layer, &relative_path.to_string_lossy())
+                    .await?
             {
                 entries.push(ke);
             }
@@ -235,6 +252,7 @@ impl KnowledgeRepository for GitRepository {
 
     async fn delete(
         &self,
+        _ctx: mk_core::types::TenantContext,
         layer: KnowledgeLayer,
         path: &str,
         message: &str
@@ -250,13 +268,14 @@ impl KnowledgeRepository for GitRepository {
 
     async fn search(
         &self,
+        ctx: mk_core::types::TenantContext,
         query: &str,
         layers: Vec<KnowledgeLayer>,
         limit: usize
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         let mut results = Vec::new();
         for layer in layers {
-            let entries = self.list(layer, "").await?;
+            let entries = self.list(ctx.clone(), layer, "").await?;
             for entry in entries {
                 if entry.content.contains(query) || entry.path.contains(query) {
                     results.push(entry);
@@ -283,6 +302,9 @@ mod tests {
     async fn test_git_repository_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         let dir = tempdir()?;
         let repo = GitRepository::new(dir.path())?;
+        let tenant_id = mk_core::types::TenantId::new("c1".into()).unwrap();
+        let user_id = mk_core::types::UserId::new("u1".into()).unwrap();
+        let ctx = mk_core::types::TenantContext::new(tenant_id, user_id);
 
         let entry = KnowledgeEntry {
             path: "test.md".to_string(),
@@ -296,18 +318,26 @@ mod tests {
             updated_at: chrono::Utc::now().timestamp()
         };
 
-        repo.store(entry.clone(), "initial commit").await?;
+        repo.store(ctx.clone(), entry.clone(), "initial commit")
+            .await?;
 
-        let retrieved = repo.get(KnowledgeLayer::Project, "test.md").await?;
+        let retrieved = repo
+            .get(ctx.clone(), KnowledgeLayer::Project, "test.md")
+            .await?;
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().content, "hello world");
 
-        let list = repo.list(KnowledgeLayer::Project, "").await?;
+        let list = repo.list(ctx.clone(), KnowledgeLayer::Project, "").await?;
         assert_eq!(list.len(), 1);
 
-        repo.delete(KnowledgeLayer::Project, "test.md", "delete file")
-            .await?;
-        let after_delete = repo.get(KnowledgeLayer::Project, "test.md").await?;
+        repo.delete(
+            ctx.clone(),
+            KnowledgeLayer::Project,
+            "test.md",
+            "delete file"
+        )
+        .await?;
+        let after_delete = repo.get(ctx, KnowledgeLayer::Project, "test.md").await?;
         assert!(after_delete.is_none());
 
         Ok(())

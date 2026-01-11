@@ -7,7 +7,7 @@ use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{
     ConstraintOperator, ConstraintSeverity, ConstraintTarget, KnowledgeEntry, KnowledgeLayer,
-    KnowledgeStatus, KnowledgeType, Policy, PolicyRule
+    KnowledgeStatus, KnowledgeType, Policy, PolicyRule, TenantContext, TenantId
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -55,33 +55,52 @@ struct MockRepo;
 #[async_trait::async_trait]
 impl KnowledgeRepository for MockRepo {
     type Error = RepositoryError;
-    async fn store(&self, _e: KnowledgeEntry, _m: &str) -> Result<String, Self::Error> {
+    async fn store(
+        &self,
+        _ctx: TenantContext,
+        _e: KnowledgeEntry,
+        _m: &str
+    ) -> Result<String, Self::Error> {
         Ok("hash".into())
     }
     async fn get(
         &self,
+        _ctx: TenantContext,
         _l: KnowledgeLayer,
         _p: &str
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
         Ok(None)
     }
-    async fn list(&self, _l: KnowledgeLayer, _p: &str) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+    async fn list(
+        &self,
+        _ctx: TenantContext,
+        _l: KnowledgeLayer,
+        _p: &str
+    ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         Ok(vec![])
     }
-    async fn delete(&self, _l: KnowledgeLayer, _p: &str, _m: &str) -> Result<String, Self::Error> {
+    async fn delete(
+        &self,
+        _ctx: TenantContext,
+        _l: KnowledgeLayer,
+        _p: &str,
+        _m: &str
+    ) -> Result<String, Self::Error> {
         Ok("hash".into())
     }
-    async fn get_head_commit(&self) -> Result<Option<String>, Self::Error> {
+    async fn get_head_commit(&self, _ctx: TenantContext) -> Result<Option<String>, Self::Error> {
         Ok(Some("head".into()))
     }
     async fn get_affected_items(
         &self,
+        _ctx: TenantContext,
         _f: &str
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         Ok(vec![])
     }
     async fn search(
         &self,
+        _ctx: TenantContext,
         _q: &str,
         _l: Vec<KnowledgeLayer>,
         _li: usize
@@ -96,10 +115,17 @@ impl KnowledgeRepository for MockRepo {
 struct MockPersister;
 #[async_trait::async_trait]
 impl SyncStatePersister for MockPersister {
-    async fn load(&self) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
+    async fn load(
+        &self,
+        _tenant_id: &TenantId
+    ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         Ok(SyncState::default())
     }
-    async fn save(&self, _s: &SyncState) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn save(
+        &self,
+        _tenant_id: &TenantId,
+        _s: &SyncState
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
 }
@@ -134,9 +160,13 @@ async fn test_sync_federation_conflict_recording() {
     .await
     .unwrap();
 
-    sync_manager.sync_federation(fed.as_ref()).await.unwrap();
+    sync_manager
+        .sync_federation(TenantContext::default(), fed.as_ref())
+        .await
+        .unwrap();
 
-    let state = sync_manager.get_state().await;
+    let ctx = TenantContext::default();
+    let state = sync_manager.get_state(&ctx.tenant_id).await.unwrap();
     assert_eq!(state.federation_conflicts.len(), 1);
     assert_eq!(state.federation_conflicts[0].upstream_id, "hub-1");
     assert!(state.federation_conflicts[0].reason.contains("conflict"));
@@ -184,7 +214,9 @@ async fn test_sync_governance_telemetry() {
     };
 
     let mut state = SyncState::default();
-    let _ = sync_manager.sync_entry(&entry, &mut state).await;
+    let _ = sync_manager
+        .sync_entry(TenantContext::default(), &entry, &mut state)
+        .await;
 
     assert_eq!(state.stats.total_governance_blocks, 1);
     assert_eq!(state.failed_items.len(), 1);

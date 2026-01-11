@@ -30,7 +30,7 @@ pub struct JsonRpcResponse {
     pub error: Option<JsonRpcError>
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonRpcError {
     pub code: i32,
     pub message: String,
@@ -193,6 +193,19 @@ impl McpServer {
                     }
                 };
 
+                let tenant_context: mk_core::types::TenantContext =
+                    match serde_json::from_value(params["tenantContext"].clone()) {
+                        Ok(ctx) => ctx,
+                        Err(_) => {
+                            return JsonRpcResponse {
+                                jsonrpc: "2.0".to_string(),
+                                id: request.id,
+                                result: None,
+                                error: Some(JsonRpcError::invalid_params("Missing tenant context"))
+                            };
+                        }
+                    };
+
                 let name = match params["name"].as_str() {
                     Some(n) => n,
                     None => {
@@ -208,7 +221,47 @@ impl McpServer {
                 Span::current().record("tool_name", name);
                 info!(tool = %name, "Calling tool");
 
-                let tool_params = params["arguments"].clone();
+                let mut tool_params = params["arguments"].clone();
+                if tool_params.is_null() {
+                    tool_params = serde_json::json!({});
+                }
+
+                if let Some(obj) = tool_params.as_object_mut() {
+                    obj.insert(
+                        "tenant_context".to_string(),
+                        serde_json::to_value(&tenant_context).unwrap()
+                    );
+                } else {
+                    tool_params = serde_json::json!({
+                        "tenant_context": tenant_context
+                    });
+                }
+
+                if let Some(obj) = tool_params.as_object_mut() {
+                    obj.insert(
+                        "tenantContext".to_string(),
+                        serde_json::to_value(&tenant_context).unwrap()
+                    );
+                } else {
+                    tool_params = serde_json::json!({
+                        "tenantContext": tenant_context
+                    });
+                }
+
+                if let Some(obj) = tool_params.as_object_mut() {
+                    obj.insert(
+                        "tenantContext".to_string(),
+                        serde_json::to_value(&tenant_context).unwrap()
+                    );
+                }
+
+                // Inject tenantContext into arguments for the tool to use
+                if let Some(obj) = tool_params.as_object_mut() {
+                    obj.insert(
+                        "tenantContext".to_string(),
+                        serde_json::to_value(&tenant_context).unwrap()
+                    );
+                }
 
                 match self.registry.call(name, tool_params).await {
                     Ok(result) => {
@@ -268,6 +321,7 @@ mod tests {
         type Error = knowledge::repository::RepositoryError;
         async fn store(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: KnowledgeEntry,
             _: &str
         ) -> std::result::Result<String, Self::Error> {
@@ -275,6 +329,7 @@ mod tests {
         }
         async fn get(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: KnowledgeLayer,
             _: &str
         ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
@@ -282,6 +337,7 @@ mod tests {
         }
         async fn list(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: KnowledgeLayer,
             _: &str
         ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
@@ -289,23 +345,29 @@ mod tests {
         }
         async fn delete(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: KnowledgeLayer,
             _: &str,
             _: &str
         ) -> std::result::Result<String, Self::Error> {
             Ok("hash".into())
         }
-        async fn get_head_commit(&self) -> std::result::Result<Option<String>, Self::Error> {
+        async fn get_head_commit(
+            &self,
+            _ctx: mk_core::types::TenantContext
+        ) -> std::result::Result<Option<String>, Self::Error> {
             Ok(None)
         }
         async fn get_affected_items(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: &str
         ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
             Ok(vec![])
         }
         async fn search(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: &str,
             _: Vec<KnowledgeLayer>,
             _: usize
@@ -321,13 +383,15 @@ mod tests {
     #[async_trait::async_trait]
     impl SyncStatePersister for MockPersister {
         async fn load(
-            &self
+            &self,
+            _tenant_id: &mk_core::types::TenantId
         ) -> std::result::Result<sync::state::SyncState, Box<dyn std::error::Error + Send + Sync>>
         {
             Ok(sync::state::SyncState::default())
         }
         async fn save(
             &self,
+            _tenant_id: &mk_core::types::TenantId,
             _: &sync::state::SyncState
         ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
@@ -423,6 +487,10 @@ mod tests {
             id: json!(1),
             method: "tools/call".to_string(),
             params: Some(json!({
+                "tenantContext": {
+                    "tenantId": "c1",
+                    "userId": "u1"
+                },
                 "name": "non_existent_tool",
                 "arguments": {}
             }))
@@ -431,6 +499,56 @@ mod tests {
         let response = server.handle_request(request).await;
         assert!(response.error.is_some());
         assert_eq!(response.error.unwrap().code, -32000);
+    }
+
+    #[tokio::test]
+    async fn test_extract_tenant_context() {
+        let server = setup_server().await;
+
+        let params = json!({
+            "tenantContext": {
+                "tenantId": "company_1",
+                "userId": "user_1"
+            },
+            "name": "memory_add",
+            "arguments": {
+                "content": "test"
+            }
+        });
+
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "tools/call".to_string(),
+            params: Some(params)
+        };
+
+        let _response = server.handle_request(request).await;
+    }
+
+    #[tokio::test]
+    async fn test_extract_tenant_context_missing() {
+        let server = setup_server().await;
+
+        let params = json!({
+            "name": "memory_add",
+            "arguments": {
+                "content": "test"
+            }
+        });
+
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "tools/call".to_string(),
+            params: Some(params)
+        };
+
+        let response = server.handle_request(request).await;
+        assert!(response.error.is_some());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, -32602);
+        assert!(err.message.contains("Missing tenant context"));
     }
 
     #[tokio::test]

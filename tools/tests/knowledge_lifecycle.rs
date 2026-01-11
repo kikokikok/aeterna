@@ -91,7 +91,11 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         author: None,
         updated_at: chrono::Utc::now().timestamp()
     };
-    repo.store(entry, "add auth spec").await?;
+    let tenant_id = mk_core::types::TenantId::new("t1".into()).unwrap();
+    let user_id = mk_core::types::UserId::new("u1".into()).unwrap();
+    let ctx = mk_core::types::TenantContext::new(tenant_id, user_id);
+
+    repo.store(ctx.clone(), entry, "add auth spec").await?;
 
     // WHEN we query knowledge via MCP tool
     let request = JsonRpcRequest {
@@ -99,6 +103,10 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         id: json!(1),
         method: "tools/call".to_string(),
         params: Some(json!({
+            "tenantContext": {
+                "tenantId": "t1",
+                "userId": "u1"
+            },
             "name": "knowledge_query",
             "arguments": {
                 "query": "Auth",
@@ -125,6 +133,10 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         id: json!(2),
         method: "tools/call".to_string(),
         params: Some(json!({
+            "tenantContext": {
+                "tenantId": "t1",
+                "userId": "u1"
+            },
             "name": "knowledge_get",
             "arguments": {
                 "path": "specs/auth.md",

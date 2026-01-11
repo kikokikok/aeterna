@@ -11,7 +11,7 @@ To support 300+ developers across multiple teams/projects, Aeterna needs enterpr
 ## What Changes
 
 - **BREAKING**: Add tenant isolation to all memory and knowledge operations
-- Add ReBAC (Relationship-Based Access Control) using OpenFGA
+- Add ReBAC (Relationship-Based Access Control) using Permit.io + OPA/Cedar (self-hosted)
 - Add governance roles: Developer, Tech Lead, Architect, Admin
 - Add drift detection engine with semantic similarity analysis
 - Add scheduled batch jobs for complex drift analysis
@@ -23,4 +23,4 @@ To support 300+ developers across multiple teams/projects, Aeterna needs enterpr
 - Affected specs: `memory-system`, `knowledge-repository`, `sync-bridge`
 - New spec: `multi-tenant-governance`
 - Affected code: All crates require tenant context
-- External dependencies: OpenFGA (or SpiceDB)
+- External dependencies: Permit.io SDK, OPA engine (or Cedar)

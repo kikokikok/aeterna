@@ -1,6 +1,7 @@
 use crate::tools::Tool;
 use async_trait::async_trait;
 use memory::manager::MemoryManager;
+use mk_core::types::TenantContext;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -22,7 +23,43 @@ pub struct MemoryAddParams {
     pub content: String,
     pub layer: String,
     #[serde(default)]
-    pub metadata: serde_json::Map<String, Value>
+    pub metadata: serde_json::Map<String, Value>,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+pub struct MemorySearchParams {
+    pub query: String,
+    pub limit: Option<usize>,
+    pub threshold: Option<f32>,
+    #[serde(default)]
+    pub filters: serde_json::Map<String, Value>,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+pub struct MemoryDeleteParams {
+    pub memory_id: String,
+    pub layer: String,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum CloseTarget {
+    Session,
+    Agent
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+pub struct MemoryCloseParams {
+    pub id: String,
+    pub target: CloseTarget,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>
 }
 
 #[async_trait]
@@ -41,7 +78,8 @@ impl Tool for MemoryAddTool {
             "properties": {
                 "content": { "type": "string" },
                 "layer": { "type": "string" },
-                "metadata": { "type": "object" }
+                "metadata": { "type": "object" },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
             },
             "required": ["content", "layer"]
         })
@@ -50,6 +88,8 @@ impl Tool for MemoryAddTool {
     async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let p: MemoryAddParams = serde_json::from_value(params)?;
         p.validate()?;
+
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
 
         let layer = match p.layer.to_lowercase().as_str() {
             "agent" => mk_core::types::MemoryLayer::Agent,
@@ -71,7 +111,7 @@ impl Tool for MemoryAddTool {
             updated_at: chrono::Utc::now().timestamp()
         };
 
-        let id = self.memory_manager.add_to_layer(layer, entry).await?;
+        let id = self.memory_manager.add_to_layer(ctx, layer, entry).await?;
         Ok(json!({ "success": true, "memoryId": id }))
     }
 }
@@ -84,15 +124,6 @@ impl MemorySearchTool {
     pub fn new(memory_manager: Arc<MemoryManager>) -> Self {
         Self { memory_manager }
     }
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Validate)]
-pub struct MemorySearchParams {
-    pub query: String,
-    pub limit: Option<usize>,
-    pub threshold: Option<f32>,
-    #[serde(default)]
-    pub filters: serde_json::Map<String, Value>
 }
 
 #[async_trait]
@@ -112,7 +143,8 @@ impl Tool for MemorySearchTool {
                 "query": { "type": "string" },
                 "limit": { "type": "integer" },
                 "threshold": { "type": "number" },
-                "filters": { "type": "object" }
+                "filters": { "type": "object" },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
             },
             "required": ["query"]
         })
@@ -122,13 +154,15 @@ impl Tool for MemorySearchTool {
         let p: MemorySearchParams = serde_json::from_value(params)?;
         p.validate()?;
 
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+
         let limit = p.limit.unwrap_or(10);
         let threshold = p.threshold.unwrap_or(0.0);
-        let filters = p.filters.into_iter().collect();
+        let filters: std::collections::HashMap<String, Value> = p.filters.into_iter().collect();
 
         let results = self
             .memory_manager
-            .search_text_with_threshold(&p.query, limit, threshold, filters)
+            .search_text_with_threshold(ctx, &p.query, limit, threshold, filters)
             .await?;
 
         Ok(json!({
@@ -149,12 +183,6 @@ impl MemoryDeleteTool {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Validate)]
-pub struct MemoryDeleteParams {
-    pub memory_id: String,
-    pub layer: String
-}
-
 #[async_trait]
 impl Tool for MemoryDeleteTool {
     fn name(&self) -> &str {
@@ -170,7 +198,8 @@ impl Tool for MemoryDeleteTool {
             "type": "object",
             "properties": {
                 "id": { "type": "string" },
-                "layer": { "type": "string" }
+                "layer": { "type": "string" },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
             },
             "required": ["id", "layer"]
         })
@@ -179,6 +208,8 @@ impl Tool for MemoryDeleteTool {
     async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let p: MemoryDeleteParams = serde_json::from_value(params)?;
         p.validate()?;
+
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
 
         let layer = match p.layer.to_lowercase().as_str() {
             "agent" => mk_core::types::MemoryLayer::Agent,
@@ -191,7 +222,7 @@ impl Tool for MemoryDeleteTool {
             _ => return Err(format!("Unknown layer: {}", p.layer).into())
         };
         self.memory_manager
-            .delete_from_layer(layer, &p.memory_id)
+            .delete_from_layer(ctx, layer, &p.memory_id)
             .await?;
         Ok(json!({ "success": true }))
     }
@@ -205,19 +236,6 @@ impl MemoryCloseTool {
     pub fn new(memory_manager: Arc<MemoryManager>) -> Self {
         Self { memory_manager }
     }
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Validate)]
-pub struct MemoryCloseParams {
-    pub id: String,
-    pub target: CloseTarget
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Debug)]
-#[serde(rename_all = "camelCase")]
-pub enum CloseTarget {
-    Session,
-    Agent
 }
 
 #[async_trait]
@@ -239,7 +257,8 @@ impl Tool for MemoryCloseTool {
                     "type": "string",
                     "enum": ["session", "agent"],
                     "description": "What to close"
-                }
+                },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
             },
             "required": ["id", "target"]
         })
@@ -249,9 +268,11 @@ impl Tool for MemoryCloseTool {
         let p: MemoryCloseParams = serde_json::from_value(params)?;
         p.validate()?;
 
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+
         match p.target {
-            CloseTarget::Session => self.memory_manager.close_session(&p.id).await?,
-            CloseTarget::Agent => self.memory_manager.close_agent(&p.id).await?
+            CloseTarget::Session => self.memory_manager.close_session(ctx, &p.id).await?,
+            CloseTarget::Agent => self.memory_manager.close_agent(ctx, &p.id).await?
         }
 
         Ok(json!({

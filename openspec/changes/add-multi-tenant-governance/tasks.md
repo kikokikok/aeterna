@@ -2,17 +2,21 @@
 
 ## 1. Core Tenant Infrastructure
 
-- [ ] 1.1 Create `TenantId`, `UserId`, `TenantContext` types in `core/`
+- [x] 1.1 Create `TenantId`, `UserId`, `TenantContext` types in `mk_core/`
 - [ ] 1.2 Add `HierarchyPath` type for Company > Org > Team > Project navigation
 - [ ] 1.3 Create `Role` enum (Developer, TechLead, Architect, Admin, Agent)
 - [ ] 1.4 Add tenant context extraction middleware for API layer
-- [ ] 1.5 Update all repository traits to accept `TenantContext` parameter
+- [x] 1.5 Update `SyncStatePersister` trait to accept `TenantId` parameter
+- [x] 1.6 Update `SyncManager` to store per-tenant states (`HashMap<TenantId, SyncState>`)
+- [x] 1.7 Update all `MockPersister` implementations across test files
+- [x] 1.8 Update memory tools to require `TenantContext` in API calls
+- [ ] 1.9 Update remaining repository traits (`KnowledgeRepository`, `MemoryProvider`) to enforce tenant context
 
-## 2. OpenFGA Integration
+## 2. Permit.io + OPA/Cedar Integration
 
-- [ ] 2.1 Add `openfga-rs` dependency to workspace
-- [ ] 2.2 Create OpenFGA authorization model (FGA DSL) per design doc
-- [ ] 2.3 Implement `AuthorizationService` trait with OpenFGA backend
+- [ ] 2.1 Add `permit-io-rs` SDK and OPA client dependencies
+- [ ] 2.2 Create OPA/Cedar policy files for authorization model per design doc
+- [ ] 2.3 Implement `AuthorizationService` trait with Permit.io + OPA/Cedar backend
 - [ ] 2.4 Create relationship management APIs (add/remove user roles)
 - [ ] 2.5 Add authorization checks to memory and knowledge operations
 - [ ] 2.6 Implement agent-as-user delegation for LLM architects
@@ -68,7 +72,7 @@
 ## 9. Testing
 
 - [ ] 9.1 Unit tests for tenant isolation
-- [ ] 9.2 Integration tests for OpenFGA authorization
+- [ ] 9.2 Integration tests for Permit.io + OPA/Cedar authorization
 - [ ] 9.3 Tests for hierarchy inheritance
 - [ ] 9.4 Tests for drift detection accuracy
 - [ ] 9.5 End-to-end tests for governance workflow
@@ -77,5 +81,5 @@
 
 - [ ] 10.1 Update API documentation with governance endpoints
 - [ ] 10.2 Create deployment guide for different modes
-- [ ] 10.3 Document OpenFGA model and role definitions
+- [ ] 10.3 Document Permit.io + OPA/Cedar policy model and role definitions
 - [ ] 10.4 Add troubleshooting guide for common governance issues

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
 use mk_core::traits::KnowledgeRepository;
-use mk_core::types::{KnowledgeEntry, KnowledgeLayer, MemoryLayer};
+use mk_core::types::{KnowledgeEntry, KnowledgeLayer, MemoryLayer, TenantId};
 use serde_json::json;
 use std::sync::Arc;
 use sync::bridge::SyncManager;
@@ -20,18 +20,25 @@ impl KnowledgeRepository for MockKnowledgeRepo {
 
     async fn get(
         &self,
+        _ctx: mk_core::types::TenantContext,
         _layer: KnowledgeLayer,
         _path: &str
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
         Ok(None)
     }
 
-    async fn store(&self, _entry: KnowledgeEntry, _message: &str) -> Result<String, Self::Error> {
+    async fn store(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _entry: KnowledgeEntry,
+        _message: &str
+    ) -> Result<String, Self::Error> {
         Ok("hash".to_string())
     }
 
     async fn list(
         &self,
+        _ctx: mk_core::types::TenantContext,
         _layer: KnowledgeLayer,
         _prefix: &str
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
@@ -40,6 +47,7 @@ impl KnowledgeRepository for MockKnowledgeRepo {
 
     async fn delete(
         &self,
+        _ctx: mk_core::types::TenantContext,
         _layer: KnowledgeLayer,
         _path: &str,
         _message: &str
@@ -47,12 +55,16 @@ impl KnowledgeRepository for MockKnowledgeRepo {
         Ok("hash".to_string())
     }
 
-    async fn get_head_commit(&self) -> Result<Option<String>, Self::Error> {
+    async fn get_head_commit(
+        &self,
+        _ctx: mk_core::types::TenantContext
+    ) -> Result<Option<String>, Self::Error> {
         Ok(Some("head".to_string()))
     }
 
     async fn get_affected_items(
         &self,
+        _ctx: mk_core::types::TenantContext,
         _since_commit: &str
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         Ok(vec![])
@@ -60,6 +72,7 @@ impl KnowledgeRepository for MockKnowledgeRepo {
 
     async fn search(
         &self,
+        _ctx: mk_core::types::TenantContext,
         _query: &str,
         _layers: Vec<KnowledgeLayer>,
         _limit: usize
@@ -76,11 +89,15 @@ struct MockPersister;
 
 #[async_trait]
 impl SyncStatePersister for MockPersister {
-    async fn load(&self) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
+    async fn load(
+        &self,
+        _tenant_id: &TenantId
+    ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         Ok(SyncState::default())
     }
     async fn save(
         &self,
+        _tenant_id: &TenantId,
         _state: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
@@ -123,6 +140,10 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
 
     let response = langchain
         .handle_mcp_request(json!({
+            "tenantContext": {
+                "tenantId": "c1",
+                "userId": "u1"
+            },
             "name": "memory_add",
             "arguments": {
                 "content": "Integrated test",

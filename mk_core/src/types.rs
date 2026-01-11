@@ -1,6 +1,336 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::str::FromStr;
 use validator::Validate;
+
+/// Tenant identifier (company-level isolation boundary)
+///
+/// Company is the hard tenant boundary for multi-tenancy.
+/// Each company has logical isolation for all data.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+pub struct TenantId(String);
+
+impl TenantId {
+    /// Creates a new TenantId
+    ///
+    /// # Errors
+    /// Returns error if the ID is empty or exceeds 100 characters
+    #[must_use]
+    pub fn new(id: String) -> Option<Self> {
+        if id.is_empty() || id.len() > 100 {
+            return None;
+        }
+        Some(Self(id))
+    }
+
+    /// Returns the inner string value
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Consumes and returns the inner string value
+    #[must_use]
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl Default for TenantId {
+    fn default() -> Self {
+        Self("default-tenant".to_string())
+    }
+}
+
+impl fmt::Display for TenantId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for TenantId {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        TenantId::new(s.to_string()).ok_or("Invalid tenant ID")
+    }
+}
+
+/// User identifier within a tenant
+///
+/// Represents a unique user across the system.
+/// Users belong to exactly one tenant.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+pub struct UserId(String);
+
+impl UserId {
+    /// Creates a new UserId
+    ///
+    /// # Errors
+    /// Returns error if the ID is empty or exceeds 100 characters
+    #[must_use]
+    pub fn new(id: String) -> Option<Self> {
+        if id.is_empty() || id.len() > 100 {
+            return None;
+        }
+        Some(Self(id))
+    }
+
+    /// Returns the inner string value
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Consumes and returns the inner string value
+    #[must_use]
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl Default for UserId {
+    fn default() -> Self {
+        Self("default-user".to_string())
+    }
+}
+
+impl fmt::Display for UserId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for UserId {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        UserId::new(s.to_string()).ok_or("Invalid user ID")
+    }
+}
+
+/// Tenant context for all operations
+///
+/// Provides the tenant boundary context for all memory and knowledge
+/// operations. All operations must include this context for proper multi-tenant
+/// isolation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantContext {
+    /// The tenant (company) ID - hard boundary
+    #[validate(custom(function = "validate_tenant_id"))]
+    pub tenant_id: TenantId,
+
+    /// The user ID performing the operation
+    #[validate(custom(function = "validate_user_id_inner"))]
+    pub user_id: UserId,
+
+    /// Optional agent ID (for LLM agents acting on behalf of users)
+    pub agent_id: Option<String>
+}
+
+impl TenantContext {
+    /// Creates a new TenantContext
+    #[must_use]
+    pub fn new(tenant_id: TenantId, user_id: UserId) -> Self {
+        Self {
+            tenant_id,
+            user_id,
+            agent_id: None
+        }
+    }
+
+    /// Creates a TenantContext with agent delegation
+    #[must_use]
+    pub fn with_agent(tenant_id: TenantId, user_id: UserId, agent_id: String) -> Self {
+        Self {
+            tenant_id,
+            user_id,
+            agent_id: Some(agent_id)
+        }
+    }
+}
+
+impl Default for TenantContext {
+    fn default() -> Self {
+        Self {
+            tenant_id: TenantId::default(),
+            user_id: UserId::default(),
+            agent_id: None
+        }
+    }
+}
+
+fn validate_tenant_id(_: &TenantId) -> Result<(), validator::ValidationError> {
+    // TenantId::new() already validates, so this is always ok
+    Ok(())
+}
+
+fn validate_user_id_inner(_: &UserId) -> Result<(), validator::ValidationError> {
+    // UserId::new() already validates, so this is always ok
+    Ok(())
+}
+
+/// Hierarchy path for Company > Org > Team > Project navigation
+///
+/// Represents the organizational hierarchy path for a resource or user.
+/// Each level is optional depending on where in the hierarchy the entity
+/// exists.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct HierarchyPath {
+    /// Company ID (tenant boundary)
+    pub company_id: String,
+
+    /// Organization ID within company
+    pub org_id: Option<String>,
+
+    /// Team ID within organization
+    pub team_id: Option<String>,
+
+    /// Project ID within team
+    pub project_id: Option<String>
+}
+
+impl HierarchyPath {
+    /// Creates a new HierarchyPath at company level
+    #[must_use]
+    pub fn company(company_id: String) -> Self {
+        Self {
+            company_id,
+            org_id: None,
+            team_id: None,
+            project_id: None
+        }
+    }
+
+    /// Creates a new HierarchyPath at organization level
+    #[must_use]
+    pub fn org(company_id: String, org_id: String) -> Self {
+        Self {
+            company_id,
+            org_id: Some(org_id),
+            team_id: None,
+            project_id: None
+        }
+    }
+
+    /// Creates a new HierarchyPath at team level
+    #[must_use]
+    pub fn team(company_id: String, org_id: String, team_id: String) -> Self {
+        Self {
+            company_id,
+            org_id: Some(org_id),
+            team_id: Some(team_id),
+            project_id: None
+        }
+    }
+
+    /// Creates a new HierarchyPath at project level
+    #[must_use]
+    pub fn project(
+        company_id: String,
+        org_id: String,
+        team_id: String,
+        project_id: String
+    ) -> Self {
+        Self {
+            company_id,
+            org_id: Some(org_id),
+            team_id: Some(team_id),
+            project_id: Some(project_id)
+        }
+    }
+
+    /// Returns the depth level (1=company, 2=org, 3=team, 4=project)
+    #[must_use]
+    pub fn depth(&self) -> u8 {
+        if self.project_id.is_some() {
+            4
+        } else if self.team_id.is_some() {
+            3
+        } else if self.org_id.is_some() {
+            2
+        } else {
+            1
+        }
+    }
+
+    /// Returns string representation of hierarchy path
+    #[must_use]
+    pub fn path_string(&self) -> String {
+        let mut parts: Vec<String> = vec![self.company_id.clone()];
+        self.org_id.as_ref().map(|id| parts.push(id.clone()));
+        self.team_id.as_ref().map(|id| parts.push(id.clone()));
+        self.project_id.as_ref().map(|id| parts.push(id.clone()));
+        parts.join(" > ")
+    }
+}
+
+/// Governance roles for access control
+///
+/// Defines hierarchical roles for multi-tenant governance with scope-based
+/// permissions.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    strum::EnumString,
+    strum::Display,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum Role {
+    /// Project-level contributor (add memories, propose knowledge, view)
+    Developer,
+
+    /// Team-level leader (approve promotions, manage team knowledge)
+    TechLead,
+
+    /// Organization-level architect (reject proposals, force corrections, drift
+    /// review)
+    Architect,
+
+    /// Company-level admin (full access, tenant management)
+    Admin,
+
+    /// Agent acting on behalf of user (inherits user's role)
+    Agent
+}
+
+impl Role {
+    /// Returns role precedence value (4=highest, 1=lowest)
+    #[must_use]
+    pub fn precedence(&self) -> u8 {
+        match self {
+            Role::Admin => 4,
+            Role::Architect => 3,
+            Role::TechLead => 2,
+            Role::Developer => 1,
+            Role::Agent => 0
+        }
+    }
+
+    /// Returns display name for UI
+    #[must_use]
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Role::Developer => "Developer",
+            Role::TechLead => "Tech Lead",
+            Role::Architect => "Architect",
+            Role::Admin => "Admin",
+            Role::Agent => "Agent"
+        }
+    }
+}
 
 /// Knowledge types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
@@ -689,25 +1019,135 @@ mod tests {
     }
 
     #[test]
-    fn test_memory_layer_from_str_comprehensive() {
+    fn test_role_serialization() {
+        let architect = Role::Architect;
+        let json = serde_json::to_string(&architect).unwrap();
+        assert_eq!(json, "\"architect\"");
+
+        let deserialized: Role = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, Role::Architect);
+    }
+
+    #[test]
+    fn test_role_precedence() {
+        assert_eq!(Role::Admin.precedence(), 4);
+        assert_eq!(Role::Architect.precedence(), 3);
+        assert_eq!(Role::TechLead.precedence(), 2);
+        assert_eq!(Role::Developer.precedence(), 1);
+        assert_eq!(Role::Agent.precedence(), 0);
+    }
+
+    #[test]
+    fn test_role_display_name() {
+        assert_eq!(Role::Developer.display_name(), "Developer");
+        assert_eq!(Role::TechLead.display_name(), "Tech Lead");
+        assert_eq!(Role::Architect.display_name(), "Architect");
+        assert_eq!(Role::Admin.display_name(), "Admin");
+        assert_eq!(Role::Agent.display_name(), "Agent");
+    }
+
+    #[test]
+    fn test_tenant_id_validation() {
+        assert!(TenantId::new("comp_123".to_string()).is_some());
+        assert!(TenantId::new("".to_string()).is_none());
+        assert!(TenantId::new("a".repeat(101)).is_none());
+    }
+
+    #[test]
+    fn test_user_id_validation() {
+        assert!(UserId::new("user_456".to_string()).is_some());
+        assert!(UserId::new("".to_string()).is_none());
+        assert!(UserId::new("a".repeat(101)).is_none());
+    }
+
+    #[test]
+    fn test_hierarchy_path_depth() {
+        let company = HierarchyPath::company("c1".to_string());
+        assert_eq!(company.depth(), 1);
+
+        let org = HierarchyPath::org("c1".to_string(), "o1".to_string());
+        assert_eq!(org.depth(), 2);
+
+        let team = HierarchyPath::team("c1".to_string(), "o1".to_string(), "t1".to_string());
+        assert_eq!(team.depth(), 3);
+
+        let project = HierarchyPath::project(
+            "c1".to_string(),
+            "o1".to_string(),
+            "t1".to_string(),
+            "p1".to_string()
+        );
+        assert_eq!(project.depth(), 4);
+    }
+
+    #[test]
+    fn test_hierarchy_path_string() {
+        let project = HierarchyPath::project(
+            "c1".to_string(),
+            "o1".to_string(),
+            "t1".to_string(),
+            "p1".to_string()
+        );
+        assert_eq!(project.path_string(), "c1 > o1 > t1 > p1");
+    }
+
+    #[test]
+    fn test_tenant_context_creation() {
+        let tenant_id = TenantId::new("c1".to_string()).unwrap();
+        let user_id = UserId::new("u1".to_string()).unwrap();
+        let ctx = TenantContext::new(tenant_id, user_id);
+
+        assert_eq!(ctx.tenant_id.as_str(), "c1");
+        assert_eq!(ctx.user_id.as_str(), "u1");
+        assert!(ctx.agent_id.is_none());
+    }
+
+    #[test]
+    fn test_tenant_context_with_agent() {
+        let tenant_id = TenantId::new("c1".to_string()).unwrap();
+        let user_id = UserId::new("u1".to_string()).unwrap();
+        let ctx = TenantContext::with_agent(tenant_id, user_id, "a1".to_string());
+
+        assert_eq!(ctx.agent_id.unwrap(), "a1");
+    }
+
+    #[test]
+    fn test_tenant_id_display() {
+        let id = TenantId::new("c1".to_string()).unwrap();
+        assert_eq!(format!("{}", id), "c1");
+    }
+
+    #[test]
+    fn test_user_id_display() {
+        let id = UserId::new("u1".to_string()).unwrap();
+        assert_eq!(format!("{}", id), "u1");
+    }
+
+    #[test]
+    fn test_tenant_id_from_str() {
         use std::str::FromStr;
-        assert_eq!(MemoryLayer::from_str("Agent").unwrap(), MemoryLayer::Agent);
-        assert_eq!(MemoryLayer::from_str("User").unwrap(), MemoryLayer::User);
-        assert_eq!(
-            MemoryLayer::from_str("Session").unwrap(),
-            MemoryLayer::Session
-        );
-        assert_eq!(
-            MemoryLayer::from_str("Project").unwrap(),
-            MemoryLayer::Project
-        );
-        assert_eq!(MemoryLayer::from_str("Team").unwrap(), MemoryLayer::Team);
-        assert_eq!(MemoryLayer::from_str("Org").unwrap(), MemoryLayer::Org);
-        assert_eq!(
-            MemoryLayer::from_str("Company").unwrap(),
-            MemoryLayer::Company
-        );
-        assert!(MemoryLayer::from_str("Invalid").is_err());
-        assert!(MemoryLayer::from_str("").is_err());
+        let id = TenantId::from_str("c1").unwrap();
+        assert_eq!(id.as_str(), "c1");
+        assert!(TenantId::from_str("").is_err());
+    }
+
+    #[test]
+    fn test_user_id_from_str() {
+        use std::str::FromStr;
+        let id = UserId::from_str("u1").unwrap();
+        assert_eq!(id.as_str(), "u1");
+        assert!(UserId::from_str("").is_err());
+    }
+
+    #[test]
+    fn test_tenant_id_into_inner() {
+        let id = TenantId::new("c1".to_string()).unwrap();
+        assert_eq!(id.into_inner(), "c1");
+    }
+
+    #[test]
+    fn test_user_id_into_inner() {
+        let id = UserId::new("u1".to_string()).unwrap();
+        assert_eq!(id.into_inner(), "u1");
     }
 }

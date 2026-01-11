@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
-use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType};
+use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, TenantId};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,11 +16,15 @@ struct MockPersister;
 
 #[async_trait]
 impl SyncStatePersister for MockPersister {
-    async fn load(&self) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
+    async fn load(
+        &self,
+        _tenant_id: &TenantId
+    ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         Ok(SyncState::default())
     }
     async fn save(
         &self,
+        _tenant_id: &TenantId,
         _state: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
@@ -58,8 +62,19 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
     let sync_now_tool = SyncNowTool::new(sync_manager.clone());
     let sync_status_tool = SyncStatusTool::new(sync_manager.clone());
 
+    let tenant_id = mk_core::types::TenantId::new("t1".into()).unwrap();
+    let user_id = mk_core::types::UserId::new("u1".into()).unwrap();
+    let ctx = mk_core::types::TenantContext::new(tenant_id, user_id);
+
     // WHEN initial sync status is requested
-    let status_resp = sync_status_tool.call(json!({})).await?;
+    let status_resp = sync_status_tool
+        .call(json!({
+            "tenantContext": {
+                "tenantId": "t1",
+                "userId": "u1"
+            }
+        }))
+        .await?;
 
     // THEN it should be healthy and have zero stats
     assert!(status_resp["success"].as_bool().unwrap());
@@ -78,13 +93,28 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
         author: None,
         updated_at: chrono::Utc::now().timestamp()
     };
-    knowledge_repo.store(entry, "commit").await?;
+    knowledge_repo.store(ctx, entry, "commit").await?;
 
-    let sync_resp = sync_now_tool.call(json!({"force": false})).await?;
+    let sync_resp = sync_now_tool
+        .call(json!({
+            "force": false,
+            "tenantContext": {
+                "tenantId": "t1",
+                "userId": "u1"
+            }
+        }))
+        .await?;
     assert!(sync_resp["success"].as_bool().unwrap());
 
     // THEN status should reflect the sync
-    let status_resp = sync_status_tool.call(json!({})).await?;
+    let status_resp = sync_status_tool
+        .call(json!({
+            "tenantContext": {
+                "tenantId": "t1",
+                "userId": "u1"
+            }
+        }))
+        .await?;
     assert_eq!(status_resp["stats"]["totalSyncs"], 1);
     assert_eq!(status_resp["stats"]["totalItemsSynced"], 1);
 

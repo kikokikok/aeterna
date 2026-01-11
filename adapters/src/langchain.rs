@@ -48,6 +48,7 @@ impl EcosystemAdapter for LangChainAdapter {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing tool name"))?;
         let arguments = request["arguments"].clone();
+        let tenant_context = request["tenantContext"].clone();
 
         let mcp_request = json!({
             "jsonrpc": "2.0",
@@ -55,7 +56,8 @@ impl EcosystemAdapter for LangChainAdapter {
             "method": "tools/call",
             "params": {
                 "name": name,
-                "arguments": arguments
+                "arguments": arguments,
+                "tenantContext": tenant_context
             }
         });
 
@@ -98,6 +100,7 @@ mod tests {
         type Error = knowledge::repository::RepositoryError;
         async fn store(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: mk_core::types::KnowledgeEntry,
             _: &str
         ) -> std::result::Result<String, Self::Error> {
@@ -105,6 +108,7 @@ mod tests {
         }
         async fn get(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: mk_core::types::KnowledgeLayer,
             _: &str
         ) -> std::result::Result<Option<mk_core::types::KnowledgeEntry>, Self::Error> {
@@ -112,6 +116,7 @@ mod tests {
         }
         async fn list(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: mk_core::types::KnowledgeLayer,
             _: &str
         ) -> std::result::Result<Vec<mk_core::types::KnowledgeEntry>, Self::Error> {
@@ -119,17 +124,22 @@ mod tests {
         }
         async fn delete(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: mk_core::types::KnowledgeLayer,
             _: &str,
             _: &str
         ) -> std::result::Result<String, Self::Error> {
             Ok("hash".into())
         }
-        async fn get_head_commit(&self) -> std::result::Result<Option<String>, Self::Error> {
+        async fn get_head_commit(
+            &self,
+            _ctx: mk_core::types::TenantContext
+        ) -> std::result::Result<Option<String>, Self::Error> {
             Ok(None)
         }
         async fn get_affected_items(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: &str
         ) -> std::result::Result<Vec<(mk_core::types::KnowledgeLayer, String)>, Self::Error>
         {
@@ -137,6 +147,7 @@ mod tests {
         }
         async fn search(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: &str,
             _: Vec<mk_core::types::KnowledgeLayer>,
             _: usize
@@ -152,13 +163,15 @@ mod tests {
     #[async_trait::async_trait]
     impl sync::state_persister::SyncStatePersister for MockPersister {
         async fn load(
-            &self
+            &self,
+            _tenant_id: &mk_core::types::TenantId
         ) -> std::result::Result<sync::state::SyncState, Box<dyn std::error::Error + Send + Sync>>
         {
             Ok(sync::state::SyncState::default())
         }
         async fn save(
             &self,
+            _tenant_id: &mk_core::types::TenantId,
             _: &sync::state::SyncState
         ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
