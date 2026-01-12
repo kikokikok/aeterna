@@ -19,6 +19,10 @@ pub struct PostgresBackend {
 }
 
 impl PostgresBackend {
+    pub fn pool(&self) -> &Pool<Postgres> {
+        &self.pool
+    }
+
     pub async fn new(connection_url: &str) -> Result<Self, PostgresError> {
         let pool = Pool::connect(connection_url).await?;
         Ok(Self { pool })
@@ -81,10 +85,76 @@ impl PostgresBackend {
         .execute(&self.pool)
         .await?;
 
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS governance_events (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                event_type TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                payload JSONB NOT NULL,
+                timestamp BIGINT NOT NULL
+            )"
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS drift_results (
+                project_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                drift_score REAL NOT NULL,
+                violations JSONB NOT NULL,
+                timestamp BIGINT NOT NULL,
+                PRIMARY KEY (project_id, tenant_id, timestamp)
+            )"
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS job_status (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                job_name TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                status TEXT NOT NULL, -- 'running', 'completed', 'failed'
+                message TEXT,
+                started_at BIGINT NOT NULL,
+                finished_at BIGINT,
+                duration_ms BIGINT
+            )"
+        )
+        .execute(&self.pool)
+        .await?;
+
         Ok(())
     }
 
     pub async fn create_unit(&self, unit: &OrganizationalUnit) -> Result<(), PostgresError> {
+        if let Some(ref parent_id) = unit.parent_id {
+            let parent = self
+                .get_unit_by_id(parent_id)
+                .await?
+                .ok_or_else(|| PostgresError::NotFound(parent_id.clone()))?;
+
+            match (parent.unit_type, unit.unit_type) {
+                (UnitType::Company, UnitType::Organization) => {}
+                (UnitType::Organization, UnitType::Team) => {}
+                (UnitType::Team, UnitType::Project) => {}
+                _ => {
+                    return Err(PostgresError::Database(sqlx::Error::Decode(
+                        format!(
+                            "Invalid hierarchy: cannot create {:?} under {:?}",
+                            unit.unit_type, parent.unit_type
+                        )
+                        .into()
+                    )));
+                }
+            }
+        } else if unit.unit_type != UnitType::Company {
+            return Err(PostgresError::Database(sqlx::Error::Decode(
+                "Only Company units can be root units (no parent)".into()
+            )));
+        }
+
         sqlx::query(
             "INSERT INTO organizational_units (id, name, type, parent_id, tenant_id, metadata, \
              created_at, updated_at)
@@ -102,6 +172,48 @@ impl PostgresBackend {
         .await?;
 
         Ok(())
+    }
+
+    async fn get_unit_by_id(&self, id: &str) -> Result<Option<OrganizationalUnit>, PostgresError> {
+        let row = sqlx::query(
+            "SELECT id, name, type, parent_id, tenant_id, metadata, created_at, updated_at 
+             FROM organizational_units WHERE id = $1"
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            let unit_type_str: String = row.get("type");
+            let unit_type = match unit_type_str.as_str() {
+                "company" => UnitType::Company,
+                "organization" => UnitType::Organization,
+                "team" => UnitType::Team,
+                "project" => UnitType::Project,
+                _ => {
+                    return Err(PostgresError::Database(sqlx::Error::Decode(
+                        "Invalid unit type".into()
+                    )));
+                }
+            };
+
+            Ok(Some(OrganizationalUnit {
+                id: row.get("id"),
+                name: row.get("name"),
+                unit_type,
+                parent_id: row.get("parent_id"),
+                tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
+                    PostgresError::Database(sqlx::Error::Decode(
+                        format!("Invalid tenant_id: {}", e).into()
+                    ))
+                })?,
+                metadata: serde_json::from_value(row.get("metadata"))?,
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at")
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     pub async fn get_unit(
@@ -212,6 +324,67 @@ impl PostgresBackend {
                 INNER JOIN ancestors a ON u.id = a.parent_id AND u.tenant_id = a.tenant_id
             )
             SELECT * FROM ancestors WHERE id != $1"
+        )
+        .bind(id)
+        .bind(ctx.tenant_id.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut units = Vec::new();
+        for row in rows {
+            let unit_type_str: String = row.get("type");
+            let unit_type = match unit_type_str.as_str() {
+                "company" => UnitType::Company,
+                "organization" => UnitType::Organization,
+                "team" => UnitType::Team,
+                "project" => UnitType::Project,
+                _ => continue
+            };
+
+            units.push(OrganizationalUnit {
+                id: row.get("id"),
+                name: row.get("name"),
+                unit_type,
+                parent_id: row.get("parent_id"),
+                tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
+                    PostgresError::Database(sqlx::Error::Decode(
+                        format!("Invalid tenant_id: {}", e).into()
+                    ))
+                })?,
+                metadata: serde_json::from_value(row.get("metadata"))?,
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at")
+            });
+        }
+
+        Ok(units)
+    }
+
+    pub async fn get_unit_ancestors(
+        &self,
+        ctx: &TenantContext,
+        id: &str
+    ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
+        self.get_ancestors(ctx, id).await
+    }
+
+    pub async fn get_unit_descendants(
+        &self,
+        ctx: &TenantContext,
+        id: &str
+    ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
+        let rows = sqlx::query(
+            "WITH RECURSIVE descendants AS (
+                SELECT id, name, type, parent_id, tenant_id, metadata, created_at, updated_at
+                FROM organizational_units
+                WHERE id = $1 AND tenant_id = $2
+                UNION ALL
+                SELECT u.id, u.name, u.type, u.parent_id, u.tenant_id, u.metadata, u.created_at, \
+             u.updated_at
+                FROM organizational_units u
+                INNER JOIN descendants d ON u.parent_id = d.id AND u.tenant_id = d.tenant_id
+            )
+            SELECT * FROM descendants WHERE id != $1"
         )
         .bind(id)
         .bind(ctx.tenant_id.as_str())
@@ -402,6 +575,119 @@ impl PostgresBackend {
         }
         Ok(roles)
     }
+    pub async fn log_event(
+        &self,
+        event: &mk_core::types::GovernanceEvent
+    ) -> Result<(), PostgresError> {
+        let (event_type, tenant_id, timestamp) = match event {
+            mk_core::types::GovernanceEvent::UnitCreated {
+                unit_id: _,
+                unit_type: _,
+                tenant_id,
+                parent_id: _,
+                timestamp
+            } => ("unit_created", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::UnitUpdated {
+                unit_id: _,
+                tenant_id,
+                timestamp
+            } => ("unit_updated", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::UnitDeleted {
+                unit_id: _,
+                tenant_id,
+                timestamp
+            } => ("unit_deleted", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::RoleAssigned {
+                user_id: _,
+                unit_id: _,
+                role: _,
+                tenant_id,
+                timestamp
+            } => ("role_assigned", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::RoleRemoved {
+                user_id: _,
+                unit_id: _,
+                role: _,
+                tenant_id,
+                timestamp
+            } => ("role_removed", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::PolicyUpdated {
+                policy_id: _,
+                layer: _,
+                tenant_id,
+                timestamp
+            } => ("policy_updated", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::PolicyDeleted {
+                policy_id: _,
+                tenant_id,
+                timestamp
+            } => ("policy_deleted", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::DriftDetected {
+                project_id: _,
+                tenant_id,
+                drift_score: _,
+                timestamp
+            } => ("drift_detected", tenant_id, *timestamp)
+        };
+
+        sqlx::query(
+            "INSERT INTO governance_events (event_type, tenant_id, payload, timestamp)
+             VALUES ($1, $2, $3, $4)"
+        )
+        .bind(event_type)
+        .bind(tenant_id.as_str())
+        .bind(serde_json::to_value(event)?)
+        .bind(timestamp)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_governance_events_internal(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        since_timestamp: i64,
+        limit: usize
+    ) -> Result<Vec<mk_core::types::GovernanceEvent>, PostgresError> {
+        let rows = sqlx::query(
+            "SELECT payload FROM governance_events 
+             WHERE tenant_id = $1 AND timestamp > $2 
+             ORDER BY timestamp ASC LIMIT $3"
+        )
+        .bind(ctx.tenant_id.as_str())
+        .bind(since_timestamp)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut events = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            let payload: serde_json::Value = row.get("payload");
+            let event: mk_core::types::GovernanceEvent = serde_json::from_value(payload)?;
+            events.push(event);
+        }
+        Ok(events)
+    }
+}
+
+#[async_trait]
+impl mk_core::traits::EventPublisher for PostgresBackend {
+    type Error = PostgresError;
+
+    async fn publish(&self, event: mk_core::types::GovernanceEvent) -> Result<(), Self::Error> {
+        self.log_event(&event).await
+    }
+
+    async fn subscribe(
+        &self,
+        _channels: &[&str]
+    ) -> Result<tokio::sync::mpsc::Receiver<mk_core::types::GovernanceEvent>, Self::Error> {
+        Err(PostgresError::Database(sqlx::Error::Decode(
+            "Subscribe not implemented for Postgres backend".into()
+        )))
+    }
 }
 
 #[async_trait]
@@ -465,7 +751,15 @@ impl StorageBackend for PostgresBackend {
         ctx: TenantContext,
         unit_id: &str
     ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
-        self.get_ancestors(&ctx, unit_id).await
+        self.get_unit_ancestors(&ctx, unit_id).await
+    }
+
+    async fn get_descendants(
+        &self,
+        ctx: TenantContext,
+        unit_id: &str
+    ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
+        self.get_unit_descendants(&ctx, unit_id).await
     }
 
     async fn get_unit_policies(
@@ -474,6 +768,168 @@ impl StorageBackend for PostgresBackend {
         unit_id: &str
     ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
         self.get_unit_policies(&ctx, unit_id).await
+    }
+
+    async fn create_unit(&self, unit: &OrganizationalUnit) -> Result<(), Self::Error> {
+        self.create_unit(unit).await
+    }
+
+    async fn add_unit_policy(
+        &self,
+        ctx: &TenantContext,
+        unit_id: &str,
+        policy: &mk_core::types::Policy
+    ) -> Result<(), Self::Error> {
+        self.add_unit_policy(ctx, unit_id, policy).await
+    }
+
+    async fn assign_role(
+        &self,
+        user_id: &mk_core::types::UserId,
+        tenant_id: &mk_core::types::TenantId,
+        unit_id: &str,
+        role: mk_core::types::Role
+    ) -> Result<(), Self::Error> {
+        self.assign_role(user_id, tenant_id, unit_id, role).await
+    }
+
+    async fn remove_role(
+        &self,
+        user_id: &mk_core::types::UserId,
+        tenant_id: &mk_core::types::TenantId,
+        unit_id: &str,
+        role: mk_core::types::Role
+    ) -> Result<(), Self::Error> {
+        self.remove_role(user_id, tenant_id, unit_id, role).await
+    }
+
+    async fn store_drift_result(
+        &self,
+        result: mk_core::types::DriftResult
+    ) -> Result<(), Self::Error> {
+        sqlx::query(
+            "INSERT INTO drift_results (project_id, tenant_id, drift_score, violations, timestamp)
+             VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(&result.project_id)
+        .bind(result.tenant_id.as_str())
+        .bind(result.drift_score)
+        .bind(serde_json::to_value(&result.violations)?)
+        .bind(result.timestamp)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn get_latest_drift_result(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        project_id: &str
+    ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
+        let row = sqlx::query(
+            "SELECT project_id, tenant_id, drift_score, violations, timestamp 
+             FROM drift_results 
+             WHERE project_id = $1 AND tenant_id = $2 
+             ORDER BY timestamp DESC LIMIT 1"
+        )
+        .bind(project_id)
+        .bind(ctx.tenant_id.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            Ok(Some(mk_core::types::DriftResult {
+                project_id: row.get("project_id"),
+                tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
+                    PostgresError::Database(sqlx::Error::Decode(
+                        format!("Invalid tenant_id: {}", e).into()
+                    ))
+                })?,
+                drift_score: row.get("drift_score"),
+                violations: serde_json::from_value(row.get("violations"))?,
+                timestamp: row.get("timestamp")
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn record_job_status(
+        &self,
+        job_name: &str,
+        tenant_id: &str,
+        status: &str,
+        message: Option<&str>,
+        started_at: i64,
+        finished_at: Option<i64>
+    ) -> Result<(), Self::Error> {
+        let duration_ms = finished_at.map(|f| (f - started_at) * 1000);
+
+        sqlx::query(
+            "INSERT INTO job_status (job_name, tenant_id, status, message, started_at, \
+             finished_at, duration_ms)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        )
+        .bind(job_name)
+        .bind(tenant_id)
+        .bind(status)
+        .bind(message)
+        .bind(started_at)
+        .bind(finished_at)
+        .bind(duration_ms)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn get_governance_events(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        since_timestamp: i64,
+        limit: usize
+    ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
+        self.get_governance_events_internal(ctx, since_timestamp, limit)
+            .await
+    }
+
+    async fn list_all_units(&self) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        let rows = sqlx::query(
+            "SELECT id, name, type, parent_id, tenant_id, metadata, created_at, updated_at 
+             FROM organizational_units"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut units = Vec::new();
+        for row in rows {
+            let unit_type_str: String = row.get("type");
+            let unit_type = match unit_type_str.as_str() {
+                "company" => UnitType::Company,
+                "organization" => UnitType::Organization,
+                "team" => UnitType::Team,
+                "project" => UnitType::Project,
+                _ => continue
+            };
+
+            units.push(mk_core::types::OrganizationalUnit {
+                id: row.get("id"),
+                name: row.get("name"),
+                unit_type,
+                parent_id: row.get("parent_id"),
+                tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
+                    PostgresError::Database(sqlx::Error::Decode(
+                        format!("Invalid tenant_id: {}", e).into()
+                    ))
+                })?,
+                metadata: serde_json::from_value(row.get("metadata"))?,
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at")
+            });
+        }
+
+        Ok(units)
     }
 }
 

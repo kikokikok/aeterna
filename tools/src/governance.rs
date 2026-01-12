@@ -7,17 +7,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
-use storage::postgres::PostgresBackend;
 use validator::Validate;
 
 /// Tool to create a new organizational unit.
 pub struct UnitCreateTool {
-    backend: Arc<PostgresBackend>,
+    backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
     governance_engine: Arc<GovernanceEngine>
 }
 
 impl UnitCreateTool {
-    pub fn new(backend: Arc<PostgresBackend>, governance_engine: Arc<GovernanceEngine>) -> Self {
+    pub fn new(
+        backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
+        governance_engine: Arc<GovernanceEngine>
+    ) -> Self {
         Self {
             backend,
             governance_engine
@@ -91,15 +93,16 @@ impl Tool for UnitCreateTool {
 
         self.backend.create_unit(&unit).await?;
 
-        if let Some(tx) = self.governance_engine.event_tx() {
-            let _ = tx.send(GovernanceEvent::UnitCreated {
+        let _ = self
+            .governance_engine
+            .publish_event(GovernanceEvent::UnitCreated {
                 unit_id: unit.id.clone(),
                 unit_type: unit.unit_type,
                 tenant_id: ctx.tenant_id.clone(),
                 parent_id: unit.parent_id.clone(),
                 timestamp: chrono::Utc::now().timestamp()
-            });
-        }
+            })
+            .await;
 
         Ok(json!({
             "success": true,
@@ -110,12 +113,15 @@ impl Tool for UnitCreateTool {
 
 /// Tool to add a policy to an organizational unit.
 pub struct UnitPolicyAddTool {
-    backend: Arc<PostgresBackend>,
+    backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
     governance_engine: Arc<GovernanceEngine>
 }
 
 impl UnitPolicyAddTool {
-    pub fn new(backend: Arc<PostgresBackend>, governance_engine: Arc<GovernanceEngine>) -> Self {
+    pub fn new(
+        backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
+        governance_engine: Arc<GovernanceEngine>
+    ) -> Self {
         Self {
             backend,
             governance_engine
@@ -163,14 +169,15 @@ impl Tool for UnitPolicyAddTool {
             .add_unit_policy(&ctx, &p.unit_id, &p.policy)
             .await?;
 
-        if let Some(tx) = self.governance_engine.event_tx() {
-            let _ = tx.send(GovernanceEvent::PolicyUpdated {
+        let _ = self
+            .governance_engine
+            .publish_event(GovernanceEvent::PolicyUpdated {
                 policy_id: p.policy.id.clone(),
                 layer: p.policy.layer,
                 tenant_id: ctx.tenant_id.clone(),
                 timestamp: chrono::Utc::now().timestamp()
-            });
-        }
+            })
+            .await;
 
         Ok(json!({
             "success": true,
@@ -181,12 +188,15 @@ impl Tool for UnitPolicyAddTool {
 
 /// Tool to assign a role to a user within an organizational unit.
 pub struct UserRoleAssignTool {
-    backend: Arc<PostgresBackend>,
+    backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
     governance_engine: Arc<GovernanceEngine>
 }
 
 impl UserRoleAssignTool {
-    pub fn new(backend: Arc<PostgresBackend>, governance_engine: Arc<GovernanceEngine>) -> Self {
+    pub fn new(
+        backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
+        governance_engine: Arc<GovernanceEngine>
+    ) -> Self {
         Self {
             backend,
             governance_engine
@@ -239,21 +249,170 @@ impl Tool for UserRoleAssignTool {
         let role: Role = p.role.parse()?;
 
         self.backend
-            .assign_role(&user_id, &ctx.tenant_id, &p.unit_id, role)
+            .assign_role(&user_id, &ctx.tenant_id, &p.unit_id, role.clone())
             .await?;
 
-        if let Some(tx) = self.governance_engine.event_tx() {
-            let _ = tx.send(GovernanceEvent::RoleAssigned {
+        let _ = self
+            .governance_engine
+            .publish_event(GovernanceEvent::RoleAssigned {
                 user_id: user_id.clone(),
                 unit_id: p.unit_id.clone(),
                 role,
                 tenant_id: ctx.tenant_id.clone(),
                 timestamp: chrono::Utc::now().timestamp()
-            });
-        }
+            })
+            .await;
 
         Ok(json!({
             "success": true
+        }))
+    }
+}
+
+/// Tool to remove a role from a user within an organizational unit.
+pub struct UserRoleRemoveTool {
+    backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
+    governance_engine: Arc<GovernanceEngine>
+}
+
+impl UserRoleRemoveTool {
+    pub fn new(
+        backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
+        governance_engine: Arc<GovernanceEngine>
+    ) -> Self {
+        Self {
+            backend,
+            governance_engine
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+pub struct UserRoleRemoveParams {
+    pub user_id: String,
+    pub unit_id: String,
+    pub role: String,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>
+}
+
+#[async_trait]
+impl Tool for UserRoleRemoveTool {
+    fn name(&self) -> &str {
+        "governance_role_remove"
+    }
+
+    fn description(&self) -> &str {
+        "Remove a role from a user within a specific organizational unit."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "user_id": { "type": "string", "description": "User ID" },
+                "unit_id": { "type": "string", "description": "Unit ID" },
+                "role": {
+                    "type": "string",
+                    "enum": ["developer", "techlead", "architect", "admin", "agent"],
+                    "description": "Role to remove"
+                },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
+            },
+            "required": ["user_id", "unit_id", "role"]
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: UserRoleRemoveParams = serde_json::from_value(params)?;
+        p.validate()?;
+
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let user_id = mk_core::types::UserId::new(p.user_id).ok_or("Invalid user ID")?;
+        let role: Role = p.role.parse()?;
+
+        self.backend
+            .remove_role(&user_id, &ctx.tenant_id, &p.unit_id, role.clone())
+            .await?;
+
+        let _ = self
+            .governance_engine
+            .publish_event(GovernanceEvent::RoleRemoved {
+                user_id: user_id.clone(),
+                unit_id: p.unit_id.clone(),
+                role,
+                tenant_id: ctx.tenant_id.clone(),
+                timestamp: chrono::Utc::now().timestamp()
+            })
+            .await;
+
+        Ok(json!({
+            "success": true
+        }))
+    }
+}
+
+pub struct HierarchyNavigateTool {
+    backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>
+}
+
+impl HierarchyNavigateTool {
+    pub fn new(
+        backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>
+    ) -> Self {
+        Self { backend }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+pub struct HierarchyNavigateParams {
+    pub unit_id: String,
+    pub direction: String,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>
+}
+
+#[async_trait]
+impl Tool for HierarchyNavigateTool {
+    fn name(&self) -> &str {
+        "governance_hierarchy_navigate"
+    }
+
+    fn description(&self) -> &str {
+        "Navigate the organizational hierarchy (ancestors or descendants) for a unit."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "unit_id": { "type": "string", "description": "Starting Unit ID" },
+                "direction": {
+                    "type": "string",
+                    "enum": ["ancestors", "descendants"],
+                    "description": "Navigation direction"
+                },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
+            },
+            "required": ["unit_id", "direction"]
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: HierarchyNavigateParams = serde_json::from_value(params)?;
+        p.validate()?;
+
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+
+        let units = match p.direction.as_str() {
+            "ancestors" => self.backend.get_ancestors(ctx, &p.unit_id).await?,
+            "descendants" => self.backend.get_descendants(ctx, &p.unit_id).await?,
+            _ => return Err("Invalid direction".into())
+        };
+
+        Ok(json!({
+            "success": true,
+            "units": units
         }))
     }
 }

@@ -60,7 +60,89 @@ pub struct Config {
 
     /// Observability configuration (metrics, tracing, logging)
     #[serde(default)]
-    pub observability: ObservabilityConfig
+    pub observability: ObservabilityConfig,
+
+    /// Deployment mode configuration (Local, Hybrid, Remote)
+    #[serde(default)]
+    pub deployment: DeploymentConfig
+}
+
+impl Config {
+    /// Detects environment settings for deployment mode.
+    ///
+    /// # M-CANONICAL-DOCS
+    ///
+    /// ## Purpose
+    /// Initializes configuration based on AETERNA_ environment variables.
+    pub fn detect_env() -> Self {
+        let mut config = Self::default();
+
+        if let Ok(url) = std::env::var("AETERNA_REMOTE_GOVERNANCE_URL") {
+            config.deployment.remote_url = Some(url);
+            config.deployment.mode =
+                std::env::var("AETERNA_DEPLOYMENT_MODE").unwrap_or_else(|_| "hybrid".to_string());
+        }
+
+        if std::env::var("AETERNA_THIN_CLIENT").is_ok() {
+            config.deployment.mode = "remote".to_string();
+            config.sync.enabled = false;
+        }
+
+        config
+    }
+}
+
+/// Deployment mode configuration.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Manages the deployment mode of the system (Local, Hybrid, or Remote).
+///
+/// ## Fields
+/// - `mode`: Deployment mode (default: "local")
+/// - `remote_url`: URL of the remote governance server (required for
+///   Hybrid/Remote)
+/// - `sync_enabled`: Enable synchronization in Hybrid mode (default: true)
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
+pub struct DeploymentConfig {
+    /// Deployment mode
+    #[serde(default = "default_deployment_mode")]
+    #[validate(custom(function = "validate_deployment_mode"))]
+    pub mode: String,
+
+    /// URL of the remote governance server
+    #[serde(default)]
+    pub remote_url: Option<String>,
+
+    /// Enable synchronization in Hybrid mode
+    #[serde(default = "default_deployment_sync_enabled")]
+    pub sync_enabled: bool
+}
+
+fn default_deployment_mode() -> String {
+    "local".to_string()
+}
+
+fn default_deployment_sync_enabled() -> bool {
+    true
+}
+
+fn validate_deployment_mode(value: &str) -> Result<(), validator::ValidationError> {
+    match value {
+        "local" | "hybrid" | "remote" => Ok(()),
+        _ => Err(validator::ValidationError::new("Invalid deployment mode"))
+    }
+}
+
+impl Default for DeploymentConfig {
+    fn default() -> Self {
+        Self {
+            mode: default_deployment_mode(),
+            remote_url: None,
+            sync_enabled: default_deployment_sync_enabled()
+        }
+    }
 }
 
 /// Configuration for storage providers.

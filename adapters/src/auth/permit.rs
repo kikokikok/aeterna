@@ -55,7 +55,11 @@ impl AuthorizationService for PermitAuthorizationService {
         action: &str,
         resource: &str
     ) -> Result<bool, Self::Error> {
-        let user_id = ctx.user_id.as_str();
+        let user_id = if let Some(agent_id) = &ctx.agent_id {
+            agent_id.as_str()
+        } else {
+            ctx.user_id.as_str()
+        };
         let tenant_id = ctx.tenant_id.as_str();
 
         let url = format!("{}/allowed", self.pdp_url);
