@@ -27,7 +27,7 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
         status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
     };
     let tenant_id = mk_core::types::TenantId::new("t1".into()).unwrap();
     let user_id = mk_core::types::UserId::new("u1".into()).unwrap();
@@ -39,8 +39,8 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
     let query_resp = query_tool
         .call(json!({
             "tenantContext": {
-                "tenantId": "t1",
-                "userId": "u1"
+                "tenant_id": "t1",
+                "user_id": "u1"
             },
             "query": "Architecture",
             "layers": ["project"]
@@ -59,8 +59,8 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
     let show_resp = show_tool
         .call(json!({
             "tenantContext": {
-                "tenantId": "t1",
-                "userId": "u1"
+                "tenant_id": "t1",
+                "user_id": "u1"
             },
             "layer": "project",
             "path": "architecture/core.md"

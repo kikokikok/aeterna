@@ -67,23 +67,22 @@
 ## 8. Deployment Mode Support
 
 - [x] 8.1 Create deployment mode configuration (Local, Hybrid, Remote)
-- [ ] 8.2 Implement Hybrid mode sync protocol
-- [ ] 8.3 Add Remote mode thin client implementation
-- [ ] 8.4 Create mode-specific feature flags
-- [ ] 8.5 Add mode detection and auto-configuration
+- [x] 8.2 Implement Hybrid mode sync protocol
+- [x] 8.3 Add Remote mode thin client implementation
+- [x] 8.4 Create mode-specific feature flags
+- [x] 8.5 Add mode detection and auto-configuration
 
 ## 9. Testing
 
- - [x] 9.1 Unit tests for tenant isolation
-
-- [ ] 9.2 Integration tests for Permit.io + OPA/Cedar authorization
-- [ ] 9.3 Tests for hierarchy inheritance
-- [ ] 9.4 Tests for drift detection accuracy
-- [ ] 9.5 End-to-end tests for governance workflow
+- [x] 9.1 Unit tests for tenant isolation
+- [x] 9.2 Integration tests for Permit.io + OPA/Cedar authorization
+- [x] 9.3 Tests for hierarchy inheritance
+- [x] 9.4 Tests for drift detection accuracy
+- [x] 9.5 End-to-end tests for governance workflow
 
 ## 10. Documentation
 
-- [ ] 10.1 Update API documentation with governance endpoints
-- [ ] 10.2 Create deployment guide for different modes
-- [ ] 10.3 Document Permit.io + OPA/Cedar policy model and role definitions
-- [ ] 10.4 Add troubleshooting guide for common governance issues
+- [x] 10.1 Update API documentation with governance endpoints
+- [x] 10.2 Create deployment guide for different modes
+- [x] 10.3 Document Permit.io + OPA/Cedar policy model and role definitions
+- [x] 10.4 Add troubleshooting guide for common governance issues

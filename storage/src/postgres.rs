@@ -11,11 +11,11 @@ pub enum PostgresError {
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
     #[error("Unit not found: {0}")]
-    NotFound(String)
+    NotFound(String),
 }
 
 pub struct PostgresBackend {
-    pool: Pool<Postgres>
+    pool: Pool<Postgres>,
 }
 
 impl PostgresBackend {
@@ -29,6 +29,11 @@ impl PostgresBackend {
     }
 
     pub async fn initialize_schema(&self) -> Result<(), PostgresError> {
+        // Enable pgcrypto extension for gen_random_uuid()
+        sqlx::query("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+            .execute(&self.pool)
+            .await?;
+
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS sync_state (
                 id TEXT NOT NULL,
@@ -36,7 +41,7 @@ impl PostgresBackend {
                 data JSONB NOT NULL,
                 updated_at BIGINT NOT NULL,
                 PRIMARY KEY (id, tenant_id)
-            )"
+            )",
         )
         .execute(&self.pool)
         .await?;
@@ -55,7 +60,7 @@ impl PostgresBackend {
                 metadata JSONB DEFAULT '{}',
                 created_at BIGINT NOT NULL,
                 updated_at BIGINT NOT NULL
-            )"
+            )",
         )
         .execute(&self.pool)
         .await?;
@@ -68,7 +73,7 @@ impl PostgresBackend {
                 role TEXT NOT NULL,
                 created_at BIGINT NOT NULL,
                 PRIMARY KEY (user_id, tenant_id, unit_id, role)
-            )"
+            )",
         )
         .execute(&self.pool)
         .await?;
@@ -80,7 +85,7 @@ impl PostgresBackend {
                 policy JSONB NOT NULL,
                 created_at BIGINT NOT NULL,
                 updated_at BIGINT NOT NULL
-            )"
+            )",
         )
         .execute(&self.pool)
         .await?;
@@ -92,7 +97,7 @@ impl PostgresBackend {
                 tenant_id TEXT NOT NULL,
                 payload JSONB NOT NULL,
                 timestamp BIGINT NOT NULL
-            )"
+            )",
         )
         .execute(&self.pool)
         .await?;
@@ -105,7 +110,7 @@ impl PostgresBackend {
                 violations JSONB NOT NULL,
                 timestamp BIGINT NOT NULL,
                 PRIMARY KEY (project_id, tenant_id, timestamp)
-            )"
+            )",
         )
         .execute(&self.pool)
         .await?;
@@ -120,7 +125,7 @@ impl PostgresBackend {
                 started_at BIGINT NOT NULL,
                 finished_at BIGINT,
                 duration_ms BIGINT
-            )"
+            )",
         )
         .execute(&self.pool)
         .await?;
@@ -145,20 +150,20 @@ impl PostgresBackend {
                             "Invalid hierarchy: cannot create {:?} under {:?}",
                             unit.unit_type, parent.unit_type
                         )
-                        .into()
+                        .into(),
                     )));
                 }
             }
         } else if unit.unit_type != UnitType::Company {
             return Err(PostgresError::Database(sqlx::Error::Decode(
-                "Only Company units can be root units (no parent)".into()
+                "Only Company units can be root units (no parent)".into(),
             )));
         }
 
         sqlx::query(
             "INSERT INTO organizational_units (id, name, type, parent_id, tenant_id, metadata, \
              created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(&unit.id)
         .bind(&unit.name)
@@ -177,7 +182,7 @@ impl PostgresBackend {
     async fn get_unit_by_id(&self, id: &str) -> Result<Option<OrganizationalUnit>, PostgresError> {
         let row = sqlx::query(
             "SELECT id, name, type, parent_id, tenant_id, metadata, created_at, updated_at 
-             FROM organizational_units WHERE id = $1"
+             FROM organizational_units WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -192,7 +197,7 @@ impl PostgresBackend {
                 "project" => UnitType::Project,
                 _ => {
                     return Err(PostgresError::Database(sqlx::Error::Decode(
-                        "Invalid unit type".into()
+                        "Invalid unit type".into(),
                     )));
                 }
             };
@@ -204,12 +209,12 @@ impl PostgresBackend {
                 parent_id: row.get("parent_id"),
                 tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
                     PostgresError::Database(sqlx::Error::Decode(
-                        format!("Invalid tenant_id: {}", e).into()
+                        format!("Invalid tenant_id: {}", e).into(),
                     ))
                 })?,
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
-                updated_at: row.get("updated_at")
+                updated_at: row.get("updated_at"),
             }))
         } else {
             Ok(None)
@@ -219,11 +224,11 @@ impl PostgresBackend {
     pub async fn get_unit(
         &self,
         ctx: &TenantContext,
-        id: &str
+        id: &str,
     ) -> Result<Option<OrganizationalUnit>, PostgresError> {
         let row = sqlx::query(
             "SELECT id, name, type, parent_id, tenant_id, metadata, created_at, updated_at 
-             FROM organizational_units WHERE id = $1 AND tenant_id = $2"
+             FROM organizational_units WHERE id = $1 AND tenant_id = $2",
         )
         .bind(id)
         .bind(ctx.tenant_id.as_str())
@@ -239,7 +244,7 @@ impl PostgresBackend {
                 "project" => UnitType::Project,
                 _ => {
                     return Err(PostgresError::Database(sqlx::Error::Decode(
-                        "Invalid unit type".into()
+                        "Invalid unit type".into(),
                     )));
                 }
             };
@@ -251,12 +256,12 @@ impl PostgresBackend {
                 parent_id: row.get("parent_id"),
                 tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
                     PostgresError::Database(sqlx::Error::Decode(
-                        format!("Invalid tenant_id: {}", e).into()
+                        format!("Invalid tenant_id: {}", e).into(),
                     ))
                 })?,
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
-                updated_at: row.get("updated_at")
+                updated_at: row.get("updated_at"),
             }))
         } else {
             Ok(None)
@@ -266,11 +271,11 @@ impl PostgresBackend {
     pub async fn list_children(
         &self,
         ctx: &TenantContext,
-        parent_id: &str
+        parent_id: &str,
     ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
         let rows = sqlx::query(
             "SELECT id, name, type, parent_id, tenant_id, metadata, created_at, updated_at 
-             FROM organizational_units WHERE parent_id = $1 AND tenant_id = $2"
+             FROM organizational_units WHERE parent_id = $1 AND tenant_id = $2",
         )
         .bind(parent_id)
         .bind(ctx.tenant_id.as_str())
@@ -285,7 +290,7 @@ impl PostgresBackend {
                 "organization" => UnitType::Organization,
                 "team" => UnitType::Team,
                 "project" => UnitType::Project,
-                _ => continue
+                _ => continue,
             };
 
             units.push(OrganizationalUnit {
@@ -295,12 +300,12 @@ impl PostgresBackend {
                 parent_id: row.get("parent_id"),
                 tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
                     PostgresError::Database(sqlx::Error::Decode(
-                        format!("Invalid tenant_id: {}", e).into()
+                        format!("Invalid tenant_id: {}", e).into(),
                     ))
                 })?,
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
-                updated_at: row.get("updated_at")
+                updated_at: row.get("updated_at"),
             });
         }
 
@@ -310,7 +315,7 @@ impl PostgresBackend {
     pub async fn get_ancestors(
         &self,
         ctx: &TenantContext,
-        id: &str
+        id: &str,
     ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
         let rows = sqlx::query(
             "WITH RECURSIVE ancestors AS (
@@ -323,7 +328,7 @@ impl PostgresBackend {
                 FROM organizational_units u
                 INNER JOIN ancestors a ON u.id = a.parent_id AND u.tenant_id = a.tenant_id
             )
-            SELECT * FROM ancestors WHERE id != $1"
+            SELECT * FROM ancestors WHERE id != $1",
         )
         .bind(id)
         .bind(ctx.tenant_id.as_str())
@@ -338,7 +343,7 @@ impl PostgresBackend {
                 "organization" => UnitType::Organization,
                 "team" => UnitType::Team,
                 "project" => UnitType::Project,
-                _ => continue
+                _ => continue,
             };
 
             units.push(OrganizationalUnit {
@@ -348,12 +353,12 @@ impl PostgresBackend {
                 parent_id: row.get("parent_id"),
                 tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
                     PostgresError::Database(sqlx::Error::Decode(
-                        format!("Invalid tenant_id: {}", e).into()
+                        format!("Invalid tenant_id: {}", e).into(),
                     ))
                 })?,
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
-                updated_at: row.get("updated_at")
+                updated_at: row.get("updated_at"),
             });
         }
 
@@ -363,7 +368,7 @@ impl PostgresBackend {
     pub async fn get_unit_ancestors(
         &self,
         ctx: &TenantContext,
-        id: &str
+        id: &str,
     ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
         self.get_ancestors(ctx, id).await
     }
@@ -371,7 +376,7 @@ impl PostgresBackend {
     pub async fn get_unit_descendants(
         &self,
         ctx: &TenantContext,
-        id: &str
+        id: &str,
     ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
         let rows = sqlx::query(
             "WITH RECURSIVE descendants AS (
@@ -384,7 +389,7 @@ impl PostgresBackend {
                 FROM organizational_units u
                 INNER JOIN descendants d ON u.parent_id = d.id AND u.tenant_id = d.tenant_id
             )
-            SELECT * FROM descendants WHERE id != $1"
+            SELECT * FROM descendants WHERE id != $1",
         )
         .bind(id)
         .bind(ctx.tenant_id.as_str())
@@ -399,7 +404,7 @@ impl PostgresBackend {
                 "organization" => UnitType::Organization,
                 "team" => UnitType::Team,
                 "project" => UnitType::Project,
-                _ => continue
+                _ => continue,
             };
 
             units.push(OrganizationalUnit {
@@ -409,12 +414,12 @@ impl PostgresBackend {
                 parent_id: row.get("parent_id"),
                 tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
                     PostgresError::Database(sqlx::Error::Decode(
-                        format!("Invalid tenant_id: {}", e).into()
+                        format!("Invalid tenant_id: {}", e).into(),
                     ))
                 })?,
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
-                updated_at: row.get("updated_at")
+                updated_at: row.get("updated_at"),
             });
         }
 
@@ -424,12 +429,12 @@ impl PostgresBackend {
     pub async fn update_unit(
         &self,
         ctx: &TenantContext,
-        unit: &OrganizationalUnit
+        unit: &OrganizationalUnit,
     ) -> Result<(), PostgresError> {
         sqlx::query(
             "UPDATE organizational_units 
              SET name = $3, type = $4, parent_id = $5, metadata = $6, updated_at = $7
-             WHERE id = $1 AND tenant_id = $2"
+             WHERE id = $1 AND tenant_id = $2",
         )
         .bind(&unit.id)
         .bind(ctx.tenant_id.as_str())
@@ -458,7 +463,7 @@ impl PostgresBackend {
         &self,
         ctx: &TenantContext,
         unit_id: &str,
-        policy: &mk_core::types::Policy
+        policy: &mk_core::types::Policy,
     ) -> Result<(), PostgresError> {
         let exists: Option<(i64,)> =
             sqlx::query_as("SELECT 1 FROM organizational_units WHERE id = $1 AND tenant_id = $2")
@@ -474,7 +479,7 @@ impl PostgresBackend {
         sqlx::query(
             "INSERT INTO unit_policies (id, unit_id, policy, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT (id) DO UPDATE SET policy = $3, updated_at = $5"
+             ON CONFLICT (id) DO UPDATE SET policy = $3, updated_at = $5",
         )
         .bind(&policy.id)
         .bind(unit_id)
@@ -489,13 +494,13 @@ impl PostgresBackend {
     pub async fn get_unit_policies(
         &self,
         ctx: &TenantContext,
-        unit_id: &str
+        unit_id: &str,
     ) -> Result<Vec<mk_core::types::Policy>, PostgresError> {
         let rows = sqlx::query(
             "SELECT p.policy 
              FROM unit_policies p
              JOIN organizational_units u ON p.unit_id = u.id
-             WHERE p.unit_id = $1 AND u.tenant_id = $2"
+             WHERE p.unit_id = $1 AND u.tenant_id = $2",
         )
         .bind(unit_id)
         .bind(ctx.tenant_id.as_str())
@@ -515,12 +520,12 @@ impl PostgresBackend {
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
-        role: mk_core::types::Role
+        role: mk_core::types::Role,
     ) -> Result<(), PostgresError> {
         sqlx::query(
             "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at)
              VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT (user_id, tenant_id, unit_id, role) DO NOTHING"
+             ON CONFLICT (user_id, tenant_id, unit_id, role) DO NOTHING",
         )
         .bind(user_id.as_str())
         .bind(tenant_id.as_str())
@@ -537,11 +542,11 @@ impl PostgresBackend {
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
-        role: mk_core::types::Role
+        role: mk_core::types::Role,
     ) -> Result<(), PostgresError> {
         sqlx::query(
             "DELETE FROM user_roles 
-             WHERE user_id = $1 AND tenant_id = $2 AND unit_id = $3 AND role = $4"
+             WHERE user_id = $1 AND tenant_id = $2 AND unit_id = $3 AND role = $4",
         )
         .bind(user_id.as_str())
         .bind(tenant_id.as_str())
@@ -555,10 +560,10 @@ impl PostgresBackend {
     pub async fn get_user_roles(
         &self,
         user_id: &mk_core::types::UserId,
-        tenant_id: &mk_core::types::TenantId
+        tenant_id: &mk_core::types::TenantId,
     ) -> Result<Vec<(String, mk_core::types::Role)>, PostgresError> {
         let rows = sqlx::query(
-            "SELECT unit_id, role FROM user_roles WHERE user_id = $1 AND tenant_id = $2"
+            "SELECT unit_id, role FROM user_roles WHERE user_id = $1 AND tenant_id = $2",
         )
         .bind(user_id.as_str())
         .bind(tenant_id.as_str())
@@ -577,7 +582,7 @@ impl PostgresBackend {
     }
     pub async fn log_event(
         &self,
-        event: &mk_core::types::GovernanceEvent
+        event: &mk_core::types::GovernanceEvent,
     ) -> Result<(), PostgresError> {
         let (event_type, tenant_id, timestamp) = match event {
             mk_core::types::GovernanceEvent::UnitCreated {
@@ -585,54 +590,54 @@ impl PostgresBackend {
                 unit_type: _,
                 tenant_id,
                 parent_id: _,
-                timestamp
+                timestamp,
             } => ("unit_created", tenant_id, *timestamp),
             mk_core::types::GovernanceEvent::UnitUpdated {
                 unit_id: _,
                 tenant_id,
-                timestamp
+                timestamp,
             } => ("unit_updated", tenant_id, *timestamp),
             mk_core::types::GovernanceEvent::UnitDeleted {
                 unit_id: _,
                 tenant_id,
-                timestamp
+                timestamp,
             } => ("unit_deleted", tenant_id, *timestamp),
             mk_core::types::GovernanceEvent::RoleAssigned {
                 user_id: _,
                 unit_id: _,
                 role: _,
                 tenant_id,
-                timestamp
+                timestamp,
             } => ("role_assigned", tenant_id, *timestamp),
             mk_core::types::GovernanceEvent::RoleRemoved {
                 user_id: _,
                 unit_id: _,
                 role: _,
                 tenant_id,
-                timestamp
+                timestamp,
             } => ("role_removed", tenant_id, *timestamp),
             mk_core::types::GovernanceEvent::PolicyUpdated {
                 policy_id: _,
                 layer: _,
                 tenant_id,
-                timestamp
+                timestamp,
             } => ("policy_updated", tenant_id, *timestamp),
             mk_core::types::GovernanceEvent::PolicyDeleted {
                 policy_id: _,
                 tenant_id,
-                timestamp
+                timestamp,
             } => ("policy_deleted", tenant_id, *timestamp),
             mk_core::types::GovernanceEvent::DriftDetected {
                 project_id: _,
                 tenant_id,
                 drift_score: _,
-                timestamp
-            } => ("drift_detected", tenant_id, *timestamp)
+                timestamp,
+            } => ("drift_detected", tenant_id, *timestamp),
         };
 
         sqlx::query(
             "INSERT INTO governance_events (event_type, tenant_id, payload, timestamp)
-             VALUES ($1, $2, $3, $4)"
+             VALUES ($1, $2, $3, $4)",
         )
         .bind(event_type)
         .bind(tenant_id.as_str())
@@ -648,12 +653,12 @@ impl PostgresBackend {
         &self,
         ctx: mk_core::types::TenantContext,
         since_timestamp: i64,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<mk_core::types::GovernanceEvent>, PostgresError> {
         let rows = sqlx::query(
             "SELECT payload FROM governance_events 
              WHERE tenant_id = $1 AND timestamp > $2 
-             ORDER BY timestamp ASC LIMIT $3"
+             ORDER BY timestamp ASC LIMIT $3",
         )
         .bind(ctx.tenant_id.as_str())
         .bind(since_timestamp)
@@ -682,10 +687,10 @@ impl mk_core::traits::EventPublisher for PostgresBackend {
 
     async fn subscribe(
         &self,
-        _channels: &[&str]
+        _channels: &[&str],
     ) -> Result<tokio::sync::mpsc::Receiver<mk_core::types::GovernanceEvent>, Self::Error> {
         Err(PostgresError::Database(sqlx::Error::Decode(
-            "Subscribe not implemented for Postgres backend".into()
+            "Subscribe not implemented for Postgres backend".into(),
         )))
     }
 }
@@ -698,7 +703,7 @@ impl StorageBackend for PostgresBackend {
         sqlx::query(
             "INSERT INTO sync_state (id, tenant_id, data, updated_at)
              VALUES ($1, $2, $3, $4)
-             ON CONFLICT (id, tenant_id) DO UPDATE SET data = $3, updated_at = $4"
+             ON CONFLICT (id, tenant_id) DO UPDATE SET data = $3, updated_at = $4",
         )
         .bind(key)
         .bind(ctx.tenant_id.as_str())
@@ -713,7 +718,7 @@ impl StorageBackend for PostgresBackend {
     async fn retrieve(
         &self,
         ctx: TenantContext,
-        key: &str
+        key: &str,
     ) -> Result<Option<Vec<u8>>, Self::Error> {
         let row: Option<(serde_json::Value,)> =
             sqlx::query_as("SELECT data FROM sync_state WHERE id = $1 AND tenant_id = $2")
@@ -736,7 +741,7 @@ impl StorageBackend for PostgresBackend {
     }
 
     async fn exists(&self, ctx: TenantContext, key: &str) -> Result<bool, Self::Error> {
-        let row: Option<(i64,)> =
+        let row: Option<(i32,)> =
             sqlx::query_as("SELECT 1 FROM sync_state WHERE id = $1 AND tenant_id = $2")
                 .bind(key)
                 .bind(ctx.tenant_id.as_str())
@@ -749,7 +754,7 @@ impl StorageBackend for PostgresBackend {
     async fn get_ancestors(
         &self,
         ctx: TenantContext,
-        unit_id: &str
+        unit_id: &str,
     ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
         self.get_unit_ancestors(&ctx, unit_id).await
     }
@@ -757,7 +762,7 @@ impl StorageBackend for PostgresBackend {
     async fn get_descendants(
         &self,
         ctx: TenantContext,
-        unit_id: &str
+        unit_id: &str,
     ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
         self.get_unit_descendants(&ctx, unit_id).await
     }
@@ -765,7 +770,7 @@ impl StorageBackend for PostgresBackend {
     async fn get_unit_policies(
         &self,
         ctx: TenantContext,
-        unit_id: &str
+        unit_id: &str,
     ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
         self.get_unit_policies(&ctx, unit_id).await
     }
@@ -778,7 +783,7 @@ impl StorageBackend for PostgresBackend {
         &self,
         ctx: &TenantContext,
         unit_id: &str,
-        policy: &mk_core::types::Policy
+        policy: &mk_core::types::Policy,
     ) -> Result<(), Self::Error> {
         self.add_unit_policy(ctx, unit_id, policy).await
     }
@@ -788,7 +793,7 @@ impl StorageBackend for PostgresBackend {
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
-        role: mk_core::types::Role
+        role: mk_core::types::Role,
     ) -> Result<(), Self::Error> {
         self.assign_role(user_id, tenant_id, unit_id, role).await
     }
@@ -798,18 +803,18 @@ impl StorageBackend for PostgresBackend {
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
-        role: mk_core::types::Role
+        role: mk_core::types::Role,
     ) -> Result<(), Self::Error> {
         self.remove_role(user_id, tenant_id, unit_id, role).await
     }
 
     async fn store_drift_result(
         &self,
-        result: mk_core::types::DriftResult
+        result: mk_core::types::DriftResult,
     ) -> Result<(), Self::Error> {
         sqlx::query(
             "INSERT INTO drift_results (project_id, tenant_id, drift_score, violations, timestamp)
-             VALUES ($1, $2, $3, $4, $5)"
+             VALUES ($1, $2, $3, $4, $5)",
         )
         .bind(&result.project_id)
         .bind(result.tenant_id.as_str())
@@ -825,13 +830,13 @@ impl StorageBackend for PostgresBackend {
     async fn get_latest_drift_result(
         &self,
         ctx: mk_core::types::TenantContext,
-        project_id: &str
+        project_id: &str,
     ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
         let row = sqlx::query(
             "SELECT project_id, tenant_id, drift_score, violations, timestamp 
              FROM drift_results 
              WHERE project_id = $1 AND tenant_id = $2 
-             ORDER BY timestamp DESC LIMIT 1"
+             ORDER BY timestamp DESC LIMIT 1",
         )
         .bind(project_id)
         .bind(ctx.tenant_id.as_str())
@@ -843,12 +848,12 @@ impl StorageBackend for PostgresBackend {
                 project_id: row.get("project_id"),
                 tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
                     PostgresError::Database(sqlx::Error::Decode(
-                        format!("Invalid tenant_id: {}", e).into()
+                        format!("Invalid tenant_id: {}", e).into(),
                     ))
                 })?,
                 drift_score: row.get("drift_score"),
                 violations: serde_json::from_value(row.get("violations"))?,
-                timestamp: row.get("timestamp")
+                timestamp: row.get("timestamp"),
             }))
         } else {
             Ok(None)
@@ -862,14 +867,14 @@ impl StorageBackend for PostgresBackend {
         status: &str,
         message: Option<&str>,
         started_at: i64,
-        finished_at: Option<i64>
+        finished_at: Option<i64>,
     ) -> Result<(), Self::Error> {
         let duration_ms = finished_at.map(|f| (f - started_at) * 1000);
 
         sqlx::query(
             "INSERT INTO job_status (job_name, tenant_id, status, message, started_at, \
              finished_at, duration_ms)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
         )
         .bind(job_name)
         .bind(tenant_id)
@@ -888,7 +893,7 @@ impl StorageBackend for PostgresBackend {
         &self,
         ctx: mk_core::types::TenantContext,
         since_timestamp: i64,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
         self.get_governance_events_internal(ctx, since_timestamp, limit)
             .await
@@ -897,7 +902,7 @@ impl StorageBackend for PostgresBackend {
     async fn list_all_units(&self) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
         let rows = sqlx::query(
             "SELECT id, name, type, parent_id, tenant_id, metadata, created_at, updated_at 
-             FROM organizational_units"
+             FROM organizational_units",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -910,7 +915,7 @@ impl StorageBackend for PostgresBackend {
                 "organization" => UnitType::Organization,
                 "team" => UnitType::Team,
                 "project" => UnitType::Project,
-                _ => continue
+                _ => continue,
             };
 
             units.push(mk_core::types::OrganizationalUnit {
@@ -920,12 +925,12 @@ impl StorageBackend for PostgresBackend {
                 parent_id: row.get("parent_id"),
                 tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
                     PostgresError::Database(sqlx::Error::Decode(
-                        format!("Invalid tenant_id: {}", e).into()
+                        format!("Invalid tenant_id: {}", e).into(),
                     ))
                 })?,
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
-                updated_at: row.get("updated_at")
+                updated_at: row.get("updated_at"),
             });
         }
 
@@ -943,7 +948,7 @@ mod tests {
     #[test]
     fn test_postgres_error_display() {
         let error = PostgresError::Database(sqlx::Error::Configuration(
-            "Invalid connection string".into()
+            "Invalid connection string".into(),
         ));
 
         assert!(error.to_string().contains("Database error"));
@@ -959,7 +964,7 @@ mod tests {
         match pg_error {
             PostgresError::Database(_) => (),
             PostgresError::Serialization(_) => (),
-            PostgresError::NotFound(_) => ()
+            PostgresError::NotFound(_) => (),
         }
     }
 
@@ -968,7 +973,7 @@ mod tests {
     fn test_postgres_backend_struct() {
         // Verify the struct has expected fields
         struct TestBackend {
-            _pool: Pool<Postgres>
+            _pool: Pool<Postgres>,
         }
 
         // This is a compile-time test - if it compiles, PostgresBackend has the right

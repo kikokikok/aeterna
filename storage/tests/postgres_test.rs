@@ -62,7 +62,7 @@ async fn test_postgres_backend_store_and_retrieve() {
 
             let ctx = TenantContext::new(
                 TenantId::new("test-tenant".to_string()).unwrap(),
-                UserId::default()
+                UserId::default(),
             );
             let key = "test_key";
             let value = b"{\"test\": \"data\"}";
@@ -73,7 +73,13 @@ async fn test_postgres_backend_store_and_retrieve() {
             assert!(retrieve_result.is_ok(), "Should retrieve data");
             let retrieved = retrieve_result.unwrap();
             assert!(retrieved.is_some(), "Should have retrieved data");
-            assert_eq!(retrieved.unwrap(), value, "Retrieved data should match");
+            let retrieved_json: serde_json::Value =
+                serde_json::from_slice(&retrieved.unwrap()).unwrap();
+            let expected_json: serde_json::Value = serde_json::from_slice(value).unwrap();
+            assert_eq!(
+                retrieved_json, expected_json,
+                "Retrieved JSON should match semantically"
+            );
         }
         Err(_) => {
             eprintln!("Skipping PostgreSQL test: Docker not available");
@@ -90,7 +96,7 @@ async fn test_postgres_backend_store_update() {
 
             let ctx = TenantContext::new(
                 TenantId::new("test-tenant".to_string()).unwrap(),
-                UserId::default()
+                UserId::default(),
             );
             let key = "update_key";
             let value1 = b"{\"version\": 1}";
@@ -99,8 +105,13 @@ async fn test_postgres_backend_store_update() {
             let value2 = b"{\"version\": 2}";
             backend.store(ctx.clone(), key, value2).await.unwrap();
 
-            let retrieved = backend.retrieve(ctx, key).await.unwrap();
-            assert_eq!(retrieved.unwrap(), value2, "Should retrieve updated value");
+            let retrieved = backend.retrieve(ctx, key).await.unwrap().unwrap();
+            let retrieved_json: serde_json::Value = serde_json::from_slice(&retrieved).unwrap();
+            let expected_json: serde_json::Value = serde_json::from_slice(value2).unwrap();
+            assert_eq!(
+                retrieved_json, expected_json,
+                "Should retrieve updated value"
+            );
         }
         Err(_) => {
             eprintln!("Skipping PostgreSQL test: Docker not available");
@@ -117,7 +128,7 @@ async fn test_postgres_backend_delete() {
 
             let ctx = TenantContext::new(
                 TenantId::new("test-tenant".to_string()).unwrap(),
-                UserId::default()
+                UserId::default(),
             );
             let key = "delete_key";
             let value = b"{\"to_delete\": true}";
@@ -150,7 +161,7 @@ async fn test_postgres_backend_exists() {
 
             let ctx = TenantContext::new(
                 TenantId::new("test-tenant".to_string()).unwrap(),
-                UserId::default()
+                UserId::default(),
             );
             let exists = backend.exists(ctx.clone(), "nonexistent").await.unwrap();
             assert!(!exists, "Nonexistent key should not exist");
@@ -177,7 +188,7 @@ async fn test_postgres_backend_retrieve_nonexistent() {
 
             let ctx = TenantContext::new(
                 TenantId::new("test-tenant".to_string()).unwrap(),
-                UserId::default()
+                UserId::default(),
             );
             let result = backend.retrieve(ctx, "nonexistent_key").await;
             assert!(result.is_ok(), "Should handle nonexistent key");
@@ -201,7 +212,7 @@ async fn test_postgres_backend_invalid_json() {
 
             let ctx = TenantContext::new(
                 TenantId::new("test-tenant".to_string()).unwrap(),
-                UserId::default()
+                UserId::default(),
             );
             let key = "invalid_json_key";
             let invalid_json = b"not valid json";
@@ -226,11 +237,11 @@ async fn test_postgres_backend_tenant_isolation() {
 
             let ctx1 = TenantContext::new(
                 TenantId::new("tenant-1".to_string()).unwrap(),
-                UserId::default()
+                UserId::default(),
             );
             let ctx2 = TenantContext::new(
                 TenantId::new("tenant-2".to_string()).unwrap(),
-                UserId::default()
+                UserId::default(),
             );
             let key = "shared-key";
             let val1 = b"{\"tenant\": 1}";
@@ -248,10 +259,14 @@ async fn test_postgres_backend_tenant_isolation() {
 
             // Both should now see their own data
             let res1 = backend.retrieve(ctx1.clone(), key).await.unwrap();
-            assert_eq!(res1.unwrap(), val1);
+            let res1_json: serde_json::Value = serde_json::from_slice(&res1.unwrap()).unwrap();
+            let val1_json: serde_json::Value = serde_json::from_slice(val1).unwrap();
+            assert_eq!(res1_json, val1_json);
 
             let res2 = backend.retrieve(ctx2.clone(), key).await.unwrap();
-            assert_eq!(res2.unwrap(), val2);
+            let res2_json: serde_json::Value = serde_json::from_slice(&res2.unwrap()).unwrap();
+            let val2_json: serde_json::Value = serde_json::from_slice(val2).unwrap();
+            assert_eq!(res2_json, val2_json);
 
             // Deleting from Tenant 1 should NOT affect Tenant 2
             backend.delete(ctx1.clone(), key).await.unwrap();

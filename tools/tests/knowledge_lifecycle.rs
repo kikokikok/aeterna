@@ -220,7 +220,7 @@ async fn setup_postgres_container() -> Result<
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
     let connection_url = format!(
-        "postgres://testuser:testpass@localhost:{}/testdb",
+        "postgres://testuser:testpass@localhost:{}/testdb?sslmode=disable",
         container
             .get_host_port_ipv4(5432)
             .await
@@ -266,7 +266,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         sync_manager,
         repo.clone(),
         Arc::new(
-            storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
+            storage::postgres::PostgresBackend::new(&connection_url)
                 .await
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
@@ -300,8 +300,8 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         method: "tools/call".to_string(),
         params: Some(json!({
             "tenantContext": {
-                "tenantId": "t1",
-                "userId": "u1"
+                "tenant_id": "t1",
+                "user_id": "u1"
             },
             "name": "knowledge_query",
             "arguments": {
@@ -330,8 +330,8 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         method: "tools/call".to_string(),
         params: Some(json!({
             "tenantContext": {
-                "tenantId": "t1",
-                "userId": "u1"
+                "tenant_id": "t1",
+                "user_id": "u1"
             },
             "name": "knowledge_get",
             "arguments": {

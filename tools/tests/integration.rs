@@ -154,7 +154,7 @@ async fn setup_postgres_container()
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
     let connection_url = format!(
-        "postgres://testuser:testpass@localhost:{}/testdb",
+        "postgres://testuser:testpass@localhost:{}/testdb?sslmode=disable",
         container
             .get_host_port_ipv4(5432)
             .await
@@ -193,7 +193,7 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
         sync_manager,
         knowledge_repo.clone(),
         Arc::new(
-            storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
+            storage::postgres::PostgresBackend::new(&connection_url)
                 .await
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
@@ -208,13 +208,13 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
 
     let langchain = LangChainAdapter::new(server.clone());
     let lc_tools = langchain.to_langchain_tools();
-    assert_eq!(lc_tools.len(), 10);
+    assert_eq!(lc_tools.len(), 15); // 4 memory + 3 knowledge + 3 sync + 5 governance
 
     let response = langchain
         .handle_mcp_request(json!({
             "tenantContext": {
-                "tenantId": "c1",
-                "userId": "u1"
+                "tenant_id": "c1",
+                "user_id": "u1"
             },
             "name": "memory_add",
             "arguments": {
@@ -257,7 +257,7 @@ async fn test_server_timeout() -> anyhow::Result<()> {
         sync_manager.clone(),
         knowledge_repo.clone(),
         Arc::new(
-            storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
+            storage::postgres::PostgresBackend::new(&connection_url)
                 .await
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
@@ -308,7 +308,7 @@ async fn test_server_timeout() -> anyhow::Result<()> {
         sync_manager.clone(),
         knowledge_repo.clone(),
         Arc::new(
-            storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
+            storage::postgres::PostgresBackend::new(&connection_url)
                 .await
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
@@ -323,8 +323,8 @@ async fn test_server_timeout() -> anyhow::Result<()> {
         method: "tools/call".to_string(),
         params: Some(json!({
             "tenantContext": {
-                "tenantId": "c1",
-                "userId": "u1"
+                "tenant_id": "c1",
+                "user_id": "u1"
             },
             "name": "memory_search",
             "arguments": {

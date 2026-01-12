@@ -71,8 +71,8 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
     let status_resp = sync_status_tool
         .call(json!({
             "tenantContext": {
-                "tenantId": "t1",
-                "userId": "u1"
+                "tenant_id": "t1",
+                "user_id": "u1"
             }
         }))
         .await?;
@@ -100,8 +100,8 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
         .call(json!({
             "force": false,
             "tenantContext": {
-                "tenantId": "t1",
-                "userId": "u1"
+                "tenant_id": "t1",
+                "user_id": "u1"
             }
         }))
         .await?;
@@ -111,8 +111,8 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
     let status_resp = sync_status_tool
         .call(json!({
             "tenantContext": {
-                "tenantId": "t1",
-                "userId": "u1"
+                "tenant_id": "t1",
+                "user_id": "u1"
             }
         }))
         .await?;

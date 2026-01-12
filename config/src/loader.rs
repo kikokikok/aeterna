@@ -200,8 +200,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_load_from_env_defaults() {
         unsafe {
             env::remove_var("PG_HOST");
@@ -221,6 +223,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_from_env_overrides() {
         unsafe {
             env::set_var("PG_HOST", "testhost");
@@ -295,6 +298,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_postgres_from_env() {
         unsafe {
             env::set_var("PG_HOST", "customhost");
@@ -328,6 +332,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_qdrant_from_env() {
         unsafe {
             env::set_var("QD_HOST", "qdranthost");
@@ -351,6 +356,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_redis_from_env() {
         unsafe {
             env::set_var("RD_HOST", "redishost");
