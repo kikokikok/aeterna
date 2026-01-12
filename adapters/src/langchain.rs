@@ -79,11 +79,12 @@ mod tests {
         let memory_manager = Arc::new(MemoryManager::new());
         let repo = Arc::new(MockRepo);
         let governance = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let auth_service = Arc::new(MockAuthService);
         let sync_manager = Arc::new(
             SyncManager::new(
                 memory_manager.clone(),
                 repo.clone(),
-                governance,
+                governance.clone(),
                 None,
                 Arc::new(MockPersister)
             )
@@ -91,7 +92,54 @@ mod tests {
             .unwrap()
         );
 
-        McpServer::new(memory_manager, sync_manager, repo)
+        McpServer::new(
+            memory_manager,
+            sync_manager,
+            repo,
+            Arc::new(
+                storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
+                    .await
+                    .unwrap()
+            ),
+            governance,
+            auth_service
+        )
+    }
+
+    struct MockAuthService;
+    #[async_trait::async_trait]
+    impl mk_core::traits::AuthorizationService for MockAuthService {
+        type Error = anyhow::Error;
+        async fn check_permission(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _action: &str,
+            _resource: &str
+        ) -> anyhow::Result<bool> {
+            Ok(true)
+        }
+        async fn get_user_roles(
+            &self,
+            _ctx: &mk_core::types::TenantContext
+        ) -> anyhow::Result<Vec<mk_core::types::Role>> {
+            Ok(vec![])
+        }
+        async fn assign_role(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _user_id: &mk_core::types::UserId,
+            _role: mk_core::types::Role
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn remove_role(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _user_id: &mk_core::types::UserId,
+            _role: mk_core::types::Role
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
     }
 
     struct MockRepo;

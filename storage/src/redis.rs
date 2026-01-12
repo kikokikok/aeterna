@@ -80,6 +80,9 @@ impl RedisStorage {
                 reason: e.to_string()
             })
     }
+    pub fn scoped_key(&self, ctx: &mk_core::types::TenantContext, key: &str) -> String {
+        format!("{}:{}", ctx.tenant_id.as_str(), key)
+    }
 }
 
 #[async_trait]
@@ -88,12 +91,13 @@ impl mk_core::traits::StorageBackend for RedisStorage {
 
     async fn store(
         &self,
-        _ctx: mk_core::types::TenantContext,
+        ctx: mk_core::types::TenantContext,
         key: &str,
         value: &[u8]
     ) -> Result<(), Self::Error> {
         let mut conn = self.connection_manager.clone();
-        conn.set(key, value)
+        let scoped_key = self.scoped_key(&ctx, key);
+        conn.set(scoped_key, value)
             .await
             .map_err(|e| StorageError::QueryError {
                 backend: "Redis".to_string(),
@@ -103,30 +107,51 @@ impl mk_core::traits::StorageBackend for RedisStorage {
 
     async fn retrieve(
         &self,
-        _ctx: mk_core::types::TenantContext,
+        ctx: mk_core::types::TenantContext,
         key: &str
     ) -> Result<Option<Vec<u8>>, Self::Error> {
         let mut conn = self.connection_manager.clone();
-        conn.get(key).await.map_err(|e| StorageError::QueryError {
-            backend: "Redis".to_string(),
-            reason: e.to_string()
-        })
+        let scoped_key = self.scoped_key(&ctx, key);
+        conn.get(scoped_key)
+            .await
+            .map_err(|e| StorageError::QueryError {
+                backend: "Redis".to_string(),
+                reason: e.to_string()
+            })
     }
 
     async fn delete(
         &self,
-        _ctx: mk_core::types::TenantContext,
+        ctx: mk_core::types::TenantContext,
         key: &str
     ) -> Result<(), Self::Error> {
-        self.delete_key(key).await
+        let scoped_key = self.scoped_key(&ctx, key);
+        self.delete_key(&scoped_key).await
     }
 
     async fn exists(
         &self,
-        _ctx: mk_core::types::TenantContext,
+        ctx: mk_core::types::TenantContext,
         key: &str
     ) -> Result<bool, Self::Error> {
-        self.exists_key(key).await
+        let scoped_key = self.scoped_key(&ctx, key);
+        self.exists_key(&scoped_key).await
+    }
+
+    async fn get_ancestors(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn get_unit_policies(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
+        Ok(Vec::new())
     }
 }
 

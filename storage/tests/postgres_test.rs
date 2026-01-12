@@ -218,6 +218,53 @@ async fn test_postgres_backend_invalid_json() {
 }
 
 #[tokio::test]
+async fn test_postgres_backend_tenant_isolation() {
+    match setup_postgres_container().await {
+        Ok((_container, connection_url)) => {
+            let backend = PostgresBackend::new(&connection_url).await.unwrap();
+            backend.initialize_schema().await.unwrap();
+
+            let ctx1 = TenantContext::new(
+                TenantId::new("tenant-1".to_string()).unwrap(),
+                UserId::default()
+            );
+            let ctx2 = TenantContext::new(
+                TenantId::new("tenant-2".to_string()).unwrap(),
+                UserId::default()
+            );
+            let key = "shared-key";
+            let val1 = b"{\"tenant\": 1}";
+            let val2 = b"{\"tenant\": 2}";
+
+            // Tenant 1 stores data
+            backend.store(ctx1.clone(), key, val1).await.unwrap();
+
+            // Tenant 2 should NOT see it
+            let res2 = backend.retrieve(ctx2.clone(), key).await.unwrap();
+            assert!(res2.is_none(), "Tenant 2 should not see Tenant 1 data");
+
+            // Tenant 2 stores different data for same key
+            backend.store(ctx2.clone(), key, val2).await.unwrap();
+
+            // Both should now see their own data
+            let res1 = backend.retrieve(ctx1.clone(), key).await.unwrap();
+            assert_eq!(res1.unwrap(), val1);
+
+            let res2 = backend.retrieve(ctx2.clone(), key).await.unwrap();
+            assert_eq!(res2.unwrap(), val2);
+
+            // Deleting from Tenant 1 should NOT affect Tenant 2
+            backend.delete(ctx1.clone(), key).await.unwrap();
+            assert!(!backend.exists(ctx1, key).await.unwrap());
+            assert!(backend.exists(ctx2, key).await.unwrap());
+        }
+        Err(_) => {
+            eprintln!("Skipping PostgreSQL test: Docker not available");
+        }
+    }
+}
+
+#[tokio::test]
 async fn test_postgres_backend_connection_error() {
     let result = PostgresBackend::new("postgres://invalid:5432/invalid").await;
     assert!(result.is_err(), "Should fail with invalid connection");

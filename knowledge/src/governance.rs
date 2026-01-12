@@ -1,18 +1,40 @@
 use crate::telemetry::KnowledgeTelemetry;
-use mk_core::types::{KnowledgeLayer, Policy, PolicyViolation, ValidationResult};
+use mk_core::types::{KnowledgeLayer, Policy, PolicyViolation, TenantContext, ValidationResult};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub struct GovernanceEngine {
     policies: HashMap<KnowledgeLayer, Vec<Policy>>,
-    telemetry: KnowledgeTelemetry
+    telemetry: KnowledgeTelemetry,
+    storage:
+        Option<Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>>,
+    event_tx: Option<tokio::sync::mpsc::UnboundedSender<mk_core::types::GovernanceEvent>>
 }
 
 impl GovernanceEngine {
     pub fn new() -> Self {
         Self {
             policies: HashMap::new(),
-            telemetry: KnowledgeTelemetry
+            telemetry: KnowledgeTelemetry,
+            storage: None,
+            event_tx: None
         }
+    }
+
+    pub fn with_storage(
+        mut self,
+        storage: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>
+    ) -> Self {
+        self.storage = Some(storage);
+        self
+    }
+
+    pub fn with_events(
+        mut self,
+        tx: tokio::sync::mpsc::UnboundedSender<mk_core::types::GovernanceEvent>
+    ) -> Self {
+        self.event_tx = Some(tx);
+        self
     }
 }
 
@@ -27,22 +49,27 @@ impl GovernanceEngine {
         self.policies.entry(policy.layer).or_default().push(policy);
     }
 
+    pub fn event_tx(
+        &self
+    ) -> Option<&tokio::sync::mpsc::UnboundedSender<mk_core::types::GovernanceEvent>> {
+        self.event_tx.as_ref()
+    }
+
     pub fn validate(
         &self,
         target_layer: KnowledgeLayer,
         context: &HashMap<String, serde_json::Value>
     ) -> ValidationResult {
         let mut violations = Vec::new();
-
-        let layers = vec![
+        let layers = [
             KnowledgeLayer::Company,
             KnowledgeLayer::Org,
             KnowledgeLayer::Team,
-            KnowledgeLayer::Project,
+            KnowledgeLayer::Project
         ];
 
-        for layer in layers {
-            if let Some(layer_policies) = self.policies.get(&layer) {
+        for layer in &layers {
+            if let Some(layer_policies) = self.policies.get(layer) {
                 for policy in layer_policies {
                     for rule in &policy.rules {
                         if let Some(violation) = self.evaluate_rule(policy, rule, context) {
@@ -55,9 +82,101 @@ impl GovernanceEngine {
                     }
                 }
             }
-
-            if layer == target_layer {
+            if layer == &target_layer {
                 break;
+            }
+        }
+
+        ValidationResult {
+            is_valid: violations.is_empty(),
+            violations
+        }
+    }
+
+    pub async fn validate_with_context(
+        &self,
+        target_layer: KnowledgeLayer,
+        context: &HashMap<String, serde_json::Value>,
+        _tenant_ctx: Option<&TenantContext>
+    ) -> ValidationResult {
+        let mut violations = Vec::new();
+        let mut active_policies = Vec::new();
+
+        let layers = [
+            KnowledgeLayer::Company,
+            KnowledgeLayer::Org,
+            KnowledgeLayer::Team,
+            KnowledgeLayer::Project
+        ];
+
+        for layer in &layers {
+            if let Some(layer_policies) = self.policies.get(layer) {
+                active_policies.extend(layer_policies.clone());
+            }
+            if layer == &target_layer {
+                break;
+            }
+        }
+
+        if let Some(storage) = &self.storage {
+            let unit_id = context
+                .get("unitId")
+                .or_else(|| context.get("projectId"))
+                .and_then(|v| v.as_str());
+
+            if let Some(uid) = unit_id {
+                let ctx = _tenant_ctx.cloned().unwrap_or_default();
+                if let Ok(ancestors) = storage.get_ancestors(ctx.clone(), uid).await {
+                    for ancestor in ancestors {
+                        if let Ok(unit_policies) =
+                            storage.get_unit_policies(ctx.clone(), &ancestor.id).await
+                        {
+                            active_policies.extend(unit_policies);
+                        }
+                    }
+                }
+                if let Ok(unit_policies) = storage.get_unit_policies(ctx, uid).await {
+                    active_policies.extend(unit_policies);
+                }
+            }
+        }
+
+        for policy in &active_policies {
+            for rule in &policy.rules {
+                if let Some(violation) = self.evaluate_rule(policy, rule, context) {
+                    self.telemetry.record_violation(
+                        &format!("{:?}", policy.layer),
+                        &format!("{:?}", rule.severity)
+                    );
+                    violations.push(violation);
+                }
+            }
+        }
+
+        if !violations.is_empty() {
+            if let Some(tx) = &self.event_tx {
+                let project_id = context
+                    .get("projectId")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| context.get("unitId").and_then(|v| v.as_str()));
+
+                if let Some(pid) = project_id {
+                    let drift_score = violations
+                        .iter()
+                        .map(|v| match v.severity {
+                            mk_core::types::ConstraintSeverity::Block => 1.0,
+                            mk_core::types::ConstraintSeverity::Warn => 0.5,
+                            mk_core::types::ConstraintSeverity::Info => 0.1
+                        })
+                        .sum::<f32>();
+
+                    let _ = tx.send(mk_core::types::GovernanceEvent::DriftDetected {
+                        project_id: pid.to_string(),
+                        tenant_id: _tenant_ctx.map(|c| c.tenant_id.clone()).unwrap_or_default(),
+                        drift_score: drift_score.min(1.0),
+                        timestamp: chrono::Utc::now().timestamp()
+                    });
+                }
             }
         }
 
@@ -201,7 +320,6 @@ mod tests {
 
         engine.add_policy(company_policy);
 
-        // Scenario 1: Violation - banned dependency
         let mut context = HashMap::new();
         context.insert(
             "dependencies".to_string(),
@@ -214,17 +332,15 @@ mod tests {
         assert_eq!(result.violations.len(), 1);
         assert_eq!(result.violations[0].rule_id, "r1");
 
-        // Scenario 2: Violation - regex match
         let mut context = HashMap::new();
         context.insert("dependencies".to_string(), serde_json::json!(["safe-lib"]));
-        context.insert("content".to_string(), serde_json::json!("ADR 001\n...")); // Missing #
+        context.insert("content".to_string(), serde_json::json!("ADR 001\n..."));
 
         let result = engine.validate(KnowledgeLayer::Project, &context);
         assert!(!result.is_valid);
         assert_eq!(result.violations.len(), 1);
         assert_eq!(result.violations[0].rule_id, "r2");
 
-        // Scenario 3: All good
         let mut context = HashMap::new();
         context.insert("dependencies".to_string(), serde_json::json!(["safe-lib"]));
         context.insert("content".to_string(), serde_json::json!("# ADR 001\n..."));

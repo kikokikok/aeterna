@@ -1,82 +1,26 @@
 use crate::bridge::{ResolveFederationConflictTool, SyncNowTool, SyncStatusTool};
+use crate::governance::{UnitCreateTool, UnitPolicyAddTool, UserRoleAssignTool};
 use crate::knowledge::{KnowledgeGetTool, KnowledgeListTool, KnowledgeQueryTool};
 use crate::memory::{MemoryAddTool, MemoryCloseTool, MemoryDeleteTool, MemorySearchTool};
 use crate::tools::{ToolDefinition, ToolRegistry};
+use knowledge::governance::GovernanceEngine;
 use memory::manager::MemoryManager;
-use mk_core::traits::KnowledgeRepository;
+use mk_core::traits::{AuthorizationService, KnowledgeRepository};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
+use storage::postgres::PostgresBackend;
 use sync::bridge::SyncManager;
 use tokio::time::timeout;
 use tracing::{Span, debug, error, info, instrument};
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JsonRpcRequest {
-    pub jsonrpc: String,
-    pub id: Value,
-    pub method: String,
-    pub params: Option<Value>
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JsonRpcResponse {
-    pub jsonrpc: String,
-    pub id: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRpcError>
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JsonRpcError {
-    pub code: i32,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>
-}
-
-impl JsonRpcError {
-    pub fn invalid_params(message: impl Into<String>) -> Self {
-        Self {
-            code: -32602,
-            message: message.into(),
-            data: None
-        }
-    }
-
-    pub fn method_not_found(message: impl Into<String>) -> Self {
-        Self {
-            code: -32601,
-            message: message.into(),
-            data: None
-        }
-    }
-
-    pub fn internal_error(message: impl Into<String>) -> Self {
-        Self {
-            code: -32000,
-            message: message.into(),
-            data: None
-        }
-    }
-
-    pub fn request_timeout(message: impl Into<String>) -> Self {
-        Self {
-            code: -32001,
-            message: message.into(),
-            data: None
-        }
-    }
-}
 
 /// MCP JSON-RPC server for tool orchestration.
 ///
 /// Handles tool discovery and execution with integrated timeouts and tracing.
 pub struct McpServer {
     registry: ToolRegistry,
+    auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>,
     timeout_duration: Duration
 }
 
@@ -87,7 +31,10 @@ impl McpServer {
         sync_manager: Arc<SyncManager>,
         knowledge_repository: Arc<
             dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>
-        >
+        >,
+        postgres_backend: Arc<PostgresBackend>,
+        governance_engine: Arc<GovernanceEngine>,
+        auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>
     ) -> Self {
         let mut registry = ToolRegistry::new();
 
@@ -111,8 +58,22 @@ impl McpServer {
         registry.register(Box::new(SyncStatusTool::new(sync_manager.clone())));
         registry.register(Box::new(ResolveFederationConflictTool::new(sync_manager)));
 
+        registry.register(Box::new(UnitCreateTool::new(
+            postgres_backend.clone(),
+            governance_engine.clone()
+        )));
+        registry.register(Box::new(UnitPolicyAddTool::new(
+            postgres_backend.clone(),
+            governance_engine.clone()
+        )));
+        registry.register(Box::new(UserRoleAssignTool::new(
+            postgres_backend,
+            governance_engine
+        )));
+
         Self {
             registry,
+            auth_service,
             timeout_duration: Duration::from_secs(30)
         }
     }
@@ -201,69 +162,47 @@ impl McpServer {
                                 jsonrpc: "2.0".to_string(),
                                 id: request.id,
                                 result: None,
-                                error: Some(JsonRpcError::invalid_params("Missing tenant context"))
+                                error: Some(JsonRpcError::invalid_params(
+                                    "Missing or invalid tenant context"
+                                ))
                             };
                         }
                     };
 
-                let name = match params["name"].as_str() {
-                    Some(n) => n,
-                    None => {
+                let (name, tool_params) = match self.extract_call_params(&params, &tenant_context) {
+                    Ok(res) => res,
+                    Err(e) => {
                         return JsonRpcResponse {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: None,
-                            error: Some(JsonRpcError::invalid_params("Missing tool name"))
+                            error: Some(JsonRpcError::invalid_params(e))
                         };
                     }
                 };
 
-                Span::current().record("tool_name", name);
+                Span::current().record("tool_name", &name);
                 info!(tool = %name, "Calling tool");
 
-                let mut tool_params = params["arguments"].clone();
-                if tool_params.is_null() {
-                    tool_params = serde_json::json!({});
+                if let Err(e) = self
+                    .auth_service
+                    .check_permission(&tenant_context, "call_tool", &name)
+                    .await
+                {
+                    error!(tool = %name, error = %e, "Authorization check failed");
+                    return JsonRpcResponse {
+                        jsonrpc: "2.0".to_string(),
+                        id: request.id,
+                        result: None,
+                        error: Some(JsonRpcError {
+                            code: -32002,
+                            message: format!("Authorization error: {}", e),
+                            data: None
+                        })
+                    };
                 }
 
-                if let Some(obj) = tool_params.as_object_mut() {
-                    obj.insert(
-                        "tenant_context".to_string(),
-                        serde_json::to_value(&tenant_context).unwrap()
-                    );
-                } else {
-                    tool_params = serde_json::json!({
-                        "tenant_context": tenant_context
-                    });
-                }
-
-                if let Some(obj) = tool_params.as_object_mut() {
-                    obj.insert(
-                        "tenantContext".to_string(),
-                        serde_json::to_value(&tenant_context).unwrap()
-                    );
-                } else {
-                    tool_params = serde_json::json!({
-                        "tenantContext": tenant_context
-                    });
-                }
-
-                if let Some(obj) = tool_params.as_object_mut() {
-                    obj.insert(
-                        "tenantContext".to_string(),
-                        serde_json::to_value(&tenant_context).unwrap()
-                    );
-                }
-
-                // Inject tenantContext into arguments for the tool to use
-                if let Some(obj) = tool_params.as_object_mut() {
-                    obj.insert(
-                        "tenantContext".to_string(),
-                        serde_json::to_value(&tenant_context).unwrap()
-                    );
-                }
-
-                match self.registry.call(name, tool_params).await {
+                match self.registry.call(&name, tool_params).await {
                     Ok(result) => {
                         info!(tool = %name, "Tool call successful");
                         JsonRpcResponse {
@@ -303,6 +242,101 @@ impl McpServer {
             }
         }
     }
+
+    fn extract_call_params(
+        &self,
+        params: &Value,
+        tenant_context: &mk_core::types::TenantContext
+    ) -> Result<(String, Value), String> {
+        let name = match params["name"].as_str() {
+            Some(n) => n.to_string(),
+            None => return Err("Missing tool name".to_string())
+        };
+
+        let mut tool_params = params["arguments"].clone();
+        if tool_params.is_null() {
+            tool_params = serde_json::json!({});
+        }
+
+        if let Some(obj) = tool_params.as_object_mut() {
+            obj.insert(
+                "tenant_context".to_string(),
+                serde_json::to_value(tenant_context).unwrap()
+            );
+            obj.insert(
+                "tenantContext".to_string(),
+                serde_json::to_value(tenant_context).unwrap()
+            );
+        } else {
+            tool_params = serde_json::json!({
+                "tenant_context": tenant_context,
+                "tenantContext": tenant_context
+            });
+        }
+
+        Ok((name, tool_params))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JsonRpcResponse {
+    pub jsonrpc: String,
+    pub id: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<JsonRpcError>
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcError {
+    pub code: i32,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>
+}
+
+impl JsonRpcError {
+    pub fn invalid_params(message: impl Into<String>) -> Self {
+        Self {
+            code: -32602,
+            message: message.into(),
+            data: None
+        }
+    }
+
+    pub fn method_not_found(message: impl Into<String>) -> Self {
+        Self {
+            code: -32601,
+            message: message.into(),
+            data: None
+        }
+    }
+
+    pub fn internal_error(message: impl Into<String>) -> Self {
+        Self {
+            code: -32000,
+            message: message.into(),
+            data: None
+        }
+    }
+
+    pub fn request_timeout(message: impl Into<String>) -> Self {
+        Self {
+            code: -32001,
+            message: message.into(),
+            data: None
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JsonRpcRequest {
+    pub jsonrpc: String,
+    pub id: Value,
+    pub method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<Value>
 }
 
 #[cfg(test)]
@@ -314,6 +348,9 @@ mod tests {
     use serde_json::json;
     use sync::bridge::SyncManager;
     use sync::state_persister::SyncStatePersister;
+    use testcontainers::ContainerAsync;
+    use testcontainers::runners::AsyncRunner;
+    use testcontainers_modules::postgres::Postgres;
 
     struct MockRepo;
     #[async_trait::async_trait]
@@ -398,6 +435,63 @@ mod tests {
         }
     }
 
+    struct MockAuthService;
+    #[async_trait::async_trait]
+    impl mk_core::traits::AuthorizationService for MockAuthService {
+        type Error = anyhow::Error;
+        async fn check_permission(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _action: &str,
+            _resource: &str
+        ) -> anyhow::Result<bool> {
+            Ok(true)
+        }
+        async fn get_user_roles(
+            &self,
+            _ctx: &mk_core::types::TenantContext
+        ) -> anyhow::Result<Vec<mk_core::types::Role>> {
+            Ok(vec![])
+        }
+        async fn assign_role(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _user_id: &mk_core::types::UserId,
+            _role: mk_core::types::Role
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn remove_role(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _user_id: &mk_core::types::UserId,
+            _role: mk_core::types::Role
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    async fn setup_postgres_container()
+    -> Result<(ContainerAsync<Postgres>, String), Box<dyn std::error::Error + Send + Sync>> {
+        let container = Postgres::default()
+            .with_db_name("testdb")
+            .with_user("testuser")
+            .with_password("testpass")
+            .start()
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        let connection_url = format!(
+            "postgres://testuser:testpass@localhost:{}/testdb",
+            container
+                .get_host_port_ipv4(5432)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+        );
+
+        Ok((container, connection_url))
+    }
+
     async fn setup_server() -> McpServer {
         let memory_manager = Arc::new(MemoryManager::new());
         let repo = Arc::new(MockRepo);
@@ -406,7 +500,7 @@ mod tests {
             SyncManager::new(
                 memory_manager.clone(),
                 repo.clone(),
-                governance,
+                governance.clone(),
                 None,
                 Arc::new(MockPersister)
             )
@@ -414,7 +508,24 @@ mod tests {
             .unwrap()
         );
 
-        McpServer::new(memory_manager, sync_manager, repo)
+        let (container, connection_url) = setup_postgres_container()
+            .await
+            .expect("Failed to setup PostgreSQL test container. Make sure Docker is running.");
+
+        let backend = storage::postgres::PostgresBackend::new(&connection_url)
+            .await
+            .expect("Failed to connect to PostgreSQL test container");
+
+        let _container = container;
+
+        McpServer::new(
+            memory_manager,
+            sync_manager,
+            repo,
+            Arc::new(backend),
+            governance,
+            Arc::new(MockAuthService)
+        )
     }
 
     #[tokio::test]
@@ -548,7 +659,7 @@ mod tests {
         assert!(response.error.is_some());
         let err = response.error.unwrap();
         assert_eq!(err.code, -32602);
-        assert!(err.message.contains("Missing tenant context"));
+        assert!(err.message.contains("Missing or invalid tenant context"));
     }
 
     #[tokio::test]

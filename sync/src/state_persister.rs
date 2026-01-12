@@ -176,6 +176,22 @@ mod tests {
         ) -> Result<bool, Self::Error> {
             Ok(self.data.read().await.contains_key(key))
         }
+
+        async fn get_ancestors(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str
+        ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+
+        async fn get_unit_policies(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str
+        ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
+            Ok(vec![])
+        }
     }
 
     #[tokio::test]
@@ -328,6 +344,26 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _key: &str
             ) -> Result<bool, Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error"
+                ))
+            }
+
+            async fn get_ancestors(
+                &self,
+                _unit_id: &str
+            ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error"
+                ))
+            }
+
+            async fn get_unit_policies(
+                &self,
+                _unit_id: &str
+            ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "storage error"

@@ -36,14 +36,22 @@ impl GitRepository {
         Ok(Self { root_path })
     }
 
-    fn resolve_path(&self, layer: KnowledgeLayer, path: &str) -> PathBuf {
+    fn resolve_path(
+        &self,
+        ctx: &mk_core::types::TenantContext,
+        layer: KnowledgeLayer,
+        path: &str
+    ) -> PathBuf {
         let layer_dir = match layer {
             KnowledgeLayer::Company => "company",
             KnowledgeLayer::Org => "org",
             KnowledgeLayer::Team => "team",
             KnowledgeLayer::Project => "project"
         };
-        self.root_path.join(layer_dir).join(path)
+        self.root_path
+            .join(ctx.tenant_id.as_str())
+            .join(layer_dir)
+            .join(path)
     }
 
     pub fn commit(&self, message: &str) -> Result<String, RepositoryError> {
@@ -161,14 +169,14 @@ impl KnowledgeRepository for GitRepository {
         Ok(affected)
     }
 
-    #[tracing::instrument(skip(self, _ctx), fields(path = %path, layer = ?layer, tenant = %_ctx.tenant_id.as_str()))]
+    #[tracing::instrument(skip(self, ctx), fields(path = %path, layer = ?layer, tenant = %ctx.tenant_id.as_str()))]
     async fn get(
         &self,
-        _ctx: mk_core::types::TenantContext,
+        ctx: mk_core::types::TenantContext,
         layer: KnowledgeLayer,
         path: &str
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
-        let full_path = self.resolve_path(layer, path);
+        let full_path = self.resolve_path(&ctx, layer, path);
         if !full_path.exists() {
             return Ok(None);
         }
@@ -194,14 +202,14 @@ impl KnowledgeRepository for GitRepository {
         }))
     }
 
-    #[tracing::instrument(skip(self, _ctx, entry), fields(path = %entry.path, layer = ?entry.layer, tenant = %_ctx.tenant_id.as_str()))]
+    #[tracing::instrument(skip(self, ctx, entry), fields(path = %entry.path, layer = ?entry.layer, tenant = %ctx.tenant_id.as_str()))]
     async fn store(
         &self,
-        _ctx: mk_core::types::TenantContext,
+        ctx: mk_core::types::TenantContext,
         entry: KnowledgeEntry,
         message: &str
     ) -> Result<String, Self::Error> {
-        let full_path = self.resolve_path(entry.layer, &entry.path);
+        let full_path = self.resolve_path(&ctx, entry.layer, &entry.path);
         if let Some(parent) = full_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
@@ -216,11 +224,12 @@ impl KnowledgeRepository for GitRepository {
         layer: KnowledgeLayer,
         prefix: &str
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+        let tenant_path = self.root_path.join(ctx.tenant_id.as_str());
         let layer_path = match layer {
-            KnowledgeLayer::Company => self.root_path.join("company"),
-            KnowledgeLayer::Org => self.root_path.join("org"),
-            KnowledgeLayer::Team => self.root_path.join("team"),
-            KnowledgeLayer::Project => self.root_path.join("project")
+            KnowledgeLayer::Company => tenant_path.join("company"),
+            KnowledgeLayer::Org => tenant_path.join("org"),
+            KnowledgeLayer::Team => tenant_path.join("team"),
+            KnowledgeLayer::Project => tenant_path.join("project")
         };
 
         if !layer_path.exists() {
@@ -252,12 +261,12 @@ impl KnowledgeRepository for GitRepository {
 
     async fn delete(
         &self,
-        _ctx: mk_core::types::TenantContext,
+        ctx: mk_core::types::TenantContext,
         layer: KnowledgeLayer,
         path: &str,
         message: &str
     ) -> Result<String, Self::Error> {
-        let full_path = self.resolve_path(layer, path);
+        let full_path = self.resolve_path(&ctx, layer, path);
         if full_path.exists() {
             tokio::fs::remove_file(full_path).await?;
             self.commit(message)
@@ -339,6 +348,60 @@ mod tests {
         .await?;
         let after_delete = repo.get(ctx, KnowledgeLayer::Project, "test.md").await?;
         assert!(after_delete.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_git_repository_isolation() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempdir()?;
+        let repo = GitRepository::new(dir.path())?;
+
+        let tenant_a = mk_core::types::TenantId::new("tenant_a".into()).unwrap();
+        let user_a = mk_core::types::UserId::new("user_a".into()).unwrap();
+        let ctx_a = mk_core::types::TenantContext::new(tenant_a, user_a);
+
+        let tenant_b = mk_core::types::TenantId::new("tenant_b".into()).unwrap();
+        let user_b = mk_core::types::UserId::new("user_b".into()).unwrap();
+        let ctx_b = mk_core::types::TenantContext::new(tenant_b, user_b);
+
+        let entry = KnowledgeEntry {
+            path: "secret.md".to_string(),
+            content: "tenant a secret".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: mk_core::types::KnowledgeStatus::Accepted,
+            metadata: std::collections::HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: chrono::Utc::now().timestamp()
+        };
+
+        // Store for Tenant A
+        repo.store(ctx_a.clone(), entry, "tenant a commit").await?;
+
+        // Try to retrieve with Tenant B context
+        let retrieved_b = repo
+            .get(ctx_b.clone(), KnowledgeLayer::Project, "secret.md")
+            .await?;
+        assert!(
+            retrieved_b.is_none(),
+            "Tenant B should not see Tenant A data"
+        );
+
+        // Verify Tenant A can still see it
+        let retrieved_a = repo
+            .get(ctx_a.clone(), KnowledgeLayer::Project, "secret.md")
+            .await?;
+        assert!(retrieved_a.is_some());
+        assert_eq!(retrieved_a.unwrap().content, "tenant a secret");
+
+        // List verification
+        let list_b = repo.list(ctx_b, KnowledgeLayer::Project, "").await?;
+        assert!(list_b.is_empty(), "Tenant B list should be empty");
+
+        let list_a = repo.list(ctx_a, KnowledgeLayer::Project, "").await?;
+        assert_eq!(list_a.len(), 1, "Tenant A should see its entry");
 
         Ok(())
     }

@@ -13,10 +13,6 @@ use validator::Validate;
 pub struct TenantId(String);
 
 impl TenantId {
-    /// Creates a new TenantId
-    ///
-    /// # Errors
-    /// Returns error if the ID is empty or exceeds 100 characters
     #[must_use]
     pub fn new(id: String) -> Option<Self> {
         if id.is_empty() || id.len() > 100 {
@@ -25,13 +21,11 @@ impl TenantId {
         Some(Self(id))
     }
 
-    /// Returns the inner string value
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
-    /// Consumes and returns the inner string value
     #[must_use]
     pub fn into_inner(self) -> String {
         self.0
@@ -67,10 +61,6 @@ impl FromStr for TenantId {
 pub struct UserId(String);
 
 impl UserId {
-    /// Creates a new UserId
-    ///
-    /// # Errors
-    /// Returns error if the ID is empty or exceeds 100 characters
     #[must_use]
     pub fn new(id: String) -> Option<Self> {
         if id.is_empty() || id.len() > 100 {
@@ -79,13 +69,11 @@ impl UserId {
         Some(Self(id))
     }
 
-    /// Returns the inner string value
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
-    /// Consumes and returns the inner string value
     #[must_use]
     pub fn into_inner(self) -> String {
         self.0
@@ -133,7 +121,6 @@ pub struct TenantContext {
 }
 
 impl TenantContext {
-    /// Creates a new TenantContext
     #[must_use]
     pub fn new(tenant_id: TenantId, user_id: UserId) -> Self {
         Self {
@@ -143,7 +130,6 @@ impl TenantContext {
         }
     }
 
-    /// Creates a TenantContext with agent delegation
     #[must_use]
     pub fn with_agent(tenant_id: TenantId, user_id: UserId, agent_id: String) -> Self {
         Self {
@@ -196,7 +182,6 @@ pub struct HierarchyPath {
 }
 
 impl HierarchyPath {
-    /// Creates a new HierarchyPath at company level
     #[must_use]
     pub fn company(company_id: String) -> Self {
         Self {
@@ -207,7 +192,6 @@ impl HierarchyPath {
         }
     }
 
-    /// Creates a new HierarchyPath at organization level
     #[must_use]
     pub fn org(company_id: String, org_id: String) -> Self {
         Self {
@@ -218,7 +202,6 @@ impl HierarchyPath {
         }
     }
 
-    /// Creates a new HierarchyPath at team level
     #[must_use]
     pub fn team(company_id: String, org_id: String, team_id: String) -> Self {
         Self {
@@ -229,7 +212,6 @@ impl HierarchyPath {
         }
     }
 
-    /// Creates a new HierarchyPath at project level
     #[must_use]
     pub fn project(
         company_id: String,
@@ -302,12 +284,48 @@ pub enum Role {
     /// Company-level admin (full access, tenant management)
     Admin,
 
-    /// Agent acting on behalf of user (inherits user's role)
+    /// Role acting on behalf of user (inherits user's role)
     Agent
 }
 
+/// Organizational unit types
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    strum::EnumString,
+    strum::Display,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "camelCase")]
+pub enum UnitType {
+    Company,
+    Organization,
+    Team,
+    Project
+}
+
+/// Organizational unit entity
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OrganizationalUnit {
+    pub id: String,
+    pub name: String,
+    pub unit_type: UnitType,
+    pub parent_id: Option<String>,
+    pub tenant_id: TenantId,
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+    pub created_at: i64,
+    pub updated_at: i64
+}
+
 impl Role {
-    /// Returns role precedence value (4=highest, 1=lowest)
     #[must_use]
     pub fn precedence(&self) -> u8 {
         match self {
@@ -319,7 +337,6 @@ impl Role {
         }
     }
 
-    /// Returns display name for UI
     #[must_use]
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -491,7 +508,6 @@ pub enum MemoryLayer {
 }
 
 impl MemoryLayer {
-    /// Returns precedence value (1=highest, 7=lowest)
     #[must_use]
     pub fn precedence(&self) -> u8 {
         match self {
@@ -505,7 +521,6 @@ impl MemoryLayer {
         }
     }
 
-    /// Returns layer display name
     #[must_use]
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -684,6 +699,74 @@ pub struct PolicyViolation {
     pub severity: ConstraintSeverity,
     pub message: String,
     pub context: std::collections::HashMap<String, serde_json::Value>
+}
+
+/// Governance event types for auditing and real-time updates
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum GovernanceEvent {
+    /// New organizational unit created
+    UnitCreated {
+        unit_id: String,
+        unit_type: UnitType,
+        tenant_id: TenantId,
+        parent_id: Option<String>,
+        timestamp: i64
+    },
+
+    /// Organizational unit updated
+    UnitUpdated {
+        unit_id: String,
+        tenant_id: TenantId,
+        timestamp: i64
+    },
+
+    /// Organizational unit deleted
+    UnitDeleted {
+        unit_id: String,
+        tenant_id: TenantId,
+        timestamp: i64
+    },
+
+    /// Role assigned to a user for a specific unit
+    RoleAssigned {
+        user_id: UserId,
+        unit_id: String,
+        role: Role,
+        tenant_id: TenantId,
+        timestamp: i64
+    },
+
+    /// Role removed from a user
+    RoleRemoved {
+        user_id: UserId,
+        unit_id: String,
+        tenant_id: TenantId,
+        timestamp: i64
+    },
+
+    /// Policy created or updated
+    PolicyUpdated {
+        policy_id: String,
+        layer: KnowledgeLayer,
+        tenant_id: TenantId,
+        timestamp: i64
+    },
+
+    /// Policy deleted
+    PolicyDeleted {
+        policy_id: String,
+        tenant_id: TenantId,
+        timestamp: i64
+    },
+
+    /// Drift detected in a project
+    DriftDetected {
+        project_id: String,
+        tenant_id: TenantId,
+        drift_score: f32,
+        timestamp: i64
+    }
 }
 
 #[cfg(test)]

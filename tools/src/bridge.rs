@@ -123,7 +123,9 @@ impl Tool for SyncStatusTool {
                 "totalItemsSynced": state.stats.total_items_synced,
                 "totalConflicts": state.stats.total_conflicts,
                 "totalGovernanceBlocks": state.stats.total_governance_blocks,
-                "avgSyncDurationMs": state.stats.avg_sync_duration_ms
+                "avgSyncDurationMs": state.stats.avg_sync_duration_ms,
+                "driftScore": state.stats.drift_score,
+                "policyViolations": state.stats.policy_violations
             }
         }))
     }
