@@ -13,7 +13,7 @@ pub enum Role {
     TechLead,
     Architect,
     Admin,
-    Agent
+    Agent,
 }
 
 #[derive(
@@ -25,7 +25,7 @@ pub enum UnitType {
     Company,
     Organization,
     Team,
-    Project
+    Project,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -38,7 +38,7 @@ pub struct OrganizationalUnit {
     pub tenant_id: TenantId,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub created_at: i64,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 #[derive(
@@ -89,7 +89,7 @@ impl Default for TenantContext {
         Self {
             tenant_id: TenantId::default(),
             user_id: UserId::default(),
-            agent_id: None
+            agent_id: None,
         }
     }
 }
@@ -141,7 +141,7 @@ impl Default for UserId {
 pub struct TenantContext {
     pub tenant_id: TenantId,
     pub user_id: UserId,
-    pub agent_id: Option<String>
+    pub agent_id: Option<String>,
 }
 
 impl TenantContext {
@@ -149,7 +149,7 @@ impl TenantContext {
         Self {
             tenant_id,
             user_id,
-            agent_id: None
+            agent_id: None,
         }
     }
 
@@ -157,7 +157,7 @@ impl TenantContext {
         Self {
             tenant_id,
             user_id,
-            agent_id: Some(agent_id)
+            agent_id: Some(agent_id),
         }
     }
 }
@@ -167,7 +167,7 @@ pub struct HierarchyPath {
     pub company: String,
     pub org: Option<String>,
     pub team: Option<String>,
-    pub project: Option<String>
+    pub project: Option<String>,
 }
 
 impl HierarchyPath {
@@ -176,7 +176,7 @@ impl HierarchyPath {
             company: id,
             org: None,
             team: None,
-            project: None
+            project: None,
         }
     }
 
@@ -185,7 +185,7 @@ impl HierarchyPath {
             company,
             org: Some(id),
             team: None,
-            project: None
+            project: None,
         }
     }
 
@@ -194,7 +194,7 @@ impl HierarchyPath {
             company,
             org: Some(org),
             team: Some(id),
-            project: None
+            project: None,
         }
     }
 
@@ -203,7 +203,7 @@ impl HierarchyPath {
             company,
             org: Some(org),
             team: Some(team),
-            project: Some(id)
+            project: Some(id),
         }
     }
 
@@ -242,7 +242,7 @@ impl Role {
             Role::Architect => 3,
             Role::TechLead => 2,
             Role::Developer => 1,
-            Role::Agent => 0
+            Role::Agent => 0,
         }
     }
 
@@ -253,7 +253,7 @@ impl Role {
             Role::TechLead => "Tech Lead",
             Role::Architect => "Architect",
             Role::Admin => "Admin",
-            Role::Agent => "Agent"
+            Role::Agent => "Agent",
         }
     }
 }
@@ -265,7 +265,7 @@ pub enum KnowledgeType {
     Adr,
     Policy,
     Pattern,
-    Spec
+    Spec,
 }
 
 /// Knowledge status
@@ -276,7 +276,7 @@ pub enum KnowledgeStatus {
     Proposed,
     Accepted,
     Deprecated,
-    Superseded
+    Superseded,
 }
 
 #[derive(
@@ -298,7 +298,7 @@ pub enum KnowledgeLayer {
     Company,
     Org,
     Team,
-    Project
+    Project,
 }
 
 /// Constraint severity levels
@@ -307,7 +307,7 @@ pub enum KnowledgeLayer {
 pub enum ConstraintSeverity {
     Info,
     Warn,
-    Block
+    Block,
 }
 
 /// Constraint operators
@@ -319,7 +319,7 @@ pub enum ConstraintOperator {
     MustMatch,
     MustNotMatch,
     MustExist,
-    MustNotExist
+    MustNotExist,
 }
 
 /// Constraint targets
@@ -330,7 +330,7 @@ pub enum ConstraintTarget {
     Code,
     Dependency,
     Import,
-    Config
+    Config,
 }
 
 /// Memory layers for hierarchical storage
@@ -356,7 +356,7 @@ pub enum MemoryLayer {
     Project,
     Team,
     Org,
-    Company
+    Company,
 }
 
 impl MemoryLayer {
@@ -369,7 +369,7 @@ impl MemoryLayer {
             MemoryLayer::Project => 4,
             MemoryLayer::Team => 5,
             MemoryLayer::Org => 6,
-            MemoryLayer::Company => 7
+            MemoryLayer::Company => 7,
         }
     }
 
@@ -382,7 +382,7 @@ impl MemoryLayer {
             MemoryLayer::Project => "Project",
             MemoryLayer::Team => "Team",
             MemoryLayer::Org => "Organization",
-            MemoryLayer::Company => "Company"
+            MemoryLayer::Company => "Company",
         }
     }
 }
@@ -392,13 +392,20 @@ impl MemoryLayer {
 )]
 #[serde(rename_all = "camelCase")]
 pub struct LayerIdentifiers {
+    #[validate(custom(function = "validate_agent_id"))]
     pub agent_id: Option<String>,
+    #[validate(custom(function = "validate_user_id"))]
     pub user_id: Option<String>,
+    #[validate(custom(function = "validate_session_id"))]
     pub session_id: Option<String>,
+    #[validate(custom(function = "validate_project_id"))]
     pub project_id: Option<String>,
+    #[validate(custom(function = "validate_team_id"))]
     pub team_id: Option<String>,
+    #[validate(custom(function = "validate_org_id"))]
     pub org_id: Option<String>,
-    pub company_id: Option<String>
+    #[validate(custom(function = "validate_company_id"))]
+    pub company_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -410,7 +417,7 @@ pub struct MemoryEntry {
     pub layer: MemoryLayer,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub created_at: i64,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -424,7 +431,7 @@ pub struct KnowledgeEntry {
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub commit_hash: Option<String>,
     pub author: Option<String>,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 #[derive(
@@ -434,7 +441,7 @@ pub struct KnowledgeEntry {
 pub enum PolicyMode {
     #[default]
     Optional,
-    Mandatory
+    Mandatory,
 }
 
 #[derive(
@@ -445,7 +452,7 @@ pub enum RuleMergeStrategy {
     #[default]
     Override,
     Merge,
-    Intersect
+    Intersect,
 }
 
 #[derive(
@@ -455,7 +462,7 @@ pub enum RuleMergeStrategy {
 pub enum RuleType {
     #[default]
     Allow,
-    Deny
+    Deny,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -470,7 +477,7 @@ pub struct Policy {
     #[serde(default)]
     pub merge_strategy: RuleMergeStrategy,
     pub rules: Vec<PolicyRule>,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -483,14 +490,14 @@ pub struct PolicyRule {
     pub operator: ConstraintOperator,
     pub value: serde_json::Value,
     pub severity: ConstraintSeverity,
-    pub message: String
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationResult {
     pub is_valid: bool,
-    pub violations: Vec<PolicyViolation>
+    pub violations: Vec<PolicyViolation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -500,7 +507,7 @@ pub struct PolicyViolation {
     pub policy_id: String,
     pub severity: ConstraintSeverity,
     pub message: String,
-    pub context: std::collections::HashMap<String, serde_json::Value>
+    pub context: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Governance event types for auditing and real-time updates
@@ -513,21 +520,21 @@ pub enum GovernanceEvent {
         unit_type: UnitType,
         tenant_id: TenantId,
         parent_id: Option<String>,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Organizational unit updated
     UnitUpdated {
         unit_id: String,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Organizational unit deleted
     UnitDeleted {
         unit_id: String,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Role assigned to a user for a specific unit
@@ -536,7 +543,7 @@ pub enum GovernanceEvent {
         unit_id: String,
         role: Role,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Role removed from a user
@@ -545,7 +552,7 @@ pub enum GovernanceEvent {
         unit_id: String,
         role: Role,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Policy created or updated
@@ -553,14 +560,14 @@ pub enum GovernanceEvent {
         policy_id: String,
         layer: KnowledgeLayer,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Policy deleted
     PolicyDeleted {
         policy_id: String,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Drift detected in a project
@@ -568,8 +575,8 @@ pub enum GovernanceEvent {
         project_id: String,
         tenant_id: TenantId,
         drift_score: f32,
-        timestamp: i64
-    }
+        timestamp: i64,
+    },
 }
 
 impl GovernanceEvent {
@@ -583,7 +590,7 @@ impl GovernanceEvent {
             GovernanceEvent::RoleRemoved { tenant_id, .. } => tenant_id,
             GovernanceEvent::PolicyUpdated { tenant_id, .. } => tenant_id,
             GovernanceEvent::PolicyDeleted { tenant_id, .. } => tenant_id,
-            GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id
+            GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id,
         }
     }
 }
@@ -596,7 +603,7 @@ pub struct DriftResult {
     pub tenant_id: TenantId,
     pub drift_score: f32,
     pub violations: Vec<PolicyViolation>,
-    pub timestamp: i64
+    pub timestamp: i64,
 }
 
 pub fn validate_user_id(id: &&String) -> Result<(), validator::ValidationError> {
@@ -612,7 +619,7 @@ pub fn validate_user_id(id: &&String) -> Result<(), validator::ValidationError> 
 pub fn validate_session_id(id: &&String) -> Result<(), validator::ValidationError> {
     if id.is_empty() {
         return Err(validator::ValidationError::new(
-            "Session ID cannot be empty"
+            "Session ID cannot be empty",
         ));
     }
     Ok(())
@@ -621,7 +628,7 @@ pub fn validate_session_id(id: &&String) -> Result<(), validator::ValidationErro
 pub fn validate_project_id(id: &&String) -> Result<(), validator::ValidationError> {
     if id.is_empty() {
         return Err(validator::ValidationError::new(
-            "Project ID cannot be empty"
+            "Project ID cannot be empty",
         ));
     }
     Ok(())
@@ -644,7 +651,7 @@ pub fn validate_org_id(id: &&String) -> Result<(), validator::ValidationError> {
 pub fn validate_company_id(id: &&String) -> Result<(), validator::ValidationError> {
     if id.is_empty() {
         return Err(validator::ValidationError::new(
-            "Company ID cannot be empty"
+            "Company ID cannot be empty",
         ));
     }
     Ok(())
@@ -745,7 +752,7 @@ mod tests {
             layer: MemoryLayer::User,
             metadata: std::collections::HashMap::new(),
             created_at: 1234567890,
-            updated_at: 1234567890
+            updated_at: 1234567890,
         };
 
         assert_eq!(entry.id, "test_id");
@@ -765,7 +772,7 @@ mod tests {
             commit_hash: Some("abc123".to_string()),
             author: Some("Alice".to_string()),
             status: KnowledgeStatus::Accepted,
-            updated_at: 1234567890
+            updated_at: 1234567890,
         };
 
         assert_eq!(entry.path, "docs/adr/001.md");
@@ -783,7 +790,7 @@ mod tests {
             operator: ConstraintOperator::MustNotUse,
             value: serde_json::json!("unsafe-lib"),
             severity: ConstraintSeverity::Block,
-            message: "Do not use unsafe libraries".to_string()
+            message: "Do not use unsafe libraries".to_string(),
         };
 
         let policy = Policy {
@@ -794,7 +801,7 @@ mod tests {
             mode: PolicyMode::Mandatory,
             merge_strategy: RuleMergeStrategy::Merge,
             rules: vec![rule],
-            metadata: std::collections::HashMap::new()
+            metadata: std::collections::HashMap::new(),
         };
 
         assert_eq!(policy.id, "policy_1");
@@ -810,12 +817,12 @@ mod tests {
             policy_id: "policy_1".to_string(),
             severity: ConstraintSeverity::Warn,
             message: "Warning message".to_string(),
-            context: std::collections::HashMap::new()
+            context: std::collections::HashMap::new(),
         };
 
         let result = ValidationResult {
             is_valid: false,
-            violations: vec![violation]
+            violations: vec![violation],
         };
 
         assert!(!result.is_valid);
@@ -888,7 +895,7 @@ mod tests {
             project_id: Some("project_789".to_string()),
             team_id: Some("team_abc".to_string()),
             org_id: Some("org_xyz".to_string()),
-            company_id: Some("company_123".to_string())
+            company_id: Some("company_123".to_string()),
         };
 
         let result = identifiers.validate();
@@ -904,7 +911,7 @@ mod tests {
             project_id: None,
             team_id: None,
             org_id: None,
-            company_id: None
+            company_id: None,
         };
 
         let result = identifiers.validate();
@@ -1052,7 +1059,7 @@ mod tests {
             "c1".to_string(),
             "o1".to_string(),
             "t1".to_string(),
-            "p1".to_string()
+            "p1".to_string(),
         );
         assert_eq!(project.depth(), 4);
     }
@@ -1063,7 +1070,7 @@ mod tests {
             "c1".to_string(),
             "o1".to_string(),
             "t1".to_string(),
-            "p1".to_string()
+            "p1".to_string(),
         );
         assert_eq!(project.path_string(), "c1 > o1 > t1 > p1");
     }

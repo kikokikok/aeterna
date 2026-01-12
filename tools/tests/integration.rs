@@ -25,7 +25,7 @@ impl KnowledgeRepository for MockKnowledgeRepo {
         &self,
         _ctx: mk_core::types::TenantContext,
         _layer: KnowledgeLayer,
-        _path: &str
+        _path: &str,
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
         Ok(None)
     }
@@ -34,7 +34,7 @@ impl KnowledgeRepository for MockKnowledgeRepo {
         &self,
         _ctx: mk_core::types::TenantContext,
         _entry: KnowledgeEntry,
-        _message: &str
+        _message: &str,
     ) -> Result<String, Self::Error> {
         Ok("hash".to_string())
     }
@@ -43,7 +43,7 @@ impl KnowledgeRepository for MockKnowledgeRepo {
         &self,
         _ctx: mk_core::types::TenantContext,
         _layer: KnowledgeLayer,
-        _prefix: &str
+        _prefix: &str,
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         Ok(vec![])
     }
@@ -53,14 +53,14 @@ impl KnowledgeRepository for MockKnowledgeRepo {
         _ctx: mk_core::types::TenantContext,
         _layer: KnowledgeLayer,
         _path: &str,
-        _message: &str
+        _message: &str,
     ) -> Result<String, Self::Error> {
         Ok("hash".to_string())
     }
 
     async fn get_head_commit(
         &self,
-        _ctx: mk_core::types::TenantContext
+        _ctx: mk_core::types::TenantContext,
     ) -> Result<Option<String>, Self::Error> {
         Ok(Some("head".to_string()))
     }
@@ -68,7 +68,7 @@ impl KnowledgeRepository for MockKnowledgeRepo {
     async fn get_affected_items(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _since_commit: &str
+        _since_commit: &str,
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         Ok(vec![])
     }
@@ -78,7 +78,7 @@ impl KnowledgeRepository for MockKnowledgeRepo {
         _ctx: mk_core::types::TenantContext,
         _query: &str,
         _layers: Vec<KnowledgeLayer>,
-        _limit: usize
+        _limit: usize,
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         Ok(vec![])
     }
@@ -94,14 +94,14 @@ struct MockPersister;
 impl SyncStatePersister for MockPersister {
     async fn load(
         &self,
-        _tenant_id: &TenantId
+        _tenant_id: &TenantId,
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         Ok(SyncState::default())
     }
     async fn save(
         &self,
         _tenant_id: &TenantId,
-        _state: &SyncState
+        _state: &SyncState,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
@@ -115,13 +115,13 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
         &self,
         _ctx: &mk_core::types::TenantContext,
         _action: &str,
-        _resource: &str
+        _resource: &str,
     ) -> anyhow::Result<bool> {
         Ok(true)
     }
     async fn get_user_roles(
         &self,
-        _ctx: &mk_core::types::TenantContext
+        _ctx: &mk_core::types::TenantContext,
     ) -> anyhow::Result<Vec<mk_core::types::Role>> {
         Ok(vec![])
     }
@@ -129,7 +129,7 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
         &self,
         _ctx: &mk_core::types::TenantContext,
         _user_id: &mk_core::types::UserId,
-        _role: mk_core::types::Role
+        _role: mk_core::types::Role,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -137,7 +137,7 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
         &self,
         _ctx: &mk_core::types::TenantContext,
         _user_id: &mk_core::types::UserId,
-        _role: mk_core::types::Role
+        _role: mk_core::types::Role,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -180,11 +180,12 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
             memory_manager.clone(),
             knowledge_repo.clone(),
             Arc::new(knowledge::governance::GovernanceEngine::new()),
+            config::config::DeploymentConfig::default(),
             None,
-            Arc::new(MockPersister)
+            Arc::new(MockPersister),
         )
         .await
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?,
     );
 
     let server = Arc::new(McpServer::new(
@@ -194,10 +195,11 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
         Arc::new(
             storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
                 .await
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
-        Arc::new(MockAuthService)
+        Arc::new(MockAuthService),
+        None,
     ));
 
     let opencode = OpenCodeAdapter::new(server.clone());
@@ -242,11 +244,12 @@ async fn test_server_timeout() -> anyhow::Result<()> {
             memory_manager.clone(),
             knowledge_repo.clone(),
             Arc::new(knowledge::governance::GovernanceEngine::new()),
+            config::config::DeploymentConfig::default(),
             None,
-            Arc::new(MockPersister)
+            Arc::new(MockPersister),
         )
         .await
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?,
     );
 
     let _server = McpServer::new(
@@ -256,10 +259,11 @@ async fn test_server_timeout() -> anyhow::Result<()> {
         Arc::new(
             storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
                 .await
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
-        Arc::new(MockAuthService)
+        Arc::new(MockAuthService),
+        None,
     )
     .with_timeout(std::time::Duration::from_millis(1));
 
@@ -271,13 +275,13 @@ async fn test_server_timeout() -> anyhow::Result<()> {
             &self,
             _ctx: &mk_core::types::TenantContext,
             _action: &str,
-            _resource: &str
+            _resource: &str,
         ) -> anyhow::Result<bool> {
             Ok(false)
         }
         async fn get_user_roles(
             &self,
-            _ctx: &mk_core::types::TenantContext
+            _ctx: &mk_core::types::TenantContext,
         ) -> anyhow::Result<Vec<mk_core::types::Role>> {
             Ok(vec![])
         }
@@ -285,7 +289,7 @@ async fn test_server_timeout() -> anyhow::Result<()> {
             &self,
             _ctx: &mk_core::types::TenantContext,
             _user_id: &mk_core::types::UserId,
-            _role: mk_core::types::Role
+            _role: mk_core::types::Role,
         ) -> anyhow::Result<()> {
             Ok(())
         }
@@ -293,7 +297,7 @@ async fn test_server_timeout() -> anyhow::Result<()> {
             &self,
             _ctx: &mk_core::types::TenantContext,
             _user_id: &mk_core::types::UserId,
-            _role: mk_core::types::Role
+            _role: mk_core::types::Role,
         ) -> anyhow::Result<()> {
             Ok(())
         }
@@ -306,10 +310,11 @@ async fn test_server_timeout() -> anyhow::Result<()> {
         Arc::new(
             storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
                 .await
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
-        Arc::new(DenyAuthService)
+        Arc::new(DenyAuthService),
+        None,
     );
 
     let request = JsonRpcRequest {
@@ -325,7 +330,7 @@ async fn test_server_timeout() -> anyhow::Result<()> {
             "arguments": {
                 "query": "test"
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;

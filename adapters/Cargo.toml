@@ -13,6 +13,7 @@ memory.workspace = true
 knowledge.workspace = true
 storage.workspace = true
 sync.workspace = true
+config.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
