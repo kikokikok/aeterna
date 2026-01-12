@@ -6,7 +6,7 @@ use memory::providers::MockProvider;
 use mk_core::traits::{KnowledgeRepository, StorageBackend};
 use mk_core::types::{
     KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, MemoryLayer, TenantContext,
-    TenantId
+    TenantId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,13 +16,13 @@ use sync::state_persister::SyncStatePersister;
 use tokio::sync::RwLock;
 
 struct MockStorage {
-    data: Arc<RwLock<HashMap<String, Vec<u8>>>>
+    data: Arc<RwLock<HashMap<String, Vec<u8>>>>,
 }
 
 impl MockStorage {
     fn new() -> Self {
         Self {
-            data: Arc::new(RwLock::new(HashMap::new()))
+            data: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -42,7 +42,7 @@ impl StorageBackend for MockStorage {
     async fn retrieve(
         &self,
         _ctx: TenantContext,
-        key: &str
+        key: &str,
     ) -> Result<Option<Vec<u8>>, Self::Error> {
         Ok(self.data.read().await.get(key).cloned())
     }
@@ -59,7 +59,15 @@ impl StorageBackend for MockStorage {
     async fn get_ancestors(
         &self,
         _ctx: TenantContext,
-        _unit_id: &str
+        _unit_id: &str,
+    ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn get_descendants(
+        &self,
+        _ctx: TenantContext,
+        _unit_id: &str,
     ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
         Ok(Vec::new())
     }
@@ -67,33 +75,109 @@ impl StorageBackend for MockStorage {
     async fn get_unit_policies(
         &self,
         _ctx: TenantContext,
-        _unit_id: &str
+        _unit_id: &str,
     ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn create_unit(
+        &self,
+        _unit: &mk_core::types::OrganizationalUnit,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn add_unit_policy(
+        &self,
+        _ctx: &TenantContext,
+        _unit_id: &str,
+        _policy: &mk_core::types::Policy,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn assign_role(
+        &self,
+        _user_id: &mk_core::types::UserId,
+        _tenant_id: &mk_core::types::TenantId,
+        _unit_id: &str,
+        _role: mk_core::types::Role,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn remove_role(
+        &self,
+        _user_id: &mk_core::types::UserId,
+        _tenant_id: &mk_core::types::TenantId,
+        _unit_id: &str,
+        _role: mk_core::types::Role,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn store_drift_result(
+        &self,
+        _result: mk_core::types::DriftResult,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn get_latest_drift_result(
+        &self,
+        _ctx: TenantContext,
+        _project_id: &str,
+    ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
+        Ok(None)
+    }
+
+    async fn list_all_units(&self) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn record_job_status(
+        &self,
+        _job_name: &str,
+        _tenant_id: &str,
+        _status: &str,
+        _message: Option<&str>,
+        _started_at: i64,
+        _finished_at: Option<i64>,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn get_governance_events(
+        &self,
+        _ctx: TenantContext,
+        _since_timestamp: i64,
+        _limit: usize,
+    ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
         Ok(Vec::new())
     }
 }
 
 pub struct SimplePersister {
-    storage: Arc<MockStorage>
+    storage: Arc<MockStorage>,
 }
 
 #[async_trait]
 impl SyncStatePersister for SimplePersister {
     async fn load(
         &self,
-        tenant_id: &TenantId
+        tenant_id: &TenantId,
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         let ctx = TenantContext::new(tenant_id.clone(), mk_core::types::UserId::default());
         match self.storage.retrieve(ctx, "sync_state").await? {
             Some(data) => Ok(serde_json::from_slice(&data)?),
-            None => Ok(SyncState::default())
+            None => Ok(SyncState::default()),
         }
     }
 
     async fn save(
         &self,
         tenant_id: &TenantId,
-        state: &SyncState
+        state: &SyncState,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let ctx = TenantContext::new(tenant_id.clone(), mk_core::types::UserId::default());
         let data = serde_json::to_vec(state)?;
@@ -104,7 +188,6 @@ impl SyncStatePersister for SimplePersister {
 
 #[tokio::test]
 async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // GIVEN a SyncManager with mock storage and repositories
     let repo_dir = tempfile::tempdir()?;
     let knowledge_repo = Arc::new(GitRepository::new(repo_dir.path())?);
     let governance_engine = Arc::new(GovernanceEngine::new());
@@ -117,19 +200,19 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
 
     let storage = Arc::new(MockStorage::new());
     let persister = Arc::new(SimplePersister {
-        storage: storage.clone()
+        storage: storage.clone(),
     });
 
     let sync_manager = SyncManager::new(
         memory_manager.clone(),
         knowledge_repo.clone(),
         governance_engine.clone(),
+        config::DeploymentConfig::default(),
         None,
-        persister.clone()
+        persister.clone(),
     )
     .await?;
 
-    // AND initial knowledge
     let entry = KnowledgeEntry {
         path: "test.md".to_string(),
         content: "initial content".to_string(),
@@ -139,16 +222,14 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
         metadata: HashMap::new(),
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
     };
     knowledge_repo
         .store(TenantContext::default(), entry.clone(), "first commit")
         .await?;
 
-    // WHEN performing full sync
     sync_manager.sync_all(TenantContext::default()).await?;
 
-    // THEN sync state is persisted
     let ctx = TenantContext::default();
     assert!(storage.exists(ctx, "sync_state").await?);
     let tenant_id = TenantId::default();
@@ -156,7 +237,6 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
     assert_eq!(state.stats.total_items_synced, 1);
     assert!(state.last_knowledge_commit.is_some());
 
-    // WHEN updating knowledge
     let updated_entry = KnowledgeEntry {
         content: "updated content".to_string(),
         ..entry.clone()
@@ -165,16 +245,13 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
         .store(TenantContext::default(), updated_entry, "second commit")
         .await?;
 
-    // AND performing incremental sync
     sync_manager
         .sync_incremental(TenantContext::default())
         .await?;
 
-    // THEN sync state is updated
     let state = persister.load(&tenant_id).await?;
     assert_eq!(state.stats.total_syncs, 2);
 
-    // WHEN triggering sync cycle (manual)
     sync_manager
         .run_sync_cycle(TenantContext::default(), 0)
         .await?;
@@ -183,24 +260,20 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
         .detect_conflicts(TenantContext::default())
         .await?;
 
-    // WHEN corrupting memory (missing pointer)
     let memory_id = format!("ptr_{}", entry.path);
     memory_manager
         .delete_from_layer(TenantContext::default(), MemoryLayer::Project, &memory_id)
         .await?;
 
-    // THEN conflict is detected
     let conflicts = sync_manager
         .detect_conflicts(TenantContext::default())
         .await?;
     assert_eq!(conflicts.len(), 1);
 
-    // WHEN resolving conflicts
     sync_manager
         .resolve_conflicts(TenantContext::default(), conflicts)
         .await?;
 
-    // THEN conflict is resolved
     let conflicts = sync_manager
         .detect_conflicts(TenantContext::default())
         .await?;
@@ -214,7 +287,6 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
 
 #[tokio::test]
 async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // GIVEN a SyncManager with mock storage
     let repo_dir = tempfile::tempdir()?;
     let knowledge_repo = Arc::new(GitRepository::new(repo_dir.path())?);
     let governance_engine = Arc::new(GovernanceEngine::new());
@@ -226,7 +298,7 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
 
     let storage = Arc::new(MockStorage::new());
     let persister = Arc::new(SimplePersister {
-        storage: storage.clone()
+        storage: storage.clone(),
     });
 
     let sync_manager = Arc::new(
@@ -234,13 +306,13 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
             memory_manager.clone(),
             knowledge_repo.clone(),
             governance_engine.clone(),
+            config::DeploymentConfig::default(),
             None,
-            persister.clone()
+            persister.clone(),
         )
-        .await?
+        .await?,
     );
 
-    // AND initial knowledge
     let entry = KnowledgeEntry {
         path: "bg_test.md".to_string(),
         content: "initial content".to_string(),
@@ -250,20 +322,18 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
         metadata: HashMap::new(),
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
     };
     knowledge_repo
         .store(TenantContext::default(), entry.clone(), "first commit")
         .await?;
 
-    // WHEN starting background sync with short interval
     let (_tx, rx) = tokio::sync::watch::channel(false);
     let handle = sync_manager
         .clone()
         .start_background_sync(TenantContext::default(), 1, 0, rx)
         .await;
 
-    // THEN after some time, the item should be synced
     let mut synced = false;
     let tenant_id = TenantId::default();
     for _ in 0..10 {
@@ -283,7 +353,6 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
 
 #[tokio::test]
 async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // GIVEN a SyncManager with a blocking policy
     let repo_dir = tempfile::tempdir()?;
     let knowledge_repo = Arc::new(GitRepository::new(repo_dir.path())?);
     let mut governance_engine = GovernanceEngine::new();
@@ -293,15 +362,18 @@ async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error
         name: "No Secrets".to_string(),
         description: None,
         layer: KnowledgeLayer::Company,
+        mode: mk_core::types::PolicyMode::Mandatory,
+        merge_strategy: mk_core::types::RuleMergeStrategy::Override,
         rules: vec![mk_core::types::PolicyRule {
             id: "r1".to_string(),
+            rule_type: mk_core::types::RuleType::Allow,
             target: mk_core::types::ConstraintTarget::Code,
             operator: mk_core::types::ConstraintOperator::MustNotMatch,
             value: serde_json::json!("SECRET"),
             severity: mk_core::types::ConstraintSeverity::Block,
-            message: "No secrets allowed".to_string()
+            message: "No secrets allowed".to_string(),
         }],
-        metadata: HashMap::new()
+        metadata: HashMap::new(),
     });
 
     let memory_manager = Arc::new(MemoryManager::new());
@@ -312,52 +384,40 @@ async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error
 
     let storage = Arc::new(MockStorage::new());
     let persister = Arc::new(SimplePersister {
-        storage: storage.clone()
+        storage: storage.clone(),
     });
 
     let sync_manager = SyncManager::new(
         memory_manager.clone(),
         knowledge_repo.clone(),
         Arc::new(governance_engine),
+        config::DeploymentConfig::default(),
         None,
-        persister.clone()
+        persister.clone(),
     )
     .await?;
 
-    // AND knowledge containing a secret
     let entry = KnowledgeEntry {
         path: "secret.md".to_string(),
         content: "My SECRET is 12345".to_string(),
-        layer: KnowledgeLayer::Company,
+        layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
-        status: KnowledgeStatus::Draft,
+        status: KnowledgeStatus::Accepted,
         metadata: HashMap::new(),
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
     };
     knowledge_repo
-        .store(
-            TenantContext::default(),
-            entry.clone(),
-            "commit with secret"
-        )
+        .store(TenantContext::default(), entry, "secret commit")
         .await?;
 
-    // WHEN syncing
-    let mut state = SyncState::default();
-    let result = sync_manager
-        .sync_entry(TenantContext::default(), &entry, &mut state)
-        .await;
+    sync_manager.sync_all(TenantContext::default()).await?;
 
-    // THEN sync fails for that item
-    assert!(result.is_err());
-    assert!(
-        state
-            .failed_items
-            .iter()
-            .any(|f| f.error.contains("Governance violation (BLOCK)"))
-    );
+    let tenant_id = TenantId::default();
+    let state = persister.load(&tenant_id).await?;
+    assert_eq!(state.stats.total_items_synced, 0);
+    assert!(state.stats.total_governance_blocks > 0);
 
     Ok(())
 }

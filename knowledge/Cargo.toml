@@ -4,6 +4,13 @@ version = "0.1.0"
 edition = "2024"
 description = "Knowledge repository implementation"
 
+[features]
+default = ["local", "hybrid", "remote"]
+local = []
+hybrid = []
+remote = []
+full = ["local", "hybrid", "remote"]
+
 [dependencies]
 mk_core.workspace = true
 utils.workspace = true
@@ -28,3 +35,6 @@ utoipa.workspace = true
 reqwest.workspace = true
 uuid.workspace = true
 sqlx.workspace = true
+
+[dev-dependencies]
+memory.workspace = true

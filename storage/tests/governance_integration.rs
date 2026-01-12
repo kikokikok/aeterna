@@ -1,7 +1,7 @@
 //! Integration tests for the governance event system and multi-publisher.
 
-use mk_core::traits::EventPublisher;
-use mk_core::types::{GovernanceEvent, TenantId};
+use mk_core::traits::{AuthorizationService, EventPublisher, StorageBackend};
+use mk_core::types::{GovernanceEvent, TenantContext, TenantId, UserId};
 use std::sync::Arc;
 use storage::events::RedisPublisher;
 use storage::postgres::PostgresBackend;
@@ -17,9 +17,9 @@ async fn test_governance_event_propagation() {
             String,
             String,
             ContainerAsync<Postgres>,
-            ContainerAsync<Redis>
+            ContainerAsync<Redis>,
         ),
-        Box<dyn std::error::Error>
+        Box<dyn std::error::Error>,
     > = async {
         let (_pg_container, pg_url) = setup_postgres_test().await?;
         let (_redis_container, redis_url) = setup_redis_test().await?;
@@ -41,7 +41,7 @@ async fn test_governance_event_propagation() {
                 project_id: "project-1".to_string(),
                 tenant_id: tenant_id.clone(),
                 drift_score: 0.75,
-                timestamp: chrono::Utc::now().timestamp()
+                timestamp: chrono::Utc::now().timestamp(),
             };
 
             pg_backend.publish(event.clone()).await.unwrap();
@@ -89,7 +89,7 @@ async fn test_full_governance_workflow() {
                 tenant_id: tenant_id.clone(),
                 metadata: std::collections::HashMap::new(),
                 created_at: chrono::Utc::now().timestamp(),
-                updated_at: chrono::Utc::now().timestamp()
+                updated_at: chrono::Utc::now().timestamp(),
             };
             pg_backend.create_unit(&company).await.unwrap();
 
@@ -101,7 +101,7 @@ async fn test_full_governance_workflow() {
                 tenant_id: tenant_id.clone(),
                 metadata: std::collections::HashMap::new(),
                 created_at: chrono::Utc::now().timestamp(),
-                updated_at: chrono::Utc::now().timestamp()
+                updated_at: chrono::Utc::now().timestamp(),
             };
             pg_backend.create_unit(&project).await.unwrap();
 
@@ -127,7 +127,7 @@ async fn test_full_governance_workflow() {
                     "completed",
                     None,
                     chrono::Utc::now().timestamp() - 100,
-                    Some(chrono::Utc::now().timestamp())
+                    Some(chrono::Utc::now().timestamp()),
                 )
                 .await
                 .unwrap();
@@ -137,28 +137,29 @@ async fn test_full_governance_workflow() {
                 tenant_id: tenant_id.clone(),
                 drift_score: 0.2,
                 violations: vec![],
-                timestamp: chrono::Utc::now().timestamp()
+                timestamp: chrono::Utc::now().timestamp(),
             };
             pg_backend.store_drift_result(drift).await.unwrap();
 
-            let engine = Arc::new(knowledge::governance::GovernanceEngine::new(
-                Some(pg_backend.clone()),
-                None,
-                None,
-                Arc::new(authorizer)
-            ));
+            let engine = Arc::new(
+                knowledge::governance::GovernanceEngine::new().with_storage(pg_backend.clone()),
+            );
             let deployment_config = config::DeploymentConfig::default();
-            let api = knowledge::api::GovernanceDashboardApi::new(
+            let api = Arc::new(knowledge::api::GovernanceDashboardApi::new(
                 engine,
                 pg_backend.clone(),
-                deployment_config
-            );
+                deployment_config,
+            ));
 
-            let drift_status = api.get_drift_status(&ctx, "proj1").await.unwrap();
+            let drift_status = knowledge::api::get_drift_status(api.clone(), &ctx, "proj1")
+                .await
+                .unwrap();
             assert!(drift_status.is_some());
             assert_eq!(drift_status.unwrap().drift_score, 0.2);
 
-            let jobs = api.get_job_status(&ctx, Some("drift_scan")).await.unwrap();
+            let jobs = knowledge::api::get_job_status(api, &ctx, Some("drift_scan"))
+                .await
+                .unwrap();
             assert!(jobs.as_array().unwrap().len() >= 1);
         }
         Err(_) => {

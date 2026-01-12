@@ -28,6 +28,7 @@ redis.workspace = true
 
 [dev-dependencies]
 adapters = { path = "../adapters" }
+config.workspace = true
 storage.workspace = true
 testcontainers = "0.26"
 testcontainers-modules = { version = "0.14", features = ["redis", "postgres"] }

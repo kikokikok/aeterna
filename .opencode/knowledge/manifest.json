@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "generatedAt": "2026-01-12T12:22:49.509Z",
+  "totalCount": 0,
+  "entries": {
+    "company": [],
+    "org": [],
+    "team": [],
+    "project": []
+  },
+  "stats": {
+    "byType": {},
+    "bySeverity": {}
+  }
+}

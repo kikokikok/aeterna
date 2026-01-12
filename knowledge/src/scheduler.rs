@@ -1,10 +1,7 @@
 use crate::governance::GovernanceEngine;
 use config::config::DeploymentConfig;
 use mk_core::traits::KnowledgeRepository;
-use mk_core::types::{
-    DriftResult, KnowledgeLayer, OrganizationalUnit, PolicyViolation, TenantContext, UnitType,
-    UserId
-};
+use mk_core::types::{DriftResult, KnowledgeLayer, TenantContext, UnitType, UserId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -16,7 +13,7 @@ pub struct GovernanceScheduler {
     deployment_config: DeploymentConfig,
     quick_scan_interval: Duration,
     semantic_scan_interval: Duration,
-    report_interval: Duration
+    report_interval: Duration,
 }
 
 impl GovernanceScheduler {
@@ -26,7 +23,7 @@ impl GovernanceScheduler {
         deployment_config: DeploymentConfig,
         quick_scan_interval: Duration,
         semantic_scan_interval: Duration,
-        report_interval: Duration
+        report_interval: Duration,
     ) -> Self {
         Self {
             engine,
@@ -34,7 +31,7 @@ impl GovernanceScheduler {
             deployment_config,
             quick_scan_interval,
             semantic_scan_interval,
-            report_interval
+            report_interval,
         }
     }
 
@@ -71,7 +68,7 @@ impl GovernanceScheduler {
 
     async fn run_job<F>(&self, name: &str, tenant_id: &str, job_future: F) -> anyhow::Result<()>
     where
-        F: std::future::Future<Output = anyhow::Result<()>>
+        F: std::future::Future<Output = anyhow::Result<()>>,
     {
         let started_at = chrono::Utc::now().timestamp();
         tracing::info!("Starting job: {}", name);
@@ -95,7 +92,7 @@ impl GovernanceScheduler {
                         "completed",
                         None,
                         started_at,
-                        Some(finished_at)
+                        Some(finished_at),
                     )
                     .await;
                 Ok(())
@@ -110,7 +107,7 @@ impl GovernanceScheduler {
                         "failed",
                         Some(&message),
                         started_at,
-                        Some(finished_at)
+                        Some(finished_at),
                     )
                     .await;
                 Err(e)
@@ -204,7 +201,7 @@ impl GovernanceScheduler {
                                 tenant_id: unit.tenant_id.clone(),
                                 drift_score,
                                 violations: result.violations,
-                                timestamp: chrono::Utc::now().timestamp()
+                                timestamp: chrono::Utc::now().timestamp(),
                             })
                             .await;
                     }
@@ -244,7 +241,7 @@ impl GovernanceScheduler {
                 let children = storage
                     .get_descendants(
                         TenantContext::new(unit.tenant_id.clone(), UserId::default()),
-                        &unit.id
+                        &unit.id,
                     )
                     .await
                     .map_err(|e| anyhow::anyhow!("Failed to list projects: {:?}", e))?;
@@ -258,7 +255,7 @@ impl GovernanceScheduler {
                         if let Some(result) = storage
                             .get_latest_drift_result(
                                 TenantContext::new(child.tenant_id.clone(), UserId::default()),
-                                &child.id
+                                &child.id,
                             )
                             .await
                             .map_err(|e| anyhow::anyhow!("Failed to fetch drift: {:?}", e))?
@@ -281,11 +278,11 @@ impl GovernanceScheduler {
                 report_data.insert("average_drift".to_string(), serde_json::json!(avg_drift));
                 report_data.insert(
                     "project_count".to_string(),
-                    serde_json::json!(project_count)
+                    serde_json::json!(project_count),
                 );
                 report_data.insert(
                     "violation_count".to_string(),
-                    serde_json::json!(all_violations.len())
+                    serde_json::json!(all_violations.len()),
                 );
 
                 tracing::info!(

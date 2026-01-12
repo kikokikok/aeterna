@@ -18,7 +18,7 @@ pub struct DeltaResult {
     pub added: Vec<KnowledgeEntry>,
     pub updated: Vec<KnowledgeEntry>,
     pub deleted: Vec<String>,
-    pub unchanged: Vec<String>
+    pub unchanged: Vec<String>,
 }
 
 pub struct SyncManager {
@@ -30,7 +30,7 @@ pub struct SyncManager {
     federation_manager: Option<Arc<dyn FederationProvider>>,
     persister: Arc<dyn SyncStatePersister>,
     states: Arc<RwLock<HashMap<mk_core::types::TenantId, SyncState>>>,
-    checkpoints: Arc<RwLock<HashMap<mk_core::types::TenantId, SyncState>>>
+    checkpoints: Arc<RwLock<HashMap<mk_core::types::TenantId, SyncState>>>,
 }
 
 impl SyncManager {
@@ -44,12 +44,12 @@ impl SyncManager {
     pub async fn new(
         memory_manager: Arc<MemoryManager>,
         knowledge_repo: Arc<
-            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>
+            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
         >,
         governance_engine: Arc<GovernanceEngine>,
         deployment_config: DeploymentConfig,
         federation_manager: Option<Arc<dyn FederationProvider>>,
-        persister: Arc<dyn SyncStatePersister>
+        persister: Arc<dyn SyncStatePersister>,
     ) -> Result<Self> {
         let governance_client =
             if deployment_config.mode == "hybrid" || deployment_config.mode == "remote" {
@@ -72,7 +72,7 @@ impl SyncManager {
             federation_manager,
             persister,
             states: Arc::new(RwLock::new(states)),
-            checkpoints: Arc::new(RwLock::new(checkpoints))
+            checkpoints: Arc::new(RwLock::new(checkpoints)),
         })
     }
 
@@ -144,7 +144,7 @@ impl SyncManager {
     pub async fn scheduled_sync(
         &self,
         ctx: TenantContext,
-        staleness_threshold_mins: u32
+        staleness_threshold_mins: u32,
     ) -> Result<()> {
         if let Some(trigger) = self
             .check_triggers(ctx.clone(), staleness_threshold_mins)
@@ -287,7 +287,7 @@ impl SyncManager {
     pub async fn sync_federation(
         &self,
         ctx: TenantContext,
-        fed: &dyn FederationProvider
+        fed: &dyn FederationProvider,
     ) -> Result<()> {
         tracing::info!("Starting federation sync for tenant: {}", ctx.tenant_id);
         let mut state = self.get_or_load_state(&ctx.tenant_id).await?;
@@ -320,7 +320,7 @@ impl SyncManager {
                     state.federation_conflicts.push(FederationConflict {
                         upstream_id: upstream_id.clone(),
                         reason: msg,
-                        detected_at: chrono::Utc::now().timestamp()
+                        detected_at: chrono::Utc::now().timestamp(),
                     });
                 }
                 Err(e) => {
@@ -348,7 +348,7 @@ impl SyncManager {
 
         let last_commit = match &state.last_knowledge_commit {
             Some(c) => c.clone(),
-            None => return self.sync_all_internal(ctx, &mut state, start_time).await
+            None => return self.sync_all_internal(ctx, &mut state, start_time).await,
         };
 
         let head_commit = self.knowledge_repo.get_head_commit(ctx.clone()).await?;
@@ -383,7 +383,7 @@ impl SyncManager {
                         knowledge_id: path,
                         error: e.to_string(),
                         failed_at: chrono::Utc::now().timestamp(),
-                        retry_count: 0
+                        retry_count: 0,
                     });
                     continue;
                 }
@@ -394,7 +394,7 @@ impl SyncManager {
                     knowledge_id: entry.path.clone(),
                     error: e.to_string(),
                     failed_at: chrono::Utc::now().timestamp(),
-                    retry_count: 0
+                    retry_count: 0,
                 });
             }
         }
@@ -430,7 +430,7 @@ impl SyncManager {
         &self,
         ctx: TenantContext,
         state: &mut SyncState,
-        start_time: std::time::Instant
+        start_time: std::time::Instant,
     ) -> Result<()> {
         let head_commit = self.knowledge_repo.get_head_commit(ctx.clone()).await?;
         let mut sync_errors = Vec::new();
@@ -439,7 +439,7 @@ impl SyncManager {
             mk_core::types::KnowledgeLayer::Company,
             mk_core::types::KnowledgeLayer::Org,
             mk_core::types::KnowledgeLayer::Team,
-            mk_core::types::KnowledgeLayer::Project
+            mk_core::types::KnowledgeLayer::Project,
         ] {
             let entries = match self.knowledge_repo.list(ctx.clone(), layer, "").await {
                 Ok(e) => e,
@@ -448,7 +448,7 @@ impl SyncManager {
                         knowledge_id: format!("layer:{layer:?}"),
                         error: e.to_string(),
                         failed_at: chrono::Utc::now().timestamp(),
-                        retry_count: 0
+                        retry_count: 0,
                     });
                     continue;
                 }
@@ -460,7 +460,7 @@ impl SyncManager {
                         knowledge_id: entry.path.clone(),
                         error: e.to_string(),
                         failed_at: chrono::Utc::now().timestamp(),
-                        retry_count: 0
+                        retry_count: 0,
                     });
                 }
             }
@@ -490,7 +490,7 @@ impl SyncManager {
     pub async fn check_triggers(
         &self,
         ctx: TenantContext,
-        staleness_threshold_mins: u32
+        staleness_threshold_mins: u32,
     ) -> Result<Option<SyncTrigger>> {
         if self.deployment_config.mode == "remote" {
             return Ok(Some(SyncTrigger::Manual));
@@ -504,13 +504,13 @@ impl SyncManager {
                 if head != *last {
                     return Ok(Some(SyncTrigger::CommitMismatch {
                         last_commit: last.clone(),
-                        head_commit: head
+                        head_commit: head,
                     }));
                 }
             } else {
                 return Ok(Some(SyncTrigger::CommitMismatch {
                     last_commit: "none".to_string(),
-                    head_commit: head
+                    head_commit: head,
                 }));
             }
         }
@@ -521,7 +521,7 @@ impl SyncManager {
             if elapsed_mins >= staleness_threshold_mins as i64 {
                 return Ok(Some(SyncTrigger::Staleness {
                     last_sync_at: last_sync,
-                    threshold_mins: staleness_threshold_mins
+                    threshold_mins: staleness_threshold_mins,
                 }));
             }
         } else {
@@ -535,7 +535,7 @@ impl SyncManager {
         &self,
         tenant_id: mk_core::types::TenantId,
         upstream_id: &str,
-        resolution: &str
+        resolution: &str,
     ) -> Result<()> {
         let mut state = self.get_or_load_state(&tenant_id).await?;
 
@@ -561,7 +561,7 @@ impl SyncManager {
     pub async fn resolve_conflicts(
         &self,
         ctx: TenantContext,
-        conflicts: Vec<SyncConflict>
+        conflicts: Vec<SyncConflict>,
     ) -> Result<()> {
         let mut state = self.get_or_load_state(&ctx.tenant_id).await?;
 
@@ -586,13 +586,13 @@ impl SyncManager {
                 }
                 SyncConflict::OrphanedPointer {
                     memory_id,
-                    knowledge_id
+                    knowledge_id,
                 } => {
                     for layer in [
                         mk_core::types::MemoryLayer::Company,
                         mk_core::types::MemoryLayer::Org,
                         mk_core::types::MemoryLayer::Team,
-                        mk_core::types::MemoryLayer::Project
+                        mk_core::types::MemoryLayer::Project,
                     ] {
                         let _ = self
                             .memory_manager
@@ -606,7 +606,7 @@ impl SyncManager {
                 }
                 SyncConflict::DuplicatePointer {
                     knowledge_id,
-                    mut memory_ids
+                    mut memory_ids,
                 } => {
                     memory_ids.sort();
                     let _to_keep = memory_ids.remove(0);
@@ -616,7 +616,7 @@ impl SyncManager {
                             mk_core::types::MemoryLayer::Company,
                             mk_core::types::MemoryLayer::Org,
                             mk_core::types::MemoryLayer::Team,
-                            mk_core::types::MemoryLayer::Project
+                            mk_core::types::MemoryLayer::Project,
                         ] {
                             let _ = self
                                 .memory_manager
@@ -668,7 +668,7 @@ impl SyncManager {
                     knowledge_id,
                     memory_id,
                     expected_layer,
-                    actual_layer
+                    actual_layer,
                 } => {
                     let old_memory_layer = map_layer(expected_layer);
                     let _ = self
@@ -730,7 +730,7 @@ impl SyncManager {
             if memory_ids.len() > 1 {
                 conflicts.push(SyncConflict::DuplicatePointer {
                     knowledge_id,
-                    memory_ids
+                    memory_ids,
                 });
             }
         }
@@ -774,7 +774,7 @@ impl SyncManager {
                             knowledge_id: knowledge_id.clone(),
                             memory_id: memory_id.clone(),
                             expected_hash: exp.clone(),
-                            actual_hash
+                            actual_hash,
                         });
                     }
 
@@ -784,7 +784,7 @@ impl SyncManager {
                         conflicts.push(SyncConflict::StatusChange {
                             knowledge_id: knowledge_id.clone(),
                             memory_id: memory_id.clone(),
-                            new_status: k_entry.status
+                            new_status: k_entry.status,
                         });
                     }
 
@@ -793,7 +793,7 @@ impl SyncManager {
                             knowledge_id: knowledge_id.clone(),
                             memory_id: memory_id.clone(),
                             expected_layer: layer,
-                            actual_layer: k_entry.layer
+                            actual_layer: k_entry.layer,
                         });
                     }
 
@@ -806,7 +806,7 @@ impl SyncManager {
                         Ok(None) => {
                             conflicts.push(SyncConflict::MissingPointer {
                                 knowledge_id: knowledge_id.clone(),
-                                expected_memory_id: memory_id.clone()
+                                expected_memory_id: memory_id.clone(),
                             });
                         }
                         Ok(Some(m_entry)) => {
@@ -819,14 +819,14 @@ impl SyncManager {
                                     knowledge_id: knowledge_id.clone(),
                                     memory_id: memory_id.clone(),
                                     expected_hash: "summary_mismatch".to_string(),
-                                    actual_hash: "summary_mismatch".to_string()
+                                    actual_hash: "summary_mismatch".to_string(),
                                 });
                             }
                         }
                         Err(e) => {
                             conflicts.push(SyncConflict::DetectionError {
                                 target_id: memory_id.clone(),
-                                error: e.to_string()
+                                error: e.to_string(),
                             });
                             tracing::warn!("Failed to check memory entry {}: {}", memory_id, e)
                         }
@@ -838,7 +838,7 @@ impl SyncManager {
                         mk_core::types::KnowledgeLayer::Company,
                         mk_core::types::KnowledgeLayer::Org,
                         mk_core::types::KnowledgeLayer::Team,
-                        mk_core::types::KnowledgeLayer::Project
+                        mk_core::types::KnowledgeLayer::Project,
                     ] {
                         if other_layer == layer {
                             continue;
@@ -853,7 +853,7 @@ impl SyncManager {
                                 knowledge_id: knowledge_id.clone(),
                                 memory_id: memory_id.clone(),
                                 expected_layer: layer,
-                                actual_layer: other_layer
+                                actual_layer: other_layer,
                             });
                             found_elsewhere = true;
                             break;
@@ -863,14 +863,14 @@ impl SyncManager {
                     if !found_elsewhere {
                         conflicts.push(SyncConflict::OrphanedPointer {
                             memory_id: memory_id.clone(),
-                            knowledge_id: knowledge_id.clone()
+                            knowledge_id: knowledge_id.clone(),
                         });
                     }
                 }
                 Err(e) => {
                     conflicts.push(SyncConflict::DetectionError {
                         target_id: knowledge_id.clone(),
-                        error: e.to_string()
+                        error: e.to_string(),
                     });
                     tracing::error!(
                         "Error fetching knowledge {} for conflict detection: {}",
@@ -887,7 +887,7 @@ impl SyncManager {
     fn find_memory_id_by_knowledge_id(
         &self,
         knowledge_id: &str,
-        state: &SyncState
+        state: &SyncState,
     ) -> Option<String> {
         state
             .pointer_mapping
@@ -900,7 +900,7 @@ impl SyncManager {
         &self,
         ctx: TenantContext,
         entry: &KnowledgeEntry,
-        state: &mut SyncState
+        state: &mut SyncState,
     ) -> Result<()> {
         let mut content = entry.content.clone();
         content = utils::redact_pii(&content);
@@ -928,7 +928,7 @@ impl SyncManager {
                                     violation.message
                                 ),
                                 failed_at: chrono::Utc::now().timestamp(),
-                                retry_count: 0
+                                retry_count: 0,
                             });
                             return Err(SyncError::GovernanceBlock(violation.message));
                         }
@@ -954,7 +954,7 @@ impl SyncManager {
                             knowledge_id: entry.path.clone(),
                             error: format!("Governance violation (BLOCK): {}", violation.message),
                             failed_at: chrono::Utc::now().timestamp(),
-                            retry_count: 0
+                            retry_count: 0,
                         });
                         return Err(SyncError::GovernanceBlock(violation.message));
                     }
@@ -984,13 +984,13 @@ impl SyncManager {
             content_hash: content_hash.clone(),
             synced_at: chrono::Utc::now().timestamp(),
             source_layer: entry.layer,
-            is_orphaned: false
+            is_orphaned: false,
         };
 
         let metadata = KnowledgePointerMetadata {
             kind: "knowledge_pointer".to_string(),
             knowledge_pointer: pointer,
-            tags: Vec::new()
+            tags: Vec::new(),
         };
 
         let metadata_map = match serde_json::to_value(metadata)? {
@@ -1003,7 +1003,7 @@ impl SyncManager {
             }
             _ => {
                 return Err(SyncError::Internal(
-                    "Failed to serialize metadata".to_string()
+                    "Failed to serialize metadata".to_string(),
                 ));
             }
         };
@@ -1015,7 +1015,7 @@ impl SyncManager {
             layer: memory_layer,
             metadata: metadata_map,
             created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         };
 
         self.memory_manager
@@ -1105,7 +1105,7 @@ impl SyncManager {
     pub fn find_memory_id_by_knowledge_id_for_test(
         &self,
         knowledge_id: &str,
-        state: &SyncState
+        state: &SyncState,
     ) -> Option<String> {
         self.find_memory_id_by_knowledge_id(knowledge_id, state)
     }
@@ -1116,7 +1116,7 @@ impl SyncManager {
             KnowledgeLayer::Company,
             KnowledgeLayer::Org,
             KnowledgeLayer::Team,
-            KnowledgeLayer::Project
+            KnowledgeLayer::Project,
         ];
 
         for layer in layers {
@@ -1156,7 +1156,7 @@ impl SyncManager {
         ctx: TenantContext,
         interval_secs: u64,
         staleness_threshold_mins: u32,
-        mut rx: tokio::sync::watch::Receiver<bool>
+        mut rx: tokio::sync::watch::Receiver<bool>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
@@ -1192,14 +1192,14 @@ mod tests {
     impl SyncStatePersister for MockPersister {
         async fn load(
             &self,
-            _tenant_id: &mk_core::types::TenantId
+            _tenant_id: &mk_core::types::TenantId,
         ) -> std::result::Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
             Ok(SyncState::default())
         }
         async fn save(
             &self,
             _tenant_id: &mk_core::types::TenantId,
-            _s: &SyncState
+            _s: &SyncState,
         ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
         }
@@ -1218,7 +1218,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _e: KnowledgeEntry,
-            _m: &str
+            _m: &str,
         ) -> std::result::Result<String, Self::Error> {
             Ok("hash".to_string())
         }
@@ -1226,7 +1226,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _l: KnowledgeLayer,
-            _p: &str
+            _p: &str,
         ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
             Ok(None)
         }
@@ -1234,7 +1234,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _l: KnowledgeLayer,
-            _p: &str
+            _p: &str,
         ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
             Ok(Vec::new())
         }
@@ -1243,20 +1243,20 @@ mod tests {
             _ctx: TenantContext,
             _l: KnowledgeLayer,
             _p: &str,
-            _m: &str
+            _m: &str,
         ) -> std::result::Result<String, Self::Error> {
             Ok("hash".to_string())
         }
         async fn get_head_commit(
             &self,
-            _ctx: TenantContext
+            _ctx: TenantContext,
         ) -> std::result::Result<Option<String>, Self::Error> {
             Ok(None)
         }
         async fn get_affected_items(
             &self,
             _ctx: TenantContext,
-            _f: &str
+            _f: &str,
         ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
             Ok(Vec::new())
         }
@@ -1265,7 +1265,7 @@ mod tests {
             _ctx: TenantContext,
             _q: &str,
             _l: Vec<KnowledgeLayer>,
-            _li: usize
+            _li: usize,
         ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
             Ok(Vec::new())
         }
@@ -1279,10 +1279,10 @@ mod tests {
     fn create_sync_manager_with_state(
         memory_manager: Arc<MemoryManager>,
         knowledge_repo: Arc<
-            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>
+            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
         >,
         state: SyncState,
-        tenant_id: &mk_core::types::TenantId
+        tenant_id: &mk_core::types::TenantId,
     ) -> SyncManager {
         let mut states_map = HashMap::new();
         states_map.insert(tenant_id.clone(), state);
@@ -1290,10 +1290,12 @@ mod tests {
             memory_manager,
             knowledge_repo,
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(states_map)),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -1303,10 +1305,12 @@ mod tests {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let entry = KnowledgeEntry {
@@ -1318,7 +1322,7 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 1234567890
+            updated_at: 1234567890,
         };
 
         let summary = sync_manager.generate_summary(&entry);
@@ -1332,10 +1336,12 @@ mod tests {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let entry = KnowledgeEntry {
@@ -1347,7 +1353,7 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 1234567890
+            updated_at: 1234567890,
         };
 
         let summary = sync_manager.generate_summary(&entry);
@@ -1360,10 +1366,12 @@ mod tests {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let mut state = SyncState::default();
@@ -1382,12 +1390,12 @@ mod tests {
     }
 
     struct MockRepoWithEntries {
-        entries: Vec<KnowledgeEntry>
+        entries: Vec<KnowledgeEntry>,
     }
     impl MockRepoWithEntries {
         fn new() -> Self {
             Self {
-                entries: Vec::new()
+                entries: Vec::new(),
             }
         }
         fn add_entry(&mut self, e: KnowledgeEntry) {
@@ -1401,7 +1409,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _e: KnowledgeEntry,
-            _m: &str
+            _m: &str,
         ) -> std::result::Result<String, Self::Error> {
             Ok("hash".to_string())
         }
@@ -1409,7 +1417,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             l: KnowledgeLayer,
-            p: &str
+            p: &str,
         ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
             Ok(self
                 .entries
@@ -1421,7 +1429,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             l: KnowledgeLayer,
-            _p: &str
+            _p: &str,
         ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
             Ok(self
                 .entries
@@ -1435,20 +1443,20 @@ mod tests {
             _ctx: TenantContext,
             _l: KnowledgeLayer,
             _p: &str,
-            _m: &str
+            _m: &str,
         ) -> std::result::Result<String, Self::Error> {
             Ok("hash".to_string())
         }
         async fn get_head_commit(
             &self,
-            _ctx: TenantContext
+            _ctx: TenantContext,
         ) -> std::result::Result<Option<String>, Self::Error> {
             Ok(None)
         }
         async fn get_affected_items(
             &self,
             _ctx: TenantContext,
-            _f: &str
+            _f: &str,
         ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
             Ok(Vec::new())
         }
@@ -1457,7 +1465,7 @@ mod tests {
             _ctx: TenantContext,
             _q: &str,
             _l: Vec<KnowledgeLayer>,
-            _li: usize
+            _li: usize,
         ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
             Ok(Vec::new())
         }
@@ -1491,20 +1499,20 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         });
 
         let memory = Arc::new(MemoryManager::new());
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Org,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -1519,8 +1527,8 @@ mod tests {
                     layer: mk_core::types::MemoryLayer::Project,
                     metadata: HashMap::new(),
                     created_at: 0,
-                    updated_at: 0
-                }
+                    updated_at: 0,
+                },
             )
             .await
             .unwrap();
@@ -1579,7 +1587,7 @@ mod tests {
                 metadata: HashMap::new(),
                 commit_hash: None,
                 author: None,
-                updated_at: 0
+                updated_at: 0,
             });
         }
 
@@ -1587,7 +1595,7 @@ mod tests {
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -1605,8 +1613,8 @@ mod tests {
                         layer: mk_core::types::MemoryLayer::Project,
                         metadata: HashMap::new(),
                         created_at: 0,
-                        updated_at: 0
-                    }
+                        updated_at: 0,
+                    },
                 )
                 .await
                 .unwrap();
@@ -1634,14 +1642,15 @@ mod tests {
             Arc::new(MemoryManager::new()),
             Arc::new(MockKnowledgeRepository::new()),
             Arc::new(GovernanceEngine::new()),
+            DeploymentConfig::default(),
             None,
-            Arc::new(MockPersister)
+            Arc::new(MockPersister),
         )
         .await
         .unwrap();
 
         struct ErrorFed {
-            config: knowledge::federation::FederationConfig
+            config: knowledge::federation::FederationConfig,
         }
         impl ErrorFed {
             fn new() -> Self {
@@ -1651,10 +1660,10 @@ mod tests {
                             id: "upstream1".to_string(),
                             url: "http://test".to_string(),
                             branch: "main".to_string(),
-                            auth_token: None
+                            auth_token: None,
                         }],
-                        sync_interval_secs: 60
-                    }
+                        sync_interval_secs: 60,
+                    },
                 }
             }
         }
@@ -1665,23 +1674,23 @@ mod tests {
             }
             async fn fetch_upstream_manifest(
                 &self,
-                _id: &str
+                _id: &str,
             ) -> std::result::Result<
                 knowledge::federation::KnowledgeManifest,
-                knowledge::repository::RepositoryError
+                knowledge::repository::RepositoryError,
             > {
                 Ok(knowledge::federation::KnowledgeManifest {
                     version: "1".to_string(),
-                    items: HashMap::new()
+                    items: HashMap::new(),
                 })
             }
             async fn sync_upstream(
                 &self,
                 _id: &str,
-                _p: &std::path::Path
+                _p: &std::path::Path,
             ) -> std::result::Result<(), knowledge::repository::RepositoryError> {
                 Err(knowledge::repository::RepositoryError::InvalidPath(
-                    "something went wrong".to_string()
+                    "something went wrong".to_string(),
                 ))
             }
         }
@@ -1698,10 +1707,12 @@ mod tests {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         });
 
         let (tx, rx) = tokio::sync::watch::channel(false);
@@ -1722,11 +1733,12 @@ mod tests {
                 Arc::new(MemoryManager::new()),
                 Arc::new(MockKnowledgeRepository::new()),
                 Arc::new(GovernanceEngine::new()),
+                DeploymentConfig::default(),
                 None,
-                Arc::new(MockPersister)
+                Arc::new(MockPersister),
             )
             .await
-            .unwrap()
+            .unwrap(),
         );
 
         let (tx, rx) = tokio::sync::watch::channel(false);
@@ -1744,8 +1756,9 @@ mod tests {
             Arc::new(MemoryManager::new()),
             Arc::new(MockKnowledgeRepository::new()),
             Arc::new(GovernanceEngine::new()),
+            DeploymentConfig::default(),
             None,
-            Arc::new(MockPersister)
+            Arc::new(MockPersister),
         )
         .await
         .unwrap();
@@ -1760,10 +1773,12 @@ mod tests {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let tenant_id = TenantId::default();
@@ -1789,7 +1804,8 @@ mod tests {
     #[tokio::test]
     async fn test_sync_entry_governance_block() {
         use mk_core::types::{
-            ConstraintOperator, ConstraintSeverity, ConstraintTarget, Policy, PolicyRule
+            ConstraintOperator, ConstraintSeverity, ConstraintTarget, Policy, PolicyMode,
+            PolicyRule, RuleMergeStrategy, RuleType,
         };
 
         let ctx = TenantContext::default();
@@ -1799,25 +1815,30 @@ mod tests {
             name: "Banned Word".to_string(),
             description: None,
             layer: KnowledgeLayer::Company,
+            mode: PolicyMode::Mandatory,
+            merge_strategy: RuleMergeStrategy::Merge,
             rules: vec![PolicyRule {
                 id: "r1".to_string(),
+                rule_type: RuleType::Deny,
                 target: ConstraintTarget::Code,
                 operator: ConstraintOperator::MustNotMatch,
                 value: serde_json::json!("BANNED"),
                 severity: ConstraintSeverity::Block,
-                message: "BANNED word found".to_string()
+                message: "BANNED word found".to_string(),
             }],
-            metadata: HashMap::new()
+            metadata: HashMap::new(),
         });
 
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
             governance_engine: Arc::new(engine),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let entry = KnowledgeEntry {
@@ -1829,7 +1850,7 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let mut state = SyncState::default();
@@ -1846,10 +1867,12 @@ mod tests {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let trigger = sync_manager.check_triggers(ctx, 60).await.unwrap();
@@ -1862,7 +1885,7 @@ mod tests {
         let mut state = SyncState::default();
         state.knowledge_hashes.insert(
             "unchanged.md".to_string(),
-            utils::compute_content_hash("content")
+            utils::compute_content_hash("content"),
         );
         state
             .knowledge_hashes
@@ -1881,7 +1904,7 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         });
         repo.add_entry(KnowledgeEntry {
             path: "updated.md".to_string(),
@@ -1892,7 +1915,7 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         });
         repo.add_entry(KnowledgeEntry {
             path: "added.md".to_string(),
@@ -1903,14 +1926,14 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         });
 
         let sync_manager = create_sync_manager_with_state(
             Arc::new(MemoryManager::new()),
             Arc::new(repo),
             state.clone(),
-            &ctx.tenant_id
+            &ctx.tenant_id,
         );
 
         let delta = sync_manager.detect_delta(ctx, &state).await.unwrap();
@@ -1927,7 +1950,7 @@ mod tests {
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -1941,17 +1964,19 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         });
 
         let sync_manager = SyncManager {
             memory_manager: memory.clone(),
             knowledge_repo: Arc::new(repo),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         sync_manager.sync_all(ctx.clone()).await.unwrap();
@@ -1970,7 +1995,7 @@ mod tests {
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -1986,8 +2011,8 @@ mod tests {
                     layer: mk_core::types::MemoryLayer::Project,
                     metadata: HashMap::new(),
                     created_at: 0,
-                    updated_at: 0
-                }
+                    updated_at: 0,
+                },
             )
             .await
             .unwrap();
@@ -2004,12 +2029,12 @@ mod tests {
             memory.clone(),
             Arc::new(MockKnowledgeRepository::new()),
             state,
-            &ctx.tenant_id
+            &ctx.tenant_id,
         );
 
         let conflicts = vec![SyncConflict::OrphanedPointer {
             memory_id: m_id.clone(),
-            knowledge_id: "old.md".to_string()
+            knowledge_id: "old.md".to_string(),
         }];
 
         sync_manager
@@ -2031,7 +2056,7 @@ mod tests {
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -2057,7 +2082,7 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         });
 
         let sync_manager =
@@ -2067,7 +2092,7 @@ mod tests {
             knowledge_id: k_id.clone(),
             memory_id: m_id.clone(),
             expected_hash: "old_hash".to_string(),
-            actual_hash: utils::compute_content_hash("new content")
+            actual_hash: utils::compute_content_hash("new content"),
         }];
 
         sync_manager
@@ -2092,7 +2117,7 @@ mod tests {
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -2114,7 +2139,7 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         });
 
         let sync_manager =
@@ -2122,7 +2147,7 @@ mod tests {
 
         let conflicts = vec![SyncConflict::MissingPointer {
             knowledge_id: k_id.clone(),
-            expected_memory_id: m_id.clone()
+            expected_memory_id: m_id.clone(),
         }];
 
         sync_manager
@@ -2144,13 +2169,13 @@ mod tests {
             knowledge_id: "old_fail.md".to_string(),
             error: "err".to_string(),
             failed_at: chrono::Utc::now().timestamp() - (40 * 24 * 60 * 60),
-            retry_count: 0
+            retry_count: 0,
         });
         state.failed_items.push(SyncFailure {
             knowledge_id: "new_fail.md".to_string(),
             error: "err".to_string(),
             failed_at: chrono::Utc::now().timestamp(),
-            retry_count: 0
+            retry_count: 0,
         });
 
         let ctx = TenantContext::default();
@@ -2158,7 +2183,7 @@ mod tests {
             Arc::new(MemoryManager::new()),
             Arc::new(MockKnowledgeRepository::new()),
             state,
-            &ctx.tenant_id
+            &ctx.tenant_id,
         );
 
         sync_manager
@@ -2180,15 +2205,17 @@ mod tests {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let conflicts = vec![SyncConflict::DetectionError {
             target_id: "test".to_string(),
-            error: "some error".to_string()
+            error: "some error".to_string(),
         }];
 
         let result = sync_manager
@@ -2208,7 +2235,7 @@ mod tests {
             Arc::new(MemoryManager::new()),
             Arc::new(MockKnowledgeRepository::new()),
             state,
-            &ctx.tenant_id
+            &ctx.tenant_id,
         );
 
         sync_manager.scheduled_sync(ctx, 120).await.unwrap();
@@ -2221,7 +2248,7 @@ mod tests {
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -2250,8 +2277,8 @@ mod tests {
                     layer: mk_core::types::MemoryLayer::Project,
                     metadata: HashMap::new(),
                     created_at: 0,
-                    updated_at: 0
-                }
+                    updated_at: 0,
+                },
             )
             .await
             .unwrap();
@@ -2264,7 +2291,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _e: KnowledgeEntry,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("".to_string())
             }
@@ -2272,7 +2299,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                p: &str
+                p: &str,
             ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
                 if p == "existing.md" {
                     Ok(Some(KnowledgeEntry {
@@ -2284,7 +2311,7 @@ mod tests {
                         metadata: HashMap::new(),
                         commit_hash: None,
                         author: None,
-                        updated_at: 0
+                        updated_at: 0,
                     }))
                 } else {
                     Ok(None)
@@ -2294,7 +2321,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                _p: &str
+                _p: &str,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2303,20 +2330,20 @@ mod tests {
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
                 _p: &str,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("".to_string())
             }
             async fn get_head_commit(
                 &self,
-                _ctx: TenantContext
+                _ctx: TenantContext,
             ) -> std::result::Result<Option<String>, Self::Error> {
                 Ok(Some("new_commit".to_string()))
             }
             async fn get_affected_items(
                 &self,
                 _ctx: TenantContext,
-                _f: &str
+                _f: &str,
             ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
                 Ok(vec![(KnowledgeLayer::Project, "existing.md".to_string())])
             }
@@ -2325,7 +2352,7 @@ mod tests {
                 _ctx: TenantContext,
                 _q: &str,
                 _l: Vec<KnowledgeLayer>,
-                _li: usize
+                _li: usize,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2338,7 +2365,7 @@ mod tests {
             memory.clone(),
             Arc::new(IncrementalRepo),
             state,
-            &ctx.tenant_id
+            &ctx.tenant_id,
         );
 
         sync_manager.sync_incremental(ctx.clone()).await.unwrap();
@@ -2357,7 +2384,7 @@ mod tests {
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -2385,8 +2412,8 @@ mod tests {
                     layer: mk_core::types::MemoryLayer::Project,
                     metadata: HashMap::new(),
                     created_at: 0,
-                    updated_at: 0
-                }
+                    updated_at: 0,
+                },
             )
             .await
             .unwrap();
@@ -2399,7 +2426,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _e: KnowledgeEntry,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("".to_string())
             }
@@ -2407,7 +2434,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                _p: &str
+                _p: &str,
             ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
                 Ok(None)
             }
@@ -2415,7 +2442,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                _p: &str
+                _p: &str,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2424,20 +2451,20 @@ mod tests {
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
                 _p: &str,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("".to_string())
             }
             async fn get_head_commit(
                 &self,
-                _ctx: TenantContext
+                _ctx: TenantContext,
             ) -> std::result::Result<Option<String>, Self::Error> {
                 Ok(Some("new_commit".to_string()))
             }
             async fn get_affected_items(
                 &self,
                 _ctx: TenantContext,
-                _f: &str
+                _f: &str,
             ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
                 Ok(vec![(KnowledgeLayer::Project, "deleted.md".to_string())])
             }
@@ -2446,7 +2473,7 @@ mod tests {
                 _ctx: TenantContext,
                 _q: &str,
                 _l: Vec<KnowledgeLayer>,
-                _li: usize
+                _li: usize,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2459,7 +2486,7 @@ mod tests {
             memory.clone(),
             Arc::new(DeletingRepo),
             state,
-            &ctx.tenant_id
+            &ctx.tenant_id,
         );
 
         sync_manager.sync_incremental(ctx.clone()).await.unwrap();
@@ -2480,7 +2507,7 @@ mod tests {
             .push(crate::state::FederationConflict {
                 upstream_id: "upstream1".to_string(),
                 reason: "conflict".to_string(),
-                detected_at: 0
+                detected_at: 0,
             });
 
         let ctx = TenantContext::default();
@@ -2488,7 +2515,7 @@ mod tests {
             Arc::new(MemoryManager::new()),
             Arc::new(MockKnowledgeRepository::new()),
             state,
-            &ctx.tenant_id
+            &ctx.tenant_id,
         );
 
         sync_manager
@@ -2513,7 +2540,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _e: KnowledgeEntry,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("".to_string())
             }
@@ -2521,7 +2548,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                _p: &str
+                _p: &str,
             ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
                 Ok(None)
             }
@@ -2529,7 +2556,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                _p: &str
+                _p: &str,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2538,20 +2565,20 @@ mod tests {
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
                 _p: &str,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("".to_string())
             }
             async fn get_head_commit(
                 &self,
-                _ctx: TenantContext
+                _ctx: TenantContext,
             ) -> std::result::Result<Option<String>, Self::Error> {
                 Ok(Some(self.0.clone()))
             }
             async fn get_affected_items(
                 &self,
                 _ctx: TenantContext,
-                _f: &str
+                _f: &str,
             ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2560,7 +2587,7 @@ mod tests {
                 _ctx: TenantContext,
                 _q: &str,
                 _l: Vec<KnowledgeLayer>,
-                _li: usize
+                _li: usize,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2578,7 +2605,7 @@ mod tests {
             Arc::new(MemoryManager::new()),
             Arc::new(RepoWithHead("new".to_string())),
             state,
-            &ctx.tenant_id
+            &ctx.tenant_id,
         );
 
         let trigger = sync_manager.check_triggers(ctx, 120).await.unwrap();
@@ -2595,7 +2622,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _e: KnowledgeEntry,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("".to_string())
             }
@@ -2603,7 +2630,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                _p: &str
+                _p: &str,
             ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
                 Ok(None)
             }
@@ -2611,7 +2638,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                _p: &str
+                _p: &str,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2620,20 +2647,20 @@ mod tests {
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
                 _p: &str,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("".to_string())
             }
             async fn get_head_commit(
                 &self,
-                _ctx: TenantContext
+                _ctx: TenantContext,
             ) -> std::result::Result<Option<String>, Self::Error> {
                 Ok(Some(self.0.clone()))
             }
             async fn get_affected_items(
                 &self,
                 _ctx: TenantContext,
-                _f: &str
+                _f: &str,
             ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2642,7 +2669,7 @@ mod tests {
                 _ctx: TenantContext,
                 _q: &str,
                 _l: Vec<KnowledgeLayer>,
-                _li: usize
+                _li: usize,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2660,7 +2687,7 @@ mod tests {
             Arc::new(MemoryManager::new()),
             Arc::new(RepoWithHead("same".to_string())),
             state,
-            &ctx.tenant_id
+            &ctx.tenant_id,
         );
 
         let trigger = sync_manager.check_triggers(ctx, 30).await.unwrap();
@@ -2673,7 +2700,7 @@ mod tests {
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -2681,10 +2708,12 @@ mod tests {
             memory_manager: memory,
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let ctx = TenantContext::default();
@@ -2704,7 +2733,7 @@ mod tests {
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -2727,7 +2756,7 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         });
 
         let sync_manager =
@@ -2736,7 +2765,7 @@ mod tests {
         let conflicts = vec![SyncConflict::StatusChange {
             knowledge_id: k_id.clone(),
             memory_id: m_id.clone(),
-            new_status: KnowledgeStatus::Deprecated
+            new_status: KnowledgeStatus::Deprecated,
         }];
 
         sync_manager
@@ -2759,13 +2788,13 @@ mod tests {
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Org,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -2789,8 +2818,8 @@ mod tests {
                     layer: mk_core::types::MemoryLayer::Project,
                     metadata: HashMap::new(),
                     created_at: 0,
-                    updated_at: 0
-                }
+                    updated_at: 0,
+                },
             )
             .await
             .unwrap();
@@ -2805,7 +2834,7 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         });
 
         let sync_manager =
@@ -2815,7 +2844,7 @@ mod tests {
             knowledge_id: k_id.clone(),
             memory_id: m_id.clone(),
             expected_layer: KnowledgeLayer::Project,
-            actual_layer: KnowledgeLayer::Org
+            actual_layer: KnowledgeLayer::Org,
         }];
 
         sync_manager
@@ -2846,7 +2875,7 @@ mod tests {
         memory
             .register_provider(
                 mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new())
+                Box::new(memory::providers::MockProvider::new()),
             )
             .await;
 
@@ -2871,7 +2900,7 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         });
 
         let sync_manager =
@@ -2879,7 +2908,7 @@ mod tests {
 
         let conflicts = vec![SyncConflict::DuplicatePointer {
             knowledge_id: k_id.clone(),
-            memory_ids: vec![m_id1.clone(), m_id2.clone()]
+            memory_ids: vec![m_id1.clone(), m_id2.clone()],
         }];
 
         sync_manager
@@ -2909,7 +2938,7 @@ mod tests {
             metadata: HashMap::new(),
             commit_hash: Some("abc123".to_string()),
             author: None,
-            updated_at: 0
+            updated_at: 0,
         });
 
         struct MockRepoWithCommit;
@@ -2920,7 +2949,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _e: KnowledgeEntry,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("hash".to_string())
             }
@@ -2928,7 +2957,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                _p: &str
+                _p: &str,
             ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
                 Ok(None)
             }
@@ -2936,7 +2965,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                _p: &str
+                _p: &str,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2945,20 +2974,20 @@ mod tests {
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
                 _p: &str,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("hash".to_string())
             }
             async fn get_head_commit(
                 &self,
-                _ctx: TenantContext
+                _ctx: TenantContext,
             ) -> std::result::Result<Option<String>, Self::Error> {
                 Ok(Some("abc123".to_string()))
             }
             async fn get_affected_items(
                 &self,
                 _ctx: TenantContext,
-                _f: &str
+                _f: &str,
             ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2967,7 +2996,7 @@ mod tests {
                 _ctx: TenantContext,
                 _q: &str,
                 _l: Vec<KnowledgeLayer>,
-                _li: usize
+                _li: usize,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -2981,7 +3010,7 @@ mod tests {
             Arc::new(MemoryManager::new()),
             Arc::new(MockRepoWithCommit),
             state,
-            &ctx.tenant_id
+            &ctx.tenant_id,
         );
 
         let trigger = sync_manager.check_triggers(ctx, 60).await.unwrap();
@@ -3001,10 +3030,12 @@ mod tests {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let mut state = SyncState::default();
@@ -3029,7 +3060,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _e: KnowledgeEntry,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("hash".to_string())
             }
@@ -3037,7 +3068,7 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                _p: &str
+                _p: &str,
             ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
                 Ok(None)
             }
@@ -3045,10 +3076,10 @@ mod tests {
                 &self,
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
-                _p: &str
+                _p: &str,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Err(knowledge::repository::RepositoryError::InvalidPath(
-                    "test error".to_string()
+                    "test error".to_string(),
                 ))
             }
             async fn delete(
@@ -3056,20 +3087,20 @@ mod tests {
                 _ctx: TenantContext,
                 _l: KnowledgeLayer,
                 _p: &str,
-                _m: &str
+                _m: &str,
             ) -> std::result::Result<String, Self::Error> {
                 Ok("hash".to_string())
             }
             async fn get_head_commit(
                 &self,
-                _ctx: TenantContext
+                _ctx: TenantContext,
             ) -> std::result::Result<Option<String>, Self::Error> {
                 Ok(Some("abc".to_string()))
             }
             async fn get_affected_items(
                 &self,
                 _ctx: TenantContext,
-                _f: &str
+                _f: &str,
             ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -3078,7 +3109,7 @@ mod tests {
                 _ctx: TenantContext,
                 _q: &str,
                 _l: Vec<KnowledgeLayer>,
-                _li: usize
+                _li: usize,
             ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
                 Ok(Vec::new())
             }
@@ -3091,10 +3122,12 @@ mod tests {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockRepoListError),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let ctx = TenantContext::default();
@@ -3120,10 +3153,12 @@ mod tests {
             memory_manager: Arc::new(MemoryManager::new()),
             knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
             governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
             federation_manager: None,
             persister: Arc::new(MockPersister),
             states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let tenant_id = TenantId::default();

@@ -1,7 +1,7 @@
 use crate::bridge::{ResolveFederationConflictTool, SyncNowTool, SyncStatusTool};
 use crate::governance::{
     HierarchyNavigateTool, UnitCreateTool, UnitPolicyAddTool, UserRoleAssignTool,
-    UserRoleRemoveTool
+    UserRoleRemoveTool,
 };
 use crate::knowledge::{KnowledgeGetTool, KnowledgeListTool, KnowledgeQueryTool};
 use crate::memory::{MemoryAddTool, MemoryCloseTool, MemoryDeleteTool, MemorySearchTool};
@@ -25,7 +25,7 @@ pub struct McpServer {
     registry: ToolRegistry,
     auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>,
     event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
-    timeout_duration: Duration
+    timeout_duration: Duration,
 }
 
 impl McpServer {
@@ -34,14 +34,14 @@ impl McpServer {
         memory_manager: Arc<MemoryManager>,
         sync_manager: Arc<SyncManager>,
         knowledge_repository: Arc<
-            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>
+            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
         >,
         storage_backend: Arc<
-            dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>
+            dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>,
         >,
         governance_engine: Arc<GovernanceEngine>,
         auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>,
-        event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>
+        event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
     ) -> Self {
         let mut registry = ToolRegistry::new();
 
@@ -51,14 +51,14 @@ impl McpServer {
         registry.register(Box::new(MemoryCloseTool::new(memory_manager.clone())));
 
         registry.register(Box::new(KnowledgeGetTool::new(
-            knowledge_repository.clone()
+            knowledge_repository.clone(),
         )));
         registry.register(Box::new(KnowledgeListTool::new(
-            knowledge_repository.clone()
+            knowledge_repository.clone(),
         )));
         registry.register(Box::new(KnowledgeQueryTool::new(
             memory_manager.clone(),
-            knowledge_repository.clone()
+            knowledge_repository.clone(),
         )));
 
         registry.register(Box::new(SyncNowTool::new(sync_manager.clone())));
@@ -67,19 +67,19 @@ impl McpServer {
 
         registry.register(Box::new(UnitCreateTool::new(
             storage_backend.clone(),
-            governance_engine.clone()
+            governance_engine.clone(),
         )));
         registry.register(Box::new(UnitPolicyAddTool::new(
             storage_backend.clone(),
-            governance_engine.clone()
+            governance_engine.clone(),
         )));
         registry.register(Box::new(UserRoleAssignTool::new(
             storage_backend.clone(),
-            governance_engine.clone()
+            governance_engine.clone(),
         )));
         registry.register(Box::new(UserRoleRemoveTool::new(
             storage_backend.clone(),
-            governance_engine
+            governance_engine,
         )));
         registry.register(Box::new(HierarchyNavigateTool::new(storage_backend)));
 
@@ -87,7 +87,7 @@ impl McpServer {
             registry,
             auth_service,
             event_publisher,
-            timeout_duration: Duration::from_secs(30)
+            timeout_duration: Duration::from_secs(30),
         }
     }
 
@@ -120,7 +120,7 @@ impl McpServer {
                     jsonrpc: "2.0".to_string(),
                     id: Value::Null,
                     result: None,
-                    error: Some(JsonRpcError::request_timeout("Request timed out"))
+                    error: Some(JsonRpcError::request_timeout("Request timed out")),
                 }
             }
         }
@@ -143,7 +143,7 @@ impl McpServer {
                         "version": "0.1.0"
                     }
                 })),
-                error: None
+                error: None,
             },
             "tools/list" => {
                 let tools = self.registry.list_tools();
@@ -151,7 +151,7 @@ impl McpServer {
                     jsonrpc: "2.0".to_string(),
                     id: request.id,
                     result: Some(serde_json::to_value(tools).unwrap()),
-                    error: None
+                    error: None,
                 }
             }
             "tools/call" => {
@@ -162,7 +162,7 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: None,
-                            error: Some(JsonRpcError::invalid_params("Invalid params"))
+                            error: Some(JsonRpcError::invalid_params("Invalid params")),
                         };
                     }
                 };
@@ -176,8 +176,8 @@ impl McpServer {
                                 id: request.id,
                                 result: None,
                                 error: Some(JsonRpcError::invalid_params(
-                                    "Missing or invalid tenant context"
-                                ))
+                                    "Missing or invalid tenant context",
+                                )),
                             };
                         }
                     };
@@ -189,7 +189,7 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: None,
-                            error: Some(JsonRpcError::invalid_params(e))
+                            error: Some(JsonRpcError::invalid_params(e)),
                         };
                     }
                 };
@@ -216,8 +216,8 @@ impl McpServer {
                                         "Authorization error: access denied for tool {}",
                                         name
                                     ),
-                                    data: None
-                                })
+                                    data: None,
+                                }),
                             };
                         }
                     }
@@ -230,8 +230,8 @@ impl McpServer {
                             error: Some(JsonRpcError {
                                 code: -32002,
                                 message: format!("Authorization error: {}", e),
-                                data: None
-                            })
+                                data: None,
+                            }),
                         };
                     }
                 }
@@ -252,14 +252,14 @@ impl McpServer {
                                             .unwrap_or_default()
                                             .to_string(),
                                         unit_type: serde_json::from_value(
-                                            result["unit_type"].clone()
+                                            result["unit_type"].clone(),
                                         )
                                         .unwrap_or(mk_core::types::UnitType::Project),
                                         tenant_id: tenant_context.tenant_id.clone(),
                                         parent_id: result["parent_id"]
                                             .as_str()
                                             .map(|s| s.to_string()),
-                                        timestamp
+                                        timestamp,
                                     })
                                 }
                                 "role_assign" => {
@@ -273,7 +273,7 @@ impl McpServer {
                                         role: serde_json::from_value(result["role"].clone())
                                             .unwrap_or(mk_core::types::Role::Developer),
                                         tenant_id: tenant_context.tenant_id.clone(),
-                                        timestamp
+                                        timestamp,
                                     })
                                 }
                                 "role_remove" => {
@@ -287,7 +287,7 @@ impl McpServer {
                                         role: serde_json::from_value(result["role"].clone())
                                             .unwrap_or(mk_core::types::Role::Developer),
                                         tenant_id: tenant_context.tenant_id.clone(),
-                                        timestamp
+                                        timestamp,
                                     })
                                 }
                                 "unit_policy_add" => {
@@ -299,10 +299,10 @@ impl McpServer {
                                         layer: serde_json::from_value(result["layer"].clone())
                                             .unwrap_or(mk_core::types::KnowledgeLayer::Project),
                                         tenant_id: tenant_context.tenant_id.clone(),
-                                        timestamp
+                                        timestamp,
                                     })
                                 }
-                                _ => None
+                                _ => None,
                             };
 
                             if let Some(event) = event {
@@ -316,7 +316,7 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: Some(result),
-                            error: None
+                            error: None,
                         }
                     }
                     Err(e) => {
@@ -333,7 +333,7 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: None,
-                            error: Some(rpc_error)
+                            error: Some(rpc_error),
                         }
                     }
                 }
@@ -344,7 +344,7 @@ impl McpServer {
                     jsonrpc: "2.0".to_string(),
                     id: request.id,
                     result: None,
-                    error: Some(JsonRpcError::method_not_found("Method not found"))
+                    error: Some(JsonRpcError::method_not_found("Method not found")),
                 }
             }
         }
@@ -353,11 +353,11 @@ impl McpServer {
     fn extract_call_params(
         &self,
         params: &Value,
-        tenant_context: &mk_core::types::TenantContext
+        tenant_context: &mk_core::types::TenantContext,
     ) -> Result<(String, Value), String> {
         let name = match params["name"].as_str() {
             Some(n) => n.to_string(),
-            None => return Err("Missing tool name".to_string())
+            None => return Err("Missing tool name".to_string()),
         };
 
         let mut tool_params = params["arguments"].clone();
@@ -368,11 +368,11 @@ impl McpServer {
         if let Some(obj) = tool_params.as_object_mut() {
             obj.insert(
                 "tenant_context".to_string(),
-                serde_json::to_value(tenant_context).unwrap()
+                serde_json::to_value(tenant_context).unwrap(),
             );
             obj.insert(
                 "tenantContext".to_string(),
-                serde_json::to_value(tenant_context).unwrap()
+                serde_json::to_value(tenant_context).unwrap(),
             );
         } else {
             tool_params = serde_json::json!({
@@ -392,7 +392,7 @@ pub struct JsonRpcResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRpcError>
+    pub error: Option<JsonRpcError>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -400,7 +400,7 @@ pub struct JsonRpcError {
     pub code: i32,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>
+    pub data: Option<Value>,
 }
 
 impl JsonRpcError {
@@ -408,7 +408,7 @@ impl JsonRpcError {
         Self {
             code: -32602,
             message: message.into(),
-            data: None
+            data: None,
         }
     }
 
@@ -416,7 +416,7 @@ impl JsonRpcError {
         Self {
             code: -32601,
             message: message.into(),
-            data: None
+            data: None,
         }
     }
 
@@ -424,7 +424,7 @@ impl JsonRpcError {
         Self {
             code: -32000,
             message: message.into(),
-            data: None
+            data: None,
         }
     }
 
@@ -432,7 +432,7 @@ impl JsonRpcError {
         Self {
             code: -32001,
             message: message.into(),
-            data: None
+            data: None,
         }
     }
 }
@@ -443,7 +443,7 @@ pub struct JsonRpcRequest {
     pub id: Value,
     pub method: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub params: Option<Value>
+    pub params: Option<Value>,
 }
 
 #[cfg(test)]
@@ -467,7 +467,7 @@ mod tests {
             &self,
             _ctx: mk_core::types::TenantContext,
             _: KnowledgeEntry,
-            _: &str
+            _: &str,
         ) -> std::result::Result<String, Self::Error> {
             Ok("hash".into())
         }
@@ -475,7 +475,7 @@ mod tests {
             &self,
             _ctx: mk_core::types::TenantContext,
             _: KnowledgeLayer,
-            _: &str
+            _: &str,
         ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
             Ok(None)
         }
@@ -483,7 +483,7 @@ mod tests {
             &self,
             _ctx: mk_core::types::TenantContext,
             _: KnowledgeLayer,
-            _: &str
+            _: &str,
         ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
             Ok(vec![])
         }
@@ -492,20 +492,20 @@ mod tests {
             _ctx: mk_core::types::TenantContext,
             _: KnowledgeLayer,
             _: &str,
-            _: &str
+            _: &str,
         ) -> std::result::Result<String, Self::Error> {
             Ok("hash".into())
         }
         async fn get_head_commit(
             &self,
-            _ctx: mk_core::types::TenantContext
+            _ctx: mk_core::types::TenantContext,
         ) -> std::result::Result<Option<String>, Self::Error> {
             Ok(None)
         }
         async fn get_affected_items(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _: &str
+            _: &str,
         ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
             Ok(vec![])
         }
@@ -514,7 +514,7 @@ mod tests {
             _ctx: mk_core::types::TenantContext,
             _: &str,
             _: Vec<KnowledgeLayer>,
-            _: usize
+            _: usize,
         ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
             Ok(vec![])
         }
@@ -528,7 +528,7 @@ mod tests {
     impl SyncStatePersister for MockPersister {
         async fn load(
             &self,
-            _tenant_id: &mk_core::types::TenantId
+            _tenant_id: &mk_core::types::TenantId,
         ) -> std::result::Result<sync::state::SyncState, Box<dyn std::error::Error + Send + Sync>>
         {
             Ok(sync::state::SyncState::default())
@@ -536,7 +536,7 @@ mod tests {
         async fn save(
             &self,
             _tenant_id: &mk_core::types::TenantId,
-            _: &sync::state::SyncState
+            _: &sync::state::SyncState,
         ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
         }
@@ -550,13 +550,13 @@ mod tests {
             &self,
             _ctx: &mk_core::types::TenantContext,
             _action: &str,
-            _resource: &str
+            _resource: &str,
         ) -> anyhow::Result<bool> {
             Ok(true)
         }
         async fn get_user_roles(
             &self,
-            _ctx: &mk_core::types::TenantContext
+            _ctx: &mk_core::types::TenantContext,
         ) -> anyhow::Result<Vec<mk_core::types::Role>> {
             Ok(vec![])
         }
@@ -564,7 +564,7 @@ mod tests {
             &self,
             _ctx: &mk_core::types::TenantContext,
             _user_id: &mk_core::types::UserId,
-            _role: mk_core::types::Role
+            _role: mk_core::types::Role,
         ) -> anyhow::Result<()> {
             Ok(())
         }
@@ -572,7 +572,7 @@ mod tests {
             &self,
             _ctx: &mk_core::types::TenantContext,
             _user_id: &mk_core::types::UserId,
-            _role: mk_core::types::Role
+            _role: mk_core::types::Role,
         ) -> anyhow::Result<()> {
             Ok(())
         }
@@ -608,11 +608,12 @@ mod tests {
                 memory_manager.clone(),
                 repo.clone(),
                 governance.clone(),
+                config::config::DeploymentConfig::default(),
                 None,
-                Arc::new(MockPersister)
+                Arc::new(MockPersister),
             )
             .await
-            .unwrap()
+            .unwrap(),
         );
 
         let (container, connection_url) = setup_postgres_container()
@@ -632,7 +633,7 @@ mod tests {
             Arc::new(backend),
             governance,
             Arc::new(MockAuthService),
-            None
+            None,
         )
     }
 
@@ -643,7 +644,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "initialize".to_string(),
-            params: None
+            params: None,
         };
 
         let response = server.handle_request(request).await;
@@ -659,7 +660,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "tools/list".to_string(),
-            params: None
+            params: None,
         };
 
         let response = server.handle_request(request).await;
@@ -675,7 +676,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "unknown_method".to_string(),
-            params: None
+            params: None,
         };
 
         let response = server.handle_request(request).await;
@@ -690,7 +691,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "tools/call".to_string(),
-            params: None
+            params: None,
         };
 
         let response = server.handle_request(request).await;
@@ -712,7 +713,7 @@ mod tests {
                 },
                 "name": "non_existent_tool",
                 "arguments": {}
-            }))
+            })),
         };
 
         let response = server.handle_request(request).await;
@@ -739,7 +740,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "tools/call".to_string(),
-            params: Some(params)
+            params: Some(params),
         };
 
         let _response = server.handle_request(request).await;
@@ -760,7 +761,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "tools/call".to_string(),
-            params: Some(params)
+            params: Some(params),
         };
 
         let response = server.handle_request(request).await;
@@ -778,7 +779,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "initialize".to_string(),
-            params: None
+            params: None,
         };
 
         let _response = server.handle_request(request).await;

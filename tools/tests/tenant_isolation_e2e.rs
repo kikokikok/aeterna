@@ -4,7 +4,7 @@ use memory::providers::MockProvider;
 use mk_core::traits::{AuthorizationService, KnowledgeRepository, StorageBackend};
 use mk_core::types::{
     KnowledgeEntry, KnowledgeLayer, KnowledgeType, OrganizationalUnit, Policy, Role, TenantContext,
-    TenantId, UserId
+    TenantId, UserId,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -21,7 +21,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         ctx: &TenantContext,
         _action: &str,
-        _resource: &str
+        _resource: &str,
     ) -> anyhow::Result<bool> {
         let tenant_id = ctx.tenant_id.as_str();
         let user_id = ctx.user_id.as_str();
@@ -41,7 +41,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role
+        _role: Role,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -49,7 +49,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role
+        _role: Role,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -65,14 +65,14 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: TenantContext,
         _key: &str,
-        _value: &[u8]
+        _value: &[u8],
     ) -> Result<(), Self::Error> {
         Ok(())
     }
     async fn retrieve(
         &self,
         _ctx: TenantContext,
-        _key: &str
+        _key: &str,
     ) -> Result<Option<Vec<u8>>, Self::Error> {
         Ok(None)
     }
@@ -85,14 +85,21 @@ impl StorageBackend for MockStorage {
     async fn get_ancestors(
         &self,
         _ctx: TenantContext,
-        _unit_id: &str
+        _unit_id: &str,
+    ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
+        Ok(vec![])
+    }
+    async fn get_descendants(
+        &self,
+        _ctx: TenantContext,
+        _unit_id: &str,
     ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
         Ok(vec![])
     }
     async fn get_unit_policies(
         &self,
         _ctx: TenantContext,
-        _unit_id: &str
+        _unit_id: &str,
     ) -> Result<Vec<Policy>, Self::Error> {
         Ok(vec![])
     }
@@ -103,7 +110,7 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: &TenantContext,
         _unit_id: &str,
-        _policy: &Policy
+        _policy: &Policy,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -112,7 +119,7 @@ impl StorageBackend for MockStorage {
         _user_id: &UserId,
         _tenant_id: &TenantId,
         _unit_id: &str,
-        _role: Role
+        _role: Role,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -121,9 +128,44 @@ impl StorageBackend for MockStorage {
         _user_id: &UserId,
         _tenant_id: &TenantId,
         _unit_id: &str,
-        _role: Role
+        _role: Role,
     ) -> Result<(), Self::Error> {
         Ok(())
+    }
+    async fn store_drift_result(
+        &self,
+        _result: mk_core::types::DriftResult,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn get_latest_drift_result(
+        &self,
+        _ctx: TenantContext,
+        _project_id: &str,
+    ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
+        Ok(None)
+    }
+    async fn list_all_units(&self) -> Result<Vec<OrganizationalUnit>, Self::Error> {
+        Ok(vec![])
+    }
+    async fn record_job_status(
+        &self,
+        _job_name: &str,
+        _tenant_id: &str,
+        _status: &str,
+        _message: Option<&str>,
+        _started_at: i64,
+        _finished_at: Option<i64>,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn get_governance_events(
+        &self,
+        _ctx: TenantContext,
+        _since_timestamp: i64,
+        _limit: usize,
+    ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
+        Ok(vec![])
     }
 }
 
@@ -132,14 +174,14 @@ struct MockPersister;
 impl sync::state_persister::SyncStatePersister for MockPersister {
     async fn load(
         &self,
-        _tenant_id: &TenantId
+        _tenant_id: &TenantId,
     ) -> Result<sync::state::SyncState, Box<dyn std::error::Error + Send + Sync>> {
         Ok(sync::state::SyncState::default())
     }
     async fn save(
         &self,
         _tenant_id: &TenantId,
-        _state: &sync::state::SyncState
+        _state: &sync::state::SyncState,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
@@ -154,7 +196,7 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
     memory_manager
         .register_provider(
             mk_core::types::MemoryLayer::User,
-            Box::new(MockProvider::new())
+            Box::new(MockProvider::new()),
         )
         .await;
 
@@ -168,11 +210,12 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
             memory_manager.clone(),
             repo.clone(),
             governance_engine.clone(),
+            config::config::DeploymentConfig::default(),
             None,
-            Arc::new(MockPersister)
+            Arc::new(MockPersister),
         )
         .await
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?,
     );
 
     let server = McpServer::new(
@@ -181,7 +224,8 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
         repo,
         storage_backend,
         governance_engine,
-        auth_service
+        auth_service,
+        None,
     );
 
     // 2. Test Success: User u1 calling tool with Tenant t1
@@ -199,7 +243,7 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
                 "content": "Secret for t1",
                 "layer": "user"
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(success_request).await;
@@ -224,7 +268,7 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
                 "content": "Attempted breach",
                 "layer": "user"
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(failure_request).await;

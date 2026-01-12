@@ -15,7 +15,7 @@
 
 use crate::config::{
     Config, MemoryConfig, ObservabilityConfig, PostgresConfig, ProviderConfig, QdrantConfig,
-    RedisConfig, SyncConfig, ToolConfig
+    RedisConfig, SyncConfig, ToolConfig,
 };
 use std::env;
 
@@ -93,7 +93,7 @@ pub fn load_from_env() -> Result<Config, Box<dyn std::error::Error>> {
         memory: load_memory_from_env()?,
         tools: load_tools_from_env()?,
         observability: load_observability_from_env()?,
-        deployment: load_deployment_from_env()?
+        deployment: load_deployment_from_env()?,
     };
 
     Ok(config)
@@ -104,7 +104,7 @@ fn load_deployment_from_env() -> Result<crate::config::DeploymentConfig, Box<dyn
     Ok(crate::config::DeploymentConfig {
         mode: env::var("AETERNA_DEPLOYMENT_MODE").unwrap_or_else(|_| "local".to_string()),
         remote_url: env::var("AETERNA_REMOTE_GOVERNANCE_URL").ok(),
-        sync_enabled: parse_env("AETERNA_SYNC_ENABLED").unwrap_or(true)
+        sync_enabled: parse_env("AETERNA_SYNC_ENABLED").unwrap_or(true),
     })
 }
 
@@ -112,7 +112,7 @@ fn load_provider_from_env() -> Result<ProviderConfig, Box<dyn std::error::Error>
     Ok(ProviderConfig {
         postgres: load_postgres_from_env()?,
         qdrant: load_qdrant_from_env()?,
-        redis: load_redis_from_env()?
+        redis: load_redis_from_env()?,
     })
 }
 
@@ -124,7 +124,7 @@ fn load_postgres_from_env() -> Result<PostgresConfig, Box<dyn std::error::Error>
         username: env::var("PG_USERNAME").unwrap_or_else(|_| "postgres".to_string()),
         password: env::var("PG_PASSWORD").unwrap_or_default(),
         pool_size: parse_env("PG_POOL_SIZE").unwrap_or(10),
-        timeout_seconds: parse_env("PG_TIMEOUT_SECONDS").unwrap_or(30)
+        timeout_seconds: parse_env("PG_TIMEOUT_SECONDS").unwrap_or(30),
     })
 }
 
@@ -133,7 +133,7 @@ fn load_qdrant_from_env() -> Result<QdrantConfig, Box<dyn std::error::Error>> {
         host: env::var("QD_HOST").unwrap_or_else(|_| "localhost".to_string()),
         port: parse_env("QD_PORT").unwrap_or(6333),
         collection: env::var("QD_COLLECTION").unwrap_or_else(|_| "memory_embeddings".to_string()),
-        timeout_seconds: parse_env("QD_TIMEOUT_SECONDS").unwrap_or(30)
+        timeout_seconds: parse_env("QD_TIMEOUT_SECONDS").unwrap_or(30),
     })
 }
 
@@ -143,7 +143,7 @@ fn load_redis_from_env() -> Result<RedisConfig, Box<dyn std::error::Error>> {
         port: parse_env("RD_PORT").unwrap_or(6379),
         db: parse_env("RD_DB").unwrap_or(0),
         pool_size: parse_env("RD_POOL_SIZE").unwrap_or(10),
-        timeout_seconds: parse_env("RD_TIMEOUT_SECONDS").unwrap_or(30)
+        timeout_seconds: parse_env("RD_TIMEOUT_SECONDS").unwrap_or(30),
     })
 }
 
@@ -154,13 +154,13 @@ fn load_sync_from_env() -> Result<SyncConfig, Box<dyn std::error::Error>> {
         batch_size: parse_env("SY_BATCH_SIZE").unwrap_or(100),
         checkpoint_enabled: parse_env("SY_CHECKPOINT_ENABLED").unwrap_or(true),
         conflict_resolution: env::var("SY_CONFLICT_RESOLUTION")
-            .unwrap_or_else(|_| "prefer_knowledge".to_string())
+            .unwrap_or_else(|_| "prefer_knowledge".to_string()),
     })
 }
 
 fn load_memory_from_env() -> Result<MemoryConfig, Box<dyn std::error::Error>> {
     Ok(MemoryConfig {
-        promotion_threshold: parse_env("MK_PROMOTION_THRESHOLD").unwrap_or(0.8)
+        promotion_threshold: parse_env("MK_PROMOTION_THRESHOLD").unwrap_or(0.8),
     })
 }
 
@@ -171,7 +171,7 @@ fn load_tools_from_env() -> Result<ToolConfig, Box<dyn std::error::Error>> {
         port: parse_env("TL_PORT").unwrap_or(8080),
         api_key: env::var("TL_API_KEY").ok(),
         rate_limit_requests_per_minute: parse_env("TL_RATE_LIMIT_REQUESTS_PER_MINUTE")
-            .unwrap_or(60)
+            .unwrap_or(60),
     })
 }
 
@@ -180,20 +180,20 @@ fn load_observability_from_env() -> Result<ObservabilityConfig, Box<dyn std::err
         metrics_enabled: parse_env("OB_METRICS_ENABLED").unwrap_or(true),
         tracing_enabled: parse_env("OB_TRACING_ENABLED").unwrap_or(true),
         logging_level: env::var("OB_LOGGING_LEVEL").unwrap_or_else(|_| "info".to_string()),
-        metrics_port: parse_env("OB_METRICS_PORT").unwrap_or(9090)
+        metrics_port: parse_env("OB_METRICS_PORT").unwrap_or(9090),
     })
 }
 
 fn parse_env<T>(key: &str) -> Result<T, Box<dyn std::error::Error>>
 where
     T: std::str::FromStr,
-    T::Err: std::error::Error + Send + Sync + 'static
+    T::Err: std::error::Error + Send + Sync + 'static,
 {
     match env::var(key) {
         Ok(s) => s
             .parse::<T>()
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
-        Err(e) => Err(Box::new(e) as Box<dyn std::error::Error>)
+        Err(e) => Err(Box::new(e) as Box<dyn std::error::Error>),
     }
 }
 

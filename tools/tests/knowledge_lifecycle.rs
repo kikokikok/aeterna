@@ -14,13 +14,13 @@ use tokio::sync::RwLock;
 use tools::server::{JsonRpcRequest, McpServer};
 
 struct MockStorage {
-    data: Arc<RwLock<HashMap<String, Vec<u8>>>>
+    data: Arc<RwLock<HashMap<String, Vec<u8>>>>,
 }
 
 impl MockStorage {
     fn new() -> Self {
         Self {
-            data: Arc::new(RwLock::new(HashMap::new()))
+            data: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -33,7 +33,7 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: mk_core::types::TenantContext,
         key: &str,
-        value: &[u8]
+        value: &[u8],
     ) -> Result<(), Self::Error> {
         self.data
             .write()
@@ -45,7 +45,7 @@ impl StorageBackend for MockStorage {
     async fn retrieve(
         &self,
         _ctx: mk_core::types::TenantContext,
-        key: &str
+        key: &str,
     ) -> Result<Option<Vec<u8>>, Self::Error> {
         Ok(self.data.read().await.get(key).cloned())
     }
@@ -53,7 +53,7 @@ impl StorageBackend for MockStorage {
     async fn delete(
         &self,
         _ctx: mk_core::types::TenantContext,
-        key: &str
+        key: &str,
     ) -> Result<(), Self::Error> {
         self.data.write().await.remove(key);
         Ok(())
@@ -62,7 +62,7 @@ impl StorageBackend for MockStorage {
     async fn exists(
         &self,
         _ctx: mk_core::types::TenantContext,
-        key: &str
+        key: &str,
     ) -> Result<bool, Self::Error> {
         Ok(self.data.read().await.contains_key(key))
     }
@@ -70,7 +70,15 @@ impl StorageBackend for MockStorage {
     async fn get_ancestors(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _unit_id: &str
+        _unit_id: &str,
+    ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn get_descendants(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _unit_id: &str,
     ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
         Ok(Vec::new())
     }
@@ -78,8 +86,84 @@ impl StorageBackend for MockStorage {
     async fn get_unit_policies(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _unit_id: &str
+        _unit_id: &str,
     ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn create_unit(
+        &self,
+        _unit: &mk_core::types::OrganizationalUnit,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn add_unit_policy(
+        &self,
+        _ctx: &mk_core::types::TenantContext,
+        _unit_id: &str,
+        _policy: &mk_core::types::Policy,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn assign_role(
+        &self,
+        _user_id: &mk_core::types::UserId,
+        _tenant_id: &mk_core::types::TenantId,
+        _unit_id: &str,
+        _role: mk_core::types::Role,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn remove_role(
+        &self,
+        _user_id: &mk_core::types::UserId,
+        _tenant_id: &mk_core::types::TenantId,
+        _unit_id: &str,
+        _role: mk_core::types::Role,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn store_drift_result(
+        &self,
+        _result: mk_core::types::DriftResult,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn get_latest_drift_result(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _project_id: &str,
+    ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
+        Ok(None)
+    }
+
+    async fn list_all_units(&self) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn record_job_status(
+        &self,
+        _job_name: &str,
+        _tenant_id: &str,
+        _status: &str,
+        _message: Option<&str>,
+        _started_at: i64,
+        _finished_at: Option<i64>,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn get_governance_events(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _since_timestamp: i64,
+        _limit: usize,
+    ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
         Ok(Vec::new())
     }
 }
@@ -92,13 +176,13 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
         &self,
         _ctx: &mk_core::types::TenantContext,
         _action: &str,
-        _resource: &str
+        _resource: &str,
     ) -> anyhow::Result<bool> {
         Ok(true)
     }
     async fn get_user_roles(
         &self,
-        _ctx: &mk_core::types::TenantContext
+        _ctx: &mk_core::types::TenantContext,
     ) -> anyhow::Result<Vec<mk_core::types::Role>> {
         Ok(vec![])
     }
@@ -106,7 +190,7 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
         &self,
         _ctx: &mk_core::types::TenantContext,
         _user_id: &mk_core::types::UserId,
-        _role: mk_core::types::Role
+        _role: mk_core::types::Role,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -114,7 +198,7 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
         &self,
         _ctx: &mk_core::types::TenantContext,
         _user_id: &mk_core::types::UserId,
-        _role: mk_core::types::Role
+        _role: mk_core::types::Role,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -123,9 +207,9 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
 async fn setup_postgres_container() -> Result<
     (
         testcontainers::ContainerAsync<testcontainers_modules::postgres::Postgres>,
-        String
+        String,
     ),
-    Box<dyn std::error::Error + Send + Sync>
+    Box<dyn std::error::Error + Send + Sync>,
 > {
     let container = testcontainers_modules::postgres::Postgres::default()
         .with_db_name("testdb")
@@ -169,11 +253,12 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
             memory_manager.clone(),
             repo.clone(),
             Arc::new(knowledge::governance::GovernanceEngine::new()),
+            config::config::DeploymentConfig::default(),
             None,
-            persister
+            persister,
         )
         .await
-        .map_err(|e| anyhow::anyhow!(e))?
+        .map_err(|e| anyhow::anyhow!(e))?,
     );
 
     let server = McpServer::new(
@@ -183,10 +268,11 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         Arc::new(
             storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
                 .await
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
-        Arc::new(MockAuthService)
+        Arc::new(MockAuthService),
+        None,
     );
 
     // GIVEN a knowledge entry is stored in the repository
@@ -199,7 +285,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
     };
     let tenant_id = mk_core::types::TenantId::new("t1".into()).unwrap();
     let user_id = mk_core::types::UserId::new("u1".into()).unwrap();
@@ -222,7 +308,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
                 "query": "Auth",
                 "layers": ["project"]
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;
@@ -252,7 +338,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
                 "path": "specs/auth.md",
                 "layer": "project"
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;

@@ -8,17 +8,17 @@ use std::sync::Arc;
 pub trait SyncStatePersister: Send + Sync {
     async fn load(
         &self,
-        tenant_id: &mk_core::types::TenantId
+        tenant_id: &mk_core::types::TenantId,
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>>;
     async fn save(
         &self,
         tenant_id: &mk_core::types::TenantId,
-        state: &SyncState
+        state: &SyncState,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 pub struct FilePersister {
-    base_path: PathBuf
+    base_path: PathBuf,
 }
 
 impl FilePersister {
@@ -36,20 +36,20 @@ impl FilePersister {
 impl SyncStatePersister for FilePersister {
     async fn load(
         &self,
-        tenant_id: &mk_core::types::TenantId
+        tenant_id: &mk_core::types::TenantId,
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         let path = self.get_path(tenant_id);
         match tokio::fs::read(&path).await {
             Ok(data) => Ok(serde_json::from_slice(&data)?),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(SyncState::default()),
-            Err(e) => Err(e.into())
+            Err(e) => Err(e.into()),
         }
     }
 
     async fn save(
         &self,
         tenant_id: &mk_core::types::TenantId,
-        state: &SyncState
+        state: &SyncState,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let path = self.get_path(tenant_id);
         let data = serde_json::to_vec_pretty(state)?;
@@ -63,14 +63,14 @@ impl SyncStatePersister for FilePersister {
 
 pub struct DatabasePersister<S: StorageBackend> {
     storage: Arc<S>,
-    key_prefix: String
+    key_prefix: String,
 }
 
 impl<S: StorageBackend> DatabasePersister<S> {
     pub fn new(storage: Arc<S>, key_prefix: String) -> Self {
         Self {
             storage,
-            key_prefix
+            key_prefix,
         }
     }
 
@@ -82,33 +82,33 @@ impl<S: StorageBackend> DatabasePersister<S> {
 #[async_trait]
 impl<S: StorageBackend> SyncStatePersister for DatabasePersister<S>
 where
-    S::Error: std::error::Error + Send + Sync + 'static
+    S::Error: std::error::Error + Send + Sync + 'static,
 {
     async fn load(
         &self,
-        tenant_id: &mk_core::types::TenantId
+        tenant_id: &mk_core::types::TenantId,
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         let key = self.get_key(tenant_id);
         let ctx = mk_core::types::TenantContext::new(
             tenant_id.clone(),
-            mk_core::types::UserId::default()
+            mk_core::types::UserId::default(),
         );
         match self.storage.retrieve(ctx, &key).await? {
             Some(data) => Ok(serde_json::from_slice(&data)?),
-            None => Ok(SyncState::default())
+            None => Ok(SyncState::default()),
         }
     }
 
     async fn save(
         &self,
         tenant_id: &mk_core::types::TenantId,
-        state: &SyncState
+        state: &SyncState,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let key = self.get_key(tenant_id);
         let data = serde_json::to_vec(state)?;
         let ctx = mk_core::types::TenantContext::new(
             tenant_id.clone(),
-            mk_core::types::UserId::default()
+            mk_core::types::UserId::default(),
         );
         self.storage.store(ctx, &key, &data).await?;
         Ok(())
@@ -124,13 +124,13 @@ mod tests {
     use tokio::sync::RwLock;
 
     struct MockStorage {
-        data: Arc<RwLock<HashMap<String, Vec<u8>>>>
+        data: Arc<RwLock<HashMap<String, Vec<u8>>>>,
     }
 
     impl MockStorage {
         fn new() -> Self {
             Self {
-                data: Arc::new(RwLock::new(HashMap::new()))
+                data: Arc::new(RwLock::new(HashMap::new())),
             }
         }
     }
@@ -143,7 +143,7 @@ mod tests {
             &self,
             _ctx: mk_core::types::TenantContext,
             key: &str,
-            value: &[u8]
+            value: &[u8],
         ) -> Result<(), Self::Error> {
             self.data
                 .write()
@@ -155,7 +155,7 @@ mod tests {
         async fn retrieve(
             &self,
             _ctx: mk_core::types::TenantContext,
-            key: &str
+            key: &str,
         ) -> Result<Option<Vec<u8>>, Self::Error> {
             Ok(self.data.read().await.get(key).cloned())
         }
@@ -163,7 +163,7 @@ mod tests {
         async fn delete(
             &self,
             _ctx: mk_core::types::TenantContext,
-            key: &str
+            key: &str,
         ) -> Result<(), Self::Error> {
             self.data.write().await.remove(key);
             Ok(())
@@ -172,7 +172,7 @@ mod tests {
         async fn exists(
             &self,
             _ctx: mk_core::types::TenantContext,
-            key: &str
+            key: &str,
         ) -> Result<bool, Self::Error> {
             Ok(self.data.read().await.contains_key(key))
         }
@@ -180,7 +180,15 @@ mod tests {
         async fn get_ancestors(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _unit_id: &str
+            _unit_id: &str,
+        ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+
+        async fn get_descendants(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str,
         ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
             Ok(vec![])
         }
@@ -188,8 +196,86 @@ mod tests {
         async fn get_unit_policies(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _unit_id: &str
+            _unit_id: &str,
         ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
+            Ok(vec![])
+        }
+
+        async fn create_unit(
+            &self,
+            _unit: &mk_core::types::OrganizationalUnit,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn add_unit_policy(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _unit_id: &str,
+            _policy: &mk_core::types::Policy,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn assign_role(
+            &self,
+            _user_id: &mk_core::types::UserId,
+            _tenant_id: &mk_core::types::TenantId,
+            _unit_id: &str,
+            _role: mk_core::types::Role,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn remove_role(
+            &self,
+            _user_id: &mk_core::types::UserId,
+            _tenant_id: &mk_core::types::TenantId,
+            _unit_id: &str,
+            _role: mk_core::types::Role,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn store_drift_result(
+            &self,
+            _result: mk_core::types::DriftResult,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn get_latest_drift_result(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _project_id: &str,
+        ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
+            Ok(None)
+        }
+
+        async fn list_all_units(
+            &self,
+        ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+
+        async fn record_job_status(
+            &self,
+            _job_name: &str,
+            _tenant_id: &str,
+            _status: &str,
+            _message: Option<&str>,
+            _started_at: i64,
+            _finished_at: Option<i64>,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn get_governance_events(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _since_timestamp: i64,
+            _limit: usize,
+        ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
             Ok(vec![])
         }
     }
@@ -309,64 +395,182 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _key: &str,
-                _value: &[u8]
+                _value: &[u8],
             ) -> Result<(), Self::Error> {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "storage error"
+                    "storage error",
                 ))
             }
 
             async fn retrieve(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _key: &str
+                _key: &str,
             ) -> Result<Option<Vec<u8>>, Self::Error> {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "storage error"
+                    "storage error",
                 ))
             }
 
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _key: &str
+                _key: &str,
             ) -> Result<(), Self::Error> {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "storage error"
+                    "storage error",
                 ))
             }
 
             async fn exists(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _key: &str
+                _key: &str,
             ) -> Result<bool, Self::Error> {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "storage error"
+                    "storage error",
                 ))
             }
 
             async fn get_ancestors(
                 &self,
-                _unit_id: &str
+                _ctx: mk_core::types::TenantContext,
+                _unit_id: &str,
             ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "storage error"
+                    "storage error",
+                ))
+            }
+
+            async fn get_descendants(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _unit_id: &str,
+            ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error",
                 ))
             }
 
             async fn get_unit_policies(
                 &self,
-                _unit_id: &str
+                _ctx: mk_core::types::TenantContext,
+                _unit_id: &str,
             ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "storage error"
+                    "storage error",
+                ))
+            }
+
+            async fn create_unit(
+                &self,
+                _unit: &mk_core::types::OrganizationalUnit,
+            ) -> Result<(), Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error",
+                ))
+            }
+
+            async fn add_unit_policy(
+                &self,
+                _ctx: &mk_core::types::TenantContext,
+                _unit_id: &str,
+                _policy: &mk_core::types::Policy,
+            ) -> Result<(), Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error",
+                ))
+            }
+
+            async fn assign_role(
+                &self,
+                _user_id: &mk_core::types::UserId,
+                _tenant_id: &mk_core::types::TenantId,
+                _unit_id: &str,
+                _role: mk_core::types::Role,
+            ) -> Result<(), Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error",
+                ))
+            }
+
+            async fn remove_role(
+                &self,
+                _user_id: &mk_core::types::UserId,
+                _tenant_id: &mk_core::types::TenantId,
+                _unit_id: &str,
+                _role: mk_core::types::Role,
+            ) -> Result<(), Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error",
+                ))
+            }
+
+            async fn store_drift_result(
+                &self,
+                _result: mk_core::types::DriftResult,
+            ) -> Result<(), Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error",
+                ))
+            }
+
+            async fn get_latest_drift_result(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _project_id: &str,
+            ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error",
+                ))
+            }
+
+            async fn list_all_units(
+                &self,
+            ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error",
+                ))
+            }
+
+            async fn record_job_status(
+                &self,
+                _job_name: &str,
+                _tenant_id: &str,
+                _status: &str,
+                _message: Option<&str>,
+                _started_at: i64,
+                _finished_at: Option<i64>,
+            ) -> Result<(), Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error",
+                ))
+            }
+
+            async fn get_governance_events(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _since_timestamp: i64,
+                _limit: usize,
+            ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "storage error",
                 ))
             }
         }
