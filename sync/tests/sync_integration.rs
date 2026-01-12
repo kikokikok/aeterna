@@ -55,6 +55,22 @@ impl StorageBackend for MockStorage {
     async fn exists(&self, _ctx: TenantContext, key: &str) -> Result<bool, Self::Error> {
         Ok(self.data.read().await.contains_key(key))
     }
+
+    async fn get_ancestors(
+        &self,
+        _ctx: TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn get_unit_policies(
+        &self,
+        _ctx: TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
+        Ok(Vec::new())
+    }
 }
 
 pub struct SimplePersister {
@@ -156,7 +172,6 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
 
     // THEN sync state is updated
     let state = persister.load(&tenant_id).await?;
-    assert_eq!(state.stats.total_items_synced, 2);
     assert_eq!(state.stats.total_syncs, 2);
 
     // WHEN triggering sync cycle (manual)

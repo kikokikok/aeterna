@@ -106,11 +106,12 @@ async fn setup_server() -> Arc<McpServer> {
         .await;
 
     let repo = Arc::new(MockRepo);
+    let governance = Arc::new(knowledge::governance::GovernanceEngine::new());
     let sync_manager = Arc::new(
         SyncManager::new(
             memory_manager.clone(),
             repo.clone(),
-            Arc::new(knowledge::governance::GovernanceEngine::new()),
+            governance.clone(),
             None,
             Arc::new(MockPersister)
         )
@@ -118,7 +119,17 @@ async fn setup_server() -> Arc<McpServer> {
         .unwrap()
     );
 
-    Arc::new(McpServer::new(memory_manager, sync_manager, repo))
+    Arc::new(McpServer::new(
+        memory_manager,
+        sync_manager,
+        repo,
+        Arc::new(
+            storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
+                .await
+                .unwrap()
+        ),
+        governance
+    ))
 }
 
 #[tokio::test]

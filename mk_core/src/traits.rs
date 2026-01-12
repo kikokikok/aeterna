@@ -28,6 +28,18 @@ pub trait StorageBackend: Send + Sync {
         ctx: crate::types::TenantContext,
         key: &str
     ) -> Result<bool, Self::Error>;
+
+    async fn get_ancestors(
+        &self,
+        ctx: crate::types::TenantContext,
+        unit_id: &str
+    ) -> Result<Vec<crate::types::OrganizationalUnit>, Self::Error>;
+
+    async fn get_unit_policies(
+        &self,
+        ctx: crate::types::TenantContext,
+        unit_id: &str
+    ) -> Result<Vec<crate::types::Policy>, Self::Error>;
 }
 
 /// Health check capability for service monitoring
@@ -137,6 +149,37 @@ pub trait KnowledgeRepository: Send + Sync {
     ) -> Result<Vec<crate::types::KnowledgeEntry>, Self::Error>;
 
     fn root_path(&self) -> Option<std::path::PathBuf>;
+}
+
+#[async_trait]
+pub trait AuthorizationService: Send + Sync {
+    type Error;
+
+    async fn check_permission(
+        &self,
+        ctx: &crate::types::TenantContext,
+        action: &str,
+        resource: &str
+    ) -> Result<bool, Self::Error>;
+
+    async fn get_user_roles(
+        &self,
+        ctx: &crate::types::TenantContext
+    ) -> Result<Vec<crate::types::Role>, Self::Error>;
+
+    async fn assign_role(
+        &self,
+        ctx: &crate::types::TenantContext,
+        user_id: &crate::types::UserId,
+        role: crate::types::Role
+    ) -> Result<(), Self::Error>;
+
+    async fn remove_role(
+        &self,
+        ctx: &crate::types::TenantContext,
+        user_id: &crate::types::UserId,
+        role: crate::types::Role
+    ) -> Result<(), Self::Error>;
 }
 
 #[async_trait]

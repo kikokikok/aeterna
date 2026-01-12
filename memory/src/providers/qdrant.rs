@@ -181,14 +181,19 @@ impl MemoryProviderAdapter for QdrantProvider {
     ) -> Result<String, Self::Error> {
         self.ensure_collection().await?;
         let mut entry = entry;
-        // In a real multi-tenant scenario, we would tag the payload with tenant info
-        // or use different collections. For now, we propagate the context.
+
         entry
             .metadata
-            .insert("tenant_id".to_string(), json!(ctx.tenant_id));
+            .insert("tenant_id".to_string(), json!(ctx.tenant_id.as_str()));
         entry
             .metadata
-            .insert("user_id".to_string(), json!(ctx.user_id));
+            .insert("user_id".to_string(), json!(ctx.user_id.as_str()));
+
+        if let Some(agent_id) = &ctx.agent_id {
+            entry
+                .metadata
+                .insert("agent_id".to_string(), json!(agent_id));
+        }
 
         let point = self.entry_to_point(&entry)?;
         use qdrant_client::qdrant::UpsertPointsBuilder;
@@ -205,15 +210,18 @@ impl MemoryProviderAdapter for QdrantProvider {
         _filters: HashMap<String, Value>
     ) -> Result<Vec<MemoryEntry>, Self::Error> {
         self.ensure_collection().await?;
-        use qdrant_client::qdrant::SearchPointsBuilder;
+        use qdrant_client::qdrant::{Condition, Filter, SearchPointsBuilder};
 
-        // Tag search with tenant context in tracing/logs
-        tracing::debug!(tenant_id = %ctx.tenant_id, user_id = %ctx.user_id, "Qdrant search");
+        let filter = Filter::all(vec![Condition::matches(
+            "tenant_id",
+            ctx.tenant_id.as_str().to_string()
+        )]);
 
         let request =
             SearchPointsBuilder::new(self.collection_name.clone(), query_vector, limit as u64)
                 .with_payload(true)
-                .with_vectors(true);
+                .with_vectors(true)
+                .filter(filter);
 
         let result = self.client.search_points(request).await?;
         result
@@ -251,6 +259,13 @@ impl MemoryProviderAdapter for QdrantProvider {
                 order_value: None,
                 shard_key: None
             })?;
+
+            if entry.metadata.get("tenant_id").and_then(|t| t.as_str())
+                != Some(ctx.tenant_id.as_str())
+            {
+                return Ok(None);
+            }
+
             Ok(Some(entry))
         } else {
             Ok(None)
@@ -273,6 +288,10 @@ impl MemoryProviderAdapter for QdrantProvider {
     ) -> Result<(), Self::Error> {
         self.ensure_collection().await?;
 
+        if self.get(ctx.clone(), id).await?.is_none() {
+            return Ok(());
+        }
+
         tracing::debug!(tenant_id = %ctx.tenant_id, "Qdrant delete point");
 
         use qdrant_client::qdrant::DeletePointsBuilder;
@@ -293,12 +312,19 @@ impl MemoryProviderAdapter for QdrantProvider {
 
         tracing::debug!(tenant_id = %ctx.tenant_id, "Qdrant list points");
 
+        use qdrant_client::qdrant::{Condition, Filter};
+        let filter = Filter::all(vec![Condition::matches(
+            "tenant_id",
+            ctx.tenant_id.as_str().to_string()
+        )]);
+
         let scroll_request = qdrant_client::qdrant::ScrollPoints {
             collection_name: self.collection_name.clone(),
             limit: Some(limit as u32),
             with_payload: Some(true.into()),
             with_vectors: Some(true.into()),
             offset: cursor.map(|c| PointId::from(c)),
+            filter: Some(filter),
             ..Default::default()
         };
 

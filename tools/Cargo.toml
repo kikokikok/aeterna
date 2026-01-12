@@ -9,6 +9,7 @@ mk_core.workspace = true
 memory.workspace = true
 knowledge.workspace = true
 sync.workspace = true
+storage.workspace = true
 utils.workspace = true
 errors.workspace = true
 serde.workspace = true
@@ -23,10 +24,11 @@ validator.workspace = true
 chrono.workspace = true
 tempfile.workspace = true
 anyhow.workspace = true
+redis.workspace = true
 
 [dev-dependencies]
 adapters = { path = "../adapters" }
 storage.workspace = true
 testcontainers = "0.26"
-testcontainers-modules = { version = "0.14", features = ["redis"] }
+testcontainers-modules = { version = "0.14", features = ["redis", "postgres"] }
 

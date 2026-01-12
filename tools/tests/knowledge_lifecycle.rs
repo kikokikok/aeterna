@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use sync::bridge::SyncManager;
 use sync::state_persister::DatabasePersister;
+use testcontainers::runners::AsyncRunner;
 use tokio::sync::RwLock;
 use tools::server::{JsonRpcRequest, McpServer};
 
@@ -65,10 +66,91 @@ impl StorageBackend for MockStorage {
     ) -> Result<bool, Self::Error> {
         Ok(self.data.read().await.contains_key(key))
     }
+
+    async fn get_ancestors(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn get_unit_policies(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
+        Ok(Vec::new())
+    }
+}
+
+struct MockAuthService;
+#[async_trait]
+impl mk_core::traits::AuthorizationService for MockAuthService {
+    type Error = anyhow::Error;
+    async fn check_permission(
+        &self,
+        _ctx: &mk_core::types::TenantContext,
+        _action: &str,
+        _resource: &str
+    ) -> anyhow::Result<bool> {
+        Ok(true)
+    }
+    async fn get_user_roles(
+        &self,
+        _ctx: &mk_core::types::TenantContext
+    ) -> anyhow::Result<Vec<mk_core::types::Role>> {
+        Ok(vec![])
+    }
+    async fn assign_role(
+        &self,
+        _ctx: &mk_core::types::TenantContext,
+        _user_id: &mk_core::types::UserId,
+        _role: mk_core::types::Role
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn remove_role(
+        &self,
+        _ctx: &mk_core::types::TenantContext,
+        _user_id: &mk_core::types::UserId,
+        _role: mk_core::types::Role
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+async fn setup_postgres_container() -> Result<
+    (
+        testcontainers::ContainerAsync<testcontainers_modules::postgres::Postgres>,
+        String
+    ),
+    Box<dyn std::error::Error + Send + Sync>
+> {
+    let container = testcontainers_modules::postgres::Postgres::default()
+        .with_db_name("testdb")
+        .with_user("testuser")
+        .with_password("testpass")
+        .start()
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+    let connection_url = format!(
+        "postgres://testuser:testpass@localhost:{}/testdb",
+        container
+            .get_host_port_ipv4(5432)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+    );
+
+    Ok((container, connection_url))
 }
 
 #[tokio::test]
 async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
+    let (_container, connection_url) = setup_postgres_container()
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
     let temp_dir = tempfile::tempdir()?;
     let repo_path = temp_dir.path().join("repo");
     let repo = Arc::new(GitRepository::new(&repo_path)?);
@@ -94,7 +176,18 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!(e))?
     );
 
-    let server = McpServer::new(memory_manager, sync_manager, repo.clone());
+    let server = McpServer::new(
+        memory_manager,
+        sync_manager,
+        repo.clone(),
+        Arc::new(
+            storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        ),
+        Arc::new(knowledge::governance::GovernanceEngine::new()),
+        Arc::new(MockAuthService)
+    );
 
     // GIVEN a knowledge entry is stored in the repository
     let entry = KnowledgeEntry {

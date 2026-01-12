@@ -7,6 +7,7 @@ description = "Knowledge repository implementation"
 [dependencies]
 mk_core.workspace = true
 utils.workspace = true
+storage.workspace = true
 errors.workspace = true
 serde.workspace = true
 serde_json.workspace = true

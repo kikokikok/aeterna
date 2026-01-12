@@ -3,8 +3,8 @@
 ## 1. Core Tenant Infrastructure
 
 - [x] 1.1 Create `TenantId`, `UserId`, `TenantContext` types in `mk_core/`
-- [ ] 1.2 Add `HierarchyPath` type for Company > Org > Team > Project navigation
-- [ ] 1.3 Create `Role` enum (Developer, TechLead, Architect, Admin, Agent)
+- [x] 1.2 Add `HierarchyPath` type for Company > Org > Team > Project navigation
+- [x] 1.3 Create `Role` enum (Developer, TechLead, Architect, Admin, Agent)
 - [ ] 1.4 Add tenant context extraction middleware for API layer
 - [x] 1.5 Update `SyncStatePersister` trait to accept `TenantId` parameter
 - [x] 1.6 Update `SyncManager` to store per-tenant states (`HashMap<TenantId, SyncState>`)

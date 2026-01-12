@@ -1,7 +1,7 @@
 use crate::governance::GovernanceService;
 use crate::telemetry::MemoryTelemetry;
-use mk_core::traits::EmbeddingService;
 use mk_core::traits::MemoryProviderAdapter;
+use mk_core::traits::{AuthorizationService, EmbeddingService};
 use mk_core::types::{MemoryEntry, MemoryLayer};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,6 +18,13 @@ pub struct MemoryManager {
         Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
     >,
     governance_service: Arc<GovernanceService>,
+    auth_service: Option<
+        Arc<
+            dyn AuthorizationService<Error = Box<dyn std::error::Error + Send + Sync>>
+                + Send
+                + Sync
+        >
+    >,
     telemetry: Arc<MemoryTelemetry>,
     config: config::MemoryConfig
 }
@@ -28,6 +35,7 @@ impl MemoryManager {
             providers: Arc::new(RwLock::new(HashMap::new())),
             embedding_service: None,
             governance_service: Arc::new(GovernanceService::new()),
+            auth_service: None,
             telemetry: Arc::new(MemoryTelemetry::new()),
             config: config::MemoryConfig::default()
         }
@@ -45,6 +53,18 @@ impl MemoryManager {
         >
     ) -> Self {
         self.embedding_service = Some(embedding_service);
+        self
+    }
+
+    pub fn with_auth_service(
+        mut self,
+        auth_service: Arc<
+            dyn AuthorizationService<Error = Box<dyn std::error::Error + Send + Sync>>
+                + Send
+                + Sync
+        >
+    ) -> Self {
+        self.auth_service = Some(auth_service);
         self
     }
 
@@ -81,6 +101,15 @@ impl MemoryManager {
         limit: usize,
         filters: HashMap<String, serde_json::Value>
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(auth) = &self.auth_service {
+            if !auth
+                .check_permission(&ctx, "memory:read", "hierarchical")
+                .await?
+            {
+                return Err("Unauthorized to search hierarchical memory".into());
+            }
+        }
+
         let start = std::time::Instant::now();
         let providers = self.providers.read().await;
         let mut all_results = Vec::new();
@@ -184,6 +213,15 @@ impl MemoryManager {
         layer: MemoryLayer,
         mut entry: MemoryEntry
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(auth) = &self.auth_service {
+            if !auth
+                .check_permission(&ctx, "memory:write", &format!("layer:{:?}", layer))
+                .await?
+            {
+                return Err("Unauthorized to write to this memory layer".into());
+            }
+        }
+
         let start = std::time::Instant::now();
         let layer_str = format!("{:?}", layer);
         let _span = self.telemetry.record_operation_start("add", &layer_str);
@@ -276,9 +314,7 @@ impl MemoryManager {
             .get(&layer)
             .ok_or("No provider registered for layer")?;
 
-        let result = provider
-            .search(ctx, vec![0.0; 0], 1000, HashMap::new())
-            .await?;
+        let (result, _) = provider.list(ctx, layer, 1000, None).await?;
         Ok(result)
     }
 
@@ -320,6 +356,7 @@ impl MemoryManager {
             providers: self.providers.clone(),
             embedding_service: self.embedding_service.clone(),
             governance_service: self.governance_service.clone(),
+            auth_service: self.auth_service.clone(),
             telemetry: self.telemetry.clone(),
             config: self.config.clone()
         }))
