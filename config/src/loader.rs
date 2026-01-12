@@ -92,10 +92,20 @@ pub fn load_from_env() -> Result<Config, Box<dyn std::error::Error>> {
         sync: load_sync_from_env()?,
         memory: load_memory_from_env()?,
         tools: load_tools_from_env()?,
-        observability: load_observability_from_env()?
+        observability: load_observability_from_env()?,
+        deployment: load_deployment_from_env()?
     };
 
     Ok(config)
+}
+
+fn load_deployment_from_env() -> Result<crate::config::DeploymentConfig, Box<dyn std::error::Error>>
+{
+    Ok(crate::config::DeploymentConfig {
+        mode: env::var("AETERNA_DEPLOYMENT_MODE").unwrap_or_else(|_| "local".to_string()),
+        remote_url: env::var("AETERNA_REMOTE_GOVERNANCE_URL").ok(),
+        sync_enabled: parse_env("AETERNA_SYNC_ENABLED").unwrap_or(true)
+    })
 }
 
 fn load_provider_from_env() -> Result<ProviderConfig, Box<dyn std::error::Error>> {

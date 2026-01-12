@@ -35,11 +35,72 @@ pub trait StorageBackend: Send + Sync {
         unit_id: &str
     ) -> Result<Vec<crate::types::OrganizationalUnit>, Self::Error>;
 
+    async fn get_descendants(
+        &self,
+        ctx: crate::types::TenantContext,
+        unit_id: &str
+    ) -> Result<Vec<crate::types::OrganizationalUnit>, Self::Error>;
+
     async fn get_unit_policies(
         &self,
         ctx: crate::types::TenantContext,
         unit_id: &str
     ) -> Result<Vec<crate::types::Policy>, Self::Error>;
+
+    async fn create_unit(&self, unit: &crate::types::OrganizationalUnit)
+    -> Result<(), Self::Error>;
+
+    async fn add_unit_policy(
+        &self,
+        ctx: &crate::types::TenantContext,
+        unit_id: &str,
+        policy: &crate::types::Policy
+    ) -> Result<(), Self::Error>;
+
+    async fn assign_role(
+        &self,
+        user_id: &crate::types::UserId,
+        tenant_id: &crate::types::TenantId,
+        unit_id: &str,
+        role: crate::types::Role
+    ) -> Result<(), Self::Error>;
+
+    async fn remove_role(
+        &self,
+        user_id: &crate::types::UserId,
+        tenant_id: &crate::types::TenantId,
+        unit_id: &str,
+        role: crate::types::Role
+    ) -> Result<(), Self::Error>;
+
+    async fn store_drift_result(
+        &self,
+        result: crate::types::DriftResult
+    ) -> Result<(), Self::Error>;
+
+    async fn get_latest_drift_result(
+        &self,
+        ctx: crate::types::TenantContext,
+        project_id: &str
+    ) -> Result<Option<crate::types::DriftResult>, Self::Error>;
+
+    async fn list_all_units(&self) -> Result<Vec<crate::types::OrganizationalUnit>, Self::Error>;
+    async fn record_job_status(
+        &self,
+        job_name: &str,
+        tenant_id: &str,
+        status: &str,
+        message: Option<&str>,
+        started_at: i64,
+        finished_at: Option<i64>
+    ) -> Result<(), Self::Error>;
+
+    async fn get_governance_events(
+        &self,
+        ctx: crate::types::TenantContext,
+        since_timestamp: i64,
+        limit: usize
+    ) -> Result<Vec<crate::types::GovernanceEvent>, Self::Error>;
 }
 
 /// Health check capability for service monitoring
@@ -224,4 +285,32 @@ pub trait EmbeddingService: Send + Sync {
         }
         Ok(results)
     }
+}
+
+#[async_trait]
+pub trait EventPublisher: Send + Sync {
+    type Error;
+
+    async fn publish(&self, event: crate::types::GovernanceEvent) -> Result<(), Self::Error>;
+
+    async fn subscribe(
+        &self,
+        channels: &[&str]
+    ) -> Result<tokio::sync::mpsc::Receiver<crate::types::GovernanceEvent>, Self::Error>;
+}
+
+/// LLM service trait for text generation and reasoning
+#[async_trait]
+pub trait LlmService: Send + Sync {
+    type Error;
+
+    /// Generates text based on a prompt
+    async fn generate(&self, prompt: &str) -> Result<String, Self::Error>;
+
+    /// Analyzes content against a set of policies
+    async fn analyze_drift(
+        &self,
+        content: &str,
+        policies: &[crate::types::Policy]
+    ) -> Result<crate::types::ValidationResult, Self::Error>;
 }

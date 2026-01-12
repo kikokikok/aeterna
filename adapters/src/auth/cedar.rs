@@ -42,7 +42,35 @@ impl AuthorizationService for CedarAuthorizer {
         action: &str,
         resource: &str
     ) -> Result<bool, Self::Error> {
-        let principal = EntityUid::from_str(&format!("User::\"{}\"", ctx.user_id.as_str()))
+        if let Some(agent_id) = &ctx.agent_id {
+            let agent_principal = EntityUid::from_str(&format!("User::\"{}\"", agent_id))
+                .map_err(|e| CedarError::Evaluation(e.to_string()))?;
+            let delegate_action = EntityUid::from_str("Action::\"ActAs\"")
+                .map_err(|e| CedarError::Evaluation(e.to_string()))?;
+            let user_resource = EntityUid::from_str(&format!("User::\"{}\"", ctx.user_id.as_str()))
+                .map_err(|e| CedarError::Evaluation(e.to_string()))?;
+
+            let delegation_request = Request::new(
+                agent_principal,
+                delegate_action,
+                user_resource,
+                Context::empty(),
+                None
+            )
+            .map_err(|e| CedarError::Evaluation(e.to_string()))?;
+
+            let authorizer = Authorizer::new();
+            let delegation_answer =
+                authorizer.is_authorized(&delegation_request, &self.policies, &self.entities);
+
+            if delegation_answer.decision() != Decision::Allow {
+                return Ok(false);
+            }
+        }
+
+        let principal_str = format!("User::\"{}\"", ctx.user_id.as_str());
+
+        let principal = EntityUid::from_str(&principal_str)
             .map_err(|e| CedarError::Evaluation(e.to_string()))?;
         let action_uid = EntityUid::from_str(&format!("Action::\"{}\"", action))
             .map_err(|e| CedarError::Evaluation(e.to_string()))?;

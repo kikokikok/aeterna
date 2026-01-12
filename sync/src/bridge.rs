@@ -2,8 +2,10 @@ use crate::error::{Result, SyncError};
 use crate::pointer::{KnowledgePointer, KnowledgePointerMetadata, map_layer};
 use crate::state::{FederationConflict, SyncConflict, SyncFailure, SyncState, SyncTrigger};
 use crate::state_persister::SyncStatePersister;
+use config::config::DeploymentConfig;
 use knowledge::federation::FederationProvider;
 use knowledge::governance::GovernanceEngine;
+use knowledge::governance_client::{GovernanceClient, RemoteGovernanceClient};
 use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{KnowledgeEntry, KnowledgeLayer, MemoryEntry, TenantContext};
@@ -23,6 +25,8 @@ pub struct SyncManager {
     memory_manager: Arc<MemoryManager>,
     knowledge_repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
     governance_engine: Arc<GovernanceEngine>,
+    governance_client: Option<Arc<dyn GovernanceClient>>,
+    deployment_config: DeploymentConfig,
     federation_manager: Option<Arc<dyn FederationProvider>>,
     persister: Arc<dyn SyncStatePersister>,
     states: Arc<RwLock<HashMap<mk_core::types::TenantId, SyncState>>>,
@@ -43,17 +47,32 @@ impl SyncManager {
             dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>
         >,
         governance_engine: Arc<GovernanceEngine>,
+        deployment_config: DeploymentConfig,
         federation_manager: Option<Arc<dyn FederationProvider>>,
         persister: Arc<dyn SyncStatePersister>
     ) -> Result<Self> {
+        let governance_client =
+            if deployment_config.mode == "hybrid" || deployment_config.mode == "remote" {
+                deployment_config.remote_url.as_ref().map(|url: &String| {
+                    Arc::new(RemoteGovernanceClient::new(url.clone())) as Arc<dyn GovernanceClient>
+                })
+            } else {
+                None
+            };
+
+        let mut states = HashMap::new();
+        let mut checkpoints = HashMap::new();
+
         Ok(Self {
             memory_manager,
             knowledge_repo,
             governance_engine,
+            governance_client,
+            deployment_config,
             federation_manager,
             persister,
-            states: Arc::new(RwLock::new(HashMap::new())),
-            checkpoints: Arc::new(RwLock::new(HashMap::new()))
+            states: Arc::new(RwLock::new(states)),
+            checkpoints: Arc::new(RwLock::new(checkpoints))
         })
     }
 
@@ -142,6 +161,11 @@ impl SyncManager {
 impl SyncManager {
     #[tracing::instrument(skip(self))]
     pub async fn run_sync_cycle(&self, ctx: TenantContext, interval_secs: u64) -> Result<()> {
+        if self.deployment_config.mode == "hybrid" && !self.deployment_config.sync_enabled {
+            tracing::info!("Sync disabled in Hybrid mode for tenant: {}", ctx.tenant_id);
+            return Ok(());
+        }
+
         if let Some(trigger) = self
             .check_triggers(ctx.clone(), (interval_secs / 60) as u32)
             .await?
@@ -468,6 +492,10 @@ impl SyncManager {
         ctx: TenantContext,
         staleness_threshold_mins: u32
     ) -> Result<Option<SyncTrigger>> {
+        if self.deployment_config.mode == "remote" {
+            return Ok(Some(SyncTrigger::Manual));
+        }
+
         let state = self.get_or_load_state(&ctx.tenant_id).await?;
 
         let head_commit = self.knowledge_repo.get_head_commit(ctx).await?;
@@ -881,26 +909,62 @@ impl SyncManager {
         context.insert("path".to_string(), serde_json::json!(entry.path));
         context.insert("content".to_string(), serde_json::json!(content));
 
-        let validation = self.governance_engine.validate(entry.layer, &context);
-        if !validation.is_valid {
-            state.stats.total_governance_blocks += 1;
-            metrics::counter!("sync.governance.blocks", 1);
-            for violation in validation.violations {
-                if violation.severity == mk_core::types::ConstraintSeverity::Block {
-                    state.failed_items.push(SyncFailure {
-                        knowledge_id: entry.path.clone(),
-                        error: format!("Governance violation (BLOCK): {}", violation.message),
-                        failed_at: chrono::Utc::now().timestamp(),
-                        retry_count: 0
-                    });
-                    return Err(SyncError::GovernanceBlock(violation.message));
+        if self.deployment_config.mode == "hybrid" || self.deployment_config.mode == "remote" {
+            if let Some(client) = &self.governance_client {
+                let validation = client
+                    .validate(&ctx, entry.layer, &context)
+                    .await
+                    .map_err(|e| SyncError::Internal(format!("Remote validation failed: {}", e)))?;
+
+                if !validation.is_valid {
+                    state.stats.total_governance_blocks += 1;
+                    metrics::counter!("sync.governance.blocks", 1);
+                    for violation in validation.violations {
+                        if violation.severity == mk_core::types::ConstraintSeverity::Block {
+                            state.failed_items.push(SyncFailure {
+                                knowledge_id: entry.path.clone(),
+                                error: format!(
+                                    "Remote governance violation (BLOCK): {}",
+                                    violation.message
+                                ),
+                                failed_at: chrono::Utc::now().timestamp(),
+                                retry_count: 0
+                            });
+                            return Err(SyncError::GovernanceBlock(violation.message));
+                        }
+                        tracing::warn!(
+                            "Remote governance violation ({:?}) for {}: {}",
+                            violation.severity,
+                            entry.path,
+                            violation.message
+                        );
+                    }
                 }
-                tracing::warn!(
-                    "Governance violation ({:?}) for {}: {}",
-                    violation.severity,
-                    entry.path,
-                    violation.message
-                );
+            }
+        }
+
+        if self.deployment_config.mode != "remote" {
+            let validation = self.governance_engine.validate(entry.layer, &context);
+            if !validation.is_valid {
+                state.stats.total_governance_blocks += 1;
+                metrics::counter!("sync.governance.blocks", 1);
+                for violation in validation.violations {
+                    if violation.severity == mk_core::types::ConstraintSeverity::Block {
+                        state.failed_items.push(SyncFailure {
+                            knowledge_id: entry.path.clone(),
+                            error: format!("Governance violation (BLOCK): {}", violation.message),
+                            failed_at: chrono::Utc::now().timestamp(),
+                            retry_count: 0
+                        });
+                        return Err(SyncError::GovernanceBlock(violation.message));
+                    }
+                    tracing::warn!(
+                        "Governance violation ({:?}) for {}: {}",
+                        violation.severity,
+                        entry.path,
+                        violation.message
+                    );
+                }
             }
         }
 

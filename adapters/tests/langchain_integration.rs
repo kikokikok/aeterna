@@ -119,17 +119,140 @@ async fn setup_server() -> Arc<McpServer> {
         .unwrap()
     );
 
+    let auth_service = Arc::new(MockAuthService);
+
     Arc::new(McpServer::new(
         memory_manager,
         sync_manager,
         repo,
-        Arc::new(
-            storage::postgres::PostgresBackend::new("postgres://localhost:5432/test")
-                .await
-                .unwrap()
-        ),
-        governance
+        Arc::new(MockStorageBackend),
+        governance,
+        auth_service
     ))
+}
+
+struct MockStorageBackend;
+#[async_trait::async_trait]
+impl mk_core::traits::StorageBackend for MockStorageBackend {
+    type Error = storage::postgres::PostgresError;
+    async fn store(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _key: &str,
+        _value: &[u8]
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn retrieve(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _key: &str
+    ) -> Result<Option<Vec<u8>>, Self::Error> {
+        Ok(None)
+    }
+    async fn delete(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _key: &str
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn exists(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _key: &str
+    ) -> Result<bool, Self::Error> {
+        Ok(false)
+    }
+    async fn get_ancestors(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(vec![])
+    }
+    async fn get_descendants(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(vec![])
+    }
+    async fn get_unit_policies(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
+        Ok(vec![])
+    }
+    async fn create_unit(
+        &self,
+        _unit: &mk_core::types::OrganizationalUnit
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn add_unit_policy(
+        &self,
+        _ctx: &mk_core::types::TenantContext,
+        _unit_id: &str,
+        _policy: &mk_core::types::Policy
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn assign_role(
+        &self,
+        _user_id: &mk_core::types::UserId,
+        _tenant_id: &mk_core::types::TenantId,
+        _unit_id: &str,
+        _role: mk_core::types::Role
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn remove_role(
+        &self,
+        _user_id: &mk_core::types::UserId,
+        _tenant_id: &mk_core::types::TenantId,
+        _unit_id: &str,
+        _role: mk_core::types::Role
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+struct MockAuthService;
+#[async_trait::async_trait]
+impl mk_core::traits::AuthorizationService for MockAuthService {
+    type Error = anyhow::Error;
+    async fn check_permission(
+        &self,
+        _ctx: &mk_core::types::TenantContext,
+        _action: &str,
+        _resource: &str
+    ) -> anyhow::Result<bool> {
+        Ok(true)
+    }
+    async fn get_user_roles(
+        &self,
+        _ctx: &mk_core::types::TenantContext
+    ) -> anyhow::Result<Vec<mk_core::types::Role>> {
+        Ok(vec![])
+    }
+    async fn assign_role(
+        &self,
+        _ctx: &mk_core::types::TenantContext,
+        _user_id: &mk_core::types::UserId,
+        _role: mk_core::types::Role
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn remove_role(
+        &self,
+        _ctx: &mk_core::types::TenantContext,
+        _user_id: &mk_core::types::UserId,
+        _role: mk_core::types::Role
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 #[tokio::test]

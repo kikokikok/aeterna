@@ -1,16 +1,19 @@
 use crate::bridge::{ResolveFederationConflictTool, SyncNowTool, SyncStatusTool};
-use crate::governance::{UnitCreateTool, UnitPolicyAddTool, UserRoleAssignTool};
+use crate::governance::{
+    HierarchyNavigateTool, UnitCreateTool, UnitPolicyAddTool, UserRoleAssignTool,
+    UserRoleRemoveTool
+};
 use crate::knowledge::{KnowledgeGetTool, KnowledgeListTool, KnowledgeQueryTool};
 use crate::memory::{MemoryAddTool, MemoryCloseTool, MemoryDeleteTool, MemorySearchTool};
 use crate::tools::{ToolDefinition, ToolRegistry};
 use knowledge::governance::GovernanceEngine;
 use memory::manager::MemoryManager;
-use mk_core::traits::{AuthorizationService, KnowledgeRepository};
+use mk_core::traits::{AuthorizationService, EventPublisher, KnowledgeRepository};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
-use storage::postgres::PostgresBackend;
+use storage::events::EventError;
 use sync::bridge::SyncManager;
 use tokio::time::timeout;
 use tracing::{Span, debug, error, info, instrument};
@@ -21,6 +24,7 @@ use tracing::{Span, debug, error, info, instrument};
 pub struct McpServer {
     registry: ToolRegistry,
     auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>,
+    event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
     timeout_duration: Duration
 }
 
@@ -32,9 +36,12 @@ impl McpServer {
         knowledge_repository: Arc<
             dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>
         >,
-        postgres_backend: Arc<PostgresBackend>,
+        storage_backend: Arc<
+            dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>
+        >,
         governance_engine: Arc<GovernanceEngine>,
-        auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>
+        auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>,
+        event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>
     ) -> Self {
         let mut registry = ToolRegistry::new();
 
@@ -59,21 +66,27 @@ impl McpServer {
         registry.register(Box::new(ResolveFederationConflictTool::new(sync_manager)));
 
         registry.register(Box::new(UnitCreateTool::new(
-            postgres_backend.clone(),
+            storage_backend.clone(),
             governance_engine.clone()
         )));
         registry.register(Box::new(UnitPolicyAddTool::new(
-            postgres_backend.clone(),
+            storage_backend.clone(),
             governance_engine.clone()
         )));
         registry.register(Box::new(UserRoleAssignTool::new(
-            postgres_backend,
+            storage_backend.clone(),
+            governance_engine.clone()
+        )));
+        registry.register(Box::new(UserRoleRemoveTool::new(
+            storage_backend.clone(),
             governance_engine
         )));
+        registry.register(Box::new(HierarchyNavigateTool::new(storage_backend)));
 
         Self {
             registry,
             auth_service,
+            event_publisher,
             timeout_duration: Duration::from_secs(30)
         }
     }
@@ -184,27 +197,121 @@ impl McpServer {
                 Span::current().record("tool_name", &name);
                 info!(tool = %name, "Calling tool");
 
-                if let Err(e) = self
+                let auth_result = self
                     .auth_service
                     .check_permission(&tenant_context, "call_tool", &name)
-                    .await
-                {
-                    error!(tool = %name, error = %e, "Authorization check failed");
-                    return JsonRpcResponse {
-                        jsonrpc: "2.0".to_string(),
-                        id: request.id,
-                        result: None,
-                        error: Some(JsonRpcError {
-                            code: -32002,
-                            message: format!("Authorization error: {}", e),
-                            data: None
-                        })
-                    };
+                    .await;
+
+                match auth_result {
+                    Ok(allowed) => {
+                        if !allowed {
+                            error!(tool = %name, "Authorization denied");
+                            return JsonRpcResponse {
+                                jsonrpc: "2.0".to_string(),
+                                id: request.id,
+                                result: None,
+                                error: Some(JsonRpcError {
+                                    code: -32002,
+                                    message: format!(
+                                        "Authorization error: access denied for tool {}",
+                                        name
+                                    ),
+                                    data: None
+                                })
+                            };
+                        }
+                    }
+                    Err(e) => {
+                        error!(tool = %name, error = %e, "Authorization check failed");
+                        return JsonRpcResponse {
+                            jsonrpc: "2.0".to_string(),
+                            id: request.id,
+                            result: None,
+                            error: Some(JsonRpcError {
+                                code: -32002,
+                                message: format!("Authorization error: {}", e),
+                                data: None
+                            })
+                        };
+                    }
                 }
 
-                match self.registry.call(&name, tool_params).await {
+                let call_result = self.registry.call(&name, tool_params).await;
+
+                match call_result {
                     Ok(result) => {
                         info!(tool = %name, "Tool call successful");
+
+                        if let Some(ref publisher) = self.event_publisher {
+                            let timestamp = chrono::Utc::now().timestamp();
+                            let event = match name.as_str() {
+                                "unit_create" => {
+                                    Some(mk_core::types::GovernanceEvent::UnitCreated {
+                                        unit_id: result["unit_id"]
+                                            .as_str()
+                                            .unwrap_or_default()
+                                            .to_string(),
+                                        unit_type: serde_json::from_value(
+                                            result["unit_type"].clone()
+                                        )
+                                        .unwrap_or(mk_core::types::UnitType::Project),
+                                        tenant_id: tenant_context.tenant_id.clone(),
+                                        parent_id: result["parent_id"]
+                                            .as_str()
+                                            .map(|s| s.to_string()),
+                                        timestamp
+                                    })
+                                }
+                                "role_assign" => {
+                                    Some(mk_core::types::GovernanceEvent::RoleAssigned {
+                                        user_id: serde_json::from_value(result["user_id"].clone())
+                                            .unwrap_or_default(),
+                                        unit_id: result["unit_id"]
+                                            .as_str()
+                                            .unwrap_or_default()
+                                            .to_string(),
+                                        role: serde_json::from_value(result["role"].clone())
+                                            .unwrap_or(mk_core::types::Role::Developer),
+                                        tenant_id: tenant_context.tenant_id.clone(),
+                                        timestamp
+                                    })
+                                }
+                                "role_remove" => {
+                                    Some(mk_core::types::GovernanceEvent::RoleRemoved {
+                                        user_id: serde_json::from_value(result["user_id"].clone())
+                                            .unwrap_or_default(),
+                                        unit_id: result["unit_id"]
+                                            .as_str()
+                                            .unwrap_or_default()
+                                            .to_string(),
+                                        role: serde_json::from_value(result["role"].clone())
+                                            .unwrap_or(mk_core::types::Role::Developer),
+                                        tenant_id: tenant_context.tenant_id.clone(),
+                                        timestamp
+                                    })
+                                }
+                                "unit_policy_add" => {
+                                    Some(mk_core::types::GovernanceEvent::PolicyUpdated {
+                                        policy_id: result["policy_id"]
+                                            .as_str()
+                                            .unwrap_or_default()
+                                            .to_string(),
+                                        layer: serde_json::from_value(result["layer"].clone())
+                                            .unwrap_or(mk_core::types::KnowledgeLayer::Project),
+                                        tenant_id: tenant_context.tenant_id.clone(),
+                                        timestamp
+                                    })
+                                }
+                                _ => None
+                            };
+
+                            if let Some(event) = event {
+                                if let Err(e) = publisher.publish(event).await {
+                                    error!(error = %e, "Failed to publish governance event");
+                                }
+                            }
+                        }
+
                         JsonRpcResponse {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
@@ -524,7 +631,8 @@ mod tests {
             repo,
             Arc::new(backend),
             governance,
-            Arc::new(MockAuthService)
+            Arc::new(MockAuthService),
+            None
         )
     }
 
