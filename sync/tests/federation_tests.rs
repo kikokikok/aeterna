@@ -191,7 +191,7 @@ async fn test_sync_governance_telemetry() {
             id: "r-test".to_string(),
             rule_type: RuleType::Deny,
             target: ConstraintTarget::Code,
-            operator: ConstraintOperator::MustNotMatch,
+            operator: ConstraintOperator::MustMatch,
             value: serde_json::json!("forbidden"),
             severity: ConstraintSeverity::Block,
             message: "Forbidden content detected".to_string(),

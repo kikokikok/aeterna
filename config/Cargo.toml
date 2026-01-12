@@ -18,3 +18,6 @@ tracing.workspace = true
 validator.workspace = true
 notify.workspace = true
 tempfile.workspace = true
+
+[dev-dependencies]
+serial_test.workspace = true

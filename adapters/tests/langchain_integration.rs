@@ -325,8 +325,8 @@ async fn test_langchain_adapter_request_handling() {
 
     let request = json!({
         "tenantContext": {
-            "tenantId": "test_tenant",
-            "userId": "test_user"
+            "tenant_id": "test_tenant",
+            "user_id": "test_user"
         },
         "name": "memory_add",
         "arguments": {

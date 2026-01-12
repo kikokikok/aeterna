@@ -1821,7 +1821,7 @@ mod tests {
                 id: "r1".to_string(),
                 rule_type: RuleType::Deny,
                 target: ConstraintTarget::Code,
-                operator: ConstraintOperator::MustNotMatch,
+                operator: ConstraintOperator::MustMatch,
                 value: serde_json::json!("BANNED"),
                 severity: ConstraintSeverity::Block,
                 message: "BANNED word found".to_string(),

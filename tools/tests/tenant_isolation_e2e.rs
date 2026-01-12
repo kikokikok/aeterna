@@ -235,8 +235,8 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
         method: "tools/call".to_string(),
         params: Some(json!({
             "tenantContext": {
-                "tenantId": "t1",
-                "userId": "u1"
+                "tenant_id": "t1",
+                "user_id": "u1"
             },
             "name": "memory_add",
             "arguments": {
@@ -260,8 +260,8 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
         method: "tools/call".to_string(),
         params: Some(json!({
             "tenantContext": {
-                "tenantId": "t2",
-                "userId": "u1"
+                "tenant_id": "t2",
+                "user_id": "u1"
             },
             "name": "memory_add",
             "arguments": {

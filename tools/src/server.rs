@@ -320,13 +320,16 @@ impl McpServer {
                         }
                     }
                     Err(e) => {
-                        error!(tool = %name, error = %e, "Tool call failed");
-                        let rpc_error = if e.is::<serde_json::Error>() {
-                            JsonRpcError::invalid_params(e.to_string())
-                        } else if e.to_string().contains("Validation error") {
-                            JsonRpcError::invalid_params(e.to_string())
+                        let error_str = e.to_string();
+                        error!(tool = %name, error = %error_str, "Tool call failed");
+                        let rpc_error = if error_str.contains("not found") {
+                            JsonRpcError::method_not_found(error_str)
+                        } else if e.is::<serde_json::Error>()
+                            || error_str.contains("Validation error")
+                        {
+                            JsonRpcError::invalid_params(error_str)
                         } else {
-                            JsonRpcError::internal_error(e.to_string())
+                            JsonRpcError::internal_error(error_str)
                         };
 
                         JsonRpcResponse {
@@ -708,8 +711,8 @@ mod tests {
             method: "tools/call".to_string(),
             params: Some(json!({
                 "tenantContext": {
-                    "tenantId": "c1",
-                    "userId": "u1"
+                    "tenant_id": "c1",
+                    "user_id": "u1"
                 },
                 "name": "non_existent_tool",
                 "arguments": {}
@@ -718,7 +721,7 @@ mod tests {
 
         let response = server.handle_request(request).await;
         assert!(response.error.is_some());
-        assert_eq!(response.error.unwrap().code, -32000);
+        assert_eq!(response.error.unwrap().code, -32601);
     }
 
     #[tokio::test]

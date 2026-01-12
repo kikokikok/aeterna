@@ -11,7 +11,7 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
     // GIVEN a MemoryManager and tools
     let memory_manager = Arc::new(
         MemoryManager::new()
-            .with_embedding_service(Arc::new(memory::embedding::MockEmbeddingService::new(1536)))
+            .with_embedding_service(Arc::new(memory::embedding::MockEmbeddingService::new(1536))),
     );
     memory_manager
         .register_provider(MemoryLayer::User, Box::new(MockProvider::new()))
@@ -22,8 +22,8 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
     let delete_tool = MemoryDeleteTool::new(memory_manager.clone());
 
     let tenant_context = json!({
-        "tenantId": "test-tenant",
-        "userId": "test-user"
+        "tenant_id": "test-tenant",
+        "user_id": "test-user"
     });
 
     // WHEN adding memory

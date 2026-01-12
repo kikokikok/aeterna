@@ -13,7 +13,7 @@ use storage::redis::RedisStorage;
 use testcontainers::{
     ContainerAsync, GenericImage,
     core::{ContainerPort, WaitFor},
-    runners::AsyncRunner
+    runners::AsyncRunner,
 };
 use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::redis::Redis;
@@ -47,7 +47,7 @@ async fn setup_qdrant() -> Result<(ContainerAsync<GenericImage>, String), Box<dy
     let container = GenericImage::new("qdrant/qdrant", "latest")
         .with_exposed_port(ContainerPort::Tcp(6334))
         .with_wait_for(WaitFor::message_on_stdout(
-            "Qdrant is ready to accept connections"
+            "Qdrant is ready to accept connections",
         ))
         .start()
         .await?;
@@ -57,6 +57,7 @@ async fn setup_qdrant() -> Result<(ContainerAsync<GenericImage>, String), Box<dy
 }
 
 #[tokio::test]
+#[ignore = "requires Docker with PostgreSQL, Redis, and Qdrant containers"]
 async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>> {
     let postgres_setup = setup_postgres().await;
     let redis_setup = setup_redis().await;
@@ -96,7 +97,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         layer: MemoryLayer::User,
         metadata: HashMap::new(),
         created_at: 1736400000,
-        updated_at: 1736400000
+        updated_at: 1736400000,
     };
 
     let ctx = test_ctx();
@@ -132,12 +133,12 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
             m.insert("access_count".to_string(), serde_json::json!(10));
             m.insert(
                 "last_accessed_at".to_string(),
-                serde_json::json!(chrono::Utc::now().timestamp())
+                serde_json::json!(chrono::Utc::now().timestamp()),
             );
             m
         },
         created_at: 1736400000,
-        updated_at: 1736400000
+        updated_at: 1736400000,
     };
 
     let session_qdrant_client = Qdrant::new(QdrantConfig::from_url(&qdrant_url))?;
