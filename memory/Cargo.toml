@@ -19,7 +19,7 @@ async-trait.workspace = true
 chrono.workspace = true
 qdrant-client = { version = "1.10", features = ["reqwest", "serde"] }
 async-openai = "0.27"
-aisdk = { version = "0.1", features = ["openai"] }
+aisdk = { version = "0.3", features = ["openai"] }
 metrics-util = "0.15"
 rand = "0.8"
 lru = "0.12"

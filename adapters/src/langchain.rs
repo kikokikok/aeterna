@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tools::server::McpServer;
 
 pub struct LangChainAdapter {
-    server: Arc<McpServer>
+    server: Arc<McpServer>,
 }
 
 impl LangChainAdapter {
@@ -22,7 +22,7 @@ impl LangChainAdapter {
                 if let Some(obj) = schema.as_object_mut() {
                     obj.insert(
                         "$schema".to_string(),
-                        json!("http://json-schema.org/draft-07/schema#")
+                        json!("http://json-schema.org/draft-07/schema#"),
                     );
                     obj.insert("additionalProperties".to_string(), json!(false));
                 }
@@ -48,6 +48,7 @@ impl EcosystemAdapter for LangChainAdapter {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing tool name"))?;
         let arguments = request["arguments"].clone();
+        let tenant_context = request["tenantContext"].clone();
 
         let mcp_request = json!({
             "jsonrpc": "2.0",
@@ -55,7 +56,8 @@ impl EcosystemAdapter for LangChainAdapter {
             "method": "tools/call",
             "params": {
                 "name": name,
-                "arguments": arguments
+                "arguments": arguments,
+                "tenantContext": tenant_context
             }
         });
 
@@ -77,19 +79,192 @@ mod tests {
         let memory_manager = Arc::new(MemoryManager::new());
         let repo = Arc::new(MockRepo);
         let governance = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let auth_service = Arc::new(MockAuthService);
+        let deployment_config = config::config::DeploymentConfig::default();
         let sync_manager = Arc::new(
             SyncManager::new(
                 memory_manager.clone(),
                 repo.clone(),
-                governance,
+                governance.clone(),
+                deployment_config,
                 None,
-                Arc::new(MockPersister)
+                Arc::new(MockPersister),
             )
             .await
-            .unwrap()
+            .unwrap(),
         );
 
-        McpServer::new(memory_manager, sync_manager, repo)
+        McpServer::new(
+            memory_manager,
+            sync_manager,
+            repo,
+            Arc::new(MockStorageBackend),
+            governance,
+            auth_service,
+            None,
+        )
+    }
+
+    struct MockStorageBackend;
+    #[async_trait::async_trait]
+    impl mk_core::traits::StorageBackend for MockStorageBackend {
+        type Error = storage::postgres::PostgresError;
+        async fn store(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _key: &str,
+            _value: &[u8],
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn retrieve(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _key: &str,
+        ) -> Result<Option<Vec<u8>>, Self::Error> {
+            Ok(None)
+        }
+        async fn delete(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _key: &str,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn exists(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _key: &str,
+        ) -> Result<bool, Self::Error> {
+            Ok(false)
+        }
+        async fn get_ancestors(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str,
+        ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn get_descendants(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str,
+        ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn get_unit_policies(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str,
+        ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn create_unit(
+            &self,
+            _unit: &mk_core::types::OrganizationalUnit,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn add_unit_policy(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _unit_id: &str,
+            _policy: &mk_core::types::Policy,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn assign_role(
+            &self,
+            _user_id: &mk_core::types::UserId,
+            _tenant_id: &mk_core::types::TenantId,
+            _unit_id: &str,
+            _role: mk_core::types::Role,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn remove_role(
+            &self,
+            _user_id: &mk_core::types::UserId,
+            _tenant_id: &mk_core::types::TenantId,
+            _unit_id: &str,
+            _role: mk_core::types::Role,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn store_drift_result(
+            &self,
+            _result: mk_core::types::DriftResult,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_latest_drift_result(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _project_id: &str,
+        ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
+            Ok(None)
+        }
+        async fn list_all_units(
+            &self,
+        ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn record_job_status(
+            &self,
+            _job_name: &str,
+            _tenant_id: &str,
+            _status: &str,
+            _message: Option<&str>,
+            _started_at: i64,
+            _finished_at: Option<i64>,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_governance_events(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _since_timestamp: i64,
+            _limit: usize,
+        ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
+            Ok(vec![])
+        }
+    }
+
+    struct MockAuthService;
+
+    #[async_trait::async_trait]
+    impl mk_core::traits::AuthorizationService for MockAuthService {
+        type Error = anyhow::Error;
+        async fn check_permission(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _action: &str,
+            _resource: &str,
+        ) -> anyhow::Result<bool> {
+            Ok(true)
+        }
+        async fn get_user_roles(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+        ) -> anyhow::Result<Vec<mk_core::types::Role>> {
+            Ok(vec![])
+        }
+        async fn assign_role(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _user_id: &mk_core::types::UserId,
+            _role: mk_core::types::Role,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn remove_role(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _user_id: &mk_core::types::UserId,
+            _role: mk_core::types::Role,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
     }
 
     struct MockRepo;
@@ -98,48 +273,57 @@ mod tests {
         type Error = knowledge::repository::RepositoryError;
         async fn store(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: mk_core::types::KnowledgeEntry,
-            _: &str
+            _: &str,
         ) -> std::result::Result<String, Self::Error> {
             Ok("hash".into())
         }
         async fn get(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: mk_core::types::KnowledgeLayer,
-            _: &str
+            _: &str,
         ) -> std::result::Result<Option<mk_core::types::KnowledgeEntry>, Self::Error> {
             Ok(None)
         }
         async fn list(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: mk_core::types::KnowledgeLayer,
-            _: &str
+            _: &str,
         ) -> std::result::Result<Vec<mk_core::types::KnowledgeEntry>, Self::Error> {
             Ok(vec![])
         }
         async fn delete(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: mk_core::types::KnowledgeLayer,
             _: &str,
-            _: &str
+            _: &str,
         ) -> std::result::Result<String, Self::Error> {
             Ok("hash".into())
         }
-        async fn get_head_commit(&self) -> std::result::Result<Option<String>, Self::Error> {
+        async fn get_head_commit(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+        ) -> std::result::Result<Option<String>, Self::Error> {
             Ok(None)
         }
         async fn get_affected_items(
             &self,
-            _: &str
+            _ctx: mk_core::types::TenantContext,
+            _: &str,
         ) -> std::result::Result<Vec<(mk_core::types::KnowledgeLayer, String)>, Self::Error>
         {
             Ok(vec![])
         }
         async fn search(
             &self,
+            _ctx: mk_core::types::TenantContext,
             _: &str,
             _: Vec<mk_core::types::KnowledgeLayer>,
-            _: usize
+            _: usize,
         ) -> std::result::Result<Vec<mk_core::types::KnowledgeEntry>, Self::Error> {
             Ok(vec![])
         }
@@ -152,14 +336,16 @@ mod tests {
     #[async_trait::async_trait]
     impl sync::state_persister::SyncStatePersister for MockPersister {
         async fn load(
-            &self
+            &self,
+            _tenant_id: &mk_core::types::TenantId,
         ) -> std::result::Result<sync::state::SyncState, Box<dyn std::error::Error + Send + Sync>>
         {
             Ok(sync::state::SyncState::default())
         }
         async fn save(
             &self,
-            _: &sync::state::SyncState
+            _tenant_id: &mk_core::types::TenantId,
+            _: &sync::state::SyncState,
         ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
         }

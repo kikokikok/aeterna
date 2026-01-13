@@ -29,15 +29,24 @@ impl Default for MockProvider {
 impl MemoryProviderAdapter for MockProvider {
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
-    async fn add(&self, entry: MemoryEntry) -> Result<String, Self::Error> {
+    async fn add(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        entry: MemoryEntry
+    ) -> Result<String, Self::Error> {
         let mut entries = self.entries.write().await;
         let id = entry.id.clone();
+        let mut entry = entry;
+        entry
+            .metadata
+            .insert("tenant_id".to_string(), serde_json::json!(ctx.tenant_id));
         entries.insert(id.clone(), entry);
         Ok(id)
     }
 
     async fn search(
         &self,
+        ctx: mk_core::types::TenantContext,
         _query_vector: Vec<f32>,
         limit: usize,
         filters: HashMap<String, serde_json::Value>
@@ -46,6 +55,10 @@ impl MemoryProviderAdapter for MockProvider {
         let results: Vec<MemoryEntry> = entries
             .values()
             .filter(|entry| {
+                // Ensure tenant isolation in mock search
+                if entry.metadata.get("tenant_id") != Some(&serde_json::json!(ctx.tenant_id)) {
+                    return false;
+                }
                 for (key, val) in &filters {
                     if entry.metadata.get(key) != Some(val) {
                         return false;
@@ -59,29 +72,56 @@ impl MemoryProviderAdapter for MockProvider {
         Ok(results)
     }
 
-    async fn get(&self, id: &str) -> Result<Option<MemoryEntry>, Self::Error> {
+    async fn get(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        id: &str
+    ) -> Result<Option<MemoryEntry>, Self::Error> {
         let entries = self.entries.read().await;
-        Ok(entries.get(id).cloned())
-    }
-
-    async fn update(&self, entry: MemoryEntry) -> Result<(), Self::Error> {
-        let mut entries = self.entries.write().await;
-        if entries.contains_key(&entry.id) {
-            entries.insert(entry.id.clone(), entry);
-            Ok(())
-        } else {
-            Err("Entry not found".into())
+        if let Some(entry) = entries.get(id) {
+            if entry.metadata.get("tenant_id") == Some(&serde_json::json!(ctx.tenant_id)) {
+                return Ok(Some(entry.clone()));
+            }
         }
+        Ok(None)
     }
 
-    async fn delete(&self, id: &str) -> Result<(), Self::Error> {
+    async fn update(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        entry: MemoryEntry
+    ) -> Result<(), Self::Error> {
         let mut entries = self.entries.write().await;
-        entries.remove(id);
+        if let Some(existing) = entries.get(&entry.id) {
+            if existing.metadata.get("tenant_id") == Some(&serde_json::json!(ctx.tenant_id)) {
+                let mut entry = entry;
+                entry
+                    .metadata
+                    .insert("tenant_id".to_string(), serde_json::json!(ctx.tenant_id));
+                entries.insert(entry.id.clone(), entry);
+                return Ok(());
+            }
+        }
+        Err("Entry not found or access denied".into())
+    }
+
+    async fn delete(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        id: &str
+    ) -> Result<(), Self::Error> {
+        let mut entries = self.entries.write().await;
+        if let Some(existing) = entries.get(id) {
+            if existing.metadata.get("tenant_id") == Some(&serde_json::json!(ctx.tenant_id)) {
+                entries.remove(id);
+            }
+        }
         Ok(())
     }
 
     async fn list(
         &self,
+        ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
         limit: usize,
         cursor: Option<String>
@@ -89,7 +129,10 @@ impl MemoryProviderAdapter for MockProvider {
         let entries = self.entries.read().await;
         let mut results: Vec<MemoryEntry> = entries
             .values()
-            .filter(|e| e.layer == layer)
+            .filter(|e| {
+                e.layer == layer
+                    && e.metadata.get("tenant_id") == Some(&serde_json::json!(ctx.tenant_id))
+            })
             .collect::<Vec<_>>()
             .into_iter()
             .cloned()
@@ -126,11 +169,21 @@ impl MemoryProviderAdapter for MockProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mk_core::types::MemoryLayer;
+    use mk_core::types::{MemoryLayer, TenantContext};
+
+    fn test_ctx() -> TenantContext {
+        use std::str::FromStr;
+        TenantContext {
+            tenant_id: mk_core::types::TenantId::from_str("test-tenant").unwrap(),
+            user_id: mk_core::types::UserId::from_str("test-user").unwrap(),
+            agent_id: None
+        }
+    }
 
     #[tokio::test]
     async fn test_mock_provider_basic_ops() {
         let provider = MockProvider::new();
+        let ctx = test_ctx();
         let entry = MemoryEntry {
             id: "test1".to_string(),
             content: "hello world".to_string(),
@@ -141,29 +194,38 @@ mod tests {
             updated_at: 0
         };
 
-        provider.add(entry.clone()).await.unwrap();
+        provider.add(ctx.clone(), entry.clone()).await.unwrap();
 
-        let retrieved = provider.get("test1").await.unwrap().unwrap();
+        let retrieved = provider.get(ctx.clone(), "test1").await.unwrap().unwrap();
         assert_eq!(retrieved.content, "hello world");
 
         let mut updated = entry.clone();
         updated.content = "updated".to_string();
-        provider.update(updated).await.unwrap();
+        provider.update(ctx.clone(), updated).await.unwrap();
         assert_eq!(
-            provider.get("test1").await.unwrap().unwrap().content,
+            provider
+                .get(ctx.clone(), "test1")
+                .await
+                .unwrap()
+                .unwrap()
+                .content,
             "updated"
         );
 
-        let (list, _) = provider.list(MemoryLayer::Agent, 10, None).await.unwrap();
+        let (list, _) = provider
+            .list(ctx.clone(), MemoryLayer::Agent, 10, None)
+            .await
+            .unwrap();
         assert_eq!(list.len(), 1);
 
-        provider.delete("test1").await.unwrap();
-        assert!(provider.get("test1").await.unwrap().is_none());
+        provider.delete(ctx.clone(), "test1").await.unwrap();
+        assert!(provider.get(ctx.clone(), "test1").await.unwrap().is_none());
     }
 
     #[tokio::test]
     async fn test_mock_provider_update_nonexistent() {
         let provider = MockProvider::new();
+        let ctx = test_ctx();
         let entry = MemoryEntry {
             id: "ghost".to_string(),
             content: "ghost".to_string(),
@@ -173,12 +235,13 @@ mod tests {
             created_at: 0,
             updated_at: 0
         };
-        assert!(provider.update(entry).await.is_err());
+        assert!(provider.update(ctx, entry).await.is_err());
     }
 
     #[tokio::test]
     async fn test_mock_provider_search() {
         let provider = MockProvider::new();
+        let ctx = test_ctx();
         let entry1 = MemoryEntry {
             id: "1".to_string(),
             content: "one".to_string(),
@@ -206,13 +269,13 @@ mod tests {
             updated_at: 0
         };
 
-        provider.add(entry1).await.unwrap();
-        provider.add(entry2).await.unwrap();
+        provider.add(ctx.clone(), entry1).await.unwrap();
+        provider.add(ctx.clone(), entry2).await.unwrap();
 
         let mut filters = HashMap::new();
         filters.insert("type".to_string(), serde_json::json!("a"));
 
-        let results = provider.search(vec![], 10, filters).await.unwrap();
+        let results = provider.search(ctx, vec![], 10, filters).await.unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, "1");
     }
@@ -220,6 +283,7 @@ mod tests {
     #[tokio::test]
     async fn test_mock_provider_list_pagination() {
         let provider = MockProvider::new();
+        let ctx = test_ctx();
         for i in 0..5 {
             let entry = MemoryEntry {
                 id: format!("{}", i),
@@ -230,18 +294,27 @@ mod tests {
                 created_at: 0,
                 updated_at: 0
             };
-            provider.add(entry).await.unwrap();
+            provider.add(ctx.clone(), entry).await.unwrap();
         }
 
-        let (page1, cursor) = provider.list(MemoryLayer::Agent, 2, None).await.unwrap();
+        let (page1, cursor) = provider
+            .list(ctx.clone(), MemoryLayer::Agent, 2, None)
+            .await
+            .unwrap();
         assert_eq!(page1.len(), 2);
         assert!(cursor.is_some());
 
-        let (page2, cursor2) = provider.list(MemoryLayer::Agent, 2, cursor).await.unwrap();
+        let (page2, cursor2) = provider
+            .list(ctx.clone(), MemoryLayer::Agent, 2, cursor)
+            .await
+            .unwrap();
         assert_eq!(page2.len(), 2);
         assert!(cursor2.is_some());
 
-        let (page3, cursor3) = provider.list(MemoryLayer::Agent, 2, cursor2).await.unwrap();
+        let (page3, cursor3) = provider
+            .list(ctx.clone(), MemoryLayer::Agent, 2, cursor2)
+            .await
+            .unwrap();
         assert_eq!(page3.len(), 1);
         assert!(cursor3.is_none());
     }

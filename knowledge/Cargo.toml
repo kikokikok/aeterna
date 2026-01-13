@@ -4,10 +4,19 @@ version = "0.1.0"
 edition = "2024"
 description = "Knowledge repository implementation"
 
+[features]
+default = ["local", "hybrid", "remote"]
+local = []
+hybrid = []
+remote = []
+full = ["local", "hybrid", "remote"]
+
 [dependencies]
 mk_core.workspace = true
 utils.workspace = true
+storage.workspace = true
 errors.workspace = true
+config.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -21,3 +30,13 @@ tempfile.workspace = true
 regex.workspace = true
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
+anyhow.workspace = true
+utoipa.workspace = true
+reqwest.workspace = true
+uuid.workspace = true
+sqlx.workspace = true
+
+[dev-dependencies]
+memory.workspace = true
+testcontainers.workspace = true
+testcontainers-modules = { workspace = true, features = ["postgres"] }

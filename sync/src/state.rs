@@ -90,7 +90,9 @@ pub struct SyncStats {
     pub total_items_synced: u64,
     pub total_conflicts: u64,
     pub total_governance_blocks: u64,
-    pub avg_sync_duration_ms: u64
+    pub avg_sync_duration_ms: u64,
+    pub drift_score: f32,
+    pub policy_violations: u64
 }
 
 impl Default for SyncState {

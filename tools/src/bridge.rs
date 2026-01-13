@@ -1,5 +1,6 @@
 use crate::tools::Tool;
 use async_trait::async_trait;
+use mk_core::types::TenantContext;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -20,7 +21,9 @@ impl SyncNowTool {
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct SyncNowparams {
     #[serde(default)]
-    pub force: bool
+    pub force: bool,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>
 }
 
 #[async_trait]
@@ -41,7 +44,8 @@ impl Tool for SyncNowTool {
                     "type": "boolean",
                     "description": "Force full sync (ignore delta detection)",
                     "default": false
-                }
+                },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
             }
         })
     }
@@ -50,10 +54,12 @@ impl Tool for SyncNowTool {
         let p: SyncNowparams = serde_json::from_value(params)?;
         p.validate()?;
 
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+
         if p.force {
-            self.sync_manager.sync_all().await?;
+            self.sync_manager.sync_all(ctx).await?;
         } else {
-            self.sync_manager.sync_incremental().await?;
+            self.sync_manager.sync_incremental(ctx).await?;
         }
 
         Ok(json!({
@@ -73,6 +79,12 @@ impl SyncStatusTool {
     }
 }
 
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+pub struct SyncStatusParams {
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>
+}
+
 #[async_trait]
 impl Tool for SyncStatusTool {
     fn name(&self) -> &str {
@@ -86,15 +98,19 @@ impl Tool for SyncStatusTool {
     fn input_schema(&self) -> Value {
         json!({
             "type": "object",
-            "properties": {}
+            "properties": {
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
+            }
         })
     }
 
-    async fn call(
-        &self,
-        _params: Value
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        let state = self.sync_manager.get_state().await;
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: SyncStatusParams = serde_json::from_value(params)?;
+        p.validate()?;
+
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+
+        let state = self.sync_manager.get_state(&ctx.tenant_id).await?;
 
         Ok(json!({
             "success": true,
@@ -107,7 +123,9 @@ impl Tool for SyncStatusTool {
                 "totalItemsSynced": state.stats.total_items_synced,
                 "totalConflicts": state.stats.total_conflicts,
                 "totalGovernanceBlocks": state.stats.total_governance_blocks,
-                "avgSyncDurationMs": state.stats.avg_sync_duration_ms
+                "avgSyncDurationMs": state.stats.avg_sync_duration_ms,
+                "driftScore": state.stats.drift_score,
+                "policyViolations": state.stats.policy_violations
             }
         }))
     }
@@ -126,7 +144,9 @@ impl ResolveFederationConflictTool {
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct ResolveFederationConflictParams {
     pub upstream_id: String,
-    pub resolution: String
+    pub resolution: String,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>
 }
 
 #[async_trait]
@@ -151,7 +171,8 @@ impl Tool for ResolveFederationConflictTool {
                     "type": "string",
                     "description": "Resolution strategy: ours, theirs, or manual",
                     "enum": ["ours", "theirs", "manual"]
-                }
+                },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
             },
             "required": ["upstream_id", "resolution"]
         })
@@ -161,8 +182,10 @@ impl Tool for ResolveFederationConflictTool {
         let p: ResolveFederationConflictParams = serde_json::from_value(params)?;
         p.validate()?;
 
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+
         self.sync_manager
-            .resolve_federation_conflict(&p.upstream_id, &p.resolution)
+            .resolve_federation_conflict(ctx.tenant_id, &p.upstream_id, &p.resolution)
             .await?;
 
         Ok(json!({

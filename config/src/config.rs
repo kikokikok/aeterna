@@ -60,7 +60,137 @@ pub struct Config {
 
     /// Observability configuration (metrics, tracing, logging)
     #[serde(default)]
-    pub observability: ObservabilityConfig
+    pub observability: ObservabilityConfig,
+
+    /// Deployment mode configuration (Local, Hybrid, Remote)
+    #[serde(default)]
+    pub deployment: DeploymentConfig,
+}
+
+impl Config {
+    /// Detects environment settings for deployment mode.
+    ///
+    /// # M-CANONICAL-DOCS
+    ///
+    /// ## Purpose
+    /// Initializes configuration based on AETERNA_ environment variables.
+    pub fn detect_env() -> Self {
+        let mut config = Self::default();
+
+        if let Ok(url) = std::env::var("AETERNA_REMOTE_GOVERNANCE_URL") {
+            config.deployment.remote_url = Some(url);
+            config.deployment.mode =
+                std::env::var("AETERNA_DEPLOYMENT_MODE").unwrap_or_else(|_| "hybrid".to_string());
+        }
+
+        if std::env::var("AETERNA_THIN_CLIENT").is_ok() {
+            config.deployment.mode = "remote".to_string();
+            config.sync.enabled = false;
+        }
+
+        config
+    }
+}
+
+/// Deployment mode configuration.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Manages the deployment mode of the system (Local, Hybrid, or Remote).
+///
+/// ## Fields
+/// - `mode`: Deployment mode (default: "local")
+/// - `remote_url`: URL of the remote governance server (required for
+///   Hybrid/Remote)
+/// - `sync_enabled`: Enable synchronization in Hybrid mode (default: true)
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
+pub struct DeploymentConfig {
+    /// Deployment mode
+    #[serde(default = "default_deployment_mode")]
+    #[validate(custom(function = "validate_deployment_mode"))]
+    pub mode: String,
+
+    /// URL of the remote governance server
+    #[serde(default)]
+    pub remote_url: Option<String>,
+
+    /// Enable synchronization in Hybrid mode
+    #[serde(default = "default_deployment_sync_enabled")]
+    pub sync_enabled: bool,
+}
+
+fn default_deployment_mode() -> String {
+    "local".to_string()
+}
+
+fn default_deployment_sync_enabled() -> bool {
+    true
+}
+
+fn validate_deployment_mode(value: &str) -> Result<(), validator::ValidationError> {
+    match value {
+        "local" | "hybrid" | "remote" => Ok(()),
+        _ => Err(validator::ValidationError::new("Invalid deployment mode")),
+    }
+}
+
+impl Default for DeploymentConfig {
+    fn default() -> Self {
+        Self {
+            mode: default_deployment_mode(),
+            remote_url: None,
+            sync_enabled: default_deployment_sync_enabled(),
+        }
+    }
+}
+
+impl DeploymentConfig {
+    pub fn auto_detect() -> Self {
+        let mut config = Self::default();
+
+        if let Ok(mode) = std::env::var("AETERNA_DEPLOYMENT_MODE") {
+            config.mode = mode;
+        }
+
+        if let Ok(url) = std::env::var("AETERNA_REMOTE_GOVERNANCE_URL") {
+            config.remote_url = Some(url);
+            if config.mode == "local" {
+                config.mode = "hybrid".to_string();
+            }
+        }
+
+        if std::env::var("AETERNA_THIN_CLIENT").is_ok() {
+            config.mode = "remote".to_string();
+            config.sync_enabled = false;
+        }
+
+        if let Ok(sync) = std::env::var("AETERNA_SYNC_ENABLED") {
+            config.sync_enabled = sync.to_lowercase() == "true" || sync == "1";
+        }
+
+        config
+    }
+
+    pub fn is_local(&self) -> bool {
+        self.mode == "local"
+    }
+
+    pub fn is_hybrid(&self) -> bool {
+        self.mode == "hybrid"
+    }
+
+    pub fn is_remote(&self) -> bool {
+        self.mode == "remote"
+    }
+
+    pub fn requires_remote_url(&self) -> bool {
+        self.is_hybrid() || self.is_remote()
+    }
+
+    pub fn requires_local_engine(&self) -> bool {
+        self.is_local() || self.is_hybrid()
+    }
 }
 
 /// Configuration for storage providers.
@@ -99,7 +229,7 @@ pub struct ProviderConfig {
 
     /// Redis caching configuration
     #[serde(default)]
-    pub redis: RedisConfig
+    pub redis: RedisConfig,
 }
 
 /// PostgreSQL configuration.
@@ -153,7 +283,7 @@ pub struct PostgresConfig {
     /// Connection timeout in seconds
     #[serde(default = "default_postgres_timeout")]
     #[validate(range(min = 1, max = 300))]
-    pub timeout_seconds: u64
+    pub timeout_seconds: u64,
 }
 
 fn default_postgres_host() -> String {
@@ -193,7 +323,7 @@ impl Default for PostgresConfig {
             username: default_postgres_username(),
             password: default_postgres_password(),
             pool_size: default_postgres_pool_size(),
-            timeout_seconds: default_postgres_timeout()
+            timeout_seconds: default_postgres_timeout(),
         }
     }
 }
@@ -230,7 +360,7 @@ pub struct QdrantConfig {
     /// Request timeout in seconds
     #[serde(default = "default_qdrant_timeout")]
     #[validate(range(min = 1, max = 300))]
-    pub timeout_seconds: u64
+    pub timeout_seconds: u64,
 }
 
 fn default_qdrant_host() -> String {
@@ -255,7 +385,7 @@ impl Default for QdrantConfig {
             host: default_qdrant_host(),
             port: default_qdrant_port(),
             collection: default_qdrant_collection(),
-            timeout_seconds: default_qdrant_timeout()
+            timeout_seconds: default_qdrant_timeout(),
         }
     }
 }
@@ -298,7 +428,7 @@ pub struct RedisConfig {
     /// Connection timeout in seconds
     #[serde(default = "default_redis_timeout")]
     #[validate(range(min = 1, max = 300))]
-    pub timeout_seconds: u64
+    pub timeout_seconds: u64,
 }
 
 fn default_redis_host() -> String {
@@ -328,7 +458,7 @@ impl Default for RedisConfig {
             port: default_redis_port(),
             db: default_redis_db(),
             pool_size: default_redis_pool_size(),
-            timeout_seconds: default_redis_timeout()
+            timeout_seconds: default_redis_timeout(),
         }
     }
 }
@@ -370,7 +500,7 @@ pub struct SyncConfig {
     /// Conflict resolution strategy
     #[serde(default = "default_sync_conflict_resolution")]
     #[validate(custom(function = "validate_conflict_resolution"))]
-    pub conflict_resolution: String
+    pub conflict_resolution: String,
 }
 
 fn default_sync_enabled() -> bool {
@@ -397,8 +527,8 @@ fn validate_conflict_resolution(value: &str) -> Result<(), validator::Validation
     match value {
         "prefer_knowledge" | "prefer_memory" | "manual" => Ok(()),
         _ => Err(validator::ValidationError::new(
-            "Invalid conflict resolution strategy"
-        ))
+            "Invalid conflict resolution strategy",
+        )),
     }
 }
 
@@ -409,7 +539,7 @@ impl Default for SyncConfig {
             sync_interval_seconds: default_sync_interval(),
             batch_size: default_sync_batch_size(),
             checkpoint_enabled: default_sync_checkpoint(),
-            conflict_resolution: default_sync_conflict_resolution()
+            conflict_resolution: default_sync_conflict_resolution(),
         }
     }
 }
@@ -450,7 +580,7 @@ pub struct ToolConfig {
     /// Rate limit: requests per minute
     #[serde(default = "default_tools_rate_limit")]
     #[validate(range(min = 1, max = 1000))]
-    pub rate_limit_requests_per_minute: u32
+    pub rate_limit_requests_per_minute: u32,
 }
 
 fn default_tools_enabled() -> bool {
@@ -476,7 +606,7 @@ impl Default for ToolConfig {
             host: default_tools_host(),
             port: default_tools_port(),
             api_key: None,
-            rate_limit_requests_per_minute: default_tools_rate_limit()
+            rate_limit_requests_per_minute: default_tools_rate_limit(),
         }
     }
 }
@@ -511,7 +641,7 @@ pub struct ObservabilityConfig {
     /// Metrics server port
     #[serde(default = "default_observability_metrics_port")]
     #[validate(range(min = 1, max = 65535))]
-    pub metrics_port: u16
+    pub metrics_port: u16,
 }
 
 fn default_observability_metrics_enabled() -> bool {
@@ -533,7 +663,7 @@ fn default_observability_metrics_port() -> u16 {
 fn validate_logging_level(value: &str) -> Result<(), validator::ValidationError> {
     match value {
         "trace" | "debug" | "info" | "warn" | "error" => Ok(()),
-        _ => Err(validator::ValidationError::new("Invalid logging level"))
+        _ => Err(validator::ValidationError::new("Invalid logging level")),
     }
 }
 
@@ -543,7 +673,7 @@ impl Default for ObservabilityConfig {
             metrics_enabled: default_observability_metrics_enabled(),
             tracing_enabled: default_observability_tracing_enabled(),
             logging_level: default_observability_logging_level(),
-            metrics_port: default_observability_metrics_port()
+            metrics_port: default_observability_metrics_port(),
         }
     }
 }
@@ -563,7 +693,7 @@ pub struct MemoryConfig {
     /// Threshold for memory promotion
     #[serde(default = "default_promotion_threshold")]
     #[validate(range(min = 0.0, max = 1.0))]
-    pub promotion_threshold: f32
+    pub promotion_threshold: f32,
 }
 
 fn default_promotion_threshold() -> f32 {
@@ -573,7 +703,7 @@ fn default_promotion_threshold() -> f32 {
 impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
-            promotion_threshold: default_promotion_threshold()
+            promotion_threshold: default_promotion_threshold(),
         }
     }
 }
@@ -657,5 +787,97 @@ mod tests {
             config.providers.postgres.host,
             deserialized.providers.postgres.host
         );
+    }
+
+    #[test]
+    fn test_deployment_config_default() {
+        let config = DeploymentConfig::default();
+        assert_eq!(config.mode, "local");
+        assert!(config.remote_url.is_none());
+        assert!(config.sync_enabled);
+    }
+
+    #[test]
+    fn test_deployment_config_is_local() {
+        let config = DeploymentConfig {
+            mode: "local".to_string(),
+            remote_url: None,
+            sync_enabled: true,
+        };
+        assert!(config.is_local());
+        assert!(!config.is_hybrid());
+        assert!(!config.is_remote());
+    }
+
+    #[test]
+    fn test_deployment_config_is_hybrid() {
+        let config = DeploymentConfig {
+            mode: "hybrid".to_string(),
+            remote_url: Some("http://localhost:8080".to_string()),
+            sync_enabled: true,
+        };
+        assert!(!config.is_local());
+        assert!(config.is_hybrid());
+        assert!(!config.is_remote());
+    }
+
+    #[test]
+    fn test_deployment_config_is_remote() {
+        let config = DeploymentConfig {
+            mode: "remote".to_string(),
+            remote_url: Some("http://localhost:8080".to_string()),
+            sync_enabled: false,
+        };
+        assert!(!config.is_local());
+        assert!(!config.is_hybrid());
+        assert!(config.is_remote());
+    }
+
+    #[test]
+    fn test_deployment_config_requires_remote_url() {
+        let local = DeploymentConfig {
+            mode: "local".to_string(),
+            ..Default::default()
+        };
+        let hybrid = DeploymentConfig {
+            mode: "hybrid".to_string(),
+            ..Default::default()
+        };
+        let remote = DeploymentConfig {
+            mode: "remote".to_string(),
+            ..Default::default()
+        };
+
+        assert!(!local.requires_remote_url());
+        assert!(hybrid.requires_remote_url());
+        assert!(remote.requires_remote_url());
+    }
+
+    #[test]
+    fn test_deployment_config_requires_local_engine() {
+        let local = DeploymentConfig {
+            mode: "local".to_string(),
+            ..Default::default()
+        };
+        let hybrid = DeploymentConfig {
+            mode: "hybrid".to_string(),
+            ..Default::default()
+        };
+        let remote = DeploymentConfig {
+            mode: "remote".to_string(),
+            ..Default::default()
+        };
+
+        assert!(local.requires_local_engine());
+        assert!(hybrid.requires_local_engine());
+        assert!(!remote.requires_local_engine());
+    }
+
+    #[test]
+    fn test_deployment_mode_validation() {
+        assert!(validate_deployment_mode("local").is_ok());
+        assert!(validate_deployment_mode("hybrid").is_ok());
+        assert!(validate_deployment_mode("remote").is_ok());
+        assert!(validate_deployment_mode("invalid").is_err());
     }
 }

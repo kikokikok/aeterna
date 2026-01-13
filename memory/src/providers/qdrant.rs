@@ -174,8 +174,27 @@ impl QdrantProvider {
 impl MemoryProviderAdapter for QdrantProvider {
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
-    async fn add(&self, entry: MemoryEntry) -> Result<String, Self::Error> {
+    async fn add(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        entry: MemoryEntry
+    ) -> Result<String, Self::Error> {
         self.ensure_collection().await?;
+        let mut entry = entry;
+
+        entry
+            .metadata
+            .insert("tenant_id".to_string(), json!(ctx.tenant_id.as_str()));
+        entry
+            .metadata
+            .insert("user_id".to_string(), json!(ctx.user_id.as_str()));
+
+        if let Some(agent_id) = &ctx.agent_id {
+            entry
+                .metadata
+                .insert("agent_id".to_string(), json!(agent_id));
+        }
+
         let point = self.entry_to_point(&entry)?;
         use qdrant_client::qdrant::UpsertPointsBuilder;
         let request = UpsertPointsBuilder::new(self.collection_name.clone(), vec![point]);
@@ -185,16 +204,24 @@ impl MemoryProviderAdapter for QdrantProvider {
 
     async fn search(
         &self,
+        ctx: mk_core::types::TenantContext,
         query_vector: Vec<f32>,
         limit: usize,
         _filters: HashMap<String, Value>
     ) -> Result<Vec<MemoryEntry>, Self::Error> {
         self.ensure_collection().await?;
-        use qdrant_client::qdrant::SearchPointsBuilder;
+        use qdrant_client::qdrant::{Condition, Filter, SearchPointsBuilder};
+
+        let filter = Filter::all(vec![Condition::matches(
+            "tenant_id",
+            ctx.tenant_id.as_str().to_string()
+        )]);
+
         let request =
             SearchPointsBuilder::new(self.collection_name.clone(), query_vector, limit as u64)
                 .with_payload(true)
-                .with_vectors(true);
+                .with_vectors(true)
+                .filter(filter);
 
         let result = self.client.search_points(request).await?;
         result
@@ -204,9 +231,16 @@ impl MemoryProviderAdapter for QdrantProvider {
             .collect()
     }
 
-    async fn get(&self, id: &str) -> Result<Option<MemoryEntry>, Self::Error> {
+    async fn get(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        id: &str
+    ) -> Result<Option<MemoryEntry>, Self::Error> {
         self.ensure_collection().await?;
         use qdrant_client::qdrant::GetPointsBuilder;
+
+        tracing::debug!(tenant_id = %ctx.tenant_id, "Qdrant get point");
+
         let request = GetPointsBuilder::new(
             self.collection_name.clone(),
             vec![PointId::from(id.to_string())]
@@ -225,19 +259,41 @@ impl MemoryProviderAdapter for QdrantProvider {
                 order_value: None,
                 shard_key: None
             })?;
+
+            if entry.metadata.get("tenant_id").and_then(|t| t.as_str())
+                != Some(ctx.tenant_id.as_str())
+            {
+                return Ok(None);
+            }
+
             Ok(Some(entry))
         } else {
             Ok(None)
         }
     }
 
-    async fn update(&self, entry: MemoryEntry) -> Result<(), Self::Error> {
-        self.add(entry).await?;
+    async fn update(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        entry: MemoryEntry
+    ) -> Result<(), Self::Error> {
+        self.add(ctx, entry).await?;
         Ok(())
     }
 
-    async fn delete(&self, id: &str) -> Result<(), Self::Error> {
+    async fn delete(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        id: &str
+    ) -> Result<(), Self::Error> {
         self.ensure_collection().await?;
+
+        if self.get(ctx.clone(), id).await?.is_none() {
+            return Ok(());
+        }
+
+        tracing::debug!(tenant_id = %ctx.tenant_id, "Qdrant delete point");
+
         use qdrant_client::qdrant::DeletePointsBuilder;
         let request = DeletePointsBuilder::new(self.collection_name.clone())
             .points(vec![PointId::from(id.to_string())]);
@@ -247,17 +303,28 @@ impl MemoryProviderAdapter for QdrantProvider {
 
     async fn list(
         &self,
+        ctx: mk_core::types::TenantContext,
         _layer: MemoryLayer,
         limit: usize,
         cursor: Option<String>
     ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
         self.ensure_collection().await?;
+
+        tracing::debug!(tenant_id = %ctx.tenant_id, "Qdrant list points");
+
+        use qdrant_client::qdrant::{Condition, Filter};
+        let filter = Filter::all(vec![Condition::matches(
+            "tenant_id",
+            ctx.tenant_id.as_str().to_string()
+        )]);
+
         let scroll_request = qdrant_client::qdrant::ScrollPoints {
             collection_name: self.collection_name.clone(),
             limit: Some(limit as u32),
             with_payload: Some(true.into()),
             with_vectors: Some(true.into()),
             offset: cursor.map(|c| PointId::from(c)),
+            filter: Some(filter),
             ..Default::default()
         };
 
