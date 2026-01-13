@@ -9,7 +9,7 @@ use tracing::{error, info};
 /// tenant stream based on the tenant_id in each event.
 pub struct RedisPublisher {
     redis_url: String,
-    base_stream_key: String
+    base_stream_key: String,
 }
 
 impl RedisPublisher {
@@ -20,7 +20,7 @@ impl RedisPublisher {
     pub fn new_with_tenant_isolation(redis_url: String, base_stream_key: String) -> Self {
         Self {
             redis_url,
-            base_stream_key
+            base_stream_key,
         }
     }
 
@@ -29,7 +29,7 @@ impl RedisPublisher {
         let base_stream_key = format!("governance:events:{}", tenant_id.as_str());
         Self {
             redis_url,
-            base_stream_key
+            base_stream_key,
         }
     }
 
@@ -38,7 +38,7 @@ impl RedisPublisher {
     pub fn new(redis_url: String, stream_key: String) -> Self {
         Self {
             redis_url,
-            base_stream_key: stream_key
+            base_stream_key: stream_key,
         }
     }
 
@@ -47,10 +47,10 @@ impl RedisPublisher {
     /// This spawns a Tokio task that listens for events and publishes them to
     /// Redis. Returns a channel sender that can be used to send events.
     pub fn start(
-        self
+        self,
     ) -> (
         tokio::sync::mpsc::UnboundedSender<GovernanceEvent>,
-        tokio::task::JoinHandle<()>
+        tokio::task::JoinHandle<()>,
     ) {
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
 
@@ -66,7 +66,7 @@ impl RedisPublisher {
     /// Main loop for the Redis publisher.
     async fn run(
         self,
-        mut event_rx: UnboundedReceiver<GovernanceEvent>
+        mut event_rx: UnboundedReceiver<GovernanceEvent>,
     ) -> Result<(), anyhow::Error> {
         info!(
             "Starting Redis publisher with tenant isolation, base stream: {}",
@@ -98,7 +98,7 @@ impl RedisPublisher {
     async fn publish_event(
         base_stream_key: &str,
         con: &mut redis::aio::ConnectionManager,
-        event: &GovernanceEvent
+        event: &GovernanceEvent,
     ) -> Result<(), anyhow::Error> {
         let tenant_id = match event {
             GovernanceEvent::UnitCreated { tenant_id, .. } => tenant_id,
@@ -108,17 +108,12 @@ impl RedisPublisher {
             GovernanceEvent::PolicyDeleted { tenant_id, .. } => tenant_id,
             GovernanceEvent::RoleAssigned { tenant_id, .. } => tenant_id,
             GovernanceEvent::RoleRemoved { tenant_id, .. } => tenant_id,
-            GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id
+            GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id,
         };
 
-        let stream_key = if base_stream_key.contains(":") {
-            // If base stream key already contains tenant ID (legacy mode)
-            base_stream_key.to_string()
-        } else {
-            // Tenant isolation mode: append tenant ID to base stream key
-            format!("{}:{}", base_stream_key, tenant_id.as_str())
-        };
+        let stream_key = format!("{}:{}", base_stream_key, tenant_id.as_str());
 
+        println!("DEBUG: Publishing to stream key: {}", stream_key);
         let event_json = serde_json::to_string(event)?;
 
         let _: String = redis::cmd("XADD")
@@ -144,10 +139,10 @@ impl RedisPublisher {
 /// to_string()); let governance_engine =
 /// GovernanceEngine::new().with_events(event_tx); ```
 pub fn create_redis_publisher_with_tenant_isolation(
-    redis_url: String
+    redis_url: String,
 ) -> (
     tokio::sync::mpsc::UnboundedSender<GovernanceEvent>,
-    tokio::task::JoinHandle<()>
+    tokio::task::JoinHandle<()>,
 ) {
     let publisher =
         RedisPublisher::new_with_tenant_isolation(redis_url, "governance:events".to_string());
@@ -157,10 +152,10 @@ pub fn create_redis_publisher_with_tenant_isolation(
 /// Creates a Redis publisher for a specific tenant (legacy API).
 pub fn create_redis_publisher_for_tenant(
     redis_url: String,
-    tenant_id: &TenantId
+    tenant_id: &TenantId,
 ) -> (
     tokio::sync::mpsc::UnboundedSender<GovernanceEvent>,
-    tokio::task::JoinHandle<()>
+    tokio::task::JoinHandle<()>,
 ) {
     let publisher = RedisPublisher::new_for_tenant(redis_url, tenant_id);
     publisher.start()
@@ -169,10 +164,10 @@ pub fn create_redis_publisher_for_tenant(
 /// Creates a Redis publisher with a custom stream key (no tenant isolation).
 pub fn create_redis_publisher(
     redis_url: String,
-    stream_key: String
+    stream_key: String,
 ) -> (
     tokio::sync::mpsc::UnboundedSender<GovernanceEvent>,
-    tokio::task::JoinHandle<()>
+    tokio::task::JoinHandle<()>,
 ) {
     let publisher = RedisPublisher::new(redis_url, stream_key);
     publisher.start()
@@ -190,7 +185,7 @@ mod tests {
 
         let publisher = RedisPublisher::new_with_tenant_isolation(
             "redis://localhost:6379".to_string(),
-            "governance:events".to_string()
+            "governance:events".to_string(),
         );
 
         let event1 = GovernanceEvent::UnitCreated {
@@ -198,7 +193,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id1.clone(),
             parent_id: None,
-            timestamp: 1234567890
+            timestamp: 1234567890,
         };
 
         let event2 = GovernanceEvent::UnitCreated {
@@ -206,7 +201,7 @@ mod tests {
             unit_type: UnitType::Team,
             tenant_id: tenant_id2.clone(),
             parent_id: Some("unit-1".to_string()),
-            timestamp: 1234567891
+            timestamp: 1234567891,
         };
 
         let _legacy_publisher =
@@ -226,26 +221,26 @@ mod tests {
                 unit_type: UnitType::Company,
                 tenant_id: tenant_id.clone(),
                 parent_id: None,
-                timestamp: 1234567890
+                timestamp: 1234567890,
             },
             GovernanceEvent::PolicyUpdated {
                 policy_id: "policy-1".to_string(),
                 layer: KnowledgeLayer::Company,
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567891
+                timestamp: 1234567891,
             },
             GovernanceEvent::RoleAssigned {
                 user_id: user_id.clone(),
                 unit_id: "unit-1".to_string(),
                 role: Role::Admin,
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567892
+                timestamp: 1234567892,
             },
             GovernanceEvent::DriftDetected {
                 project_id: "project-1".to_string(),
                 tenant_id: tenant_id.clone(),
                 drift_score: 0.5,
-                timestamp: 1234567893
+                timestamp: 1234567893,
             },
         ];
 
@@ -258,7 +253,7 @@ mod tests {
                 GovernanceEvent::PolicyDeleted { tenant_id, .. } => tenant_id,
                 GovernanceEvent::RoleAssigned { tenant_id, .. } => tenant_id,
                 GovernanceEvent::RoleRemoved { tenant_id, .. } => tenant_id,
-                GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id
+                GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id,
             };
             assert_eq!(extracted_tenant_id, &tenant_id);
         }

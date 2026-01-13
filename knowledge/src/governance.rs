@@ -748,4 +748,547 @@ mod tests {
         let result = engine.validate(KnowledgeLayer::Project, &context);
         assert!(result.is_valid);
     }
+
+    fn create_test_policy(rule: PolicyRule) -> Policy {
+        Policy {
+            id: "test-policy".to_string(),
+            name: "Test Policy".to_string(),
+            description: None,
+            layer: KnowledgeLayer::Project,
+            rules: vec![rule],
+            metadata: HashMap::new(),
+            mode: mk_core::types::PolicyMode::Optional,
+            merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
+        }
+    }
+
+    fn create_rule(
+        operator: ConstraintOperator,
+        target: ConstraintTarget,
+        value: serde_json::Value,
+    ) -> PolicyRule {
+        PolicyRule {
+            id: "test-rule".to_string(),
+            target,
+            operator,
+            value,
+            severity: ConstraintSeverity::Block,
+            message: "Test rule violation".to_string(),
+            rule_type: mk_core::types::RuleType::Allow,
+        }
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_exist_passes_when_value_present() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustExist,
+            ConstraintTarget::File,
+            serde_json::json!(null),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert("path".to_string(), serde_json::json!("src/main.rs"));
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_exist_fails_when_value_absent() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustExist,
+            ConstraintTarget::File,
+            serde_json::json!(null),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let context = HashMap::new();
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_not_exist_passes_when_value_absent() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustNotExist,
+            ConstraintTarget::File,
+            serde_json::json!(null),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let context = HashMap::new();
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_not_exist_fails_when_value_present() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustNotExist,
+            ConstraintTarget::File,
+            serde_json::json!(null),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert("path".to_string(), serde_json::json!("forbidden.txt"));
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_use_with_array_passes_when_value_in_array() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustUse,
+            ConstraintTarget::Dependency,
+            serde_json::json!("required-lib"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "dependencies".to_string(),
+            serde_json::json!(["required-lib", "other-lib"]),
+        );
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_use_with_array_fails_when_value_not_in_array() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustUse,
+            ConstraintTarget::Dependency,
+            serde_json::json!("required-lib"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert("dependencies".to_string(), serde_json::json!(["other-lib"]));
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_use_with_scalar_passes_when_values_match() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustUse,
+            ConstraintTarget::Config,
+            serde_json::json!("production"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert("config".to_string(), serde_json::json!("production"));
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_use_fails_when_value_absent() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustUse,
+            ConstraintTarget::Dependency,
+            serde_json::json!("required-lib"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let context = HashMap::new();
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_not_use_with_array_passes_when_value_not_in_array() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustNotUse,
+            ConstraintTarget::Dependency,
+            serde_json::json!("banned-lib"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "dependencies".to_string(),
+            serde_json::json!(["safe-lib", "another-lib"]),
+        );
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_not_use_with_array_fails_when_value_in_array() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustNotUse,
+            ConstraintTarget::Dependency,
+            serde_json::json!("banned-lib"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "dependencies".to_string(),
+            serde_json::json!(["safe-lib", "banned-lib"]),
+        );
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_not_use_passes_when_value_absent() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustNotUse,
+            ConstraintTarget::Dependency,
+            serde_json::json!("banned-lib"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let context = HashMap::new();
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_match_passes_when_regex_matches() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustMatch,
+            ConstraintTarget::Code,
+            serde_json::json!("^# ADR"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "content".to_string(),
+            serde_json::json!("# ADR 001\nDecision..."),
+        );
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_match_fails_when_regex_does_not_match() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustMatch,
+            ConstraintTarget::Code,
+            serde_json::json!("^# ADR"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "content".to_string(),
+            serde_json::json!("Some other content"),
+        );
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_match_fails_when_value_absent() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustMatch,
+            ConstraintTarget::Code,
+            serde_json::json!("^# ADR"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let context = HashMap::new();
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_match_fails_when_value_not_string() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustMatch,
+            ConstraintTarget::Code,
+            serde_json::json!("^# ADR"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert("content".to_string(), serde_json::json!(12345));
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_match_fails_when_regex_invalid() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustMatch,
+            ConstraintTarget::Code,
+            serde_json::json!("[invalid(regex"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert("content".to_string(), serde_json::json!("any content"));
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_not_match_passes_when_regex_does_not_match() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustNotMatch,
+            ConstraintTarget::Code,
+            serde_json::json!("TODO|FIXME"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert("content".to_string(), serde_json::json!("Clean code here"));
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_not_match_fails_when_regex_matches() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustNotMatch,
+            ConstraintTarget::Code,
+            serde_json::json!("TODO|FIXME"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "content".to_string(),
+            serde_json::json!("// TODO: fix this later"),
+        );
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_not_match_passes_when_value_absent() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustNotMatch,
+            ConstraintTarget::Code,
+            serde_json::json!("TODO"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let context = HashMap::new();
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_not_match_passes_when_value_not_string() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustNotMatch,
+            ConstraintTarget::Code,
+            serde_json::json!("pattern"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "content".to_string(),
+            serde_json::json!(["not", "a", "string"]),
+        );
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_not_match_passes_when_regex_invalid() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustNotMatch,
+            ConstraintTarget::Code,
+            serde_json::json!("[invalid(regex"),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert("content".to_string(), serde_json::json!("any content"));
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_must_not_match_passes_when_pattern_not_string() {
+        let engine = GovernanceEngine::new();
+        let rule = create_rule(
+            ConstraintOperator::MustNotMatch,
+            ConstraintTarget::Code,
+            serde_json::json!(12345),
+        );
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert("content".to_string(), serde_json::json!("any content"));
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_rule_deny_rule_type_inverts_logic() {
+        let engine = GovernanceEngine::new();
+        let mut rule = create_rule(
+            ConstraintOperator::MustExist,
+            ConstraintTarget::File,
+            serde_json::json!(null),
+        );
+        rule.rule_type = mk_core::types::RuleType::Deny;
+        let policy = create_test_policy(rule.clone());
+
+        let mut context = HashMap::new();
+        context.insert("path".to_string(), serde_json::json!("src/main.rs"));
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_rule_all_constraint_targets() {
+        let engine = GovernanceEngine::new();
+
+        let targets_and_keys = [
+            (ConstraintTarget::File, "path"),
+            (ConstraintTarget::Code, "content"),
+            (ConstraintTarget::Dependency, "dependencies"),
+            (ConstraintTarget::Import, "imports"),
+            (ConstraintTarget::Config, "config"),
+        ];
+
+        for (target, key) in targets_and_keys {
+            let rule = create_rule(
+                ConstraintOperator::MustExist,
+                target,
+                serde_json::json!(null),
+            );
+            let policy = create_test_policy(rule.clone());
+
+            let mut context = HashMap::new();
+            context.insert(key.to_string(), serde_json::json!("value"));
+
+            let result = engine.evaluate_rule(&policy, &rule, &context);
+            assert!(
+                result.is_none(),
+                "Target {:?} with key {} should pass",
+                target,
+                key
+            );
+        }
+    }
+
+    #[test]
+    fn test_evaluate_rule_violation_contains_correct_metadata() {
+        let engine = GovernanceEngine::new();
+        let mut rule = create_rule(
+            ConstraintOperator::MustExist,
+            ConstraintTarget::File,
+            serde_json::json!(null),
+        );
+        rule.id = "specific-rule-id".to_string();
+        rule.message = "Custom error message".to_string();
+        rule.severity = ConstraintSeverity::Warn;
+
+        let mut policy = create_test_policy(rule.clone());
+        policy.id = "specific-policy-id".to_string();
+
+        let mut context = HashMap::new();
+        context.insert("other_key".to_string(), serde_json::json!("value"));
+
+        let result = engine.evaluate_rule(&policy, &rule, &context);
+        assert!(result.is_some());
+
+        let violation = result.unwrap();
+        assert_eq!(violation.rule_id, "specific-rule-id");
+        assert_eq!(violation.policy_id, "specific-policy-id");
+        assert_eq!(violation.message, "Custom error message");
+        assert_eq!(violation.severity, ConstraintSeverity::Warn);
+        assert!(violation.context.contains_key("other_key"));
+    }
+
+    #[test]
+    fn test_cosine_similarity_identical_vectors() {
+        let engine = GovernanceEngine::new();
+        let v1 = vec![1.0, 2.0, 3.0];
+        let v2 = vec![1.0, 2.0, 3.0];
+        let similarity = engine.cosine_similarity(&v1, &v2);
+        assert!((similarity - 1.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_cosine_similarity_orthogonal_vectors() {
+        let engine = GovernanceEngine::new();
+        let v1 = vec![1.0, 0.0];
+        let v2 = vec![0.0, 1.0];
+        let similarity = engine.cosine_similarity(&v1, &v2);
+        assert!(similarity.abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_cosine_similarity_different_lengths() {
+        let engine = GovernanceEngine::new();
+        let v1 = vec![1.0, 2.0, 3.0];
+        let v2 = vec![1.0, 2.0];
+        let similarity = engine.cosine_similarity(&v1, &v2);
+        assert_eq!(similarity, 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_empty_vectors() {
+        let engine = GovernanceEngine::new();
+        let v1: Vec<f32> = vec![];
+        let v2: Vec<f32> = vec![];
+        let similarity = engine.cosine_similarity(&v1, &v2);
+        assert_eq!(similarity, 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_zero_vector() {
+        let engine = GovernanceEngine::new();
+        let v1 = vec![0.0, 0.0, 0.0];
+        let v2 = vec![1.0, 2.0, 3.0];
+        let similarity = engine.cosine_similarity(&v1, &v2);
+        assert_eq!(similarity, 0.0);
+    }
 }

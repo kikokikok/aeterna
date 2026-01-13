@@ -64,6 +64,8 @@ utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
 redis = { version = "1.0.2", features = ["tokio-comp", "json", "connection-manager"] }
 regex = "1.10"
 serial_test = "3.2"
+testcontainers = "0.26"
+testcontainers-modules = "0.14"
 metrics = { version = "0.21" }
 metrics-exporter-prometheus = { version = "0.12" }
 sqlx = { version = "0.9.0-alpha.1", features = ["postgres", "runtime-tokio", "tls-native-tls", "json", "uuid", "chrono"] }

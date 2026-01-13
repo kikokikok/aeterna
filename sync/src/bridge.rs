@@ -60,8 +60,8 @@ impl SyncManager {
                 None
             };
 
-        let mut states = HashMap::new();
-        let mut checkpoints = HashMap::new();
+        let states = HashMap::new();
+        let checkpoints = HashMap::new();
 
         Ok(Self {
             memory_manager,

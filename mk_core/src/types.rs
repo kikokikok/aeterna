@@ -8,6 +8,7 @@ use validator::Validate;
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
 #[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
 pub enum Role {
     Developer,
     TechLead,
@@ -1133,5 +1134,66 @@ mod tests {
     fn test_user_id_into_inner() {
         let id = UserId::new("u1".to_string()).unwrap();
         assert_eq!(id.into_inner(), "u1");
+    }
+
+    #[test]
+    fn test_governance_event_tenant_id() {
+        let tenant_id = TenantId::new("tenant-1".to_string()).unwrap();
+        let user_id = UserId::new("user-1".to_string()).unwrap();
+
+        let events = vec![
+            GovernanceEvent::UnitCreated {
+                unit_id: "u1".to_string(),
+                unit_type: UnitType::Company,
+                tenant_id: tenant_id.clone(),
+                parent_id: None,
+                timestamp: 0,
+            },
+            GovernanceEvent::UnitUpdated {
+                unit_id: "u1".to_string(),
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::UnitDeleted {
+                unit_id: "u1".to_string(),
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::RoleAssigned {
+                user_id: user_id.clone(),
+                unit_id: "u1".to_string(),
+                role: Role::Admin,
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::RoleRemoved {
+                user_id: user_id.clone(),
+                unit_id: "u1".to_string(),
+                role: Role::Admin,
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::PolicyUpdated {
+                policy_id: "p1".to_string(),
+                layer: KnowledgeLayer::Company,
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::PolicyDeleted {
+                policy_id: "p1".to_string(),
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::DriftDetected {
+                project_id: "proj-1".to_string(),
+                tenant_id: tenant_id.clone(),
+                drift_score: 0.5,
+                timestamp: 0,
+            },
+        ];
+
+        for event in events {
+            assert_eq!(event.tenant_id().as_str(), "tenant-1");
+        }
     }
 }
