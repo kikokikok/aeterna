@@ -90,7 +90,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         .register_provider(MemoryLayer::User, Box::new(qdrant_provider))
         .await;
 
-    let entry = MemoryEntry {
+    let entry = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
         id: "system_msg_1".to_string(),
         content: "System integration test content".to_string(),
         embedding: Some(vec![0.1; 128]),
@@ -122,7 +122,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
     assert_eq!(search_results.len(), 1);
     assert_eq!(search_results[0].id, "system_msg_1");
 
-    let session_entry = MemoryEntry {
+    let session_entry = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
         id: "session_important".to_string(),
         content: "Important session content for promotion".to_string(),
         embedding: Some(vec![0.2; 128]),

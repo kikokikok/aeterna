@@ -198,6 +198,9 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
+        Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+            memory::llm::mock::MockLlmService::new(),
+        ))),
         Arc::new(MockAuthService),
         None,
     ));
@@ -208,7 +211,7 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
 
     let langchain = LangChainAdapter::new(server.clone());
     let lc_tools = langchain.to_langchain_tools();
-    assert_eq!(lc_tools.len(), 15); // 4 memory + 3 knowledge + 3 sync + 5 governance
+    assert_eq!(lc_tools.len(), 16); // 5 memory + 3 knowledge + 3 sync + 5 governance
 
     let response = langchain
         .handle_mcp_request(json!({
@@ -262,6 +265,9 @@ async fn test_server_timeout() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
+        Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+            memory::llm::mock::MockLlmService::new(),
+        ))),
         Arc::new(MockAuthService),
         None,
     )
@@ -313,6 +319,9 @@ async fn test_server_timeout() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
+        Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+            memory::llm::mock::MockLlmService::new(),
+        ))),
         Arc::new(DenyAuthService),
         None,
     );

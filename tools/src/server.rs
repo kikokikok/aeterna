@@ -4,7 +4,10 @@ use crate::governance::{
     UserRoleRemoveTool,
 };
 use crate::knowledge::{KnowledgeGetTool, KnowledgeListTool, KnowledgeQueryTool};
-use crate::memory::{MemoryAddTool, MemoryCloseTool, MemoryDeleteTool, MemorySearchTool};
+use crate::memory::{
+    MemoryAddTool, MemoryCloseTool, MemoryDeleteTool, MemoryFeedbackTool, MemoryReasonTool,
+    MemorySearchTool,
+};
 use crate::tools::{ToolDefinition, ToolRegistry};
 use knowledge::governance::GovernanceEngine;
 use memory::manager::MemoryManager;
@@ -40,6 +43,7 @@ impl McpServer {
             dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>,
         >,
         governance_engine: Arc<GovernanceEngine>,
+        reflective_reasoner: Arc<dyn memory::reasoning::ReflectiveReasoner>,
         auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>,
         event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
     ) -> Self {
@@ -49,6 +53,8 @@ impl McpServer {
         registry.register(Box::new(MemorySearchTool::new(memory_manager.clone())));
         registry.register(Box::new(MemoryDeleteTool::new(memory_manager.clone())));
         registry.register(Box::new(MemoryCloseTool::new(memory_manager.clone())));
+        registry.register(Box::new(MemoryFeedbackTool::new(memory_manager.clone())));
+        registry.register(Box::new(MemoryReasonTool::new(reflective_reasoner)));
 
         registry.register(Box::new(KnowledgeGetTool::new(
             knowledge_repository.clone(),
@@ -629,12 +635,17 @@ mod tests {
 
         let _container = container;
 
+        let mock_reasoner = Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+            memory::llm::mock::MockLlmService::new(),
+        )));
+
         McpServer::new(
             memory_manager,
             sync_manager,
             repo,
             Arc::new(backend),
             governance,
+            mock_reasoner,
             Arc::new(MockAuthService),
             None,
         )

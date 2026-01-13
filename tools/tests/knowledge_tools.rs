@@ -24,6 +24,7 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
         layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
         metadata: std::collections::HashMap::new(),
+        summaries: std::collections::HashMap::new(),
         status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,

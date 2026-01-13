@@ -31,10 +31,9 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
         .call(json!({
             "content": "User prefers Rust",
             "layer": "user",
-            "identifiers": {
+            "metadata": {
                 "user_id": "test_user_123"
             },
-            "tags": ["coding"],
             "tenantContext": tenant_context
         }))
         .await?;
@@ -59,7 +58,7 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
     // WHEN deleting memory
     let delete_resp = delete_tool
         .call(json!({
-            "memory_id": memory_id,
+            "memoryId": memory_id,
             "layer": "user",
             "tenantContext": tenant_context
         }))

@@ -9,24 +9,25 @@ use tokio::sync::RwLock;
 
 pub type ProviderMap = HashMap<
     MemoryLayer,
-    Box<dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
+    Box<dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
 >;
 
 pub struct MemoryManager {
     providers: Arc<RwLock<ProviderMap>>,
     embedding_service: Option<
-        Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
+        Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
     >,
     governance_service: Arc<GovernanceService>,
     auth_service: Option<
         Arc<
             dyn AuthorizationService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync
-        >
+                + Sync,
+        >,
     >,
     telemetry: Arc<MemoryTelemetry>,
-    config: config::MemoryConfig
+    config: config::MemoryConfig,
+    trajectories: Arc<RwLock<HashMap<String, Vec<mk_core::types::MemoryTrajectoryEvent>>>>,
 }
 
 impl MemoryManager {
@@ -37,7 +38,8 @@ impl MemoryManager {
             governance_service: Arc::new(GovernanceService::new()),
             auth_service: None,
             telemetry: Arc::new(MemoryTelemetry::new()),
-            config: config::MemoryConfig::default()
+            config: config::MemoryConfig::default(),
+            trajectories: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -49,8 +51,8 @@ impl MemoryManager {
     pub fn with_embedding_service(
         mut self,
         embedding_service: Arc<
-            dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
-        >
+            dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+        >,
     ) -> Self {
         self.embedding_service = Some(embedding_service);
         self
@@ -61,8 +63,8 @@ impl MemoryManager {
         auth_service: Arc<
             dyn AuthorizationService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync
-        >
+                + Sync,
+        >,
     ) -> Self {
         self.auth_service = Some(auth_service);
         self
@@ -87,8 +89,8 @@ impl MemoryManager {
         provider: Box<
             dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync
-        >
+                + Sync,
+        >,
     ) {
         let mut providers = self.providers.write().await;
         providers.insert(layer, provider);
@@ -99,7 +101,7 @@ impl MemoryManager {
         ctx: mk_core::types::TenantContext,
         query_vector: Vec<f32>,
         limit: usize,
-        filters: HashMap<String, serde_json::Value>
+        filters: HashMap<String, serde_json::Value>,
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         if let Some(auth) = &self.auth_service {
             if !auth
@@ -125,7 +127,7 @@ impl MemoryManager {
                     self.telemetry.record_operation_success(
                         "search",
                         &layer_str,
-                        start.elapsed().as_millis() as f64
+                        start.elapsed().as_millis() as f64,
                     );
                     for mut entry in results {
                         entry.layer = *layer;
@@ -154,7 +156,7 @@ impl MemoryManager {
         query_vector: Vec<f32>,
         limit: usize,
         threshold: f32,
-        filters: HashMap<String, serde_json::Value>
+        filters: HashMap<String, serde_json::Value>,
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
         let mut all_results = Vec::new();
@@ -179,7 +181,7 @@ impl MemoryManager {
                         }
                     }
                 }
-                Err(e) => tracing::error!("Error searching layer {:?}: {}", layer, e)
+                Err(e) => tracing::error!("Error searching layer {:?}: {}", layer, e),
             }
         }
 
@@ -194,7 +196,7 @@ impl MemoryManager {
         query_text: &str,
         limit: usize,
         threshold: f32,
-        filters: HashMap<String, serde_json::Value>
+        filters: HashMap<String, serde_json::Value>,
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let embedding_service = self
             .embedding_service
@@ -211,7 +213,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        mut entry: MemoryEntry
+        mut entry: MemoryEntry,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         if let Some(auth) = &self.auth_service {
             if !auth
@@ -237,13 +239,24 @@ impl MemoryManager {
             .get(&layer)
             .ok_or("No provider registered for layer")?;
 
-        match provider.add(ctx, entry).await {
+        match provider.add(ctx.clone(), entry.clone()).await {
             Ok(id) => {
                 self.telemetry.record_operation_success(
                     "add",
                     &layer_str,
-                    start.elapsed().as_millis() as f64
+                    start.elapsed().as_millis() as f64,
                 );
+
+                let mut trajectories = self.trajectories.write().await;
+                let event = mk_core::types::MemoryTrajectoryEvent {
+                    operation: mk_core::types::MemoryOperation::Add,
+                    entry_id: id.clone(),
+                    reward: None,
+                    reasoning: Some(format!("Memory added to layer {:?}", layer)),
+                    timestamp: chrono::Utc::now().timestamp(),
+                };
+                trajectories.entry(id.clone()).or_default().push(event);
+
                 Ok(id)
             }
             Err(e) => {
@@ -258,20 +271,140 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        id: &str
+        id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
         let provider = providers
             .get(&layer)
             .ok_or("No provider registered for layer")?;
-        provider.delete(ctx, id).await
+
+        match provider.delete(ctx, id).await {
+            Ok(_) => {
+                let mut trajectories = self.trajectories.write().await;
+                let event = mk_core::types::MemoryTrajectoryEvent {
+                    operation: mk_core::types::MemoryOperation::Delete,
+                    entry_id: id.to_string(),
+                    reward: None,
+                    reasoning: Some(format!("Memory deleted from layer {:?}", layer)),
+                    timestamp: chrono::Utc::now().timestamp(),
+                };
+                trajectories.entry(id.to_string()).or_default().push(event);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    pub async fn record_reward(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        layer: MemoryLayer,
+        memory_id: &str,
+        reward: mk_core::types::RewardSignal,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let entry = self
+            .get_from_layer(ctx.clone(), layer, memory_id)
+            .await?
+            .ok_or_else(|| format!("Memory {} not found in layer {:?}", memory_id, layer))?;
+
+        let mut updated_entry = entry.clone();
+        let current_score = entry.importance_score.unwrap_or(0.5);
+        let new_score = (current_score + reward.score).clamp(0.0, 1.0);
+        updated_entry.importance_score = Some(new_score);
+
+        let providers = self.providers.read().await;
+        let provider = providers
+            .get(&layer)
+            .ok_or("No provider registered for layer")?;
+
+        provider.update(ctx, updated_entry).await?;
+
+        let mut trajectories = self.trajectories.write().await;
+        let event = mk_core::types::MemoryTrajectoryEvent {
+            operation: mk_core::types::MemoryOperation::Noop,
+            entry_id: memory_id.to_string(),
+            reward: Some(reward),
+            reasoning: Some("Reward signal recorded".to_string()),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        trajectories
+            .entry(memory_id.to_string())
+            .or_default()
+            .push(event);
+
+        Ok(())
+    }
+
+    pub async fn prune_low_utility_memories(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        layer: MemoryLayer,
+        threshold: f32,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let memories = self.list_all_from_layer(ctx.clone(), layer).await?;
+        let mut pruned_ids = Vec::new();
+
+        {
+            let trajectories = self.trajectories.read().await;
+            for entry in &memories {
+                let mut should_prune = false;
+                let score = entry.importance_score.unwrap_or(0.5);
+
+                if score < threshold {
+                    should_prune = true;
+                } else if let Some(history) = trajectories.get(&entry.id) {
+                    let last_events = if history.len() > 5 {
+                        &history[history.len() - 5..]
+                    } else {
+                        &history[..]
+                    };
+
+                    let has_rewards = last_events.iter().any(|e| e.reward.is_some());
+                    if !has_rewards && history.len() >= 5 {
+                        should_prune = true;
+                    }
+                }
+
+                if should_prune {
+                    pruned_ids.push(entry.id.clone());
+                }
+            }
+        }
+
+        for id in &pruned_ids {
+            let score = memories
+                .iter()
+                .find(|m| m.id == *id)
+                .and_then(|m| m.importance_score)
+                .unwrap_or(0.5);
+
+            self.delete_from_layer(ctx.clone(), layer, id).await?;
+
+            let mut trajectories_write = self.trajectories.write().await;
+            let event = mk_core::types::MemoryTrajectoryEvent {
+                operation: mk_core::types::MemoryOperation::Prune,
+                entry_id: id.clone(),
+                reward: None,
+                reasoning: Some(format!(
+                    "Memory pruned due to low utility (score: {:.2})",
+                    score
+                )),
+                timestamp: chrono::Utc::now().timestamp(),
+            };
+            trajectories_write
+                .entry(id.clone())
+                .or_default()
+                .push(event);
+        }
+
+        Ok(pruned_ids)
     }
 
     pub async fn get_from_layer(
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        id: &str
+        id: &str,
     ) -> Result<Option<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
         let provider = providers
@@ -307,7 +440,7 @@ impl MemoryManager {
     pub async fn list_all_from_layer(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer
+        layer: MemoryLayer,
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
         let provider = providers
@@ -323,7 +456,7 @@ impl MemoryManager {
         ctx: mk_core::types::TenantContext,
         id: &str,
         source_layer: MemoryLayer,
-        target_layer: MemoryLayer
+        target_layer: MemoryLayer,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let entry = self
             .get_from_layer(ctx.clone(), source_layer, id)
@@ -337,7 +470,7 @@ impl MemoryManager {
         let now = chrono::Utc::now().timestamp();
         promoted_entry.metadata.insert(
             "original_memory_id".to_string(),
-            serde_json::json!(entry.id)
+            serde_json::json!(entry.id),
         );
         promoted_entry
             .metadata
@@ -349,7 +482,7 @@ impl MemoryManager {
     pub async fn promote_important_memories(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer
+        layer: MemoryLayer,
     ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         use crate::promotion::PromotionService;
         let promotion_service = PromotionService::new(Arc::new(MemoryManager {
@@ -358,7 +491,8 @@ impl MemoryManager {
             governance_service: self.governance_service.clone(),
             auth_service: self.auth_service.clone(),
             telemetry: self.telemetry.clone(),
-            config: self.config.clone()
+            config: self.config.clone(),
+            trajectories: self.trajectories.clone(),
         }))
         .with_config(self.config.clone())
         .with_telemetry(self.telemetry.clone());
@@ -369,7 +503,7 @@ impl MemoryManager {
             .map_err(|e| {
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    e.to_string()
+                    e.to_string(),
                 )) as Box<dyn std::error::Error + Send + Sync>
             })
     }
@@ -377,7 +511,7 @@ impl MemoryManager {
     pub async fn close_session(
         &self,
         ctx: mk_core::types::TenantContext,
-        session_id: &str
+        session_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("Closing session: {}", session_id);
 
@@ -393,7 +527,7 @@ impl MemoryManager {
     pub async fn close_agent(
         &self,
         ctx: mk_core::types::TenantContext,
-        agent_id: &str
+        agent_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("Closing agent: {}", agent_id);
 
@@ -418,7 +552,7 @@ pub(crate) mod tests {
         TenantContext {
             tenant_id: mk_core::types::TenantId::from_str("test-tenant").unwrap(),
             user_id: mk_core::types::UserId::from_str("test-user").unwrap(),
-            agent_id: None
+            agent_id: None,
         }
     }
 
@@ -437,23 +571,29 @@ pub(crate) mod tests {
             .await;
 
         let agent_entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "agent_1".to_string(),
             content: "agent content".to_string(),
             embedding: None,
             layer: MemoryLayer::Agent,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let session_entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "session_1".to_string(),
             content: "session content".to_string(),
             embedding: None,
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -476,6 +616,80 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn test_trajectory_and_reward_flow() {
+        let manager = MemoryManager::new();
+        let ctx = test_ctx();
+        let provider = Box::new(MockProvider::new());
+        manager.register_provider(MemoryLayer::User, provider).await;
+
+        let entry = MemoryEntry {
+            id: "traj_1".to_string(),
+            content: "trajectory test".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: Some(0.5),
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        manager
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
+            .await
+            .unwrap();
+
+        {
+            let trajectories = manager.trajectories.read().await;
+            let events = trajectories.get("traj_1").unwrap();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].operation, mk_core::types::MemoryOperation::Add);
+        }
+
+        let reward = mk_core::types::RewardSignal {
+            reward_type: mk_core::types::RewardType::Helpful,
+            score: 0.2,
+            reasoning: Some("Very helpful".to_string()),
+            agent_id: None,
+            timestamp: 0,
+        };
+
+        manager
+            .record_reward(ctx.clone(), MemoryLayer::User, "traj_1", reward)
+            .await
+            .unwrap();
+
+        let updated = manager
+            .get_from_layer(ctx.clone(), MemoryLayer::User, "traj_1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.importance_score.unwrap(), 0.7);
+
+        {
+            let trajectories = manager.trajectories.read().await;
+            let events = trajectories.get("traj_1").unwrap();
+            assert_eq!(events.len(), 2);
+            assert!(events[1].reward.is_some());
+        }
+
+        let pruned = manager
+            .prune_low_utility_memories(ctx.clone(), MemoryLayer::User, 0.8)
+            .await
+            .unwrap();
+        assert_eq!(pruned.len(), 1);
+        assert_eq!(pruned[0], "traj_1");
+
+        {
+            let trajectories = manager.trajectories.read().await;
+            let events = trajectories.get("traj_1").unwrap();
+            assert_eq!(events.len(), 4);
+            assert_eq!(events[3].operation, mk_core::types::MemoryOperation::Prune);
+        }
+    }
+
+    #[tokio::test]
     async fn test_search_with_threshold() {
         let manager = MemoryManager::new();
         let ctx = test_ctx();
@@ -484,6 +698,9 @@ pub(crate) mod tests {
         manager.register_provider(MemoryLayer::User, provider).await;
 
         let entry_high_score = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "high_score".to_string(),
             content: "high score content".to_string(),
             embedding: None,
@@ -494,10 +711,13 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let entry_low_score = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "low_score".to_string(),
             content: "low score content".to_string(),
             embedding: None,
@@ -508,7 +728,7 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -545,13 +765,16 @@ pub(crate) mod tests {
         manager.register_provider(MemoryLayer::User, provider).await;
 
         let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "no_score".to_string(),
             content: "no score content".to_string(),
             embedding: None,
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -576,13 +799,16 @@ pub(crate) mod tests {
         manager.register_provider(MemoryLayer::User, provider).await;
 
         let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "mem_1".to_string(),
             content: "Contact user@example.com".to_string(),
             embedding: None,
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -606,13 +832,16 @@ pub(crate) mod tests {
         manager.register_provider(MemoryLayer::User, provider).await;
 
         let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "mem_1".to_string(),
             content: "test".to_string(),
             embedding: None,
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -645,13 +874,16 @@ pub(crate) mod tests {
             .await;
 
         let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "session_mem".to_string(),
             content: "to be promoted".to_string(),
             embedding: None,
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -663,7 +895,7 @@ pub(crate) mod tests {
                 ctx.clone(),
                 "session_mem",
                 MemoryLayer::Session,
-                MemoryLayer::Project
+                MemoryLayer::Project,
             )
             .await
             .unwrap();
@@ -690,6 +922,9 @@ pub(crate) mod tests {
             .await;
 
         let agent_entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "agent_high_priority".to_string(),
             content: "agent content".to_string(),
             embedding: None,
@@ -700,10 +935,13 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let user_entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "user_high_similarity".to_string(),
             content: "user content".to_string(),
             embedding: None,
@@ -714,7 +952,7 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -739,7 +977,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn test_close_session_triggers_promotion() {
         let manager = MemoryManager::new().with_config(config::MemoryConfig {
-            promotion_threshold: 0.5
+            promotion_threshold: 0.5,
         });
         let ctx = test_ctx();
         let mock_session = Box::new(MockProvider::new());
@@ -752,6 +990,9 @@ pub(crate) mod tests {
             .await;
 
         let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "important".to_string(),
             content: "highly important".to_string(),
             embedding: None,
@@ -762,7 +1003,7 @@ pub(crate) mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -808,14 +1049,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<String, Self::Error> {
                 Ok("id".to_string())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -824,21 +1065,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>
+                _f: HashMap<String, serde_json::Value>,
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("search failed".into())
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -847,7 +1088,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>
+                _c: Option<String>,
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Ok((vec![], None))
             }
@@ -883,6 +1124,9 @@ pub(crate) mod tests {
             .await;
 
         let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "agent_mem".to_string(),
             content: "agent memory content".to_string(),
             embedding: None,
@@ -893,7 +1137,7 @@ pub(crate) mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -924,6 +1168,9 @@ pub(crate) mod tests {
         manager.register_provider(MemoryLayer::User, provider).await;
 
         let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "text_mem".to_string(),
             content: "some text content".to_string(),
             embedding: None,
@@ -934,7 +1181,7 @@ pub(crate) mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -962,13 +1209,16 @@ pub(crate) mod tests {
         let manager = MemoryManager::new();
         let ctx = test_ctx();
         let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "test".to_string(),
             content: "test".to_string(),
             embedding: None,
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = manager.add_to_layer(ctx, MemoryLayer::User, entry).await;
@@ -988,14 +1238,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<String, Self::Error> {
                 Ok("id".into())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -1004,21 +1254,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>
+                _f: HashMap<String, serde_json::Value>,
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("search failed".into())
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -1027,7 +1277,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>
+                _c: Option<String>,
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Ok((vec![], None))
             }
@@ -1055,14 +1305,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<String, Self::Error> {
                 Ok("id".into())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -1071,21 +1321,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>
+                _f: HashMap<String, serde_json::Value>,
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("list failed".into())
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -1094,7 +1344,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>
+                _c: Option<String>,
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Err("list failed".into())
             }
@@ -1121,14 +1371,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<String, Self::Error> {
                 Err("add failed".into())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -1137,21 +1387,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>
+                _f: HashMap<String, serde_json::Value>,
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Ok(vec![])
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -1160,7 +1410,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>
+                _c: Option<String>,
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Ok((vec![], None))
             }
@@ -1173,13 +1423,16 @@ pub(crate) mod tests {
             .await;
 
         let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "test".to_string(),
             content: "test".to_string(),
             embedding: None,
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = manager.add_to_layer(ctx, MemoryLayer::User, entry).await;

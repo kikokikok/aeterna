@@ -6,7 +6,7 @@ use opentelemetry::trace::Tracer;
 
 #[derive(Debug)]
 pub struct MemoryTelemetry {
-    tracer: BoxedTracer
+    tracer: BoxedTracer,
 }
 
 impl MemoryTelemetry {
@@ -138,7 +138,7 @@ pub fn init_telemetry() -> Result<MemoryTelemetry, Box<dyn std::error::Error + S
 }
 
 pub fn init_telemetry_with_endpoint(
-    endpoint: std::net::SocketAddr
+    endpoint: std::net::SocketAddr,
 ) -> Result<MemoryTelemetry, Box<dyn std::error::Error + Send + Sync>> {
     let telemetry = MemoryTelemetry::new();
 
