@@ -184,7 +184,10 @@ mod tests {
     async fn test_mock_provider_basic_ops() {
         let provider = MockProvider::new();
         let ctx = test_ctx();
-        let entry = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
+        let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "test1".to_string(),
             content: "hello world".to_string(),
             embedding: None,
@@ -226,7 +229,10 @@ mod tests {
     async fn test_mock_provider_update_nonexistent() {
         let provider = MockProvider::new();
         let ctx = test_ctx();
-        let entry = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
+        let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "ghost".to_string(),
             content: "ghost".to_string(),
             embedding: None,
@@ -242,7 +248,10 @@ mod tests {
     async fn test_mock_provider_search() {
         let provider = MockProvider::new();
         let ctx = test_ctx();
-        let entry1 = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
+        let entry1 = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "1".to_string(),
             content: "one".to_string(),
             embedding: None,
@@ -255,7 +264,10 @@ mod tests {
             created_at: 0,
             updated_at: 0,
         };
-        let entry2 = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
+        let entry2 = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "2".to_string(),
             content: "two".to_string(),
             embedding: None,
@@ -285,7 +297,10 @@ mod tests {
         let provider = MockProvider::new();
         let ctx = test_ctx();
         for i in 0..5 {
-            let entry = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
+            let entry = MemoryEntry {
+                summaries: std::collections::HashMap::new(),
+                context_vector: None,
+                importance_score: None,
                 id: format!("{}", i),
                 content: format!("content {}", i),
                 embedding: None,

@@ -161,6 +161,9 @@ fn load_sync_from_env() -> Result<SyncConfig, Box<dyn std::error::Error>> {
 fn load_memory_from_env() -> Result<MemoryConfig, Box<dyn std::error::Error>> {
     Ok(MemoryConfig {
         promotion_threshold: parse_env("MK_PROMOTION_THRESHOLD").unwrap_or(0.8),
+        decay_interval_secs: parse_env("MK_DECAY_INTERVAL_SECS").unwrap_or(86400),
+        decay_rate: parse_env("MK_DECAY_RATE").unwrap_or(0.05),
+        optimization_trigger_count: parse_env("MK_OPTIMIZATION_TRIGGER_COUNT").unwrap_or(100),
     })
 }
 

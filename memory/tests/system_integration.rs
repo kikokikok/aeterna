@@ -8,6 +8,7 @@ use memory::providers::qdrant::QdrantProvider;
 use mk_core::types::{MemoryEntry, MemoryLayer, TenantContext};
 use qdrant_client::{Qdrant, config::QdrantConfig};
 use std::collections::HashMap;
+use std::sync::Arc;
 use storage::postgres::PostgresBackend;
 use storage::redis::RedisStorage;
 use testcontainers::{
@@ -87,10 +88,13 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
 
     let manager = MemoryManager::new();
     manager
-        .register_provider(MemoryLayer::User, Box::new(qdrant_provider))
+        .register_provider(MemoryLayer::User, Arc::new(qdrant_provider))
         .await;
 
-    let entry = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
+    let entry = MemoryEntry {
+        summaries: std::collections::HashMap::new(),
+        context_vector: None,
+        importance_score: None,
         id: "system_msg_1".to_string(),
         content: "System integration test content".to_string(),
         embedding: Some(vec![0.1; 128]),
@@ -122,7 +126,10 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
     assert_eq!(search_results.len(), 1);
     assert_eq!(search_results[0].id, "system_msg_1");
 
-    let session_entry = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
+    let session_entry = MemoryEntry {
+        summaries: std::collections::HashMap::new(),
+        context_vector: None,
+        importance_score: None,
         id: "session_important".to_string(),
         content: "Important session content for promotion".to_string(),
         embedding: Some(vec![0.2; 128]),
@@ -158,10 +165,10 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         .map_err(|e| e.to_string())?;
 
     manager
-        .register_provider(MemoryLayer::Session, Box::new(session_provider))
+        .register_provider(MemoryLayer::Session, Arc::new(session_provider))
         .await;
     manager
-        .register_provider(MemoryLayer::Project, Box::new(project_provider))
+        .register_provider(MemoryLayer::Project, Arc::new(project_provider))
         .await;
 
     manager

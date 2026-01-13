@@ -532,6 +532,7 @@ async fn test_mock_repository_list_by_layer() {
             commit_hash: None,
             author: None,
             updated_at: chrono::Utc::now().timestamp(),
+            summaries: HashMap::new(),
         },
         KnowledgeEntry {
             path: "company/policy.md".to_string(),
@@ -543,6 +544,7 @@ async fn test_mock_repository_list_by_layer() {
             commit_hash: None,
             author: None,
             updated_at: chrono::Utc::now().timestamp(),
+            summaries: HashMap::new(),
         },
     ];
 
