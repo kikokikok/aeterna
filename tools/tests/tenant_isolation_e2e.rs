@@ -1,11 +1,8 @@
 use async_trait::async_trait;
 use knowledge::repository::GitRepository;
 use memory::providers::MockProvider;
-use mk_core::traits::{AuthorizationService, KnowledgeRepository, StorageBackend};
-use mk_core::types::{
-    KnowledgeEntry, KnowledgeLayer, KnowledgeType, OrganizationalUnit, Policy, Role, TenantContext,
-    TenantId, UserId,
-};
+use mk_core::traits::{AuthorizationService, MemoryProviderAdapter, StorageBackend};
+use mk_core::types::{OrganizationalUnit, Policy, Role, TenantContext, TenantId, UserId};
 use serde_json::json;
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -193,11 +190,11 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
     let dir = tempdir()?;
     let repo = Arc::new(GitRepository::new(dir.path())?);
     let memory_manager = Arc::new(memory::manager::MemoryManager::new());
+    let provider: Arc<
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+    > = Arc::new(MockProvider::new());
     memory_manager
-        .register_provider(
-            mk_core::types::MemoryLayer::User,
-            Box::new(MockProvider::new()),
-        )
+        .register_provider(mk_core::types::MemoryLayer::User, provider)
         .await;
 
     let governance_engine = Arc::new(knowledge::governance::GovernanceEngine::new());

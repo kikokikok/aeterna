@@ -1510,16 +1510,26 @@ mod tests {
 
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Org,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Org, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         memory
@@ -1602,10 +1612,15 @@ mod tests {
 
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         for i in 0..count {
@@ -1967,10 +1982,15 @@ mod tests {
         let ctx = TenantContext::default();
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let mut repo = MockRepoWithEntries::new();
@@ -2014,10 +2034,15 @@ mod tests {
         let ctx = TenantContext::default();
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let m_id = "ptr_orphaned".to_string();
@@ -2078,10 +2103,15 @@ mod tests {
         let ctx = TenantContext::default();
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "mismatch.md".to_string();
@@ -2140,10 +2170,15 @@ mod tests {
         let ctx = TenantContext::default();
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "missing.md".to_string();
@@ -2272,10 +2307,15 @@ mod tests {
         let memory = Arc::new(MemoryManager::new());
         let ctx = TenantContext::default();
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "existing.md".to_string();
@@ -2412,10 +2452,15 @@ mod tests {
         let memory = Arc::new(MemoryManager::new());
         let ctx = TenantContext::default();
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "deleted.md".to_string();
@@ -2731,10 +2776,15 @@ mod tests {
     async fn test_run_sync_cycle_with_trigger() {
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let sync_manager = SyncManager {
@@ -2764,10 +2814,15 @@ mod tests {
         let memory = Arc::new(MemoryManager::new());
         let ctx = TenantContext::default();
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "deprecated.md".to_string();
@@ -2820,16 +2875,26 @@ mod tests {
         let memory = Arc::new(MemoryManager::new());
         let ctx = TenantContext::default();
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Org,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Org, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "moved.md".to_string();
@@ -2911,10 +2976,15 @@ mod tests {
         let memory = Arc::new(MemoryManager::new());
         let ctx = TenantContext::default();
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "duplicate.md".to_string();

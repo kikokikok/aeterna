@@ -1,5 +1,6 @@
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
+use mk_core::traits::MemoryProviderAdapter;
 use mk_core::types::MemoryLayer;
 use serde_json::json;
 use std::sync::Arc;
@@ -13,8 +14,11 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
         MemoryManager::new()
             .with_embedding_service(Arc::new(memory::embedding::MockEmbeddingService::new(1536))),
     );
+    let provider: Arc<
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+    > = Arc::new(MockProvider::new());
     memory_manager
-        .register_provider(MemoryLayer::User, Box::new(MockProvider::new()))
+        .register_provider(MemoryLayer::User, provider)
         .await;
 
     let add_tool = MemoryAddTool::new(memory_manager.clone());
