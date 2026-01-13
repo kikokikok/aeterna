@@ -14,4 +14,5 @@ pub mod providers;
 pub mod pruning;
 pub mod reasoning;
 pub mod telemetry;
+pub mod trainer;
 pub mod working;

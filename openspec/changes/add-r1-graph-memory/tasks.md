@@ -1,7 +1,7 @@
 ## 1. Memory-R1 Implementation
 - [x] 1.1 Implement `RewardFunction` for memory trajectory evaluation
 - [x] 1.2 Add `prune()` and `compress()` methods to `MemoryManager`
-- [ ] 1.3 Create `MemoryR1Trainer` for outcome-driven policy updates
+- [x] 1.3 Create `MemoryR1Trainer` for outcome-driven policy updates
 
 ## 2. Dynamic Knowledge Graph
 - [ ] 2.1 Implement `GraphStore` using PostgreSQL/Apache Age or simple relational tables
