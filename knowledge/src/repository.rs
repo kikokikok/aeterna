@@ -15,11 +15,11 @@ pub enum RepositoryError {
     #[error("Invalid path: {0}")]
     InvalidPath(String),
     #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error)
+    Serialization(#[from] serde_json::Error),
 }
 
 pub struct GitRepository {
-    root_path: PathBuf
+    root_path: PathBuf,
 }
 
 impl GitRepository {
@@ -40,13 +40,13 @@ impl GitRepository {
         &self,
         ctx: &mk_core::types::TenantContext,
         layer: KnowledgeLayer,
-        path: &str
+        path: &str,
     ) -> PathBuf {
         let layer_dir = match layer {
             KnowledgeLayer::Company => "company",
             KnowledgeLayer::Org => "org",
             KnowledgeLayer::Team => "team",
-            KnowledgeLayer::Project => "project"
+            KnowledgeLayer::Project => "project",
         };
         self.root_path
             .join(ctx.tenant_id.as_str())
@@ -72,12 +72,12 @@ impl GitRepository {
 
         let parent_commit = match repo.head() {
             Ok(head) => Some(head.peel_to_commit()?),
-            Err(_) => None
+            Err(_) => None,
         };
 
         let parents = match &parent_commit {
             Some(c) => vec![c],
-            None => vec![]
+            None => vec![],
         };
 
         let commit_id = repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents)?;
@@ -89,7 +89,7 @@ impl GitRepository {
         let repo = Repository::open(&self.root_path)?;
         match repo.head() {
             Ok(head) => Ok(Some(head.peel_to_commit()?.id().to_string())),
-            Err(_) => Ok(None)
+            Err(_) => Ok(None),
         }
     }
 
@@ -100,13 +100,13 @@ impl GitRepository {
     pub async fn get_by_path(
         &self,
         ctx: mk_core::types::TenantContext,
-        path: &str
+        path: &str,
     ) -> Result<Option<KnowledgeEntry>, RepositoryError> {
         for layer in [
             KnowledgeLayer::Company,
             KnowledgeLayer::Org,
             KnowledgeLayer::Team,
-            KnowledgeLayer::Project
+            KnowledgeLayer::Project,
         ] {
             if let Some(entry) = self.get(ctx.clone(), layer, path).await? {
                 return Ok(Some(entry));
@@ -122,7 +122,7 @@ impl KnowledgeRepository for GitRepository {
 
     async fn get_head_commit(
         &self,
-        _ctx: mk_core::types::TenantContext
+        _ctx: mk_core::types::TenantContext,
     ) -> Result<Option<String>, Self::Error> {
         self.get_head_commit_sync()
     }
@@ -130,7 +130,7 @@ impl KnowledgeRepository for GitRepository {
     async fn get_affected_items(
         &self,
         _ctx: mk_core::types::TenantContext,
-        since_commit: &str
+        since_commit: &str,
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         let repo = Repository::open(&self.root_path)?;
         let from_obj = repo.revparse_single(since_commit)?;
@@ -153,7 +153,7 @@ impl KnowledgeRepository for GitRepository {
                             "org" => KnowledgeLayer::Org,
                             "team" => KnowledgeLayer::Team,
                             "project" => KnowledgeLayer::Project,
-                            _ => return true
+                            _ => return true,
                         };
                         let inner_path = parts[1..].join("/");
                         affected.push((layer, inner_path));
@@ -163,58 +163,94 @@ impl KnowledgeRepository for GitRepository {
             },
             None,
             None,
-            None
+            None,
         )?;
 
         Ok(affected)
     }
 
-    #[tracing::instrument(skip(self, ctx), fields(path = %path, layer = ?layer, tenant = %ctx.tenant_id.as_str()))]
     async fn get(
         &self,
         ctx: mk_core::types::TenantContext,
         layer: KnowledgeLayer,
-        path: &str
+        path: &str,
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
         let full_path = self.resolve_path(&ctx, layer, path);
         if !full_path.exists() {
             return Ok(None);
         }
 
+        let metadata_path = full_path.with_extension("metadata.json");
+
         let content = tokio::fs::read_to_string(&full_path).await?;
-        let repo = Repository::open(&self.root_path)?;
 
-        let mut revwalk = repo.revwalk()?;
-        revwalk.push_head().ok();
+        let commit_hash = {
+            let repo = Repository::open(&self.root_path)?;
+            let mut revwalk = repo.revwalk()?;
+            revwalk.push_head().ok();
+            revwalk.next().transpose()?.map(|id| id.to_string())
+        };
 
-        let commit_hash = revwalk.next().transpose()?.map(|id| id.to_string());
+        let (kind, status, metadata, author, updated_at) = if metadata_path.exists() {
+            let meta_content = tokio::fs::read_to_string(&metadata_path).await?;
+            let meta: serde_json::Value = serde_json::from_str(&meta_content)?;
+            (
+                serde_json::from_value(meta["kind"].clone()).unwrap_or(KnowledgeType::Spec),
+                serde_json::from_value(meta["status"].clone())
+                    .unwrap_or(mk_core::types::KnowledgeStatus::Accepted),
+                serde_json::from_value(meta["metadata"].clone()).unwrap_or_default(),
+                serde_json::from_value(meta["author"].clone()).unwrap_or_default(),
+                meta["updated_at"]
+                    .as_i64()
+                    .unwrap_or_else(|| chrono::Utc::now().timestamp()),
+            )
+        } else {
+            (
+                KnowledgeType::Spec,
+                mk_core::types::KnowledgeStatus::Accepted,
+                std::collections::HashMap::new(),
+                None,
+                chrono::Utc::now().timestamp(),
+            )
+        };
 
         Ok(Some(KnowledgeEntry {
             path: path.to_string(),
             content,
             layer,
-            kind: KnowledgeType::Spec,
-            status: mk_core::types::KnowledgeStatus::Accepted,
-            metadata: std::collections::HashMap::new(),
+            kind,
+            status,
+            metadata,
             commit_hash,
-            author: None,
-            updated_at: chrono::Utc::now().timestamp()
+            author,
+            updated_at,
         }))
     }
 
-    #[tracing::instrument(skip(self, ctx, entry), fields(path = %entry.path, layer = ?entry.layer, tenant = %ctx.tenant_id.as_str()))]
     async fn store(
         &self,
         ctx: mk_core::types::TenantContext,
         entry: KnowledgeEntry,
-        message: &str
+        message: &str,
     ) -> Result<String, Self::Error> {
         let full_path = self.resolve_path(&ctx, entry.layer, &entry.path);
+        let metadata_path = full_path.with_extension("metadata.json");
+
         if let Some(parent) = full_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
 
         tokio::fs::write(&full_path, entry.content).await?;
+
+        let meta = serde_json::json!({
+            "kind": entry.kind,
+            "status": entry.status,
+            "metadata": entry.metadata,
+            "author": entry.author,
+            "updated_at": entry.updated_at,
+        });
+        tokio::fs::write(&metadata_path, serde_json::to_string(&meta)?).await?;
+
         self.commit(message)
     }
 
@@ -222,14 +258,14 @@ impl KnowledgeRepository for GitRepository {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: KnowledgeLayer,
-        prefix: &str
+        prefix: &str,
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         let tenant_path = self.root_path.join(ctx.tenant_id.as_str());
         let layer_path = match layer {
             KnowledgeLayer::Company => tenant_path.join("company"),
             KnowledgeLayer::Org => tenant_path.join("org"),
             KnowledgeLayer::Team => tenant_path.join("team"),
-            KnowledgeLayer::Project => tenant_path.join("project")
+            KnowledgeLayer::Project => tenant_path.join("project"),
         };
 
         if !layer_path.exists() {
@@ -240,19 +276,22 @@ impl KnowledgeRepository for GitRepository {
         for entry in WalkDir::new(&layer_path)
             .into_iter()
             .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
+            .filter(|e| {
+                e.file_type().is_file() && !e.path().to_string_lossy().ends_with(".metadata.json")
+            })
         {
             let path = entry.path();
             let relative_path = path
                 .strip_prefix(&layer_path)
                 .map_err(|_| RepositoryError::InvalidPath(path.to_string_lossy().into_owned()))?;
 
-            if relative_path.to_string_lossy().starts_with(prefix)
-                && let Some(ke) = self
+            if relative_path.to_string_lossy().starts_with(prefix) {
+                if let Some(ke) = self
                     .get(ctx.clone(), layer, &relative_path.to_string_lossy())
                     .await?
-            {
-                entries.push(ke);
+                {
+                    entries.push(ke);
+                }
             }
         }
 
@@ -264,11 +303,16 @@ impl KnowledgeRepository for GitRepository {
         ctx: mk_core::types::TenantContext,
         layer: KnowledgeLayer,
         path: &str,
-        message: &str
+        message: &str,
     ) -> Result<String, Self::Error> {
         let full_path = self.resolve_path(&ctx, layer, path);
+        let metadata_path = full_path.with_extension("metadata.json");
+
         if full_path.exists() {
             tokio::fs::remove_file(full_path).await?;
+            if metadata_path.exists() {
+                tokio::fs::remove_file(metadata_path).await?;
+            }
             self.commit(message)
         } else {
             Ok(String::new())
@@ -280,7 +324,7 @@ impl KnowledgeRepository for GitRepository {
         ctx: mk_core::types::TenantContext,
         query: &str,
         layers: Vec<KnowledgeLayer>,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         let mut results = Vec::new();
         for layer in layers {
@@ -324,7 +368,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         };
 
         repo.store(ctx.clone(), entry.clone(), "initial commit")
@@ -334,7 +378,9 @@ mod tests {
             .get(ctx.clone(), KnowledgeLayer::Project, "test.md")
             .await?;
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().content, "hello world");
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.content, "hello world");
+        assert_eq!(retrieved.status, mk_core::types::KnowledgeStatus::Draft);
 
         let list = repo.list(ctx.clone(), KnowledgeLayer::Project, "").await?;
         assert_eq!(list.len(), 1);
@@ -343,7 +389,7 @@ mod tests {
             ctx.clone(),
             KnowledgeLayer::Project,
             "test.md",
-            "delete file"
+            "delete file",
         )
         .await?;
         let after_delete = repo.get(ctx, KnowledgeLayer::Project, "test.md").await?;
@@ -374,13 +420,11 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         };
 
-        // Store for Tenant A
         repo.store(ctx_a.clone(), entry, "tenant a commit").await?;
 
-        // Try to retrieve with Tenant B context
         let retrieved_b = repo
             .get(ctx_b.clone(), KnowledgeLayer::Project, "secret.md")
             .await?;
@@ -389,14 +433,12 @@ mod tests {
             "Tenant B should not see Tenant A data"
         );
 
-        // Verify Tenant A can still see it
         let retrieved_a = repo
             .get(ctx_a.clone(), KnowledgeLayer::Project, "secret.md")
             .await?;
         assert!(retrieved_a.is_some());
         assert_eq!(retrieved_a.unwrap().content, "tenant a secret");
 
-        // List verification
         let list_b = repo.list(ctx_b, KnowledgeLayer::Project, "").await?;
         assert!(list_b.is_empty(), "Tenant B list should be empty");
 

@@ -38,3 +38,5 @@ sqlx.workspace = true
 
 [dev-dependencies]
 memory.workspace = true
+testcontainers.workspace = true
+testcontainers-modules = { workspace = true, features = ["postgres"] }

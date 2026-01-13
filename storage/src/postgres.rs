@@ -465,7 +465,7 @@ impl PostgresBackend {
         unit_id: &str,
         policy: &mk_core::types::Policy,
     ) -> Result<(), PostgresError> {
-        let exists: Option<(i64,)> =
+        let exists: Option<(i32,)> =
             sqlx::query_as("SELECT 1 FROM organizational_units WHERE id = $1 AND tenant_id = $2")
                 .bind(unit_id)
                 .bind(ctx.tenant_id.as_str())
