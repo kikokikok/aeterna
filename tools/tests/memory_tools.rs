@@ -11,7 +11,7 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
     // GIVEN a MemoryManager and tools
     let memory_manager = Arc::new(
         MemoryManager::new()
-            .with_embedding_service(Arc::new(memory::embedding::MockEmbeddingService::new(1536)))
+            .with_embedding_service(Arc::new(memory::embedding::MockEmbeddingService::new(1536))),
     );
     memory_manager
         .register_provider(MemoryLayer::User, Box::new(MockProvider::new()))
@@ -21,6 +21,11 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
     let search_tool = MemorySearchTool::new(memory_manager.clone());
     let delete_tool = MemoryDeleteTool::new(memory_manager.clone());
 
+    let tenant_context = json!({
+        "tenant_id": "test-tenant",
+        "user_id": "test-user"
+    });
+
     // WHEN adding memory
     let add_resp = add_tool
         .call(json!({
@@ -29,7 +34,8 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
             "identifiers": {
                 "user_id": "test_user_123"
             },
-            "tags": ["coding"]
+            "tags": ["coding"],
+            "tenantContext": tenant_context
         }))
         .await?;
 
@@ -40,7 +46,8 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
     // WHEN searching memory
     let search_resp = search_tool
         .call(json!({
-            "query": "rust"
+            "query": "rust",
+            "tenantContext": tenant_context
         }))
         .await?;
 
@@ -53,7 +60,8 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
     let delete_resp = delete_tool
         .call(json!({
             "memory_id": memory_id,
-            "layer": "user"
+            "layer": "user",
+            "tenantContext": tenant_context
         }))
         .await?;
 
@@ -63,7 +71,8 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
     // AND search should return empty
     let search_resp = search_tool
         .call(json!({
-            "query": "rust"
+            "query": "rust",
+            "tenantContext": tenant_context
         }))
         .await?;
     assert_eq!(search_resp["totalCount"], 0);

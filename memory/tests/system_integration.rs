@@ -5,7 +5,7 @@
 
 use memory::manager::MemoryManager;
 use memory::providers::qdrant::QdrantProvider;
-use mk_core::types::{MemoryEntry, MemoryLayer};
+use mk_core::types::{MemoryEntry, MemoryLayer, TenantContext};
 use qdrant_client::{Qdrant, config::QdrantConfig};
 use std::collections::HashMap;
 use storage::postgres::PostgresBackend;
@@ -13,10 +13,14 @@ use storage::redis::RedisStorage;
 use testcontainers::{
     ContainerAsync, GenericImage,
     core::{ContainerPort, WaitFor},
-    runners::AsyncRunner
+    runners::AsyncRunner,
 };
 use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::redis::Redis;
+
+fn test_ctx() -> TenantContext {
+    TenantContext::default()
+}
 
 async fn setup_postgres() -> Result<(ContainerAsync<Postgres>, String), Box<dyn std::error::Error>>
 {
@@ -43,7 +47,7 @@ async fn setup_qdrant() -> Result<(ContainerAsync<GenericImage>, String), Box<dy
     let container = GenericImage::new("qdrant/qdrant", "latest")
         .with_exposed_port(ContainerPort::Tcp(6334))
         .with_wait_for(WaitFor::message_on_stdout(
-            "Qdrant is ready to accept connections"
+            "Qdrant is ready to accept connections",
         ))
         .start()
         .await?;
@@ -53,6 +57,7 @@ async fn setup_qdrant() -> Result<(ContainerAsync<GenericImage>, String), Box<dy
 }
 
 #[tokio::test]
+#[ignore = "requires Docker with PostgreSQL, Redis, and Qdrant containers"]
 async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>> {
     let postgres_setup = setup_postgres().await;
     let redis_setup = setup_redis().await;
@@ -92,16 +97,18 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         layer: MemoryLayer::User,
         metadata: HashMap::new(),
         created_at: 1736400000,
-        updated_at: 1736400000
+        updated_at: 1736400000,
     };
 
+    let ctx = test_ctx();
+
     manager
-        .add_to_layer(MemoryLayer::User, entry.clone())
+        .add_to_layer(ctx.clone(), MemoryLayer::User, entry.clone())
         .await
         .map_err(|e| e.to_string())?;
 
     let retrieved = manager
-        .get_from_layer(MemoryLayer::User, "system_msg_1")
+        .get_from_layer(ctx.clone(), MemoryLayer::User, "system_msg_1")
         .await
         .map_err(|e| e.to_string())?;
     assert!(retrieved.is_some());
@@ -109,7 +116,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
     assert_eq!(retrieved.content, entry.content);
 
     let search_results = manager
-        .search_hierarchical(vec![0.1; 128], 1, HashMap::new())
+        .search_hierarchical(ctx.clone(), vec![0.1; 128], 1, HashMap::new())
         .await
         .map_err(|e| e.to_string())?;
     assert_eq!(search_results.len(), 1);
@@ -126,12 +133,12 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
             m.insert("access_count".to_string(), serde_json::json!(10));
             m.insert(
                 "last_accessed_at".to_string(),
-                serde_json::json!(chrono::Utc::now().timestamp())
+                serde_json::json!(chrono::Utc::now().timestamp()),
             );
             m
         },
         created_at: 1736400000,
-        updated_at: 1736400000
+        updated_at: 1736400000,
     };
 
     let session_qdrant_client = Qdrant::new(QdrantConfig::from_url(&qdrant_url))?;
@@ -158,19 +165,19 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         .await;
 
     manager
-        .add_to_layer(MemoryLayer::Session, session_entry)
+        .add_to_layer(ctx.clone(), MemoryLayer::Session, session_entry)
         .await
         .map_err(|e| e.to_string())?;
 
     let promoted_ids = manager
-        .promote_important_memories(MemoryLayer::Session)
+        .promote_important_memories(ctx.clone(), MemoryLayer::Session)
         .await
         .map_err(|e| e.to_string())?;
     assert_eq!(promoted_ids.len(), 1);
     assert!(promoted_ids[0].contains("session_important_promoted"));
 
     let promoted_entry = manager
-        .get_from_layer(MemoryLayer::Project, &promoted_ids[0])
+        .get_from_layer(ctx, MemoryLayer::Project, &promoted_ids[0])
         .await
         .map_err(|e| e.to_string())?;
     assert!(promoted_entry.is_some());

@@ -9,7 +9,7 @@
 //! 4. Default values (lowest priority)
 
 use crate::config::{
-    Config, ObservabilityConfig, PostgresConfig, QdrantConfig, RedisConfig, SyncConfig, ToolConfig
+    Config, ObservabilityConfig, PostgresConfig, QdrantConfig, RedisConfig, SyncConfig, ToolConfig,
 };
 
 /// Merge multiple configuration sources with precedence.
@@ -45,7 +45,7 @@ pub fn merge_configs(
     env_config: Config,
     env_source_name: &str,
     cli_config: Option<Config>,
-    cli_source_name: &str
+    cli_source_name: &str,
 ) -> Config {
     let mut config = defaults;
 
@@ -67,7 +67,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_postgres,
         &override_config.providers.postgres,
         source_name,
-        &mut changes
+        &mut changes,
     );
     if !changes.is_empty() {
         base.providers.postgres = temp_postgres;
@@ -79,7 +79,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_qdrant,
         &override_config.providers.qdrant,
         source_name,
-        &mut qdrant_changes
+        &mut qdrant_changes,
     );
     if !qdrant_changes.is_empty() {
         base.providers.qdrant = temp_qdrant;
@@ -92,7 +92,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_redis,
         &override_config.providers.redis,
         source_name,
-        &mut redis_changes
+        &mut redis_changes,
     );
     if !redis_changes.is_empty() {
         base.providers.redis = temp_redis;
@@ -105,7 +105,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_sync,
         &override_config.sync,
         source_name,
-        &mut sync_changes
+        &mut sync_changes,
     );
     if !sync_changes.is_empty() {
         base.sync = temp_sync;
@@ -118,7 +118,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_tools,
         &override_config.tools,
         source_name,
-        &mut tool_changes
+        &mut tool_changes,
     );
     if !tool_changes.is_empty() {
         base.tools = temp_tools;
@@ -131,7 +131,7 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         &mut temp_obs,
         &override_config.observability,
         source_name,
-        &mut obs_changes
+        &mut obs_changes,
     );
     if !obs_changes.is_empty() {
         base.observability = temp_obs;
@@ -149,7 +149,7 @@ fn merge_postgres(
     base: &mut PostgresConfig,
     override_config: &PostgresConfig,
     _source: &str,
-    changes: &mut Vec<String>
+    changes: &mut Vec<String>,
 ) {
     if override_config.host != "localhost" && override_config.host != base.host {
         changes.push(format!(
@@ -205,7 +205,7 @@ fn merge_qdrant(
     base: &mut QdrantConfig,
     override_config: &QdrantConfig,
     _source: &str,
-    changes: &mut Vec<String>
+    changes: &mut Vec<String>,
 ) {
     if override_config.host != "localhost" && override_config.host != base.host {
         changes.push(format!("providers.qdrant.host = {}", override_config.host));
@@ -239,7 +239,7 @@ fn merge_redis(
     base: &mut RedisConfig,
     override_config: &RedisConfig,
     _source: &str,
-    changes: &mut Vec<String>
+    changes: &mut Vec<String>,
 ) {
     if override_config.host != "localhost" && override_config.host != base.host {
         changes.push(format!("providers.redis.host = {}", override_config.host));
@@ -275,7 +275,7 @@ fn merge_sync(
     base: &mut SyncConfig,
     override_config: &SyncConfig,
     _source: &str,
-    changes: &mut Vec<String>
+    changes: &mut Vec<String>,
 ) {
     if override_config.enabled != base.enabled {
         changes.push(format!("sync.enabled = {}", override_config.enabled));
@@ -317,7 +317,7 @@ fn merge_tools(
     base: &mut ToolConfig,
     override_config: &ToolConfig,
     _source: &str,
-    changes: &mut Vec<String>
+    changes: &mut Vec<String>,
 ) {
     if override_config.enabled != base.enabled {
         changes.push(format!("tools.enabled = {}", override_config.enabled));
@@ -357,7 +357,7 @@ fn merge_observability(
     base: &mut ObservabilityConfig,
     override_config: &ObservabilityConfig,
     _source: &str,
-    changes: &mut Vec<String>
+    changes: &mut Vec<String>,
 ) {
     if override_config.metrics_enabled != base.metrics_enabled {
         changes.push(format!(
@@ -439,7 +439,7 @@ mod tests {
             env_config,
             "env",
             None,
-            "cli"
+            "cli",
         );
 
         assert_eq!(merged.providers.postgres.host, "file_host");
@@ -536,7 +536,7 @@ mod tests {
             env_config,
             "env",
             Some(cli_config),
-            "cli"
+            "cli",
         );
 
         assert_eq!(merged.providers.postgres.host, "cli_host");
@@ -598,14 +598,14 @@ mod tests {
             metrics_enabled: true,
             tracing_enabled: true,
             logging_level: "info".to_string(),
-            metrics_port: 9090
+            metrics_port: 9090,
         };
 
         let override_config = ObservabilityConfig {
             metrics_enabled: false,
             tracing_enabled: false,
             logging_level: "debug".to_string(),
-            metrics_port: 9999
+            metrics_port: 9999,
         };
 
         let mut changes = Vec::new();
@@ -627,7 +627,7 @@ mod tests {
             username: "postgres".to_string(),
             password: "".to_string(),
             pool_size: 10,
-            timeout_seconds: 30
+            timeout_seconds: 30,
         };
 
         let override_config = PostgresConfig {
@@ -637,7 +637,7 @@ mod tests {
             username: "postgres".to_string(),
             password: "".to_string(),
             pool_size: 10,
-            timeout_seconds: 30
+            timeout_seconds: 30,
         };
 
         let mut changes = Vec::new();
@@ -698,7 +698,7 @@ mod tests {
             env_config,
             "env",
             None,
-            "cli"
+            "cli",
         );
 
         assert_eq!(merged, Config::default());
@@ -751,7 +751,7 @@ mod tests {
             env_config,
             "env",
             None,
-            "cli"
+            "cli",
         );
 
         assert_eq!(merged.providers.postgres.host, "file_host");

@@ -1,128 +1,340 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use strum::{Display, EnumString};
+use utoipa::ToSchema;
 use validator::Validate;
 
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum Role {
+    Developer,
+    TechLead,
+    Architect,
+    Admin,
+    Agent,
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "camelCase")]
+pub enum UnitType {
+    Company,
+    Organization,
+    Team,
+    Project,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OrganizationalUnit {
+    pub id: String,
+    pub name: String,
+    pub unit_type: UnitType,
+    pub parent_id: Option<String>,
+    pub tenant_id: TenantId,
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, JsonSchema, PartialOrd, Ord,
+)]
+#[serde(transparent)]
+pub struct TenantId(String);
+
+impl TenantId {
+    pub fn new(id: String) -> Option<Self> {
+        if id.is_empty() || id.len() > 100 {
+            None
+        } else {
+            Some(Self(id))
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Display for TenantId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Default for TenantId {
+    fn default() -> Self {
+        Self("default".to_string())
+    }
+}
+
+impl std::str::FromStr for TenantId {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s.to_string()).ok_or_else(|| anyhow::anyhow!("Invalid tenant ID"))
+    }
+}
+
+impl Default for TenantContext {
+    fn default() -> Self {
+        Self {
+            tenant_id: TenantId::default(),
+            user_id: UserId::default(),
+            agent_id: None,
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, JsonSchema, PartialOrd, Ord,
+)]
+#[serde(transparent)]
+pub struct UserId(String);
+
+impl UserId {
+    pub fn new(id: String) -> Option<Self> {
+        if id.is_empty() || id.len() > 100 {
+            None
+        } else {
+            Some(Self(id))
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Display for UserId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::str::FromStr for UserId {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s.to_string()).ok_or_else(|| anyhow::anyhow!("Invalid user ID"))
+    }
+}
+
+impl Default for UserId {
+    fn default() -> Self {
+        Self("default".to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+pub struct TenantContext {
+    pub tenant_id: TenantId,
+    pub user_id: UserId,
+    pub agent_id: Option<String>,
+}
+
+impl TenantContext {
+    pub fn new(tenant_id: TenantId, user_id: UserId) -> Self {
+        Self {
+            tenant_id,
+            user_id,
+            agent_id: None,
+        }
+    }
+
+    pub fn with_agent(tenant_id: TenantId, user_id: UserId, agent_id: String) -> Self {
+        Self {
+            tenant_id,
+            user_id,
+            agent_id: Some(agent_id),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+pub struct HierarchyPath {
+    pub company: String,
+    pub org: Option<String>,
+    pub team: Option<String>,
+    pub project: Option<String>,
+}
+
+impl HierarchyPath {
+    pub fn company(id: String) -> Self {
+        Self {
+            company: id,
+            org: None,
+            team: None,
+            project: None,
+        }
+    }
+
+    pub fn org(company: String, id: String) -> Self {
+        Self {
+            company,
+            org: Some(id),
+            team: None,
+            project: None,
+        }
+    }
+
+    pub fn team(company: String, org: String, id: String) -> Self {
+        Self {
+            company,
+            org: Some(org),
+            team: Some(id),
+            project: None,
+        }
+    }
+
+    pub fn project(company: String, org: String, team: String, id: String) -> Self {
+        Self {
+            company,
+            org: Some(org),
+            team: Some(team),
+            project: Some(id),
+        }
+    }
+
+    pub fn depth(&self) -> usize {
+        if self.project.is_some() {
+            4
+        } else if self.team.is_some() {
+            3
+        } else if self.org.is_some() {
+            2
+        } else {
+            1
+        }
+    }
+
+    pub fn path_string(&self) -> String {
+        let mut parts = vec![self.company.clone()];
+        if let Some(o) = &self.org {
+            parts.push(o.clone());
+        }
+        if let Some(t) = &self.team {
+            parts.push(t.clone());
+        }
+        if let Some(p) = &self.project {
+            parts.push(p.clone());
+        }
+        parts.join(" > ")
+    }
+}
+
+impl Role {
+    #[must_use]
+    pub fn precedence(&self) -> u8 {
+        match self {
+            Role::Admin => 4,
+            Role::Architect => 3,
+            Role::TechLead => 2,
+            Role::Developer => 1,
+            Role::Agent => 0,
+        }
+    }
+
+    #[must_use]
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Role::Developer => "Developer",
+            Role::TechLead => "Tech Lead",
+            Role::Architect => "Architect",
+            Role::Admin => "Admin",
+            Role::Agent => "Agent",
+        }
+    }
+}
+
 /// Knowledge types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum KnowledgeType {
-    /// Architecture Decision Records
     Adr,
-
-    /// Policy documents
     Policy,
-
-    /// Design patterns
     Pattern,
-
-    /// Specifications
-    Spec
+    Spec,
 }
 
 /// Knowledge status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum KnowledgeStatus {
-    /// Initial draft state
     Draft,
-
-    /// Proposed change
     Proposed,
-
-    /// Accepted/Active state
     Accepted,
-
-    /// Deprecated but still present
     Deprecated,
-
-    /// Superseded by a newer item
-    Superseded
+    Superseded,
 }
 
-/// Knowledge layers for hierarchical organization
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    ToSchema,
+    PartialOrd,
+    Ord,
+    JsonSchema,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum KnowledgeLayer {
-    /// Company-wide knowledge
     Company,
-
-    /// Organization-level knowledge
     Org,
-
-    /// Team-specific knowledge
     Team,
-
-    /// Project-specific knowledge
-    Project
+    Project,
 }
 
 /// Constraint severity levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ConstraintSeverity {
-    /// Informational only
     Info,
-
-    /// Warning level
     Warn,
-
-    /// Blocking violation
-    Block
+    Block,
 }
 
 /// Constraint operators
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ConstraintOperator {
-    /// Must use this item
     MustUse,
-
-    /// Must not use this item
     MustNotUse,
-
-    /// Must match pattern
     MustMatch,
-
-    /// Must not match pattern
     MustNotMatch,
-
-    /// Must exist
     MustExist,
-
-    /// Must not exist
-    MustNotExist
+    MustNotExist,
 }
 
 /// Constraint targets
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ConstraintTarget {
-    /// File-based constraint
     File,
-
-    /// Code-based constraint
     Code,
-
-    /// Dependency-based constraint
     Dependency,
-
-    /// Import-based constraint
     Import,
-
-    /// Config-based constraint
-    Config
+    Config,
 }
 
 /// Memory layers for hierarchical storage
-///
-/// 7-layer hierarchy with precedence rules:
-/// - Priority 1 (highest): agent
-/// - Priority 2: user
-/// - Priority 3: session
-/// - Priority 4: project
-/// - Priority 5: team
-/// - Priority 6: org
-/// - Priority 7 (lowest): company
 #[derive(
     Debug,
     Clone,
@@ -135,33 +347,20 @@ pub enum ConstraintTarget {
     JsonSchema,
     strum::EnumString,
     strum::Display,
+    ToSchema,
 )]
 #[serde(rename_all = "camelCase")]
 pub enum MemoryLayer {
-    /// Per-agent instance (most specific)
     Agent,
-
-    /// Cross-session user data
     User,
-
-    /// Single conversation context
     Session,
-
-    /// Project-wide persistent data
     Project,
-
-    /// Team-shared knowledge
     Team,
-
-    /// Organization-level policies
     Org,
-
-    /// Company-wide standards
-    Company
+    Company,
 }
 
 impl MemoryLayer {
-    /// Returns precedence value (1=highest, 7=lowest)
     #[must_use]
     pub fn precedence(&self) -> u8 {
         match self {
@@ -171,11 +370,10 @@ impl MemoryLayer {
             MemoryLayer::Project => 4,
             MemoryLayer::Team => 5,
             MemoryLayer::Org => 6,
-            MemoryLayer::Company => 7
+            MemoryLayer::Company => 7,
         }
     }
 
-    /// Returns layer display name
     #[must_use]
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -185,12 +383,14 @@ impl MemoryLayer {
             MemoryLayer::Project => "Project",
             MemoryLayer::Team => "Team",
             MemoryLayer::Org => "Organization",
-            MemoryLayer::Company => "Company"
+            MemoryLayer::Company => "Company",
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, Validate, Default)]
+#[derive(
+    Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, Validate, Default, ToSchema,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerIdentifiers {
     #[validate(custom(function = "validate_agent_id"))]
@@ -206,92 +406,10 @@ pub struct LayerIdentifiers {
     #[validate(custom(function = "validate_org_id"))]
     pub org_id: Option<String>,
     #[validate(custom(function = "validate_company_id"))]
-    pub company_id: Option<String>
-}
-#[allow(dead_code)]
-fn validate_agent_id(agent_id: &&String) -> Result<(), validator::ValidationError> {
-    if agent_id.is_empty() {
-        return Err(validator::ValidationError::new("agent_id cannot be empty"));
-    }
-    if agent_id.len() > 100 {
-        return Err(validator::ValidationError::new("agent_id too long"));
-    }
-    Ok(())
+    pub company_id: Option<String>,
 }
 
-#[allow(dead_code)]
-fn validate_user_id(user_id: &&String) -> Result<(), validator::ValidationError> {
-    if user_id.is_empty() {
-        return Err(validator::ValidationError::new("user_id cannot be empty"));
-    }
-    if user_id.len() > 100 {
-        return Err(validator::ValidationError::new("user_id too long"));
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn validate_session_id(session_id: &&String) -> Result<(), validator::ValidationError> {
-    if session_id.is_empty() {
-        return Err(validator::ValidationError::new(
-            "session_id cannot be empty"
-        ));
-    }
-    if session_id.len() > 100 {
-        return Err(validator::ValidationError::new("session_id too long"));
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn validate_project_id(project_id: &&String) -> Result<(), validator::ValidationError> {
-    if project_id.is_empty() {
-        return Err(validator::ValidationError::new(
-            "project_id cannot be empty"
-        ));
-    }
-    if project_id.len() > 100 {
-        return Err(validator::ValidationError::new("project_id too long"));
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn validate_team_id(team_id: &&String) -> Result<(), validator::ValidationError> {
-    if team_id.is_empty() {
-        return Err(validator::ValidationError::new("team_id cannot be empty"));
-    }
-    if team_id.len() > 100 {
-        return Err(validator::ValidationError::new("team_id too long"));
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn validate_org_id(org_id: &&String) -> Result<(), validator::ValidationError> {
-    if org_id.is_empty() {
-        return Err(validator::ValidationError::new("org_id cannot be empty"));
-    }
-    if org_id.len() > 100 {
-        return Err(validator::ValidationError::new("org_id too long"));
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn validate_company_id(company_id: &&String) -> Result<(), validator::ValidationError> {
-    if company_id.is_empty() {
-        return Err(validator::ValidationError::new(
-            "company_id cannot be empty"
-        ));
-    }
-    if company_id.len() > 100 {
-        return Err(validator::ValidationError::new("company_id too long"));
-    }
-    Ok(())
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryEntry {
     pub id: String,
@@ -300,10 +418,10 @@ pub struct MemoryEntry {
     pub layer: MemoryLayer,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub created_at: i64,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KnowledgeEntry {
     pub path: String,
@@ -314,46 +432,240 @@ pub struct KnowledgeEntry {
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub commit_hash: Option<String>,
     pub author: Option<String>,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Default, ToSchema,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum PolicyMode {
+    #[default]
+    Optional,
+    Mandatory,
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Default, ToSchema,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum RuleMergeStrategy {
+    #[default]
+    Override,
+    Merge,
+    Intersect,
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Default, ToSchema,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum RuleType {
+    #[default]
+    Allow,
+    Deny,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Policy {
     pub id: String,
     pub name: String,
     pub description: Option<String>,
     pub layer: KnowledgeLayer,
+    #[serde(default)]
+    pub mode: PolicyMode,
+    #[serde(default)]
+    pub merge_strategy: RuleMergeStrategy,
     pub rules: Vec<PolicyRule>,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolicyRule {
     pub id: String,
+    #[serde(default)]
+    pub rule_type: RuleType,
     pub target: ConstraintTarget,
     pub operator: ConstraintOperator,
     pub value: serde_json::Value,
     pub severity: ConstraintSeverity,
-    pub message: String
+    pub message: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationResult {
     pub is_valid: bool,
-    pub violations: Vec<PolicyViolation>
+    pub violations: Vec<PolicyViolation>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolicyViolation {
     pub rule_id: String,
     pub policy_id: String,
     pub severity: ConstraintSeverity,
     pub message: String,
-    pub context: std::collections::HashMap<String, serde_json::Value>
+    pub context: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// Governance event types for auditing and real-time updates
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum GovernanceEvent {
+    /// New organizational unit created
+    UnitCreated {
+        unit_id: String,
+        unit_type: UnitType,
+        tenant_id: TenantId,
+        parent_id: Option<String>,
+        timestamp: i64,
+    },
+
+    /// Organizational unit updated
+    UnitUpdated {
+        unit_id: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Organizational unit deleted
+    UnitDeleted {
+        unit_id: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Role assigned to a user for a specific unit
+    RoleAssigned {
+        user_id: UserId,
+        unit_id: String,
+        role: Role,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Role removed from a user
+    RoleRemoved {
+        user_id: UserId,
+        unit_id: String,
+        role: Role,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Policy created or updated
+    PolicyUpdated {
+        policy_id: String,
+        layer: KnowledgeLayer,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Policy deleted
+    PolicyDeleted {
+        policy_id: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Drift detected in a project
+    DriftDetected {
+        project_id: String,
+        tenant_id: TenantId,
+        drift_score: f32,
+        timestamp: i64,
+    },
+}
+
+impl GovernanceEvent {
+    #[must_use]
+    pub fn tenant_id(&self) -> &TenantId {
+        match self {
+            GovernanceEvent::UnitCreated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::UnitUpdated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::UnitDeleted { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RoleAssigned { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RoleRemoved { tenant_id, .. } => tenant_id,
+            GovernanceEvent::PolicyUpdated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::PolicyDeleted { tenant_id, .. } => tenant_id,
+            GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id,
+        }
+    }
+}
+
+/// Drift analysis result
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DriftResult {
+    pub project_id: String,
+    pub tenant_id: TenantId,
+    pub drift_score: f32,
+    pub violations: Vec<PolicyViolation>,
+    pub timestamp: i64,
+}
+
+pub fn validate_user_id(id: &&String) -> Result<(), validator::ValidationError> {
+    if id.is_empty() {
+        return Err(validator::ValidationError::new("User ID cannot be empty"));
+    }
+    if id.len() > 100 {
+        return Err(validator::ValidationError::new("User ID is too long"));
+    }
+    Ok(())
+}
+
+pub fn validate_session_id(id: &&String) -> Result<(), validator::ValidationError> {
+    if id.is_empty() {
+        return Err(validator::ValidationError::new(
+            "Session ID cannot be empty",
+        ));
+    }
+    Ok(())
+}
+
+pub fn validate_project_id(id: &&String) -> Result<(), validator::ValidationError> {
+    if id.is_empty() {
+        return Err(validator::ValidationError::new(
+            "Project ID cannot be empty",
+        ));
+    }
+    Ok(())
+}
+
+pub fn validate_team_id(id: &&String) -> Result<(), validator::ValidationError> {
+    if id.is_empty() {
+        return Err(validator::ValidationError::new("Team ID cannot be empty"));
+    }
+    Ok(())
+}
+
+pub fn validate_org_id(id: &&String) -> Result<(), validator::ValidationError> {
+    if id.is_empty() {
+        return Err(validator::ValidationError::new("Org ID cannot be empty"));
+    }
+    Ok(())
+}
+
+pub fn validate_company_id(id: &&String) -> Result<(), validator::ValidationError> {
+    if id.is_empty() {
+        return Err(validator::ValidationError::new(
+            "Company ID cannot be empty",
+        ));
+    }
+    Ok(())
+}
+
+pub fn validate_agent_id(id: &&String) -> Result<(), validator::ValidationError> {
+    if id.is_empty() {
+        return Err(validator::ValidationError::new("Agent ID cannot be empty"));
+    }
+    if id.len() > 100 {
+        return Err(validator::ValidationError::new("Agent ID is too long"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -441,7 +753,7 @@ mod tests {
             layer: MemoryLayer::User,
             metadata: std::collections::HashMap::new(),
             created_at: 1234567890,
-            updated_at: 1234567890
+            updated_at: 1234567890,
         };
 
         assert_eq!(entry.id, "test_id");
@@ -461,7 +773,7 @@ mod tests {
             commit_hash: Some("abc123".to_string()),
             author: Some("Alice".to_string()),
             status: KnowledgeStatus::Accepted,
-            updated_at: 1234567890
+            updated_at: 1234567890,
         };
 
         assert_eq!(entry.path, "docs/adr/001.md");
@@ -474,11 +786,12 @@ mod tests {
     fn test_policy_creation() {
         let rule = PolicyRule {
             id: "rule_1".to_string(),
+            rule_type: RuleType::Deny,
             target: ConstraintTarget::Dependency,
             operator: ConstraintOperator::MustNotUse,
             value: serde_json::json!("unsafe-lib"),
             severity: ConstraintSeverity::Block,
-            message: "Do not use unsafe libraries".to_string()
+            message: "Do not use unsafe libraries".to_string(),
         };
 
         let policy = Policy {
@@ -486,8 +799,10 @@ mod tests {
             name: "Security Policy".to_string(),
             description: Some("Security constraints".to_string()),
             layer: KnowledgeLayer::Company,
+            mode: PolicyMode::Mandatory,
+            merge_strategy: RuleMergeStrategy::Merge,
             rules: vec![rule],
-            metadata: std::collections::HashMap::new()
+            metadata: std::collections::HashMap::new(),
         };
 
         assert_eq!(policy.id, "policy_1");
@@ -503,12 +818,12 @@ mod tests {
             policy_id: "policy_1".to_string(),
             severity: ConstraintSeverity::Warn,
             message: "Warning message".to_string(),
-            context: std::collections::HashMap::new()
+            context: std::collections::HashMap::new(),
         };
 
         let result = ValidationResult {
             is_valid: false,
-            violations: vec![violation]
+            violations: vec![violation],
         };
 
         assert!(!result.is_valid);
@@ -581,7 +896,7 @@ mod tests {
             project_id: Some("project_789".to_string()),
             team_id: Some("team_abc".to_string()),
             org_id: Some("org_xyz".to_string()),
-            company_id: Some("company_123".to_string())
+            company_id: Some("company_123".to_string()),
         };
 
         let result = identifiers.validate();
@@ -597,7 +912,7 @@ mod tests {
             project_id: None,
             team_id: None,
             org_id: None,
-            company_id: None
+            company_id: None,
         };
 
         let result = identifiers.validate();
@@ -689,25 +1004,196 @@ mod tests {
     }
 
     #[test]
-    fn test_memory_layer_from_str_comprehensive() {
+    fn test_role_serialization() {
+        let architect = Role::Architect;
+        let json = serde_json::to_string(&architect).unwrap();
+        assert_eq!(json, "\"architect\"");
+
+        let deserialized: Role = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, Role::Architect);
+    }
+
+    #[test]
+    fn test_role_precedence() {
+        assert_eq!(Role::Admin.precedence(), 4);
+        assert_eq!(Role::Architect.precedence(), 3);
+        assert_eq!(Role::TechLead.precedence(), 2);
+        assert_eq!(Role::Developer.precedence(), 1);
+        assert_eq!(Role::Agent.precedence(), 0);
+    }
+
+    #[test]
+    fn test_role_display_name() {
+        assert_eq!(Role::Developer.display_name(), "Developer");
+        assert_eq!(Role::TechLead.display_name(), "Tech Lead");
+        assert_eq!(Role::Architect.display_name(), "Architect");
+        assert_eq!(Role::Admin.display_name(), "Admin");
+        assert_eq!(Role::Agent.display_name(), "Agent");
+    }
+
+    #[test]
+    fn test_tenant_id_validation() {
+        assert!(TenantId::new("comp_123".to_string()).is_some());
+        assert!(TenantId::new("".to_string()).is_none());
+        assert!(TenantId::new("a".repeat(101)).is_none());
+    }
+
+    #[test]
+    fn test_user_id_validation() {
+        assert!(UserId::new("user_456".to_string()).is_some());
+        assert!(UserId::new("".to_string()).is_none());
+        assert!(UserId::new("a".repeat(101)).is_none());
+    }
+
+    #[test]
+    fn test_hierarchy_path_depth() {
+        let company = HierarchyPath::company("c1".to_string());
+        assert_eq!(company.depth(), 1);
+
+        let org = HierarchyPath::org("c1".to_string(), "o1".to_string());
+        assert_eq!(org.depth(), 2);
+
+        let team = HierarchyPath::team("c1".to_string(), "o1".to_string(), "t1".to_string());
+        assert_eq!(team.depth(), 3);
+
+        let project = HierarchyPath::project(
+            "c1".to_string(),
+            "o1".to_string(),
+            "t1".to_string(),
+            "p1".to_string(),
+        );
+        assert_eq!(project.depth(), 4);
+    }
+
+    #[test]
+    fn test_hierarchy_path_string() {
+        let project = HierarchyPath::project(
+            "c1".to_string(),
+            "o1".to_string(),
+            "t1".to_string(),
+            "p1".to_string(),
+        );
+        assert_eq!(project.path_string(), "c1 > o1 > t1 > p1");
+    }
+
+    #[test]
+    fn test_tenant_context_creation() {
+        let tenant_id = TenantId::new("c1".to_string()).unwrap();
+        let user_id = UserId::new("u1".to_string()).unwrap();
+        let ctx = TenantContext::new(tenant_id, user_id);
+
+        assert_eq!(ctx.tenant_id.as_str(), "c1");
+        assert_eq!(ctx.user_id.as_str(), "u1");
+        assert!(ctx.agent_id.is_none());
+    }
+
+    #[test]
+    fn test_tenant_context_with_agent() {
+        let tenant_id = TenantId::new("c1".to_string()).unwrap();
+        let user_id = UserId::new("u1".to_string()).unwrap();
+        let ctx = TenantContext::with_agent(tenant_id, user_id, "a1".to_string());
+
+        assert_eq!(ctx.agent_id.unwrap(), "a1");
+    }
+
+    #[test]
+    fn test_tenant_id_display() {
+        let id = TenantId::new("c1".to_string()).unwrap();
+        assert_eq!(format!("{}", id), "c1");
+    }
+
+    #[test]
+    fn test_user_id_display() {
+        let id = UserId::new("u1".to_string()).unwrap();
+        assert_eq!(format!("{}", id), "u1");
+    }
+
+    #[test]
+    fn test_tenant_id_from_str() {
         use std::str::FromStr;
-        assert_eq!(MemoryLayer::from_str("Agent").unwrap(), MemoryLayer::Agent);
-        assert_eq!(MemoryLayer::from_str("User").unwrap(), MemoryLayer::User);
-        assert_eq!(
-            MemoryLayer::from_str("Session").unwrap(),
-            MemoryLayer::Session
-        );
-        assert_eq!(
-            MemoryLayer::from_str("Project").unwrap(),
-            MemoryLayer::Project
-        );
-        assert_eq!(MemoryLayer::from_str("Team").unwrap(), MemoryLayer::Team);
-        assert_eq!(MemoryLayer::from_str("Org").unwrap(), MemoryLayer::Org);
-        assert_eq!(
-            MemoryLayer::from_str("Company").unwrap(),
-            MemoryLayer::Company
-        );
-        assert!(MemoryLayer::from_str("Invalid").is_err());
-        assert!(MemoryLayer::from_str("").is_err());
+        let id = TenantId::from_str("c1").unwrap();
+        assert_eq!(id.as_str(), "c1");
+        assert!(TenantId::from_str("").is_err());
+    }
+
+    #[test]
+    fn test_user_id_from_str() {
+        use std::str::FromStr;
+        let id = UserId::from_str("u1").unwrap();
+        assert_eq!(id.as_str(), "u1");
+        assert!(UserId::from_str("").is_err());
+    }
+
+    #[test]
+    fn test_tenant_id_into_inner() {
+        let id = TenantId::new("c1".to_string()).unwrap();
+        assert_eq!(id.into_inner(), "c1");
+    }
+
+    #[test]
+    fn test_user_id_into_inner() {
+        let id = UserId::new("u1".to_string()).unwrap();
+        assert_eq!(id.into_inner(), "u1");
+    }
+
+    #[test]
+    fn test_governance_event_tenant_id() {
+        let tenant_id = TenantId::new("tenant-1".to_string()).unwrap();
+        let user_id = UserId::new("user-1".to_string()).unwrap();
+
+        let events = vec![
+            GovernanceEvent::UnitCreated {
+                unit_id: "u1".to_string(),
+                unit_type: UnitType::Company,
+                tenant_id: tenant_id.clone(),
+                parent_id: None,
+                timestamp: 0,
+            },
+            GovernanceEvent::UnitUpdated {
+                unit_id: "u1".to_string(),
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::UnitDeleted {
+                unit_id: "u1".to_string(),
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::RoleAssigned {
+                user_id: user_id.clone(),
+                unit_id: "u1".to_string(),
+                role: Role::Admin,
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::RoleRemoved {
+                user_id: user_id.clone(),
+                unit_id: "u1".to_string(),
+                role: Role::Admin,
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::PolicyUpdated {
+                policy_id: "p1".to_string(),
+                layer: KnowledgeLayer::Company,
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::PolicyDeleted {
+                policy_id: "p1".to_string(),
+                tenant_id: tenant_id.clone(),
+                timestamp: 0,
+            },
+            GovernanceEvent::DriftDetected {
+                project_id: "proj-1".to_string(),
+                tenant_id: tenant_id.clone(),
+                drift_score: 0.5,
+                timestamp: 0,
+            },
+        ];
+
+        for event in events {
+            assert_eq!(event.tenant_id().as_str(), "tenant-1");
+        }
     }
 }

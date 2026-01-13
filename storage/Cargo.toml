@@ -22,3 +22,6 @@ chrono = { version = "0.4", features = ["serde"] }
 testcontainers = "0.26"
 testcontainers-modules = { version = "0.14", features = ["postgres", "redis"] }
 tokio-test = "0.4"
+adapters.workspace = true
+knowledge.workspace = true
+config.workspace = true

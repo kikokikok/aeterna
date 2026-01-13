@@ -19,7 +19,7 @@ pub enum SyncError {
     #[error("Internal error: {0}")]
     Internal(String),
     #[error("Other error: {0}")]
-    Other(String)
+    Other(String),
 }
 
 impl From<Box<dyn std::error::Error + Send + Sync>> for SyncError {
@@ -29,3 +29,50 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for SyncError {
 }
 
 pub type Result<T> = std::result::Result<T, SyncError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sync_error_from_boxed_error() {
+        let boxed_err: Box<dyn std::error::Error + Send + Sync> =
+            Box::new(std::io::Error::other("test error"));
+        let sync_err: SyncError = boxed_err.into();
+
+        match sync_err {
+            SyncError::Other(msg) => assert!(msg.contains("test error")),
+            _ => panic!("Expected SyncError::Other"),
+        }
+    }
+
+    #[test]
+    fn test_sync_error_display() {
+        let errors = vec![
+            (
+                SyncError::GovernanceBlock("policy violated".to_string()),
+                "Governance violation: policy violated",
+            ),
+            (
+                SyncError::ConflictDetection("hash mismatch".to_string()),
+                "Conflict detection failed: hash mismatch",
+            ),
+            (
+                SyncError::Persistence("disk full".to_string()),
+                "State persistence failed: disk full",
+            ),
+            (
+                SyncError::Internal("unexpected".to_string()),
+                "Internal error: unexpected",
+            ),
+            (
+                SyncError::Other("unknown".to_string()),
+                "Other error: unknown",
+            ),
+        ];
+
+        for (error, expected) in errors {
+            assert_eq!(error.to_string(), expected);
+        }
+    }
+}

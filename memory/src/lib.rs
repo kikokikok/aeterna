@@ -6,6 +6,7 @@ pub mod embedding;
 pub mod episodic;
 pub mod error;
 pub mod governance;
+pub mod llm;
 pub mod manager;
 pub mod procedural;
 pub mod promotion;

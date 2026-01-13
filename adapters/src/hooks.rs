@@ -11,20 +11,34 @@ impl MemoryContextHooks {
 
 #[async_trait]
 impl ContextHooks for MemoryContextHooks {
-    async fn on_session_start(&self, _session_id: &str) -> anyhow::Result<()> {
+    async fn on_session_start(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _session_id: &str
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
-    async fn on_session_end(&self, _session_id: &str) -> anyhow::Result<()> {
+    async fn on_session_end(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _session_id: &str
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
-    async fn on_message(&self, _session_id: &str, _message: &str) -> anyhow::Result<()> {
+    async fn on_message(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _session_id: &str,
+        _message: &str
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
     async fn on_tool_use(
         &self,
+        _ctx: mk_core::types::TenantContext,
         _session_id: &str,
         _tool_name: &str,
         _params: serde_json::Value
@@ -36,6 +50,7 @@ impl ContextHooks for MemoryContextHooks {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mk_core::types::TenantContext;
     use serde_json::json;
 
     #[test]
@@ -47,18 +62,29 @@ mod tests {
     #[tokio::test]
     async fn test_memory_context_hooks_methods() {
         let hooks = MemoryContextHooks::new();
+        let ctx = TenantContext::default();
 
-        assert!(hooks.on_session_start("test-session").await.is_ok());
-        assert!(hooks.on_session_end("test-session").await.is_ok());
         assert!(
             hooks
-                .on_message("test-session", "test message")
+                .on_session_start(ctx.clone(), "test-session")
                 .await
                 .is_ok()
         );
         assert!(
             hooks
-                .on_tool_use("test-session", "test_tool", json!({}))
+                .on_session_end(ctx.clone(), "test-session")
+                .await
+                .is_ok()
+        );
+        assert!(
+            hooks
+                .on_message(ctx.clone(), "test-session", "test message")
+                .await
+                .is_ok()
+        );
+        assert!(
+            hooks
+                .on_tool_use(ctx, "test-session", "test_tool", json!({}))
                 .await
                 .is_ok()
         );

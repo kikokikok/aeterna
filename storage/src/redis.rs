@@ -1,10 +1,12 @@
 use async_trait::async_trait;
 use errors::StorageError;
+use mk_core::traits::EventPublisher;
+use mk_core::types::GovernanceEvent;
 use redis::AsyncCommands;
+use std::sync::Arc;
 
 pub struct RedisStorage {
-    #[allow(dead_code)]
-    client: redis::Client,
+    client: Arc<redis::Client>,
     connection_manager: redis::aio::ConnectionManager
 }
 
@@ -26,7 +28,7 @@ impl RedisStorage {
                 })?;
 
         Ok(Self {
-            client,
+            client: Arc::new(client),
             connection_manager
         })
     }
@@ -80,15 +82,101 @@ impl RedisStorage {
                 reason: e.to_string()
             })
     }
+    pub fn scoped_key(&self, ctx: &mk_core::types::TenantContext, key: &str) -> String {
+        format!("{}:{}", ctx.tenant_id.as_str(), key)
+    }
+}
+
+#[async_trait]
+impl EventPublisher for RedisStorage {
+    type Error = StorageError;
+
+    async fn publish(&self, event: GovernanceEvent) -> Result<(), Self::Error> {
+        let mut conn = self.connection_manager.clone();
+        let event_json =
+            serde_json::to_string(&event).map_err(|e| StorageError::SerializationError {
+                error_type: "JSON".to_string(),
+                reason: e.to_string()
+            })?;
+
+        let stream_key = format!("governance:events:{}", event.tenant_id());
+        let _: String = conn
+            .xadd(stream_key, "*", &[("event", event_json)])
+            .await
+            .map_err(|e| StorageError::QueryError {
+                backend: "Redis".to_string(),
+                reason: e.to_string()
+            })?;
+
+        Ok(())
+    }
+
+    async fn subscribe(
+        &self,
+        channels: &[&str]
+    ) -> Result<tokio::sync::mpsc::Receiver<GovernanceEvent>, Self::Error> {
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let client = self.client.clone();
+        let stream_keys: Vec<String> = channels.iter().map(|s| s.to_string()).collect();
+
+        tokio::spawn(async move {
+            if let Ok(mut conn) = client.get_connection_manager().await {
+                let mut last_ids: Vec<String> = vec!["$".to_string(); stream_keys.len()];
+
+                loop {
+                    let opts = redis::streams::StreamReadOptions::default()
+                        .block(0)
+                        .count(10);
+
+                    let result: Result<redis::streams::StreamReadReply, redis::RedisError> =
+                        conn.xread_options(&stream_keys, &last_ids, &opts).await;
+
+                    match result {
+                        Ok(reply) => {
+                            for (i, stream) in reply.keys.into_iter().enumerate() {
+                                for record in stream.ids {
+                                    if let Some(event_json) = record.map.get("event") {
+                                        if let Ok(event_str) =
+                                            redis::from_redis_value::<String>(event_json.clone())
+                                        {
+                                            if let Ok(event) =
+                                                serde_json::from_str::<GovernanceEvent>(&event_str)
+                                            {
+                                                if tx.send(event).await.is_err() {
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    last_ids[i] = record.id;
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
+    }
 }
 
 #[async_trait]
 impl mk_core::traits::StorageBackend for RedisStorage {
     type Error = StorageError;
 
-    async fn store(&self, key: &str, value: &[u8]) -> Result<(), Self::Error> {
+    async fn store(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        key: &str,
+        value: &[u8]
+    ) -> Result<(), Self::Error> {
         let mut conn = self.connection_manager.clone();
-        conn.set(key, value)
+        let scoped_key = self.scoped_key(&ctx, key);
+        conn.set(scoped_key, value)
             .await
             .map_err(|e| StorageError::QueryError {
                 backend: "Redis".to_string(),
@@ -96,20 +184,137 @@ impl mk_core::traits::StorageBackend for RedisStorage {
             })
     }
 
-    async fn retrieve(&self, key: &str) -> Result<Option<Vec<u8>>, Self::Error> {
+    async fn retrieve(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<Option<Vec<u8>>, Self::Error> {
         let mut conn = self.connection_manager.clone();
-        conn.get(key).await.map_err(|e| StorageError::QueryError {
-            backend: "Redis".to_string(),
-            reason: e.to_string()
-        })
+        let scoped_key = self.scoped_key(&ctx, key);
+        conn.get(scoped_key)
+            .await
+            .map_err(|e| StorageError::QueryError {
+                backend: "Redis".to_string(),
+                reason: e.to_string()
+            })
     }
 
-    async fn delete(&self, key: &str) -> Result<(), Self::Error> {
-        self.delete_key(key).await
+    async fn delete(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<(), Self::Error> {
+        let scoped_key = self.scoped_key(&ctx, key);
+        self.delete_key(&scoped_key).await
     }
 
-    async fn exists(&self, key: &str) -> Result<bool, Self::Error> {
-        self.exists_key(key).await
+    async fn exists(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        key: &str
+    ) -> Result<bool, Self::Error> {
+        let scoped_key = self.scoped_key(&ctx, key);
+        self.exists_key(&scoped_key).await
+    }
+
+    async fn get_ancestors(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn get_unit_policies(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn create_unit(
+        &self,
+        _unit: &mk_core::types::OrganizationalUnit
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn add_unit_policy(
+        &self,
+        _ctx: &mk_core::types::TenantContext,
+        _unit_id: &str,
+        _policy: &mk_core::types::Policy
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn assign_role(
+        &self,
+        _user_id: &mk_core::types::UserId,
+        _tenant_id: &mk_core::types::TenantId,
+        _unit_id: &str,
+        _role: mk_core::types::Role
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn remove_role(
+        &self,
+        _user_id: &mk_core::types::UserId,
+        _tenant_id: &mk_core::types::TenantId,
+        _unit_id: &str,
+        _role: mk_core::types::Role
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn get_descendants(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _unit_id: &str
+    ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn store_drift_result(
+        &self,
+        _result: mk_core::types::DriftResult
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn get_latest_drift_result(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _project_id: &str
+    ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
+        Ok(None)
+    }
+
+    async fn list_all_units(&self) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn record_job_status(
+        &self,
+        _job_name: &str,
+        _tenant_id: &str,
+        _status: &str,
+        _message: Option<&str>,
+        _started_at: i64,
+        _finished_at: Option<i64>
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn get_governance_events(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        _since_timestamp: i64,
+        _limit: usize
+    ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
+        Ok(Vec::new())
     }
 }
 
@@ -211,7 +416,6 @@ mod tests {
     #[test]
     fn test_method_signatures() {
         // This is a compile-time check
-        use async_trait::async_trait;
 
         // Verify RedisStorage has the expected method signature
         // The existence of the method is verified by compilation

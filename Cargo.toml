@@ -11,7 +11,7 @@ members = [
     "config",
     "utils",
     "errors"
-]
+, "agent-a2a"]
 
 [workspace.lints.rust]
 unused_imports = "warn"
@@ -37,6 +37,7 @@ utils = { path = "./utils" }
 errors = { path = "./errors" }
 
 # Shared dependencies across all crates
+reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0.17"
@@ -52,14 +53,22 @@ tracing = { version = "0.1", features = ["log"] }
 validator = { version = "0.20.0", features = ["derive"] }
 schemars = { version = "0.8" }
 async-trait = "0.1"
+wiremock = "0.6"
 git2 = "0.20.3"
 walkdir = "2.4"
 strum = { version = "0.26", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
+cedar-policy = "4.3"
+utoipa = { version = "5.3", features = ["chrono", "uuid"] }
+utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
 redis = { version = "1.0.2", features = ["tokio-comp", "json", "connection-manager"] }
 regex = "1.10"
+serial_test = "3.2"
+testcontainers = "0.26"
+testcontainers-modules = "0.14"
 metrics = { version = "0.21" }
 metrics-exporter-prometheus = { version = "0.12" }
+sqlx = { version = "0.9.0-alpha.1", features = ["postgres", "runtime-tokio", "tls-native-tls", "json", "uuid", "chrono"] }
 
 [workspace.metadata.tarpaulin]
 all-features = true

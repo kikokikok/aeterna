@@ -1,0 +1,32 @@
+entity type User;
+
+entity type Unit {
+    parent: Unit,
+    tenant_id: String
+};
+
+entity type Role {
+    name: String
+};
+
+action ViewKnowledge, EditKnowledge, DeleteKnowledge, AdministerUnit;
+
+// Allow users to view knowledge if they are members of the unit (or parent units)
+permit (
+    principal,
+    action == Action::"ViewKnowledge",
+    resource
+)
+when {
+    principal in resource.members
+};
+
+// Allow Unit Admins to administer the unit
+permit (
+    principal,
+    action == Action::"AdministerUnit",
+    resource
+)
+when {
+    principal has role && principal.role == Role::"UnitAdmin"
+};
