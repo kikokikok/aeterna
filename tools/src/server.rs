@@ -5,8 +5,8 @@ use crate::governance::{
 };
 use crate::knowledge::{KnowledgeGetTool, KnowledgeListTool, KnowledgeQueryTool};
 use crate::memory::{
-    MemoryAddTool, MemoryCloseTool, MemoryDeleteTool, MemoryFeedbackTool, MemoryReasonTool,
-    MemorySearchTool,
+    GraphNeighborsTool, GraphPathTool, GraphQueryTool, MemoryAddTool, MemoryCloseTool,
+    MemoryDeleteTool, MemoryFeedbackTool, MemoryOptimizeTool, MemoryReasonTool, MemorySearchTool,
 };
 use crate::tools::{ToolDefinition, ToolRegistry};
 use knowledge::governance::GovernanceEngine;
@@ -54,7 +54,11 @@ impl McpServer {
         registry.register(Box::new(MemoryDeleteTool::new(memory_manager.clone())));
         registry.register(Box::new(MemoryCloseTool::new(memory_manager.clone())));
         registry.register(Box::new(MemoryFeedbackTool::new(memory_manager.clone())));
+        registry.register(Box::new(MemoryOptimizeTool::new(memory_manager.clone())));
         registry.register(Box::new(MemoryReasonTool::new(reflective_reasoner)));
+        registry.register(Box::new(GraphQueryTool::new(memory_manager.clone())));
+        registry.register(Box::new(GraphNeighborsTool::new(memory_manager.clone())));
+        registry.register(Box::new(GraphPathTool::new(memory_manager.clone())));
 
         registry.register(Box::new(KnowledgeGetTool::new(
             knowledge_repository.clone(),

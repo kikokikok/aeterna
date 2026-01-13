@@ -22,11 +22,11 @@ pub trait ReflectiveReasoner: Send + Sync {
 }
 
 pub struct DefaultReflectiveReasoner {
-    llm: Arc<dyn LlmService<Error = anyhow::Error>>,
+    llm: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>,
 }
 
 impl DefaultReflectiveReasoner {
-    pub fn new(llm: Arc<dyn LlmService<Error = anyhow::Error>>) -> Self {
+    pub fn new(llm: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>) -> Self {
         Self { llm }
     }
 }
@@ -55,7 +55,11 @@ impl ReflectiveReasoner for DefaultReflectiveReasoner {
             context_summary.unwrap_or("None")
         );
 
-        let response = self.llm.generate(&prompt).await?;
+        let response = self
+            .llm
+            .generate(&prompt)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
 
         // Extract JSON if needed
         let json_str = if let Some(start) = response.find('{') {

@@ -158,7 +158,10 @@ impl QdrantProvider {
             })
             .ok_or("Missing updated_at")?;
 
-        Ok(MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
+        Ok(MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id,
             content,
             embedding: Some(vector),
@@ -470,7 +473,10 @@ mod tests {
     #[test]
     fn test_entry_to_point_missing_embedding() {
         let provider = setup_provider();
-        let entry = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
+        let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "test-id".to_string(),
             content: "test content".to_string(),
             embedding: None,

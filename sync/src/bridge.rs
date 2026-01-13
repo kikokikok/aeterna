@@ -1326,6 +1326,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 1234567890,
+            summaries: HashMap::new(),
         };
 
         let summary = sync_manager.generate_summary(&entry);
@@ -1357,6 +1358,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 1234567890,
+            summaries: HashMap::new(),
         };
 
         let summary = sync_manager.generate_summary(&entry);
@@ -1503,6 +1505,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let memory = Arc::new(MemoryManager::new());
@@ -1528,6 +1531,9 @@ mod tests {
                     content: "[Spec] [Accepted] moved_item.md\n\ncontent".to_string(),
                     embedding: None,
                     layer: mk_core::types::MemoryLayer::Project,
+                    summaries: HashMap::new(),
+                    context_vector: None,
+                    importance_score: None,
                     metadata: HashMap::new(),
                     created_at: 0,
                     updated_at: 0,
@@ -1569,30 +1575,30 @@ mod tests {
         let count = 1000;
         let mut state = SyncState::default();
         let mut repo = MockRepoWithEntries::new();
+        let k_id = "moved_item.md".to_string();
+        let m_id = format!("ptr_{}", k_id);
+        let ctx = TenantContext::default();
 
-        for i in 0..count {
-            let k_id = format!("item_{}.md", i);
-            let m_id = format!("ptr_{}", k_id);
-            state.pointer_mapping.insert(m_id.clone(), k_id.clone());
-            state
-                .knowledge_hashes
-                .insert(k_id.clone(), utils::compute_content_hash("content"));
-            state
-                .knowledge_layers
-                .insert(k_id.clone(), KnowledgeLayer::Project);
+        state.pointer_mapping.insert(m_id.clone(), k_id.clone());
+        state
+            .knowledge_hashes
+            .insert(k_id.clone(), utils::compute_content_hash("content"));
+        state
+            .knowledge_layers
+            .insert(k_id.clone(), KnowledgeLayer::Project);
 
-            repo.add_entry(KnowledgeEntry {
-                path: k_id.clone(),
-                content: "content".to_string(),
-                layer: KnowledgeLayer::Project,
-                kind: KnowledgeType::Spec,
-                status: KnowledgeStatus::Accepted,
-                metadata: HashMap::new(),
-                commit_hash: None,
-                author: None,
-                updated_at: 0,
-            });
-        }
+        repo.add_entry(KnowledgeEntry {
+            path: k_id.clone(),
+            content: "content".to_string(),
+            layer: KnowledgeLayer::Org,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0,
+            summaries: HashMap::new(),
+        });
 
         let memory = Arc::new(MemoryManager::new());
         memory
@@ -1614,6 +1620,9 @@ mod tests {
                         content: "[Spec] [Accepted] item.md\n\ncontent".to_string(),
                         embedding: None,
                         layer: mk_core::types::MemoryLayer::Project,
+                        summaries: HashMap::new(),
+                        context_vector: None,
+                        importance_score: None,
                         metadata: HashMap::new(),
                         created_at: 0,
                         updated_at: 0,
@@ -1854,6 +1863,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         };
 
         let mut state = SyncState::default();
@@ -1898,8 +1908,9 @@ mod tests {
             .insert("deleted.md".to_string(), "some_hash".to_string());
 
         let mut repo = MockRepoWithEntries::new();
+        let k_id = "unchanged.md".to_string();
         repo.add_entry(KnowledgeEntry {
-            path: "unchanged.md".to_string(),
+            path: k_id.clone(),
             content: "content".to_string(),
             layer: KnowledgeLayer::Project,
             kind: KnowledgeType::Spec,
@@ -1908,20 +1919,11 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
+        let k_id = "added.md".to_string();
         repo.add_entry(KnowledgeEntry {
-            path: "updated.md".to_string(),
-            content: "new_content".to_string(),
-            layer: KnowledgeLayer::Project,
-            kind: KnowledgeType::Spec,
-            status: KnowledgeStatus::Accepted,
-            metadata: HashMap::new(),
-            commit_hash: None,
-            author: None,
-            updated_at: 0,
-        });
-        repo.add_entry(KnowledgeEntry {
-            path: "added.md".to_string(),
+            path: k_id.clone(),
             content: "new".to_string(),
             layer: KnowledgeLayer::Project,
             kind: KnowledgeType::Spec,
@@ -1930,6 +1932,20 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
+        });
+        let k_id = "updated.md".to_string();
+        repo.add_entry(KnowledgeEntry {
+            path: k_id.clone(),
+            content: "new_content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager = create_sync_manager_with_state(
@@ -1958,8 +1974,9 @@ mod tests {
             .await;
 
         let mut repo = MockRepoWithEntries::new();
+        let k_id = "test.md".to_string();
         repo.add_entry(KnowledgeEntry {
-            path: "test.md".to_string(),
+            path: k_id.clone(),
             content: "content".to_string(),
             layer: KnowledgeLayer::Project,
             kind: KnowledgeType::Spec,
@@ -1968,6 +1985,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager = SyncManager {
@@ -2012,6 +2030,9 @@ mod tests {
                     content: "content".to_string(),
                     embedding: None,
                     layer: mk_core::types::MemoryLayer::Project,
+                    summaries: HashMap::new(),
+                    context_vector: None,
+                    importance_score: None,
                     metadata: HashMap::new(),
                     created_at: 0,
                     updated_at: 0,
@@ -2086,6 +2107,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager =
@@ -2143,6 +2165,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager =
@@ -2278,6 +2301,9 @@ mod tests {
                     content: "old".to_string(),
                     embedding: None,
                     layer: mk_core::types::MemoryLayer::Project,
+                    summaries: HashMap::new(),
+                    context_vector: None,
+                    importance_score: None,
                     metadata: HashMap::new(),
                     created_at: 0,
                     updated_at: 0,
@@ -2315,6 +2341,7 @@ mod tests {
                         commit_hash: None,
                         author: None,
                         updated_at: 0,
+                        summaries: HashMap::new(),
                     }))
                 } else {
                     Ok(None)
@@ -2413,6 +2440,9 @@ mod tests {
                     content: "content".to_string(),
                     embedding: None,
                     layer: mk_core::types::MemoryLayer::Project,
+                    summaries: HashMap::new(),
+                    context_vector: None,
+                    importance_score: None,
                     metadata: HashMap::new(),
                     created_at: 0,
                     updated_at: 0,
@@ -2760,6 +2790,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager =
@@ -2819,6 +2850,9 @@ mod tests {
                     content: "old".to_string(),
                     embedding: None,
                     layer: mk_core::types::MemoryLayer::Project,
+                    summaries: HashMap::new(),
+                    context_vector: None,
+                    importance_score: None,
                     metadata: HashMap::new(),
                     created_at: 0,
                     updated_at: 0,
@@ -2838,6 +2872,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager =
@@ -2904,6 +2939,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager =
@@ -2942,6 +2978,7 @@ mod tests {
             commit_hash: Some("abc123".to_string()),
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         struct MockRepoWithCommit;

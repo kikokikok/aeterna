@@ -223,6 +223,7 @@ async fn test_sync_governance_telemetry() {
         commit_hash: None,
         author: None,
         updated_at: chrono::Utc::now().timestamp(),
+        summaries: HashMap::new(),
     };
 
     let mut state = SyncState::default();

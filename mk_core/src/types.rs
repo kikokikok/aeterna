@@ -496,6 +496,7 @@ pub enum MemoryOperation {
     Add,
     Update,
     Delete,
+    Retrieve,
     Prune,
     Compress,
     Noop,

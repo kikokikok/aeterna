@@ -678,32 +678,48 @@ impl Default for ObservabilityConfig {
     }
 }
 
-/// Memory system configuration.
-///
-/// # M-CANONICAL-DOCS
-///
-/// ## Purpose
-/// Manages configuration for the memory system, including promotion thresholds.
-///
-/// ## Fields
-/// - `promotion_threshold`: Threshold for memory promotion (default: 0.8,
-///   range: 0.0-1.0)
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
 pub struct MemoryConfig {
-    /// Threshold for memory promotion
     #[serde(default = "default_promotion_threshold")]
     #[validate(range(min = 0.0, max = 1.0))]
     pub promotion_threshold: f32,
+
+    #[serde(default = "default_decay_interval")]
+    #[validate(range(min = 3600, max = 86400))]
+    pub decay_interval_secs: u64,
+
+    #[serde(default = "default_decay_rate")]
+    #[validate(range(min = 0.0, max = 0.5))]
+    pub decay_rate: f32,
+
+    #[serde(default = "default_optimization_trigger_count")]
+    #[validate(range(min = 10, max = 1000))]
+    pub optimization_trigger_count: usize,
 }
 
 fn default_promotion_threshold() -> f32 {
     0.8
 }
 
+fn default_decay_interval() -> u64 {
+    86400 // 24 hours
+}
+
+fn default_decay_rate() -> f32 {
+    0.05 // 5% decay
+}
+
+fn default_optimization_trigger_count() -> usize {
+    100
+}
+
 impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
             promotion_threshold: default_promotion_threshold(),
+            decay_interval_secs: default_decay_interval(),
+            decay_rate: default_decay_rate(),
+            optimization_trigger_count: default_optimization_trigger_count(),
         }
     }
 }

@@ -1,6 +1,6 @@
 ## 1. Memory-R1 Implementation
-- [ ] 1.1 Implement `RewardFunction` for memory trajectory evaluation
-- [ ] 1.2 Add `prune()` and `compress()` methods to `MemoryManager`
+- [x] 1.1 Implement `RewardFunction` for memory trajectory evaluation
+- [x] 1.2 Add `prune()` and `compress()` methods to `MemoryManager`
 - [ ] 1.3 Create `MemoryR1Trainer` for outcome-driven policy updates
 
 ## 2. Dynamic Knowledge Graph

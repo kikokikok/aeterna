@@ -28,7 +28,7 @@ impl MockLlmService {
 
 #[async_trait]
 impl LlmService for MockLlmService {
-    type Error = anyhow::Error;
+    type Error = Box<dyn std::error::Error + Send + Sync>;
 
     async fn generate(&self, prompt: &str) -> Result<String, Self::Error> {
         let responses = self.responses.read().await;
