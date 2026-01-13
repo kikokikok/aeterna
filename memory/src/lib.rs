@@ -11,5 +11,6 @@ pub mod manager;
 pub mod procedural;
 pub mod promotion;
 pub mod providers;
+pub mod reasoning;
 pub mod telemetry;
 pub mod working;

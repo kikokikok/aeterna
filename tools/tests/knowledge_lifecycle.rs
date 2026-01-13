@@ -271,6 +271,9 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
+        Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+            memory::llm::mock::MockLlmService::new(),
+        ))),
         Arc::new(MockAuthService),
         None,
     );
@@ -282,6 +285,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
         metadata: HashMap::new(),
+        summaries: HashMap::new(),
         status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,

@@ -224,6 +224,9 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
         repo,
         storage_backend,
         governance_engine,
+        Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+            memory::llm::mock::MockLlmService::new(),
+        ))),
         auth_service,
         None,
     );
