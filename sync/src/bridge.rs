@@ -1013,6 +1013,9 @@ impl SyncManager {
             content: self.generate_summary_internal(entry, &content),
             embedding: None,
             layer: memory_layer,
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             metadata: metadata_map,
             created_at: chrono::Utc::now().timestamp(),
             updated_at: chrono::Utc::now().timestamp(),
@@ -1323,6 +1326,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 1234567890,
+            summaries: HashMap::new(),
         };
 
         let summary = sync_manager.generate_summary(&entry);
@@ -1354,6 +1358,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 1234567890,
+            summaries: HashMap::new(),
         };
 
         let summary = sync_manager.generate_summary(&entry);
@@ -1500,20 +1505,31 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Org,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Org, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         memory
@@ -1525,6 +1541,9 @@ mod tests {
                     content: "[Spec] [Accepted] moved_item.md\n\ncontent".to_string(),
                     embedding: None,
                     layer: mk_core::types::MemoryLayer::Project,
+                    summaries: HashMap::new(),
+                    context_vector: None,
+                    importance_score: None,
                     metadata: HashMap::new(),
                     created_at: 0,
                     updated_at: 0,
@@ -1566,37 +1585,42 @@ mod tests {
         let count = 1000;
         let mut state = SyncState::default();
         let mut repo = MockRepoWithEntries::new();
+        let k_id = "moved_item.md".to_string();
+        let m_id = format!("ptr_{}", k_id);
+        let ctx = TenantContext::default();
 
-        for i in 0..count {
-            let k_id = format!("item_{}.md", i);
-            let m_id = format!("ptr_{}", k_id);
-            state.pointer_mapping.insert(m_id.clone(), k_id.clone());
-            state
-                .knowledge_hashes
-                .insert(k_id.clone(), utils::compute_content_hash("content"));
-            state
-                .knowledge_layers
-                .insert(k_id.clone(), KnowledgeLayer::Project);
+        state.pointer_mapping.insert(m_id.clone(), k_id.clone());
+        state
+            .knowledge_hashes
+            .insert(k_id.clone(), utils::compute_content_hash("content"));
+        state
+            .knowledge_layers
+            .insert(k_id.clone(), KnowledgeLayer::Project);
 
-            repo.add_entry(KnowledgeEntry {
-                path: k_id.clone(),
-                content: "content".to_string(),
-                layer: KnowledgeLayer::Project,
-                kind: KnowledgeType::Spec,
-                status: KnowledgeStatus::Accepted,
-                metadata: HashMap::new(),
-                commit_hash: None,
-                author: None,
-                updated_at: 0,
-            });
-        }
+        repo.add_entry(KnowledgeEntry {
+            path: k_id.clone(),
+            content: "content".to_string(),
+            layer: KnowledgeLayer::Org,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0,
+            summaries: HashMap::new(),
+        });
 
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         for i in 0..count {
@@ -1611,6 +1635,9 @@ mod tests {
                         content: "[Spec] [Accepted] item.md\n\ncontent".to_string(),
                         embedding: None,
                         layer: mk_core::types::MemoryLayer::Project,
+                        summaries: HashMap::new(),
+                        context_vector: None,
+                        importance_score: None,
                         metadata: HashMap::new(),
                         created_at: 0,
                         updated_at: 0,
@@ -1851,6 +1878,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         };
 
         let mut state = SyncState::default();
@@ -1895,8 +1923,9 @@ mod tests {
             .insert("deleted.md".to_string(), "some_hash".to_string());
 
         let mut repo = MockRepoWithEntries::new();
+        let k_id = "unchanged.md".to_string();
         repo.add_entry(KnowledgeEntry {
-            path: "unchanged.md".to_string(),
+            path: k_id.clone(),
             content: "content".to_string(),
             layer: KnowledgeLayer::Project,
             kind: KnowledgeType::Spec,
@@ -1905,20 +1934,11 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
+        let k_id = "added.md".to_string();
         repo.add_entry(KnowledgeEntry {
-            path: "updated.md".to_string(),
-            content: "new_content".to_string(),
-            layer: KnowledgeLayer::Project,
-            kind: KnowledgeType::Spec,
-            status: KnowledgeStatus::Accepted,
-            metadata: HashMap::new(),
-            commit_hash: None,
-            author: None,
-            updated_at: 0,
-        });
-        repo.add_entry(KnowledgeEntry {
-            path: "added.md".to_string(),
+            path: k_id.clone(),
             content: "new".to_string(),
             layer: KnowledgeLayer::Project,
             kind: KnowledgeType::Spec,
@@ -1927,6 +1947,20 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
+        });
+        let k_id = "updated.md".to_string();
+        repo.add_entry(KnowledgeEntry {
+            path: k_id.clone(),
+            content: "new_content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager = create_sync_manager_with_state(
@@ -1948,15 +1982,21 @@ mod tests {
         let ctx = TenantContext::default();
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let mut repo = MockRepoWithEntries::new();
+        let k_id = "test.md".to_string();
         repo.add_entry(KnowledgeEntry {
-            path: "test.md".to_string(),
+            path: k_id.clone(),
             content: "content".to_string(),
             layer: KnowledgeLayer::Project,
             kind: KnowledgeType::Spec,
@@ -1965,6 +2005,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager = SyncManager {
@@ -1993,10 +2034,15 @@ mod tests {
         let ctx = TenantContext::default();
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let m_id = "ptr_orphaned".to_string();
@@ -2009,6 +2055,9 @@ mod tests {
                     content: "content".to_string(),
                     embedding: None,
                     layer: mk_core::types::MemoryLayer::Project,
+                    summaries: HashMap::new(),
+                    context_vector: None,
+                    importance_score: None,
                     metadata: HashMap::new(),
                     created_at: 0,
                     updated_at: 0,
@@ -2054,10 +2103,15 @@ mod tests {
         let ctx = TenantContext::default();
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "mismatch.md".to_string();
@@ -2083,6 +2137,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager =
@@ -2115,10 +2170,15 @@ mod tests {
         let ctx = TenantContext::default();
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "missing.md".to_string();
@@ -2140,6 +2200,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager =
@@ -2246,10 +2307,15 @@ mod tests {
         let memory = Arc::new(MemoryManager::new());
         let ctx = TenantContext::default();
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "existing.md".to_string();
@@ -2275,6 +2341,9 @@ mod tests {
                     content: "old".to_string(),
                     embedding: None,
                     layer: mk_core::types::MemoryLayer::Project,
+                    summaries: HashMap::new(),
+                    context_vector: None,
+                    importance_score: None,
                     metadata: HashMap::new(),
                     created_at: 0,
                     updated_at: 0,
@@ -2312,6 +2381,7 @@ mod tests {
                         commit_hash: None,
                         author: None,
                         updated_at: 0,
+                        summaries: HashMap::new(),
                     }))
                 } else {
                     Ok(None)
@@ -2382,10 +2452,15 @@ mod tests {
         let memory = Arc::new(MemoryManager::new());
         let ctx = TenantContext::default();
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "deleted.md".to_string();
@@ -2410,6 +2485,9 @@ mod tests {
                     content: "content".to_string(),
                     embedding: None,
                     layer: mk_core::types::MemoryLayer::Project,
+                    summaries: HashMap::new(),
+                    context_vector: None,
+                    importance_score: None,
                     metadata: HashMap::new(),
                     created_at: 0,
                     updated_at: 0,
@@ -2698,10 +2776,15 @@ mod tests {
     async fn test_run_sync_cycle_with_trigger() {
         let memory = Arc::new(MemoryManager::new());
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let sync_manager = SyncManager {
@@ -2731,10 +2814,15 @@ mod tests {
         let memory = Arc::new(MemoryManager::new());
         let ctx = TenantContext::default();
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "deprecated.md".to_string();
@@ -2757,6 +2845,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager =
@@ -2786,16 +2875,26 @@ mod tests {
         let memory = Arc::new(MemoryManager::new());
         let ctx = TenantContext::default();
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Org,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Org, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "moved.md".to_string();
@@ -2816,6 +2915,9 @@ mod tests {
                     content: "old".to_string(),
                     embedding: None,
                     layer: mk_core::types::MemoryLayer::Project,
+                    summaries: HashMap::new(),
+                    context_vector: None,
+                    importance_score: None,
                     metadata: HashMap::new(),
                     created_at: 0,
                     updated_at: 0,
@@ -2835,6 +2937,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager =
@@ -2873,10 +2976,15 @@ mod tests {
         let memory = Arc::new(MemoryManager::new());
         let ctx = TenantContext::default();
         memory
-            .register_provider(
-                mk_core::types::MemoryLayer::Project,
-                Box::new(memory::providers::MockProvider::new()),
-            )
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
             .await;
 
         let k_id = "duplicate.md".to_string();
@@ -2901,6 +3009,7 @@ mod tests {
             commit_hash: None,
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         let sync_manager =
@@ -2939,6 +3048,7 @@ mod tests {
             commit_hash: Some("abc123".to_string()),
             author: None,
             updated_at: 0,
+            summaries: HashMap::new(),
         });
 
         struct MockRepoWithCommit;

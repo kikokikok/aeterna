@@ -3,7 +3,7 @@ use knowledge::governance::GovernanceEngine;
 use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
-use mk_core::traits::{KnowledgeRepository, StorageBackend};
+use mk_core::traits::{KnowledgeRepository, MemoryProviderAdapter, StorageBackend};
 use mk_core::types::{
     KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, MemoryLayer, TenantContext,
     TenantId,
@@ -194,8 +194,11 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
 
     let memory_manager = Arc::new(MemoryManager::new());
     let mock_provider = MockProvider::new();
+    let provider: Arc<
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+    > = Arc::new(mock_provider);
     memory_manager
-        .register_provider(MemoryLayer::Project, Box::new(mock_provider))
+        .register_provider(MemoryLayer::Project, provider)
         .await;
 
     let storage = Arc::new(MockStorage::new());
@@ -220,6 +223,7 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
         kind: KnowledgeType::Spec,
         status: KnowledgeStatus::Accepted,
         metadata: HashMap::new(),
+        summaries: HashMap::new(),
         commit_hash: None,
         author: None,
         updated_at: chrono::Utc::now().timestamp(),
@@ -292,8 +296,11 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
     let governance_engine = Arc::new(GovernanceEngine::new());
     let memory_manager = Arc::new(MemoryManager::new());
     let mock_provider = MockProvider::new();
+    let provider: Arc<
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+    > = Arc::new(mock_provider);
     memory_manager
-        .register_provider(MemoryLayer::Project, Box::new(mock_provider))
+        .register_provider(MemoryLayer::Project, provider)
         .await;
 
     let storage = Arc::new(MockStorage::new());
@@ -320,6 +327,7 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
         kind: KnowledgeType::Spec,
         status: KnowledgeStatus::Accepted,
         metadata: HashMap::new(),
+        summaries: HashMap::new(),
         commit_hash: None,
         author: None,
         updated_at: chrono::Utc::now().timestamp(),
@@ -378,8 +386,11 @@ async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error
 
     let memory_manager = Arc::new(MemoryManager::new());
     let mock_provider = MockProvider::new();
+    let provider: Arc<
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+    > = Arc::new(mock_provider);
     memory_manager
-        .register_provider(MemoryLayer::Project, Box::new(mock_provider))
+        .register_provider(MemoryLayer::Project, provider)
         .await;
 
     let storage = Arc::new(MockStorage::new());
@@ -404,6 +415,7 @@ async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error
         kind: KnowledgeType::Spec,
         status: KnowledgeStatus::Accepted,
         metadata: HashMap::new(),
+        summaries: HashMap::new(),
         commit_hash: None,
         author: None,
         updated_at: chrono::Utc::now().timestamp(),

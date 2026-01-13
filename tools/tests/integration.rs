@@ -3,7 +3,7 @@ use adapters::langchain::LangChainAdapter;
 use async_trait::async_trait;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
-use mk_core::traits::KnowledgeRepository;
+use mk_core::traits::{KnowledgeRepository, MemoryProviderAdapter};
 use mk_core::types::{KnowledgeEntry, KnowledgeLayer, MemoryLayer, TenantId};
 use serde_json::json;
 use std::sync::Arc;
@@ -170,8 +170,11 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
     let memory_manager = Arc::new(MemoryManager::new());
+    let provider: Arc<
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+    > = Arc::new(MockProvider::new());
     memory_manager
-        .register_provider(MemoryLayer::User, Box::new(MockProvider::new()))
+        .register_provider(MemoryLayer::User, provider)
         .await;
 
     let knowledge_repo = Arc::new(MockKnowledgeRepo);
@@ -198,6 +201,9 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
+        Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+            memory::llm::mock::MockLlmService::new(),
+        ))),
         Arc::new(MockAuthService),
         None,
     ));
@@ -208,7 +214,7 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
 
     let langchain = LangChainAdapter::new(server.clone());
     let lc_tools = langchain.to_langchain_tools();
-    assert_eq!(lc_tools.len(), 15); // 4 memory + 3 knowledge + 3 sync + 5 governance
+    assert_eq!(lc_tools.len(), 16); // 5 memory + 3 knowledge + 3 sync + 5 governance
 
     let response = langchain
         .handle_mcp_request(json!({
@@ -262,6 +268,9 @@ async fn test_server_timeout() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
+        Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+            memory::llm::mock::MockLlmService::new(),
+        ))),
         Arc::new(MockAuthService),
         None,
     )
@@ -313,6 +322,9 @@ async fn test_server_timeout() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
+        Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+            memory::llm::mock::MockLlmService::new(),
+        ))),
         Arc::new(DenyAuthService),
         None,
     );

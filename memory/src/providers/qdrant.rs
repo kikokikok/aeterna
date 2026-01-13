@@ -5,8 +5,8 @@ use qdrant_client::{
     Qdrant,
     qdrant::{
         Distance, PointId, PointStruct, ScoredPoint, Value as QdrantValue, VectorParams,
-        VectorsConfig, point_id::PointIdOptions, vectors_config::Config
-    }
+        VectorsConfig, point_id::PointIdOptions, vectors_config::Config,
+    },
 };
 use serde_json::{Value, json};
 
@@ -16,7 +16,7 @@ use std::sync::Arc;
 pub struct QdrantProvider {
     client: Arc<Qdrant>,
     collection_name: String,
-    embedding_dimension: usize
+    embedding_dimension: usize,
 }
 
 impl QdrantProvider {
@@ -24,7 +24,7 @@ impl QdrantProvider {
         Self {
             client: Arc::new(client),
             collection_name,
-            embedding_dimension
+            embedding_dimension,
         }
     }
 
@@ -43,7 +43,7 @@ impl QdrantProvider {
                         size: self.embedding_dimension as u64,
                         distance: Distance::Cosine.into(),
                         ..Default::default()
-                    }))
+                    })),
                 });
 
             self.client.create_collection(request).await?;
@@ -54,7 +54,7 @@ impl QdrantProvider {
 
     fn entry_to_point(
         &self,
-        entry: &MemoryEntry
+        entry: &MemoryEntry,
     ) -> Result<PointStruct, Box<dyn std::error::Error + Send + Sync>> {
         let embedding = entry.embedding.as_ref().ok_or("Entry missing embedding")?;
 
@@ -63,27 +63,27 @@ impl QdrantProvider {
             ("content".to_string(), entry.content.clone().into()),
             (
                 "layer".to_string(),
-                serde_json::to_string(&entry.layer)?.into()
+                serde_json::to_string(&entry.layer)?.into(),
             ),
             ("created_at".to_string(), entry.created_at.into()),
-            ("updated_at".to_string(), entry.updated_at.into())
+            ("updated_at".to_string(), entry.updated_at.into()),
         ]);
 
         payload.insert(
             "metadata".to_string(),
-            serde_json::to_string(&entry.metadata)?.into()
+            serde_json::to_string(&entry.metadata)?.into(),
         );
 
         Ok(PointStruct {
             id: Some(PointId::from(entry.id.clone())),
             vectors: Some(embedding.clone().into()),
-            payload
+            payload,
         })
     }
 
     fn point_to_entry(
         &self,
-        point: ScoredPoint
+        point: ScoredPoint,
     ) -> Result<MemoryEntry, Box<dyn std::error::Error + Send + Sync>> {
         let payload = point.payload;
 
@@ -107,10 +107,10 @@ impl QdrantProvider {
                 .get_vector()
                 .and_then(|vec| match vec {
                     qdrant_client::qdrant::vector_output::Vector::Dense(dense) => Some(dense.data),
-                    _ => None
+                    _ => None,
                 })
                 .ok_or("Unsupported or missing vector format")?,
-            None => return Err("Point missing vector".into())
+            None => return Err("Point missing vector".into()),
         };
 
         let layer_str = payload
@@ -159,13 +159,16 @@ impl QdrantProvider {
             .ok_or("Missing updated_at")?;
 
         Ok(MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id,
             content,
             embedding: Some(vector),
             layer,
             metadata,
             created_at,
-            updated_at
+            updated_at,
         })
     }
 }
@@ -177,7 +180,7 @@ impl MemoryProviderAdapter for QdrantProvider {
     async fn add(
         &self,
         ctx: mk_core::types::TenantContext,
-        entry: MemoryEntry
+        entry: MemoryEntry,
     ) -> Result<String, Self::Error> {
         self.ensure_collection().await?;
         let mut entry = entry;
@@ -207,14 +210,14 @@ impl MemoryProviderAdapter for QdrantProvider {
         ctx: mk_core::types::TenantContext,
         query_vector: Vec<f32>,
         limit: usize,
-        _filters: HashMap<String, Value>
+        _filters: HashMap<String, Value>,
     ) -> Result<Vec<MemoryEntry>, Self::Error> {
         self.ensure_collection().await?;
         use qdrant_client::qdrant::{Condition, Filter, SearchPointsBuilder};
 
         let filter = Filter::all(vec![Condition::matches(
             "tenant_id",
-            ctx.tenant_id.as_str().to_string()
+            ctx.tenant_id.as_str().to_string(),
         )]);
 
         let request =
@@ -234,7 +237,7 @@ impl MemoryProviderAdapter for QdrantProvider {
     async fn get(
         &self,
         ctx: mk_core::types::TenantContext,
-        id: &str
+        id: &str,
     ) -> Result<Option<MemoryEntry>, Self::Error> {
         self.ensure_collection().await?;
         use qdrant_client::qdrant::GetPointsBuilder;
@@ -243,7 +246,7 @@ impl MemoryProviderAdapter for QdrantProvider {
 
         let request = GetPointsBuilder::new(
             self.collection_name.clone(),
-            vec![PointId::from(id.to_string())]
+            vec![PointId::from(id.to_string())],
         )
         .with_payload(true)
         .with_vectors(true);
@@ -257,7 +260,7 @@ impl MemoryProviderAdapter for QdrantProvider {
                 payload: point.payload,
                 vectors: point.vectors,
                 order_value: None,
-                shard_key: None
+                shard_key: None,
             })?;
 
             if entry.metadata.get("tenant_id").and_then(|t| t.as_str())
@@ -275,7 +278,7 @@ impl MemoryProviderAdapter for QdrantProvider {
     async fn update(
         &self,
         ctx: mk_core::types::TenantContext,
-        entry: MemoryEntry
+        entry: MemoryEntry,
     ) -> Result<(), Self::Error> {
         self.add(ctx, entry).await?;
         Ok(())
@@ -284,7 +287,7 @@ impl MemoryProviderAdapter for QdrantProvider {
     async fn delete(
         &self,
         ctx: mk_core::types::TenantContext,
-        id: &str
+        id: &str,
     ) -> Result<(), Self::Error> {
         self.ensure_collection().await?;
 
@@ -306,7 +309,7 @@ impl MemoryProviderAdapter for QdrantProvider {
         ctx: mk_core::types::TenantContext,
         _layer: MemoryLayer,
         limit: usize,
-        cursor: Option<String>
+        cursor: Option<String>,
     ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
         self.ensure_collection().await?;
 
@@ -315,7 +318,7 @@ impl MemoryProviderAdapter for QdrantProvider {
         use qdrant_client::qdrant::{Condition, Filter};
         let filter = Filter::all(vec![Condition::matches(
             "tenant_id",
-            ctx.tenant_id.as_str().to_string()
+            ctx.tenant_id.as_str().to_string(),
         )]);
 
         let scroll_request = qdrant_client::qdrant::ScrollPoints {
@@ -340,7 +343,7 @@ impl MemoryProviderAdapter for QdrantProvider {
                     payload: p.payload,
                     vectors: p.vectors,
                     order_value: None,
-                    shard_key: None
+                    shard_key: None,
                 })
             })
             .collect();
@@ -348,7 +351,7 @@ impl MemoryProviderAdapter for QdrantProvider {
         let next_cursor = result.next_page_offset.map(|id| match id.point_id_options {
             Some(PointIdOptions::Uuid(u)) => u,
             Some(PointIdOptions::Num(n)) => n.to_string(),
-            None => String::new()
+            None => String::new(),
         });
         Ok((entries?, next_cursor))
     }
@@ -375,13 +378,13 @@ mod tests {
         payload.insert("content".to_string(), "test content".to_string().into());
         payload.insert(
             "layer".to_string(),
-            serde_json::to_string(&MemoryLayer::Agent).unwrap().into()
+            serde_json::to_string(&MemoryLayer::Agent).unwrap().into(),
         );
         payload.insert(
             "metadata".to_string(),
             serde_json::to_string(&HashMap::<String, Value>::new())
                 .unwrap()
-                .into()
+                .into(),
         );
         payload.insert("created_at".to_string(), 1000.into());
         payload.insert("updated_at".to_string(), 2000.into());
@@ -393,16 +396,16 @@ mod tests {
                 vectors_options: Some(VectorsOptions::Vector(VectorOutput {
                     vector: Some(qdrant_client::qdrant::vector_output::Vector::Dense(
                         qdrant_client::qdrant::DenseVector {
-                            data: vec![0.1, 0.2, 0.3]
-                        }
+                            data: vec![0.1, 0.2, 0.3],
+                        },
                     )),
                     ..Default::default()
-                }))
+                })),
             }),
             score: 0.95,
             version: 1,
             order_value: None,
-            shard_key: None
+            shard_key: None,
         };
 
         let entry = provider.point_to_entry(point).unwrap();
@@ -423,13 +426,13 @@ mod tests {
         payload.insert("content".to_string(), "test content".to_string().into());
         payload.insert(
             "layer".to_string(),
-            serde_json::to_string(&MemoryLayer::Agent).unwrap().into()
+            serde_json::to_string(&MemoryLayer::Agent).unwrap().into(),
         );
         payload.insert(
             "metadata".to_string(),
             serde_json::to_string(&HashMap::from([("key".to_string(), json!("value"))]))
                 .unwrap()
-                .into()
+                .into(),
         );
         payload.insert("created_at".to_string(), 1000.into());
         payload.insert("updated_at".to_string(), 2000.into());
@@ -441,16 +444,16 @@ mod tests {
                 vectors_options: Some(VectorsOptions::Vector(VectorOutput {
                     vector: Some(qdrant_client::qdrant::vector_output::Vector::Dense(
                         qdrant_client::qdrant::DenseVector {
-                            data: vec![0.1, 0.2, 0.3]
-                        }
+                            data: vec![0.1, 0.2, 0.3],
+                        },
                     )),
                     ..Default::default()
-                }))
+                })),
             }),
             score: 0.95,
             version: 1,
             order_value: None,
-            shard_key: None
+            shard_key: None,
         };
 
         let entry = provider.point_to_entry(point).unwrap();
@@ -471,13 +474,16 @@ mod tests {
     fn test_entry_to_point_missing_embedding() {
         let provider = setup_provider();
         let entry = MemoryEntry {
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             id: "test-id".to_string(),
             content: "test content".to_string(),
             embedding: None,
             layer: MemoryLayer::Agent,
-            metadata: HashMap::new(),
+            metadata: std::collections::HashMap::new(),
             created_at: 1000,
-            updated_at: 2000
+            updated_at: 2000,
         };
 
         let result = provider.entry_to_point(&entry);
@@ -490,21 +496,21 @@ mod tests {
         let provider = setup_provider();
         let point = ScoredPoint {
             id: Some(PointId::from("test-id".to_string())),
-            payload: HashMap::new(),
+            payload: std::collections::HashMap::new(),
             vectors: Some(VectorsOutput {
                 vectors_options: Some(VectorsOptions::Vector(VectorOutput {
                     vector: Some(qdrant_client::qdrant::vector_output::Vector::Dense(
                         qdrant_client::qdrant::DenseVector {
-                            data: vec![0.1, 0.2, 0.3]
-                        }
+                            data: vec![0.1, 0.2, 0.3],
+                        },
                     )),
                     ..Default::default()
-                }))
+                })),
             }),
             score: 0.95,
             version: 1,
             order_value: None,
-            shard_key: None
+            shard_key: None,
         };
 
         let result = provider.point_to_entry(point);
@@ -529,16 +535,16 @@ mod tests {
                 vectors_options: Some(VectorsOptions::Vector(VectorOutput {
                     vector: Some(qdrant_client::qdrant::vector_output::Vector::Dense(
                         qdrant_client::qdrant::DenseVector {
-                            data: vec![0.1, 0.2, 0.3]
-                        }
+                            data: vec![0.1, 0.2, 0.3],
+                        },
                     )),
                     ..Default::default()
-                }))
+                })),
             }),
             score: 0.95,
             version: 1,
             order_value: None,
-            shard_key: None
+            shard_key: None,
         };
 
         let result = provider.point_to_entry(point);
@@ -553,7 +559,7 @@ mod tests {
         payload.insert("content".to_string(), "test content".to_string().into());
         payload.insert(
             "layer".to_string(),
-            serde_json::to_string(&MemoryLayer::Agent).unwrap().into()
+            serde_json::to_string(&MemoryLayer::Agent).unwrap().into(),
         );
         payload.insert("created_at".to_string(), 1000.into());
         payload.insert("updated_at".to_string(), 2000.into());
@@ -565,16 +571,16 @@ mod tests {
                 vectors_options: Some(VectorsOptions::Vector(VectorOutput {
                     vector: Some(qdrant_client::qdrant::vector_output::Vector::Dense(
                         qdrant_client::qdrant::DenseVector {
-                            data: vec![0.1, 0.2, 0.3]
-                        }
+                            data: vec![0.1, 0.2, 0.3],
+                        },
                     )),
                     ..Default::default()
-                }))
+                })),
             }),
             score: 0.95,
             version: 1,
             order_value: None,
-            shard_key: None
+            shard_key: None,
         };
 
         let result = provider.point_to_entry(point);
@@ -593,7 +599,7 @@ mod tests {
         payload.insert("content".to_string(), "test content".to_string().into());
         payload.insert(
             "layer".to_string(),
-            serde_json::to_string(&MemoryLayer::Agent).unwrap().into()
+            serde_json::to_string(&MemoryLayer::Agent).unwrap().into(),
         );
         payload.insert("metadata".to_string(), "{}".to_string().into());
         payload.insert("created_at".to_string(), 1000.into());
@@ -603,12 +609,12 @@ mod tests {
             id: Some(PointId::from("test-id".to_string())),
             payload,
             vectors: Some(VectorsOutput {
-                vectors_options: None
+                vectors_options: None,
             }),
             score: 0.95,
             version: 1,
             order_value: None,
-            shard_key: None
+            shard_key: None,
         };
 
         let result = provider.point_to_entry(point);
@@ -627,7 +633,7 @@ mod tests {
         payload.insert("content".to_string(), "test content".to_string().into());
         payload.insert(
             "layer".to_string(),
-            serde_json::to_string(&MemoryLayer::Agent).unwrap().into()
+            serde_json::to_string(&MemoryLayer::Agent).unwrap().into(),
         );
         payload.insert("metadata".to_string(), "invalid-json".to_string().into());
         payload.insert("created_at".to_string(), 1000.into());
@@ -640,16 +646,16 @@ mod tests {
                 vectors_options: Some(VectorsOptions::Vector(VectorOutput {
                     vector: Some(qdrant_client::qdrant::vector_output::Vector::Dense(
                         qdrant_client::qdrant::DenseVector {
-                            data: vec![0.1, 0.2, 0.3]
-                        }
+                            data: vec![0.1, 0.2, 0.3],
+                        },
                     )),
                     ..Default::default()
-                }))
+                })),
             }),
             score: 0.95,
             version: 1,
             order_value: None,
-            shard_key: None
+            shard_key: None,
         };
 
         let result = provider.point_to_entry(point);
@@ -664,7 +670,7 @@ mod tests {
         payload.insert("content".to_string(), "test content".to_string().into());
         payload.insert(
             "layer".to_string(),
-            serde_json::to_string(&MemoryLayer::Agent).unwrap().into()
+            serde_json::to_string(&MemoryLayer::Agent).unwrap().into(),
         );
         payload.insert("metadata".to_string(), "{}".to_string().into());
         payload.insert("created_at".to_string(), 1000.into());
@@ -677,7 +683,7 @@ mod tests {
             score: 0.95,
             version: 1,
             order_value: None,
-            shard_key: None
+            shard_key: None,
         };
 
         let result = provider.point_to_entry(point);

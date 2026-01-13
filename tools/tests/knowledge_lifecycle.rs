@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
-use mk_core::traits::{KnowledgeRepository, StorageBackend};
+use mk_core::traits::{KnowledgeRepository, MemoryProviderAdapter, StorageBackend};
 use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, MemoryLayer};
 use serde_json::json;
 use std::collections::HashMap;
@@ -241,8 +241,11 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
 
     let memory_manager = Arc::new(MemoryManager::new());
     let mock_provider = MockProvider::new();
+    let provider: Arc<
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+    > = Arc::new(mock_provider);
     memory_manager
-        .register_provider(MemoryLayer::Project, Box::new(mock_provider))
+        .register_provider(MemoryLayer::Project, provider)
         .await;
 
     let storage = Arc::new(MockStorage::new());
@@ -271,6 +274,9 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
+        Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+            memory::llm::mock::MockLlmService::new(),
+        ))),
         Arc::new(MockAuthService),
         None,
     );
@@ -282,6 +288,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
         metadata: HashMap::new(),
+        summaries: HashMap::new(),
         status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,

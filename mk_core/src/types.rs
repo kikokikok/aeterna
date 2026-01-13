@@ -409,16 +409,175 @@ pub struct LayerIdentifiers {
     pub company_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SummaryDepth {
+    Sentence,
+    Paragraph,
+    Detailed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerSummary {
+    pub depth: SummaryDepth,
+    pub content: String,
+    pub token_count: u32,
+    pub generated_at: i64,
+    pub source_hash: String,
+    pub personalized: bool,
+    pub personalization_context: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SummaryConfig {
+    pub layer: MemoryLayer,
+    pub update_interval_secs: Option<u64>,
+    pub update_on_changes: Option<u32>,
+    pub skip_if_unchanged: bool,
+    pub personalized: bool,
+    pub depths: Vec<SummaryDepth>,
+}
+
+pub type ContextVector = Vec<f32>;
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    ToSchema,
+    Display,
+    EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "camelCase")]
+pub enum ReasoningStrategy {
+    Exhaustive,
+    Targeted,
+    SemanticOnly,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReasoningTrace {
+    pub strategy: ReasoningStrategy,
+    pub thought_process: String,
+    pub refined_query: Option<String>,
+    pub start_time: chrono::DateTime<chrono::Utc>,
+    pub end_time: chrono::DateTime<chrono::Utc>,
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryEntry {
     pub id: String,
     pub content: String,
     pub embedding: Option<Vec<f32>>,
     pub layer: MemoryLayer,
+    pub summaries: std::collections::HashMap<SummaryDepth, LayerSummary>,
+    pub context_vector: Option<ContextVector>,
+    pub importance_score: Option<f32>,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum MemoryOperation {
+    Add,
+    Update,
+    Delete,
+    Retrieve,
+    Prune,
+    Compress,
+    Noop,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    ToSchema,
+    Display,
+    EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "camelCase")]
+pub enum RewardType {
+    Helpful,
+    Irrelevant,
+    Outdated,
+    Inaccurate,
+    Duplicate,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RewardSignal {
+    pub reward_type: RewardType,
+    pub score: f32, // -1.0 to 1.0
+    pub reasoning: Option<String>,
+    pub agent_id: Option<String>,
+    pub timestamp: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryTrajectoryEvent {
+    pub operation: MemoryOperation,
+    pub entry_id: String,
+    pub reward: Option<RewardSignal>,
+    pub reasoning: Option<String>,
+    pub timestamp: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Entity {
+    pub id: String,
+    pub name: String,
+    pub entity_type: String,
+    pub description: Option<String>,
+    pub embedding: Option<Vec<f32>>,
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Relationship {
+    pub id: String,
+    pub source_id: String,
+    pub target_id: String,
+    pub relation_type: String,
+    pub weight: f32,
+    pub description: Option<String>,
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Community {
+    pub id: String,
+    pub name: String,
+    pub summary: String,
+    pub level: u32,
+    pub entity_ids: Vec<String>,
+    pub relationship_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -429,6 +588,7 @@ pub struct KnowledgeEntry {
     pub layer: KnowledgeLayer,
     pub kind: KnowledgeType,
     pub status: KnowledgeStatus,
+    pub summaries: std::collections::HashMap<SummaryDepth, LayerSummary>,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub commit_hash: Option<String>,
     pub author: Option<String>,
@@ -751,6 +911,9 @@ mod tests {
             content: "Test content".to_string(),
             embedding: Some(vec![0.1, 0.2, 0.3]),
             layer: MemoryLayer::User,
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1234567890,
             updated_at: 1234567890,
@@ -769,6 +932,7 @@ mod tests {
             content: "# ADR 001: Use Rust".to_string(),
             layer: KnowledgeLayer::Project,
             kind: KnowledgeType::Adr,
+            summaries: std::collections::HashMap::new(),
             metadata: std::collections::HashMap::new(),
             commit_hash: Some("abc123".to_string()),
             author: Some("Alice".to_string()),
@@ -1023,12 +1187,19 @@ mod tests {
     }
 
     #[test]
-    fn test_role_display_name() {
-        assert_eq!(Role::Developer.display_name(), "Developer");
-        assert_eq!(Role::TechLead.display_name(), "Tech Lead");
-        assert_eq!(Role::Architect.display_name(), "Architect");
-        assert_eq!(Role::Admin.display_name(), "Admin");
-        assert_eq!(Role::Agent.display_name(), "Agent");
+    fn test_reasoning_strategy_serialization() {
+        let exhaustive = ReasoningStrategy::Exhaustive;
+        let json = serde_json::to_string(&exhaustive).unwrap();
+        assert_eq!(json, "\"exhaustive\"");
+
+        let deserialized: ReasoningStrategy = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, ReasoningStrategy::Exhaustive);
+    }
+
+    #[test]
+    fn test_reasoning_strategy_display() {
+        assert_eq!(format!("{}", ReasoningStrategy::Exhaustive), "exhaustive");
+        assert_eq!(format!("{}", ReasoningStrategy::Targeted), "targeted");
     }
 
     #[test]

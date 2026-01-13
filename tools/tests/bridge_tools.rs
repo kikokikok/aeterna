@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
-use mk_core::traits::KnowledgeRepository;
+use mk_core::traits::{KnowledgeRepository, MemoryProviderAdapter};
 use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, TenantId};
 use serde_json::json;
 use std::collections::HashMap;
@@ -39,11 +39,11 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
     let memory_manager = Arc::new(MemoryManager::new());
 
     use memory::providers::MockProvider;
+    let provider: Arc<
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+    > = Arc::new(MockProvider::new());
     memory_manager
-        .register_provider(
-            mk_core::types::MemoryLayer::Project,
-            Box::new(MockProvider::new()),
-        )
+        .register_provider(mk_core::types::MemoryLayer::Project, provider)
         .await;
 
     let persister = Arc::new(MockPersister);
@@ -89,6 +89,7 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
         layer: KnowledgeLayer::Project,
         kind: KnowledgeType::Spec,
         metadata: HashMap::new(),
+        summaries: HashMap::new(),
         status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,

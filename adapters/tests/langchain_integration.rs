@@ -2,7 +2,7 @@ use adapters::ecosystem::EcosystemAdapter;
 use adapters::langchain::LangChainAdapter;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
-use mk_core::traits::KnowledgeRepository;
+use mk_core::traits::{KnowledgeRepository, MemoryProviderAdapter};
 use mk_core::types::{KnowledgeEntry, KnowledgeLayer, MemoryLayer, TenantContext};
 use serde_json::json;
 use std::sync::Arc;
@@ -101,8 +101,11 @@ impl sync::state_persister::SyncStatePersister for MockPersister {
 
 async fn setup_server() -> Arc<McpServer> {
     let memory_manager = Arc::new(MemoryManager::new());
+    let provider: Arc<
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+    > = Arc::new(MockProvider::new());
     memory_manager
-        .register_provider(MemoryLayer::User, Box::new(MockProvider::new()))
+        .register_provider(MemoryLayer::User, provider)
         .await;
 
     let repo = Arc::new(MockRepo);
@@ -123,12 +126,17 @@ async fn setup_server() -> Arc<McpServer> {
 
     let auth_service = Arc::new(MockAuthService);
 
+    let mock_reasoner = Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+        memory::llm::mock::MockLlmService::new(),
+    )));
+
     Arc::new(McpServer::new(
         memory_manager,
         sync_manager,
         repo,
         Arc::new(MockStorageBackend),
         governance,
+        mock_reasoner,
         auth_service,
         None,
     ))
