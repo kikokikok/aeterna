@@ -95,11 +95,14 @@ mod tests {
         );
 
         McpServer::new(
-            memory_manager,
+            memory_manager.clone(),
             sync_manager,
             repo,
             Arc::new(MockStorageBackend),
             governance,
+            Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
+                memory::llm::mock::MockLlmService::new(),
+            ))),
             auth_service,
             None,
         )
