@@ -15,7 +15,7 @@ pub struct GovernanceEngine {
         Option<Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>>,
     event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
     embedding_service: Option<Arc<dyn EmbeddingService<Error = anyhow::Error>>>,
-    llm_service: Option<Arc<dyn LlmService<Error = anyhow::Error>>>,
+    llm_service: Option<Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>>,
     knowledge_repository: Option<
         Arc<dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>>,
     >,
@@ -60,7 +60,7 @@ impl GovernanceEngine {
 
     pub fn with_llm_service(
         mut self,
-        llm_service: Arc<dyn LlmService<Error = anyhow::Error>>,
+        llm_service: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>,
     ) -> Self {
         self.llm_service = Some(llm_service);
         self
@@ -83,7 +83,9 @@ impl GovernanceEngine {
         self.storage.clone()
     }
 
-    pub fn llm_service(&self) -> Option<Arc<dyn LlmService<Error = anyhow::Error>>> {
+    pub fn llm_service(
+        &self,
+    ) -> Option<Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>> {
         self.llm_service.clone()
     }
 

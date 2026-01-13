@@ -49,7 +49,7 @@ async fn test_qdrant_full_lifecycle() {
     let ctx = test_ctx();
 
     for i in 0..5 {
-        let entry = MemoryEntry {
+        let entry = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
             id: format!("id_{}", i),
             content: format!("Content {}", i),
             embedding: Some(vec![i as f32 * 0.1; 128]),
@@ -136,7 +136,7 @@ async fn test_qdrant_error_conditions() {
 
     let provider = QdrantProvider::new(client, "error_test".to_string(), 128);
 
-    let entry_no_emb = MemoryEntry {
+    let entry_no_emb = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
         id: "no_emb".to_string(),
         content: "No embedding".to_string(),
         embedding: None,
@@ -195,7 +195,7 @@ async fn test_qdrant_complex_metadata() {
     metadata.insert("nested".to_string(), serde_json::json!({"key": "value"}));
     metadata.insert("priority".to_string(), serde_json::json!(5));
 
-    let entry = MemoryEntry {
+    let entry = MemoryEntry { summaries: std::collections::HashMap::new(), context_vector: None, importance_score: None,
         id: "meta_1".to_string(),
         content: "Metadata test".to_string(),
         embedding: Some(vec![0.1; 128]),

@@ -228,6 +228,7 @@ async fn test_governance_dashboard_api_proposals() {
         commit_hash: None,
         author: Some("u1".to_string()),
         updated_at: 1000,
+        summaries: std::collections::HashMap::new(),
     };
     repo.store(ctx.clone(), entry, "Initial proposal")
         .await
@@ -255,6 +256,7 @@ async fn test_governance_dashboard_api_proposals() {
         commit_hash: None,
         author: Some("u1".to_string()),
         updated_at: 1000,
+        summaries: std::collections::HashMap::new(),
     };
     repo.store(ctx.clone(), entry2, "Initial proposal")
         .await

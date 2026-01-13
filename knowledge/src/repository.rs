@@ -191,13 +191,14 @@ impl KnowledgeRepository for GitRepository {
             revwalk.next().transpose()?.map(|id| id.to_string())
         };
 
-        let (kind, status, metadata, author, updated_at) = if metadata_path.exists() {
+        let (kind, status, summaries, metadata, author, updated_at) = if metadata_path.exists() {
             let meta_content = tokio::fs::read_to_string(&metadata_path).await?;
             let meta: serde_json::Value = serde_json::from_str(&meta_content)?;
             (
                 serde_json::from_value(meta["kind"].clone()).unwrap_or(KnowledgeType::Spec),
                 serde_json::from_value(meta["status"].clone())
                     .unwrap_or(mk_core::types::KnowledgeStatus::Accepted),
+                serde_json::from_value(meta["summaries"].clone()).unwrap_or_default(),
                 serde_json::from_value(meta["metadata"].clone()).unwrap_or_default(),
                 serde_json::from_value(meta["author"].clone()).unwrap_or_default(),
                 meta["updated_at"]
@@ -208,6 +209,7 @@ impl KnowledgeRepository for GitRepository {
             (
                 KnowledgeType::Spec,
                 mk_core::types::KnowledgeStatus::Accepted,
+                std::collections::HashMap::new(),
                 std::collections::HashMap::new(),
                 None,
                 chrono::Utc::now().timestamp(),
@@ -220,6 +222,7 @@ impl KnowledgeRepository for GitRepository {
             layer,
             kind,
             status,
+            summaries,
             metadata,
             commit_hash,
             author,
@@ -245,6 +248,7 @@ impl KnowledgeRepository for GitRepository {
         let meta = serde_json::json!({
             "kind": entry.kind,
             "status": entry.status,
+            "summaries": entry.summaries,
             "metadata": entry.metadata,
             "author": entry.author,
             "updated_at": entry.updated_at,
@@ -365,6 +369,7 @@ mod tests {
             layer: KnowledgeLayer::Project,
             kind: KnowledgeType::Spec,
             status: mk_core::types::KnowledgeStatus::Draft,
+            summaries: std::collections::HashMap::new(),
             metadata: std::collections::HashMap::new(),
             commit_hash: None,
             author: None,
@@ -417,6 +422,7 @@ mod tests {
             layer: KnowledgeLayer::Project,
             kind: KnowledgeType::Spec,
             status: mk_core::types::KnowledgeStatus::Accepted,
+            summaries: std::collections::HashMap::new(),
             metadata: std::collections::HashMap::new(),
             commit_hash: None,
             author: None,
