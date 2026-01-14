@@ -44,4 +44,9 @@ pub trait GraphStore: Send + Sync {
         query: &str,
         limit: usize,
     ) -> Result<Vec<GraphNode>, Self::Error>;
+    async fn soft_delete_nodes_by_source_memory_id(
+        &self,
+        ctx: TenantContext,
+        source_memory_id: &str,
+    ) -> Result<usize, Self::Error>;
 }

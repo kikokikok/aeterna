@@ -453,10 +453,17 @@ impl MemoryManager {
                     let extractor = EntityExtractor::new(llm_service.clone());
                     if let Ok(extraction) = extractor.extract(&entry).await {
                         for entity in extraction.entities {
+                            let mut properties = entity.properties;
+                            if let Some(obj) = properties.as_object_mut() {
+                                obj.insert(
+                                    "source_memory_id".to_string(),
+                                    serde_json::Value::String(id.clone()),
+                                );
+                            }
                             let node = storage::graph::GraphNode {
                                 id: entity.name.clone(),
                                 label: entity.label,
-                                properties: entity.properties,
+                                properties,
                                 tenant_id: ctx.tenant_id.to_string(),
                             };
                             let _ = graph_store.add_node(ctx.clone(), node).await;
@@ -503,8 +510,17 @@ impl MemoryManager {
                 .clone()
         };
 
-        match provider.delete(ctx, id).await {
+        match provider.delete(ctx.clone(), id).await {
             Ok(_) => {
+                if let Some(graph_store) = &self.graph_store {
+                    if let Err(e) = graph_store
+                        .soft_delete_nodes_by_source_memory_id(ctx.clone(), id)
+                        .await
+                    {
+                        tracing::warn!("Failed to cleanup graph nodes for memory {}: {}", id, e);
+                    }
+                }
+
                 let mut trajectories = self.trajectories.write().await;
                 let event = mk_core::types::MemoryTrajectoryEvent {
                     operation: mk_core::types::MemoryOperation::Delete,
