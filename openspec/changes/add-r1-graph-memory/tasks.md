@@ -64,11 +64,11 @@
 - [x] 8.5 Write tests for telemetry emission
 
 ## 9. Security & Tenant Isolation (High Gap R1-H3)
-- [ ] 9.1 Implement parameterized tenant filter for all queries
-- [ ] 9.2 Add query validation layer to reject tenant filter bypass attempts
-- [ ] 9.3 Add security audit logging for rejected queries
-- [ ] 9.4 Write penetration tests for tenant isolation
-- [ ] 9.5 Add tenant context validation middleware
+- [x] 9.1 Implement parameterized tenant filter for all queries
+- [x] 9.2 Add query validation layer to reject tenant filter bypass attempts
+- [x] 9.3 Add security audit logging for rejected queries
+- [x] 9.4 Write penetration tests for tenant isolation
+- [x] 9.5 Add tenant context validation middleware
 
 ## 10. Backup & Recovery (High Gap R1-H4)
 - [ ] 10.1 Implement scheduled S3 snapshot job (configurable interval)

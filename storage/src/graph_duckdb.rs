@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::graph::{GraphEdge, GraphNode, GraphStore};
@@ -68,6 +68,9 @@ pub enum GraphError {
 
     #[error("Invalid tenant context")]
     InvalidTenantContext,
+
+    #[error("Invalid tenant ID format: {0}")]
+    InvalidTenantIdFormat(String),
 
     #[error("Serialization error: {0}")]
     Serialization(String),
@@ -628,13 +631,81 @@ impl DuckDbGraphStore {
         Ok(())
     }
 
-    /// Validate tenant context (R1-H3)
+    /// Validate tenant context and tenant ID format (R1-H3, Task 9.1-9.3)
     fn validate_tenant(&self, ctx: &TenantContext) -> Result<String, GraphError> {
         let tenant_id = ctx.tenant_id.as_str();
         if tenant_id.is_empty() {
+            Self::log_security_audit("REJECTED", "empty_tenant_id", "", "Empty tenant ID");
             return Err(GraphError::InvalidTenantContext);
         }
+
+        Self::validate_tenant_id_format(tenant_id)?;
         Ok(tenant_id.to_string())
+    }
+
+    /// Validate tenant ID format to prevent SQL injection (Task 9.1, 9.2)
+    fn validate_tenant_id_format(tenant_id: &str) -> Result<(), GraphError> {
+        if tenant_id.len() > 128 {
+            Self::log_security_audit(
+                "REJECTED",
+                "tenant_id_too_long",
+                tenant_id,
+                "Tenant ID exceeds 128 chars",
+            );
+            return Err(GraphError::InvalidTenantIdFormat(
+                "Tenant ID exceeds maximum length of 128 characters".to_string(),
+            ));
+        }
+
+        if !tenant_id
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
+            Self::log_security_audit(
+                "REJECTED",
+                "invalid_tenant_id_chars",
+                tenant_id,
+                "Invalid characters in tenant ID",
+            );
+            return Err(GraphError::InvalidTenantIdFormat(
+                "Tenant ID contains invalid characters (allowed: alphanumeric, -, _)".to_string(),
+            ));
+        }
+
+        let sql_injection_patterns = [
+            "--", ";", "'", "\"", "/*", "*/", "UNION", "SELECT", "INSERT", "UPDATE", "DELETE",
+            "DROP", "EXEC", "EXECUTE", "xp_",
+        ];
+
+        let upper_tenant_id = tenant_id.to_uppercase();
+        for pattern in &sql_injection_patterns {
+            if upper_tenant_id.contains(pattern) {
+                Self::log_security_audit(
+                    "BLOCKED",
+                    "sql_injection_attempt",
+                    tenant_id,
+                    &format!("SQL injection pattern detected: {}", pattern),
+                );
+                return Err(GraphError::InvalidTenantIdFormat(
+                    "Tenant ID contains disallowed pattern".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Log security audit events (Task 9.3)
+    fn log_security_audit(action: &str, event_type: &str, tenant_id: &str, details: &str) {
+        error!(
+            target: "security_audit",
+            action = action,
+            event_type = event_type,
+            tenant_id = tenant_id,
+            details = details,
+            "Security audit: {} - {} for tenant '{}': {}",
+            action, event_type, tenant_id, details
+        );
     }
 
     /// Check if a node exists and belongs to the tenant (R1-C2)
@@ -1323,6 +1394,8 @@ impl DuckDbGraphStore {
     }
 
     fn export_to_parquet(&self, tenant_id: &str) -> Result<Vec<u8>, GraphError> {
+        Self::validate_tenant_id_format(tenant_id)?;
+
         let conn = self.conn.lock();
 
         let export_sql = format!(
@@ -1354,6 +1427,8 @@ impl DuckDbGraphStore {
     }
 
     fn import_from_parquet(&self, tenant_id: &str, data: &[u8]) -> Result<(), GraphError> {
+        Self::validate_tenant_id_format(tenant_id)?;
+
         let conn = self.conn.lock();
 
         let temp_path = format!("/tmp/graph_import_{}.parquet", Uuid::new_v4());
