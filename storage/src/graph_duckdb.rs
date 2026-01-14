@@ -71,6 +71,15 @@ pub enum GraphError {
 
     #[error("Serialization error: {0}")]
     Serialization(String),
+
+    #[error("S3 error: {0}")]
+    S3(String),
+
+    #[error("Checksum mismatch: expected {expected}, got {actual}")]
+    ChecksumMismatch { expected: String, actual: String },
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// Configuration for the DuckDB graph store
@@ -84,6 +93,14 @@ pub struct DuckDbGraphConfig {
     pub soft_delete_enabled: bool,
     /// Maximum path depth for traversal queries
     pub max_path_depth: usize,
+    /// S3 bucket for persistence (optional)
+    pub s3_bucket: Option<String>,
+    /// S3 key prefix for this store's data
+    pub s3_prefix: Option<String>,
+    /// S3 endpoint override (for MinIO/LocalStack)
+    pub s3_endpoint: Option<String>,
+    /// S3 region
+    pub s3_region: Option<String>,
 }
 
 impl Default for DuckDbGraphConfig {
@@ -93,6 +110,10 @@ impl Default for DuckDbGraphConfig {
             query_timeout_secs: DEFAULT_QUERY_TIMEOUT_SECS,
             soft_delete_enabled: true,
             max_path_depth: MAX_PATH_DEPTH,
+            s3_bucket: None,
+            s3_prefix: None,
+            s3_endpoint: None,
+            s3_region: None,
         }
     }
 }
@@ -147,6 +168,152 @@ pub struct GraphEdgeExtended {
     pub weight: f64,
     pub created_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
+}
+
+#[async_trait]
+pub trait EntityExtractor: Send + Sync {
+    async fn extract_entities(&self, text: &str) -> Result<Vec<Entity>, GraphError>;
+    async fn extract_relationships(
+        &self,
+        text: &str,
+        entities: &[Entity],
+    ) -> Result<Vec<EntityEdge>, GraphError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct Community {
+    pub id: String,
+    pub member_node_ids: Vec<String>,
+    pub density: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct WriteCoordinatorConfig {
+    pub lock_ttl_ms: u64,
+    pub max_retries: u32,
+    pub base_backoff_ms: u64,
+    pub max_backoff_ms: u64,
+}
+
+impl Default for WriteCoordinatorConfig {
+    fn default() -> Self {
+        Self {
+            lock_ttl_ms: 5000,
+            max_retries: 5,
+            base_backoff_ms: 50,
+            max_backoff_ms: 2000,
+        }
+    }
+}
+
+pub struct WriteCoordinator {
+    redis_url: String,
+    config: WriteCoordinatorConfig,
+}
+
+impl WriteCoordinator {
+    pub fn new(redis_url: String, config: WriteCoordinatorConfig) -> Self {
+        Self { redis_url, config }
+    }
+
+    pub async fn acquire_lock(&self, tenant_id: &str) -> Result<String, GraphError> {
+        let client = redis::Client::open(self.redis_url.as_str())
+            .map_err(|e| GraphError::S3(format!("Redis connection failed: {}", e)))?;
+        let mut conn = client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|e| GraphError::S3(format!("Redis connection failed: {}", e)))?;
+
+        let lock_key = format!("aeterna:graph:lock:{}", tenant_id);
+        let lock_value = Uuid::new_v4().to_string();
+        let mut backoff = self.config.base_backoff_ms;
+
+        for attempt in 0..self.config.max_retries {
+            let result: Result<bool, _> = redis::cmd("SET")
+                .arg(&lock_key)
+                .arg(&lock_value)
+                .arg("NX")
+                .arg("PX")
+                .arg(self.config.lock_ttl_ms)
+                .query_async(&mut conn)
+                .await;
+
+            match result {
+                Ok(true) => {
+                    debug!("Acquired lock {} on attempt {}", lock_key, attempt + 1);
+                    return Ok(lock_value);
+                }
+                Ok(false) => {
+                    if attempt < self.config.max_retries - 1 {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(backoff)).await;
+                        backoff = (backoff * 2).min(self.config.max_backoff_ms);
+                    }
+                }
+                Err(e) => {
+                    return Err(GraphError::S3(format!("Redis SET failed: {}", e)));
+                }
+            }
+        }
+
+        Err(GraphError::Timeout(self.config.max_retries as i32))
+    }
+
+    pub async fn release_lock(&self, tenant_id: &str, lock_value: &str) -> Result<(), GraphError> {
+        let client = redis::Client::open(self.redis_url.as_str())
+            .map_err(|e| GraphError::S3(format!("Redis connection failed: {}", e)))?;
+        let mut conn = client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|e| GraphError::S3(format!("Redis connection failed: {}", e)))?;
+
+        let lock_key = format!("aeterna:graph:lock:{}", tenant_id);
+
+        let script = redis::Script::new(
+            r#"
+            if redis.call("GET", KEYS[1]) == ARGV[1] then
+                return redis.call("DEL", KEYS[1])
+            else
+                return 0
+            end
+            "#,
+        );
+
+        let _: i32 = script
+            .key(&lock_key)
+            .arg(lock_value)
+            .invoke_async(&mut conn)
+            .await
+            .map_err(|e| GraphError::S3(format!("Redis EVAL failed: {}", e)))?;
+
+        debug!("Released lock {}", lock_key);
+        Ok(())
+    }
+}
+
+/// Observability metrics for graph operations.
+/// Uses the `metrics` crate for lightweight instrumentation.
+#[derive(Clone, Debug, Default)]
+pub struct GraphMetrics {
+    _private: (),
+}
+
+impl GraphMetrics {
+    pub fn new() -> Self {
+        Self { _private: () }
+    }
+
+    pub fn record_query(&self, duration_secs: f64, result_count: usize) {
+        metrics::histogram!("graph_query_duration_seconds", duration_secs);
+        metrics::histogram!("graph_query_result_count", result_count as f64);
+    }
+
+    pub fn record_cache_hit(&self) {
+        metrics::counter!("graph_cache_hits_total", 1);
+    }
+
+    pub fn record_cache_miss(&self) {
+        metrics::counter!("graph_cache_misses_total", 1);
+    }
 }
 
 /// DuckDB-backed implementation of GraphStore
@@ -828,6 +995,316 @@ impl DuckDbGraphStore {
             entity_edge_count: entity_edge_count as usize,
         })
     }
+
+    /// Persist graph data to S3 as Parquet with two-phase commit (R1-C4)
+    ///
+    /// Returns the S3 key of the persisted snapshot on success.
+    #[instrument(skip(self), fields(tenant_id = %tenant_id))]
+    pub async fn persist_to_s3(&self, tenant_id: &str) -> Result<String, GraphError> {
+        use aws_config::BehaviorVersion;
+        use aws_sdk_s3::primitives::ByteStream;
+        use sha2::{Digest, Sha256};
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+        let prefix = self.config.s3_prefix.as_deref().unwrap_or("graph");
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
+        let snapshot_key = format!("{}/{}/snapshot_{}.parquet", prefix, tenant_id, timestamp);
+        let staging_key = format!("{}/.staging/{}", snapshot_key, Uuid::new_v4());
+
+        let parquet_data = self.export_to_parquet(tenant_id)?;
+
+        let mut hasher = Sha256::new();
+        hasher.update(&parquet_data);
+        let checksum = hex::encode(hasher.finalize());
+
+        s3_client
+            .put_object()
+            .bucket(bucket)
+            .key(&staging_key)
+            .body(ByteStream::from(parquet_data.clone()))
+            .metadata("checksum", &checksum)
+            .metadata("tenant_id", tenant_id)
+            .metadata("timestamp", &timestamp)
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to upload staging: {}", e)))?;
+
+        s3_client
+            .copy_object()
+            .bucket(bucket)
+            .copy_source(format!("{}/{}", bucket, staging_key))
+            .key(&snapshot_key)
+            .metadata_directive(aws_sdk_s3::types::MetadataDirective::Copy)
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to commit snapshot: {}", e)))?;
+
+        s3_client
+            .delete_object()
+            .bucket(bucket)
+            .key(&staging_key)
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to cleanup staging: {}", e)))?;
+
+        info!("Persisted graph snapshot to S3: {}", snapshot_key);
+        Ok(snapshot_key)
+    }
+
+    /// Load graph from S3 Parquet snapshot with checksum verification
+    #[instrument(skip(self), fields(tenant_id = %tenant_id, snapshot_key = %snapshot_key))]
+    pub async fn load_from_s3(
+        &self,
+        tenant_id: &str,
+        snapshot_key: &str,
+    ) -> Result<(), GraphError> {
+        use aws_config::BehaviorVersion;
+        use sha2::{Digest, Sha256};
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        let response = s3_client
+            .get_object()
+            .bucket(bucket)
+            .key(snapshot_key)
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to fetch snapshot: {}", e)))?;
+
+        let expected_checksum = response.metadata().and_then(|m| m.get("checksum")).cloned();
+
+        let data = response
+            .body
+            .collect()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to read body: {}", e)))?
+            .into_bytes()
+            .to_vec();
+
+        if let Some(expected) = expected_checksum {
+            let mut hasher = Sha256::new();
+            hasher.update(&data);
+            let actual = hex::encode(hasher.finalize());
+            if actual != expected {
+                return Err(GraphError::ChecksumMismatch { expected, actual });
+            }
+        }
+
+        self.import_from_parquet(tenant_id, &data)?;
+
+        info!("Loaded graph snapshot from S3: {}", snapshot_key);
+        Ok(())
+    }
+
+    fn export_to_parquet(&self, tenant_id: &str) -> Result<Vec<u8>, GraphError> {
+        let conn = self.conn.lock();
+
+        let export_sql = format!(
+            r#"
+            COPY (
+                SELECT 'node' as record_type, id, label, properties, memory_id, 
+                       CAST(created_at AS VARCHAR) as created_at, 
+                       CAST(updated_at AS VARCHAR) as updated_at,
+                       NULL as source_id, NULL as target_id, NULL as relation, NULL as weight
+                FROM memory_nodes WHERE tenant_id = '{tenant_id}' AND deleted_at IS NULL
+                UNION ALL
+                SELECT 'edge' as record_type, id, NULL as label, properties, NULL as memory_id,
+                       CAST(created_at AS VARCHAR) as created_at, NULL as updated_at,
+                       source_id, target_id, relation, CAST(weight AS VARCHAR)
+                FROM memory_edges WHERE tenant_id = '{tenant_id}' AND deleted_at IS NULL
+            ) TO '/dev/stdout' (FORMAT PARQUET)
+            "#,
+            tenant_id = tenant_id
+        );
+
+        let temp_path = format!("/tmp/graph_export_{}.parquet", Uuid::new_v4());
+        let export_sql = export_sql.replace("/dev/stdout", &temp_path);
+        conn.execute_batch(&export_sql)?;
+
+        let data = std::fs::read(&temp_path)?;
+        std::fs::remove_file(&temp_path).ok();
+
+        Ok(data)
+    }
+
+    fn import_from_parquet(&self, tenant_id: &str, data: &[u8]) -> Result<(), GraphError> {
+        let conn = self.conn.lock();
+
+        let temp_path = format!("/tmp/graph_import_{}.parquet", Uuid::new_v4());
+        std::fs::write(&temp_path, data)?;
+
+        conn.execute(
+            "DELETE FROM memory_edges WHERE tenant_id = ?",
+            params![tenant_id],
+        )?;
+        conn.execute(
+            "DELETE FROM memory_nodes WHERE tenant_id = ?",
+            params![tenant_id],
+        )?;
+
+        let import_nodes_sql = format!(
+            r#"
+            INSERT INTO memory_nodes (id, label, properties, memory_id, tenant_id, created_at, updated_at)
+            SELECT id, label, properties, memory_id, '{tenant_id}', 
+                   TRY_CAST(created_at AS TIMESTAMP), TRY_CAST(updated_at AS TIMESTAMP)
+            FROM read_parquet('{path}')
+            WHERE record_type = 'node'
+            "#,
+            tenant_id = tenant_id,
+            path = temp_path
+        );
+        conn.execute_batch(&import_nodes_sql)?;
+
+        let import_edges_sql = format!(
+            r#"
+            INSERT INTO memory_edges (id, source_id, target_id, relation, properties, tenant_id, weight, created_at)
+            SELECT id, source_id, target_id, relation, properties, '{tenant_id}', 
+                   TRY_CAST(weight AS DOUBLE), TRY_CAST(created_at AS TIMESTAMP)
+            FROM read_parquet('{path}')
+            WHERE record_type = 'edge'
+            "#,
+            tenant_id = tenant_id,
+            path = temp_path
+        );
+        conn.execute_batch(&import_edges_sql)?;
+
+        std::fs::remove_file(&temp_path).ok();
+
+        debug!("Imported graph data from parquet for tenant {}", tenant_id);
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(min_size = %min_community_size))]
+    pub fn detect_communities(
+        &self,
+        ctx: TenantContext,
+        min_community_size: usize,
+    ) -> Result<Vec<Community>, GraphError> {
+        let tenant_id = self.validate_tenant(&ctx)?;
+        let conn = self.conn.lock();
+
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT id FROM memory_nodes
+            WHERE tenant_id = ? AND deleted_at IS NULL
+            "#,
+        )?;
+
+        let node_ids: Vec<String> = stmt
+            .query_map(params![tenant_id], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if node_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut adjacency: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+
+        for node_id in &node_ids {
+            adjacency.insert(node_id.clone(), Vec::new());
+        }
+
+        let mut edge_stmt = conn.prepare(
+            r#"
+            SELECT source_id, target_id FROM memory_edges
+            WHERE tenant_id = ? AND deleted_at IS NULL
+            "#,
+        )?;
+
+        let edges: Vec<(String, String)> = edge_stmt
+            .query_map(params![tenant_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        for (src, tgt) in &edges {
+            if let Some(neighbors) = adjacency.get_mut(src) {
+                neighbors.push(tgt.clone());
+            }
+            if let Some(neighbors) = adjacency.get_mut(tgt) {
+                neighbors.push(src.clone());
+            }
+        }
+
+        let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut communities: Vec<Community> = Vec::new();
+
+        for start_node in &node_ids {
+            if visited.contains(start_node) {
+                continue;
+            }
+
+            let mut component: Vec<String> = Vec::new();
+            let mut queue: std::collections::VecDeque<String> = std::collections::VecDeque::new();
+            queue.push_back(start_node.clone());
+            visited.insert(start_node.clone());
+
+            while let Some(current) = queue.pop_front() {
+                component.push(current.clone());
+                if let Some(neighbors) = adjacency.get(&current) {
+                    for neighbor in neighbors {
+                        if !visited.contains(neighbor) {
+                            visited.insert(neighbor.clone());
+                            queue.push_back(neighbor.clone());
+                        }
+                    }
+                }
+            }
+
+            if component.len() >= min_community_size {
+                let n = component.len();
+                let internal_edges: usize = edges
+                    .iter()
+                    .filter(|(s, t)| component.contains(s) && component.contains(t))
+                    .count();
+                let max_edges = if n > 1 { n * (n - 1) / 2 } else { 1 };
+                let density = internal_edges as f64 / max_edges as f64;
+
+                communities.push(Community {
+                    id: Uuid::new_v4().to_string(),
+                    member_node_ids: component,
+                    density,
+                });
+            }
+        }
+
+        debug!(
+            "Detected {} communities with min size {}",
+            communities.len(),
+            min_community_size
+        );
+        Ok(communities)
+    }
 }
 
 /// Graph statistics
@@ -1313,5 +1790,115 @@ mod tests {
         let stats = store.get_stats(ctx).unwrap();
         assert_eq!(stats.node_count, 3);
         assert_eq!(stats.edge_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_detect_communities_single_component() {
+        let store = create_test_store();
+        let ctx = test_tenant_context();
+        let tenant_id = ctx.tenant_id.as_str().to_string();
+
+        for i in 1..=4 {
+            let node = GraphNode {
+                id: format!("node-{}", i),
+                label: format!("Node{}", i),
+                properties: serde_json::Value::Null,
+                tenant_id: tenant_id.clone(),
+            };
+            store.add_node(ctx.clone(), node).await.unwrap();
+        }
+
+        let edges = vec![
+            ("node-1", "node-2"),
+            ("node-2", "node-3"),
+            ("node-3", "node-4"),
+            ("node-4", "node-1"),
+        ];
+        for (i, (src, tgt)) in edges.iter().enumerate() {
+            let edge = GraphEdge {
+                id: format!("edge-{}", i),
+                source_id: src.to_string(),
+                target_id: tgt.to_string(),
+                relation: "CONNECTS".to_string(),
+                properties: serde_json::Value::Null,
+                tenant_id: tenant_id.clone(),
+            };
+            store.add_edge(ctx.clone(), edge).await.unwrap();
+        }
+
+        let communities = store.detect_communities(ctx, 2).unwrap();
+        assert_eq!(communities.len(), 1);
+        assert_eq!(communities[0].member_node_ids.len(), 4);
+        assert!(communities[0].density > 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_detect_communities_multiple_components() {
+        let store = create_test_store();
+        let ctx = test_tenant_context();
+        let tenant_id = ctx.tenant_id.as_str().to_string();
+
+        for i in 1..=6 {
+            let node = GraphNode {
+                id: format!("node-{}", i),
+                label: format!("Node{}", i),
+                properties: serde_json::Value::Null,
+                tenant_id: tenant_id.clone(),
+            };
+            store.add_node(ctx.clone(), node).await.unwrap();
+        }
+
+        let edge1 = GraphEdge {
+            id: "edge-1".to_string(),
+            source_id: "node-1".to_string(),
+            target_id: "node-2".to_string(),
+            relation: "CONNECTS".to_string(),
+            properties: serde_json::Value::Null,
+            tenant_id: tenant_id.clone(),
+        };
+        store.add_edge(ctx.clone(), edge1).await.unwrap();
+
+        let edge2 = GraphEdge {
+            id: "edge-2".to_string(),
+            source_id: "node-4".to_string(),
+            target_id: "node-5".to_string(),
+            relation: "CONNECTS".to_string(),
+            properties: serde_json::Value::Null,
+            tenant_id: tenant_id.clone(),
+        };
+        store.add_edge(ctx.clone(), edge2).await.unwrap();
+
+        let communities = store.detect_communities(ctx, 2).unwrap();
+        assert_eq!(communities.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_detect_communities_min_size_filter() {
+        let store = create_test_store();
+        let ctx = test_tenant_context();
+        let tenant_id = ctx.tenant_id.as_str().to_string();
+
+        for i in 1..=3 {
+            let node = GraphNode {
+                id: format!("node-{}", i),
+                label: format!("Node{}", i),
+                properties: serde_json::Value::Null,
+                tenant_id: tenant_id.clone(),
+            };
+            store.add_node(ctx.clone(), node).await.unwrap();
+        }
+
+        let edge = GraphEdge {
+            id: "edge-1".to_string(),
+            source_id: "node-1".to_string(),
+            target_id: "node-2".to_string(),
+            relation: "CONNECTS".to_string(),
+            properties: serde_json::Value::Null,
+            tenant_id: tenant_id.clone(),
+        };
+        store.add_edge(ctx.clone(), edge).await.unwrap();
+
+        let communities = store.detect_communities(ctx, 3).unwrap();
+        assert_eq!(communities.len(), 0);
     }
 }
