@@ -537,6 +537,60 @@ impl DuckDbGraphStore {
         Ok(())
     }
 
+    /// Soft-delete all nodes originating from a specific memory entry
+    /// Looks for nodes with `source_memory_id` in their properties JSON
+    #[instrument(skip(self), fields(source_memory_id = %source_memory_id))]
+    pub fn soft_delete_nodes_by_source_memory_id(
+        &self,
+        ctx: TenantContext,
+        source_memory_id: &str,
+    ) -> Result<usize, GraphError> {
+        let tenant_id = self.validate_tenant(&ctx)?;
+        let conn = self.conn.lock();
+        let now = Utc::now().to_rfc3339();
+
+        let mut stmt = conn.prepare(
+            "SELECT id FROM memory_nodes 
+             WHERE tenant_id = ? 
+             AND deleted_at IS NULL 
+             AND json_extract_string(properties, '$.source_memory_id') = ?",
+        )?;
+
+        let node_ids: Vec<String> = stmt
+            .query_map(params![tenant_id, source_memory_id], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if node_ids.is_empty() {
+            debug!("No nodes found with source_memory_id: {}", source_memory_id);
+            return Ok(0);
+        }
+
+        let nodes_deleted = conn.execute(
+            "UPDATE memory_nodes SET deleted_at = ? 
+             WHERE tenant_id = ? 
+             AND deleted_at IS NULL 
+             AND json_extract_string(properties, '$.source_memory_id') = ?",
+            params![now, tenant_id, source_memory_id],
+        )?;
+
+        for node_id in &node_ids {
+            conn.execute(
+                "UPDATE memory_edges SET deleted_at = ? 
+                 WHERE (source_id = ? OR target_id = ?) 
+                 AND tenant_id = ? 
+                 AND deleted_at IS NULL",
+                params![now, node_id, node_id, tenant_id],
+            )?;
+        }
+
+        info!(
+            "Soft-deleted {} nodes with source_memory_id {} and cascaded to edges",
+            nodes_deleted, source_memory_id
+        );
+        Ok(nodes_deleted)
+    }
+
     /// Hard delete nodes and edges marked as deleted (cleanup job)
     #[instrument(skip(self))]
     pub fn cleanup_deleted(&self, older_than: DateTime<Utc>) -> Result<usize, GraphError> {
@@ -1540,6 +1594,15 @@ impl GraphStore for DuckDbGraphStore {
         debug!("Found {} nodes matching query '{}'", results.len(), query);
         Ok(results)
     }
+
+    #[instrument(skip(self), fields(source_memory_id = %source_memory_id))]
+    async fn soft_delete_nodes_by_source_memory_id(
+        &self,
+        ctx: TenantContext,
+        source_memory_id: &str,
+    ) -> Result<usize, Self::Error> {
+        DuckDbGraphStore::soft_delete_nodes_by_source_memory_id(self, ctx, source_memory_id)
+    }
 }
 
 #[cfg(test)]
@@ -1900,5 +1963,60 @@ mod tests {
 
         let communities = store.detect_communities(ctx, 3).unwrap();
         assert_eq!(communities.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_soft_delete_nodes_by_source_memory_id() {
+        let store = create_test_store();
+        let ctx = test_tenant_context();
+        let tenant_id = ctx.tenant_id.as_str().to_string();
+
+        let node1 = GraphNode {
+            id: "entity-person".to_string(),
+            label: "Person".to_string(),
+            properties: serde_json::json!({"source_memory_id": "memory-123", "name": "Alice"}),
+            tenant_id: tenant_id.clone(),
+        };
+        let node2 = GraphNode {
+            id: "entity-place".to_string(),
+            label: "Place".to_string(),
+            properties: serde_json::json!({"source_memory_id": "memory-123", "name": "Office"}),
+            tenant_id: tenant_id.clone(),
+        };
+        let node3 = GraphNode {
+            id: "entity-other".to_string(),
+            label: "Other".to_string(),
+            properties: serde_json::json!({"source_memory_id": "memory-456", "name": "Unrelated"}),
+            tenant_id: tenant_id.clone(),
+        };
+
+        store.add_node(ctx.clone(), node1).await.unwrap();
+        store.add_node(ctx.clone(), node2).await.unwrap();
+        store.add_node(ctx.clone(), node3).await.unwrap();
+
+        let edge = GraphEdge {
+            id: "edge-person-place".to_string(),
+            source_id: "entity-person".to_string(),
+            target_id: "entity-place".to_string(),
+            relation: "WORKS_AT".to_string(),
+            properties: serde_json::Value::Null,
+            tenant_id: tenant_id.clone(),
+        };
+        store.add_edge(ctx.clone(), edge).await.unwrap();
+
+        let deleted = store
+            .soft_delete_nodes_by_source_memory_id(ctx.clone(), "memory-123")
+            .unwrap();
+        assert_eq!(deleted, 2);
+
+        let results = store.search_nodes(ctx.clone(), "Other", 10).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "entity-other");
+
+        let neighbors = store
+            .get_neighbors(ctx.clone(), "entity-other")
+            .await
+            .unwrap();
+        assert!(neighbors.is_empty());
     }
 }

@@ -872,6 +872,44 @@ impl crate::graph::GraphStore for PostgresBackend {
         }
         Ok(nodes)
     }
+
+    async fn soft_delete_nodes_by_source_memory_id(
+        &self,
+        ctx: TenantContext,
+        source_memory_id: &str,
+    ) -> Result<usize, Self::Error> {
+        let result = sqlx::query(
+            "UPDATE graph_nodes SET deleted_at = NOW() 
+             WHERE tenant_id = $1 
+             AND deleted_at IS NULL 
+             AND properties->>'source_memory_id' = $2",
+        )
+        .bind(ctx.tenant_id.as_str())
+        .bind(source_memory_id)
+        .execute(&self.pool)
+        .await?;
+
+        let deleted_count = result.rows_affected() as usize;
+
+        sqlx::query(
+            "UPDATE graph_edges SET deleted_at = NOW()
+             WHERE tenant_id = $1 
+             AND deleted_at IS NULL
+             AND (source_id IN (
+                SELECT id FROM graph_nodes 
+                WHERE tenant_id = $1 AND properties->>'source_memory_id' = $2
+             ) OR target_id IN (
+                SELECT id FROM graph_nodes 
+                WHERE tenant_id = $1 AND properties->>'source_memory_id' = $2
+             ))",
+        )
+        .bind(ctx.tenant_id.as_str())
+        .bind(source_memory_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(deleted_count)
+    }
 }
 
 #[async_trait]
