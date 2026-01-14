@@ -229,3 +229,215 @@ The system SHALL support migration from heuristic-based context to OPAL-backed c
 - **THEN** all authorization decisions go through Cedar
 - **AND** denied requests are logged with policy reason
 - **AND** circuit breaker prevents cascade failures
+
+### Requirement: OPAL Server High Availability
+The system SHALL deploy OPAL Server in high availability mode to prevent authorization decision outages.
+
+#### Scenario: OPAL Server HA deployment
+- **WHEN** administrator deploys Aeterna in production mode
+- **THEN** OPAL Server SHALL be deployed with minimum 3 replicas
+- **AND** replicas SHALL be distributed across availability zones
+- **AND** load balancer SHALL distribute traffic across healthy replicas
+
+#### Scenario: OPAL Server failover
+- **WHEN** an OPAL Server replica becomes unavailable
+- **THEN** traffic SHALL be automatically routed to healthy replicas
+- **AND** no authorization decisions SHALL be blocked during failover
+- **AND** system SHALL alert on replica failure
+
+#### Scenario: Local policy cache with TTL
+- **WHEN** all OPAL Server replicas are unavailable
+- **THEN** Cedar Agents SHALL use local policy cache
+- **AND** cache SHALL have configurable TTL (default: 5 minutes)
+- **AND** system SHALL operate in degraded mode with cached policies
+- **AND** alert SHALL be raised for manual intervention
+
+### Requirement: Cedar Policy Conflict Detection
+The system SHALL detect and prevent conflicting Cedar policies before deployment.
+
+#### Scenario: Conflict detection on policy proposal
+- **WHEN** a new policy is proposed via `aeterna_policy_validate`
+- **THEN** the system SHALL analyze for conflicts with existing policies
+- **AND** detect explicit allow + deny conflicts for same action/resource
+- **AND** detect implicit conflicts from different policy priorities
+- **AND** return detailed conflict report
+
+#### Scenario: Block conflicting policy deployment
+- **WHEN** policy conflict is detected
+- **THEN** the system SHALL reject policy proposal
+- **AND** provide clear explanation of conflict
+- **AND** suggest resolution options (modify, override, remove)
+
+#### Scenario: Policy conflict audit
+- **WHEN** conflict detection runs
+- **THEN** analysis results SHALL be logged to audit trail
+- **AND** include policy IDs, conflict type, and resolution path
+
+### Requirement: PostgreSQL Referential Integrity
+The system SHALL enforce referential integrity in the organizational hierarchy database.
+
+#### Scenario: Foreign key constraint enforcement
+- **WHEN** database schema is created
+- **THEN** foreign key constraints SHALL be defined for all relationships:
+  - organizations.company_id → companies.id
+  - teams.org_id → organizations.id
+  - projects.team_id → teams.id
+  - memberships.user_id → users.id
+  - memberships.team_id → teams.id
+
+#### Scenario: Cascading soft-delete
+- **WHEN** an organization is deleted
+- **THEN** all child teams SHALL be soft-deleted
+- **AND** all child projects SHALL be soft-deleted
+- **AND** memberships to deleted teams SHALL be soft-deleted
+- **AND** cleanup job SHALL permanently remove after retention period
+
+#### Scenario: Orphan detection
+- **WHEN** integrity scan runs (daily)
+- **THEN** system SHALL detect orphaned records (missing parent)
+- **AND** log orphans to audit trail
+- **AND** optionally auto-repair by reassigning or removing
+
+### Requirement: WebSocket PubSub Reliability
+The system SHALL ensure reliable delivery of policy updates via OPAL WebSocket PubSub.
+
+#### Scenario: Reconnection with exponential backoff
+- **WHEN** Cedar Agent loses WebSocket connection to OPAL Server
+- **THEN** agent SHALL reconnect with exponential backoff (1s, 2s, 4s, 8s, max 30s)
+- **AND** emit metrics for reconnection attempts
+- **AND** log reconnection events
+
+#### Scenario: Full resync on reconnect
+- **WHEN** Cedar Agent reconnects after disconnection
+- **THEN** agent SHALL request full policy and data resync
+- **AND** verify data consistency with checksum
+- **AND** log any detected drift
+
+#### Scenario: Connection health monitoring
+- **WHEN** WebSocket connection is active
+- **THEN** system SHALL emit heartbeat metrics (latency, drop count)
+- **AND** alert on high latency (>1s) or frequent drops (>3/minute)
+
+### Requirement: IdP Synchronization Timeliness
+The system SHALL ensure timely synchronization of user and group changes from identity providers.
+
+#### Scenario: Webhook-based real-time sync
+- **WHEN** IdP sends webhook for user/group change
+- **THEN** system SHALL process webhook within 5 seconds
+- **AND** update PostgreSQL referential
+- **AND** trigger OPAL update
+- **AND** Cedar Agents SHALL have updated data within 10 seconds total
+
+#### Scenario: Scheduled pull sync fallback
+- **WHEN** webhook delivery fails or is delayed
+- **THEN** scheduled sync job (configurable, default: 15 minutes) SHALL catch up
+- **AND** log delta between webhook and pull sync
+
+#### Scenario: Sync lag alerting
+- **WHEN** IdP changes are detected older than threshold (default: 30 minutes)
+- **THEN** system SHALL alert on sync lag
+- **AND** log affected users/groups
+
+### Requirement: CLI Offline Mode
+The system SHALL support offline operation of CLI commands when Aeterna server is unreachable.
+
+#### Scenario: Local policy cache for offline
+- **WHEN** CLI detects server is unreachable
+- **THEN** CLI SHALL use local policy cache for read operations
+- **AND** display warning about cached data age
+- **AND** refuse write operations that require server
+
+#### Scenario: Operation queue for later sync
+- **WHEN** CLI is used offline for write operations
+- **THEN** operations SHALL be queued in local SQLite database
+- **AND** CLI SHALL attempt sync when server becomes reachable
+- **AND** conflict resolution SHALL be prompted if conflicts detected
+
+#### Scenario: Server reachability check
+- **WHEN** CLI starts
+- **THEN** CLI SHALL check server health endpoint
+- **AND** cache result for session
+- **AND** display connection status
+
+### Requirement: Policy Rollback Mechanism
+The system SHALL support rollback of policy deployments when issues are detected.
+
+#### Scenario: Manual policy rollback
+- **WHEN** administrator runs `aeterna policy rollback --version <version>`
+- **THEN** system SHALL revert to specified policy version
+- **AND** propagate change to all Cedar Agents
+- **AND** log rollback in audit trail
+
+#### Scenario: Automatic rollback on error rate
+- **WHEN** authorization error rate exceeds threshold (configurable, default: 5% in 5 minutes)
+- **THEN** system SHALL automatically rollback to previous policy version
+- **AND** alert administrators
+- **AND** log incident with error details
+
+#### Scenario: Policy version history
+- **WHEN** policy is deployed
+- **THEN** system SHALL store version with timestamp and deployer
+- **AND** retain configurable number of versions (default: 10)
+- **AND** support diff between versions
+
+### Requirement: LLM Translation Determinism
+The system SHALL ensure deterministic policy translation from natural language to Cedar.
+
+#### Scenario: Prompt caching for consistency
+- **WHEN** same natural language input is provided multiple times
+- **THEN** system SHALL return cached translation if available
+- **AND** cache SHALL have configurable TTL (default: 24 hours)
+- **AND** cache key SHALL include input hash and context
+
+#### Scenario: Few-shot example templates
+- **WHEN** natural language input matches known pattern
+- **THEN** system SHALL use template-based translation (no LLM)
+- **AND** templates SHALL cover 80% of common use cases
+- **AND** fall back to LLM only for complex patterns
+
+#### Scenario: Translation audit trail
+- **WHEN** translation is performed
+- **THEN** system SHALL log input, output, method (template/LLM), and confidence
+- **AND** support review of translations for quality assurance
+
+### Requirement: Approval Workflow Timeout
+The system SHALL enforce timeouts on pending approval workflows to prevent stuck proposals.
+
+#### Scenario: Configurable approval timeout
+- **WHEN** proposal is submitted for approval
+- **THEN** system SHALL apply timeout (configurable per governance level)
+- **AND** send reminder at 50% and 75% of timeout
+- **AND** expire proposal if timeout reached
+
+#### Scenario: Escalation on timeout
+- **WHEN** proposal timeout is approaching (75%)
+- **THEN** system SHALL escalate to next approver tier
+- **AND** notify original approvers of escalation
+- **AND** log escalation event
+
+#### Scenario: Auto-close expired proposals
+- **WHEN** proposal expires
+- **THEN** system SHALL close proposal with "expired" status
+- **AND** notify proposer of expiration
+- **AND** proposer can resubmit if still needed
+
+### Requirement: Governance Audit Log Retention
+The system SHALL manage retention of governance audit logs to prevent unbounded growth.
+
+#### Scenario: Configurable retention policy
+- **WHEN** audit log retention is configured (default: 90 days)
+- **THEN** logs older than retention period SHALL be archived to cold storage
+- **AND** archived logs SHALL be available for compliance queries
+- **AND** hot storage SHALL contain only recent logs
+
+#### Scenario: Audit log archival
+- **WHEN** archival job runs (daily)
+- **THEN** system SHALL move expired logs to S3 cold storage
+- **AND** maintain index for searchability
+- **AND** emit metrics for archived log count and size
+
+#### Scenario: Compliance export
+- **WHEN** compliance audit requires historical logs
+- **THEN** system SHALL support export from archive
+- **AND** export SHALL include full event details
+- **AND** export SHALL be filterable by time range and entity

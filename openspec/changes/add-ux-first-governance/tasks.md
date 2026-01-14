@@ -270,3 +270,86 @@
 - [ ] 12.8.6 E2E test: IdP sync creates users and memberships
 - [ ] 12.8.7 E2E test: Circuit breaker fallback on Cedar Agent failure
 - [ ] 12.8.8 Load test: 1000 concurrent authorization requests
+
+## 13. Production Reliability Gaps (Critical + High)
+
+### 13.1 OPAL High Availability (UX-C1)
+- [ ] 13.1.1 Configure OPAL Server StatefulSet with 3 replicas
+- [ ] 13.1.2 Implement anti-affinity rules for AZ distribution
+- [ ] 13.1.3 Configure load balancer for OPAL Server traffic
+- [ ] 13.1.4 Implement local policy cache with configurable TTL
+- [ ] 13.1.5 Add alerting for OPAL replica failures
+- [ ] 13.1.6 Write tests for OPAL failover scenarios
+
+### 13.2 Cedar Policy Conflict Detection (UX-C2)
+- [ ] 13.2.1 Implement policy conflict analyzer in `aeterna_policy_validate`
+- [ ] 13.2.2 Detect explicit allow/deny conflicts for same action/resource
+- [ ] 13.2.3 Detect implicit conflicts from policy priorities
+- [ ] 13.2.4 Block conflicting policy deployment with clear error
+- [ ] 13.2.5 Add conflict resolution suggestions
+- [ ] 13.2.6 Log conflict detection to audit trail
+- [ ] 13.2.7 Write tests for conflict detection scenarios
+
+### 13.3 PostgreSQL Referential Integrity (UX-C3)
+- [ ] 13.3.1 Add foreign key constraints to all relationship columns
+- [ ] 13.3.2 Implement cascading soft-delete for org hierarchy
+- [ ] 13.3.3 Create orphan detection scheduled job
+- [ ] 13.3.4 Add auto-repair option for orphaned records
+- [ ] 13.3.5 Write migration script for existing data
+- [ ] 13.3.6 Write tests for referential integrity enforcement
+
+### 13.4 WebSocket PubSub Reliability (UX-H1)
+- [ ] 13.4.1 Implement reconnection with exponential backoff (1s→30s max)
+- [ ] 13.4.2 Implement full resync on reconnect
+- [ ] 13.4.3 Add checksum verification for data consistency
+- [ ] 13.4.4 Emit connection health metrics (latency, drop count)
+- [ ] 13.4.5 Add alerting for high latency/frequent drops
+- [ ] 13.4.6 Write tests for reconnection scenarios
+
+### 13.5 IdP Sync Timeliness (UX-H2)
+- [ ] 13.5.1 Implement webhook handlers for Okta/Azure AD events
+- [ ] 13.5.2 Add webhook processing SLA (5 second target)
+- [ ] 13.5.3 Implement pull+push sync strategy
+- [ ] 13.5.4 Add sync lag detection and alerting
+- [ ] 13.5.5 Log delta between webhook and pull sync
+- [ ] 13.5.6 Write tests for sync timeliness
+
+### 13.6 CLI Offline Mode (UX-H3)
+- [ ] 13.6.1 Implement local policy cache in SQLite
+- [ ] 13.6.2 Add server reachability check on CLI start
+- [ ] 13.6.3 Queue write operations for later sync
+- [ ] 13.6.4 Implement conflict resolution for queued operations
+- [ ] 13.6.5 Display cache age warning in offline mode
+- [ ] 13.6.6 Write tests for offline scenarios
+
+### 13.7 Policy Rollback (UX-H4)
+- [ ] 13.7.1 Implement `aeterna policy rollback` command
+- [ ] 13.7.2 Store policy version history (default: 10 versions)
+- [ ] 13.7.3 Implement automatic rollback on error rate threshold
+- [ ] 13.7.4 Add policy version diff capability
+- [ ] 13.7.5 Log rollbacks in audit trail
+- [ ] 13.7.6 Write tests for rollback scenarios
+
+### 13.8 LLM Translation Determinism (UX-H5)
+- [ ] 13.8.1 Implement prompt caching with configurable TTL
+- [ ] 13.8.2 Build few-shot template library (80% coverage target)
+- [ ] 13.8.3 Add template-based translation for common patterns
+- [ ] 13.8.4 Log translation method and confidence
+- [ ] 13.8.5 Add translation quality review workflow
+- [ ] 13.8.6 Write tests for translation consistency
+
+### 13.9 Approval Workflow Timeout (UX-H6)
+- [ ] 13.9.1 Implement configurable approval timeout per governance level
+- [ ] 13.9.2 Send reminder notifications at 50% and 75% timeout
+- [ ] 13.9.3 Implement escalation to next approver tier
+- [ ] 13.9.4 Auto-close expired proposals with notification
+- [ ] 13.9.5 Log timeout and escalation events
+- [ ] 13.9.6 Write tests for timeout scenarios
+
+### 13.10 Audit Log Retention (UX-H7)
+- [ ] 13.10.1 Implement configurable retention policy (default: 90 days)
+- [ ] 13.10.2 Create archival job to S3 cold storage
+- [ ] 13.10.3 Maintain search index for archived logs
+- [ ] 13.10.4 Implement compliance export from archive
+- [ ] 13.10.5 Add metrics for archived log count and size
+- [ ] 13.10.6 Write tests for retention and archival

@@ -311,6 +311,93 @@ Implementation checklist organized by migration phases from design.md.
 
 ---
 
+## Phase 8: Production Gap Requirements
+
+### 8.1 LLM Summarization Cost Control (CCA-C1) - CRITICAL
+- [ ] 8.1.1 Add `SummarizationBudget` struct with fields: `daily_token_limit`, `hourly_token_limit`, `per_layer_limit`
+- [ ] 8.1.2 Implement `BudgetTracker` in `knowledge/src/context_architect/budget.rs`
+- [ ] 8.1.3 Add tenant-scoped budget storage in PostgreSQL (table: `summarization_budgets`)
+- [ ] 8.1.4 Implement budget enforcement in `SummaryGenerator` (check before LLM call)
+- [ ] 8.1.5 Add summarization batching: `BatchedSummarizer` that groups requests by layer
+- [ ] 8.1.6 Implement tiered model selection (expensive model for user/session, cheap model for company/org layers)
+- [ ] 8.1.7 Add budget exhaustion handling: queue low-priority requests, reject if queue full
+- [ ] 8.1.8 Add metrics for summarization cost tracking (tokens consumed, budget remaining)
+- [ ] 8.1.9 Implement alert when budget reaches 80%, 90%, 100% thresholds
+- [ ] 8.1.10 Write integration tests for budget enforcement scenarios
+
+### 8.2 Meta-Agent Time Budget (CCA-C2) - CRITICAL
+- [ ] 8.2.1 Add `time_budget_seconds` field to `MetaAgentConfig` (default: 300s/5min)
+- [ ] 8.2.2 Implement `TimeBudgetTracker` in `knowledge/src/meta_agent/budget.rs`
+- [ ] 8.2.3 Add deadline checking at iteration boundaries (before build, test, improve phases)
+- [ ] 8.2.4 Implement graceful termination: complete current phase, then exit
+- [ ] 8.2.5 Add timeout handling: save progress state for potential manual resume
+- [ ] 8.2.6 Implement escalation message generation on timeout (what was attempted, where it stopped)
+- [ ] 8.2.7 Add per-phase time tracking metrics (build_time, test_time, improve_time)
+- [ ] 8.2.8 Write tests for timeout scenarios (mid-build, mid-test, mid-improve)
+
+### 8.3 Summary Staleness Validation (CCA-H1) - HIGH
+- [ ] 8.3.1 Add `content_hash: String` field to `LayerSummary` struct
+- [ ] 8.3.2 Implement hash computation using xxHash64 (fast, deterministic)
+- [ ] 8.3.3 Add hash validation in `ContextAssembler.retrieve_summary()` method
+- [ ] 8.3.4 Implement stale summary detection: compare stored hash vs current content hash
+- [ ] 8.3.5 Add automatic invalidation: mark summary as stale when hash mismatch detected
+- [ ] 8.3.6 Implement stale summary handling: return stale with warning flag, or regenerate
+- [ ] 8.3.7 Add `staleness_policy` config option: `serve_stale_warn`, `regenerate_blocking`, `regenerate_async`
+- [ ] 8.3.8 Write tests for staleness detection edge cases
+
+### 8.4 Hindsight Note Deduplication (CCA-H2) - HIGH
+- [ ] 8.4.1 Add `ErrorSignatureIndex` struct for efficient signature lookup
+- [ ] 8.4.2 Implement signature normalization: remove timestamps, UUIDs, line numbers from error messages
+- [ ] 8.4.3 Add embedding-based similarity check using cosine similarity (threshold: 0.95)
+- [ ] 8.4.4 Implement deduplication in `ErrorCapture.capture_error()`: check before insert
+- [ ] 8.4.5 Add resolution merging: combine successful resolutions for duplicate errors
+- [ ] 8.4.6 Implement deduplication background job: periodic scan for duplicates
+- [ ] 8.4.7 Add deduplication metrics: duplicates_detected, duplicates_merged, unique_signatures
+- [ ] 8.4.8 Write tests for signature normalization and merging
+
+### 8.5 Extension State Memory Limits (CCA-H3) - HIGH
+- [ ] 8.5.1 Add `max_state_size_bytes` config option per extension (default: 1MB)
+- [ ] 8.5.2 Add `state_ttl_seconds` config option per extension (default: 3600)
+- [ ] 8.5.3 Implement size check in `ExtensionContext.set_state()` method
+- [ ] 8.5.4 Add TTL enforcement using Redis EXPIRE command
+- [ ] 8.5.5 Implement LRU eviction policy for extension state (when tenant limit reached)
+- [ ] 8.5.6 Add state compression for large values (zstd compression)
+- [ ] 8.5.7 Implement state size alerting: warn at 80% of limit
+- [ ] 8.5.8 Add metrics for extension state usage (size_bytes, keys_count, evictions)
+- [ ] 8.5.9 Write tests for memory limit enforcement and eviction
+
+### 8.6 Trajectory Capture Latency Control (CCA-H4) - HIGH
+- [ ] 8.6.1 Implement async trajectory capture using `tokio::spawn`
+- [ ] 8.6.2 Add write batching: buffer events, flush every 100ms or 10 events
+- [ ] 8.6.3 Implement sampling for high-volume tools: capture 1 in N executions (configurable)
+- [ ] 8.6.4 Add `capture_mode` config: `all`, `sampled`, `errors_only`, `disabled`
+- [ ] 8.6.5 Implement capture overhead budget: skip if adding >5ms latency
+- [ ] 8.6.6 Add capture queue with bounded size (drop oldest on overflow)
+- [ ] 8.6.7 Implement capture metrics: events_captured, events_dropped, capture_latency_ms
+- [ ] 8.6.8 Write performance benchmarks for capture overhead
+
+### 8.7 Context Assembly Latency Control (CCA-H5) - HIGH
+- [ ] 8.7.1 Add `assembly_timeout_ms` config option (default: 100ms)
+- [ ] 8.7.2 Implement pre-computed relevance scores: update on content change
+- [ ] 8.7.3 Add assembled context caching: key by query embedding + token budget
+- [ ] 8.7.4 Implement timeout fallback: return partial context with flag
+- [ ] 8.7.5 Add parallel layer querying using `tokio::join!`
+- [ ] 8.7.6 Implement early termination: stop when token budget filled
+- [ ] 8.7.7 Add assembly latency metrics: p50, p95, p99, timeouts
+- [ ] 8.7.8 Write latency benchmark tests (target: p99 < 100ms)
+
+### 8.8 LLM Summarization Failure Handling (CCA-H6) - HIGH
+- [ ] 8.8.1 Implement retry with exponential backoff (initial: 1s, max: 30s, max_retries: 3)
+- [ ] 8.8.2 Add cached summary fallback: serve last known summary on failure
+- [ ] 8.8.3 Implement circuit breaker pattern: trip after 5 failures in 60s
+- [ ] 8.8.4 Add fallback model selection: try cheaper/faster model on primary failure
+- [ ] 8.8.5 Implement alert on repeated failures: notify after 3 consecutive failures
+- [ ] 8.8.6 Add graceful degradation: return raw content when all summarization fails
+- [ ] 8.8.7 Implement failure metrics: failures_total, retries_total, circuit_breaker_trips
+- [ ] 8.8.8 Write tests for failure scenarios (API timeout, rate limit, model error)
+
+---
+
 ## Summary
 
 | Phase | Tasks | Description |
@@ -322,7 +409,23 @@ Implementation checklist organized by migration phases from design.md.
 | 5 | 20 | Meta-Agent loop integration |
 | 6 | 21 | Extension system for callbacks |
 | 7 | 17 | OpenCode Plugin integration |
+| 8 | 68 | Production gap requirements (CCA-C1 to CCA-H6) |
 | CC | 14 | Cross-cutting concerns |
-| **Total** | **172** | |
+| **Total** | **240** | |
 
-**Estimated effort**: 6-8 weeks with 80% test coverage target
+**Estimated effort**: 8-10 weeks with 80% test coverage target
+
+---
+
+## Production Gap Tracking
+
+| Gap ID | Priority | Requirement | Tasks |
+|--------|----------|-------------|-------|
+| CCA-C1 | Critical | LLM Summarization Cost Control | 8.1.1-8.1.10 |
+| CCA-C2 | Critical | Meta-Agent Time Budget | 8.2.1-8.2.8 |
+| CCA-H1 | High | Summary Staleness Validation | 8.3.1-8.3.8 |
+| CCA-H2 | High | Hindsight Note Deduplication | 8.4.1-8.4.8 |
+| CCA-H3 | High | Extension State Memory Limits | 8.5.1-8.5.9 |
+| CCA-H4 | High | Trajectory Capture Latency Control | 8.6.1-8.6.8 |
+| CCA-H5 | High | Context Assembly Latency Control | 8.7.1-8.7.8 |
+| CCA-H6 | High | LLM Summarization Failure Handling | 8.8.1-8.8.8 |

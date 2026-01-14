@@ -311,3 +311,129 @@ The system SHALL support both NPM plugin and MCP server integration methods simu
 - **WHEN** both plugin and MCP are configured
 - **THEN** the plugin SHALL handle local operations
 - **AND** MCP SHALL handle remote knowledge/governance sync
+
+### Requirement: Plugin SDK Version Stability (OC-C1)
+The system SHALL maintain stability guarantees despite underlying SDK pre-release status.
+
+#### Scenario: SDK Version Pinning
+- **WHEN** the plugin package builds
+- **THEN** the `@opencode-ai/plugin` dependency MUST be pinned to an exact version
+- **AND** the pinned version MUST be documented in CHANGELOG on update
+
+#### Scenario: SDK Abstraction Layer
+- **WHEN** implementing OpenCode SDK integration
+- **THEN** the system MUST implement an abstraction layer between business logic and SDK
+- **AND** this abstraction MUST allow SDK replacement without changing business logic
+
+#### Scenario: SDK Compatibility Tests
+- **WHEN** the SDK version changes
+- **THEN** compatibility tests MUST verify all hooks work correctly
+- **AND** tests MUST cover tool registration, chat hooks, and event handlers
+
+### Requirement: Credential Security (OC-C2)
+The system SHALL implement secure credential handling to prevent token exposure.
+
+#### Scenario: Credential Masking in Logs
+- **WHEN** debug logging is enabled
+- **THEN** the system MUST mask `AETERNA_TOKEN` and other credentials
+- **AND** masked values MUST use format `[REDACTED:...last4chars]`
+
+#### Scenario: Secure Credential Storage
+- **WHEN** credentials are persisted
+- **THEN** the system MUST use secure storage (keychain/credential manager)
+- **AND** credentials MUST NOT be stored in plain text files
+
+#### Scenario: Token Rotation Support
+- **WHEN** tokens are rotated
+- **THEN** the system MUST support seamless token refresh
+- **AND** ongoing operations MUST NOT be interrupted during rotation
+
+### Requirement: Experimental Hook Fallback (OC-H1)
+The system SHALL handle experimental hook API changes gracefully.
+
+#### Scenario: Feature Flag for Experimental Hooks
+- **WHEN** experimental hooks are used
+- **THEN** the system MUST wrap them in feature flags
+- **AND** each experimental hook MUST be individually configurable
+
+#### Scenario: Fallback Behavior
+- **WHEN** an experimental hook is unavailable or fails
+- **THEN** the system MUST provide fallback behavior
+- **AND** core functionality MUST remain operational
+
+#### Scenario: Hook Availability Detection
+- **WHEN** the plugin initializes
+- **THEN** it MUST detect available hooks from SDK version
+- **AND** warn when using hooks marked as experimental
+
+### Requirement: Session Capture Performance (OC-H2)
+The system SHALL minimize latency impact from tool execution capture.
+
+#### Scenario: Async Capture
+- **WHEN** `tool.execute.after` hook fires
+- **THEN** the capture operation MUST be asynchronous
+- **AND** MUST NOT block the tool response to the AI
+
+#### Scenario: Capture Sampling
+- **WHEN** tool execution rate exceeds threshold (default: 10/second)
+- **THEN** the system MUST apply sampling
+- **AND** sample rate MUST be configurable
+
+#### Scenario: Capture Debouncing
+- **WHEN** multiple similar tool executions occur rapidly
+- **THEN** the system MUST debounce captures
+- **AND** debounce window MUST be configurable (default: 500ms)
+
+### Requirement: Knowledge Query Performance (OC-H3)
+The system SHALL optimize knowledge injection latency.
+
+#### Scenario: Pre-fetch on Session Start
+- **WHEN** a session starts
+- **THEN** the system MUST pre-fetch frequently accessed knowledge
+- **AND** cache project and team-level knowledge for duration of session
+
+#### Scenario: Query Caching
+- **WHEN** a knowledge query is executed
+- **THEN** results MUST be cached with TTL (default: 60 seconds)
+- **AND** cache key MUST include query and filter parameters
+
+#### Scenario: Timeout Fallback
+- **WHEN** knowledge query exceeds timeout (default: 200ms)
+- **THEN** the system MUST return cached results if available
+- **AND** proceed without injection if no cache available
+
+### Requirement: Session State Persistence (OC-H4)
+The system SHALL define and implement session state storage strategy.
+
+#### Scenario: Redis Session Storage
+- **WHEN** multiple plugin instances are deployed
+- **THEN** session state MUST be stored in Redis
+- **AND** state MUST be accessible from any instance
+
+#### Scenario: Local Fallback Storage
+- **WHEN** Redis is unavailable
+- **THEN** the system MUST fall back to local file storage
+- **AND** warn that multi-instance deployments may have inconsistent state
+
+#### Scenario: Session State TTL
+- **WHEN** session state is stored
+- **THEN** it MUST have configurable TTL (default: 24 hours)
+- **AND** expired sessions MUST be automatically cleaned up
+
+### Requirement: MCP Server Health Management (OC-H5)
+The system SHALL implement robust MCP server process management.
+
+#### Scenario: Health Check Implementation
+- **WHEN** MCP server is running
+- **THEN** it MUST expose health check endpoint
+- **AND** health check MUST verify backend connectivity
+
+#### Scenario: Supervisor Pattern
+- **WHEN** MCP server process crashes
+- **THEN** the system MUST implement automatic restart
+- **AND** restart MUST use exponential backoff (max 3 retries, then alert)
+
+#### Scenario: Crash Recovery
+- **WHEN** MCP server recovers from crash
+- **THEN** it MUST restore in-flight request state if possible
+- **AND** emit metrics for crash events

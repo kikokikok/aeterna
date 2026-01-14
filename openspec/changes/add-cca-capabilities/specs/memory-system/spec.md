@@ -89,3 +89,45 @@ The system SHALL emit metrics for summary operations.
 - **WHEN** summary retrieval completes
 - **THEN** system SHALL emit histogram: memory.summary.retrieval_latency_ms
 - **AND** system SHALL emit counter: memory.summary.retrievals with labels (layer, depth, cache_hit)
+
+### Requirement: LLM Summarization Cost Control
+The system SHALL implement cost controls for LLM-based summarization to prevent unbounded API costs.
+
+#### Scenario: Per-tenant summarization budget
+- **WHEN** summarization is triggered
+- **THEN** system SHALL check current billing period usage against tenant budget
+- **AND** system SHALL reject summarization if budget exceeded
+- **AND** system SHALL return error with budget exhaustion details
+
+#### Scenario: Summarization batching
+- **WHEN** multiple summaries need regeneration within batch window (configurable, default: 5 minutes)
+- **THEN** system SHALL batch summaries into single LLM call where possible
+- **AND** system SHALL process batches by priority (higher layers first)
+- **AND** system SHALL emit batch efficiency metrics
+
+#### Scenario: Tiered model selection
+- **WHEN** summarization is triggered for low-priority layers (company, org)
+- **THEN** system SHALL use cheaper models (e.g., gpt-4o-mini vs gpt-4o)
+- **AND** system SHALL make model configurable per layer
+- **AND** system SHALL log model used for cost tracking
+
+### Requirement: Summary Staleness Validation
+The system SHALL detect and invalidate stale summaries when source content changes.
+
+#### Scenario: Content hash comparison
+- **WHEN** source content is modified
+- **THEN** system SHALL compute new content hash
+- **AND** system SHALL compare against summary's source_hash
+- **AND** system SHALL mark summary as stale on mismatch
+
+#### Scenario: Immediate invalidation on significant change
+- **WHEN** source content is deleted or replaced entirely
+- **THEN** system SHALL immediately invalidate associated summary
+- **AND** system SHALL trigger high-priority regeneration
+- **AND** system SHALL serve stale data with warning until regenerated
+
+#### Scenario: Staleness check on retrieval
+- **WHEN** summary is retrieved for context assembly
+- **THEN** system SHALL verify staleness before returning
+- **AND** system SHALL include freshness metadata in response
+- **AND** system SHALL log stale summary usage for monitoring

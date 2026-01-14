@@ -150,3 +150,24 @@ The system SHALL emit metrics and logs for hindsight learning operations.
 #### Scenario: Emit promotion metrics
 - **WHEN** promotion is proposed or completed
 - **THEN** system SHALL emit counter: hindsight.promotion.total with labels (from_layer, to_layer, status)
+
+### Requirement: Hindsight Note Deduplication
+The system SHALL prevent storage of duplicate hindsight notes capturing the same error pattern.
+
+#### Scenario: Detect duplicate hindsight note
+- **WHEN** generating hindsight note for error signature
+- **THEN** system SHALL check for existing notes with same error_signature_id
+- **AND** system SHALL check for semantic similarity > 0.9 with existing notes
+- **AND** system SHALL skip creation if duplicate detected
+
+#### Scenario: Merge resolutions for duplicate
+- **WHEN** duplicate error signature detected with new resolution
+- **THEN** system SHALL add resolution to existing signature
+- **AND** system SHALL NOT create new hindsight note
+- **AND** system SHALL update existing note with merged resolutions
+
+#### Scenario: Storage bloat monitoring
+- **WHEN** hindsight note count exceeds threshold per layer (configurable, default: 1000)
+- **THEN** system SHALL alert on potential bloat
+- **AND** system SHALL suggest cleanup of low-value notes (low success_rate, old, unused)
+- **AND** system SHALL emit metric: hindsight.storage.count with labels (layer)
