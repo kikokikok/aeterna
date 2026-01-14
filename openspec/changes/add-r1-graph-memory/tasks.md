@@ -20,7 +20,7 @@
 - [x] 3.2 Add `graph_neighbors` tool for related memory lookup
 - [x] 3.3 Add `memory_optimize` tool for R1-led pruning
 - [x] 3.4 Integrate GraphStore with MemoryManager (auto-update on add/delete)
-- [ ] 3.5 Write E2E tests for graph-based reasoning
+- [x] 3.5 Write E2E tests for graph-based reasoning
 - [x] 3.6 Add GraphStore configuration to `config/` module
 
 ## 4. Data Integrity (Critical Gaps R1-C1, R1-C2)
