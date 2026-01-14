@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
-use storage::graph_duckdb::{WriteCoordinator, WriteCoordinatorConfig};
+use storage::graph_duckdb::{ContentionAlertConfig, WriteCoordinator, WriteCoordinatorConfig};
 use testcontainers::ContainerAsync;
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::redis::Redis;
@@ -78,6 +78,7 @@ async fn test_write_coordinator_lock_blocks_second_acquirer() {
                 max_retries: 2,
                 base_backoff_ms: 50,
                 max_backoff_ms: 100,
+                alert_config: ContentionAlertConfig::default(),
             };
             let coordinator = Arc::new(WriteCoordinator::new(redis_url, config));
 
@@ -190,6 +191,7 @@ async fn test_write_coordinator_concurrent_contention() {
                 max_retries: 10,
                 base_backoff_ms: 10,
                 max_backoff_ms: 50,
+                alert_config: ContentionAlertConfig::default(),
             };
             let coordinator = Arc::new(WriteCoordinator::new(redis_url, config));
 
@@ -267,6 +269,7 @@ async fn test_write_coordinator_lock_ttl_expiry() {
                 max_retries: 3,
                 base_backoff_ms: 50,
                 max_backoff_ms: 100,
+                alert_config: ContentionAlertConfig::default(),
             };
             let coordinator = Arc::new(WriteCoordinator::new(redis_url, config));
 
@@ -295,6 +298,7 @@ async fn test_write_coordinator_exponential_backoff() {
                 max_retries: 4,
                 base_backoff_ms: 50,
                 max_backoff_ms: 500,
+                alert_config: ContentionAlertConfig::default(),
             };
             let coordinator = Arc::new(WriteCoordinator::new(redis_url, config));
 
@@ -336,6 +340,7 @@ async fn test_write_coordinator_wrong_lock_value_release() {
                 max_retries: 2,
                 base_backoff_ms: 50,
                 max_backoff_ms: 100,
+                alert_config: ContentionAlertConfig::default(),
             };
             let coordinator = WriteCoordinator::new(redis_url, config);
 

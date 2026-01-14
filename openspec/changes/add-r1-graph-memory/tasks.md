@@ -37,7 +37,7 @@
 - [x] 5.3 Implement exponential backoff for lock acquisition
 - [x] 5.4 Add write contention metrics (queue depth, wait time, timeout rate)
 - [x] 5.5 Write tests for concurrent write scenarios
-- [ ] 5.6 Add alerting threshold configuration for contention
+- [x] 5.6 Add alerting threshold configuration for contention
 
 ## 6. Transactional S3 Persistence (Critical Gap R1-C4)
 - [x] 6.1 Implement two-phase commit for Parquet export (temp prefix → atomic rename)
@@ -48,8 +48,8 @@
 - [x] 6.6 Write tests for partial export failure scenarios
 
 ## 7. Performance Optimization (High Gaps R1-H1, R1-H7)
-- [ ] 7.1 Create composite indexes: `idx_edges_tenant_source`, `idx_edges_tenant_target`
-- [ ] 7.2 Create single-column indexes: `idx_nodes_tenant`, `idx_entities_tenant`
+- [x] 7.1 Create composite indexes: `idx_edges_tenant_source`, `idx_edges_tenant_target`
+- [x] 7.2 Create single-column indexes: `idx_nodes_tenant`, `idx_entities_tenant`
 - [ ] 7.3 Implement lazy partition loading for Lambda cold start
 - [ ] 7.4 Add cold start budget enforcement (3s limit)
 - [ ] 7.5 Implement partition access tracking for pre-warming
@@ -61,7 +61,7 @@
 - [x] 8.2 Record span attributes: query type, tenant_id, hop count, result count, duration_ms
 - [x] 8.3 Implement Prometheus metrics: `graph_query_duration_seconds`, `graph_query_result_count`
 - [x] 8.4 Add `graph_cache_hit_ratio` and `graph_traversal_depth` metrics
-- [ ] 8.5 Write tests for telemetry emission
+- [x] 8.5 Write tests for telemetry emission
 
 ## 9. Security & Tenant Isolation (High Gap R1-H3)
 - [ ] 9.1 Implement parameterized tenant filter for all queries

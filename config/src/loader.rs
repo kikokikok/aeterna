@@ -14,8 +14,8 @@
 //! - `OB_*`: Observability settings
 
 use crate::config::{
-    Config, GraphConfig, MemoryConfig, ObservabilityConfig, PostgresConfig, ProviderConfig,
-    QdrantConfig, RedisConfig, SyncConfig, ToolConfig,
+    Config, ContentionAlertConfig, GraphConfig, MemoryConfig, ObservabilityConfig, PostgresConfig,
+    ProviderConfig, QdrantConfig, RedisConfig, SyncConfig, ToolConfig,
 };
 use std::env;
 
@@ -156,6 +156,7 @@ fn load_graph_from_env() -> Result<GraphConfig, Box<dyn std::error::Error>> {
         s3_prefix: env::var("GR_S3_PREFIX").ok(),
         s3_endpoint: env::var("GR_S3_ENDPOINT").ok(),
         s3_region: env::var("GR_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
+        contention_alerts: ContentionAlertConfig::default(),
     })
 }
 

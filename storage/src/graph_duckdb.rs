@@ -188,11 +188,35 @@ pub struct Community {
 }
 
 #[derive(Debug, Clone)]
+pub struct ContentionAlertConfig {
+    pub queue_depth_warn: u32,
+    pub queue_depth_critical: u32,
+    pub wait_time_warn_ms: u64,
+    pub wait_time_critical_ms: u64,
+    pub timeout_rate_warn_percent: f64,
+    pub timeout_rate_critical_percent: f64,
+}
+
+impl Default for ContentionAlertConfig {
+    fn default() -> Self {
+        Self {
+            queue_depth_warn: 5,
+            queue_depth_critical: 10,
+            wait_time_warn_ms: 1000,
+            wait_time_critical_ms: 3000,
+            timeout_rate_warn_percent: 5.0,
+            timeout_rate_critical_percent: 15.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct WriteCoordinatorConfig {
     pub lock_ttl_ms: u64,
     pub max_retries: u32,
     pub base_backoff_ms: u64,
     pub max_backoff_ms: u64,
+    pub alert_config: ContentionAlertConfig,
 }
 
 impl Default for WriteCoordinatorConfig {
@@ -202,6 +226,7 @@ impl Default for WriteCoordinatorConfig {
             max_retries: 5,
             base_backoff_ms: 50,
             max_backoff_ms: 2000,
+            alert_config: ContentionAlertConfig::default(),
         }
     }
 }
@@ -214,10 +239,11 @@ pub struct WriteCoordinator {
 
 impl WriteCoordinator {
     pub fn new(redis_url: String, config: WriteCoordinatorConfig) -> Self {
+        let metrics = GraphMetrics::with_alert_config(config.alert_config.clone());
         Self {
             redis_url,
             config,
-            metrics: GraphMetrics::new(),
+            metrics,
         }
     }
 
@@ -316,14 +342,72 @@ impl WriteCoordinator {
 
 /// Observability metrics for graph operations.
 /// Uses the `metrics` crate for lightweight instrumentation.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct GraphMetrics {
-    _private: (),
+    alert_config: Option<ContentionAlertConfig>,
+}
+
+impl Default for GraphMetrics {
+    fn default() -> Self {
+        Self { alert_config: None }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlertSeverity {
+    Warn,
+    Critical,
 }
 
 impl GraphMetrics {
     pub fn new() -> Self {
-        Self { _private: () }
+        Self::default()
+    }
+
+    pub fn with_alert_config(alert_config: ContentionAlertConfig) -> Self {
+        Self {
+            alert_config: Some(alert_config),
+        }
+    }
+
+    fn emit_alert(&self, severity: AlertSeverity, metric_name: &str, value: f64, threshold: f64) {
+        let severity_str = match severity {
+            AlertSeverity::Warn => "warn",
+            AlertSeverity::Critical => "critical",
+        };
+        metrics::counter!(
+            "graph_contention_alerts_total",
+            1,
+            "severity" => severity_str,
+            "metric" => metric_name.to_string()
+        );
+        warn!(
+            severity = severity_str,
+            metric = metric_name,
+            value = value,
+            threshold = threshold,
+            "Contention alert triggered"
+        );
+    }
+
+    fn check_wait_time_alert(&self, wait_time_ms: u64) {
+        if let Some(ref config) = self.alert_config {
+            if wait_time_ms >= config.wait_time_critical_ms {
+                self.emit_alert(
+                    AlertSeverity::Critical,
+                    "wait_time_ms",
+                    wait_time_ms as f64,
+                    config.wait_time_critical_ms as f64,
+                );
+            } else if wait_time_ms >= config.wait_time_warn_ms {
+                self.emit_alert(
+                    AlertSeverity::Warn,
+                    "wait_time_ms",
+                    wait_time_ms as f64,
+                    config.wait_time_warn_ms as f64,
+                );
+            }
+        }
     }
 
     pub fn record_query(&self, duration_secs: f64, result_count: usize) {
@@ -339,13 +423,11 @@ impl GraphMetrics {
         metrics::counter!("graph_cache_misses_total", 1);
     }
 
-    /// Record write lock acquisition attempt
     pub fn record_lock_attempt(&self, _tenant_id: &str) {
         metrics::counter!("graph_write_lock_attempts_total", 1);
         metrics::gauge!("graph_write_queue_depth", 1.0);
     }
 
-    /// Record successful lock acquisition with wait time
     pub fn record_lock_acquired(&self, _tenant_id: &str, wait_time_ms: u64, retry_count: u32) {
         metrics::counter!("graph_write_lock_acquired_total", 1);
         metrics::histogram!(
@@ -354,9 +436,9 @@ impl GraphMetrics {
         );
         metrics::histogram!("graph_write_lock_retries", retry_count as f64);
         metrics::gauge!("graph_write_queue_depth", -1.0);
+        self.check_wait_time_alert(wait_time_ms);
     }
 
-    /// Record lock acquisition timeout/failure
     pub fn record_lock_timeout(&self, _tenant_id: &str, wait_time_ms: u64, retry_count: u32) {
         metrics::counter!("graph_write_lock_timeouts_total", 1);
         metrics::histogram!(
@@ -365,9 +447,9 @@ impl GraphMetrics {
         );
         metrics::histogram!("graph_write_lock_retries", retry_count as f64);
         metrics::gauge!("graph_write_queue_depth", -1.0);
+        self.check_wait_time_alert(wait_time_ms);
     }
 
-    /// Record lock release
     pub fn record_lock_released(&self, _tenant_id: &str, hold_time_ms: u64) {
         metrics::counter!("graph_write_lock_released_total", 1);
         metrics::histogram!(
