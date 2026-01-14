@@ -146,3 +146,45 @@ The system SHALL track and emit metrics for summary generation quality and perfo
 - **WHEN** context assembly completes
 - **THEN** system SHALL emit histogram: context_architect.assembly.tokens_used
 - **AND** system SHALL emit histogram: context_architect.assembly.layers_included
+
+### Requirement: Context Assembly Latency Control
+The system SHALL ensure context assembly meets latency requirements for real-time agent interactions.
+
+#### Scenario: Pre-computed relevance scores
+- **WHEN** layer content is updated
+- **THEN** system SHALL pre-compute relevance scores against common query patterns
+- **AND** system SHALL store scores for fast retrieval during assembly
+- **AND** system SHALL invalidate scores when content changes significantly
+
+#### Scenario: Cached context assembly
+- **WHEN** same query pattern is received within cache window (configurable, default: 5 minutes)
+- **THEN** system SHALL return cached assembled context
+- **AND** system SHALL invalidate cache on layer content changes
+- **AND** system SHALL emit metric: context_architect.assembly.cache_hit_rate
+
+#### Scenario: Assembly timeout fallback
+- **WHEN** context assembly exceeds timeout (configurable, default: 500ms)
+- **THEN** system SHALL return partial context with available layers
+- **AND** system SHALL log timeout with assembly progress
+- **AND** system SHALL continue assembly asynchronously for next request
+
+### Requirement: LLM Summarization Failure Handling
+The system SHALL gracefully handle LLM API failures during summarization.
+
+#### Scenario: Retry with exponential backoff
+- **WHEN** LLM API call fails
+- **THEN** system SHALL retry with exponential backoff (1s, 2s, 4s, max 3 attempts)
+- **AND** system SHALL log each retry attempt
+- **AND** system SHALL emit metric: context_architect.llm.retries
+
+#### Scenario: Fallback to cached summary
+- **WHEN** all LLM retry attempts fail
+- **THEN** system SHALL return cached summary if available
+- **AND** system SHALL mark summary as stale but usable
+- **AND** system SHALL alert on repeated failures
+
+#### Scenario: Graceful degradation
+- **WHEN** no cached summary available and LLM fails
+- **THEN** system SHALL fall back to raw content truncation
+- **AND** system SHALL log degraded operation
+- **AND** system SHALL include warning in response metadata

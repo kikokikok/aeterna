@@ -234,3 +234,147 @@ Policies can be:
 - **WHEN** a lower level attempts to create a policy that contradicts a forbidden parent policy
 - **THEN** the system SHALL reject the creation
 - **AND** the system SHALL return the conflicting parent policy in the error response
+
+### Requirement: Tenant Data Isolation Security (MT-C1)
+The system SHALL implement defense-in-depth for tenant data isolation.
+
+#### Scenario: Query Parameterization
+- **WHEN** database queries are executed
+- **THEN** all queries MUST use parameterized statements
+- **AND** tenant_id MUST be included in all WHERE clauses
+
+#### Scenario: Row-Level Security
+- **WHEN** PostgreSQL tables contain multi-tenant data
+- **THEN** row-level security (RLS) policies MUST be enabled
+- **AND** RLS MUST enforce tenant isolation at the database level
+
+#### Scenario: Penetration Testing
+- **WHEN** new tenant isolation features are deployed
+- **THEN** penetration testing MUST verify cross-tenant isolation
+- **AND** test results MUST be documented
+
+### Requirement: RBAC Policy Testing (MT-C2)
+The system SHALL have comprehensive automated testing for role-based access control.
+
+#### Scenario: RBAC Integration Tests
+- **WHEN** CI runs
+- **THEN** integration tests MUST verify all role-action-resource combinations
+- **AND** tests MUST cover positive and negative authorization cases
+
+#### Scenario: Permission Matrix Validation
+- **WHEN** RBAC policies are modified
+- **THEN** a permission matrix MUST be generated
+- **AND** matrix MUST be reviewed before deployment
+
+#### Scenario: Role Escalation Prevention
+- **WHEN** testing role permissions
+- **THEN** tests MUST verify privilege escalation is not possible
+- **AND** tests MUST verify role hierarchy is enforced correctly
+
+### Requirement: Drift Detection Tuning (MT-C3)
+The system SHALL provide controls to reduce drift detection false positives.
+
+#### Scenario: Configurable Drift Threshold
+- **WHEN** drift detection runs
+- **THEN** drift threshold MUST be configurable per project
+- **AND** default threshold MUST be conservative (0.2 similarity difference)
+
+#### Scenario: Drift Suppression Rules
+- **WHEN** a known legitimate drift pattern exists
+- **THEN** suppression rules MUST allow marking it as acceptable
+- **AND** suppressed drifts MUST be tracked separately in reports
+
+#### Scenario: Drift Confidence Scoring
+- **WHEN** drift is detected
+- **THEN** system MUST provide confidence score for each drift item
+- **AND** low-confidence drifts MUST be flagged for manual review
+
+### Requirement: Event Streaming Reliability (MT-H1)
+The system SHALL implement reliable delivery for governance events.
+
+#### Scenario: Event Persistence
+- **WHEN** governance events are emitted
+- **THEN** events MUST be persisted to durable storage before acknowledgment
+- **AND** persistence failure MUST be retried with exponential backoff
+
+#### Scenario: At-Least-Once Delivery
+- **WHEN** consumers receive events
+- **THEN** delivery MUST be at-least-once with idempotency keys
+- **AND** consumers MUST handle duplicate events gracefully
+
+#### Scenario: Dead Letter Queue
+- **WHEN** event delivery fails after max retries
+- **THEN** events MUST be moved to dead letter queue
+- **AND** DLQ MUST be monitored with alerts
+
+### Requirement: Batch Job Coordination (MT-H2)
+The system SHALL prevent batch job scheduling conflicts.
+
+#### Scenario: Distributed Locking
+- **WHEN** batch jobs are scheduled
+- **THEN** distributed locks MUST prevent concurrent execution
+- **AND** locks MUST have TTL to prevent deadlocks
+
+#### Scenario: Job Deduplication
+- **WHEN** a job is triggered while previous instance is running
+- **THEN** system MUST skip the duplicate run
+- **AND** skip event MUST be logged for monitoring
+
+#### Scenario: Job Timeout
+- **WHEN** a batch job exceeds timeout (default: 30 minutes)
+- **THEN** job MUST be terminated gracefully
+- **AND** partial results MUST be persisted
+
+### Requirement: Tenant Context Safety (MT-H3)
+The system SHALL enforce mandatory tenant context propagation.
+
+#### Scenario: Middleware Enforcement
+- **WHEN** requests are processed
+- **THEN** middleware MUST require valid TenantContext
+- **AND** requests without context MUST be rejected immediately
+
+#### Scenario: Fail-Closed Policy
+- **WHEN** TenantContext extraction fails
+- **THEN** system MUST fail closed (reject request)
+- **AND** MUST NOT fall back to default tenant
+
+#### Scenario: Context Audit Trail
+- **WHEN** operations are performed
+- **THEN** TenantContext MUST be logged with each operation
+- **AND** audit logs MUST enable forensic reconstruction
+
+### Requirement: Authorization Fallback (MT-H4)
+The system SHALL implement fallback for external authorization service failures.
+
+#### Scenario: Local Policy Cache
+- **WHEN** Permit.io/external auth service is unavailable
+- **THEN** system MUST use locally cached policies
+- **AND** cache MUST be refreshed when service recovers
+
+#### Scenario: OPA/Cedar Fallback
+- **WHEN** configuring authorization
+- **THEN** system MUST support local OPA or Cedar as fallback
+- **AND** policy sync between Permit.io and local MUST be automated
+
+#### Scenario: Graceful Degradation
+- **WHEN** authorization is degraded
+- **THEN** system MUST log degradation mode
+- **AND** read operations MAY continue with cached permissions
+
+### Requirement: Dashboard API Security (MT-H5)
+The system SHALL secure dashboard API endpoints.
+
+#### Scenario: JWT Validation
+- **WHEN** dashboard API requests are received
+- **THEN** JWT tokens MUST be validated
+- **AND** expired tokens MUST be rejected
+
+#### Scenario: OPAL Integration
+- **WHEN** using OPAL for policy updates
+- **THEN** dashboard auth MUST integrate with OPAL auth
+- **AND** API keys MUST be rotatable
+
+#### Scenario: CORS Configuration
+- **WHEN** dashboard frontends access API
+- **THEN** CORS MUST be configured with allowed origins
+- **AND** production MUST not allow wildcard origins

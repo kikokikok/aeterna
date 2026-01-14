@@ -143,3 +143,132 @@ The chart SHALL validate configuration at install time.
 #### Scenario: Invalid resource values
 - **WHEN** resource limits are less than requests
 - **THEN** helm install SHALL fail with descriptive error
+
+### Requirement: Secure Secret Management (HC-C1)
+The system SHALL implement production-grade secret management.
+
+#### Scenario: SOPS Integration
+- **WHEN** `secretProvider=sops` is configured
+- **THEN** the chart MUST support SOPS-encrypted values files
+- **AND** documentation MUST describe SOPS key configuration
+
+#### Scenario: External Secret Managers
+- **WHEN** using external secret manager (Vault, AWS Secrets Manager)
+- **THEN** the chart MUST support External Secrets Operator integration
+- **AND** the chart MUST NOT require plain-text secrets in values.yaml
+
+#### Scenario: Secret Rotation
+- **WHEN** secrets are rotated
+- **THEN** the chart MUST support rolling restart on secret change
+- **AND** documentation MUST describe secret rotation procedure
+
+### Requirement: Subchart Version Pinning (HC-C2)
+The system SHALL pin all subchart dependencies to exact versions.
+
+#### Scenario: Pinned Subchart Versions
+- **WHEN** Chart.yaml is generated
+- **THEN** all dependency versions MUST be exact (no semver ranges)
+- **AND** versions MUST be documented in CHANGELOG
+
+#### Scenario: Subchart Upgrade Procedure
+- **WHEN** subchart versions are updated
+- **THEN** documentation MUST describe breaking changes
+- **AND** upgrade procedure MUST be documented
+
+### Requirement: Pod Disruption Budget Configuration (HC-H1)
+The system SHALL ensure availability during cluster operations.
+
+#### Scenario: PDB with minAvailable
+- **WHEN** `podDisruptionBudget.enabled=true`
+- **THEN** PDB MUST set `minAvailable: 1` by default
+- **AND** PDB settings MUST be configurable
+
+#### Scenario: Drain Procedure Documentation
+- **WHEN** node drain is required
+- **THEN** documentation MUST describe safe drain procedure
+- **AND** must include pre-drain checklist
+
+### Requirement: Network Policy Completeness (HC-H2)
+The system SHALL implement comprehensive network isolation.
+
+#### Scenario: Ingress Network Policies
+- **WHEN** `networkPolicy.enabled=true`
+- **THEN** NetworkPolicy MUST restrict ingress to known sources only
+- **AND** policies MUST allow Ingress controller traffic if enabled
+
+#### Scenario: Egress Network Policies
+- **WHEN** `networkPolicy.enabled=true`
+- **THEN** NetworkPolicy MUST restrict egress to required destinations
+- **AND** policies MUST allow DNS resolution
+
+#### Scenario: Inter-component Policies
+- **WHEN** dependencies are deployed
+- **THEN** NetworkPolicy MUST only allow Aeterna→dependency traffic
+- **AND** direct external access to dependencies MUST be denied
+
+### Requirement: Backup and Restore (HC-H3)
+The system SHALL implement automated backup capabilities.
+
+#### Scenario: PostgreSQL Backup CronJob
+- **WHEN** `backup.enabled=true`
+- **THEN** a CronJob MUST be created for PostgreSQL backups
+- **AND** backups MUST be stored to configured storage (S3, GCS, Azure Blob)
+
+#### Scenario: CloudNativePG Backup Integration
+- **WHEN** using CloudNativePG for PostgreSQL
+- **THEN** the chart MUST integrate with CloudNativePG backup features
+- **AND** backup schedule MUST be configurable
+
+#### Scenario: Restore Documentation
+- **WHEN** restore is needed
+- **THEN** documentation MUST describe restore procedure
+- **AND** must include point-in-time recovery instructions
+
+### Requirement: Resource Limit Guidance (HC-H4)
+The system SHALL provide production sizing guidance.
+
+#### Scenario: Configurable Resource Limits
+- **WHEN** deploying for production
+- **THEN** resource limits MUST be easily configurable
+- **AND** defaults MUST be clearly documented as non-production
+
+#### Scenario: Sizing Documentation
+- **WHEN** sizing for production
+- **THEN** documentation MUST provide sizing guidelines
+- **AND** must include memory/CPU recommendations for different scales
+
+#### Scenario: VPA Support
+- **WHEN** `vpa.enabled=true`
+- **THEN** VerticalPodAutoscaler resource MUST be created
+- **AND** VPA MUST recommend appropriate resource values
+
+### Requirement: Multi-Region Architecture Documentation (HC-H5)
+The system SHALL document multi-region deployment patterns.
+
+#### Scenario: Multi-Region Documentation
+- **WHEN** multi-region deployment is needed
+- **THEN** documentation MUST describe architecture patterns
+- **AND** must include federation approach for future implementation
+
+#### Scenario: Cross-Region Data Sync
+- **WHEN** multiple regions are deployed
+- **THEN** documentation MUST describe data synchronization options
+- **AND** must note limitations of current single-cluster design
+
+### Requirement: Redis Alternative Compatibility (HC-H6)
+The system SHALL ensure compatibility with Redis alternatives.
+
+#### Scenario: Dragonfly Compatibility Tests
+- **WHEN** `redis.alternative=dragonfly` is configured
+- **THEN** compatibility tests MUST verify all operations work
+- **AND** any limitations MUST be documented
+
+#### Scenario: KeyDB Compatibility Tests
+- **WHEN** `redis.alternative=keydb` is configured
+- **THEN** compatibility tests MUST verify all operations work
+- **AND** cluster mode differences MUST be documented
+
+#### Scenario: Redis vs Alternative Differences
+- **WHEN** using Redis alternatives
+- **THEN** documentation MUST describe behavior differences
+- **AND** must note features that may not be available

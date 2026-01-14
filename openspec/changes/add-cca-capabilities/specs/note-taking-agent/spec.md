@@ -131,3 +131,24 @@ The system SHALL emit metrics and logs for note-taking operations.
 - **WHEN** note retrieval completes
 - **THEN** system SHALL emit histogram: note_taking.retrieval.results_count
 - **AND** system SHALL emit histogram: note_taking.retrieval.latency_ms
+
+### Requirement: Trajectory Capture Latency Control
+The system SHALL minimize latency overhead when capturing tool execution trajectories.
+
+#### Scenario: Asynchronous trajectory capture
+- **WHEN** tool execution completes
+- **THEN** system SHALL capture trajectory asynchronously (non-blocking)
+- **AND** system SHALL NOT add latency to tool execution response
+- **AND** system SHALL buffer captures for batch write
+
+#### Scenario: Batch trajectory writes
+- **WHEN** trajectory buffer reaches threshold (configurable, default: 10 events or 5 seconds)
+- **THEN** system SHALL flush buffer to storage
+- **AND** system SHALL emit metric: note_taking.capture.batch_size
+- **AND** system SHALL handle flush failures with retry queue
+
+#### Scenario: Sampling for high-volume operations
+- **WHEN** tool execution rate exceeds threshold (configurable, default: 100/minute)
+- **THEN** system SHALL sample captures (configurable rate, default: 10%)
+- **AND** system SHALL log sampling active status
+- **AND** system SHALL capture all failed executions regardless of sampling
