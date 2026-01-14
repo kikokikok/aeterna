@@ -35,7 +35,7 @@
 - [x] 5.1 Implement Redis-backed write queue for serialized writes
 - [x] 5.2 Add distributed lock (SETNX) for Lambda cold start coordination
 - [x] 5.3 Implement exponential backoff for lock acquisition
-- [ ] 5.4 Add write contention metrics (queue depth, wait time, timeout rate)
+- [x] 5.4 Add write contention metrics (queue depth, wait time, timeout rate)
 - [ ] 5.5 Write tests for concurrent write scenarios
 - [ ] 5.6 Add alerting threshold configuration for contention
 

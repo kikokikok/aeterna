@@ -209,14 +209,22 @@ impl Default for WriteCoordinatorConfig {
 pub struct WriteCoordinator {
     redis_url: String,
     config: WriteCoordinatorConfig,
+    metrics: GraphMetrics,
 }
 
 impl WriteCoordinator {
     pub fn new(redis_url: String, config: WriteCoordinatorConfig) -> Self {
-        Self { redis_url, config }
+        Self {
+            redis_url,
+            config,
+            metrics: GraphMetrics::new(),
+        }
     }
 
     pub async fn acquire_lock(&self, tenant_id: &str) -> Result<String, GraphError> {
+        let start_time = std::time::Instant::now();
+        self.metrics.record_lock_attempt(tenant_id);
+
         let client = redis::Client::open(self.redis_url.as_str())
             .map_err(|e| GraphError::S3(format!("Redis connection failed: {}", e)))?;
         let mut conn = client
@@ -240,6 +248,9 @@ impl WriteCoordinator {
 
             match result {
                 Ok(true) => {
+                    let wait_time_ms = start_time.elapsed().as_millis() as u64;
+                    self.metrics
+                        .record_lock_acquired(tenant_id, wait_time_ms, attempt);
                     debug!("Acquired lock {} on attempt {}", lock_key, attempt + 1);
                     return Ok(lock_value);
                 }
@@ -250,15 +261,26 @@ impl WriteCoordinator {
                     }
                 }
                 Err(e) => {
+                    let wait_time_ms = start_time.elapsed().as_millis() as u64;
+                    self.metrics
+                        .record_lock_timeout(tenant_id, wait_time_ms, attempt);
                     return Err(GraphError::S3(format!("Redis SET failed: {}", e)));
                 }
             }
         }
 
+        let wait_time_ms = start_time.elapsed().as_millis() as u64;
+        self.metrics
+            .record_lock_timeout(tenant_id, wait_time_ms, self.config.max_retries);
         Err(GraphError::Timeout(self.config.max_retries as i32))
     }
 
-    pub async fn release_lock(&self, tenant_id: &str, lock_value: &str) -> Result<(), GraphError> {
+    pub async fn release_lock(
+        &self,
+        tenant_id: &str,
+        lock_value: &str,
+        acquired_at: std::time::Instant,
+    ) -> Result<(), GraphError> {
         let client = redis::Client::open(self.redis_url.as_str())
             .map_err(|e| GraphError::S3(format!("Redis connection failed: {}", e)))?;
         let mut conn = client
@@ -285,6 +307,8 @@ impl WriteCoordinator {
             .await
             .map_err(|e| GraphError::S3(format!("Redis EVAL failed: {}", e)))?;
 
+        let hold_time_ms = acquired_at.elapsed().as_millis() as u64;
+        self.metrics.record_lock_released(tenant_id, hold_time_ms);
         debug!("Released lock {}", lock_key);
         Ok(())
     }
@@ -313,6 +337,43 @@ impl GraphMetrics {
 
     pub fn record_cache_miss(&self) {
         metrics::counter!("graph_cache_misses_total", 1);
+    }
+
+    /// Record write lock acquisition attempt
+    pub fn record_lock_attempt(&self, _tenant_id: &str) {
+        metrics::counter!("graph_write_lock_attempts_total", 1);
+        metrics::gauge!("graph_write_queue_depth", 1.0);
+    }
+
+    /// Record successful lock acquisition with wait time
+    pub fn record_lock_acquired(&self, _tenant_id: &str, wait_time_ms: u64, retry_count: u32) {
+        metrics::counter!("graph_write_lock_acquired_total", 1);
+        metrics::histogram!(
+            "graph_write_lock_wait_seconds",
+            wait_time_ms as f64 / 1000.0
+        );
+        metrics::histogram!("graph_write_lock_retries", retry_count as f64);
+        metrics::gauge!("graph_write_queue_depth", -1.0);
+    }
+
+    /// Record lock acquisition timeout/failure
+    pub fn record_lock_timeout(&self, _tenant_id: &str, wait_time_ms: u64, retry_count: u32) {
+        metrics::counter!("graph_write_lock_timeouts_total", 1);
+        metrics::histogram!(
+            "graph_write_lock_wait_seconds",
+            wait_time_ms as f64 / 1000.0
+        );
+        metrics::histogram!("graph_write_lock_retries", retry_count as f64);
+        metrics::gauge!("graph_write_queue_depth", -1.0);
+    }
+
+    /// Record lock release
+    pub fn record_lock_released(&self, _tenant_id: &str, hold_time_ms: u64) {
+        metrics::counter!("graph_write_lock_released_total", 1);
+        metrics::histogram!(
+            "graph_write_lock_hold_seconds",
+            hold_time_ms as f64 / 1000.0
+        );
     }
 }
 
