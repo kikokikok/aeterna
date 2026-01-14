@@ -19,6 +19,7 @@ Modern enterprises face critical challenges when deploying AI agents:
 | **Knowledge drift** | No audit trail for architectural decisions | Immutable commits, constraint enforcement |
 | **Multi-tenant chaos** | Teams stepping on each other | Hierarchical isolation with policy inheritance |
 | **Compliance gaps** | AI agents violating organizational standards | Cedar/Permit.io authorization + policy engine |
+| **Agent coordination** | No shared context between agents | A2A protocol via Radkit integration |
 
 ---
 
@@ -35,7 +36,7 @@ Modern enterprises face critical challenges when deploying AI agents:
 │                                    │                                         │
 │                          ┌─────────▼─────────┐                              │
 │                          │   MCP Tool API    │                              │
-│                          │  (8 unified tools) │                              │
+│                          │ (11 unified tools) │                              │
 │                          └─────────┬─────────┘                              │
 └────────────────────────────────────┼────────────────────────────────────────┘
                                      │
@@ -47,16 +48,26 @@ Modern enterprises face critical challenges when deploying AI agents:
 │   │                        │              │                        │        │
 │   │  • 7-layer hierarchy   │◄────────────►│  • Git-versioned       │        │
 │   │  • Vector retrieval    │  Sync Bridge │  • Constraint DSL      │        │
-│   │  • Provider agnostic   │              │  • Policy enforcement  │        │
-│   └───────────┬────────────┘              └───────────┬────────────┘        │
+│   │  • Memory-R1 rewards   │              │  • Policy enforcement  │        │
+│   │  • DuckDB graph layer  │              │  • Natural language → │        │
+│   └───────────┬────────────┘              │    Cedar translation   │        │
 │               │                                       │                      │
 │   ┌───────────▼────────────┐              ┌───────────▼────────────┐        │
 │   │   GOVERNANCE ENGINE    │              │   AUTHORIZATION        │        │
 │   │                        │              │                        │        │
 │   │  • Policy inheritance  │              │  • Cedar policies      │        │
 │   │  • Drift detection     │              │  • RBAC (5 roles)      │        │
-│   │  • Merge strategies    │              │  • Tenant isolation    │        │
+│   │  • Merge strategies    │              │  • OPAL integration    │        │
+│   │  • Multi-tenant ReBAC  │              │  • Tenant isolation    │        │
 │   └────────────────────────┘              └────────────────────────┘        │
+│                                                                              │
+│   ┌────────────────────────────────────────────────────────────────────────┐ │
+│   │                        CCA CAPABILITIES                                 │ │
+│   │  • Context Architect: Hierarchical compression                         │ │
+│   │  • Note-Taking Agent: Trajectory distillation                          │ │
+│   │  • Hindsight Learning: Error capture & patterns                        │ │
+│   │  • Meta-Agent: Build-test-improve loop                                 │ │
+│   └────────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
                                      │
@@ -66,6 +77,10 @@ Modern enterprises face critical challenges when deploying AI agents:
 │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐  │
 │   │  Mem0   │ │  Letta  │ │ Qdrant  │ │Pinecone │ │ Chroma  │ │PostgreSQL│  │
 │   └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘  │
+│                                                                              │
+│   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────────────────┐  │
+│   │  Redis  │ │ DuckDB  │ │Permit.io│ │   OPAL  │ │     Radkit A2A      │  │
+│   └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -212,7 +227,7 @@ let team_policy = Policy {
 | **Developer** | 1 | Standard development, knowledge access |
 | **Agent** | 0 | Delegated permissions from user context |
 
-### Cedar Authorization
+### Cedar Authorization + OPAL Integration
 
 ```cedar
 // Allow users to view knowledge in their unit hierarchy
@@ -276,9 +291,73 @@ async fn optimize_layer(&self, layer: MemoryLayer) -> Result<OptimizationResult>
 
 ---
 
+## Graph Layer: DuckDB Integration
+
+New with the **add-r1-graph-memory** change, Aeterna now includes a DuckDB-based graph storage layer:
+
+```rust
+// Graph relationship storage
+pub struct GraphMemory {
+    pub memory_id: MemoryId,
+    pub relationships: Vec<Relationship>,
+    pub embedding: Option<Vec<f32>>,
+}
+
+// Query traversals
+let related = graph.query()
+    .from_memory("payments-architecture")
+    .follow_relationships("implements", "references")
+    .depth(3)
+    .execute().await?;
+```
+
+---
+
+## CCA: Confucius Code Agent Capabilities
+
+The **add-cca-capabilities** change introduces four specialized agents:
+
+### Context Architect
+Hierarchical context compression for efficient memory storage:
+```rust
+let compressed = context_architect.compress(session_memory)
+    .with_hierarchy(true)
+    .with_threshold(0.8)
+    .execute().await?;
+```
+
+### Note-Taking Agent
+Trajectory distillation to Markdown documentation:
+```rust
+let notes = note_taking.distill(agent_trajectory)
+    .to_format(DocumentFormat::Markdown)
+    .with_sections(&["decisions", "outcomes", "patterns"])
+    .execute().await?;
+```
+
+### Hindsight Learning
+Error capture and resolution pattern extraction:
+```rust
+let patterns = hindsight.extract_errors(failed_sessions)
+    .identify_patterns()
+    .suggest_improvements()
+    .execute().await?;
+```
+
+### Meta-Agent
+Build-test-improve self-refinement loop:
+```rust
+let improved = meta_agent.refine(agent_behavior)
+    .with_feedback_loop(FedbackType::Hindsight)
+    .with_iterations(3)
+    .execute().await?;
+```
+
+---
+
 ## MCP Tool Interface
 
-Aeterna exposes 8 unified tools via Model Context Protocol:
+Aeterna exposes 11 unified tools via Model Context Protocol:
 
 ### Memory Tools
 
@@ -298,7 +377,7 @@ Aeterna exposes 8 unified tools via Model Context Protocol:
 | `knowledge_check` | Validate against constraints |
 | `knowledge_show` | Retrieve full knowledge item |
 
-### Graph Tools (Experimental)
+### Graph Tools
 
 | Tool | Description |
 |------|-------------|
@@ -308,14 +387,89 @@ Aeterna exposes 8 unified tools via Model Context Protocol:
 
 ---
 
+## Roadmap: Active OpenSpec Changes
+
+The following 8 changes are currently in development:
+
+### 1. **add-r1-graph-memory** - Memory-R1 + Dynamic Knowledge Graph Layer
+- **Status**: Implementation Phase
+- **Key Features**: DuckDB-based graph store, memory pruning/compression, relationship traversal
+- **New Tools**: `graph_query`, `memory_prune`
+- **Impact**: Enables complex relationship discovery between memories
+
+### 2. **add-ux-first-governance** - UX-First Architecture
+- **Status**: Design Phase
+- **Key Features**: Natural language → Cedar policy translation, OPAL + Cedar Agent integration
+- **New CLI Commands**: `aeterna policy create`, `aeterna init`, `aeterna context resolve`
+- **New Skills**: Policy, Governance, Onboarding, Context, Memory Discovery, Knowledge Discovery, CLI Interface (8 categories total)
+- **Impact**: Dramatically simplifies policy creation and governance management
+
+### 3. **add-cca-capabilities** - Confucius Code Agent (CCA) Capabilities
+- **Status**: Implementation Phase
+- **Key Features**: Context Architect, Note-Taking Agent, Hindsight Learning, Meta-Agent
+- **Extension System**: Typed callbacks with state management
+- **Impact**: Advanced agent self-improvement and learning capabilities
+
+### 4. **add-radkit-integration** - Radkit A2A Integration
+- **Status**: Testing Phase
+- **Key Features**: Agent-to-Agent protocol support, skill definitions for A2A discovery
+- **Thread Management**: Conversation persistence across agents
+- **Impact**: Enables multi-agent coordination and knowledge sharing
+
+### 5. **add-opencode-plugin** - OpenCode Plugin Integration
+- **Status**: Implementation Phase
+- **Key Features**: MCP server for OpenCode, session lifecycle hooks, knowledge query integration
+- **NPM Package**: `@aeterna/opencode-plugin`
+- **Impact**: Native integration with AI coding assistants
+
+### 6. **add-helm-chart** - Kubernetes Deployment
+- **Status**: Testing Phase
+- **Key Features**: Helm chart with configurable dependencies, external/bundled Redis/PostgreSQL/Qdrant
+- **Kubernetes Features**: HPA, RBAC, NetworkPolicies, ServiceMonitor
+- **Impact**: Production-ready enterprise deployment
+
+### 7. **add-multi-tenant-governance** - Enterprise Multi-Tenancy
+- **Status**: Implementation Phase
+- **Key Features**: Tenant isolation with ReBAC (Permit.io + OPA/Cedar), governance roles
+- **Real-time Features**: Event streaming + batch reporting, drift detection with semantic analysis
+- **Impact**: True enterprise-grade multi-tenancy
+
+### 8. **add-reflective-reasoning** - Reflective Memory Reasoning (MemR³)
+- **Status**: Design Phase
+- **Key Features**: Pre-retrieval reasoning, multi-hop retrieval, query refinement
+- **Impact**: Reduces noise in memory retrieval, improves search accuracy
+
+---
+
+## Production Readiness
+
+Aeterna addresses **93 production readiness gaps** identified across enterprise deployments:
+
+### Gap Distribution
+- **Critical**: 19 gaps (data integrity, availability, cost control, security, stability)
+- **High**: 47 gaps (performance, monitoring, scalability, compliance)
+- **Medium**: 27 gaps (documentation, testing, tooling)
+
+### Key Areas Addressed
+- **Security**: Cedar/Permit.io authorization, policy enforcement, tenant isolation
+- **Reliability**: Multi-tenant failover, data replication, disaster recovery
+- **Performance**: Vector optimization, caching strategies, resource pooling
+- **Compliance**: Audit trails, data retention, GDPR/CCPA support
+- **Observability**: Metrics collection, distributed tracing, error tracking
+
+📖 **[Full Details: Production Gaps Analysis](PRODUCTION_GAPS.md)**
+
+---
+
 ## Quick Start
 
 ### Prerequisites
 
 - **Rust**: 1.70+ (Edition 2024)
-- **PostgreSQL**: 16+
+- **PostgreSQL**: 16+ with pgvector extension
 - **Qdrant**: 1.12+
 - **Redis**: 7+
+- **DuckDB**: 0.9+ (for graph layer)
 
 ### Installation
 
@@ -346,6 +500,10 @@ embedding_model = "text-embedding-3-small"
 url = "http://localhost:6333"
 collection_prefix = "aeterna"
 
+[memory.graph]
+provider = "duckdb"
+path = "./data/graph.duckdb"
+
 [knowledge]
 backend = "git"
 repository_path = "./knowledge-repo"
@@ -353,9 +511,18 @@ repository_path = "./knowledge-repo"
 [governance]
 authorization = "cedar"
 policy_mode = "enforce"
+opa_endpoint = "http://localhost:8181"
+permit_sdk_key = "your-permit-io-key"
 
 [governance.cedar]
 schema_path = "./policies/cedar.cedarschema"
+
+[cca]
+enabled = true
+context_architect = true
+note_taking = true
+hindsight_learning = true
+meta_agent = true
 ```
 
 ### Basic Usage (Rust)
@@ -403,6 +570,13 @@ if violations.has_blocking() {
     // Agent stops, explains constraint
     return Err(violations.blocking_message());
 }
+
+// Graph query (new with add-r1-graph-memory)
+let related = memory.graph_query()
+    .from_memory_id("payments-architecture")
+    .follow_relationships(&["implements", "references"])
+    .depth(2)
+    .execute().await?;
 ```
 
 ---
@@ -411,36 +585,41 @@ if violations.has_blocking() {
 
 ```
 aeterna/
-├── adapters/           # Ecosystem integrations (OpenCode, LangChain)
+├── adapters/           # Ecosystem integrations (OpenCode, LangChain, Radkit)
+├── agent-a2a/          # Agent-to-Agent protocol implementation
 ├── config/             # Configuration management, hot reload
 ├── errors/             # Error handling framework
 ├── knowledge/          # Knowledge repository (Git-based)
-├── memory/             # Memory system with R1 optimization
+├── memory/             # Memory system with R1 optimization + Graph layer
 ├── mk_core/            # Shared types and traits
-├── storage/            # Storage layer (PostgreSQL, Qdrant, Redis)
+├── storage/            # Storage layer (PostgreSQL, Qdrant, Redis, DuckDB)
 ├── sync/               # Memory-Knowledge sync bridge
 ├── tools/              # MCP tool interface
-├── specs/              # Detailed specifications
+├── utils/              # Common utilities
+├── specs/              # Detailed specifications (10 specs)
 ├── docs/               # Architecture documentation
-└── openspec/           # Change proposals and versioning
+├── openspec/           # Change proposals and versioning
+├── test-project/       # Integration test project
+└── agent-a2a/          # A2A protocol implementation
 ```
 
 ---
 
 ## Specifications
 
-| Document | Description |
-|----------|-------------|
-| [00-overview](specs/00-overview.md) | Executive summary and architecture |
-| [01-core-concepts](specs/01-core-concepts.md) | Glossary and mental models |
-| [02-memory-system](specs/02-memory-system.md) | Memory layers and operations |
-| [03-knowledge-repository](specs/03-knowledge-repository.md) | Git-based knowledge store |
-| [04-memory-knowledge-sync](specs/04-memory-knowledge-sync.md) | Pointer architecture |
-| [05-adapter-architecture](specs/05-adapter-architecture.md) | Provider abstraction |
-| [06-tool-interface](specs/06-tool-interface.md) | MCP tool contracts |
-| [07-configuration](specs/07-configuration.md) | Config schema |
-| [08-deployment](specs/08-deployment.md) | Self-hosted vs cloud |
-| [09-migration](specs/09-migration.md) | Data portability |
+| Document | Description | Requirements |
+|----------|-------------|-------------|
+| [00-overview](specs/00-overview.md) | Executive summary and architecture | - |
+| [01-core-concepts](specs/01-core-concepts.md) | Glossary and mental models | - |
+| [02-memory-system](specs/02-memory-system.md) | Memory layers and operations | 21 requirements |
+| [03-knowledge-repository](specs/03-knowledge-repository.md) | Git-based knowledge store | 17 requirements |
+| [04-memory-knowledge-sync](specs/04-memory-knowledge-sync.md) | Pointer architecture | 11 requirements |
+| [05-adapter-architecture](specs/05-adapter-architecture.md) | Provider abstraction | - |
+| [06-tool-interface](specs/06-tool-interface.md) | MCP tool contracts | - |
+| [07-configuration](specs/07-configuration.md) | Config schema | - |
+| [08-deployment](specs/08-deployment.md) | Self-hosted vs cloud | - |
+| [09-migration](specs/09-migration.md) | Data portability | - |
+| [storage-spec](specs/storage/spec.md) | Storage layer specification | 10 requirements |
 
 ---
 
@@ -472,6 +651,10 @@ aeterna/
 │   • Anti-Corruption Layer            • Successful approaches    │
 │   • Brick Specification              • Promoted to team/org     │
 │                                                                  │
+│   CCA Agents:                        Graph Relationships:       │
+│   • Context Architect compression    • Service dependencies    │
+│   • Note-taking trajectory docs      • Data flow mappings       │
+│   • Hindsight error patterns         • Migration impact graph   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -481,40 +664,47 @@ aeterna/
 - **Patterns** document reusable solutions (Strangler Facade, ACL, Bricks)
 - **Memory** preserves team learnings (gotchas, workarounds, successes)
 - **Agents** have full context for code generation and review
+- **CCA** compresses context and learns from errors
+- **Graph** discovers service dependencies and impact
 
 📖 **[Full Example: Strangler Fig Migration Guide](docs/examples/strangler-fig-migration.md)**
 
-### 2. Enterprise AI Coding Assistant
+### 2. Enterprise AI Coding Assistant with OpenCode Integration
 
 Deploy AI coding assistants that:
 - Remember individual developer preferences
 - Apply team coding standards automatically
 - Enforce company security policies
 - Share learnings across the organization
+- Integrate seamlessly with OpenCode via MCP plugin
 
-### 3. Autonomous Agent Platform
+### 3. Multi-Agent Platform with A2A Coordination
 
-Build multi-agent systems where:
+Build coordinated multi-agent systems where:
 - Each agent has isolated memory
 - Shared knowledge prevents conflicting decisions
 - Policy constraints prevent dangerous actions
-- Audit trail tracks all agent decisions
+- Agents coordinate via Radkit A2A protocol
+- Graph layer tracks agent relationships
 
-### 4. AI-Powered DevOps
+### 4. AI-Powered DevOps with Helm Deployment
 
 Automate infrastructure management with:
 - Service-specific operational knowledge
 - Team runbooks as enforceable constraints
 - Incident learnings promoted across teams
 - Compliance policies applied uniformly
+- Production-ready Helm chart deployment
 
-### 5. Knowledge-Augmented RAG
+### 5. Knowledge-Augmented RAG with Reflective Reasoning
 
 Enhance retrieval-augmented generation with:
 - Hierarchical context from multiple scopes
 - Constraint-guided response generation
 - Version-controlled knowledge base
 - Semantic deduplication
+- Pre-retrieval reasoning for noise reduction
+- Multi-hop retrieval for complex queries
 
 ---
 
@@ -543,7 +733,18 @@ cargo test --all -- --include-ignored
 - **Error Handling**: `anyhow` for apps, `thiserror` for libs
 - **Async**: Tokio runtime with proper cancellation
 - **Safety**: Avoid `unsafe` unless necessary
-- **Testing**: 80% coverage minimum
+- **Testing**: 80% coverage minimum (TDD/BDD enforced)
+
+### Tech Stack
+
+- **Language**: Rust (Edition 2024)
+- **Memory Storage**: Redis 7+, PostgreSQL 16+ with pgvector, Qdrant 1.12+
+- **Graph Storage**: DuckDB 0.9+
+- **Embedding**: rust-genai 0.4+ (multi-provider)
+- **Authorization**: Cedar + Permit.io + OPAL
+- **Deployment**: Helm chart with Kubernetes support
+- **A2A Protocol**: Radkit SDK integration
+- **Testing**: TDD/BDD with 80% minimum coverage
 
 ---
 
@@ -569,3 +770,6 @@ Built with insights from:
 - [Letta](https://letta.com) - Agent memory patterns
 - [Cedar](https://www.cedarpolicy.com) - Authorization language
 - [OpenCode](https://opencode.ai) - AI coding assistant integration
+- [Permit.io](https://permit.io) - ReBAC authorization
+- [Radkit](https://radkit.dev) - Agent-to-Agent protocol
+- [OPAL](https://opal.ac) - Policy administration
