@@ -234,6 +234,106 @@ impl Default for WriteCoordinatorConfig {
     }
 }
 
+/// Configuration for backup and recovery (R1-H4)
+#[derive(Debug, Clone)]
+pub struct BackupConfig {
+    /// Interval between automatic snapshots (in seconds)
+    pub snapshot_interval_secs: u64,
+    /// Maximum number of snapshots to retain per tenant
+    pub retention_count: usize,
+    /// Maximum age of snapshots to retain (in seconds)
+    pub retention_max_age_secs: u64,
+    /// Enable automatic scheduled backups
+    pub auto_backup_enabled: bool,
+    /// S3 prefix for backup snapshots
+    pub backup_prefix: String,
+}
+
+impl Default for BackupConfig {
+    fn default() -> Self {
+        Self {
+            snapshot_interval_secs: 3600,      // 1 hour
+            retention_count: 24,               // Keep last 24 snapshots
+            retention_max_age_secs: 86400 * 7, // 7 days
+            auto_backup_enabled: false,
+            backup_prefix: "backups".to_string(),
+        }
+    }
+}
+
+/// Snapshot metadata for versioning and recovery
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotMetadata {
+    pub snapshot_id: String,
+    pub tenant_id: String,
+    pub s3_key: String,
+    pub created_at: DateTime<Utc>,
+    pub size_bytes: u64,
+    pub checksum: String,
+    pub node_count: u64,
+    pub edge_count: u64,
+    pub schema_version: i32,
+}
+
+/// Result of a backup operation
+#[derive(Debug, Clone)]
+pub struct BackupResult {
+    pub snapshot_id: String,
+    pub s3_key: String,
+    pub size_bytes: u64,
+    pub duration_ms: u64,
+    pub checksum: String,
+}
+
+/// Result of a recovery operation
+#[derive(Debug, Clone)]
+pub struct RecoveryResult {
+    pub snapshot_id: String,
+    pub nodes_restored: u64,
+    pub edges_restored: u64,
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComponentHealth {
+    pub is_healthy: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheckResult {
+    pub healthy: bool,
+    pub duckdb: ComponentHealth,
+    pub s3: ComponentHealth,
+    pub schema_version: i32,
+    pub total_latency_ms: u64,
+    pub duckdb_latency_ms: u64,
+    pub s3_latency_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadinessResult {
+    pub ready: bool,
+    pub duckdb_ready: bool,
+    pub schema_ready: bool,
+    pub latency_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct Migration {
+    pub version: i32,
+    pub description: String,
+    pub up_sql: Vec<&'static str>,
+    pub down_sql: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MigrationRecord {
+    pub version: i32,
+    pub applied_at: String,
+    pub description: String,
+}
+
 pub struct WriteCoordinator {
     redis_url: String,
     config: WriteCoordinatorConfig,
@@ -595,12 +695,12 @@ impl DuckDbGraphStore {
         Ok(())
     }
 
-    /// Run database migrations
+    // ==================== Schema Migrations (R1-H9) ====================
+
     #[instrument(skip(self))]
     fn run_migrations(&self) -> Result<(), GraphError> {
         let conn = self.conn.lock();
 
-        // Check current schema version
         let current_version: i32 = conn
             .query_row(
                 "SELECT COALESCE(MAX(version), 0) FROM schema_version",
@@ -609,26 +709,98 @@ impl DuckDbGraphStore {
             )
             .unwrap_or(0);
 
-        if current_version < SCHEMA_VERSION {
-            info!(
-                "Running migrations from version {} to {}",
-                current_version, SCHEMA_VERSION
-            );
-
-            // Migration v1: Initial schema (already applied in initialize_schema)
-            if current_version < 1 {
-                conn.execute(
-                    "INSERT INTO schema_version (version, description) VALUES (1, 'Initial schema with soft-delete support')",
-                    [],
-                )?;
-            }
-
-            info!("Migrations completed successfully");
-        } else {
+        if current_version >= SCHEMA_VERSION {
             debug!("Schema is up to date (version {})", current_version);
+            return Ok(());
         }
 
+        info!(
+            "Running migrations from version {} to {}",
+            current_version, SCHEMA_VERSION
+        );
+
+        let migrations = Self::get_migrations();
+
+        for migration in migrations {
+            if current_version < migration.version {
+                info!(
+                    "Applying migration v{}: {}",
+                    migration.version, migration.description
+                );
+
+                conn.execute_batch("BEGIN TRANSACTION")?;
+
+                let result = (|| -> Result<(), GraphError> {
+                    for sql in &migration.up_sql {
+                        conn.execute_batch(sql)?;
+                    }
+
+                    conn.execute(
+                        "INSERT INTO schema_version (version, description) VALUES (?, ?)",
+                        params![migration.version, migration.description],
+                    )?;
+
+                    Ok(())
+                })();
+
+                match result {
+                    Ok(()) => {
+                        conn.execute_batch("COMMIT")?;
+                        info!("Migration v{} applied successfully", migration.version);
+                    }
+                    Err(e) => {
+                        conn.execute_batch("ROLLBACK")?;
+                        error!(
+                            error = %e,
+                            version = migration.version,
+                            "Migration v{} failed, rolled back",
+                            migration.version
+                        );
+                        return Err(GraphError::Migration(format!(
+                            "Migration v{} failed: {}",
+                            migration.version, e
+                        )));
+                    }
+                }
+            }
+        }
+
+        info!("All migrations completed successfully");
         Ok(())
+    }
+
+    fn get_migrations() -> Vec<Migration> {
+        vec![Migration {
+            version: 1,
+            description: "Initial schema with soft-delete support".to_string(),
+            up_sql: vec![],
+            down_sql: vec![],
+        }]
+    }
+
+    pub fn get_current_schema_version(&self) -> Result<i32, GraphError> {
+        self.get_schema_version()
+    }
+
+    pub fn get_migration_history(&self) -> Result<Vec<MigrationRecord>, GraphError> {
+        let conn = self.conn.lock();
+
+        let mut stmt = conn.prepare(
+            "SELECT version, CAST(applied_at AS VARCHAR) as applied_at, description FROM schema_version ORDER BY version ASC",
+        )?;
+
+        let records = stmt
+            .query_map([], |row| {
+                Ok(MigrationRecord {
+                    version: row.get(0)?,
+                    applied_at: row.get(1)?,
+                    description: row.get(2)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(records)
     }
 
     /// Validate tenant context and tenant ID format (R1-H3, Task 9.1-9.3)
@@ -645,6 +817,13 @@ impl DuckDbGraphStore {
 
     /// Validate tenant ID format to prevent SQL injection (Task 9.1, 9.2)
     fn validate_tenant_id_format(tenant_id: &str) -> Result<(), GraphError> {
+        if tenant_id.is_empty() {
+            Self::log_security_audit("REJECTED", "empty_tenant_id", tenant_id, "Empty tenant ID");
+            return Err(GraphError::InvalidTenantIdFormat(
+                "Tenant ID cannot be empty".to_string(),
+            ));
+        }
+
         if tenant_id.len() > 128 {
             Self::log_security_audit(
                 "REJECTED",
@@ -1473,6 +1652,729 @@ impl DuckDbGraphStore {
 
         debug!("Imported graph data from parquet for tenant {}", tenant_id);
         Ok(())
+    }
+
+    // ==================== Backup & Recovery (R1-H4) ====================
+
+    #[instrument(skip(self, backup_config), fields(tenant_id = %tenant_id))]
+    pub async fn create_backup(
+        &self,
+        tenant_id: &str,
+        backup_config: &BackupConfig,
+    ) -> Result<BackupResult, GraphError> {
+        use aws_config::BehaviorVersion;
+        use aws_sdk_s3::primitives::ByteStream;
+        use sha2::{Digest, Sha256};
+
+        let start = std::time::Instant::now();
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        let snapshot_id = Uuid::new_v4().to_string();
+        let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
+        let s3_key = format!(
+            "{}/{}/{}/snapshot_{}.parquet",
+            backup_config.backup_prefix, tenant_id, timestamp, snapshot_id
+        );
+
+        let parquet_data = self.export_to_parquet(tenant_id)?;
+        let size_bytes = parquet_data.len() as u64;
+
+        let mut hasher = Sha256::new();
+        hasher.update(&parquet_data);
+        let checksum = hex::encode(hasher.finalize());
+
+        let stats = self.get_stats_internal(tenant_id)?;
+        let metadata = SnapshotMetadata {
+            snapshot_id: snapshot_id.clone(),
+            tenant_id: tenant_id.to_string(),
+            s3_key: s3_key.clone(),
+            created_at: Utc::now(),
+            size_bytes,
+            checksum: checksum.clone(),
+            node_count: stats.node_count as u64,
+            edge_count: stats.edge_count as u64,
+            schema_version: SCHEMA_VERSION,
+        };
+
+        let metadata_json = serde_json::to_string(&metadata)
+            .map_err(|e| GraphError::Serialization(e.to_string()))?;
+
+        s3_client
+            .put_object()
+            .bucket(bucket)
+            .key(&s3_key)
+            .body(ByteStream::from(parquet_data))
+            .metadata("checksum", &checksum)
+            .metadata("tenant_id", tenant_id)
+            .metadata("snapshot_id", &snapshot_id)
+            .metadata("snapshot_metadata", &metadata_json)
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to upload backup: {}", e)))?;
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        info!(
+            snapshot_id = %snapshot_id,
+            size_bytes = size_bytes,
+            duration_ms = duration_ms,
+            "Created backup snapshot"
+        );
+
+        Ok(BackupResult {
+            snapshot_id,
+            s3_key,
+            size_bytes,
+            duration_ms,
+            checksum,
+        })
+    }
+
+    #[instrument(skip(self, backup_config), fields(tenant_id = %tenant_id))]
+    pub async fn list_snapshots(
+        &self,
+        tenant_id: &str,
+        backup_config: &BackupConfig,
+    ) -> Result<Vec<SnapshotMetadata>, GraphError> {
+        use aws_config::BehaviorVersion;
+
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        let prefix = format!("{}/{}/", backup_config.backup_prefix, tenant_id);
+
+        let response = s3_client
+            .list_objects_v2()
+            .bucket(bucket)
+            .prefix(&prefix)
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to list snapshots: {}", e)))?;
+
+        let mut snapshots = Vec::new();
+
+        for obj in response.contents() {
+            if let Some(key) = obj.key() {
+                if key.ends_with(".parquet") {
+                    let head = s3_client
+                        .head_object()
+                        .bucket(bucket)
+                        .key(key)
+                        .send()
+                        .await
+                        .map_err(|e| {
+                            GraphError::S3(format!("Failed to get object metadata: {}", e))
+                        })?;
+
+                    if let Some(metadata_json) =
+                        head.metadata().and_then(|m| m.get("snapshot_metadata"))
+                    {
+                        if let Ok(metadata) =
+                            serde_json::from_str::<SnapshotMetadata>(metadata_json)
+                        {
+                            snapshots.push(metadata);
+                        }
+                    }
+                }
+            }
+        }
+
+        snapshots.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(snapshots)
+    }
+
+    #[instrument(skip(self), fields(tenant_id = %tenant_id, snapshot_id = %snapshot_id))]
+    pub async fn restore_from_snapshot(
+        &self,
+        tenant_id: &str,
+        snapshot_id: &str,
+        backup_config: &BackupConfig,
+    ) -> Result<RecoveryResult, GraphError> {
+        use aws_config::BehaviorVersion;
+        use sha2::{Digest, Sha256};
+
+        let start = std::time::Instant::now();
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let snapshots = self.list_snapshots(tenant_id, backup_config).await?;
+        let snapshot = snapshots
+            .iter()
+            .find(|s| s.snapshot_id == snapshot_id)
+            .ok_or_else(|| GraphError::S3(format!("Snapshot not found: {}", snapshot_id)))?;
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        let response = s3_client
+            .get_object()
+            .bucket(bucket)
+            .key(&snapshot.s3_key)
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to fetch snapshot: {}", e)))?;
+
+        let data = response
+            .body
+            .collect()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to read body: {}", e)))?
+            .into_bytes()
+            .to_vec();
+
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let actual_checksum = hex::encode(hasher.finalize());
+        if actual_checksum != snapshot.checksum {
+            return Err(GraphError::ChecksumMismatch {
+                expected: snapshot.checksum.clone(),
+                actual: actual_checksum,
+            });
+        }
+
+        self.import_from_parquet(tenant_id, &data)?;
+
+        let stats = self.get_stats_internal(tenant_id)?;
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        info!(
+            snapshot_id = %snapshot_id,
+            nodes_restored = stats.node_count,
+            edges_restored = stats.edge_count,
+            duration_ms = duration_ms,
+            "Restored from backup snapshot"
+        );
+
+        Ok(RecoveryResult {
+            snapshot_id: snapshot_id.to_string(),
+            nodes_restored: stats.node_count as u64,
+            edges_restored: stats.edge_count as u64,
+            duration_ms,
+        })
+    }
+
+    #[instrument(skip(self, backup_config), fields(tenant_id = %tenant_id))]
+    pub async fn apply_retention_policy(
+        &self,
+        tenant_id: &str,
+        backup_config: &BackupConfig,
+    ) -> Result<usize, GraphError> {
+        use aws_config::BehaviorVersion;
+
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        let mut snapshots = self.list_snapshots(tenant_id, backup_config).await?;
+        let mut deleted_count = 0;
+
+        let cutoff_time =
+            Utc::now() - chrono::Duration::seconds(backup_config.retention_max_age_secs as i64);
+
+        let mut to_delete: Vec<String> = Vec::new();
+
+        for snapshot in snapshots.iter() {
+            if snapshot.created_at < cutoff_time {
+                to_delete.push(snapshot.s3_key.clone());
+            }
+        }
+
+        snapshots.retain(|s| s.created_at >= cutoff_time);
+
+        if snapshots.len() > backup_config.retention_count {
+            let excess = snapshots.len() - backup_config.retention_count;
+            for snapshot in snapshots.iter().rev().take(excess) {
+                if !to_delete.contains(&snapshot.s3_key) {
+                    to_delete.push(snapshot.s3_key.clone());
+                }
+            }
+        }
+
+        for key in to_delete {
+            s3_client
+                .delete_object()
+                .bucket(bucket)
+                .key(&key)
+                .send()
+                .await
+                .map_err(|e| GraphError::S3(format!("Failed to delete old snapshot: {}", e)))?;
+            deleted_count += 1;
+            debug!(s3_key = %key, "Deleted old snapshot per retention policy");
+        }
+
+        info!(
+            tenant_id = %tenant_id,
+            deleted_count = deleted_count,
+            "Applied retention policy"
+        );
+
+        Ok(deleted_count)
+    }
+
+    fn get_stats_internal(&self, tenant_id: &str) -> Result<GraphStats, GraphError> {
+        let conn = self.conn.lock();
+
+        let node_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let edge_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM memory_edges WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let entity_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM entities WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let entity_edge_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM entity_edges WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        Ok(GraphStats {
+            node_count: node_count as usize,
+            edge_count: edge_count as usize,
+            entity_count: entity_count as usize,
+            entity_edge_count: entity_edge_count as usize,
+        })
+    }
+
+    // ==================== Transaction Atomicity (R1-H5) ====================
+
+    #[instrument(skip(self, nodes, edges), fields(tenant_id = %tenant_id, nodes = nodes.len(), edges = edges.len()))]
+    pub fn add_nodes_and_edges_atomic(
+        &self,
+        ctx: &TenantContext,
+        tenant_id: &str,
+        nodes: Vec<GraphNode>,
+        edges: Vec<GraphEdge>,
+    ) -> Result<(), GraphError> {
+        let _ = ctx;
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let conn = self.conn.lock();
+
+        conn.execute_batch("BEGIN TRANSACTION")?;
+
+        let result = (|| -> Result<(), GraphError> {
+            for node in &nodes {
+                if node.tenant_id != tenant_id {
+                    return Err(GraphError::TenantViolation(
+                        "Node tenant_id does not match context".to_string(),
+                    ));
+                }
+
+                let properties_json = serde_json::to_string(&node.properties)
+                    .map_err(|e| GraphError::Serialization(e.to_string()))?;
+
+                conn.execute(
+                    r#"
+                    INSERT INTO memory_nodes (id, label, properties, tenant_id)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT (id) DO UPDATE SET
+                        label = EXCLUDED.label,
+                        properties = EXCLUDED.properties,
+                        updated_at = now()
+                    "#,
+                    params![node.id, node.label, properties_json, tenant_id],
+                )?;
+            }
+
+            for edge in &edges {
+                if edge.tenant_id != tenant_id {
+                    return Err(GraphError::TenantViolation(
+                        "Edge tenant_id does not match context".to_string(),
+                    ));
+                }
+
+                if !self.node_exists(&conn, &edge.source_id, tenant_id)? {
+                    return Err(GraphError::ReferentialIntegrity(format!(
+                        "Source node {} does not exist",
+                        edge.source_id
+                    )));
+                }
+
+                if !self.node_exists(&conn, &edge.target_id, tenant_id)? {
+                    return Err(GraphError::ReferentialIntegrity(format!(
+                        "Target node {} does not exist",
+                        edge.target_id
+                    )));
+                }
+
+                let properties_json = serde_json::to_string(&edge.properties)
+                    .map_err(|e| GraphError::Serialization(e.to_string()))?;
+
+                conn.execute(
+                    r#"
+                    INSERT INTO memory_edges (id, source_id, target_id, relation, properties, tenant_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (id) DO UPDATE SET
+                        relation = EXCLUDED.relation,
+                        properties = EXCLUDED.properties
+                    "#,
+                    params![
+                        edge.id,
+                        edge.source_id,
+                        edge.target_id,
+                        edge.relation,
+                        properties_json,
+                        tenant_id
+                    ],
+                )?;
+            }
+
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                conn.execute_batch("COMMIT")?;
+                info!(
+                    nodes_added = nodes.len(),
+                    edges_added = edges.len(),
+                    "Atomic batch insert committed"
+                );
+                Ok(())
+            }
+            Err(e) => {
+                conn.execute_batch("ROLLBACK")?;
+                warn!(error = %e, "Atomic batch insert rolled back");
+                Err(e)
+            }
+        }
+    }
+
+    #[instrument(skip(self, entities, entity_edges), fields(tenant_id = %tenant_id))]
+    pub fn add_entities_atomic(
+        &self,
+        ctx: &TenantContext,
+        tenant_id: &str,
+        entities: Vec<Entity>,
+        entity_edges: Vec<EntityEdge>,
+    ) -> Result<(), GraphError> {
+        let _ = ctx;
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let conn = self.conn.lock();
+
+        conn.execute_batch("BEGIN TRANSACTION")?;
+
+        let result = (|| -> Result<(), GraphError> {
+            for entity in &entities {
+                if entity.tenant_id != tenant_id {
+                    return Err(GraphError::TenantViolation(
+                        "Entity tenant_id does not match context".to_string(),
+                    ));
+                }
+
+                let properties_json = serde_json::to_string(&entity.properties)
+                    .map_err(|e| GraphError::Serialization(e.to_string()))?;
+
+                conn.execute(
+                    r#"
+                    INSERT INTO entities (id, name, entity_type, properties, tenant_id)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT (id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        entity_type = EXCLUDED.entity_type,
+                        properties = EXCLUDED.properties
+                    "#,
+                    params![
+                        entity.id,
+                        entity.name,
+                        entity.entity_type,
+                        properties_json,
+                        tenant_id
+                    ],
+                )?;
+            }
+
+            for edge in &entity_edges {
+                if edge.tenant_id != tenant_id {
+                    return Err(GraphError::TenantViolation(
+                        "EntityEdge tenant_id does not match context".to_string(),
+                    ));
+                }
+
+                let properties_json = serde_json::to_string(&edge.properties)
+                    .map_err(|e| GraphError::Serialization(e.to_string()))?;
+
+                conn.execute(
+                    r#"
+                    INSERT INTO entity_edges (id, source_entity_id, target_entity_id, relation, properties, tenant_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (id) DO UPDATE SET
+                        relation = EXCLUDED.relation,
+                        properties = EXCLUDED.properties
+                    "#,
+                    params![
+                        edge.id,
+                        edge.source_entity_id,
+                        edge.target_entity_id,
+                        edge.relation,
+                        properties_json,
+                        tenant_id
+                    ],
+                )?;
+            }
+
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                conn.execute_batch("COMMIT")?;
+                info!(
+                    entities_added = entities.len(),
+                    edges_added = entity_edges.len(),
+                    "Atomic entity batch insert committed"
+                );
+                Ok(())
+            }
+            Err(e) => {
+                conn.execute_batch("ROLLBACK")?;
+                warn!(error = %e, "Atomic entity batch insert rolled back");
+                Err(e)
+            }
+        }
+    }
+
+    pub fn with_transaction<F, T>(&self, f: F) -> Result<T, GraphError>
+    where
+        F: FnOnce(&duckdb::Connection) -> Result<T, GraphError>,
+    {
+        let conn = self.conn.lock();
+
+        conn.execute_batch("BEGIN TRANSACTION")?;
+
+        match f(&conn) {
+            Ok(result) => {
+                conn.execute_batch("COMMIT")?;
+                Ok(result)
+            }
+            Err(e) => {
+                conn.execute_batch("ROLLBACK")?;
+                Err(e)
+            }
+        }
+    }
+
+    // ==================== Health Checks (R1-H8) ====================
+
+    pub fn health_check(&self) -> HealthCheckResult {
+        let start = std::time::Instant::now();
+
+        let duckdb_status = self.check_duckdb_health();
+        let duckdb_latency_ms = start.elapsed().as_millis() as u64;
+
+        let s3_start = std::time::Instant::now();
+        let s3_status = self.check_s3_config();
+        let s3_latency_ms = s3_start.elapsed().as_millis() as u64;
+
+        let schema_version = self.get_schema_version().unwrap_or(-1);
+
+        let overall_healthy = duckdb_status.is_healthy && s3_status.is_healthy;
+
+        HealthCheckResult {
+            healthy: overall_healthy,
+            duckdb: duckdb_status,
+            s3: s3_status,
+            schema_version,
+            total_latency_ms: start.elapsed().as_millis() as u64,
+            duckdb_latency_ms,
+            s3_latency_ms,
+        }
+    }
+
+    pub fn readiness_check(&self) -> ReadinessResult {
+        let start = std::time::Instant::now();
+
+        let duckdb_ready = self.check_duckdb_ready();
+        let schema_ready = self.check_schema_ready();
+
+        let ready = duckdb_ready && schema_ready;
+
+        ReadinessResult {
+            ready,
+            duckdb_ready,
+            schema_ready,
+            latency_ms: start.elapsed().as_millis() as u64,
+        }
+    }
+
+    fn check_duckdb_health(&self) -> ComponentHealth {
+        let conn = self.conn.lock();
+
+        match conn.query_row("SELECT 1", [], |row| row.get::<_, i32>(0)) {
+            Ok(1) => ComponentHealth {
+                is_healthy: true,
+                message: "DuckDB connection OK".to_string(),
+            },
+            Ok(_) => ComponentHealth {
+                is_healthy: false,
+                message: "DuckDB returned unexpected value".to_string(),
+            },
+            Err(e) => ComponentHealth {
+                is_healthy: false,
+                message: format!("DuckDB query failed: {}", e),
+            },
+        }
+    }
+
+    fn check_s3_config(&self) -> ComponentHealth {
+        if self.config.s3_bucket.is_none() {
+            return ComponentHealth {
+                is_healthy: true,
+                message: "S3 not configured (optional)".to_string(),
+            };
+        }
+
+        ComponentHealth {
+            is_healthy: true,
+            message: format!(
+                "S3 configured: bucket={}",
+                self.config.s3_bucket.as_ref().unwrap()
+            ),
+        }
+    }
+
+    fn check_duckdb_ready(&self) -> bool {
+        let conn = self.conn.lock();
+        conn.query_row("SELECT 1", [], |row| row.get::<_, i32>(0))
+            .is_ok()
+    }
+
+    fn check_schema_ready(&self) -> bool {
+        let conn = self.conn.lock();
+
+        let tables_exist = conn
+            .query_row(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('memory_nodes', 'memory_edges', 'entities', 'entity_edges', 'schema_version')",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0);
+
+        tables_exist >= 5
+    }
+
+    fn get_schema_version(&self) -> Result<i32, GraphError> {
+        let conn = self.conn.lock();
+
+        let version: i32 = conn.query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+            [],
+            |row| row.get(0),
+        )?;
+
+        Ok(version)
+    }
+
+    pub async fn check_s3_connectivity(&self) -> ComponentHealth {
+        use aws_config::BehaviorVersion;
+
+        let bucket = match &self.config.s3_bucket {
+            Some(b) => b,
+            None => {
+                return ComponentHealth {
+                    is_healthy: true,
+                    message: "S3 not configured".to_string(),
+                };
+            }
+        };
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        match s3_client.head_bucket().bucket(bucket).send().await {
+            Ok(_) => ComponentHealth {
+                is_healthy: true,
+                message: format!("S3 bucket '{}' accessible", bucket),
+            },
+            Err(e) => ComponentHealth {
+                is_healthy: false,
+                message: format!("S3 bucket '{}' not accessible: {}", bucket, e),
+            },
+        }
     }
 
     #[instrument(skip(self), fields(min_size = %min_community_size))]

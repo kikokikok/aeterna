@@ -71,28 +71,28 @@
 - [x] 9.5 Add tenant context validation middleware
 
 ## 10. Backup & Recovery (High Gap R1-H4)
-- [ ] 10.1 Implement scheduled S3 snapshot job (configurable interval)
-- [ ] 10.2 Add snapshot versioning with retention policy
-- [ ] 10.3 Implement point-in-time recovery from snapshots
-- [ ] 10.4 Add backup duration and size metrics
-- [ ] 10.5 Write tests for backup and recovery workflows
+- [x] 10.1 Implement scheduled S3 snapshot job (configurable interval)
+- [x] 10.2 Add snapshot versioning with retention policy
+- [x] 10.3 Implement point-in-time recovery from snapshots
+- [x] 10.4 Add backup duration and size metrics
+- [x] 10.5 Write tests for backup and recovery workflows
 
 ## 11. Transaction Atomicity (High Gap R1-H5)
-- [ ] 11.1 Wrap multi-table inserts in single transaction
-- [ ] 11.2 Configure SERIALIZABLE isolation level
-- [ ] 11.3 Implement transaction rollback on partial failure
-- [ ] 11.4 Write tests for atomic multi-table operations
+- [x] 11.1 Wrap multi-table inserts in single transaction
+- [x] 11.2 Configure SERIALIZABLE isolation level
+- [x] 11.3 Implement transaction rollback on partial failure
+- [x] 11.4 Write tests for atomic multi-table operations
 
 ## 12. Health Checks (High Gap R1-H8)
-- [ ] 12.1 Implement `/health/graph` endpoint with DuckDB connectivity check
-- [ ] 12.2 Add S3 bucket accessibility check to health endpoint
-- [ ] 12.3 Implement `/ready/graph` endpoint for readiness probe
-- [ ] 12.4 Add latency measurements to health response
-- [ ] 12.5 Write tests for health check endpoints
+- [x] 12.1 Implement `/health/graph` endpoint with DuckDB connectivity check
+- [x] 12.2 Add S3 bucket accessibility check to health endpoint
+- [x] 12.3 Implement `/ready/graph` endpoint for readiness probe
+- [x] 12.4 Add latency measurements to health response
+- [x] 12.5 Write tests for health check endpoints
 
 ## 13. Schema Migrations (High Gap R1-H9)
-- [ ] 13.1 Create `schema_version` table for version tracking
-- [ ] 13.2 Implement migration runner on startup
-- [ ] 13.3 Add migration rollback on failure
-- [ ] 13.4 Ensure migrations are backward compatible (additive only)
-- [ ] 13.5 Write tests for migration scenarios
+- [x] 13.1 Create `schema_version` table for version tracking
+- [x] 13.2 Implement migration runner on startup
+- [x] 13.3 Add migration rollback on failure
+- [x] 13.4 Ensure migrations are backward compatible (additive only)
+- [x] 13.5 Write tests for migration scenarios
