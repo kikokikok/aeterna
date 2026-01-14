@@ -122,3 +122,110 @@
 - [ ] 14.3 Tool usage examples
 - [ ] 14.4 MCP server setup guide (alternative integration)
 - [ ] 14.5 Troubleshooting guide
+
+---
+
+## 15. Production Gap Requirements
+
+### 15.1 Plugin SDK Version Stability (OC-C1) - CRITICAL
+- [ ] 15.1.1 Pin `@opencode-ai/plugin` to exact version in `package.json` (e.g., `"@opencode-ai/plugin": "0.1.0"`)
+- [ ] 15.1.2 Create `src/sdk-abstraction/index.ts` module
+- [ ] 15.1.3 Define `OpenCodeAdapter` interface abstracting SDK operations
+- [ ] 15.1.4 Implement `OpenCodeSDKAdapter` class implementing the interface
+- [ ] 15.1.5 Add SDK version detection and logging on initialization
+- [ ] 15.1.6 Create compatibility test suite in `tests/sdk-compatibility.test.ts`
+- [ ] 15.1.7 Document SDK version in CHANGELOG.md when updated
+
+### 15.2 Credential Security (OC-C2) - CRITICAL
+- [ ] 15.2.1 Create `src/security/credential-masker.ts` module
+- [ ] 15.2.2 Implement log masking for `AETERNA_TOKEN` and sensitive env vars
+- [ ] 15.2.3 Add mask format: `[REDACTED:...last4chars]`
+- [ ] 15.2.4 Create `src/security/secure-storage.ts` for keychain integration
+- [ ] 15.2.5 Implement macOS Keychain, Windows Credential Manager, Linux Secret Service support
+- [ ] 15.2.6 Add token refresh mechanism without service interruption
+- [ ] 15.2.7 Implement token rotation event handling
+- [ ] 15.2.8 Write security tests for credential masking
+
+### 15.3 Experimental Hook Fallback (OC-H1) - HIGH
+- [ ] 15.3.1 Add `experimental_hooks` feature flags section to config
+- [ ] 15.3.2 Implement `HookRegistry` with availability detection
+- [ ] 15.3.3 Create fallback implementations for each experimental hook
+- [ ] 15.3.4 Implement `system.transform` fallback (inject via chat.message)
+- [ ] 15.3.5 Add runtime hook availability checking
+- [ ] 15.3.6 Implement warning system for experimental hook usage
+- [ ] 15.3.7 Write tests for fallback scenarios
+
+### 15.4 Session Capture Performance (OC-H2) - HIGH
+- [ ] 15.4.1 Refactor `tool.execute.after` handler to use async queue
+- [ ] 15.4.2 Implement capture queue with configurable batch size
+- [ ] 15.4.3 Add sampling when rate exceeds threshold (default: 10/sec)
+- [ ] 15.4.4 Implement debouncing for similar tool executions (default: 500ms)
+- [ ] 15.4.5 Add `capture.async_enabled`, `capture.sample_rate`, `capture.debounce_ms` config options
+- [ ] 15.4.6 Implement capture latency metrics
+- [ ] 15.4.7 Write performance benchmark tests
+
+### 15.5 Knowledge Query Performance (OC-H3) - HIGH
+- [ ] 15.5.1 Implement session-start pre-fetch for project/team knowledge
+- [ ] 15.5.2 Create `src/cache/knowledge-cache.ts` module
+- [ ] 15.5.3 Implement LRU cache with TTL (default: 60s)
+- [ ] 15.5.4 Add timeout handling with fallback to cache (default: 200ms)
+- [ ] 15.5.5 Implement background refresh for frequently accessed knowledge
+- [ ] 15.5.6 Add cache hit/miss metrics
+- [ ] 15.5.7 Write tests for cache and timeout scenarios
+
+### 15.6 Session State Persistence (OC-H4) - HIGH
+- [ ] 15.6.1 Create `src/storage/session-storage.ts` interface
+- [ ] 15.6.2 Implement `RedisSessionStorage` class
+- [ ] 15.6.3 Implement `LocalFileSessionStorage` fallback class
+- [ ] 15.6.4 Add storage mode auto-detection (Redis available → use Redis)
+- [ ] 15.6.5 Implement session TTL enforcement (default: 24 hours)
+- [ ] 15.6.6 Add session cleanup job for expired sessions
+- [ ] 15.6.7 Write integration tests for both storage backends
+
+### 15.7 MCP Server Health Management (OC-H5) - HIGH
+- [ ] 15.7.1 Add `/health` endpoint to MCP server
+- [ ] 15.7.2 Implement health check logic (backend connectivity, memory usage)
+- [ ] 15.7.3 Create `src/mcp/supervisor.ts` with restart logic
+- [ ] 15.7.4 Implement exponential backoff for restarts (initial: 1s, max: 30s, 3 retries)
+- [ ] 15.7.5 Add crash event metrics and alerting hooks
+- [ ] 15.7.6 Implement graceful shutdown with in-flight request draining
+- [ ] 15.7.7 Write tests for crash recovery scenarios
+
+---
+
+## Summary
+
+| Section | Tasks | Description |
+|---------|-------|-------------|
+| 1 | 5 | NPM Package Setup |
+| 2 | 7 | Aeterna Client Library |
+| 3 | 9 | Tool Implementations |
+| 4 | 5 | Chat Hooks |
+| 5 | 5 | System Prompt Hooks |
+| 6 | 5 | Tool Execution Hooks |
+| 7 | 4 | Permission Hooks |
+| 8 | 5 | Session Lifecycle |
+| 9 | 6 | Plugin Entry Point |
+| 10 | 7 | MCP Server |
+| 11 | 6 | Configuration & CLI |
+| 12 | 6 | Utility Functions |
+| 13 | 6 | Testing |
+| 14 | 5 | Documentation |
+| 15 | 49 | Production Gap Requirements (OC-C1 to OC-H5) |
+| **Total** | **130** | |
+
+**Estimated effort**: 5-6 weeks with 80% test coverage target
+
+---
+
+## Production Gap Tracking
+
+| Gap ID | Priority | Requirement | Tasks |
+|--------|----------|-------------|-------|
+| OC-C1 | Critical | Plugin SDK Version Stability | 15.1.1-15.1.7 |
+| OC-C2 | Critical | Credential Security | 15.2.1-15.2.8 |
+| OC-H1 | High | Experimental Hook Fallback | 15.3.1-15.3.7 |
+| OC-H2 | High | Session Capture Performance | 15.4.1-15.4.7 |
+| OC-H3 | High | Knowledge Query Performance | 15.5.1-15.5.7 |
+| OC-H4 | High | Session State Persistence | 15.6.1-15.6.7 |
+| OC-H5 | High | MCP Server Health Management | 15.7.1-15.7.7 |

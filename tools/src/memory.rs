@@ -6,6 +6,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::sync::Arc;
+use storage::graph::GraphStore;
+use storage::graph_duckdb::DuckDbGraphStore;
 use validator::Validate;
 
 pub struct MemoryAddTool {
@@ -492,17 +494,19 @@ impl Tool for MemoryOptimizeTool {
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct GraphQueryParams {
     pub query: String,
+    #[serde(default)]
+    pub limit: Option<usize>,
     #[serde(rename = "tenantContext")]
     pub tenant_context: Option<TenantContext>,
 }
 
 pub struct GraphQueryTool {
-    memory_manager: Arc<MemoryManager>,
+    graph_store: Arc<DuckDbGraphStore>,
 }
 
 impl GraphQueryTool {
-    pub fn new(memory_manager: Arc<MemoryManager>) -> Self {
-        Self { memory_manager }
+    pub fn new(graph_store: Arc<DuckDbGraphStore>) -> Self {
+        Self { graph_store }
     }
 }
 
@@ -513,14 +517,15 @@ impl Tool for GraphQueryTool {
     }
 
     fn description(&self) -> &str {
-        "Query the knowledge graph using natural language."
+        "Search the knowledge graph for nodes matching a query."
     }
 
     fn input_schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "query": { "type": "string" },
+                "query": { "type": "string", "description": "Search query for finding nodes" },
+                "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
                 "tenantContext": { "$ref": "#/definitions/TenantContext" }
             },
             "required": ["query"]
@@ -531,32 +536,35 @@ impl Tool for GraphQueryTool {
         let p: GraphQueryParams = serde_json::from_value(params)?;
         p.validate()?;
 
-        let _ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let limit = p.limit.unwrap_or(10);
+
+        let nodes = self.graph_store.search_nodes(ctx, &p.query, limit).await?;
 
         Ok(json!({
             "success": true,
-            "message": "Graph query not yet implemented",
-            "query": p.query
+            "results": nodes,
+            "totalCount": nodes.len()
         }))
     }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct GraphNeighborsParams {
-    #[serde(rename = "entityId")]
-    pub entity_id: String,
+    #[serde(rename = "nodeId")]
+    pub node_id: String,
     pub depth: Option<usize>,
     #[serde(rename = "tenantContext")]
     pub tenant_context: Option<TenantContext>,
 }
 
 pub struct GraphNeighborsTool {
-    memory_manager: Arc<MemoryManager>,
+    graph_store: Arc<DuckDbGraphStore>,
 }
 
 impl GraphNeighborsTool {
-    pub fn new(memory_manager: Arc<MemoryManager>) -> Self {
-        Self { memory_manager }
+    pub fn new(graph_store: Arc<DuckDbGraphStore>) -> Self {
+        Self { graph_store }
     }
 }
 
@@ -567,18 +575,18 @@ impl Tool for GraphNeighborsTool {
     }
 
     fn description(&self) -> &str {
-        "Find neighboring entities in the knowledge graph."
+        "Find neighboring nodes connected to a given node in the knowledge graph."
     }
 
     fn input_schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "entityId": { "type": "string" },
-                "depth": { "type": "integer", "minimum": 1, "maximum": 5 },
+                "nodeId": { "type": "string", "description": "ID of the node to find neighbors for" },
+                "depth": { "type": "integer", "minimum": 1, "maximum": 5, "default": 1, "description": "Traversal depth (hops)" },
                 "tenantContext": { "$ref": "#/definitions/TenantContext" }
             },
-            "required": ["entityId"]
+            "required": ["nodeId"]
         })
     }
 
@@ -586,13 +594,26 @@ impl Tool for GraphNeighborsTool {
         let p: GraphNeighborsParams = serde_json::from_value(params)?;
         p.validate()?;
 
-        let _ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let _depth = p.depth.unwrap_or(1);
+
+        let neighbors = self.graph_store.get_neighbors(ctx, &p.node_id).await?;
+
+        let results: Vec<Value> = neighbors
+            .into_iter()
+            .map(|(edge, node)| {
+                json!({
+                    "edge": edge,
+                    "node": node
+                })
+            })
+            .collect();
 
         Ok(json!({
             "success": true,
-            "message": "Graph neighbors not yet implemented",
-            "entityId": p.entity_id,
-            "depth": p.depth.unwrap_or(1)
+            "nodeId": p.node_id,
+            "neighbors": results,
+            "count": results.len()
         }))
     }
 }
@@ -610,12 +631,12 @@ pub struct GraphPathParams {
 }
 
 pub struct GraphPathTool {
-    memory_manager: Arc<MemoryManager>,
+    graph_store: Arc<DuckDbGraphStore>,
 }
 
 impl GraphPathTool {
-    pub fn new(memory_manager: Arc<MemoryManager>) -> Self {
-        Self { memory_manager }
+    pub fn new(graph_store: Arc<DuckDbGraphStore>) -> Self {
+        Self { graph_store }
     }
 }
 
@@ -626,16 +647,16 @@ impl Tool for GraphPathTool {
     }
 
     fn description(&self) -> &str {
-        "Find the shortest path between two entities in the knowledge graph."
+        "Find the shortest path between two nodes in the knowledge graph."
     }
 
     fn input_schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "sourceId": { "type": "string" },
-                "targetId": { "type": "string" },
-                "maxHops": { "type": "integer", "minimum": 1, "maximum": 10 },
+                "sourceId": { "type": "string", "description": "ID of the starting node" },
+                "targetId": { "type": "string", "description": "ID of the target node" },
+                "maxHops": { "type": "integer", "minimum": 1, "maximum": 10, "default": 5, "description": "Maximum path length" },
                 "tenantContext": { "$ref": "#/definitions/TenantContext" }
             },
             "required": ["sourceId", "targetId"]
@@ -646,14 +667,23 @@ impl Tool for GraphPathTool {
         let p: GraphPathParams = serde_json::from_value(params)?;
         p.validate()?;
 
-        let _ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let max_hops = p.max_hops.unwrap_or(5);
+
+        let path = self
+            .graph_store
+            .find_path(ctx, &p.source_id, &p.target_id, max_hops)
+            .await?;
+
+        let found = !path.is_empty();
 
         Ok(json!({
             "success": true,
-            "message": "Graph path not yet implemented",
+            "found": found,
             "sourceId": p.source_id,
             "targetId": p.target_id,
-            "maxHops": p.max_hops.unwrap_or(5)
+            "path": path,
+            "hops": path.len()
         }))
     }
 }

@@ -109,3 +109,115 @@ The system SHALL support multiple ecosystem adapter implementations including A2
 - **WHEN** an A2A session begins
 - **THEN** the adapter MUST call getSessionContext() to inject relevant memories
 - **AND** include active constraints in the response context
+
+### Requirement: Radkit SDK Version Stability (RAD-C1)
+The system SHALL maintain stability guarantees despite underlying SDK pre-release status.
+
+#### Scenario: SDK Version Pinning
+- **WHEN** the project builds
+- **THEN** the `radkit` dependency MUST be pinned to an exact version (not semver range)
+- **AND** the pinned version MUST be documented in CHANGELOG on update
+
+#### Scenario: SDK Abstraction Layer
+- **WHEN** implementing Radkit integration
+- **THEN** the system MUST implement an abstraction layer between business logic and Radkit SDK
+- **AND** this abstraction MUST allow SDK replacement without changing business logic
+
+#### Scenario: SDK Integration Test Suite
+- **WHEN** the SDK version changes
+- **THEN** integration tests MUST verify all skill handlers work correctly
+- **AND** tests MUST cover Agent Card generation, task submission, and response formats
+
+### Requirement: Thread State Persistence (RAD-C2)
+The system SHALL persist A2A Thread state to survive pod restarts and enable conversation recovery.
+
+#### Scenario: Thread Storage Backend
+- **WHEN** a new A2A Thread is created
+- **THEN** the system MUST persist thread state to PostgreSQL
+- **AND** the state MUST include thread_id, tenant_id, created_at, updated_at, and conversation_context
+
+#### Scenario: Thread Recovery on Startup
+- **WHEN** the agent-a2a service starts
+- **THEN** it MUST recover active threads from PostgreSQL
+- **AND** restore conversation context for each active thread
+
+#### Scenario: Thread Expiration
+- **WHEN** a thread has been inactive for longer than configured TTL (default: 24 hours)
+- **THEN** the system MUST mark the thread as expired
+- **AND** return appropriate error when clients attempt to continue expired threads
+
+### Requirement: A2A Spec Compliance Monitoring (RAD-H1)
+The system SHALL maintain compliance with evolving A2A specification.
+
+#### Scenario: Compliance Test Suite
+- **WHEN** CI runs
+- **THEN** the system MUST execute A2A compliance tests against official test vectors
+- **AND** fail the build if any compliance tests fail
+
+#### Scenario: Spec Version Tracking
+- **WHEN** the A2A spec version changes
+- **THEN** the system MUST document supported A2A spec version in Agent Card metadata
+- **AND** log warning when receiving requests from newer spec versions
+
+### Requirement: Error Mapping Completeness (RAD-H2)
+The system SHALL provide exhaustive mapping from domain errors to A2A result variants.
+
+#### Scenario: Exhaustive Error Mapping
+- **WHEN** any domain error occurs during skill execution
+- **THEN** the system MUST map it to an appropriate A2A error response
+- **AND** include error code, message, and optional details
+
+#### Scenario: Unmapped Error Handling
+- **WHEN** an unexpected error type is encountered
+- **THEN** the system MUST return status `failed` with generic error code `INTERNAL_ERROR`
+- **AND** log the unmapped error with full context for debugging
+- **AND** never expose internal error details to clients
+
+### Requirement: A2A Rate Limiting (RAD-H3)
+The system SHALL implement rate limiting to protect against endpoint abuse.
+
+#### Scenario: Per-Tenant Rate Limits
+- **WHEN** an A2A request is received
+- **THEN** the system MUST enforce per-tenant rate limits
+- **AND** return HTTP 429 with `Retry-After` header when limits exceeded
+
+#### Scenario: Rate Limit Configuration
+- **WHEN** the system starts
+- **THEN** rate limits MUST be configurable per tenant tier (default: 100 req/min)
+- **AND** support different limits for different skill types
+
+#### Scenario: Rate Limit Metrics
+- **WHEN** rate limiting occurs
+- **THEN** the system MUST emit metrics for rate limit hits
+- **AND** include tenant_id and skill_name in metric labels
+
+### Requirement: LLM Cost Optimization (RAD-H4)
+The system SHALL minimize LLM usage for operations that don't require reasoning.
+
+#### Scenario: Direct Tool Routing
+- **WHEN** an A2A request contains explicit tool invocation
+- **THEN** the system MUST route directly to the skill handler without LLM involvement
+- **AND** only invoke LLM for ambiguous requests requiring interpretation
+
+#### Scenario: Minimal LLM Configuration
+- **WHEN** Radkit requires LLM for routing
+- **THEN** the system MUST configure the cheapest/fastest model available
+- **AND** limit LLM context to skill descriptions and tool schemas only
+
+### Requirement: Thread State Memory Management (RAD-H5)
+The system SHALL prevent unbounded state growth during multi-turn conversations.
+
+#### Scenario: State TTL Enforcement
+- **WHEN** thread state is persisted
+- **THEN** each state record MUST have TTL (default: 1 hour for conversation context)
+- **AND** expired state MUST be automatically cleaned up
+
+#### Scenario: Periodic State Cleanup Job
+- **WHEN** the cleanup job runs (default: every 5 minutes)
+- **THEN** it MUST remove expired thread states
+- **AND** emit metrics for states cleaned up
+
+#### Scenario: State Size Limits
+- **WHEN** thread state grows
+- **THEN** the system MUST enforce maximum state size per thread (default: 1MB)
+- **AND** return error when state would exceed limit

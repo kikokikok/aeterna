@@ -185,3 +185,25 @@ The system SHALL emit metrics and logs for meta-agent loop operations.
 - **WHEN** quality gate is evaluated
 - **THEN** system SHALL emit counter: meta_agent.gate.evaluations with labels (gate, result)
 - **AND** system SHALL emit histogram: meta_agent.gate.latency_ms with labels (gate)
+
+### Requirement: Meta-Agent Time Budget
+The system SHALL enforce a total time budget for the meta-agent loop to prevent infinite execution.
+
+#### Scenario: Total time budget enforcement
+- **WHEN** meta-agent loop is initiated
+- **THEN** system SHALL start time budget timer (configurable, default: 5 minutes)
+- **AND** system SHALL check remaining budget before each phase
+- **AND** system SHALL terminate loop if budget exhausted
+
+#### Scenario: Budget exhaustion handling
+- **WHEN** time budget is exhausted
+- **THEN** system SHALL gracefully terminate current phase
+- **AND** system SHALL capture partial results
+- **AND** system SHALL escalate to user with "time budget exceeded" status
+- **AND** system SHALL record incomplete loop for hindsight learning
+
+#### Scenario: Budget warning threshold
+- **WHEN** 75% of time budget is consumed
+- **THEN** system SHALL log warning with remaining time
+- **AND** system SHALL limit remaining iterations to prevent timeout
+- **AND** system SHALL prioritize completing current iteration over starting new one

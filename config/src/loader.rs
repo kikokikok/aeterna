@@ -14,8 +14,8 @@
 //! - `OB_*`: Observability settings
 
 use crate::config::{
-    Config, MemoryConfig, ObservabilityConfig, PostgresConfig, ProviderConfig, QdrantConfig,
-    RedisConfig, SyncConfig, ToolConfig,
+    Config, GraphConfig, MemoryConfig, ObservabilityConfig, PostgresConfig, ProviderConfig,
+    QdrantConfig, RedisConfig, SyncConfig, ToolConfig,
 };
 use std::env;
 
@@ -113,6 +113,7 @@ fn load_provider_from_env() -> Result<ProviderConfig, Box<dyn std::error::Error>
         postgres: load_postgres_from_env()?,
         qdrant: load_qdrant_from_env()?,
         redis: load_redis_from_env()?,
+        graph: load_graph_from_env()?,
     })
 }
 
@@ -144,6 +145,17 @@ fn load_redis_from_env() -> Result<RedisConfig, Box<dyn std::error::Error>> {
         db: parse_env("RD_DB").unwrap_or(0),
         pool_size: parse_env("RD_POOL_SIZE").unwrap_or(10),
         timeout_seconds: parse_env("RD_TIMEOUT_SECONDS").unwrap_or(30),
+    })
+}
+
+fn load_graph_from_env() -> Result<GraphConfig, Box<dyn std::error::Error>> {
+    Ok(GraphConfig {
+        enabled: parse_env("GR_ENABLED").unwrap_or(true),
+        database_path: env::var("GR_DATABASE_PATH").unwrap_or_else(|_| ":memory:".to_string()),
+        s3_bucket: env::var("GR_S3_BUCKET").ok(),
+        s3_prefix: env::var("GR_S3_PREFIX").ok(),
+        s3_endpoint: env::var("GR_S3_ENDPOINT").ok(),
+        s3_region: env::var("GR_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
     })
 }
 

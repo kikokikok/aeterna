@@ -193,3 +193,24 @@ The system SHALL emit metrics and logs for extension system operations.
 - **WHEN** state operation completes
 - **THEN** system SHALL emit counter: extension.state.operations with labels (operation, extension_id)
 - **AND** system SHALL emit histogram: extension.state.size_bytes with labels (extension_id)
+
+### Requirement: Extension State Memory Limits
+The system SHALL enforce memory limits on extension state to prevent Redis bloat during long sessions.
+
+#### Scenario: TTL enforcement on state keys
+- **WHEN** extension sets state value
+- **THEN** system SHALL apply configurable TTL (default: 1 hour)
+- **AND** system SHALL refresh TTL on state read
+- **AND** system SHALL automatically expire stale state
+
+#### Scenario: LRU eviction for state
+- **WHEN** extension state exceeds per-extension limit (configurable, default: 10MB)
+- **THEN** system SHALL evict least recently used keys
+- **AND** system SHALL log eviction events
+- **AND** system SHALL emit metric: extension.state.evictions with labels (extension_id)
+
+#### Scenario: Session state size monitoring
+- **WHEN** session is active
+- **THEN** system SHALL track total state size per session
+- **AND** system SHALL alert when approaching limit (80% of max)
+- **AND** system SHALL enforce hard limit to prevent OOM
