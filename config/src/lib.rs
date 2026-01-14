@@ -24,8 +24,8 @@ pub mod loader;
 pub mod precedence;
 
 pub use config::{
-    Config, DeploymentConfig, MemoryConfig, ObservabilityConfig, ProviderConfig, SyncConfig,
-    ToolConfig,
+    Config, DeploymentConfig, GraphConfig, MemoryConfig, ObservabilityConfig, ProviderConfig,
+    SyncConfig, ToolConfig,
 };
 pub use file_loader::{load_from_file, load_from_toml, load_from_yaml};
 pub use hot_reload::watch_config;

@@ -17,6 +17,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
 use storage::events::EventError;
+use storage::graph_duckdb::DuckDbGraphStore;
 use sync::bridge::SyncManager;
 use tokio::time::timeout;
 use tracing::{Span, debug, error, info, instrument};
@@ -46,6 +47,7 @@ impl McpServer {
         reflective_reasoner: Arc<dyn memory::reasoning::ReflectiveReasoner>,
         auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>,
         event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
+        graph_store: Option<Arc<DuckDbGraphStore>>,
     ) -> Self {
         let mut registry = ToolRegistry::new();
 
@@ -56,9 +58,12 @@ impl McpServer {
         registry.register(Box::new(MemoryFeedbackTool::new(memory_manager.clone())));
         registry.register(Box::new(MemoryOptimizeTool::new(memory_manager.clone())));
         registry.register(Box::new(MemoryReasonTool::new(reflective_reasoner)));
-        registry.register(Box::new(GraphQueryTool::new(memory_manager.clone())));
-        registry.register(Box::new(GraphNeighborsTool::new(memory_manager.clone())));
-        registry.register(Box::new(GraphPathTool::new(memory_manager.clone())));
+
+        if let Some(graph) = graph_store {
+            registry.register(Box::new(GraphQueryTool::new(graph.clone())));
+            registry.register(Box::new(GraphNeighborsTool::new(graph.clone())));
+            registry.register(Box::new(GraphPathTool::new(graph)));
+        }
 
         registry.register(Box::new(KnowledgeGetTool::new(
             knowledge_repository.clone(),
@@ -651,6 +656,7 @@ mod tests {
             governance,
             mock_reasoner,
             Arc::new(MockAuthService),
+            None,
             None,
         )
     }
