@@ -658,13 +658,13 @@ impl DuckDbGraphStore {
                     e.relation,
                     e.properties as edge_properties,
                     e.weight,
-                    e.created_at as edge_created_at,
+                    CAST(e.created_at AS VARCHAR) as edge_created_at,
                     n.id as node_id,
                     n.label,
                     n.properties as node_properties,
                     n.memory_id,
-                    n.created_at as node_created_at,
-                    n.updated_at,
+                    CAST(n.created_at AS VARCHAR) as node_created_at,
+                    CAST(n.updated_at AS VARCHAR) as node_updated_at,
                     1 as depth
                 FROM memory_edges e
                 JOIN memory_nodes n ON (
@@ -686,19 +686,19 @@ impl DuckDbGraphStore {
                     e.relation,
                     e.properties as edge_properties,
                     e.weight,
-                    e.created_at as edge_created_at,
+                    CAST(e.created_at AS VARCHAR) as edge_created_at,
                     n.id as node_id,
                     n.label,
                     n.properties as node_properties,
                     n.memory_id,
-                    n.created_at as node_created_at,
-                    n.updated_at,
+                    CAST(n.created_at AS VARCHAR) as node_created_at,
+                    CAST(n.updated_at AS VARCHAR) as node_updated_at,
                     r.depth + 1
-                FROM memory_edges e
+                FROM related r
+                JOIN memory_edges e ON (e.source_id = r.node_id OR e.target_id = r.node_id)
                 JOIN memory_nodes n ON (
                     CASE WHEN e.source_id = r.node_id THEN e.target_id ELSE e.source_id END = n.id
                 )
-                JOIN related r ON (e.source_id = r.node_id OR e.target_id = r.node_id)
                 WHERE e.tenant_id = ?
                     AND e.deleted_at IS NULL
                     AND n.tenant_id = ?
@@ -731,9 +731,9 @@ impl DuckDbGraphStore {
                         tenant_id: tenant_id.clone(),
                         weight: row.get(5)?,
                         created_at: row
-                            .get::<_, String>(6)?
-                            .parse()
-                            .unwrap_or_else(|_| Utc::now()),
+                            .get::<_, Option<String>>(6)?
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or_else(Utc::now),
                         deleted_at: None,
                     },
                     GraphNodeExtended {
@@ -746,13 +746,13 @@ impl DuckDbGraphStore {
                         tenant_id: tenant_id.clone(),
                         memory_id: row.get(10)?,
                         created_at: row
-                            .get::<_, String>(11)?
-                            .parse()
-                            .unwrap_or_else(|_| Utc::now()),
+                            .get::<_, Option<String>>(11)?
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or_else(Utc::now),
                         updated_at: row
-                            .get::<_, String>(12)?
-                            .parse()
-                            .unwrap_or_else(|_| Utc::now()),
+                            .get::<_, Option<String>>(12)?
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or_else(Utc::now),
                         deleted_at: None,
                     },
                 ))
