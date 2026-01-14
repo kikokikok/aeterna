@@ -204,6 +204,7 @@ impl DeploymentConfig {
 /// - PostgreSQL: Primary data storage with pgvector extension
 /// - Qdrant: Vector similarity search
 /// - Redis: Caching layer
+/// - Graph: DuckDB-based knowledge graph
 ///
 /// ## Usage
 /// ```rust,no_run
@@ -217,6 +218,7 @@ impl DeploymentConfig {
 /// - `postgres`: PostgreSQL connection configuration
 /// - `qdrant`: Qdrant vector database configuration
 /// - `redis`: Redis caching configuration
+/// - `graph`: DuckDB graph store configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, Default, PartialEq)]
 pub struct ProviderConfig {
     /// PostgreSQL connection configuration
@@ -230,6 +232,10 @@ pub struct ProviderConfig {
     /// Redis caching configuration
     #[serde(default)]
     pub redis: RedisConfig,
+
+    /// DuckDB graph store configuration
+    #[serde(default)]
+    pub graph: GraphConfig,
 }
 
 /// PostgreSQL configuration.
@@ -459,6 +465,73 @@ impl Default for RedisConfig {
             db: default_redis_db(),
             pool_size: default_redis_pool_size(),
             timeout_seconds: default_redis_timeout(),
+        }
+    }
+}
+
+/// DuckDB Graph Store configuration.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Manages configuration for the DuckDB-based knowledge graph storage layer.
+///
+/// ## Fields
+/// - `enabled`: Enable/disable graph store (default: true)
+/// - `database_path`: Path to DuckDB database file (default: ":memory:")
+/// - `s3_bucket`: Optional S3 bucket for persistence
+/// - `s3_prefix`: Optional S3 key prefix
+/// - `s3_endpoint`: Optional S3 endpoint for MinIO/localstack
+/// - `s3_region`: S3 region (default: "us-east-1")
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
+pub struct GraphConfig {
+    /// Enable/disable graph store
+    #[serde(default = "default_graph_enabled")]
+    pub enabled: bool,
+
+    /// Path to DuckDB database file (use ":memory:" for in-memory)
+    #[serde(default = "default_graph_path")]
+    #[validate(length(min = 1, max = 255))]
+    pub database_path: String,
+
+    /// Optional S3 bucket for graph persistence
+    #[serde(default)]
+    pub s3_bucket: Option<String>,
+
+    /// Optional S3 key prefix
+    #[serde(default)]
+    pub s3_prefix: Option<String>,
+
+    /// Optional S3 endpoint (for MinIO or localstack)
+    #[serde(default)]
+    pub s3_endpoint: Option<String>,
+
+    /// S3 region
+    #[serde(default = "default_graph_s3_region")]
+    pub s3_region: String,
+}
+
+fn default_graph_enabled() -> bool {
+    true
+}
+
+fn default_graph_path() -> String {
+    ":memory:".to_string()
+}
+
+fn default_graph_s3_region() -> String {
+    "us-east-1".to_string()
+}
+
+impl Default for GraphConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_graph_enabled(),
+            database_path: default_graph_path(),
+            s3_bucket: None,
+            s3_prefix: None,
+            s3_endpoint: None,
+            s3_region: default_graph_s3_region(),
         }
     }
 }
@@ -895,5 +968,33 @@ mod tests {
         assert!(validate_deployment_mode("hybrid").is_ok());
         assert!(validate_deployment_mode("remote").is_ok());
         assert!(validate_deployment_mode("invalid").is_err());
+    }
+
+    #[test]
+    fn test_graph_config_default() {
+        let config = GraphConfig::default();
+        assert!(config.enabled);
+        assert_eq!(config.database_path, ":memory:");
+        assert!(config.s3_bucket.is_none());
+        assert!(config.s3_prefix.is_none());
+        assert!(config.s3_endpoint.is_none());
+        assert_eq!(config.s3_region, "us-east-1");
+    }
+
+    #[test]
+    fn test_graph_config_validation() {
+        let mut config = GraphConfig::default();
+        config.database_path = "".to_string();
+        assert!(config.validate().is_err());
+
+        config.database_path = "/path/to/graph.duckdb".to_string();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_provider_config_includes_graph() {
+        let providers = ProviderConfig::default();
+        assert!(providers.graph.enabled);
+        assert_eq!(providers.graph.database_path, ":memory:");
     }
 }
