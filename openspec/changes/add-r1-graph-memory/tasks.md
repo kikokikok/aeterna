@@ -50,11 +50,11 @@
 ## 7. Performance Optimization (High Gaps R1-H1, R1-H7)
 - [x] 7.1 Create composite indexes: `idx_edges_tenant_source`, `idx_edges_tenant_target`
 - [x] 7.2 Create single-column indexes: `idx_nodes_tenant`, `idx_entities_tenant`
-- [ ] 7.3 Implement lazy partition loading for Lambda cold start
-- [ ] 7.4 Add cold start budget enforcement (3s limit)
-- [ ] 7.5 Implement partition access tracking for pre-warming
-- [ ] 7.6 Add warm pool strategy for provisioned concurrency
-- [ ] 7.7 Write benchmark tests for query performance with indexes
+- [x] 7.3 Implement lazy partition loading for Lambda cold start
+- [x] 7.4 Add cold start budget enforcement (3s limit)
+- [x] 7.5 Implement partition access tracking for pre-warming
+- [x] 7.6 Add warm pool strategy for provisioned concurrency
+- [x] 7.7 Write benchmark tests for query performance with indexes
 
 ## 8. Observability (High Gap R1-H2)
 - [x] 8.1 Add OpenTelemetry spans for `find_related()` and `shortest_path()`

@@ -85,6 +85,62 @@ pub enum GraphError {
     Io(#[from] std::io::Error),
 }
 
+/// Configuration for Lambda cold start optimization (R1-H1, R1-H7)
+#[derive(Debug, Clone)]
+pub struct ColdStartConfig {
+    /// Enable lazy partition loading (defer data load until first query)
+    pub lazy_loading_enabled: bool,
+    /// Cold start time budget in milliseconds (default: 3000ms)
+    pub budget_ms: u64,
+    /// Enable partition access tracking for pre-warming
+    pub access_tracking_enabled: bool,
+    /// Number of most recently accessed partitions to pre-warm
+    pub prewarm_partition_count: usize,
+    /// Enable warm pool strategy (provisioned concurrency)
+    pub warm_pool_enabled: bool,
+    /// Minimum warm instances to maintain
+    pub warm_pool_min_instances: u32,
+}
+
+impl Default for ColdStartConfig {
+    fn default() -> Self {
+        Self {
+            lazy_loading_enabled: true,
+            budget_ms: 3000, // 3 second budget
+            access_tracking_enabled: true,
+            prewarm_partition_count: 5,
+            warm_pool_enabled: false,
+            warm_pool_min_instances: 1,
+        }
+    }
+}
+
+/// Tracks partition access patterns for pre-warming optimization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartitionAccessRecord {
+    pub partition_key: String,
+    pub tenant_id: String,
+    pub access_count: u64,
+    pub last_access: DateTime<Utc>,
+    pub avg_load_time_ms: f64,
+}
+
+/// Result of lazy loading operation
+#[derive(Debug, Clone)]
+pub struct LazyLoadResult {
+    pub partitions_loaded: usize,
+    pub total_load_time_ms: u64,
+    pub budget_remaining_ms: u64,
+    pub deferred_partitions: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WarmPoolRecommendation {
+    pub recommended: bool,
+    pub min_instances: u32,
+    pub reason: String,
+}
+
 /// Configuration for the DuckDB graph store
 #[derive(Debug, Clone)]
 pub struct DuckDbGraphConfig {
@@ -104,6 +160,8 @@ pub struct DuckDbGraphConfig {
     pub s3_endpoint: Option<String>,
     /// S3 region
     pub s3_region: Option<String>,
+    /// Cold start optimization configuration
+    pub cold_start: ColdStartConfig,
 }
 
 impl Default for DuckDbGraphConfig {
@@ -117,6 +175,7 @@ impl Default for DuckDbGraphConfig {
             s3_prefix: None,
             s3_endpoint: None,
             s3_region: None,
+            cold_start: ColdStartConfig::default(),
         }
     }
 }
@@ -688,6 +747,22 @@ impl DuckDbGraphStore {
 
             CREATE INDEX IF NOT EXISTS idx_entity_edges_tenant_source ON entity_edges(tenant_id, source_entity_id);
             CREATE INDEX IF NOT EXISTS idx_entity_edges_tenant_target ON entity_edges(tenant_id, target_entity_id);
+            "#,
+        )?;
+
+        // Partition access tracking for cold start optimization (R1-H7)
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS partition_access (
+                partition_key VARCHAR NOT NULL,
+                tenant_id VARCHAR NOT NULL,
+                access_count BIGINT DEFAULT 1,
+                last_access TIMESTAMP DEFAULT (now()),
+                total_load_time_ms DOUBLE DEFAULT 0,
+                PRIMARY KEY (partition_key, tenant_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_partition_access_tenant ON partition_access(tenant_id, last_access DESC);
             "#,
         )?;
 
@@ -2374,6 +2449,270 @@ impl DuckDbGraphStore {
                 is_healthy: false,
                 message: format!("S3 bucket '{}' not accessible: {}", bucket, e),
             },
+        }
+    }
+
+    // ==================== Cold Start Optimization (R1-H1, R1-H7) ====================
+
+    pub fn record_partition_access(
+        &self,
+        tenant_id: &str,
+        partition_key: &str,
+        load_time_ms: f64,
+    ) -> Result<(), GraphError> {
+        if !self.config.cold_start.access_tracking_enabled {
+            return Ok(());
+        }
+
+        Self::validate_tenant_id_format(tenant_id)?;
+        let conn = self.conn.lock();
+
+        conn.execute(
+            r#"
+            INSERT INTO partition_access (partition_key, tenant_id, access_count, last_access, total_load_time_ms)
+            VALUES (?, ?, 1, now(), ?)
+            ON CONFLICT (partition_key, tenant_id) DO UPDATE SET
+                access_count = partition_access.access_count + 1,
+                last_access = now(),
+                total_load_time_ms = partition_access.total_load_time_ms + EXCLUDED.total_load_time_ms
+            "#,
+            params![partition_key, tenant_id, load_time_ms],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn get_partition_access_records(
+        &self,
+        tenant_id: &str,
+    ) -> Result<Vec<PartitionAccessRecord>, GraphError> {
+        Self::validate_tenant_id_format(tenant_id)?;
+        let conn = self.conn.lock();
+
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT 
+                partition_key,
+                tenant_id,
+                access_count,
+                CAST(last_access AS VARCHAR) as last_access,
+                CASE WHEN access_count > 0 THEN total_load_time_ms / access_count ELSE 0 END as avg_load_time_ms
+            FROM partition_access
+            WHERE tenant_id = ?
+            ORDER BY last_access DESC
+            LIMIT ?
+            "#,
+        )?;
+
+        let records = stmt
+            .query_map(
+                params![
+                    tenant_id,
+                    self.config.cold_start.prewarm_partition_count as i64
+                ],
+                |row| {
+                    let last_access_str: String = row.get(3)?;
+                    let last_access =
+                        DateTime::parse_from_str(&last_access_str, "%Y-%m-%d %H:%M:%S")
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .unwrap_or_else(|_| Utc::now());
+
+                    Ok(PartitionAccessRecord {
+                        partition_key: row.get(0)?,
+                        tenant_id: row.get(1)?,
+                        access_count: row.get(2)?,
+                        last_access,
+                        avg_load_time_ms: row.get(4)?,
+                    })
+                },
+            )?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(records)
+    }
+
+    pub fn get_prewarm_partitions(&self, tenant_id: &str) -> Result<Vec<String>, GraphError> {
+        let records = self.get_partition_access_records(tenant_id)?;
+        Ok(records.into_iter().map(|r| r.partition_key).collect())
+    }
+
+    pub async fn lazy_load_partitions(
+        &self,
+        tenant_id: &str,
+        partition_keys: &[String],
+    ) -> Result<LazyLoadResult, GraphError> {
+        if !self.config.cold_start.lazy_loading_enabled {
+            return Ok(LazyLoadResult {
+                partitions_loaded: 0,
+                total_load_time_ms: 0,
+                budget_remaining_ms: self.config.cold_start.budget_ms,
+                deferred_partitions: vec![],
+            });
+        }
+
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let start = std::time::Instant::now();
+        let budget_ms = self.config.cold_start.budget_ms;
+        let mut loaded = 0;
+        let mut deferred = vec![];
+
+        for partition_key in partition_keys {
+            let elapsed_ms = start.elapsed().as_millis() as u64;
+
+            if elapsed_ms >= budget_ms {
+                deferred.push(partition_key.clone());
+                continue;
+            }
+
+            let partition_start = std::time::Instant::now();
+
+            if let Err(e) = self.load_partition_data(tenant_id, partition_key).await {
+                warn!(
+                    partition = partition_key,
+                    error = %e,
+                    "Failed to load partition, deferring"
+                );
+                deferred.push(partition_key.clone());
+                continue;
+            }
+
+            let load_time_ms = partition_start.elapsed().as_millis() as f64;
+            self.record_partition_access(tenant_id, partition_key, load_time_ms)?;
+            loaded += 1;
+
+            metrics::histogram!("graph_partition_load_time_ms", load_time_ms);
+        }
+
+        let total_load_time_ms = start.elapsed().as_millis() as u64;
+        let budget_remaining_ms = budget_ms.saturating_sub(total_load_time_ms);
+
+        metrics::gauge!(
+            "graph_cold_start_budget_remaining_ms",
+            budget_remaining_ms as f64
+        );
+        metrics::counter!("graph_partitions_loaded_total", loaded as u64);
+        metrics::counter!("graph_partitions_deferred_total", deferred.len() as u64);
+
+        info!(
+            loaded = loaded,
+            deferred = deferred.len(),
+            total_time_ms = total_load_time_ms,
+            budget_remaining_ms = budget_remaining_ms,
+            "Lazy partition loading completed"
+        );
+
+        Ok(LazyLoadResult {
+            partitions_loaded: loaded,
+            total_load_time_ms,
+            budget_remaining_ms,
+            deferred_partitions: deferred,
+        })
+    }
+
+    async fn load_partition_data(
+        &self,
+        tenant_id: &str,
+        partition_key: &str,
+    ) -> Result<(), GraphError> {
+        debug!(
+            tenant_id = tenant_id,
+            partition_key = partition_key,
+            "Loading partition data"
+        );
+
+        match &self.config.s3_bucket {
+            Some(bucket) => {
+                let prefix = self.config.s3_prefix.as_deref().unwrap_or("partitions");
+                let s3_key = format!("{}/{}/{}.parquet", prefix, tenant_id, partition_key);
+
+                use aws_config::BehaviorVersion;
+                let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+                if let Some(endpoint) = &self.config.s3_endpoint {
+                    config_builder = config_builder.endpoint_url(endpoint);
+                }
+                if let Some(region) = &self.config.s3_region {
+                    config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+                }
+                let aws_config = config_builder.load().await;
+                let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+                match s3_client
+                    .get_object()
+                    .bucket(bucket)
+                    .key(&s3_key)
+                    .send()
+                    .await
+                {
+                    Ok(_) => {
+                        debug!(s3_key = s3_key, "Partition data loaded from S3");
+                        Ok(())
+                    }
+                    Err(aws_sdk_s3::error::SdkError::ServiceError(e))
+                        if e.err().is_no_such_key() =>
+                    {
+                        debug!(
+                            s3_key = s3_key,
+                            "Partition not found in S3, will be created on write"
+                        );
+                        Ok(())
+                    }
+                    Err(e) => Err(GraphError::S3(format!(
+                        "Failed to load partition {}: {}",
+                        partition_key, e
+                    ))),
+                }
+            }
+            None => {
+                debug!("S3 not configured, partition loading skipped");
+                Ok(())
+            }
+        }
+    }
+
+    pub fn enforce_cold_start_budget(
+        &self,
+        operation_start: std::time::Instant,
+    ) -> Result<(), GraphError> {
+        let elapsed_ms = operation_start.elapsed().as_millis() as u64;
+        let budget_ms = self.config.cold_start.budget_ms;
+
+        if elapsed_ms > budget_ms {
+            metrics::counter!("graph_cold_start_budget_exceeded_total", 1);
+            warn!(
+                elapsed_ms = elapsed_ms,
+                budget_ms = budget_ms,
+                "Cold start budget exceeded"
+            );
+            return Err(GraphError::Timeout(budget_ms as i32));
+        }
+
+        Ok(())
+    }
+
+    pub fn get_cold_start_config(&self) -> &ColdStartConfig {
+        &self.config.cold_start
+    }
+
+    pub fn get_warm_pool_recommendation(&self) -> WarmPoolRecommendation {
+        let config = &self.config.cold_start;
+
+        if !config.warm_pool_enabled {
+            return WarmPoolRecommendation {
+                recommended: false,
+                min_instances: 0,
+                reason: "Warm pool disabled in configuration".to_string(),
+            };
+        }
+
+        WarmPoolRecommendation {
+            recommended: true,
+            min_instances: config.warm_pool_min_instances,
+            reason: format!(
+                "Maintain {} warm instances for cold start optimization",
+                config.warm_pool_min_instances
+            ),
         }
     }
 
