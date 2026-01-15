@@ -1652,27 +1652,26 @@ impl DuckDbGraphStore {
 
         let conn = self.conn.lock();
 
-        let export_sql = format!(
-            r#"
+        // Use parameterized query to prevent SQL injection
+        let export_sql = r#"
             COPY (
                 SELECT 'node' as record_type, id, label, properties, memory_id, 
                        CAST(created_at AS VARCHAR) as created_at, 
                        CAST(updated_at AS VARCHAR) as updated_at,
                        NULL as source_id, NULL as target_id, NULL as relation, NULL as weight
-                FROM memory_nodes WHERE tenant_id = '{tenant_id}' AND deleted_at IS NULL
+                FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL
                 UNION ALL
                 SELECT 'edge' as record_type, id, NULL as label, properties, NULL as memory_id,
                        CAST(created_at AS VARCHAR) as created_at, NULL as updated_at,
                        source_id, target_id, relation, CAST(weight AS VARCHAR)
-                FROM memory_edges WHERE tenant_id = '{tenant_id}' AND deleted_at IS NULL
+                FROM memory_edges WHERE tenant_id = ? AND deleted_at IS NULL
             ) TO '/dev/stdout' (FORMAT PARQUET)
-            "#,
-            tenant_id = tenant_id
-        );
+            "#
+        .to_string();
 
         let temp_path = format!("/tmp/graph_export_{}.parquet", Uuid::new_v4());
         let export_sql = export_sql.replace("/dev/stdout", &temp_path);
-        conn.execute_batch(&export_sql)?;
+        conn.prepare(&export_sql)?.execute([tenant_id])?;
 
         let data = std::fs::read(&temp_path)?;
         std::fs::remove_file(&temp_path).ok();

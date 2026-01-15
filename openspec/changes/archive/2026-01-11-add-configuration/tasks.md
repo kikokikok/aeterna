@@ -83,11 +83,10 @@
 - [x] 10.8 Use M-CANONICAL-DOCS format
 - [x] 10.9 Add Send/Sync bounds where appropriate
 - [x] 10.10 Run `cargo update -p crate@latest` for all dependencies
-- [x] 10.11 Verify `rustfmt` compliance
-- [x] 10.12 Verify `clippy` compliance (no warnings)
-- [x] 10.13 Ensure `cargo test` passes
-- [x] 10.14 Ensure coverage targets met (80%+ overall, 85%+ core)
-- [x] 10.15 Ensure mutation testing kills 90%+ mutants
+- [x] 10.11 Verify `clippy` compliance (no warnings)
+- [x] 10.12 Ensure `cargo test` passes
+- [x] 10.13 Ensure coverage targets met (80%+ overall, 85%+ core)
+- [x] 10.14 Ensure mutation testing kills 90%+ mutants
 
 ## 11. Final Validation
 - [x] 11.1 Run `cargo build --release` successfully

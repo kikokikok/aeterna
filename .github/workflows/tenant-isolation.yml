@@ -1,0 +1,76 @@
+name: Tenant Isolation Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'storage/**'
+      - 'mk_core/**'
+      - 'tools/tests/tenant_isolation_e2e.rs'
+  pull_request:
+    paths:
+      - 'storage/**'
+      - 'mk_core/**'
+      - 'tools/tests/tenant_isolation_e2e.rs'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  tenant-isolation:
+    name: Tenant Isolation Security Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: aeterna_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tenant isolation tests
+        env:
+          DATABASE_URL: postgres://test:test@localhost:5432/aeterna_test
+        run: |
+          cargo test -p storage --test tenant_isolation_test -- --nocapture
+          cargo test -p storage --test rls_policy_test -- --nocapture
+
+      - name: Run cross-tenant E2E tests
+        env:
+          DATABASE_URL: postgres://test:test@localhost:5432/aeterna_test
+        run: cargo test -p tools --test tenant_isolation_e2e -- --nocapture
+
+      - name: Verify RLS policies active
+        env:
+          PGPASSWORD: test
+        run: |
+          psql -h localhost -U test -d aeterna_test -c "
+            SELECT tablename, policyname 
+            FROM pg_policies 
+            WHERE schemaname = 'public'
+            ORDER BY tablename;
+          "

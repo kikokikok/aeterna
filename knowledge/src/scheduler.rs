@@ -1,7 +1,7 @@
 use crate::governance::GovernanceEngine;
 use config::config::DeploymentConfig;
 use mk_core::traits::KnowledgeRepository;
-use mk_core::types::{DriftResult, KnowledgeLayer, TenantContext, UnitType, UserId};
+use mk_core::types::{DriftResult, EventStatus, KnowledgeLayer, TenantContext, UnitType, UserId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,6 +14,7 @@ pub struct GovernanceScheduler {
     quick_scan_interval: Duration,
     semantic_scan_interval: Duration,
     report_interval: Duration,
+    dlq_processing_interval: Duration,
 }
 
 impl GovernanceScheduler {
@@ -32,7 +33,13 @@ impl GovernanceScheduler {
             quick_scan_interval,
             semantic_scan_interval,
             report_interval,
+            dlq_processing_interval: Duration::from_secs(300),
         }
+    }
+
+    pub fn with_dlq_interval(mut self, interval: Duration) -> Self {
+        self.dlq_processing_interval = interval;
+        self
     }
 
     pub async fn start(&self) {
@@ -44,6 +51,7 @@ impl GovernanceScheduler {
         let mut quick_interval = time::interval(self.quick_scan_interval);
         let mut semantic_interval = time::interval(self.semantic_scan_interval);
         let mut report_interval = time::interval(self.report_interval);
+        let mut dlq_interval = time::interval(self.dlq_processing_interval);
 
         loop {
             tokio::select! {
@@ -61,6 +69,9 @@ impl GovernanceScheduler {
                     if self.deployment_config.mode == "local" {
                         let _ = self.run_job("weekly_report", "all", self.run_weekly_report_job()).await;
                     }
+                }
+                _ = dlq_interval.tick() => {
+                    let _ = self.run_job("dlq_processing", "all", self.run_dlq_processing_job()).await;
                 }
             }
         }
@@ -194,16 +205,12 @@ impl GovernanceScheduler {
 
                 match llm.analyze_drift(&content, &policies).await {
                     Ok(result) => {
-                        let drift_score = if result.is_valid { 0.0 } else { 1.0 };
-                        let _ = storage
-                            .store_drift_result(DriftResult {
-                                project_id: unit.id.clone(),
-                                tenant_id: unit.tenant_id.clone(),
-                                drift_score,
-                                violations: result.violations,
-                                timestamp: chrono::Utc::now().timestamp(),
-                            })
-                            .await;
+                        let drift_result = DriftResult::new(
+                            unit.id.clone(),
+                            unit.tenant_id.clone(),
+                            result.violations,
+                        );
+                        let _ = storage.store_drift_result(drift_result).await;
                     }
                     Err(e) => {
                         tracing::error!(
@@ -249,6 +256,8 @@ impl GovernanceScheduler {
                 let mut total_drift = 0.0;
                 let mut project_count = 0;
                 let mut all_violations = Vec::new();
+                let mut all_suppressed = Vec::new();
+                let mut manual_review_count = 0;
 
                 for child in children {
                     if child.unit_type == UnitType::Project {
@@ -264,6 +273,10 @@ impl GovernanceScheduler {
                                 total_drift += result.drift_score;
                                 project_count += 1;
                                 all_violations.extend(result.violations);
+                                all_suppressed.extend(result.suppressed_violations);
+                                if result.requires_manual_review {
+                                    manual_review_count += 1;
+                                }
                             }
                         }
                     }
@@ -281,19 +294,113 @@ impl GovernanceScheduler {
                     serde_json::json!(project_count),
                 );
                 report_data.insert(
-                    "violation_count".to_string(),
+                    "active_violation_count".to_string(),
                     serde_json::json!(all_violations.len()),
+                );
+                report_data.insert(
+                    "suppressed_violation_count".to_string(),
+                    serde_json::json!(all_suppressed.len()),
+                );
+                report_data.insert(
+                    "manual_review_required".to_string(),
+                    serde_json::json!(manual_review_count),
                 );
 
                 tracing::info!(
-                    "Weekly report for Org {}: Avg Drift: {}, Projects: {}, Violations: {}",
+                    "Weekly report for Org {}: Avg Drift: {:.2}, Projects: {}, Active Violations: {}, Suppressed: {}, Manual Review: {}",
                     unit.id,
                     avg_drift,
                     project_count,
-                    all_violations.len()
+                    all_violations.len(),
+                    all_suppressed.len(),
+                    manual_review_count
                 );
             }
         }
+
+        Ok(())
+    }
+
+    async fn run_dlq_processing_job(&self) -> anyhow::Result<()> {
+        tracing::info!("Starting DLQ processing job");
+
+        let storage = self
+            .engine
+            .storage()
+            .ok_or_else(|| anyhow::anyhow!("Storage not configured"))?;
+
+        let units = storage
+            .list_all_units()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to list units: {:?}", e))?;
+
+        let mut total_processed = 0;
+        let mut total_failed = 0;
+        let mut total_requeued = 0;
+
+        for unit in units {
+            if unit.unit_type == UnitType::Company {
+                let ctx = TenantContext::new(unit.tenant_id.clone(), UserId::default());
+
+                let dead_letters = storage
+                    .get_dead_letter_events(ctx.clone(), 100)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to fetch DLQ events: {:?}", e))?;
+
+                if dead_letters.is_empty() {
+                    continue;
+                }
+
+                tracing::info!(
+                    "Processing {} DLQ events for tenant {}",
+                    dead_letters.len(),
+                    unit.tenant_id
+                );
+
+                for mut event in dead_letters {
+                    if event.retry_count < event.max_retries + 3 {
+                        event.retry_count += 1;
+                        match self.engine.publish_event(event.payload.clone()).await {
+                            Ok(_) => {
+                                storage
+                                    .update_event_status(
+                                        &event.event_id,
+                                        EventStatus::Published,
+                                        None,
+                                    )
+                                    .await
+                                    .ok();
+                                total_processed += 1;
+                            }
+                            Err(_) => {
+                                storage
+                                    .update_event_status(
+                                        &event.event_id,
+                                        EventStatus::DeadLettered,
+                                        Some("DLQ reprocessing failed".to_string()),
+                                    )
+                                    .await
+                                    .ok();
+                                total_requeued += 1;
+                            }
+                        }
+                    } else {
+                        tracing::warn!(
+                            event_id = %event.event_id,
+                            "Event exceeded max DLQ retries, marking as permanently failed"
+                        );
+                        total_failed += 1;
+                    }
+                }
+            }
+        }
+
+        tracing::info!(
+            "DLQ processing complete: {} processed, {} requeued, {} permanently failed",
+            total_processed,
+            total_requeued,
+            total_failed
+        );
 
         Ok(())
     }
@@ -465,6 +572,107 @@ mod tests {
             _limit: usize,
         ) -> Result<Vec<GovernanceEvent>, Self::Error> {
             Ok(Vec::new())
+        }
+
+        async fn persist_event(
+            &self,
+            _event: mk_core::types::PersistentEvent,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn get_pending_events(
+            &self,
+            _ctx: TenantContext,
+            _limit: usize,
+        ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
+            Ok(Vec::new())
+        }
+
+        async fn update_event_status(
+            &self,
+            _event_id: &str,
+            _status: EventStatus,
+            _error: Option<String>,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn get_dead_letter_events(
+            &self,
+            _ctx: TenantContext,
+            _limit: usize,
+        ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
+            Ok(Vec::new())
+        }
+
+        async fn check_idempotency(
+            &self,
+            _consumer_group: &str,
+            _idempotency_key: &str,
+        ) -> Result<bool, Self::Error> {
+            Ok(false)
+        }
+
+        async fn record_consumer_state(
+            &self,
+            _state: mk_core::types::ConsumerState,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn get_event_metrics(
+            &self,
+            _ctx: TenantContext,
+            _period_start: i64,
+            _period_end: i64,
+        ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
+            Ok(Vec::new())
+        }
+
+        async fn record_event_metrics(
+            &self,
+            _metrics: mk_core::types::EventDeliveryMetrics,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn create_suppression(
+            &self,
+            _suppression: mk_core::types::DriftSuppression,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn list_suppressions(
+            &self,
+            _ctx: TenantContext,
+            _project_id: &str,
+        ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
+            Ok(Vec::new())
+        }
+
+        async fn delete_suppression(
+            &self,
+            _ctx: TenantContext,
+            _suppression_id: &str,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn get_drift_config(
+            &self,
+            _ctx: TenantContext,
+            _project_id: &str,
+        ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
+            Ok(None)
+        }
+
+        async fn save_drift_config(
+            &self,
+            _config: mk_core::types::DriftConfig,
+        ) -> Result<(), Self::Error> {
+            Ok(())
         }
     }
 
@@ -692,20 +900,8 @@ mod tests {
 
         let storage = Arc::new(MockStorage::with_units(units));
 
-        let result1 = DriftResult {
-            project_id: "proj-1".to_string(),
-            tenant_id: tenant_id.clone(),
-            drift_score: 0.3,
-            violations: vec![],
-            timestamp: chrono::Utc::now().timestamp(),
-        };
-        let result2 = DriftResult {
-            project_id: "proj-2".to_string(),
-            tenant_id: tenant_id.clone(),
-            drift_score: 0.7,
-            violations: vec![],
-            timestamp: chrono::Utc::now().timestamp(),
-        };
+        let result1 = DriftResult::new("proj-1".to_string(), tenant_id.clone(), vec![]);
+        let result2 = DriftResult::new("proj-2".to_string(), tenant_id.clone(), vec![]);
         storage.store_drift_result(result1).await.unwrap();
         storage.store_drift_result(result2).await.unwrap();
 
@@ -877,13 +1073,9 @@ mod tests {
 
         let storage = Arc::new(MockStorage::with_units(units));
 
-        let old_result = DriftResult {
-            project_id: "proj-1".to_string(),
-            tenant_id: tenant_id.clone(),
-            drift_score: 0.5,
-            violations: vec![],
-            timestamp: chrono::Utc::now().timestamp() - (14 * 24 * 60 * 60),
-        };
+        let old_result = DriftResult::new("proj-1".to_string(), tenant_id.clone(), vec![]);
+        let mut old_result = old_result;
+        old_result.timestamp = chrono::Utc::now().timestamp() - (14 * 24 * 60 * 60);
         storage.store_drift_result(old_result).await.unwrap();
 
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));

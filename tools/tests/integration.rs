@@ -206,6 +206,7 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
         ))),
         Arc::new(MockAuthService),
         None,
+        None,
     ));
 
     let opencode = OpenCodeAdapter::new(server.clone());
@@ -214,7 +215,7 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
 
     let langchain = LangChainAdapter::new(server.clone());
     let lc_tools = langchain.to_langchain_tools();
-    assert_eq!(lc_tools.len(), 16); // 5 memory + 3 knowledge + 3 sync + 5 governance
+    assert_eq!(lc_tools.len(), 18); // 7 memory + 3 knowledge + 3 sync + 5 governance
 
     let response = langchain
         .handle_mcp_request(json!({
@@ -273,6 +274,7 @@ async fn test_server_timeout() -> anyhow::Result<()> {
         ))),
         Arc::new(MockAuthService),
         None,
+        None,
     )
     .with_timeout(std::time::Duration::from_millis(1));
 
@@ -326,6 +328,7 @@ async fn test_server_timeout() -> anyhow::Result<()> {
             memory::llm::mock::MockLlmService::new(),
         ))),
         Arc::new(DenyAuthService),
+        None,
         None,
     );
 

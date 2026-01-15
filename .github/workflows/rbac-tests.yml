@@ -1,0 +1,57 @@
+name: RBAC Policy Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'adapters/src/auth/**'
+      - 'adapters/tests/rbac_matrix_test.rs'
+      - 'adapters/tests/cedar_integration.rs'
+      - 'policies/**'
+  pull_request:
+    paths:
+      - 'adapters/src/auth/**'
+      - 'adapters/tests/rbac_matrix_test.rs'
+      - 'adapters/tests/cedar_integration.rs'
+      - 'policies/**'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rbac-tests:
+    name: RBAC Matrix Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run RBAC matrix tests
+        run: |
+          cargo test -p adapters --test rbac_matrix_test -- --nocapture
+
+      - name: Run Cedar integration tests
+        run: |
+          cargo test -p adapters --test cedar_integration -- --nocapture
+
+      - name: Generate RBAC matrix documentation
+        run: |
+          chmod +x scripts/generate_rbac_matrix.sh
+          scripts/generate_rbac_matrix.sh
+
+      - name: Verify matrix unchanged
+        run: |
+          git diff --exit-code docs/security/rbac-matrix.md || \
+            (echo "ERROR: RBAC matrix documentation out of sync" && exit 1)
