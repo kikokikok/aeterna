@@ -11,7 +11,7 @@ pub trait EcosystemAdapter: Send + Sync {
 }
 
 pub struct OpenCodeAdapter {
-    server: Arc<McpServer>
+    server: Arc<McpServer>,
 }
 
 impl OpenCodeAdapter {

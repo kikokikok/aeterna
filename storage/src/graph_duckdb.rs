@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::graph::{GraphEdge, GraphNode, GraphStore};
@@ -69,6 +69,9 @@ pub enum GraphError {
     #[error("Invalid tenant context")]
     InvalidTenantContext,
 
+    #[error("Invalid tenant ID format: {0}")]
+    InvalidTenantIdFormat(String),
+
     #[error("Serialization error: {0}")]
     Serialization(String),
 
@@ -80,6 +83,62 @@ pub enum GraphError {
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+}
+
+/// Configuration for Lambda cold start optimization (R1-H1, R1-H7)
+#[derive(Debug, Clone)]
+pub struct ColdStartConfig {
+    /// Enable lazy partition loading (defer data load until first query)
+    pub lazy_loading_enabled: bool,
+    /// Cold start time budget in milliseconds (default: 3000ms)
+    pub budget_ms: u64,
+    /// Enable partition access tracking for pre-warming
+    pub access_tracking_enabled: bool,
+    /// Number of most recently accessed partitions to pre-warm
+    pub prewarm_partition_count: usize,
+    /// Enable warm pool strategy (provisioned concurrency)
+    pub warm_pool_enabled: bool,
+    /// Minimum warm instances to maintain
+    pub warm_pool_min_instances: u32,
+}
+
+impl Default for ColdStartConfig {
+    fn default() -> Self {
+        Self {
+            lazy_loading_enabled: true,
+            budget_ms: 3000, // 3 second budget
+            access_tracking_enabled: true,
+            prewarm_partition_count: 5,
+            warm_pool_enabled: false,
+            warm_pool_min_instances: 1,
+        }
+    }
+}
+
+/// Tracks partition access patterns for pre-warming optimization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartitionAccessRecord {
+    pub partition_key: String,
+    pub tenant_id: String,
+    pub access_count: u64,
+    pub last_access: DateTime<Utc>,
+    pub avg_load_time_ms: f64,
+}
+
+/// Result of lazy loading operation
+#[derive(Debug, Clone)]
+pub struct LazyLoadResult {
+    pub partitions_loaded: usize,
+    pub total_load_time_ms: u64,
+    pub budget_remaining_ms: u64,
+    pub deferred_partitions: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WarmPoolRecommendation {
+    pub recommended: bool,
+    pub min_instances: u32,
+    pub reason: String,
 }
 
 /// Configuration for the DuckDB graph store
@@ -101,6 +160,8 @@ pub struct DuckDbGraphConfig {
     pub s3_endpoint: Option<String>,
     /// S3 region
     pub s3_region: Option<String>,
+    /// Cold start optimization configuration
+    pub cold_start: ColdStartConfig,
 }
 
 impl Default for DuckDbGraphConfig {
@@ -114,6 +175,7 @@ impl Default for DuckDbGraphConfig {
             s3_prefix: None,
             s3_endpoint: None,
             s3_region: None,
+            cold_start: ColdStartConfig::default(),
         }
     }
 }
@@ -188,11 +250,35 @@ pub struct Community {
 }
 
 #[derive(Debug, Clone)]
+pub struct ContentionAlertConfig {
+    pub queue_depth_warn: u32,
+    pub queue_depth_critical: u32,
+    pub wait_time_warn_ms: u64,
+    pub wait_time_critical_ms: u64,
+    pub timeout_rate_warn_percent: f64,
+    pub timeout_rate_critical_percent: f64,
+}
+
+impl Default for ContentionAlertConfig {
+    fn default() -> Self {
+        Self {
+            queue_depth_warn: 5,
+            queue_depth_critical: 10,
+            wait_time_warn_ms: 1000,
+            wait_time_critical_ms: 3000,
+            timeout_rate_warn_percent: 5.0,
+            timeout_rate_critical_percent: 15.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct WriteCoordinatorConfig {
     pub lock_ttl_ms: u64,
     pub max_retries: u32,
     pub base_backoff_ms: u64,
     pub max_backoff_ms: u64,
+    pub alert_config: ContentionAlertConfig,
 }
 
 impl Default for WriteCoordinatorConfig {
@@ -202,8 +288,109 @@ impl Default for WriteCoordinatorConfig {
             max_retries: 5,
             base_backoff_ms: 50,
             max_backoff_ms: 2000,
+            alert_config: ContentionAlertConfig::default(),
         }
     }
+}
+
+/// Configuration for backup and recovery (R1-H4)
+#[derive(Debug, Clone)]
+pub struct BackupConfig {
+    /// Interval between automatic snapshots (in seconds)
+    pub snapshot_interval_secs: u64,
+    /// Maximum number of snapshots to retain per tenant
+    pub retention_count: usize,
+    /// Maximum age of snapshots to retain (in seconds)
+    pub retention_max_age_secs: u64,
+    /// Enable automatic scheduled backups
+    pub auto_backup_enabled: bool,
+    /// S3 prefix for backup snapshots
+    pub backup_prefix: String,
+}
+
+impl Default for BackupConfig {
+    fn default() -> Self {
+        Self {
+            snapshot_interval_secs: 3600,      // 1 hour
+            retention_count: 24,               // Keep last 24 snapshots
+            retention_max_age_secs: 86400 * 7, // 7 days
+            auto_backup_enabled: false,
+            backup_prefix: "backups".to_string(),
+        }
+    }
+}
+
+/// Snapshot metadata for versioning and recovery
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotMetadata {
+    pub snapshot_id: String,
+    pub tenant_id: String,
+    pub s3_key: String,
+    pub created_at: DateTime<Utc>,
+    pub size_bytes: u64,
+    pub checksum: String,
+    pub node_count: u64,
+    pub edge_count: u64,
+    pub schema_version: i32,
+}
+
+/// Result of a backup operation
+#[derive(Debug, Clone)]
+pub struct BackupResult {
+    pub snapshot_id: String,
+    pub s3_key: String,
+    pub size_bytes: u64,
+    pub duration_ms: u64,
+    pub checksum: String,
+}
+
+/// Result of a recovery operation
+#[derive(Debug, Clone)]
+pub struct RecoveryResult {
+    pub snapshot_id: String,
+    pub nodes_restored: u64,
+    pub edges_restored: u64,
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComponentHealth {
+    pub is_healthy: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheckResult {
+    pub healthy: bool,
+    pub duckdb: ComponentHealth,
+    pub s3: ComponentHealth,
+    pub schema_version: i32,
+    pub total_latency_ms: u64,
+    pub duckdb_latency_ms: u64,
+    pub s3_latency_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadinessResult {
+    pub ready: bool,
+    pub duckdb_ready: bool,
+    pub schema_ready: bool,
+    pub latency_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct Migration {
+    pub version: i32,
+    pub description: String,
+    pub up_sql: Vec<&'static str>,
+    pub down_sql: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MigrationRecord {
+    pub version: i32,
+    pub applied_at: String,
+    pub description: String,
 }
 
 pub struct WriteCoordinator {
@@ -214,10 +401,11 @@ pub struct WriteCoordinator {
 
 impl WriteCoordinator {
     pub fn new(redis_url: String, config: WriteCoordinatorConfig) -> Self {
+        let metrics = GraphMetrics::with_alert_config(config.alert_config.clone());
         Self {
             redis_url,
             config,
-            metrics: GraphMetrics::new(),
+            metrics,
         }
     }
 
@@ -316,14 +504,72 @@ impl WriteCoordinator {
 
 /// Observability metrics for graph operations.
 /// Uses the `metrics` crate for lightweight instrumentation.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct GraphMetrics {
-    _private: (),
+    alert_config: Option<ContentionAlertConfig>,
+}
+
+impl Default for GraphMetrics {
+    fn default() -> Self {
+        Self { alert_config: None }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlertSeverity {
+    Warn,
+    Critical,
 }
 
 impl GraphMetrics {
     pub fn new() -> Self {
-        Self { _private: () }
+        Self::default()
+    }
+
+    pub fn with_alert_config(alert_config: ContentionAlertConfig) -> Self {
+        Self {
+            alert_config: Some(alert_config),
+        }
+    }
+
+    fn emit_alert(&self, severity: AlertSeverity, metric_name: &str, value: f64, threshold: f64) {
+        let severity_str = match severity {
+            AlertSeverity::Warn => "warn",
+            AlertSeverity::Critical => "critical",
+        };
+        metrics::counter!(
+            "graph_contention_alerts_total",
+            1,
+            "severity" => severity_str,
+            "metric" => metric_name.to_string()
+        );
+        warn!(
+            severity = severity_str,
+            metric = metric_name,
+            value = value,
+            threshold = threshold,
+            "Contention alert triggered"
+        );
+    }
+
+    fn check_wait_time_alert(&self, wait_time_ms: u64) {
+        if let Some(ref config) = self.alert_config {
+            if wait_time_ms >= config.wait_time_critical_ms {
+                self.emit_alert(
+                    AlertSeverity::Critical,
+                    "wait_time_ms",
+                    wait_time_ms as f64,
+                    config.wait_time_critical_ms as f64,
+                );
+            } else if wait_time_ms >= config.wait_time_warn_ms {
+                self.emit_alert(
+                    AlertSeverity::Warn,
+                    "wait_time_ms",
+                    wait_time_ms as f64,
+                    config.wait_time_warn_ms as f64,
+                );
+            }
+        }
     }
 
     pub fn record_query(&self, duration_secs: f64, result_count: usize) {
@@ -339,13 +585,11 @@ impl GraphMetrics {
         metrics::counter!("graph_cache_misses_total", 1);
     }
 
-    /// Record write lock acquisition attempt
     pub fn record_lock_attempt(&self, _tenant_id: &str) {
         metrics::counter!("graph_write_lock_attempts_total", 1);
         metrics::gauge!("graph_write_queue_depth", 1.0);
     }
 
-    /// Record successful lock acquisition with wait time
     pub fn record_lock_acquired(&self, _tenant_id: &str, wait_time_ms: u64, retry_count: u32) {
         metrics::counter!("graph_write_lock_acquired_total", 1);
         metrics::histogram!(
@@ -354,9 +598,9 @@ impl GraphMetrics {
         );
         metrics::histogram!("graph_write_lock_retries", retry_count as f64);
         metrics::gauge!("graph_write_queue_depth", -1.0);
+        self.check_wait_time_alert(wait_time_ms);
     }
 
-    /// Record lock acquisition timeout/failure
     pub fn record_lock_timeout(&self, _tenant_id: &str, wait_time_ms: u64, retry_count: u32) {
         metrics::counter!("graph_write_lock_timeouts_total", 1);
         metrics::histogram!(
@@ -365,9 +609,9 @@ impl GraphMetrics {
         );
         metrics::histogram!("graph_write_lock_retries", retry_count as f64);
         metrics::gauge!("graph_write_queue_depth", -1.0);
+        self.check_wait_time_alert(wait_time_ms);
     }
 
-    /// Record lock release
     pub fn record_lock_released(&self, _tenant_id: &str, hold_time_ms: u64) {
         metrics::counter!("graph_write_lock_released_total", 1);
         metrics::histogram!(
@@ -506,16 +750,32 @@ impl DuckDbGraphStore {
             "#,
         )?;
 
+        // Partition access tracking for cold start optimization (R1-H7)
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS partition_access (
+                partition_key VARCHAR NOT NULL,
+                tenant_id VARCHAR NOT NULL,
+                access_count BIGINT DEFAULT 1,
+                last_access TIMESTAMP DEFAULT (now()),
+                total_load_time_ms DOUBLE DEFAULT 0,
+                PRIMARY KEY (partition_key, tenant_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_partition_access_tenant ON partition_access(tenant_id, last_access DESC);
+            "#,
+        )?;
+
         debug!("Schema initialized successfully");
         Ok(())
     }
 
-    /// Run database migrations
+    // ==================== Schema Migrations (R1-H9) ====================
+
     #[instrument(skip(self))]
     fn run_migrations(&self) -> Result<(), GraphError> {
         let conn = self.conn.lock();
 
-        // Check current schema version
         let current_version: i32 = conn
             .query_row(
                 "SELECT COALESCE(MAX(version), 0) FROM schema_version",
@@ -524,35 +784,182 @@ impl DuckDbGraphStore {
             )
             .unwrap_or(0);
 
-        if current_version < SCHEMA_VERSION {
-            info!(
-                "Running migrations from version {} to {}",
-                current_version, SCHEMA_VERSION
-            );
-
-            // Migration v1: Initial schema (already applied in initialize_schema)
-            if current_version < 1 {
-                conn.execute(
-                    "INSERT INTO schema_version (version, description) VALUES (1, 'Initial schema with soft-delete support')",
-                    [],
-                )?;
-            }
-
-            info!("Migrations completed successfully");
-        } else {
+        if current_version >= SCHEMA_VERSION {
             debug!("Schema is up to date (version {})", current_version);
+            return Ok(());
+        }
+
+        info!(
+            "Running migrations from version {} to {}",
+            current_version, SCHEMA_VERSION
+        );
+
+        let migrations = Self::get_migrations();
+
+        for migration in migrations {
+            if current_version < migration.version {
+                info!(
+                    "Applying migration v{}: {}",
+                    migration.version, migration.description
+                );
+
+                conn.execute_batch("BEGIN TRANSACTION")?;
+
+                let result = (|| -> Result<(), GraphError> {
+                    for sql in &migration.up_sql {
+                        conn.execute_batch(sql)?;
+                    }
+
+                    conn.execute(
+                        "INSERT INTO schema_version (version, description) VALUES (?, ?)",
+                        params![migration.version, migration.description],
+                    )?;
+
+                    Ok(())
+                })();
+
+                match result {
+                    Ok(()) => {
+                        conn.execute_batch("COMMIT")?;
+                        info!("Migration v{} applied successfully", migration.version);
+                    }
+                    Err(e) => {
+                        conn.execute_batch("ROLLBACK")?;
+                        error!(
+                            error = %e,
+                            version = migration.version,
+                            "Migration v{} failed, rolled back",
+                            migration.version
+                        );
+                        return Err(GraphError::Migration(format!(
+                            "Migration v{} failed: {}",
+                            migration.version, e
+                        )));
+                    }
+                }
+            }
+        }
+
+        info!("All migrations completed successfully");
+        Ok(())
+    }
+
+    fn get_migrations() -> Vec<Migration> {
+        vec![Migration {
+            version: 1,
+            description: "Initial schema with soft-delete support".to_string(),
+            up_sql: vec![],
+            down_sql: vec![],
+        }]
+    }
+
+    pub fn get_current_schema_version(&self) -> Result<i32, GraphError> {
+        self.get_schema_version()
+    }
+
+    pub fn get_migration_history(&self) -> Result<Vec<MigrationRecord>, GraphError> {
+        let conn = self.conn.lock();
+
+        let mut stmt = conn.prepare(
+            "SELECT version, CAST(applied_at AS VARCHAR) as applied_at, description FROM schema_version ORDER BY version ASC",
+        )?;
+
+        let records = stmt
+            .query_map([], |row| {
+                Ok(MigrationRecord {
+                    version: row.get(0)?,
+                    applied_at: row.get(1)?,
+                    description: row.get(2)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(records)
+    }
+
+    /// Validate tenant context and tenant ID format (R1-H3, Task 9.1-9.3)
+    fn validate_tenant(&self, ctx: &TenantContext) -> Result<String, GraphError> {
+        let tenant_id = ctx.tenant_id.as_str();
+        if tenant_id.is_empty() {
+            Self::log_security_audit("REJECTED", "empty_tenant_id", "", "Empty tenant ID");
+            return Err(GraphError::InvalidTenantContext);
+        }
+
+        Self::validate_tenant_id_format(tenant_id)?;
+        Ok(tenant_id.to_string())
+    }
+
+    /// Validate tenant ID format to prevent SQL injection (Task 9.1, 9.2)
+    fn validate_tenant_id_format(tenant_id: &str) -> Result<(), GraphError> {
+        if tenant_id.is_empty() {
+            Self::log_security_audit("REJECTED", "empty_tenant_id", tenant_id, "Empty tenant ID");
+            return Err(GraphError::InvalidTenantIdFormat(
+                "Tenant ID cannot be empty".to_string(),
+            ));
+        }
+
+        if tenant_id.len() > 128 {
+            Self::log_security_audit(
+                "REJECTED",
+                "tenant_id_too_long",
+                tenant_id,
+                "Tenant ID exceeds 128 chars",
+            );
+            return Err(GraphError::InvalidTenantIdFormat(
+                "Tenant ID exceeds maximum length of 128 characters".to_string(),
+            ));
+        }
+
+        if !tenant_id
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
+            Self::log_security_audit(
+                "REJECTED",
+                "invalid_tenant_id_chars",
+                tenant_id,
+                "Invalid characters in tenant ID",
+            );
+            return Err(GraphError::InvalidTenantIdFormat(
+                "Tenant ID contains invalid characters (allowed: alphanumeric, -, _)".to_string(),
+            ));
+        }
+
+        let sql_injection_patterns = [
+            "--", ";", "'", "\"", "/*", "*/", "UNION", "SELECT", "INSERT", "UPDATE", "DELETE",
+            "DROP", "EXEC", "EXECUTE", "xp_",
+        ];
+
+        let upper_tenant_id = tenant_id.to_uppercase();
+        for pattern in &sql_injection_patterns {
+            if upper_tenant_id.contains(pattern) {
+                Self::log_security_audit(
+                    "BLOCKED",
+                    "sql_injection_attempt",
+                    tenant_id,
+                    &format!("SQL injection pattern detected: {}", pattern),
+                );
+                return Err(GraphError::InvalidTenantIdFormat(
+                    "Tenant ID contains disallowed pattern".to_string(),
+                ));
+            }
         }
 
         Ok(())
     }
 
-    /// Validate tenant context (R1-H3)
-    fn validate_tenant(&self, ctx: &TenantContext) -> Result<String, GraphError> {
-        let tenant_id = ctx.tenant_id.as_str();
-        if tenant_id.is_empty() {
-            return Err(GraphError::InvalidTenantContext);
-        }
-        Ok(tenant_id.to_string())
+    /// Log security audit events (Task 9.3)
+    fn log_security_audit(action: &str, event_type: &str, tenant_id: &str, details: &str) {
+        error!(
+            target: "security_audit",
+            action = action,
+            event_type = event_type,
+            tenant_id = tenant_id,
+            details = details,
+            "Security audit: {} - {} for tenant '{}': {}",
+            action, event_type, tenant_id, details
+        );
     }
 
     /// Check if a node exists and belongs to the tenant (R1-C2)
@@ -1241,29 +1648,30 @@ impl DuckDbGraphStore {
     }
 
     fn export_to_parquet(&self, tenant_id: &str) -> Result<Vec<u8>, GraphError> {
+        Self::validate_tenant_id_format(tenant_id)?;
+
         let conn = self.conn.lock();
 
-        let export_sql = format!(
-            r#"
+        // Use parameterized query to prevent SQL injection
+        let export_sql = r#"
             COPY (
                 SELECT 'node' as record_type, id, label, properties, memory_id, 
                        CAST(created_at AS VARCHAR) as created_at, 
                        CAST(updated_at AS VARCHAR) as updated_at,
                        NULL as source_id, NULL as target_id, NULL as relation, NULL as weight
-                FROM memory_nodes WHERE tenant_id = '{tenant_id}' AND deleted_at IS NULL
+                FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL
                 UNION ALL
                 SELECT 'edge' as record_type, id, NULL as label, properties, NULL as memory_id,
                        CAST(created_at AS VARCHAR) as created_at, NULL as updated_at,
                        source_id, target_id, relation, CAST(weight AS VARCHAR)
-                FROM memory_edges WHERE tenant_id = '{tenant_id}' AND deleted_at IS NULL
+                FROM memory_edges WHERE tenant_id = ? AND deleted_at IS NULL
             ) TO '/dev/stdout' (FORMAT PARQUET)
-            "#,
-            tenant_id = tenant_id
-        );
+            "#
+        .to_string();
 
         let temp_path = format!("/tmp/graph_export_{}.parquet", Uuid::new_v4());
         let export_sql = export_sql.replace("/dev/stdout", &temp_path);
-        conn.execute_batch(&export_sql)?;
+        conn.prepare(&export_sql)?.execute([tenant_id])?;
 
         let data = std::fs::read(&temp_path)?;
         std::fs::remove_file(&temp_path).ok();
@@ -1272,6 +1680,8 @@ impl DuckDbGraphStore {
     }
 
     fn import_from_parquet(&self, tenant_id: &str, data: &[u8]) -> Result<(), GraphError> {
+        Self::validate_tenant_id_format(tenant_id)?;
+
         let conn = self.conn.lock();
 
         let temp_path = format!("/tmp/graph_import_{}.parquet", Uuid::new_v4());
@@ -1316,6 +1726,993 @@ impl DuckDbGraphStore {
 
         debug!("Imported graph data from parquet for tenant {}", tenant_id);
         Ok(())
+    }
+
+    // ==================== Backup & Recovery (R1-H4) ====================
+
+    #[instrument(skip(self, backup_config), fields(tenant_id = %tenant_id))]
+    pub async fn create_backup(
+        &self,
+        tenant_id: &str,
+        backup_config: &BackupConfig,
+    ) -> Result<BackupResult, GraphError> {
+        use aws_config::BehaviorVersion;
+        use aws_sdk_s3::primitives::ByteStream;
+        use sha2::{Digest, Sha256};
+
+        let start = std::time::Instant::now();
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        let snapshot_id = Uuid::new_v4().to_string();
+        let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
+        let s3_key = format!(
+            "{}/{}/{}/snapshot_{}.parquet",
+            backup_config.backup_prefix, tenant_id, timestamp, snapshot_id
+        );
+
+        let parquet_data = self.export_to_parquet(tenant_id)?;
+        let size_bytes = parquet_data.len() as u64;
+
+        let mut hasher = Sha256::new();
+        hasher.update(&parquet_data);
+        let checksum = hex::encode(hasher.finalize());
+
+        let stats = self.get_stats_internal(tenant_id)?;
+        let metadata = SnapshotMetadata {
+            snapshot_id: snapshot_id.clone(),
+            tenant_id: tenant_id.to_string(),
+            s3_key: s3_key.clone(),
+            created_at: Utc::now(),
+            size_bytes,
+            checksum: checksum.clone(),
+            node_count: stats.node_count as u64,
+            edge_count: stats.edge_count as u64,
+            schema_version: SCHEMA_VERSION,
+        };
+
+        let metadata_json = serde_json::to_string(&metadata)
+            .map_err(|e| GraphError::Serialization(e.to_string()))?;
+
+        s3_client
+            .put_object()
+            .bucket(bucket)
+            .key(&s3_key)
+            .body(ByteStream::from(parquet_data))
+            .metadata("checksum", &checksum)
+            .metadata("tenant_id", tenant_id)
+            .metadata("snapshot_id", &snapshot_id)
+            .metadata("snapshot_metadata", &metadata_json)
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to upload backup: {}", e)))?;
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        info!(
+            snapshot_id = %snapshot_id,
+            size_bytes = size_bytes,
+            duration_ms = duration_ms,
+            "Created backup snapshot"
+        );
+
+        Ok(BackupResult {
+            snapshot_id,
+            s3_key,
+            size_bytes,
+            duration_ms,
+            checksum,
+        })
+    }
+
+    #[instrument(skip(self, backup_config), fields(tenant_id = %tenant_id))]
+    pub async fn list_snapshots(
+        &self,
+        tenant_id: &str,
+        backup_config: &BackupConfig,
+    ) -> Result<Vec<SnapshotMetadata>, GraphError> {
+        use aws_config::BehaviorVersion;
+
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        let prefix = format!("{}/{}/", backup_config.backup_prefix, tenant_id);
+
+        let response = s3_client
+            .list_objects_v2()
+            .bucket(bucket)
+            .prefix(&prefix)
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to list snapshots: {}", e)))?;
+
+        let mut snapshots = Vec::new();
+
+        for obj in response.contents() {
+            if let Some(key) = obj.key() {
+                if key.ends_with(".parquet") {
+                    let head = s3_client
+                        .head_object()
+                        .bucket(bucket)
+                        .key(key)
+                        .send()
+                        .await
+                        .map_err(|e| {
+                            GraphError::S3(format!("Failed to get object metadata: {}", e))
+                        })?;
+
+                    if let Some(metadata_json) =
+                        head.metadata().and_then(|m| m.get("snapshot_metadata"))
+                    {
+                        if let Ok(metadata) =
+                            serde_json::from_str::<SnapshotMetadata>(metadata_json)
+                        {
+                            snapshots.push(metadata);
+                        }
+                    }
+                }
+            }
+        }
+
+        snapshots.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(snapshots)
+    }
+
+    #[instrument(skip(self), fields(tenant_id = %tenant_id, snapshot_id = %snapshot_id))]
+    pub async fn restore_from_snapshot(
+        &self,
+        tenant_id: &str,
+        snapshot_id: &str,
+        backup_config: &BackupConfig,
+    ) -> Result<RecoveryResult, GraphError> {
+        use aws_config::BehaviorVersion;
+        use sha2::{Digest, Sha256};
+
+        let start = std::time::Instant::now();
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let snapshots = self.list_snapshots(tenant_id, backup_config).await?;
+        let snapshot = snapshots
+            .iter()
+            .find(|s| s.snapshot_id == snapshot_id)
+            .ok_or_else(|| GraphError::S3(format!("Snapshot not found: {}", snapshot_id)))?;
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        let response = s3_client
+            .get_object()
+            .bucket(bucket)
+            .key(&snapshot.s3_key)
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to fetch snapshot: {}", e)))?;
+
+        let data = response
+            .body
+            .collect()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to read body: {}", e)))?
+            .into_bytes()
+            .to_vec();
+
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let actual_checksum = hex::encode(hasher.finalize());
+        if actual_checksum != snapshot.checksum {
+            return Err(GraphError::ChecksumMismatch {
+                expected: snapshot.checksum.clone(),
+                actual: actual_checksum,
+            });
+        }
+
+        self.import_from_parquet(tenant_id, &data)?;
+
+        let stats = self.get_stats_internal(tenant_id)?;
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        info!(
+            snapshot_id = %snapshot_id,
+            nodes_restored = stats.node_count,
+            edges_restored = stats.edge_count,
+            duration_ms = duration_ms,
+            "Restored from backup snapshot"
+        );
+
+        Ok(RecoveryResult {
+            snapshot_id: snapshot_id.to_string(),
+            nodes_restored: stats.node_count as u64,
+            edges_restored: stats.edge_count as u64,
+            duration_ms,
+        })
+    }
+
+    #[instrument(skip(self, backup_config), fields(tenant_id = %tenant_id))]
+    pub async fn apply_retention_policy(
+        &self,
+        tenant_id: &str,
+        backup_config: &BackupConfig,
+    ) -> Result<usize, GraphError> {
+        use aws_config::BehaviorVersion;
+
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        let mut snapshots = self.list_snapshots(tenant_id, backup_config).await?;
+        let mut deleted_count = 0;
+
+        let cutoff_time =
+            Utc::now() - chrono::Duration::seconds(backup_config.retention_max_age_secs as i64);
+
+        let mut to_delete: Vec<String> = Vec::new();
+
+        for snapshot in snapshots.iter() {
+            if snapshot.created_at < cutoff_time {
+                to_delete.push(snapshot.s3_key.clone());
+            }
+        }
+
+        snapshots.retain(|s| s.created_at >= cutoff_time);
+
+        if snapshots.len() > backup_config.retention_count {
+            let excess = snapshots.len() - backup_config.retention_count;
+            for snapshot in snapshots.iter().rev().take(excess) {
+                if !to_delete.contains(&snapshot.s3_key) {
+                    to_delete.push(snapshot.s3_key.clone());
+                }
+            }
+        }
+
+        for key in to_delete {
+            s3_client
+                .delete_object()
+                .bucket(bucket)
+                .key(&key)
+                .send()
+                .await
+                .map_err(|e| GraphError::S3(format!("Failed to delete old snapshot: {}", e)))?;
+            deleted_count += 1;
+            debug!(s3_key = %key, "Deleted old snapshot per retention policy");
+        }
+
+        info!(
+            tenant_id = %tenant_id,
+            deleted_count = deleted_count,
+            "Applied retention policy"
+        );
+
+        Ok(deleted_count)
+    }
+
+    fn get_stats_internal(&self, tenant_id: &str) -> Result<GraphStats, GraphError> {
+        let conn = self.conn.lock();
+
+        let node_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let edge_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM memory_edges WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let entity_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM entities WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let entity_edge_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM entity_edges WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        Ok(GraphStats {
+            node_count: node_count as usize,
+            edge_count: edge_count as usize,
+            entity_count: entity_count as usize,
+            entity_edge_count: entity_edge_count as usize,
+        })
+    }
+
+    // ==================== Transaction Atomicity (R1-H5) ====================
+
+    #[instrument(skip(self, nodes, edges), fields(tenant_id = %tenant_id, nodes = nodes.len(), edges = edges.len()))]
+    pub fn add_nodes_and_edges_atomic(
+        &self,
+        ctx: &TenantContext,
+        tenant_id: &str,
+        nodes: Vec<GraphNode>,
+        edges: Vec<GraphEdge>,
+    ) -> Result<(), GraphError> {
+        let _ = ctx;
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let conn = self.conn.lock();
+
+        conn.execute_batch("BEGIN TRANSACTION")?;
+
+        let result = (|| -> Result<(), GraphError> {
+            for node in &nodes {
+                if node.tenant_id != tenant_id {
+                    return Err(GraphError::TenantViolation(
+                        "Node tenant_id does not match context".to_string(),
+                    ));
+                }
+
+                let properties_json = serde_json::to_string(&node.properties)
+                    .map_err(|e| GraphError::Serialization(e.to_string()))?;
+
+                conn.execute(
+                    r#"
+                    INSERT INTO memory_nodes (id, label, properties, tenant_id)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT (id) DO UPDATE SET
+                        label = EXCLUDED.label,
+                        properties = EXCLUDED.properties,
+                        updated_at = now()
+                    "#,
+                    params![node.id, node.label, properties_json, tenant_id],
+                )?;
+            }
+
+            for edge in &edges {
+                if edge.tenant_id != tenant_id {
+                    return Err(GraphError::TenantViolation(
+                        "Edge tenant_id does not match context".to_string(),
+                    ));
+                }
+
+                if !self.node_exists(&conn, &edge.source_id, tenant_id)? {
+                    return Err(GraphError::ReferentialIntegrity(format!(
+                        "Source node {} does not exist",
+                        edge.source_id
+                    )));
+                }
+
+                if !self.node_exists(&conn, &edge.target_id, tenant_id)? {
+                    return Err(GraphError::ReferentialIntegrity(format!(
+                        "Target node {} does not exist",
+                        edge.target_id
+                    )));
+                }
+
+                let properties_json = serde_json::to_string(&edge.properties)
+                    .map_err(|e| GraphError::Serialization(e.to_string()))?;
+
+                conn.execute(
+                    r#"
+                    INSERT INTO memory_edges (id, source_id, target_id, relation, properties, tenant_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (id) DO UPDATE SET
+                        relation = EXCLUDED.relation,
+                        properties = EXCLUDED.properties
+                    "#,
+                    params![
+                        edge.id,
+                        edge.source_id,
+                        edge.target_id,
+                        edge.relation,
+                        properties_json,
+                        tenant_id
+                    ],
+                )?;
+            }
+
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                conn.execute_batch("COMMIT")?;
+                info!(
+                    nodes_added = nodes.len(),
+                    edges_added = edges.len(),
+                    "Atomic batch insert committed"
+                );
+                Ok(())
+            }
+            Err(e) => {
+                conn.execute_batch("ROLLBACK")?;
+                warn!(error = %e, "Atomic batch insert rolled back");
+                Err(e)
+            }
+        }
+    }
+
+    #[instrument(skip(self, entities, entity_edges), fields(tenant_id = %tenant_id))]
+    pub fn add_entities_atomic(
+        &self,
+        ctx: &TenantContext,
+        tenant_id: &str,
+        entities: Vec<Entity>,
+        entity_edges: Vec<EntityEdge>,
+    ) -> Result<(), GraphError> {
+        let _ = ctx;
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let conn = self.conn.lock();
+
+        conn.execute_batch("BEGIN TRANSACTION")?;
+
+        let result = (|| -> Result<(), GraphError> {
+            for entity in &entities {
+                if entity.tenant_id != tenant_id {
+                    return Err(GraphError::TenantViolation(
+                        "Entity tenant_id does not match context".to_string(),
+                    ));
+                }
+
+                let properties_json = serde_json::to_string(&entity.properties)
+                    .map_err(|e| GraphError::Serialization(e.to_string()))?;
+
+                conn.execute(
+                    r#"
+                    INSERT INTO entities (id, name, entity_type, properties, tenant_id)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT (id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        entity_type = EXCLUDED.entity_type,
+                        properties = EXCLUDED.properties
+                    "#,
+                    params![
+                        entity.id,
+                        entity.name,
+                        entity.entity_type,
+                        properties_json,
+                        tenant_id
+                    ],
+                )?;
+            }
+
+            for edge in &entity_edges {
+                if edge.tenant_id != tenant_id {
+                    return Err(GraphError::TenantViolation(
+                        "EntityEdge tenant_id does not match context".to_string(),
+                    ));
+                }
+
+                let properties_json = serde_json::to_string(&edge.properties)
+                    .map_err(|e| GraphError::Serialization(e.to_string()))?;
+
+                conn.execute(
+                    r#"
+                    INSERT INTO entity_edges (id, source_entity_id, target_entity_id, relation, properties, tenant_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (id) DO UPDATE SET
+                        relation = EXCLUDED.relation,
+                        properties = EXCLUDED.properties
+                    "#,
+                    params![
+                        edge.id,
+                        edge.source_entity_id,
+                        edge.target_entity_id,
+                        edge.relation,
+                        properties_json,
+                        tenant_id
+                    ],
+                )?;
+            }
+
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                conn.execute_batch("COMMIT")?;
+                info!(
+                    entities_added = entities.len(),
+                    edges_added = entity_edges.len(),
+                    "Atomic entity batch insert committed"
+                );
+                Ok(())
+            }
+            Err(e) => {
+                conn.execute_batch("ROLLBACK")?;
+                warn!(error = %e, "Atomic entity batch insert rolled back");
+                Err(e)
+            }
+        }
+    }
+
+    pub fn with_transaction<F, T>(&self, f: F) -> Result<T, GraphError>
+    where
+        F: FnOnce(&duckdb::Connection) -> Result<T, GraphError>,
+    {
+        let conn = self.conn.lock();
+
+        conn.execute_batch("BEGIN TRANSACTION")?;
+
+        match f(&conn) {
+            Ok(result) => {
+                conn.execute_batch("COMMIT")?;
+                Ok(result)
+            }
+            Err(e) => {
+                conn.execute_batch("ROLLBACK")?;
+                Err(e)
+            }
+        }
+    }
+
+    // ==================== Health Checks (R1-H8) ====================
+
+    pub fn health_check(&self) -> HealthCheckResult {
+        let start = std::time::Instant::now();
+
+        let duckdb_status = self.check_duckdb_health();
+        let duckdb_latency_ms = start.elapsed().as_millis() as u64;
+
+        let s3_start = std::time::Instant::now();
+        let s3_status = self.check_s3_config();
+        let s3_latency_ms = s3_start.elapsed().as_millis() as u64;
+
+        let schema_version = self.get_schema_version().unwrap_or(-1);
+
+        let overall_healthy = duckdb_status.is_healthy && s3_status.is_healthy;
+
+        HealthCheckResult {
+            healthy: overall_healthy,
+            duckdb: duckdb_status,
+            s3: s3_status,
+            schema_version,
+            total_latency_ms: start.elapsed().as_millis() as u64,
+            duckdb_latency_ms,
+            s3_latency_ms,
+        }
+    }
+
+    pub fn readiness_check(&self) -> ReadinessResult {
+        let start = std::time::Instant::now();
+
+        let duckdb_ready = self.check_duckdb_ready();
+        let schema_ready = self.check_schema_ready();
+
+        let ready = duckdb_ready && schema_ready;
+
+        ReadinessResult {
+            ready,
+            duckdb_ready,
+            schema_ready,
+            latency_ms: start.elapsed().as_millis() as u64,
+        }
+    }
+
+    fn check_duckdb_health(&self) -> ComponentHealth {
+        let conn = self.conn.lock();
+
+        match conn.query_row("SELECT 1", [], |row| row.get::<_, i32>(0)) {
+            Ok(1) => ComponentHealth {
+                is_healthy: true,
+                message: "DuckDB connection OK".to_string(),
+            },
+            Ok(_) => ComponentHealth {
+                is_healthy: false,
+                message: "DuckDB returned unexpected value".to_string(),
+            },
+            Err(e) => ComponentHealth {
+                is_healthy: false,
+                message: format!("DuckDB query failed: {}", e),
+            },
+        }
+    }
+
+    fn check_s3_config(&self) -> ComponentHealth {
+        if self.config.s3_bucket.is_none() {
+            return ComponentHealth {
+                is_healthy: true,
+                message: "S3 not configured (optional)".to_string(),
+            };
+        }
+
+        ComponentHealth {
+            is_healthy: true,
+            message: format!(
+                "S3 configured: bucket={}",
+                self.config.s3_bucket.as_ref().unwrap()
+            ),
+        }
+    }
+
+    fn check_duckdb_ready(&self) -> bool {
+        let conn = self.conn.lock();
+        conn.query_row("SELECT 1", [], |row| row.get::<_, i32>(0))
+            .is_ok()
+    }
+
+    fn check_schema_ready(&self) -> bool {
+        let conn = self.conn.lock();
+
+        let tables_exist = conn
+            .query_row(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('memory_nodes', 'memory_edges', 'entities', 'entity_edges', 'schema_version')",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0);
+
+        tables_exist >= 5
+    }
+
+    fn get_schema_version(&self) -> Result<i32, GraphError> {
+        let conn = self.conn.lock();
+
+        let version: i32 = conn.query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+            [],
+            |row| row.get(0),
+        )?;
+
+        Ok(version)
+    }
+
+    pub async fn check_s3_connectivity(&self) -> ComponentHealth {
+        use aws_config::BehaviorVersion;
+
+        let bucket = match &self.config.s3_bucket {
+            Some(b) => b,
+            None => {
+                return ComponentHealth {
+                    is_healthy: true,
+                    message: "S3 not configured".to_string(),
+                };
+            }
+        };
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+        match s3_client.head_bucket().bucket(bucket).send().await {
+            Ok(_) => ComponentHealth {
+                is_healthy: true,
+                message: format!("S3 bucket '{}' accessible", bucket),
+            },
+            Err(e) => ComponentHealth {
+                is_healthy: false,
+                message: format!("S3 bucket '{}' not accessible: {}", bucket, e),
+            },
+        }
+    }
+
+    // ==================== Cold Start Optimization (R1-H1, R1-H7) ====================
+
+    pub fn record_partition_access(
+        &self,
+        tenant_id: &str,
+        partition_key: &str,
+        load_time_ms: f64,
+    ) -> Result<(), GraphError> {
+        if !self.config.cold_start.access_tracking_enabled {
+            return Ok(());
+        }
+
+        Self::validate_tenant_id_format(tenant_id)?;
+        let conn = self.conn.lock();
+
+        conn.execute(
+            r#"
+            INSERT INTO partition_access (partition_key, tenant_id, access_count, last_access, total_load_time_ms)
+            VALUES (?, ?, 1, now(), ?)
+            ON CONFLICT (partition_key, tenant_id) DO UPDATE SET
+                access_count = partition_access.access_count + 1,
+                last_access = now(),
+                total_load_time_ms = partition_access.total_load_time_ms + EXCLUDED.total_load_time_ms
+            "#,
+            params![partition_key, tenant_id, load_time_ms],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn get_partition_access_records(
+        &self,
+        tenant_id: &str,
+    ) -> Result<Vec<PartitionAccessRecord>, GraphError> {
+        Self::validate_tenant_id_format(tenant_id)?;
+        let conn = self.conn.lock();
+
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT 
+                partition_key,
+                tenant_id,
+                access_count,
+                CAST(last_access AS VARCHAR) as last_access,
+                CASE WHEN access_count > 0 THEN total_load_time_ms / access_count ELSE 0 END as avg_load_time_ms
+            FROM partition_access
+            WHERE tenant_id = ?
+            ORDER BY last_access DESC
+            LIMIT ?
+            "#,
+        )?;
+
+        let records = stmt
+            .query_map(
+                params![
+                    tenant_id,
+                    self.config.cold_start.prewarm_partition_count as i64
+                ],
+                |row| {
+                    let last_access_str: String = row.get(3)?;
+                    let last_access =
+                        DateTime::parse_from_str(&last_access_str, "%Y-%m-%d %H:%M:%S")
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .unwrap_or_else(|_| Utc::now());
+
+                    Ok(PartitionAccessRecord {
+                        partition_key: row.get(0)?,
+                        tenant_id: row.get(1)?,
+                        access_count: row.get(2)?,
+                        last_access,
+                        avg_load_time_ms: row.get(4)?,
+                    })
+                },
+            )?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(records)
+    }
+
+    pub fn get_prewarm_partitions(&self, tenant_id: &str) -> Result<Vec<String>, GraphError> {
+        let records = self.get_partition_access_records(tenant_id)?;
+        Ok(records.into_iter().map(|r| r.partition_key).collect())
+    }
+
+    pub async fn lazy_load_partitions(
+        &self,
+        tenant_id: &str,
+        partition_keys: &[String],
+    ) -> Result<LazyLoadResult, GraphError> {
+        if !self.config.cold_start.lazy_loading_enabled {
+            return Ok(LazyLoadResult {
+                partitions_loaded: 0,
+                total_load_time_ms: 0,
+                budget_remaining_ms: self.config.cold_start.budget_ms,
+                deferred_partitions: vec![],
+            });
+        }
+
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let start = std::time::Instant::now();
+        let budget_ms = self.config.cold_start.budget_ms;
+        let mut loaded = 0;
+        let mut deferred = vec![];
+
+        for partition_key in partition_keys {
+            let elapsed_ms = start.elapsed().as_millis() as u64;
+
+            if elapsed_ms >= budget_ms {
+                deferred.push(partition_key.clone());
+                continue;
+            }
+
+            let partition_start = std::time::Instant::now();
+
+            if let Err(e) = self.load_partition_data(tenant_id, partition_key).await {
+                warn!(
+                    partition = partition_key,
+                    error = %e,
+                    "Failed to load partition, deferring"
+                );
+                deferred.push(partition_key.clone());
+                continue;
+            }
+
+            let load_time_ms = partition_start.elapsed().as_millis() as f64;
+            self.record_partition_access(tenant_id, partition_key, load_time_ms)?;
+            loaded += 1;
+
+            metrics::histogram!("graph_partition_load_time_ms", load_time_ms);
+        }
+
+        let total_load_time_ms = start.elapsed().as_millis() as u64;
+        let budget_remaining_ms = budget_ms.saturating_sub(total_load_time_ms);
+
+        metrics::gauge!(
+            "graph_cold_start_budget_remaining_ms",
+            budget_remaining_ms as f64
+        );
+        metrics::counter!("graph_partitions_loaded_total", loaded as u64);
+        metrics::counter!("graph_partitions_deferred_total", deferred.len() as u64);
+
+        info!(
+            loaded = loaded,
+            deferred = deferred.len(),
+            total_time_ms = total_load_time_ms,
+            budget_remaining_ms = budget_remaining_ms,
+            "Lazy partition loading completed"
+        );
+
+        Ok(LazyLoadResult {
+            partitions_loaded: loaded,
+            total_load_time_ms,
+            budget_remaining_ms,
+            deferred_partitions: deferred,
+        })
+    }
+
+    async fn load_partition_data(
+        &self,
+        tenant_id: &str,
+        partition_key: &str,
+    ) -> Result<(), GraphError> {
+        debug!(
+            tenant_id = tenant_id,
+            partition_key = partition_key,
+            "Loading partition data"
+        );
+
+        match &self.config.s3_bucket {
+            Some(bucket) => {
+                let prefix = self.config.s3_prefix.as_deref().unwrap_or("partitions");
+                let s3_key = format!("{}/{}/{}.parquet", prefix, tenant_id, partition_key);
+
+                use aws_config::BehaviorVersion;
+                let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+                if let Some(endpoint) = &self.config.s3_endpoint {
+                    config_builder = config_builder.endpoint_url(endpoint);
+                }
+                if let Some(region) = &self.config.s3_region {
+                    config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+                }
+                let aws_config = config_builder.load().await;
+                let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
+                match s3_client
+                    .get_object()
+                    .bucket(bucket)
+                    .key(&s3_key)
+                    .send()
+                    .await
+                {
+                    Ok(_) => {
+                        debug!(s3_key = s3_key, "Partition data loaded from S3");
+                        Ok(())
+                    }
+                    Err(aws_sdk_s3::error::SdkError::ServiceError(e))
+                        if e.err().is_no_such_key() =>
+                    {
+                        debug!(
+                            s3_key = s3_key,
+                            "Partition not found in S3, will be created on write"
+                        );
+                        Ok(())
+                    }
+                    Err(e) => Err(GraphError::S3(format!(
+                        "Failed to load partition {}: {}",
+                        partition_key, e
+                    ))),
+                }
+            }
+            None => {
+                debug!("S3 not configured, partition loading skipped");
+                Ok(())
+            }
+        }
+    }
+
+    pub fn enforce_cold_start_budget(
+        &self,
+        operation_start: std::time::Instant,
+    ) -> Result<(), GraphError> {
+        let elapsed_ms = operation_start.elapsed().as_millis() as u64;
+        let budget_ms = self.config.cold_start.budget_ms;
+
+        if elapsed_ms > budget_ms {
+            metrics::counter!("graph_cold_start_budget_exceeded_total", 1);
+            warn!(
+                elapsed_ms = elapsed_ms,
+                budget_ms = budget_ms,
+                "Cold start budget exceeded"
+            );
+            return Err(GraphError::Timeout(budget_ms as i32));
+        }
+
+        Ok(())
+    }
+
+    pub fn get_cold_start_config(&self) -> &ColdStartConfig {
+        &self.config.cold_start
+    }
+
+    pub fn get_warm_pool_recommendation(&self) -> WarmPoolRecommendation {
+        let config = &self.config.cold_start;
+
+        if !config.warm_pool_enabled {
+            return WarmPoolRecommendation {
+                recommended: false,
+                min_instances: 0,
+                reason: "Warm pool disabled in configuration".to_string(),
+            };
+        }
+
+        WarmPoolRecommendation {
+            recommended: true,
+            min_instances: config.warm_pool_min_instances,
+            reason: format!(
+                "Maintain {} warm instances for cold start optimization",
+                config.warm_pool_min_instances
+            ),
+        }
     }
 
     #[instrument(skip(self), fields(min_size = %min_community_size))]

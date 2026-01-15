@@ -756,15 +756,179 @@ impl GovernanceEvent {
     }
 }
 
-/// Drift analysis result
+/// Drift analysis result with confidence scoring
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DriftResult {
     pub project_id: String,
     pub tenant_id: TenantId,
     pub drift_score: f32,
+    pub confidence: f32,
     pub violations: Vec<PolicyViolation>,
+    pub suppressed_violations: Vec<PolicyViolation>,
+    pub requires_manual_review: bool,
     pub timestamp: i64,
+}
+
+impl DriftResult {
+    pub fn new(project_id: String, tenant_id: TenantId, violations: Vec<PolicyViolation>) -> Self {
+        let drift_score = Self::calculate_score(&violations);
+        Self {
+            project_id,
+            tenant_id,
+            drift_score,
+            confidence: 1.0,
+            violations,
+            suppressed_violations: Vec::new(),
+            requires_manual_review: false,
+            timestamp: chrono::Utc::now().timestamp(),
+        }
+    }
+
+    pub fn with_confidence(mut self, confidence: f32) -> Self {
+        self.confidence = confidence.clamp(0.0, 1.0);
+        self.requires_manual_review = self.confidence < 0.7;
+        self
+    }
+
+    pub fn with_suppressions(mut self, suppressed: Vec<PolicyViolation>) -> Self {
+        self.suppressed_violations = suppressed;
+        self
+    }
+
+    fn calculate_score(violations: &[PolicyViolation]) -> f32 {
+        if violations.is_empty() {
+            return 0.0;
+        }
+        violations
+            .iter()
+            .map(|v| match v.severity {
+                ConstraintSeverity::Block => 1.0,
+                ConstraintSeverity::Warn => 0.5,
+                ConstraintSeverity::Info => 0.1,
+            })
+            .sum::<f32>()
+            .min(1.0)
+    }
+
+    pub fn active_violation_count(&self) -> usize {
+        self.violations.len()
+    }
+
+    pub fn suppressed_count(&self) -> usize {
+        self.suppressed_violations.len()
+    }
+}
+
+/// Drift suppression rule to ignore specific violations
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DriftSuppression {
+    pub id: String,
+    pub project_id: String,
+    pub tenant_id: TenantId,
+    pub policy_id: String,
+    pub rule_pattern: Option<String>,
+    pub reason: String,
+    pub created_by: UserId,
+    pub expires_at: Option<i64>,
+    pub created_at: i64,
+}
+
+impl DriftSuppression {
+    pub fn new(
+        project_id: String,
+        tenant_id: TenantId,
+        policy_id: String,
+        reason: String,
+        created_by: UserId,
+    ) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            project_id,
+            tenant_id,
+            policy_id,
+            rule_pattern: None,
+            reason,
+            created_by,
+            expires_at: None,
+            created_at: chrono::Utc::now().timestamp(),
+        }
+    }
+
+    pub fn with_pattern(mut self, pattern: String) -> Self {
+        self.rule_pattern = Some(pattern);
+        self
+    }
+
+    pub fn with_expiry(mut self, expires_at: i64) -> Self {
+        self.expires_at = Some(expires_at);
+        self
+    }
+
+    pub fn is_expired(&self) -> bool {
+        if let Some(expires) = self.expires_at {
+            chrono::Utc::now().timestamp() > expires
+        } else {
+            false
+        }
+    }
+
+    pub fn matches(&self, violation: &PolicyViolation) -> bool {
+        if self.policy_id != violation.policy_id {
+            return false;
+        }
+        if let Some(pattern) = &self.rule_pattern {
+            if let Ok(re) = regex::Regex::new(pattern) {
+                return re.is_match(&violation.message);
+            }
+        }
+        true
+    }
+}
+
+/// Drift threshold configuration per project
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DriftConfig {
+    pub project_id: String,
+    pub tenant_id: TenantId,
+    pub threshold: f32,
+    pub low_confidence_threshold: f32,
+    pub auto_suppress_info: bool,
+    pub updated_at: i64,
+}
+
+impl Default for DriftConfig {
+    fn default() -> Self {
+        Self {
+            project_id: String::new(),
+            tenant_id: TenantId::default(),
+            threshold: 0.2,
+            low_confidence_threshold: 0.7,
+            auto_suppress_info: false,
+            updated_at: chrono::Utc::now().timestamp(),
+        }
+    }
+}
+
+impl DriftConfig {
+    pub fn new(project_id: String, tenant_id: TenantId) -> Self {
+        Self {
+            project_id,
+            tenant_id,
+            ..Default::default()
+        }
+    }
+
+    pub fn for_project(project_id: String, tenant_id: TenantId) -> Self {
+        Self::new(project_id, tenant_id)
+    }
+
+    pub fn with_threshold(mut self, threshold: f32) -> Self {
+        self.threshold = threshold.clamp(0.0, 1.0);
+        self
+    }
 }
 
 pub fn validate_user_id(id: &&String) -> Result<(), validator::ValidationError> {
@@ -826,6 +990,181 @@ pub fn validate_agent_id(id: &&String) -> Result<(), validator::ValidationError>
         return Err(validator::ValidationError::new("Agent ID is too long"));
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum EventStatus {
+    Pending,
+    Published,
+    Acknowledged,
+    DeadLettered,
+}
+
+impl std::fmt::Display for EventStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EventStatus::Pending => write!(f, "pending"),
+            EventStatus::Published => write!(f, "published"),
+            EventStatus::Acknowledged => write!(f, "acknowledged"),
+            EventStatus::DeadLettered => write!(f, "dead_lettered"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistentEvent {
+    pub id: String,
+    pub event_id: String,
+    pub idempotency_key: String,
+    pub tenant_id: TenantId,
+    pub event_type: String,
+    pub payload: GovernanceEvent,
+    pub status: EventStatus,
+    pub retry_count: i32,
+    pub max_retries: i32,
+    pub last_error: Option<String>,
+    pub created_at: i64,
+    pub published_at: Option<i64>,
+    pub acknowledged_at: Option<i64>,
+    pub dead_lettered_at: Option<i64>,
+}
+
+impl PersistentEvent {
+    pub fn new(event: GovernanceEvent) -> Self {
+        let event_id = uuid::Uuid::new_v4().to_string();
+        let timestamp = chrono::Utc::now().timestamp();
+        let tenant_id = event.tenant_id().clone();
+        let idempotency_key = Self::calculate_idempotency_key(&event_id, timestamp, &tenant_id);
+        let event_type = Self::event_type_name(&event);
+
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            event_id,
+            idempotency_key,
+            tenant_id,
+            event_type,
+            payload: event,
+            status: EventStatus::Pending,
+            retry_count: 0,
+            max_retries: 3,
+            last_error: None,
+            created_at: timestamp,
+            published_at: None,
+            acknowledged_at: None,
+            dead_lettered_at: None,
+        }
+    }
+
+    fn calculate_idempotency_key(event_id: &str, timestamp: i64, tenant_id: &TenantId) -> String {
+        use sha2::{Digest, Sha256};
+        let input = format!("{}:{}:{}", event_id, timestamp, tenant_id.as_str());
+        let hash = Sha256::digest(input.as_bytes());
+        hex::encode(hash)
+    }
+
+    fn event_type_name(event: &GovernanceEvent) -> String {
+        match event {
+            GovernanceEvent::UnitCreated { .. } => "unit_created".to_string(),
+            GovernanceEvent::UnitUpdated { .. } => "unit_updated".to_string(),
+            GovernanceEvent::UnitDeleted { .. } => "unit_deleted".to_string(),
+            GovernanceEvent::RoleAssigned { .. } => "role_assigned".to_string(),
+            GovernanceEvent::RoleRemoved { .. } => "role_removed".to_string(),
+            GovernanceEvent::PolicyUpdated { .. } => "policy_updated".to_string(),
+            GovernanceEvent::PolicyDeleted { .. } => "policy_deleted".to_string(),
+            GovernanceEvent::DriftDetected { .. } => "drift_detected".to_string(),
+        }
+    }
+
+    pub fn mark_published(&mut self) {
+        self.status = EventStatus::Published;
+        self.published_at = Some(chrono::Utc::now().timestamp());
+    }
+
+    pub fn mark_acknowledged(&mut self) {
+        self.status = EventStatus::Acknowledged;
+        self.acknowledged_at = Some(chrono::Utc::now().timestamp());
+    }
+
+    pub fn mark_failed(&mut self, error: String) -> bool {
+        self.retry_count += 1;
+        self.last_error = Some(error);
+
+        if self.retry_count >= self.max_retries {
+            self.status = EventStatus::DeadLettered;
+            self.dead_lettered_at = Some(chrono::Utc::now().timestamp());
+            false
+        } else {
+            self.status = EventStatus::Pending;
+            true
+        }
+    }
+
+    pub fn is_retriable(&self) -> bool {
+        self.retry_count < self.max_retries && self.status == EventStatus::Pending
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct EventDeliveryMetrics {
+    pub tenant_id: TenantId,
+    pub event_type: String,
+    pub period_start: i64,
+    pub period_end: i64,
+    pub total_events: i64,
+    pub delivered_events: i64,
+    pub retried_events: i64,
+    pub dead_lettered_events: i64,
+    pub avg_delivery_time_ms: Option<f64>,
+}
+
+impl EventDeliveryMetrics {
+    pub fn new(
+        tenant_id: TenantId,
+        event_type: String,
+        period_start: i64,
+        period_end: i64,
+    ) -> Self {
+        Self {
+            tenant_id,
+            event_type,
+            period_start,
+            period_end,
+            total_events: 0,
+            delivered_events: 0,
+            retried_events: 0,
+            dead_lettered_events: 0,
+            avg_delivery_time_ms: None,
+        }
+    }
+
+    pub fn delivery_success_rate(&self) -> f64 {
+        if self.total_events == 0 {
+            return 1.0;
+        }
+        self.delivered_events as f64 / self.total_events as f64
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConsumerState {
+    pub consumer_group: String,
+    pub idempotency_key: String,
+    pub tenant_id: TenantId,
+    pub processed_at: i64,
+}
+
+impl ConsumerState {
+    pub fn new(consumer_group: String, idempotency_key: String, tenant_id: TenantId) -> Self {
+        Self {
+            consumer_group,
+            idempotency_key,
+            tenant_id,
+            processed_at: chrono::Utc::now().timestamp(),
+        }
+    }
 }
 
 #[cfg(test)]

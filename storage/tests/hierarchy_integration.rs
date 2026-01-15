@@ -32,7 +32,7 @@ fn create_test_unit(
     name: &str,
     unit_type: UnitType,
     parent_id: Option<String>,
-    tenant_id: &str
+    tenant_id: &str,
 ) -> OrganizationalUnit {
     OrganizationalUnit {
         id: id.to_string(),
@@ -42,7 +42,7 @@ fn create_test_unit(
         tenant_id: TenantId::new(tenant_id.to_string()).unwrap(),
         metadata: HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
     }
 }
 
@@ -74,7 +74,7 @@ async fn test_hierarchy_strict_enforcement() {
                 "Team Under Comp",
                 UnitType::Team,
                 Some("comp-1".to_string()),
-                tenant_id
+                tenant_id,
             );
             let result = backend.create_unit(&team_under_comp).await;
             assert!(result.is_err(), "Team cannot be directly under Company");
@@ -84,7 +84,7 @@ async fn test_hierarchy_strict_enforcement() {
                 "Org",
                 UnitType::Organization,
                 Some("comp-1".to_string()),
-                tenant_id
+                tenant_id,
             );
             backend
                 .create_unit(&org)
@@ -97,7 +97,7 @@ async fn test_hierarchy_strict_enforcement() {
                 "Proj Under Org",
                 UnitType::Project,
                 Some("org-1".to_string()),
-                tenant_id
+                tenant_id,
             );
             let result = backend.create_unit(&project_under_org).await;
             assert!(
@@ -110,7 +110,7 @@ async fn test_hierarchy_strict_enforcement() {
                 "Team",
                 UnitType::Team,
                 Some("org-1".to_string()),
-                tenant_id
+                tenant_id,
             );
             backend
                 .create_unit(&team)
@@ -123,7 +123,7 @@ async fn test_hierarchy_strict_enforcement() {
                 "Project",
                 UnitType::Project,
                 Some("team-1".to_string()),
-                tenant_id
+                tenant_id,
             );
             backend
                 .create_unit(&project)
@@ -146,7 +146,7 @@ async fn test_recursive_hierarchy_navigation() {
             let tenant_id = "tenant-1";
             let ctx = TenantContext::new(
                 TenantId::new(tenant_id.to_string()).unwrap(),
-                UserId::default()
+                UserId::default(),
             );
 
             // Build hierarchy: Comp -> Org -> Team -> Proj
@@ -156,21 +156,21 @@ async fn test_recursive_hierarchy_navigation() {
                 "Org",
                 UnitType::Organization,
                 Some("comp-1".to_string()),
-                tenant_id
+                tenant_id,
             );
             let team = create_test_unit(
                 "team-1",
                 "Team",
                 UnitType::Team,
                 Some("org-1".to_string()),
-                tenant_id
+                tenant_id,
             );
             let project = create_test_unit(
                 "proj-1",
                 "Proj",
                 UnitType::Project,
                 Some("team-1".to_string()),
-                tenant_id
+                tenant_id,
             );
 
             backend.create_unit(&company).await.unwrap();

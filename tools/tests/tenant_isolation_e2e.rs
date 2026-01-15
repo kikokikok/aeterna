@@ -226,6 +226,7 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
         ))),
         auth_service,
         None,
+        None,
     );
 
     // 2. Test Success: User u1 calling tool with Tenant t1

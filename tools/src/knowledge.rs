@@ -10,12 +10,12 @@ use std::sync::Arc;
 use validator::Validate;
 
 pub struct KnowledgeGetTool {
-    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
 }
 
 impl KnowledgeGetTool {
     pub fn new(
-        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
     ) -> Self {
         Self { repo }
     }
@@ -26,7 +26,7 @@ pub struct KnowledgeGetParams {
     pub path: String,
     pub layer: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
@@ -35,7 +35,7 @@ pub struct KnowledgeListParams {
     #[serde(default)]
     pub prefix: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
@@ -45,7 +45,7 @@ pub struct KnowledgeQueryParams {
     pub layers: Vec<String>,
     pub limit: Option<usize>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 #[async_trait]
@@ -81,7 +81,7 @@ impl Tool for KnowledgeGetTool {
             "org" => mk_core::types::KnowledgeLayer::Org,
             "team" => mk_core::types::KnowledgeLayer::Team,
             "project" => mk_core::types::KnowledgeLayer::Project,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into())
+            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
         };
 
         let entry = self.repo.get(ctx, layer, &p.path).await?;
@@ -90,12 +90,12 @@ impl Tool for KnowledgeGetTool {
 }
 
 pub struct KnowledgeListTool {
-    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
 }
 
 impl KnowledgeListTool {
     pub fn new(
-        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
     ) -> Self {
         Self { repo }
     }
@@ -134,7 +134,7 @@ impl Tool for KnowledgeListTool {
             "org" => mk_core::types::KnowledgeLayer::Org,
             "team" => mk_core::types::KnowledgeLayer::Team,
             "project" => mk_core::types::KnowledgeLayer::Project,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into())
+            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
         };
 
         let entries = self.repo.list(ctx, layer, &p.prefix).await?;
@@ -144,17 +144,17 @@ impl Tool for KnowledgeListTool {
 
 pub struct KnowledgeQueryTool {
     memory_manager: Arc<MemoryManager>,
-    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
 }
 
 impl KnowledgeQueryTool {
     pub fn new(
         memory_manager: Arc<MemoryManager>,
-        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
     ) -> Self {
         Self {
             memory_manager,
-            repo
+            repo,
         }
     }
 }
@@ -203,7 +203,7 @@ impl Tool for KnowledgeQueryTool {
                     "org" => mk_core::types::KnowledgeLayer::Org,
                     "team" => mk_core::types::KnowledgeLayer::Team,
                     "project" => mk_core::types::KnowledgeLayer::Project,
-                    _ => continue
+                    _ => continue,
                 };
                 layers.push(layer);
             }
@@ -216,7 +216,7 @@ impl Tool for KnowledgeQueryTool {
                 &p.query,
                 p.limit.unwrap_or(10),
                 0.7,
-                std::collections::HashMap::new()
+                std::collections::HashMap::new(),
             )
             .await
             .unwrap_or_default();

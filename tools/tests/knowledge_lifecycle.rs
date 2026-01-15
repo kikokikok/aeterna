@@ -279,6 +279,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         ))),
         Arc::new(MockAuthService),
         None,
+        None,
     );
 
     // GIVEN a knowledge entry is stored in the repository

@@ -1,6 +1,6 @@
-use storage::postgres::PostgresBackend;
-use mk_core::types::{OrganizationalUnit, TenantContext, TenantId, UnitType, UserId};
 use mk_core::traits::StorageBackend;
+use mk_core::types::{OrganizationalUnit, TenantContext, TenantId, UnitType, UserId};
+use storage::postgres::PostgresBackend;
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
 
@@ -34,7 +34,7 @@ async fn test_recursive_hierarchy_queries() {
     // Create deep hierarchy
     // Company -> Org1 -> Team1 -> Project1
     //                  -> Team2 -> Project2
-    
+
     let company = OrganizationalUnit {
         id: "comp".to_string(),
         name: "Company".to_string(),
@@ -84,7 +84,9 @@ async fn test_recursive_hierarchy_queries() {
     storage.create_unit(&project1).await.unwrap();
 
     // Test Descendants from Company
-    let descendants = StorageBackend::get_descendants(&storage, ctx.clone(), "comp").await.unwrap();
+    let descendants = StorageBackend::get_descendants(&storage, ctx.clone(), "comp")
+        .await
+        .unwrap();
     assert_eq!(descendants.len(), 3);
     let ids: Vec<String> = descendants.iter().map(|u| u.id.clone()).collect();
     assert!(ids.contains(&"org1".to_string()));
@@ -92,11 +94,15 @@ async fn test_recursive_hierarchy_queries() {
     assert!(ids.contains(&"proj1".to_string()));
 
     // Test Descendants from Org1
-    let descendants = StorageBackend::get_descendants(&storage, ctx.clone(), "org1").await.unwrap();
+    let descendants = StorageBackend::get_descendants(&storage, ctx.clone(), "org1")
+        .await
+        .unwrap();
     assert_eq!(descendants.len(), 2);
 
     // Test Ancestors from Project1
-    let ancestors = StorageBackend::get_ancestors(&storage, ctx.clone(), "proj1").await.unwrap();
+    let ancestors = StorageBackend::get_ancestors(&storage, ctx.clone(), "proj1")
+        .await
+        .unwrap();
     assert_eq!(ancestors.len(), 3);
     let ids: Vec<String> = ancestors.iter().map(|u| u.id.clone()).collect();
     assert!(ids.contains(&"team1".to_string()));

@@ -5,10 +5,10 @@
 - [x] 1.1 Create `TenantId`, `UserId`, `TenantContext` types in `mk_core/`
 - [x] 1.2 Add `HierarchyPath` type for Company > Org > Team > Project navigation
 - [x] 1.3 Create `Role` enum (Developer, TechLead, Architect, Admin, Agent)
- - [x] 1.4 Add tenant context extraction middleware for API layer
- - [x] 1.5 Update `SyncStatePersister` trait to accept `TenantId` parameter
- - [x] 1.6 Update `SyncManager` to store per-tenant states (`HashMap<TenantId, SyncState>`)
- - [x] 1.7 Update all `MockPersister` implementations across test files
+- [x] 1.4 Add tenant context extraction middleware for API layer
+- [x] 1.5 Update `SyncStatePersister` trait to accept `TenantId` parameter
+- [x] 1.6 Update `SyncManager` to store per-tenant states (`HashMap<TenantId, SyncState>`)
+- [x] 1.7 Update all `MockPersister` implementations across test files
 - [x] 1.8 Update memory tools to require `TenantContext` in API calls
 - [x] 1.9 Update remaining repository traits (`KnowledgeRepository`, `MemoryProvider`) to enforce tenant context
 - [x] 1.10 Align GovernanceEngine event publishing API with tool expectations
@@ -92,44 +92,44 @@
 ## 11. Production Gap Requirements
 
 ### 11.1 Tenant Data Isolation Security (MT-C1) - CRITICAL
-- [ ] 11.1.1 Audit all SQL queries for parameterization
-- [ ] 11.1.2 Implement query builder with mandatory tenant_id parameter
-- [ ] 11.1.3 Create PostgreSQL RLS policies for all tenant tables
-- [ ] 11.1.4 Enable RLS on memory_entries, knowledge_items, sync_states tables
-- [ ] 11.1.5 Add RLS policy tests in integration test suite
-- [ ] 11.1.6 Create penetration test suite for cross-tenant access
-- [ ] 11.1.7 Document penetration test procedures and results format
-- [ ] 11.1.8 Add automated cross-tenant access checks to CI
+- [x] 11.1.1 Audit all SQL queries for parameterization
+- [x] 11.1.2 Implement query builder with mandatory tenant_id parameter
+- [x] 11.1.3 Create PostgreSQL RLS policies for all tenant tables
+- [x] 11.1.4 Enable RLS on memory_entries, knowledge_items, sync_states tables
+- [x] 11.1.5 Add RLS policy tests in integration test suite
+- [x] 11.1.6 Create penetration test suite for cross-tenant access
+- [x] 11.1.7 Document penetration test procedures and results format
+- [x] 11.1.8 Add automated cross-tenant access checks to CI
 
 ### 11.2 RBAC Policy Testing (MT-C2) - CRITICAL
-- [ ] 11.2.1 Create RBAC test matrix covering all role-action-resource combinations
-- [ ] 11.2.2 Implement positive authorization tests (allowed actions)
-- [ ] 11.2.3 Implement negative authorization tests (denied actions)
-- [ ] 11.2.4 Add privilege escalation prevention tests
-- [ ] 11.2.5 Add role hierarchy enforcement tests
-- [ ] 11.2.6 Create permission matrix generator script
-- [ ] 11.2.7 Add matrix review step to deployment pipeline
-- [ ] 11.2.8 Document RBAC testing procedures
+- [x] 11.2.1 Create RBAC test matrix covering all role-action-resource combinations
+- [x] 11.2.2 Implement positive authorization tests (allowed actions)
+- [x] 11.2.3 Implement negative authorization tests (denied actions)
+- [x] 11.2.4 Add privilege escalation prevention tests
+- [x] 11.2.5 Add role hierarchy enforcement tests
+- [x] 11.2.6 Create permission matrix generator script
+- [x] 11.2.7 Add matrix review step to deployment pipeline
+- [x] 11.2.8 Document RBAC testing procedures
 
-### 11.3 Drift Detection Tuning (MT-C3) - CRITICAL
-- [ ] 11.3.1 Add `drift_threshold` config option per project (default: 0.2)
-- [ ] 11.3.2 Create `drift_suppressions` table in PostgreSQL
-- [ ] 11.3.3 Implement suppression rule API (create, list, delete)
-- [ ] 11.3.4 Add confidence scoring to drift detection results
-- [ ] 11.3.5 Implement confidence calculation based on embedding quality
-- [ ] 11.3.6 Add low-confidence drift flagging for manual review
-- [ ] 11.3.7 Update drift reports to show suppressed vs active drifts
-- [ ] 11.3.8 Write drift tuning documentation
+### 11.3 Drift Detection Tuning (MT-C3) - CRITICAL ✅
+- [x] 11.3.1 Add `drift_threshold` config option per project (default: 0.2)
+- [x] 11.3.2 Create `drift_suppressions` table in PostgreSQL
+- [x] 11.3.3 Implement suppression rule API (create, list, delete)
+- [x] 11.3.4 Add confidence scoring to drift detection results
+- [x] 11.3.5 Implement confidence calculation based on embedding quality
+- [x] 11.3.6 Add low-confidence drift flagging for manual review
+- [x] 11.3.7 Update drift reports to show suppressed vs active drifts
+- [x] 11.3.8 Write drift tuning documentation
 
-### 11.4 Event Streaming Reliability (MT-H1) - HIGH
-- [ ] 11.4.1 Add PostgreSQL `governance_events` table for durability
-- [ ] 11.4.2 Implement write-ahead persistence before Redis publish
-- [ ] 11.4.3 Add idempotency key to all events (event_id + timestamp hash)
-- [ ] 11.4.4 Implement consumer deduplication using idempotency keys
-- [ ] 11.4.5 Create dead letter stream in Redis
-- [ ] 11.4.6 Implement DLQ processing job with alerting
-- [ ] 11.4.7 Add event delivery metrics (delivered, retried, dead-lettered)
-- [ ] 11.4.8 Write event reliability tests
+### 11.4 Event Streaming Reliability (MT-H1) - HIGH ✅
+- [x] 11.4.1 Add PostgreSQL `governance_events` table for durability
+- [x] 11.4.2 Implement write-ahead persistence before Redis publish
+- [x] 11.4.3 Add idempotency key to all events (event_id + timestamp hash)
+- [x] 11.4.4 Implement consumer deduplication using idempotency keys
+- [x] 11.4.5 Create dead letter stream in Redis
+- [x] 11.4.6 Implement DLQ processing job with alerting
+- [x] 11.4.7 Add event delivery metrics (delivered, retried, dead-lettered)
+- [x] 11.4.8 Write event reliability tests
 
 ### 11.5 Batch Job Coordination (MT-H2) - HIGH
 - [ ] 11.5.1 Implement Redis-based distributed lock for batch jobs

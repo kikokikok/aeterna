@@ -13,7 +13,7 @@ pub struct SyncState {
     pub failed_items: Vec<SyncFailure>,
     pub federation_conflicts: Vec<FederationConflict>,
     pub upstream_commits: HashMap<String, String>,
-    pub stats: SyncStats
+    pub stats: SyncStats,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -21,7 +21,7 @@ pub struct SyncState {
 pub struct FederationConflict {
     pub upstream_id: String,
     pub reason: String,
-    pub detected_at: i64
+    pub detected_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -30,7 +30,7 @@ pub struct SyncFailure {
     pub knowledge_id: String,
     pub error: String,
     pub failed_at: i64,
-    pub retry_count: u32
+    pub retry_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -39,48 +39,48 @@ pub enum SyncConflict {
         knowledge_id: String,
         memory_id: String,
         expected_hash: String,
-        actual_hash: String
+        actual_hash: String,
     },
     OrphanedPointer {
         memory_id: String,
-        knowledge_id: String
+        knowledge_id: String,
     },
     MissingPointer {
         knowledge_id: String,
-        expected_memory_id: String
+        expected_memory_id: String,
     },
     DuplicatePointer {
         knowledge_id: String,
-        memory_ids: Vec<String>
+        memory_ids: Vec<String>,
     },
     StatusChange {
         knowledge_id: String,
         memory_id: String,
-        new_status: mk_core::types::KnowledgeStatus
+        new_status: mk_core::types::KnowledgeStatus,
     },
     LayerMismatch {
         knowledge_id: String,
         memory_id: String,
         expected_layer: mk_core::types::KnowledgeLayer,
-        actual_layer: mk_core::types::KnowledgeLayer
+        actual_layer: mk_core::types::KnowledgeLayer,
     },
     DetectionError {
         target_id: String,
-        error: String
-    }
+        error: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SyncTrigger {
     Staleness {
         last_sync_at: i64,
-        threshold_mins: u32
+        threshold_mins: u32,
     },
     CommitMismatch {
         last_commit: String,
-        head_commit: String
+        head_commit: String,
     },
-    Manual
+    Manual,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -92,7 +92,7 @@ pub struct SyncStats {
     pub total_governance_blocks: u64,
     pub avg_sync_duration_ms: u64,
     pub drift_score: f32,
-    pub policy_violations: u64
+    pub policy_violations: u64,
 }
 
 impl Default for SyncState {
@@ -107,7 +107,7 @@ impl Default for SyncState {
             failed_items: Vec::new(),
             federation_conflicts: Vec::new(),
             upstream_commits: HashMap::new(),
-            stats: SyncStats::default()
+            stats: SyncStats::default(),
         }
     }
 }
