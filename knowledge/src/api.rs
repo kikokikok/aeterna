@@ -2,7 +2,9 @@ use crate::governance::GovernanceEngine;
 use crate::governance_client::{GovernanceClient, RemoteGovernanceClient};
 use config::config::DeploymentConfig;
 use mk_core::traits::StorageBackend;
-use mk_core::types::{DriftResult, GovernanceEvent, KnowledgeLayer, TenantContext};
+use mk_core::types::{
+    DriftConfig, DriftResult, DriftSuppression, GovernanceEvent, KnowledgeLayer, TenantContext,
+};
 use std::sync::Arc;
 use storage::postgres::PostgresBackend;
 use utoipa::OpenApi;
@@ -15,10 +17,21 @@ use utoipa::OpenApi;
         approve_proposal,
         reject_proposal,
         get_job_status,
-        replay_events
+        replay_events,
+        create_suppression,
+        list_suppressions,
+        delete_suppression,
+        get_drift_config,
+        save_drift_config
     ),
     components(
-        schemas(mk_core::types::DriftResult, mk_core::types::PolicyViolation, mk_core::types::GovernanceEvent)
+        schemas(
+            mk_core::types::DriftResult,
+            mk_core::types::PolicyViolation,
+            mk_core::types::GovernanceEvent,
+            mk_core::types::DriftSuppression,
+            mk_core::types::DriftConfig
+        )
     ),
     tags(
         (name = "governance", description = "Governance Dashboard API")
@@ -30,7 +43,7 @@ pub struct GovernanceDashboardApi {
     engine: Arc<GovernanceEngine>,
     storage: Arc<PostgresBackend>,
     governance_client: Option<Arc<dyn GovernanceClient>>,
-    deployment_config: DeploymentConfig
+    deployment_config: DeploymentConfig,
 }
 
 #[utoipa::path(
@@ -51,7 +64,7 @@ pub struct GovernanceDashboardApi {
 pub async fn get_drift_status(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
-    project_id: &str
+    project_id: &str,
 ) -> anyhow::Result<Option<DriftResult>> {
     if api.deployment_config.mode == "remote" {
         if let Some(client) = &api.governance_client {
@@ -88,7 +101,7 @@ pub async fn get_drift_status(
 pub async fn get_org_report(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
-    org_id: &str
+    org_id: &str,
 ) -> anyhow::Result<serde_json::Value> {
     let descendants = StorageBackend::get_descendants(api.storage.as_ref(), ctx.clone(), org_id)
         .await
@@ -137,7 +150,7 @@ pub async fn get_org_report(
 pub async fn approve_proposal(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
-    proposal_id: &str
+    proposal_id: &str,
 ) -> anyhow::Result<()> {
     let repo = api
         .engine
@@ -148,7 +161,7 @@ pub async fn approve_proposal(
         .get(
             ctx.clone(),
             mk_core::types::KnowledgeLayer::Project,
-            proposal_id
+            proposal_id,
         )
         .await
         .map_err(|e| anyhow::anyhow!("Failed to fetch proposal: {:?}", e))?
@@ -185,7 +198,7 @@ pub async fn reject_proposal(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
     proposal_id: &str,
-    reason: &str
+    reason: &str,
 ) -> anyhow::Result<()> {
     let repo = api
         .engine
@@ -196,7 +209,7 @@ pub async fn reject_proposal(
         .get(
             ctx.clone(),
             mk_core::types::KnowledgeLayer::Project,
-            proposal_id
+            proposal_id,
         )
         .await
         .map_err(|e| anyhow::anyhow!("Failed to fetch proposal: {:?}", e))?
@@ -211,7 +224,7 @@ pub async fn reject_proposal(
     repo.store(
         ctx.clone(),
         rejected_entry,
-        &format!("Proposal rejected: {}", reason)
+        &format!("Proposal rejected: {}", reason),
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to reject proposal: {:?}", e))?;
@@ -237,13 +250,13 @@ pub async fn reject_proposal(
 pub async fn get_job_status(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
-    job_name: Option<&str>
+    job_name: Option<&str>,
 ) -> anyhow::Result<serde_json::Value> {
     let rows = sqlx::query(
         "SELECT id, job_name, status, message, started_at, finished_at, duration_ms 
          FROM job_status 
          WHERE tenant_id = $1 OR tenant_id = 'all' 
-         ORDER BY started_at DESC LIMIT 50"
+         ORDER BY started_at DESC LIMIT 50",
     )
     .bind(ctx.tenant_id.as_str())
     .fetch_all(api.storage.pool())
@@ -294,7 +307,7 @@ pub async fn replay_events(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
     since_timestamp: i64,
-    limit: usize
+    limit: usize,
 ) -> anyhow::Result<Vec<mk_core::types::GovernanceEvent>> {
     if api.deployment_config.mode == "remote" {
         if let Some(client) = &api.governance_client {
@@ -309,7 +322,7 @@ pub async fn replay_events(
         api.storage.as_ref(),
         ctx.clone(),
         since_timestamp,
-        limit
+        limit,
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to replay governance events: {:?}", e))?;
@@ -317,11 +330,191 @@ pub async fn replay_events(
     Ok(events)
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/governance/suppressions",
+    responses(
+        (status = 201, description = "Suppression created successfully", body = DriftSuppression),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("project_id" = String, Query, description = "Project ID"),
+        ("policy_id" = String, Query, description = "Policy ID to suppress"),
+        ("reason" = String, Query, description = "Reason for suppression"),
+        ("rule_pattern" = Option<String>, Query, description = "Optional regex pattern to match violations"),
+        ("expires_at" = Option<i64>, Query, description = "Optional expiration timestamp")
+    ),
+    security(
+        ("tenant_auth" = [])
+    )
+)]
+pub async fn create_suppression(
+    api: Arc<GovernanceDashboardApi>,
+    ctx: &TenantContext,
+    project_id: &str,
+    policy_id: &str,
+    reason: &str,
+    rule_pattern: Option<&str>,
+    expires_at: Option<i64>,
+) -> anyhow::Result<DriftSuppression> {
+    let mut suppression = DriftSuppression::new(
+        project_id.to_string(),
+        ctx.tenant_id.clone(),
+        policy_id.to_string(),
+        reason.to_string(),
+        ctx.user_id.clone(),
+    );
+
+    if let Some(pattern) = rule_pattern {
+        suppression = suppression.with_pattern(pattern.to_string());
+    }
+
+    if let Some(expires) = expires_at {
+        suppression = suppression.with_expiry(expires);
+    }
+
+    StorageBackend::create_suppression(api.storage.as_ref(), suppression.clone())
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create suppression: {:?}", e))?;
+
+    Ok(suppression)
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/governance/suppressions/{project_id}",
+    responses(
+        (status = 200, description = "Suppressions fetched successfully", body = Vec<DriftSuppression>),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("project_id" = String, Path, description = "Project ID")
+    ),
+    security(
+        ("tenant_auth" = [])
+    )
+)]
+pub async fn list_suppressions(
+    api: Arc<GovernanceDashboardApi>,
+    ctx: &TenantContext,
+    project_id: &str,
+) -> anyhow::Result<Vec<DriftSuppression>> {
+    let suppressions =
+        StorageBackend::list_suppressions(api.storage.as_ref(), ctx.clone(), project_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to list suppressions: {:?}", e))?;
+
+    let active_suppressions: Vec<DriftSuppression> = suppressions
+        .into_iter()
+        .filter(|s| !s.is_expired())
+        .collect();
+
+    Ok(active_suppressions)
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v1/governance/suppressions/{suppression_id}",
+    responses(
+        (status = 200, description = "Suppression deleted successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Suppression not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("suppression_id" = String, Path, description = "Suppression ID")
+    ),
+    security(
+        ("tenant_auth" = [])
+    )
+)]
+pub async fn delete_suppression(
+    api: Arc<GovernanceDashboardApi>,
+    ctx: &TenantContext,
+    suppression_id: &str,
+) -> anyhow::Result<()> {
+    StorageBackend::delete_suppression(api.storage.as_ref(), ctx.clone(), suppression_id)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to delete suppression: {:?}", e))?;
+
+    Ok(())
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/governance/drift-config/{project_id}",
+    responses(
+        (status = 200, description = "Drift config fetched successfully", body = Option<DriftConfig>),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("project_id" = String, Path, description = "Project ID")
+    ),
+    security(
+        ("tenant_auth" = [])
+    )
+)]
+pub async fn get_drift_config(
+    api: Arc<GovernanceDashboardApi>,
+    ctx: &TenantContext,
+    project_id: &str,
+) -> anyhow::Result<DriftConfig> {
+    let config = StorageBackend::get_drift_config(api.storage.as_ref(), ctx.clone(), project_id)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to get drift config: {:?}", e))?;
+
+    Ok(config
+        .unwrap_or_else(|| DriftConfig::for_project(project_id.to_string(), ctx.tenant_id.clone())))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/governance/drift-config/{project_id}",
+    responses(
+        (status = 200, description = "Drift config saved successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("project_id" = String, Path, description = "Project ID")
+    ),
+    request_body = DriftConfig,
+    security(
+        ("tenant_auth" = [])
+    )
+)]
+pub async fn save_drift_config(
+    api: Arc<GovernanceDashboardApi>,
+    ctx: &TenantContext,
+    project_id: &str,
+    threshold: f32,
+    low_confidence_threshold: Option<f32>,
+    auto_suppress_info: Option<bool>,
+) -> anyhow::Result<()> {
+    let mut config = DriftConfig::for_project(project_id.to_string(), ctx.tenant_id.clone());
+    config.threshold = threshold;
+    if let Some(lct) = low_confidence_threshold {
+        config.low_confidence_threshold = lct;
+    }
+    if let Some(asi) = auto_suppress_info {
+        config.auto_suppress_info = asi;
+    }
+
+    StorageBackend::save_drift_config(api.storage.as_ref(), config)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to save drift config: {:?}", e))?;
+
+    Ok(())
+}
+
 impl GovernanceDashboardApi {
     pub fn new(
         engine: Arc<GovernanceEngine>,
         storage: Arc<PostgresBackend>,
-        deployment_config: DeploymentConfig
+        deployment_config: DeploymentConfig,
     ) -> Self {
         let governance_client = if deployment_config.mode == "remote" {
             deployment_config.remote_url.as_ref().map(|url: &String| {
@@ -335,14 +528,14 @@ impl GovernanceDashboardApi {
             engine,
             storage,
             governance_client,
-            deployment_config
+            deployment_config,
         }
     }
 
     pub async fn list_proposals(
         &self,
         ctx: &TenantContext,
-        layer: Option<KnowledgeLayer>
+        layer: Option<KnowledgeLayer>,
     ) -> anyhow::Result<Vec<mk_core::types::KnowledgeEntry>> {
         if self.deployment_config.mode == "remote" {
             if let Some(client) = &self.governance_client {

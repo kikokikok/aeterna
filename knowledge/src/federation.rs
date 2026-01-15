@@ -7,19 +7,19 @@ pub struct UpstreamConfig {
     pub id: String,
     pub url: String,
     pub branch: String,
-    pub auth_token: Option<String>
+    pub auth_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederationConfig {
     pub upstreams: Vec<UpstreamConfig>,
-    pub sync_interval_secs: u64
+    pub sync_interval_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnowledgeManifest {
     pub version: String,
-    pub items: HashMap<String, String>
+    pub items: HashMap<String, String>,
 }
 
 #[async_trait::async_trait]
@@ -27,17 +27,17 @@ pub trait FederationProvider: Send + Sync {
     fn config(&self) -> &FederationConfig;
     async fn fetch_upstream_manifest(
         &self,
-        upstream_id: &str
+        upstream_id: &str,
     ) -> Result<KnowledgeManifest, RepositoryError>;
     async fn sync_upstream(
         &self,
         upstream_id: &str,
-        target_path: &std::path::Path
+        target_path: &std::path::Path,
     ) -> Result<(), RepositoryError>;
 }
 
 pub struct FederationManager {
-    config: FederationConfig
+    config: FederationConfig,
 }
 
 #[async_trait::async_trait]
@@ -48,7 +48,7 @@ impl FederationProvider for FederationManager {
 
     async fn fetch_upstream_manifest(
         &self,
-        upstream_id: &str
+        upstream_id: &str,
     ) -> Result<KnowledgeManifest, RepositoryError> {
         let _upstream = self
             .config
@@ -61,14 +61,14 @@ impl FederationProvider for FederationManager {
 
         Ok(KnowledgeManifest {
             version: "1.0".to_string(),
-            items: HashMap::new()
+            items: HashMap::new(),
         })
     }
 
     async fn sync_upstream(
         &self,
         upstream_id: &str,
-        target_path: &std::path::Path
+        target_path: &std::path::Path,
     ) -> Result<(), RepositoryError> {
         let upstream = self
             .config
@@ -91,7 +91,7 @@ impl FederationProvider for FederationManager {
 
             if repo.merge_base(head.id(), remote_commit.id())? != remote_commit.id() {
                 return Err(RepositoryError::InvalidPath(
-                    "Local changes conflict with upstream".to_string()
+                    "Local changes conflict with upstream".to_string(),
                 ));
             }
         } else {
@@ -119,9 +119,9 @@ mod tests {
                 id: "test".to_string(),
                 url: "https://github.com/test/repo".to_string(),
                 branch: "main".to_string(),
-                auth_token: Some("secret".to_string())
+                auth_token: Some("secret".to_string()),
             }],
-            sync_interval_secs: 3600
+            sync_interval_secs: 3600,
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -136,14 +136,14 @@ mod tests {
     async fn test_fetch_upstream_manifest_not_found() {
         let manager = FederationManager::new(FederationConfig {
             upstreams: vec![],
-            sync_interval_secs: 60
+            sync_interval_secs: 60,
         });
 
         let result = manager.fetch_upstream_manifest("nonexistent").await;
         assert!(result.is_err());
         match result {
             Err(RepositoryError::InvalidPath(msg)) => assert!(msg.contains("Upstream not found")),
-            _ => panic!("Expected InvalidPath error")
+            _ => panic!("Expected InvalidPath error"),
         }
     }
 
@@ -151,7 +151,7 @@ mod tests {
     async fn test_sync_upstream_not_found() {
         let manager = FederationManager::new(FederationConfig {
             upstreams: vec![],
-            sync_interval_secs: 60
+            sync_interval_secs: 60,
         });
 
         let result = manager
@@ -167,7 +167,7 @@ mod tests {
 
         let manifest = KnowledgeManifest {
             version: "1.0".to_string(),
-            items
+            items,
         };
 
         let json = serde_json::to_string(&manifest).unwrap();

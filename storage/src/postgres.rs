@@ -4,6 +4,8 @@ use mk_core::types::{OrganizationalUnit, TenantContext, UnitType};
 use sqlx::{Pool, Postgres, Row};
 use thiserror::Error;
 
+use crate::rls_migration;
+
 #[derive(Error, Debug)]
 pub enum PostgresError {
     #[error("Database error: {0}")]
@@ -107,7 +109,10 @@ impl PostgresBackend {
                 project_id TEXT NOT NULL,
                 tenant_id TEXT NOT NULL,
                 drift_score REAL NOT NULL,
+                confidence REAL NOT NULL DEFAULT 1.0,
                 violations JSONB NOT NULL,
+                suppressed_violations JSONB NOT NULL DEFAULT '[]',
+                requires_manual_review BOOLEAN NOT NULL DEFAULT FALSE,
                 timestamp BIGINT NOT NULL,
                 PRIMARY KEY (project_id, tenant_id, timestamp)
             )",
@@ -167,13 +172,49 @@ impl PostgresBackend {
             .execute(&self.pool)
             .await?;
 
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS memory_entries ( \
+                id TEXT PRIMARY KEY, \
+                tenant_id TEXT NOT NULL, \
+                content TEXT NOT NULL, \
+                embedding VECTOR(1536), \
+                memory_layer TEXT NOT NULL, \
+                properties JSONB DEFAULT '{}', \
+                created_at BIGINT NOT NULL, \
+                updated_at BIGINT NOT NULL, \
+                deleted_at BIGINT \
+            )",
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS knowledge_items ( \
+                id TEXT PRIMARY KEY, \
+                tenant_id TEXT NOT NULL, \
+                type TEXT NOT NULL, \
+                title TEXT NOT NULL, \
+                content TEXT NOT NULL, \
+                tags TEXT[], \
+                properties JSONB DEFAULT '{}', \
+                created_at BIGINT NOT NULL, \
+                updated_at BIGINT NOT NULL \
+            )",
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
+
+        rls_migration::run_rls_migration(&self.pool).await?;
+
         Ok(())
     }
 
     pub async fn create_unit(&self, unit: &OrganizationalUnit) -> Result<(), PostgresError> {
         if let Some(ref parent_id) = unit.parent_id {
             let parent = self
-                .get_unit_by_id(parent_id)
+                .get_unit_by_id(parent_id, &unit.tenant_id.to_string())
                 .await?
                 .ok_or_else(|| PostgresError::NotFound(parent_id.clone()))?;
 
@@ -216,12 +257,55 @@ impl PostgresBackend {
         Ok(())
     }
 
-    async fn get_unit_by_id(&self, id: &str) -> Result<Option<OrganizationalUnit>, PostgresError> {
+    fn row_to_persistent_event(
+        row: &sqlx::postgres::PgRow,
+    ) -> Result<mk_core::types::PersistentEvent, PostgresError> {
+        use sqlx::Row;
+
+        let status_str: String = row.get("status");
+        let status = match status_str.as_str() {
+            "pending" => mk_core::types::EventStatus::Pending,
+            "published" => mk_core::types::EventStatus::Published,
+            "acknowledged" => mk_core::types::EventStatus::Acknowledged,
+            "dead_lettered" => mk_core::types::EventStatus::DeadLettered,
+            _ => mk_core::types::EventStatus::Pending,
+        };
+
+        let payload: mk_core::types::GovernanceEvent = serde_json::from_value(row.get("payload"))?;
+
+        Ok(mk_core::types::PersistentEvent {
+            id: row.get("id"),
+            event_id: row.get("event_id"),
+            idempotency_key: row.get("idempotency_key"),
+            tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
+                PostgresError::Database(sqlx::Error::Decode(
+                    format!("Invalid tenant_id: {}", e).into(),
+                ))
+            })?,
+            event_type: row.get("event_type"),
+            payload,
+            status,
+            retry_count: row.get("retry_count"),
+            max_retries: row.get("max_retries"),
+            last_error: row.get("last_error"),
+            created_at: row.get("created_at"),
+            published_at: row.get("published_at"),
+            acknowledged_at: row.get("acknowledged_at"),
+            dead_lettered_at: row.get("dead_lettered_at"),
+        })
+    }
+
+    async fn get_unit_by_id(
+        &self,
+        id: &str,
+        tenant_id: &str,
+    ) -> Result<Option<OrganizationalUnit>, PostgresError> {
         let row = sqlx::query(
             "SELECT id, name, type, parent_id, tenant_id, metadata, created_at, updated_at 
-             FROM organizational_units WHERE id = $1",
+             FROM organizational_units WHERE id = $1 AND tenant_id = $2",
         )
         .bind(id)
+        .bind(tenant_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -1048,13 +1132,16 @@ impl StorageBackend for PostgresBackend {
         result: mk_core::types::DriftResult,
     ) -> Result<(), Self::Error> {
         sqlx::query(
-            "INSERT INTO drift_results (project_id, tenant_id, drift_score, violations, timestamp)
-             VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO drift_results (project_id, tenant_id, drift_score, confidence, violations, suppressed_violations, requires_manual_review, timestamp)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(&result.project_id)
         .bind(result.tenant_id.as_str())
         .bind(result.drift_score)
+        .bind(result.confidence)
         .bind(serde_json::to_value(&result.violations)?)
+        .bind(serde_json::to_value(&result.suppressed_violations)?)
+        .bind(result.requires_manual_review)
         .bind(result.timestamp)
         .execute(&self.pool)
         .await?;
@@ -1068,7 +1155,7 @@ impl StorageBackend for PostgresBackend {
         project_id: &str,
     ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
         let row = sqlx::query(
-            "SELECT project_id, tenant_id, drift_score, violations, timestamp 
+            "SELECT project_id, tenant_id, drift_score, confidence, violations, suppressed_violations, requires_manual_review, timestamp 
              FROM drift_results 
              WHERE project_id = $1 AND tenant_id = $2 
              ORDER BY timestamp DESC LIMIT 1",
@@ -1087,7 +1174,10 @@ impl StorageBackend for PostgresBackend {
                     ))
                 })?,
                 drift_score: row.get("drift_score"),
+                confidence: row.get("confidence"),
                 violations: serde_json::from_value(row.get("violations"))?,
+                suppressed_violations: serde_json::from_value(row.get("suppressed_violations"))?,
+                requires_manual_review: row.get("requires_manual_review"),
                 timestamp: row.get("timestamp"),
             }))
         } else {
@@ -1170,6 +1260,383 @@ impl StorageBackend for PostgresBackend {
         }
 
         Ok(units)
+    }
+
+    async fn create_suppression(
+        &self,
+        suppression: mk_core::types::DriftSuppression,
+    ) -> Result<(), Self::Error> {
+        sqlx::query(
+            "INSERT INTO drift_suppressions (id, project_id, tenant_id, policy_id, rule_pattern, reason, created_by, expires_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+        )
+        .bind(&suppression.id)
+        .bind(&suppression.project_id)
+        .bind(suppression.tenant_id.as_str())
+        .bind(&suppression.policy_id)
+        .bind(&suppression.rule_pattern)
+        .bind(&suppression.reason)
+        .bind(suppression.created_by.as_str())
+        .bind(suppression.expires_at)
+        .bind(suppression.created_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn list_suppressions(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        project_id: &str,
+    ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
+        let rows = sqlx::query(
+            "SELECT id, project_id, tenant_id, policy_id, rule_pattern, reason, created_by, expires_at, created_at
+             FROM drift_suppressions
+             WHERE project_id = $1 AND tenant_id = $2
+             ORDER BY created_at DESC",
+        )
+        .bind(project_id)
+        .bind(ctx.tenant_id.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut suppressions = Vec::new();
+        for row in rows {
+            suppressions.push(mk_core::types::DriftSuppression {
+                id: row.get("id"),
+                project_id: row.get("project_id"),
+                tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
+                    PostgresError::Database(sqlx::Error::Decode(
+                        format!("Invalid tenant_id: {}", e).into(),
+                    ))
+                })?,
+                policy_id: row.get("policy_id"),
+                rule_pattern: row.get("rule_pattern"),
+                reason: row.get("reason"),
+                created_by: row.get::<String, _>("created_by").parse().map_err(|e| {
+                    PostgresError::Database(sqlx::Error::Decode(
+                        format!("Invalid created_by: {}", e).into(),
+                    ))
+                })?,
+                expires_at: row.get("expires_at"),
+                created_at: row.get("created_at"),
+            });
+        }
+
+        Ok(suppressions)
+    }
+
+    async fn delete_suppression(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        suppression_id: &str,
+    ) -> Result<(), Self::Error> {
+        sqlx::query("DELETE FROM drift_suppressions WHERE id = $1 AND tenant_id = $2")
+            .bind(suppression_id)
+            .bind(ctx.tenant_id.as_str())
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn get_drift_config(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        project_id: &str,
+    ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
+        let row = sqlx::query(
+            "SELECT project_id, tenant_id, threshold, low_confidence_threshold, auto_suppress_info, updated_at
+             FROM drift_configs
+             WHERE project_id = $1 AND tenant_id = $2",
+        )
+        .bind(project_id)
+        .bind(ctx.tenant_id.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            Ok(Some(mk_core::types::DriftConfig {
+                project_id: row.get("project_id"),
+                tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
+                    PostgresError::Database(sqlx::Error::Decode(
+                        format!("Invalid tenant_id: {}", e).into(),
+                    ))
+                })?,
+                threshold: row.get("threshold"),
+                low_confidence_threshold: row.get("low_confidence_threshold"),
+                auto_suppress_info: row.get("auto_suppress_info"),
+                updated_at: row.get("updated_at"),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn save_drift_config(
+        &self,
+        config: mk_core::types::DriftConfig,
+    ) -> Result<(), Self::Error> {
+        sqlx::query(
+            "INSERT INTO drift_configs (project_id, tenant_id, threshold, low_confidence_threshold, auto_suppress_info, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (project_id, tenant_id) DO UPDATE SET
+                threshold = EXCLUDED.threshold,
+                low_confidence_threshold = EXCLUDED.low_confidence_threshold,
+                auto_suppress_info = EXCLUDED.auto_suppress_info,
+                updated_at = EXCLUDED.updated_at",
+        )
+        .bind(&config.project_id)
+        .bind(config.tenant_id.as_str())
+        .bind(config.threshold)
+        .bind(config.low_confidence_threshold)
+        .bind(config.auto_suppress_info)
+        .bind(config.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn persist_event(
+        &self,
+        event: mk_core::types::PersistentEvent,
+    ) -> Result<(), Self::Error> {
+        sqlx::query(
+            "INSERT INTO governance_events (id, event_id, idempotency_key, tenant_id, event_type, payload, status, retry_count, max_retries, last_error, created_at, published_at, acknowledged_at, dead_lettered_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11), $12, $13, $14)
+             ON CONFLICT (idempotency_key) DO NOTHING",
+        )
+        .bind(&event.id)
+        .bind(&event.event_id)
+        .bind(&event.idempotency_key)
+        .bind(event.tenant_id.as_str())
+        .bind(&event.event_type)
+        .bind(serde_json::to_value(&event.payload)?)
+        .bind(event.status.to_string())
+        .bind(event.retry_count)
+        .bind(event.max_retries)
+        .bind(&event.last_error)
+        .bind(event.created_at)
+        .bind(event.published_at.map(|ts| chrono::DateTime::from_timestamp(ts, 0)))
+        .bind(event.acknowledged_at.map(|ts| chrono::DateTime::from_timestamp(ts, 0)))
+        .bind(event.dead_lettered_at.map(|ts| chrono::DateTime::from_timestamp(ts, 0)))
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn get_pending_events(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        limit: usize,
+    ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
+        let rows = sqlx::query(
+            "SELECT id, event_id, idempotency_key, tenant_id, event_type, payload, status, retry_count, max_retries, last_error, 
+                    EXTRACT(EPOCH FROM created_at)::bigint as created_at,
+                    EXTRACT(EPOCH FROM published_at)::bigint as published_at,
+                    EXTRACT(EPOCH FROM acknowledged_at)::bigint as acknowledged_at,
+                    EXTRACT(EPOCH FROM dead_lettered_at)::bigint as dead_lettered_at
+             FROM governance_events
+             WHERE tenant_id = $1 AND status = 'pending'
+             ORDER BY created_at ASC
+             LIMIT $2",
+        )
+        .bind(ctx.tenant_id.as_str())
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut events = Vec::new();
+        for row in rows {
+            events.push(Self::row_to_persistent_event(&row)?);
+        }
+        Ok(events)
+    }
+
+    async fn update_event_status(
+        &self,
+        event_id: &str,
+        status: mk_core::types::EventStatus,
+        error: Option<String>,
+    ) -> Result<(), Self::Error> {
+        let now = chrono::Utc::now();
+
+        match status {
+            mk_core::types::EventStatus::Published => {
+                sqlx::query(
+                    "UPDATE governance_events SET status = $2, published_at = $3 WHERE event_id = $1",
+                )
+                .bind(event_id)
+                .bind(status.to_string())
+                .bind(now)
+                .execute(&self.pool)
+                .await?;
+            }
+            mk_core::types::EventStatus::Acknowledged => {
+                sqlx::query(
+                    "UPDATE governance_events SET status = $2, acknowledged_at = $3 WHERE event_id = $1",
+                )
+                .bind(event_id)
+                .bind(status.to_string())
+                .bind(now)
+                .execute(&self.pool)
+                .await?;
+            }
+            mk_core::types::EventStatus::DeadLettered => {
+                sqlx::query(
+                    "UPDATE governance_events SET status = $2, last_error = $3, dead_lettered_at = $4 WHERE event_id = $1",
+                )
+                .bind(event_id)
+                .bind(status.to_string())
+                .bind(&error)
+                .bind(now)
+                .execute(&self.pool)
+                .await?;
+            }
+            mk_core::types::EventStatus::Pending => {
+                sqlx::query(
+                    "UPDATE governance_events SET status = $2, retry_count = retry_count + 1, last_error = $3 WHERE event_id = $1",
+                )
+                .bind(event_id)
+                .bind(status.to_string())
+                .bind(&error)
+                .execute(&self.pool)
+                .await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn get_dead_letter_events(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        limit: usize,
+    ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
+        let rows = sqlx::query(
+            "SELECT id, event_id, idempotency_key, tenant_id, event_type, payload, status, retry_count, max_retries, last_error,
+                    EXTRACT(EPOCH FROM created_at)::bigint as created_at,
+                    EXTRACT(EPOCH FROM published_at)::bigint as published_at,
+                    EXTRACT(EPOCH FROM acknowledged_at)::bigint as acknowledged_at,
+                    EXTRACT(EPOCH FROM dead_lettered_at)::bigint as dead_lettered_at
+             FROM governance_events
+             WHERE tenant_id = $1 AND status = 'dead_lettered'
+             ORDER BY dead_lettered_at DESC
+             LIMIT $2",
+        )
+        .bind(ctx.tenant_id.as_str())
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut events = Vec::new();
+        for row in rows {
+            events.push(Self::row_to_persistent_event(&row)?);
+        }
+        Ok(events)
+    }
+
+    async fn check_idempotency(
+        &self,
+        consumer_group: &str,
+        idempotency_key: &str,
+    ) -> Result<bool, Self::Error> {
+        let result: Option<(i32,)> = sqlx::query_as(
+            "SELECT 1 FROM event_consumer_state WHERE consumer_group = $1 AND idempotency_key = $2",
+        )
+        .bind(consumer_group)
+        .bind(idempotency_key)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.is_some())
+    }
+
+    async fn record_consumer_state(
+        &self,
+        state: mk_core::types::ConsumerState,
+    ) -> Result<(), Self::Error> {
+        sqlx::query(
+            "INSERT INTO event_consumer_state (consumer_group, idempotency_key, tenant_id, processed_at)
+             VALUES ($1, $2, $3, to_timestamp($4))
+             ON CONFLICT (consumer_group, idempotency_key) DO NOTHING",
+        )
+        .bind(&state.consumer_group)
+        .bind(&state.idempotency_key)
+        .bind(state.tenant_id.as_str())
+        .bind(state.processed_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn get_event_metrics(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        period_start: i64,
+        period_end: i64,
+    ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
+        let rows = sqlx::query(
+            "SELECT tenant_id, event_type, 
+                    EXTRACT(EPOCH FROM period_start)::bigint as period_start,
+                    EXTRACT(EPOCH FROM period_end)::bigint as period_end,
+                    total_events, delivered_events, retried_events, dead_lettered_events, avg_delivery_time_ms
+             FROM event_delivery_metrics
+             WHERE tenant_id = $1 AND period_start >= to_timestamp($2) AND period_end <= to_timestamp($3)
+             ORDER BY period_start DESC",
+        )
+        .bind(ctx.tenant_id.as_str())
+        .bind(period_start)
+        .bind(period_end)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut metrics = Vec::new();
+        for row in rows {
+            metrics.push(mk_core::types::EventDeliveryMetrics {
+                tenant_id: row.get::<String, _>("tenant_id").parse().map_err(|e| {
+                    PostgresError::Database(sqlx::Error::Decode(
+                        format!("Invalid tenant_id: {}", e).into(),
+                    ))
+                })?,
+                event_type: row.get("event_type"),
+                period_start: row.get("period_start"),
+                period_end: row.get("period_end"),
+                total_events: row.get("total_events"),
+                delivered_events: row.get("delivered_events"),
+                retried_events: row.get("retried_events"),
+                dead_lettered_events: row.get("dead_lettered_events"),
+                avg_delivery_time_ms: row.get("avg_delivery_time_ms"),
+            });
+        }
+        Ok(metrics)
+    }
+
+    async fn record_event_metrics(
+        &self,
+        metrics: mk_core::types::EventDeliveryMetrics,
+    ) -> Result<(), Self::Error> {
+        sqlx::query(
+            "INSERT INTO event_delivery_metrics (tenant_id, event_type, period_start, period_end, total_events, delivered_events, retried_events, dead_lettered_events, avg_delivery_time_ms)
+             VALUES ($1, $2, to_timestamp($3), to_timestamp($4), $5, $6, $7, $8, $9)",
+        )
+        .bind(metrics.tenant_id.as_str())
+        .bind(&metrics.event_type)
+        .bind(metrics.period_start)
+        .bind(metrics.period_end)
+        .bind(metrics.total_events)
+        .bind(metrics.delivered_events)
+        .bind(metrics.retried_events)
+        .bind(metrics.dead_lettered_events)
+        .bind(metrics.avg_delivery_time_ms)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 }
 

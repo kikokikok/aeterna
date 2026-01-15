@@ -1,6 +1,15 @@
-use mk_core::types::{GovernanceEvent, TenantId};
+use mk_core::types::{GovernanceEvent, PersistentEvent, TenantId};
 use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::{error, info};
+use tracing::{error, info, warn};
+
+/// Base stream key for governance events
+pub const GOVERNANCE_EVENTS_STREAM: &str = "governance:events";
+
+/// Base stream key for dead letter queue
+pub const GOVERNANCE_DLQ_STREAM: &str = "governance:dlq";
+
+/// DLQ consumer group name
+pub const DLQ_CONSUMER_GROUP: &str = "dlq-processor";
 
 /// Redis publisher for governance events with tenant isolation.
 ///
@@ -125,6 +134,119 @@ impl RedisPublisher {
             .await?;
 
         Ok(())
+    }
+
+    /// Publishes a failed event to the dead letter queue stream.
+    pub async fn publish_to_dlq(
+        redis_url: &str,
+        event: &PersistentEvent,
+    ) -> Result<(), anyhow::Error> {
+        let client = redis::Client::open(redis_url)?;
+        let mut con = client.get_connection_manager().await?;
+
+        let stream_key = format!("{}:{}", GOVERNANCE_DLQ_STREAM, event.tenant_id.as_str());
+        let event_json = serde_json::to_string(event)?;
+
+        let _: String = redis::cmd("XADD")
+            .arg(&stream_key)
+            .arg("*")
+            .arg("event")
+            .arg(&event_json)
+            .arg("error")
+            .arg(event.last_error.as_deref().unwrap_or("unknown"))
+            .arg("retry_count")
+            .arg(event.retry_count.to_string())
+            .query_async(&mut con)
+            .await?;
+
+        warn!(
+            event_id = %event.event_id,
+            tenant_id = %event.tenant_id,
+            "Event published to DLQ"
+        );
+
+        Ok(())
+    }
+
+    /// Reads events from the dead letter queue for a tenant.
+    pub async fn read_dlq_events(
+        redis_url: &str,
+        tenant_id: &TenantId,
+        count: usize,
+    ) -> Result<Vec<(String, PersistentEvent)>, anyhow::Error> {
+        let client = redis::Client::open(redis_url)?;
+        let mut con = client.get_connection_manager().await?;
+
+        let stream_key = format!("{}:{}", GOVERNANCE_DLQ_STREAM, tenant_id.as_str());
+
+        let result: redis::streams::StreamReadReply = redis::cmd("XREAD")
+            .arg("COUNT")
+            .arg(count)
+            .arg("STREAMS")
+            .arg(&stream_key)
+            .arg("0")
+            .query_async(&mut con)
+            .await?;
+
+        let mut events = Vec::new();
+        for key in result.keys {
+            for entry in key.ids {
+                if let Some(event_data) = entry.map.get("event") {
+                    if let redis::Value::BulkString(bytes) = event_data {
+                        let json_str = String::from_utf8_lossy(bytes);
+                        if let Ok(event) = serde_json::from_str::<PersistentEvent>(&json_str) {
+                            events.push((entry.id.clone(), event));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(events)
+    }
+
+    /// Acknowledges and removes an event from the DLQ after successful reprocessing.
+    pub async fn ack_dlq_event(
+        redis_url: &str,
+        tenant_id: &TenantId,
+        message_id: &str,
+    ) -> Result<(), anyhow::Error> {
+        let client = redis::Client::open(redis_url)?;
+        let mut con = client.get_connection_manager().await?;
+
+        let stream_key = format!("{}:{}", GOVERNANCE_DLQ_STREAM, tenant_id.as_str());
+
+        let _: i64 = redis::cmd("XDEL")
+            .arg(&stream_key)
+            .arg(message_id)
+            .query_async(&mut con)
+            .await?;
+
+        info!(
+            message_id = %message_id,
+            tenant_id = %tenant_id,
+            "DLQ event acknowledged and removed"
+        );
+
+        Ok(())
+    }
+
+    /// Gets the count of events in the DLQ for a tenant.
+    pub async fn get_dlq_length(
+        redis_url: &str,
+        tenant_id: &TenantId,
+    ) -> Result<usize, anyhow::Error> {
+        let client = redis::Client::open(redis_url)?;
+        let mut con = client.get_connection_manager().await?;
+
+        let stream_key = format!("{}:{}", GOVERNANCE_DLQ_STREAM, tenant_id.as_str());
+
+        let len: usize = redis::cmd("XLEN")
+            .arg(&stream_key)
+            .query_async(&mut con)
+            .await?;
+
+        Ok(len)
     }
 }
 

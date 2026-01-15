@@ -12,12 +12,12 @@ pub enum CedarError {
     #[error("Policy parsing error: {0}")]
     Parse(String),
     #[error("Schema error: {0}")]
-    Schema(String)
+    Schema(String),
 }
 
 pub struct CedarAuthorizer {
     policies: PolicySet,
-    entities: Entities
+    entities: Entities,
 }
 
 impl CedarAuthorizer {
@@ -27,7 +27,7 @@ impl CedarAuthorizer {
 
         Ok(Self {
             policies,
-            entities: Entities::empty()
+            entities: Entities::empty(),
         })
     }
 }
@@ -40,7 +40,7 @@ impl AuthorizationService for CedarAuthorizer {
         &self,
         ctx: &TenantContext,
         action: &str,
-        resource: &str
+        resource: &str,
     ) -> Result<bool, Self::Error> {
         if let Some(agent_id) = &ctx.agent_id {
             let agent_principal = EntityUid::from_str(&format!("User::\"{}\"", agent_id))
@@ -55,7 +55,7 @@ impl AuthorizationService for CedarAuthorizer {
                 delegate_action,
                 user_resource,
                 Context::empty(),
-                None
+                None,
             )
             .map_err(|e| CedarError::Evaluation(e.to_string()))?;
 
@@ -94,7 +94,7 @@ impl AuthorizationService for CedarAuthorizer {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role
+        _role: Role,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -103,7 +103,7 @@ impl AuthorizationService for CedarAuthorizer {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role
+        _role: Role,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -141,7 +141,7 @@ mod tests {
 
         let ctx = TenantContext::new(
             TenantId::new("t1".into()).unwrap(),
-            UserId::new("u1".into()).unwrap()
+            UserId::new("u1".into()).unwrap(),
         );
 
         let allowed = authorizer

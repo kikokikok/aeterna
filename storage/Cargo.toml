@@ -41,3 +41,4 @@ tokio-test = "0.4"
 adapters.workspace = true
 knowledge.workspace = true
 config.workspace = true
+metrics-util = { version = "0.15", features = ["debugging"] }

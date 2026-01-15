@@ -62,6 +62,9 @@ async fn test_governance_dashboard_api_get_drift_status() {
         drift_score: 0.75,
         violations: vec![],
         timestamp: 123456789,
+        confidence: 0.9,
+        suppressed_violations: vec![],
+        requires_manual_review: false,
     };
     storage.store_drift_result(drift).await.unwrap();
 
@@ -164,6 +167,9 @@ async fn test_governance_dashboard_api_get_org_report() {
         drift_score: 0.5,
         violations: vec![],
         timestamp: 123456789,
+        confidence: 0.9,
+        suppressed_violations: vec![],
+        requires_manual_review: false,
     };
     storage.store_drift_result(drift).await.unwrap();
 

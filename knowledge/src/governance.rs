@@ -326,11 +326,15 @@ impl GovernanceEngine {
         context: &HashMap<String, serde_json::Value>,
     ) -> Result<f32, anyhow::Error> {
         let mut violations = Vec::new();
+        let mut confidence: f32 = 1.0;
 
         let content = context.get("content").and_then(|v| v.as_str());
         if let Some(c) = content {
             if self.embedding_service.is_some() {
                 let mut semantic_violations = self.check_contradictions(tenant_ctx, c, 0.8).await?;
+                if !semantic_violations.is_empty() {
+                    confidence = confidence.min(0.85);
+                }
                 violations.append(&mut semantic_violations);
             }
         }
@@ -389,6 +393,7 @@ impl GovernanceEngine {
                 .analyze_drift_with_llm(c, &active_policies, context)
                 .await
             {
+                confidence = confidence.min(0.75);
                 for v in llm_violations {
                     if !violations
                         .iter()
@@ -400,26 +405,108 @@ impl GovernanceEngine {
             }
         }
 
-        let drift_score = self.calculate_drift_score(&violations);
+        let (active_violations, suppressed_violations) = if let Some(storage) = &self.storage {
+            let suppressions = storage
+                .list_suppressions(tenant_ctx.clone(), _project_id)
+                .await
+                .unwrap_or_default();
+
+            let active_suppressions: Vec<_> = suppressions
+                .into_iter()
+                .filter(|s| !s.is_expired())
+                .collect();
+
+            self.apply_suppressions(violations, &active_suppressions)
+        } else {
+            (violations, Vec::new())
+        };
+
+        let drift_config = if let Some(storage) = &self.storage {
+            storage
+                .get_drift_config(tenant_ctx.clone(), _project_id)
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
+
+        let config = drift_config.unwrap_or_default();
+
+        if config.auto_suppress_info {
+            let filtered: Vec<_> = active_violations
+                .iter()
+                .filter(|v| v.severity != ConstraintSeverity::Info)
+                .cloned()
+                .collect();
+            let auto_suppressed: Vec<_> = active_violations
+                .iter()
+                .filter(|v| v.severity == ConstraintSeverity::Info)
+                .cloned()
+                .collect();
+            let mut all_suppressed = suppressed_violations;
+            all_suppressed.extend(auto_suppressed);
+
+            let drift_score = self.calculate_drift_score(&filtered);
+
+            if drift_score > 0.0 {
+                self.emit_drift_event(context, Some(tenant_ctx), &filtered)
+                    .await;
+            }
+
+            if let Some(storage) = &self.storage {
+                let drift_result = mk_core::types::DriftResult::new(
+                    _project_id.to_string(),
+                    tenant_ctx.tenant_id.clone(),
+                    filtered,
+                )
+                .with_confidence(confidence)
+                .with_suppressions(all_suppressed);
+                let _ = storage.store_drift_result(drift_result).await;
+            }
+
+            return Ok(drift_score);
+        }
+
+        let drift_score = self.calculate_drift_score(&active_violations);
 
         if drift_score > 0.0 {
-            self.emit_drift_event(context, Some(tenant_ctx), &violations)
+            self.emit_drift_event(context, Some(tenant_ctx), &active_violations)
                 .await;
         }
 
         if let Some(storage) = &self.storage {
-            let _ = storage
-                .store_drift_result(mk_core::types::DriftResult {
-                    project_id: _project_id.to_string(),
-                    tenant_id: tenant_ctx.tenant_id.clone(),
-                    drift_score,
-                    violations: violations.clone(),
-                    timestamp: chrono::Utc::now().timestamp(),
-                })
-                .await;
+            let drift_result = mk_core::types::DriftResult::new(
+                _project_id.to_string(),
+                tenant_ctx.tenant_id.clone(),
+                active_violations,
+            )
+            .with_confidence(confidence)
+            .with_suppressions(suppressed_violations);
+            let _ = storage.store_drift_result(drift_result).await;
         }
 
         Ok(drift_score)
+    }
+
+    fn apply_suppressions(
+        &self,
+        violations: Vec<PolicyViolation>,
+        suppressions: &[mk_core::types::DriftSuppression],
+    ) -> (Vec<PolicyViolation>, Vec<PolicyViolation>) {
+        let mut active = Vec::new();
+        let mut suppressed = Vec::new();
+
+        for violation in violations {
+            let is_suppressed = suppressions.iter().any(|s| s.matches(&violation));
+            if is_suppressed {
+                suppressed.push(violation);
+            } else {
+                active.push(violation);
+            }
+        }
+
+        (active, suppressed)
     }
 
     async fn analyze_drift_with_llm(

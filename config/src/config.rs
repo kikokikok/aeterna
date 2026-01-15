@@ -509,6 +509,69 @@ pub struct GraphConfig {
     /// S3 region
     #[serde(default = "default_graph_s3_region")]
     pub s3_region: String,
+
+    /// Alerting thresholds for write contention
+    #[serde(default)]
+    pub contention_alerts: ContentionAlertConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
+pub struct ContentionAlertConfig {
+    #[serde(default = "default_queue_depth_warn")]
+    #[validate(range(min = 1, max = 100))]
+    pub queue_depth_warn: u32,
+
+    #[serde(default = "default_queue_depth_critical")]
+    #[validate(range(min = 1, max = 100))]
+    pub queue_depth_critical: u32,
+
+    #[serde(default = "default_wait_time_warn_ms")]
+    #[validate(range(min = 100, max = 60000))]
+    pub wait_time_warn_ms: u64,
+
+    #[serde(default = "default_wait_time_critical_ms")]
+    #[validate(range(min = 100, max = 60000))]
+    pub wait_time_critical_ms: u64,
+
+    #[serde(default = "default_timeout_rate_warn")]
+    #[validate(range(min = 0.0, max = 100.0))]
+    pub timeout_rate_warn_percent: f64,
+
+    #[serde(default = "default_timeout_rate_critical")]
+    #[validate(range(min = 0.0, max = 100.0))]
+    pub timeout_rate_critical_percent: f64,
+}
+
+fn default_queue_depth_warn() -> u32 {
+    5
+}
+fn default_queue_depth_critical() -> u32 {
+    10
+}
+fn default_wait_time_warn_ms() -> u64 {
+    1000
+}
+fn default_wait_time_critical_ms() -> u64 {
+    3000
+}
+fn default_timeout_rate_warn() -> f64 {
+    5.0
+}
+fn default_timeout_rate_critical() -> f64 {
+    15.0
+}
+
+impl Default for ContentionAlertConfig {
+    fn default() -> Self {
+        Self {
+            queue_depth_warn: default_queue_depth_warn(),
+            queue_depth_critical: default_queue_depth_critical(),
+            wait_time_warn_ms: default_wait_time_warn_ms(),
+            wait_time_critical_ms: default_wait_time_critical_ms(),
+            timeout_rate_warn_percent: default_timeout_rate_warn(),
+            timeout_rate_critical_percent: default_timeout_rate_critical(),
+        }
+    }
 }
 
 fn default_graph_enabled() -> bool {
@@ -532,6 +595,7 @@ impl Default for GraphConfig {
             s3_prefix: None,
             s3_endpoint: None,
             s3_region: default_graph_s3_region(),
+            contention_alerts: ContentionAlertConfig::default(),
         }
     }
 }
