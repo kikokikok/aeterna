@@ -163,7 +163,10 @@ async fn test_full_governance_workflow() {
                 project_id: "proj1".to_string(),
                 tenant_id: tenant_id.clone(),
                 drift_score: 0.2,
+                confidence: 1.0,
                 violations: vec![],
+                suppressed_violations: vec![],
+                requires_manual_review: false,
                 timestamp: chrono::Utc::now().timestamp(),
             };
             pg_backend.store_drift_result(drift).await.unwrap();

@@ -301,43 +301,77 @@ mod tests {
     use mk_core::types::{KnowledgeLayer, Role, UnitType, UserId};
 
     #[test]
-    fn test_redis_publisher_tenant_isolation() {
-        let tenant_id1 = TenantId::new("tenant-1".to_string()).unwrap();
-        let tenant_id2 = TenantId::new("tenant-2".to_string()).unwrap();
-
+    fn test_redis_publisher_new_with_tenant_isolation() {
         let publisher = RedisPublisher::new_with_tenant_isolation(
             "redis://localhost:6379".to_string(),
             "governance:events".to_string(),
         );
 
-        let event1 = GovernanceEvent::UnitCreated {
-            unit_id: "unit-1".to_string(),
-            unit_type: UnitType::Company,
-            tenant_id: tenant_id1.clone(),
-            parent_id: None,
-            timestamp: 1234567890,
-        };
-
-        let event2 = GovernanceEvent::UnitCreated {
-            unit_id: "unit-2".to_string(),
-            unit_type: UnitType::Team,
-            tenant_id: tenant_id2.clone(),
-            parent_id: Some("unit-1".to_string()),
-            timestamp: 1234567891,
-        };
-
-        let _legacy_publisher =
-            RedisPublisher::new_for_tenant("redis://localhost:6379".to_string(), &tenant_id1);
-
-        assert!(true);
+        assert_eq!(publisher.redis_url, "redis://localhost:6379");
+        assert_eq!(publisher.base_stream_key, "governance:events");
     }
 
     #[test]
-    fn test_event_tenant_id_extraction() {
+    fn test_redis_publisher_new_for_tenant() {
+        let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
+        let publisher =
+            RedisPublisher::new_for_tenant("redis://localhost:6379".to_string(), &tenant_id);
+
+        assert_eq!(publisher.redis_url, "redis://localhost:6379");
+        assert_eq!(publisher.base_stream_key, "governance:events:test-tenant");
+    }
+
+    #[test]
+    fn test_redis_publisher_new() {
+        let publisher = RedisPublisher::new(
+            "redis://localhost:6379".to_string(),
+            "custom:stream:key".to_string(),
+        );
+
+        assert_eq!(publisher.redis_url, "redis://localhost:6379");
+        assert_eq!(publisher.base_stream_key, "custom:stream:key");
+    }
+
+    #[tokio::test]
+    async fn test_create_redis_publisher_with_tenant_isolation() {
+        let (tx, _handle) =
+            create_redis_publisher_with_tenant_isolation("redis://localhost:6379".to_string());
+
+        assert!(tx.is_closed() == false);
+    }
+
+    #[tokio::test]
+    async fn test_create_redis_publisher_for_tenant() {
+        let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
+        let (tx, _handle) =
+            create_redis_publisher_for_tenant("redis://localhost:6379".to_string(), &tenant_id);
+
+        assert!(tx.is_closed() == false);
+    }
+
+    #[tokio::test]
+    async fn test_create_redis_publisher() {
+        let (tx, _handle) = create_redis_publisher(
+            "redis://localhost:6379".to_string(),
+            "my:custom:stream".to_string(),
+        );
+
+        assert!(tx.is_closed() == false);
+    }
+
+    #[test]
+    fn test_stream_constants() {
+        assert_eq!(GOVERNANCE_EVENTS_STREAM, "governance:events");
+        assert_eq!(GOVERNANCE_DLQ_STREAM, "governance:dlq");
+        assert_eq!(DLQ_CONSUMER_GROUP, "dlq-processor");
+    }
+
+    #[test]
+    fn test_event_tenant_id_extraction_all_variants() {
         let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
         let user_id = UserId::new("user-1".to_string()).unwrap();
 
-        let events = vec![
+        let events: Vec<GovernanceEvent> = vec![
             GovernanceEvent::UnitCreated {
                 unit_id: "unit-1".to_string(),
                 unit_type: UnitType::Company,
@@ -345,24 +379,46 @@ mod tests {
                 parent_id: None,
                 timestamp: 1234567890,
             },
+            GovernanceEvent::UnitUpdated {
+                unit_id: "unit-1".to_string(),
+                tenant_id: tenant_id.clone(),
+                timestamp: 1234567891,
+            },
+            GovernanceEvent::UnitDeleted {
+                unit_id: "unit-1".to_string(),
+                tenant_id: tenant_id.clone(),
+                timestamp: 1234567892,
+            },
             GovernanceEvent::PolicyUpdated {
                 policy_id: "policy-1".to_string(),
                 layer: KnowledgeLayer::Company,
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567891,
+                timestamp: 1234567893,
+            },
+            GovernanceEvent::PolicyDeleted {
+                policy_id: "policy-1".to_string(),
+                tenant_id: tenant_id.clone(),
+                timestamp: 1234567894,
             },
             GovernanceEvent::RoleAssigned {
                 user_id: user_id.clone(),
                 unit_id: "unit-1".to_string(),
                 role: Role::Admin,
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567892,
+                timestamp: 1234567895,
+            },
+            GovernanceEvent::RoleRemoved {
+                user_id: user_id.clone(),
+                unit_id: "unit-1".to_string(),
+                role: Role::Admin,
+                tenant_id: tenant_id.clone(),
+                timestamp: 1234567896,
             },
             GovernanceEvent::DriftDetected {
                 project_id: "project-1".to_string(),
                 tenant_id: tenant_id.clone(),
                 drift_score: 0.5,
-                timestamp: 1234567893,
+                timestamp: 1234567897,
             },
         ];
 
@@ -378,6 +434,196 @@ mod tests {
                 GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id,
             };
             assert_eq!(extracted_tenant_id, &tenant_id);
+        }
+    }
+
+    #[test]
+    fn test_stream_key_format() {
+        let base = "governance:events";
+        let tenant_id = "acme-corp";
+        let stream_key = format!("{}:{}", base, tenant_id);
+        assert_eq!(stream_key, "governance:events:acme-corp");
+    }
+
+    #[test]
+    fn test_dlq_stream_key_format() {
+        let tenant_id = TenantId::new("acme-corp".to_string()).unwrap();
+        let stream_key = format!("{}:{}", GOVERNANCE_DLQ_STREAM, tenant_id.as_str());
+        assert_eq!(stream_key, "governance:dlq:acme-corp");
+    }
+
+    #[test]
+    fn test_redis_publisher_with_different_redis_urls() {
+        let urls = vec![
+            "redis://localhost:6379",
+            "redis://redis.example.com:6379",
+            "redis://:password@localhost:6379",
+            "redis://user:password@localhost:6379/0",
+        ];
+
+        for url in urls {
+            let publisher = RedisPublisher::new(url.to_string(), "test:stream".to_string());
+            assert_eq!(publisher.redis_url, url);
+        }
+    }
+
+    #[test]
+    fn test_governance_event_serialization() {
+        let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
+
+        let event = GovernanceEvent::UnitCreated {
+            unit_id: "unit-1".to_string(),
+            unit_type: UnitType::Company,
+            tenant_id: tenant_id.clone(),
+            parent_id: None,
+            timestamp: 1234567890,
+        };
+
+        let json = serde_json::to_string(&event).unwrap();
+        // GovernanceEvent uses rename_all = "camelCase" so it serializes as "unitCreated"
+        assert!(json.contains("unitCreated"));
+        assert!(json.contains("test-tenant"));
+        assert!(json.contains("unit-1"));
+
+        let deserialized: GovernanceEvent = serde_json::from_str(&json).unwrap();
+        match deserialized {
+            GovernanceEvent::UnitCreated {
+                unit_id,
+                tenant_id: tid,
+                ..
+            } => {
+                assert_eq!(unit_id, "unit-1");
+                assert_eq!(tid, tenant_id);
+            }
+            _ => panic!("Expected UnitCreated variant"),
+        }
+    }
+
+    #[test]
+    fn test_unit_type_variants_in_events() {
+        let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
+
+        let unit_types = vec![
+            UnitType::Company,
+            UnitType::Organization,
+            UnitType::Team,
+            UnitType::Project,
+        ];
+
+        for unit_type in unit_types {
+            let event = GovernanceEvent::UnitCreated {
+                unit_id: "unit-1".to_string(),
+                unit_type: unit_type.clone(),
+                tenant_id: tenant_id.clone(),
+                parent_id: None,
+                timestamp: 1234567890,
+            };
+
+            let json = serde_json::to_string(&event).unwrap();
+            let deserialized: GovernanceEvent = serde_json::from_str(&json).unwrap();
+
+            match deserialized {
+                GovernanceEvent::UnitCreated { unit_type: ut, .. } => {
+                    assert_eq!(ut, unit_type);
+                }
+                _ => panic!("Expected UnitCreated variant"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_role_variants_in_events() {
+        let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
+        let user_id = UserId::new("user-1".to_string()).unwrap();
+
+        let roles = vec![
+            Role::Admin,
+            Role::Architect,
+            Role::TechLead,
+            Role::Developer,
+            Role::Agent,
+        ];
+
+        for role in roles {
+            let event = GovernanceEvent::RoleAssigned {
+                user_id: user_id.clone(),
+                unit_id: "unit-1".to_string(),
+                role: role.clone(),
+                tenant_id: tenant_id.clone(),
+                timestamp: 1234567890,
+            };
+
+            let json = serde_json::to_string(&event).unwrap();
+            let deserialized: GovernanceEvent = serde_json::from_str(&json).unwrap();
+
+            match deserialized {
+                GovernanceEvent::RoleAssigned { role: r, .. } => {
+                    assert_eq!(r, role);
+                }
+                _ => panic!("Expected RoleAssigned variant"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_knowledge_layer_variants_in_policy_events() {
+        let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
+
+        let layers = vec![
+            KnowledgeLayer::Company,
+            KnowledgeLayer::Org,
+            KnowledgeLayer::Team,
+            KnowledgeLayer::Project,
+        ];
+
+        for layer in layers {
+            let event = GovernanceEvent::PolicyUpdated {
+                policy_id: "policy-1".to_string(),
+                layer: layer.clone(),
+                tenant_id: tenant_id.clone(),
+                timestamp: 1234567890,
+            };
+
+            let json = serde_json::to_string(&event).unwrap();
+            let deserialized: GovernanceEvent = serde_json::from_str(&json).unwrap();
+
+            match deserialized {
+                GovernanceEvent::PolicyUpdated { layer: l, .. } => {
+                    assert_eq!(l, layer);
+                }
+                _ => panic!("Expected PolicyUpdated variant"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_drift_detected_event() {
+        let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
+
+        let event = GovernanceEvent::DriftDetected {
+            project_id: "project-123".to_string(),
+            tenant_id: tenant_id.clone(),
+            drift_score: 0.75,
+            timestamp: 1234567890,
+        };
+
+        let json = serde_json::to_string(&event).unwrap();
+        // GovernanceEvent uses rename_all = "camelCase"
+        assert!(json.contains("driftDetected"));
+        assert!(json.contains("project-123"));
+        assert!(json.contains("0.75"));
+
+        let deserialized: GovernanceEvent = serde_json::from_str(&json).unwrap();
+        match deserialized {
+            GovernanceEvent::DriftDetected {
+                project_id,
+                drift_score,
+                ..
+            } => {
+                assert_eq!(project_id, "project-123");
+                assert!((drift_score - 0.75).abs() < 0.001);
+            }
+            _ => panic!("Expected DriftDetected variant"),
         }
     }
 }

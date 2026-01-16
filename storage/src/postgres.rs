@@ -26,7 +26,14 @@ impl PostgresBackend {
     }
 
     pub async fn new(connection_url: &str) -> Result<Self, PostgresError> {
-        let pool = Pool::connect(connection_url).await?;
+        use sqlx::postgres::PgPoolOptions;
+        use std::time::Duration;
+
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(Duration::from_secs(30))
+            .connect(connection_url)
+            .await?;
         Ok(Self { pool })
     }
 

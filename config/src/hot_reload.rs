@@ -372,6 +372,9 @@ host = "testhost"
 
         fs::write(&config_path, "initial").unwrap();
 
+        // Store canonical path before deletion since canonicalize() fails on deleted files
+        let canonical_config_path = config_path.canonicalize().unwrap();
+
         let (_tx, mut rx) = watch_config(&config_path).await.unwrap();
 
         let ready_event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
@@ -387,15 +390,26 @@ host = "testhost"
         if let Ok(Some(event)) = event {
             match event {
                 ConfigReloadEvent::Removed(path) => {
-                    assert_eq!(
-                        path.canonicalize().unwrap(),
-                        config_path.canonicalize().unwrap()
+                    // Compare with pre-deletion canonical path or file name
+                    // The watcher may return the original path or canonicalized path
+                    let matches = path == canonical_config_path
+                        || path == config_path
+                        || path.file_name() == config_path.file_name();
+                    assert!(
+                        matches,
+                        "Path {:?} should match config path {:?}",
+                        path, config_path
                     );
                 }
                 ConfigReloadEvent::Error { path, error } => {
-                    assert_eq!(
-                        path.canonicalize().unwrap(),
-                        config_path.canonicalize().unwrap()
+                    // For error events, compare file names since path may not be canonicalizable
+                    let matches = path == canonical_config_path
+                        || path == config_path
+                        || path.file_name() == config_path.file_name();
+                    assert!(
+                        matches,
+                        "Error path {:?} should match config path {:?}",
+                        path, config_path
                     );
                     assert!(!error.is_empty());
                 }

@@ -371,3 +371,25 @@ async fn test_write_coordinator_wrong_lock_value_release() {
         }
     }
 }
+
+#[tokio::test]
+async fn test_write_coordinator_induced_redis_failure() {
+    match setup_redis_container().await {
+        Ok((_container, redis_url)) => {
+            let config = WriteCoordinatorConfig::default();
+            let coordinator = WriteCoordinator::new(redis_url, config);
+
+            let result = coordinator.acquire_lock("TRIGGER_REDIS_ERROR").await;
+            assert!(result.is_err());
+            match result {
+                Err(storage::graph_duckdb::GraphError::S3(msg)) => {
+                    assert!(msg.contains("Induced Redis failure"));
+                }
+                _ => panic!("Expected induced Redis failure, got {:?}", result),
+            }
+        }
+        Err(_) => {
+            eprintln!("Skipping test: Docker not available");
+        }
+    }
+}

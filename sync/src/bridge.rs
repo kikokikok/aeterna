@@ -3279,4 +3279,177 @@ mod tests {
         // Then: Should succeed (no-op)
         assert!(result.is_ok());
     }
+
+    #[tokio::test]
+    async fn test_rollback_with_checkpoint() {
+        let tenant_id = TenantId::default();
+        let mut checkpoints_map = HashMap::new();
+        let mut checkpoint_state = SyncState::default();
+        checkpoint_state.version = "5".to_string();
+        checkpoint_state
+            .knowledge_hashes
+            .insert("old_item.md".to_string(), "old_hash".to_string());
+        checkpoints_map.insert(tenant_id.clone(), checkpoint_state);
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            states: Arc::new(RwLock::new(HashMap::new())),
+            checkpoints: Arc::new(RwLock::new(checkpoints_map)),
+        };
+
+        let result = sync_manager.rollback(&tenant_id).await;
+        assert!(result.is_ok());
+
+        let state = sync_manager.get_or_load_state(&tenant_id).await.unwrap();
+        assert_eq!(state.version, "5");
+        assert!(state.knowledge_hashes.contains_key("old_item.md"));
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_persists_all_states() {
+        let tenant_id = TenantId::default();
+        let mut states_map = HashMap::new();
+        let mut state = SyncState::default();
+        state.version = "10".to_string();
+        states_map.insert(tenant_id.clone(), state);
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            states: Arc::new(RwLock::new(states_map)),
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
+        };
+
+        let result = sync_manager.shutdown().await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_delta_result_default() {
+        let delta = DeltaResult::default();
+        assert!(delta.added.is_empty());
+        assert!(delta.updated.is_empty());
+        assert!(delta.deleted.is_empty());
+        assert!(delta.unchanged.is_empty());
+    }
+
+    #[test]
+    fn test_delta_result_with_items() {
+        let entry = KnowledgeEntry {
+            path: "test.md".to_string(),
+            content: "content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            metadata: HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: 0,
+            summaries: HashMap::new(),
+        };
+
+        let delta = DeltaResult {
+            added: vec![entry.clone()],
+            updated: vec![entry],
+            deleted: vec!["deleted.md".to_string()],
+            unchanged: vec!["unchanged.md".to_string()],
+        };
+
+        assert_eq!(delta.added.len(), 1);
+        assert_eq!(delta.updated.len(), 1);
+        assert_eq!(delta.deleted.len(), 1);
+        assert_eq!(delta.unchanged.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_create_checkpoint() {
+        let tenant_id = TenantId::default();
+        let mut states_map = HashMap::new();
+        let mut state = SyncState::default();
+        state.version = "3".to_string();
+        state
+            .knowledge_hashes
+            .insert("item.md".to_string(), "hash123".to_string());
+        states_map.insert(tenant_id.clone(), state);
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            states: Arc::new(RwLock::new(states_map)),
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
+        };
+
+        sync_manager.create_checkpoint(&tenant_id).await;
+
+        let checkpoints = sync_manager.checkpoints.read().await;
+        assert!(checkpoints.contains_key(&tenant_id));
+        let checkpoint = checkpoints.get(&tenant_id).unwrap();
+        assert_eq!(checkpoint.version, "3");
+    }
+
+    #[tokio::test]
+    async fn test_get_or_load_state_cached() {
+        let tenant_id = TenantId::default();
+        let mut states_map = HashMap::new();
+        let mut state = SyncState::default();
+        state.version = "7".to_string();
+        states_map.insert(tenant_id.clone(), state);
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            states: Arc::new(RwLock::new(states_map)),
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
+        };
+
+        let loaded = sync_manager.get_or_load_state(&tenant_id).await.unwrap();
+        assert_eq!(loaded.version, "7");
+    }
+
+    #[tokio::test]
+    async fn test_update_state() {
+        let tenant_id = TenantId::default();
+
+        let sync_manager = SyncManager {
+            memory_manager: Arc::new(MemoryManager::new()),
+            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
+            governance_engine: Arc::new(GovernanceEngine::new()),
+            governance_client: None,
+            deployment_config: DeploymentConfig::default(),
+            federation_manager: None,
+            persister: Arc::new(MockPersister),
+            states: Arc::new(RwLock::new(HashMap::new())),
+            checkpoints: Arc::new(RwLock::new(HashMap::new())),
+        };
+
+        let mut new_state = SyncState::default();
+        new_state.version = "15".to_string();
+
+        sync_manager.update_state(&tenant_id, new_state).await;
+
+        let states = sync_manager.states.read().await;
+        assert!(states.contains_key(&tenant_id));
+        assert_eq!(states.get(&tenant_id).unwrap().version, "15");
+    }
 }

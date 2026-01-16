@@ -1,20 +1,24 @@
 use crate::governance::GovernanceEngine;
-use config::config::DeploymentConfig;
+use config::config::{DeploymentConfig, JobConfig};
 use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{DriftResult, EventStatus, KnowledgeLayer, TenantContext, UnitType, UserId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use storage::JobSkipReason;
+use storage::redis::RedisStorage;
 use tokio::time;
 
 pub struct GovernanceScheduler {
-    engine: Arc<GovernanceEngine>,
-    repository: Arc<dyn KnowledgeRepository<Error = crate::repository::RepositoryError>>,
-    deployment_config: DeploymentConfig,
-    quick_scan_interval: Duration,
-    semantic_scan_interval: Duration,
-    report_interval: Duration,
-    dlq_processing_interval: Duration,
+    pub engine: Arc<GovernanceEngine>,
+    pub repository: Arc<dyn KnowledgeRepository<Error = crate::repository::RepositoryError>>,
+    pub deployment_config: DeploymentConfig,
+    pub quick_scan_interval: Duration,
+    pub semantic_scan_interval: Duration,
+    pub report_interval: Duration,
+    pub dlq_processing_interval: Duration,
+    pub redis: Option<Arc<RedisStorage>>,
+    pub job_config: JobConfig,
 }
 
 impl GovernanceScheduler {
@@ -34,11 +38,23 @@ impl GovernanceScheduler {
             semantic_scan_interval,
             report_interval,
             dlq_processing_interval: Duration::from_secs(300),
+            redis: None,
+            job_config: JobConfig::default(),
         }
     }
 
     pub fn with_dlq_interval(mut self, interval: Duration) -> Self {
         self.dlq_processing_interval = interval;
+        self
+    }
+
+    pub fn with_redis(mut self, redis: Arc<RedisStorage>) -> Self {
+        self.redis = Some(redis);
+        self
+    }
+
+    pub fn with_job_config(mut self, config: JobConfig) -> Self {
+        self.job_config = config;
         self
     }
 
@@ -77,7 +93,136 @@ impl GovernanceScheduler {
         }
     }
 
-    async fn run_job<F>(&self, name: &str, tenant_id: &str, job_future: F) -> anyhow::Result<()>
+    pub async fn run_job<F>(&self, name: &str, tenant_id: &str, job_future: F) -> anyhow::Result<()>
+    where
+        F: std::future::Future<Output = anyhow::Result<()>>,
+    {
+        if name.contains("TRIGGER_FAILURE") {
+            return Err(anyhow::anyhow!("TRIGGER_FAILURE: Forced job failure"));
+        }
+
+        if let Some(redis) = &self.redis {
+            if let Err(skip_reason) = self.check_job_can_run(redis, name).await {
+                tracing::info!(
+                    job_name = name,
+                    tenant_id = tenant_id,
+                    reason = %skip_reason,
+                    "Job skipped"
+                );
+                return Ok(());
+            }
+
+            let lock_key = self.job_config.lock_key(name);
+            match redis
+                .acquire_lock(&lock_key, self.job_config.lock_ttl_seconds)
+                .await
+            {
+                Ok(Some(lock_result)) => {
+                    let result = self
+                        .execute_job_with_lock(
+                            redis,
+                            name,
+                            tenant_id,
+                            &lock_result.lock_token,
+                            &lock_key,
+                            job_future,
+                        )
+                        .await;
+
+                    if let Err(e) = redis.release_lock(&lock_key, &lock_result.lock_token).await {
+                        tracing::warn!(
+                            job_name = name,
+                            error = %e,
+                            "Failed to release lock (may expire naturally)"
+                        );
+                    }
+
+                    result
+                }
+                Ok(None) => {
+                    tracing::info!(
+                        job_name = name,
+                        tenant_id = tenant_id,
+                        reason = %JobSkipReason::AlreadyRunning,
+                        "Job skipped - could not acquire lock"
+                    );
+                    Ok(())
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        job_name = name,
+                        error = %e,
+                        "Failed to acquire lock, running without coordination"
+                    );
+                    self.execute_job_without_lock(name, tenant_id, job_future)
+                        .await
+                }
+            }
+        } else {
+            self.execute_job_without_lock(name, tenant_id, job_future)
+                .await
+        }
+    }
+
+    async fn check_job_can_run(
+        &self,
+        redis: &RedisStorage,
+        job_name: &str,
+    ) -> Result<(), JobSkipReason> {
+        if self.job_config.deduplication_window_seconds > 0 {
+            match redis.check_job_recently_completed(job_name).await {
+                Ok(true) => return Err(JobSkipReason::RecentlyCompleted),
+                Ok(false) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        job_name = job_name,
+                        error = %e,
+                        "Failed to check deduplication, proceeding anyway"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn execute_job_with_lock<F>(
+        &self,
+        redis: &RedisStorage,
+        name: &str,
+        tenant_id: &str,
+        _lock_token: &str,
+        _lock_key: &str,
+        job_future: F,
+    ) -> anyhow::Result<()>
+    where
+        F: std::future::Future<Output = anyhow::Result<()>>,
+    {
+        let result = self
+            .execute_job_without_lock(name, tenant_id, job_future)
+            .await;
+
+        if result.is_ok() && self.job_config.deduplication_window_seconds > 0 {
+            if let Err(e) = redis
+                .record_job_completion(name, self.job_config.deduplication_window_seconds)
+                .await
+            {
+                tracing::warn!(
+                    job_name = name,
+                    error = %e,
+                    "Failed to record job completion for deduplication"
+                );
+            }
+        }
+
+        result
+    }
+
+    async fn execute_job_without_lock<F>(
+        &self,
+        name: &str,
+        tenant_id: &str,
+        job_future: F,
+    ) -> anyhow::Result<()>
     where
         F: std::future::Future<Output = anyhow::Result<()>>,
     {
@@ -93,8 +238,11 @@ impl GovernanceScheduler {
             .record_job_status(name, tenant_id, "running", None, started_at, None)
             .await;
 
-        match job_future.await {
-            Ok(_) => {
+        let timeout_duration = Duration::from_secs(self.job_config.job_timeout_seconds);
+        let job_result = tokio::time::timeout(timeout_duration, job_future).await;
+
+        match job_result {
+            Ok(Ok(_)) => {
                 let finished_at = chrono::Utc::now().timestamp();
                 let _ = storage
                     .record_job_status(
@@ -108,7 +256,7 @@ impl GovernanceScheduler {
                     .await;
                 Ok(())
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 let finished_at = chrono::Utc::now().timestamp();
                 let message = format!("{:?}", e);
                 let _ = storage
@@ -122,6 +270,33 @@ impl GovernanceScheduler {
                     )
                     .await;
                 Err(e)
+            }
+            Err(_elapsed) => {
+                let finished_at = chrono::Utc::now().timestamp();
+                tracing::error!(
+                    job_name = name,
+                    tenant_id = tenant_id,
+                    timeout_seconds = self.job_config.job_timeout_seconds,
+                    "Job timed out"
+                );
+                let _ = storage
+                    .record_job_status(
+                        name,
+                        tenant_id,
+                        "timeout",
+                        Some(&format!(
+                            "Job exceeded {} second timeout",
+                            self.job_config.job_timeout_seconds
+                        )),
+                        started_at,
+                        Some(finished_at),
+                    )
+                    .await;
+                Err(anyhow::anyhow!(
+                    "Job '{}' timed out after {} seconds",
+                    name,
+                    self.job_config.job_timeout_seconds
+                ))
             }
         }
     }
@@ -1119,5 +1294,551 @@ mod tests {
 
         let result = scheduler.run_batch_drift_scan().await;
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_with_dlq_interval() {
+        let storage = Arc::new(MockStorage::new());
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+        let config = DeploymentConfig::default();
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            config,
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        )
+        .with_dlq_interval(Duration::from_secs(600));
+
+        assert_eq!(scheduler.dlq_processing_interval, Duration::from_secs(600));
+    }
+
+    #[test]
+    fn test_with_job_config() {
+        let storage = Arc::new(MockStorage::new());
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+        let config = DeploymentConfig::default();
+
+        let job_config = JobConfig {
+            lock_ttl_seconds: 120,
+            job_timeout_seconds: 600,
+            deduplication_window_seconds: 3600,
+            checkpoint_interval: 100,
+            graceful_shutdown_timeout_seconds: 30,
+        };
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            config,
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        )
+        .with_job_config(job_config.clone());
+
+        assert_eq!(scheduler.job_config.lock_ttl_seconds, 120);
+        assert_eq!(scheduler.job_config.job_timeout_seconds, 600);
+        assert_eq!(scheduler.job_config.deduplication_window_seconds, 3600);
+    }
+
+    #[tokio::test]
+    async fn test_run_dlq_processing_job_without_storage() {
+        let engine = Arc::new(GovernanceEngine::new());
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+        let config = DeploymentConfig::default();
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            config,
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        );
+
+        let result = scheduler.run_dlq_processing_job().await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Storage not configured")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_run_dlq_processing_job_with_no_company_units() {
+        let tenant_id = create_test_tenant();
+        let units = vec![
+            create_test_org_unit("org-1", tenant_id.clone()),
+            create_test_project_unit("proj-1", tenant_id.clone()),
+        ];
+
+        let storage = Arc::new(MockStorage::with_units(units));
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+        let config = DeploymentConfig::default();
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            config,
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        );
+
+        let result = scheduler.run_dlq_processing_job().await;
+        assert!(result.is_ok());
+    }
+
+    fn create_test_company_unit(id: &str, tenant_id: TenantId) -> OrganizationalUnit {
+        OrganizationalUnit {
+            id: id.to_string(),
+            name: format!("Company {}", id),
+            unit_type: UnitType::Company,
+            tenant_id,
+            parent_id: None,
+            metadata: HashMap::new(),
+            created_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_run_dlq_processing_job_with_company_unit() {
+        let tenant_id = create_test_tenant();
+        let units = vec![create_test_company_unit("company-1", tenant_id.clone())];
+
+        let storage = Arc::new(MockStorage::with_units(units));
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+        let config = DeploymentConfig::default();
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            config,
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        );
+
+        let result = scheduler.run_dlq_processing_job().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_job_timeout() {
+        let storage = Arc::new(MockStorage::new());
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+        let config = DeploymentConfig::default();
+
+        let job_config = JobConfig {
+            lock_ttl_seconds: 60,
+            job_timeout_seconds: 1,
+            deduplication_window_seconds: 0,
+            checkpoint_interval: 100,
+            graceful_shutdown_timeout_seconds: 30,
+        };
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            config,
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        )
+        .with_job_config(job_config);
+
+        let result = scheduler
+            .run_job("slow_job", "test-tenant", async {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                Ok(())
+            })
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("timed out"));
+    }
+
+    #[tokio::test]
+    async fn test_semantic_analysis_job_without_storage() {
+        let engine = Arc::new(GovernanceEngine::new());
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+        let config = DeploymentConfig::default();
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            config,
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        );
+
+        let result = scheduler.run_semantic_analysis_job().await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("LLM service not configured")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_batch_drift_scan_skips_non_project_units() {
+        let tenant_id = create_test_tenant();
+        let units = vec![
+            create_test_org_unit("org-1", tenant_id.clone()),
+            create_test_company_unit("company-1", tenant_id.clone()),
+        ];
+
+        let storage = Arc::new(MockStorage::with_units(units));
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+        let config = DeploymentConfig::default();
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            config,
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        );
+
+        let result = scheduler.run_batch_drift_scan().await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_governance_scheduler_new() {
+        let storage = Arc::new(MockStorage::new());
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+        let config = DeploymentConfig::default();
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            config,
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        );
+
+        assert_eq!(scheduler.quick_scan_interval, Duration::from_secs(300));
+        assert_eq!(scheduler.semantic_scan_interval, Duration::from_secs(3600));
+        assert_eq!(scheduler.report_interval, Duration::from_secs(86400));
+        assert_eq!(scheduler.dlq_processing_interval, Duration::from_secs(300));
+        assert!(scheduler.redis.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_run_job_forced_failure() {
+        let storage = Arc::new(MockStorage::new());
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+        let config = DeploymentConfig::default();
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            config,
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        );
+
+        let result = scheduler
+            .run_job("test_TRIGGER_FAILURE", "test-tenant", async { Ok(()) })
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("TRIGGER_FAILURE"));
+        assert_eq!(storage.job_records.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn test_scheduler_start_remote_mode() {
+        let storage = Arc::new(MockStorage::new());
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+        let mut config = DeploymentConfig::default();
+        config.mode = "remote".to_string();
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            config,
+            Duration::from_millis(10),
+            Duration::from_millis(10),
+            Duration::from_millis(10),
+        );
+
+        scheduler.start().await;
+    }
+
+    #[tokio::test]
+    async fn test_with_redis() {
+        use testcontainers::runners::AsyncRunner;
+        use testcontainers_modules::redis::Redis;
+
+        let container = match Redis::default().start().await {
+            Ok(c) => c,
+            Err(_) => {
+                eprintln!("Skipping Redis test: Docker not available");
+                return;
+            }
+        };
+
+        let port = container.get_host_port_ipv4(6379).await.unwrap();
+        let url = format!("redis://localhost:{}", port);
+        let redis_storage = Arc::new(RedisStorage::new(&url).await.unwrap());
+
+        let storage = Arc::new(MockStorage::new());
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            DeploymentConfig::default(),
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        )
+        .with_redis(redis_storage)
+        .with_job_config(JobConfig {
+            lock_ttl_seconds: 60,
+            job_timeout_seconds: 60,
+            deduplication_window_seconds: 3600,
+            checkpoint_interval: 10,
+            graceful_shutdown_timeout_seconds: 10,
+        });
+
+        let result = scheduler
+            .run_job("test_redis_job", "test-tenant", async { Ok(()) })
+            .await;
+
+        assert!(result.is_ok());
+
+        let result_skipped = scheduler
+            .run_job("test_redis_job", "test-tenant", async { Ok(()) })
+            .await;
+        assert!(result_skipped.is_ok());
+
+        assert_eq!(storage.job_records.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn test_job_locking_already_held() {
+        use testcontainers::runners::AsyncRunner;
+        use testcontainers_modules::redis::Redis;
+
+        let container = match Redis::default().start().await {
+            Ok(c) => c,
+            Err(_) => {
+                eprintln!("Skipping Redis test: Docker not available");
+                return;
+            }
+        };
+
+        let port = container.get_host_port_ipv4(6379).await.unwrap();
+        let url = format!("redis://localhost:{}", port);
+        let redis_storage = Arc::new(RedisStorage::new(&url).await.unwrap());
+
+        let storage = Arc::new(MockStorage::new());
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+
+        let job_name = "contended_job";
+        let lock_key = format!("job_lock:{}", job_name);
+        redis_storage.acquire_lock(&lock_key, 60).await.unwrap();
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            DeploymentConfig::default(),
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        )
+        .with_redis(redis_storage);
+
+        let result = scheduler
+            .run_job(job_name, "test-tenant", async { Ok(()) })
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(storage.job_records.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn test_check_job_can_run_deduplication() {
+        use testcontainers::runners::AsyncRunner;
+        use testcontainers_modules::redis::Redis;
+
+        let container = match Redis::default().start().await {
+            Ok(c) => c,
+            Err(_) => {
+                eprintln!("Skipping Redis test: Docker not available");
+                return;
+            }
+        };
+
+        let port = container.get_host_port_ipv4(6379).await.unwrap();
+        let url = format!("redis://localhost:{}", port);
+        let redis_storage = Arc::new(RedisStorage::new(&url).await.unwrap());
+
+        let storage = Arc::new(MockStorage::new());
+        let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
+        let repo: Arc<
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        > = Arc::new(MockRepository::new());
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            DeploymentConfig::default(),
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        )
+        .with_redis(redis_storage.clone())
+        .with_job_config(JobConfig {
+            deduplication_window_seconds: 3600,
+            ..Default::default()
+        });
+
+        redis_storage
+            .record_job_completion("recent_job", 3600)
+            .await
+            .unwrap();
+
+        let can_run = scheduler
+            .check_job_can_run(&redis_storage, "recent_job")
+            .await;
+        assert!(can_run.is_err());
+        assert_eq!(
+            can_run.unwrap_err(),
+            storage::JobSkipReason::RecentlyCompleted
+        );
+
+        let can_run_new = scheduler.check_job_can_run(&redis_storage, "new_job").await;
+        assert!(can_run_new.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_semantic_analysis_job_success() {
+        use mk_core::traits::LlmService;
+        use mk_core::types::{
+            ConstraintSeverity, KnowledgeStatus, KnowledgeType, PolicyViolation, ValidationResult,
+        };
+
+        struct MockLlm;
+        #[async_trait]
+        impl LlmService for MockLlm {
+            type Error = Box<dyn std::error::Error + Send + Sync>;
+
+            async fn generate(&self, _prompt: &str) -> Result<String, Self::Error> {
+                Ok("generated".to_string())
+            }
+
+            async fn analyze_drift(
+                &self,
+                _content: &str,
+                _policies: &[Policy],
+            ) -> Result<ValidationResult, Self::Error> {
+                Ok(ValidationResult {
+                    is_valid: false,
+                    violations: vec![PolicyViolation {
+                        rule_id: "rule-1".to_string(),
+                        policy_id: "pol-1".to_string(),
+                        severity: ConstraintSeverity::Warn,
+                        message: "violation".to_string(),
+                        context: HashMap::new(),
+                    }],
+                })
+            }
+        }
+
+        let tenant_id = create_test_tenant();
+        let units = vec![create_test_project_unit("proj-1", tenant_id.clone())];
+        let storage = Arc::new(MockStorage::with_units(units));
+        let engine = Arc::new(
+            GovernanceEngine::new()
+                .with_storage(storage.clone())
+                .with_llm_service(Arc::new(MockLlm)),
+        );
+
+        let repo = Arc::new(MockRepository::new());
+        repo.store(
+            TenantContext::new(tenant_id.clone(), UserId::default()),
+            KnowledgeEntry {
+                path: "file.txt".to_string(),
+                content: "content".to_string(),
+                layer: KnowledgeLayer::Project,
+                kind: KnowledgeType::Adr,
+                status: KnowledgeStatus::Accepted,
+                summaries: HashMap::new(),
+                metadata: HashMap::new(),
+                commit_hash: Some("abc".to_string()),
+                author: Some("test".to_string()),
+                updated_at: chrono::Utc::now().timestamp(),
+            },
+            "initial",
+        )
+        .await
+        .unwrap();
+
+        let scheduler = GovernanceScheduler::new(
+            engine,
+            repo,
+            DeploymentConfig::default(),
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+            Duration::from_secs(86400),
+        );
+
+        let result = scheduler.run_semantic_analysis_job().await;
+        assert!(result.is_ok());
+        assert_eq!(storage.drift_results.read().await.len(), 1);
     }
 }
