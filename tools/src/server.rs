@@ -808,4 +808,93 @@ mod tests {
 
         let _response = server.handle_request(request).await;
     }
+
+    #[test]
+    fn test_json_rpc_error_constructors() {
+        let invalid_params = JsonRpcError::invalid_params("Invalid param");
+        assert_eq!(invalid_params.code, -32602);
+        assert_eq!(invalid_params.message, "Invalid param");
+        assert!(invalid_params.data.is_none());
+
+        let method_not_found = JsonRpcError::method_not_found("Not found");
+        assert_eq!(method_not_found.code, -32601);
+        assert_eq!(method_not_found.message, "Not found");
+
+        let internal = JsonRpcError::internal_error("Internal error");
+        assert_eq!(internal.code, -32000);
+        assert_eq!(internal.message, "Internal error");
+
+        let timeout = JsonRpcError::request_timeout("Timeout");
+        assert_eq!(timeout.code, -32001);
+        assert_eq!(timeout.message, "Timeout");
+    }
+
+    #[test]
+    fn test_list_tools() {
+        let registry = crate::tools::ToolRegistry::new();
+        let tools = registry.list_tools();
+        assert!(tools.is_empty());
+    }
+
+    #[test]
+    fn test_json_rpc_request_serde() {
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "test".to_string(),
+            params: Some(json!({"key": "value"})),
+        };
+
+        let serialized = serde_json::to_string(&request).unwrap();
+        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.jsonrpc, "2.0");
+        assert_eq!(deserialized.method, "test");
+        assert!(deserialized.params.is_some());
+    }
+
+    #[test]
+    fn test_json_rpc_response_serde() {
+        let response_success = JsonRpcResponse {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            result: Some(json!({"data": "test"})),
+            error: None,
+        };
+
+        let serialized = serde_json::to_string(&response_success).unwrap();
+        assert!(!serialized.contains("error"));
+
+        let response_error = JsonRpcResponse {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            result: None,
+            error: Some(JsonRpcError::internal_error("fail")),
+        };
+
+        let serialized_err = serde_json::to_string(&response_error).unwrap();
+        assert!(!serialized_err.contains("result"));
+        assert!(serialized_err.contains("error"));
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_missing_tool_name() {
+        let server = setup_server().await;
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "tools/call".to_string(),
+            params: Some(json!({
+                "tenantContext": {
+                    "tenant_id": "c1",
+                    "user_id": "u1"
+                },
+                "arguments": {}
+            })),
+        };
+
+        let response = server.handle_request(request).await;
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32602);
+    }
 }

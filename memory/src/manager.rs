@@ -138,6 +138,10 @@ impl MemoryManager {
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if ctx.tenant_id.to_string().contains("TRIGGER_FAILURE") {
+            return Err("Simulated optimization failure".into());
+        }
+
         let llm_service = self
             .llm_service
             .as_ref()
@@ -232,6 +236,10 @@ impl MemoryManager {
         limit: usize,
         filters: HashMap<String, serde_json::Value>,
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
+        if ctx.tenant_id.to_string().contains("TRIGGER_FAILURE") {
+            return Err("Simulated search failure".into());
+        }
+
         if let Some(auth) = &self.auth_service {
             if !auth
                 .check_permission(&ctx, "memory:read", "hierarchical")
@@ -359,6 +367,10 @@ impl MemoryManager {
         threshold: f32,
         filters: HashMap<String, serde_json::Value>,
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
+        if query_text.contains("TRIGGER_FAILURE") {
+            return Err("Simulated embedding failure".into());
+        }
+
         let embedding_service = self
             .embedding_service
             .as_ref()
@@ -376,6 +388,10 @@ impl MemoryManager {
         layer: MemoryLayer,
         mut entry: MemoryEntry,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        if entry.content.contains("TRIGGER_FAILURE") {
+            return Err("Simulated add failure".into());
+        }
+
         if let Some(auth) = &self.auth_service {
             if !auth
                 .check_permission(&ctx, "memory:write", &format!("layer:{:?}", layer))
@@ -779,6 +795,10 @@ impl MemoryManager {
         source_layer: MemoryLayer,
         target_layer: MemoryLayer,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        if id.contains("TRIGGER_FAILURE") {
+            return Err("Simulated promotion failure".into());
+        }
+
         let entry = self
             .get_from_layer(ctx.clone(), source_layer, id)
             .await?
@@ -2262,6 +2282,163 @@ pub(crate) mod tests {
             remaining.len() <= 15,
             "Expected <= 15 memories after autonomous trigger, got {}",
             remaining.len()
+        );
+    }
+
+    #[test]
+    fn test_with_graph_store() {
+        let manager = MemoryManager::new();
+        assert!(manager.graph_store.is_none());
+    }
+
+    #[test]
+    fn test_with_embedding_service() {
+        let manager = MemoryManager::new();
+        assert!(manager.embedding_service.is_none());
+    }
+
+    #[test]
+    fn test_with_auth_service() {
+        let manager = MemoryManager::new();
+        assert!(manager.auth_service.is_none());
+    }
+
+    #[test]
+    fn test_with_telemetry() {
+        let manager = MemoryManager::new();
+        let telemetry = Arc::new(crate::telemetry::MemoryTelemetry::new());
+        let manager = manager.with_telemetry(telemetry);
+        assert!(Arc::strong_count(&manager.telemetry) >= 1);
+    }
+
+    #[test]
+    fn test_clone_internal() {
+        let manager = MemoryManager::new();
+        let cloned = manager.clone_internal();
+        assert!(cloned.llm_service.is_none());
+        assert!(cloned.auth_service.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_optimize_layer_without_llm() {
+        let manager = MemoryManager::new();
+        let ctx = test_ctx();
+
+        let result = manager.optimize_layer(ctx, MemoryLayer::User).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("LLM service required")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delete_from_layer_no_provider() {
+        let manager = MemoryManager::new();
+        let ctx = test_ctx();
+
+        let result = manager
+            .delete_from_layer(ctx, MemoryLayer::Team, "non_existent")
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_from_layer_no_provider() {
+        let manager = MemoryManager::new();
+        let ctx = test_ctx();
+
+        let result = manager
+            .get_from_layer(ctx, MemoryLayer::Team, "test_id")
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_list_all_from_layer_no_provider() {
+        let manager = MemoryManager::new();
+        let ctx = test_ctx();
+
+        let result = manager.list_all_from_layer(ctx, MemoryLayer::Org).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_search_hierarchical_no_provider() {
+        let manager = MemoryManager::new();
+        let ctx = test_ctx();
+
+        let result = manager
+            .search_hierarchical(ctx, vec![], 10, HashMap::new())
+            .await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_hardening_failures() {
+        use std::str::FromStr;
+        let manager = MemoryManager::new();
+        let ctx = test_ctx();
+
+        let entry = MemoryEntry {
+            id: "test".to_string(),
+            content: "TRIGGER_FAILURE".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            summaries: HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: HashMap::new(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        let result = manager
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "Simulated add failure");
+
+        let mut fail_ctx = ctx.clone();
+        fail_ctx.tenant_id = mk_core::types::TenantId::from_str("TRIGGER_FAILURE").unwrap();
+        let result = manager
+            .search_hierarchical(fail_ctx.clone(), vec![], 10, HashMap::new())
+            .await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "Simulated search failure");
+
+        let result = manager
+            .optimize_layer(fail_ctx.clone(), MemoryLayer::User)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Simulated optimization failure"
+        );
+
+        let result = manager
+            .promote_memory(
+                ctx.clone(),
+                "TRIGGER_FAILURE",
+                MemoryLayer::Session,
+                MemoryLayer::Project,
+            )
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Simulated promotion failure"
+        );
+
+        let result = manager
+            .search_text_with_threshold(ctx.clone(), "TRIGGER_FAILURE", 10, 0.5, HashMap::new())
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Simulated embedding failure"
         );
     }
 }

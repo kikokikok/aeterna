@@ -65,6 +65,10 @@ pub struct Config {
     /// Deployment mode configuration (Local, Hybrid, Remote)
     #[serde(default)]
     pub deployment: DeploymentConfig,
+
+    /// Job coordination configuration (locks, timeouts, checkpoints)
+    #[serde(default)]
+    pub job: JobConfig,
 }
 
 impl Config {
@@ -858,6 +862,71 @@ impl Default for MemoryConfig {
             decay_rate: default_decay_rate(),
             optimization_trigger_count: default_optimization_trigger_count(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
+pub struct JobConfig {
+    #[serde(default = "default_lock_ttl_seconds")]
+    #[validate(range(min = 60, max = 7200))]
+    pub lock_ttl_seconds: u64,
+
+    #[serde(default = "default_job_timeout_seconds")]
+    #[validate(range(min = 30, max = 3600))]
+    pub job_timeout_seconds: u64,
+
+    #[serde(default = "default_deduplication_window_seconds")]
+    #[validate(range(min = 0, max = 3600))]
+    pub deduplication_window_seconds: u64,
+
+    #[serde(default = "default_checkpoint_interval")]
+    #[validate(range(min = 10, max = 1000))]
+    pub checkpoint_interval: usize,
+
+    #[serde(default = "default_graceful_shutdown_timeout_seconds")]
+    #[validate(range(min = 5, max = 300))]
+    pub graceful_shutdown_timeout_seconds: u64,
+}
+
+fn default_lock_ttl_seconds() -> u64 {
+    2100 // 35 minutes
+}
+
+fn default_job_timeout_seconds() -> u64 {
+    1800 // 30 minutes
+}
+
+fn default_deduplication_window_seconds() -> u64 {
+    300 // 5 minutes
+}
+
+fn default_checkpoint_interval() -> usize {
+    100
+}
+
+fn default_graceful_shutdown_timeout_seconds() -> u64 {
+    30
+}
+
+impl Default for JobConfig {
+    fn default() -> Self {
+        Self {
+            lock_ttl_seconds: default_lock_ttl_seconds(),
+            job_timeout_seconds: default_job_timeout_seconds(),
+            deduplication_window_seconds: default_deduplication_window_seconds(),
+            checkpoint_interval: default_checkpoint_interval(),
+            graceful_shutdown_timeout_seconds: default_graceful_shutdown_timeout_seconds(),
+        }
+    }
+}
+
+impl JobConfig {
+    pub fn lock_key(&self, job_name: &str) -> String {
+        format!("job_lock:{}", job_name)
+    }
+
+    pub fn should_checkpoint(&self, processed_count: usize) -> bool {
+        processed_count > 0 && processed_count % self.checkpoint_interval == 0
     }
 }
 
