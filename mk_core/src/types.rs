@@ -1167,6 +1167,124 @@ impl ConsumerState {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobCoordinationMetrics {
+    pub job_name: String,
+    pub tenant_id: TenantId,
+    pub total_runs: u64,
+    pub successful_runs: u64,
+    pub failed_runs: u64,
+    pub skipped_runs: u64,
+    pub timeout_count: u64,
+    pub total_duration_ms: u64,
+    pub last_run_at: Option<i64>,
+    pub last_success_at: Option<i64>,
+}
+
+impl JobCoordinationMetrics {
+    pub fn new(job_name: String, tenant_id: TenantId) -> Self {
+        Self {
+            job_name,
+            tenant_id,
+            total_runs: 0,
+            successful_runs: 0,
+            failed_runs: 0,
+            skipped_runs: 0,
+            timeout_count: 0,
+            total_duration_ms: 0,
+            last_run_at: None,
+            last_success_at: None,
+        }
+    }
+
+    pub fn record_run(&mut self, duration_ms: u64, success: bool) {
+        self.total_runs += 1;
+        self.total_duration_ms += duration_ms;
+        self.last_run_at = Some(chrono::Utc::now().timestamp());
+        if success {
+            self.successful_runs += 1;
+            self.last_success_at = self.last_run_at;
+        } else {
+            self.failed_runs += 1;
+        }
+    }
+
+    pub fn record_skip(&mut self) {
+        self.skipped_runs += 1;
+    }
+
+    pub fn record_timeout(&mut self) {
+        self.timeout_count += 1;
+        self.failed_runs += 1;
+    }
+
+    pub fn avg_duration_ms(&self) -> Option<f64> {
+        if self.total_runs == 0 {
+            None
+        } else {
+            Some(self.total_duration_ms as f64 / self.total_runs as f64)
+        }
+    }
+
+    pub fn success_rate(&self) -> f64 {
+        if self.total_runs == 0 {
+            1.0
+        } else {
+            self.successful_runs as f64 / self.total_runs as f64
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialJobResult {
+    pub job_name: String,
+    pub tenant_id: TenantId,
+    pub checkpoint_id: String,
+    pub processed_count: usize,
+    pub total_count: Option<usize>,
+    pub last_processed_id: Option<String>,
+    pub partial_data: serde_json::Value,
+    pub created_at: i64,
+}
+
+impl PartialJobResult {
+    pub fn new(job_name: String, tenant_id: TenantId) -> Self {
+        Self {
+            job_name,
+            tenant_id,
+            checkpoint_id: uuid::Uuid::new_v4().to_string(),
+            processed_count: 0,
+            total_count: None,
+            last_processed_id: None,
+            partial_data: serde_json::Value::Null,
+            created_at: chrono::Utc::now().timestamp(),
+        }
+    }
+
+    pub fn with_progress(mut self, processed: usize, total: Option<usize>) -> Self {
+        self.processed_count = processed;
+        self.total_count = total;
+        self
+    }
+
+    pub fn with_last_id(mut self, id: String) -> Self {
+        self.last_processed_id = Some(id);
+        self
+    }
+
+    pub fn with_data(mut self, data: serde_json::Value) -> Self {
+        self.partial_data = data;
+        self
+    }
+
+    pub fn progress_percentage(&self) -> Option<f64> {
+        self.total_count
+            .map(|total| (self.processed_count as f64 / total as f64) * 100.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1705,5 +1823,537 @@ mod tests {
         for event in events {
             assert_eq!(event.tenant_id().as_str(), "tenant-1");
         }
+    }
+
+    #[test]
+    fn test_role_display_name() {
+        assert_eq!(Role::Developer.display_name(), "Developer");
+        assert_eq!(Role::TechLead.display_name(), "Tech Lead");
+        assert_eq!(Role::Architect.display_name(), "Architect");
+        assert_eq!(Role::Admin.display_name(), "Admin");
+        assert_eq!(Role::Agent.display_name(), "Agent");
+    }
+
+    #[test]
+    fn test_drift_suppression_new() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let user_id = UserId::new("user1".to_string()).unwrap();
+
+        let suppression = DriftSuppression::new(
+            "proj-1".to_string(),
+            tenant_id.clone(),
+            "policy-1".to_string(),
+            "False positive".to_string(),
+            user_id.clone(),
+        );
+
+        assert_eq!(suppression.project_id, "proj-1");
+        assert_eq!(suppression.tenant_id, tenant_id);
+        assert_eq!(suppression.policy_id, "policy-1");
+        assert_eq!(suppression.reason, "False positive");
+        assert!(suppression.rule_pattern.is_none());
+        assert!(suppression.expires_at.is_none());
+        assert!(!suppression.id.is_empty());
+    }
+
+    #[test]
+    fn test_drift_suppression_with_pattern() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let user_id = UserId::new("user1".to_string()).unwrap();
+
+        let suppression = DriftSuppression::new(
+            "proj-1".to_string(),
+            tenant_id,
+            "policy-1".to_string(),
+            "Known issue".to_string(),
+            user_id,
+        )
+        .with_pattern(".*test.*".to_string());
+
+        assert_eq!(suppression.rule_pattern, Some(".*test.*".to_string()));
+    }
+
+    #[test]
+    fn test_drift_suppression_with_expiry() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let user_id = UserId::new("user1".to_string()).unwrap();
+        let future_time = chrono::Utc::now().timestamp() + 86400;
+
+        let suppression = DriftSuppression::new(
+            "proj-1".to_string(),
+            tenant_id,
+            "policy-1".to_string(),
+            "Temporary".to_string(),
+            user_id,
+        )
+        .with_expiry(future_time);
+
+        assert_eq!(suppression.expires_at, Some(future_time));
+    }
+
+    #[test]
+    fn test_drift_suppression_is_expired() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let user_id = UserId::new("user1".to_string()).unwrap();
+
+        let not_expired = DriftSuppression::new(
+            "proj-1".to_string(),
+            tenant_id.clone(),
+            "policy-1".to_string(),
+            "Not expired".to_string(),
+            user_id.clone(),
+        );
+        assert!(!not_expired.is_expired());
+
+        let future_expiry = DriftSuppression::new(
+            "proj-1".to_string(),
+            tenant_id.clone(),
+            "policy-1".to_string(),
+            "Future".to_string(),
+            user_id.clone(),
+        )
+        .with_expiry(chrono::Utc::now().timestamp() + 86400);
+        assert!(!future_expiry.is_expired());
+
+        let past_expiry = DriftSuppression::new(
+            "proj-1".to_string(),
+            tenant_id,
+            "policy-1".to_string(),
+            "Expired".to_string(),
+            user_id,
+        )
+        .with_expiry(chrono::Utc::now().timestamp() - 86400);
+        assert!(past_expiry.is_expired());
+    }
+
+    #[test]
+    fn test_drift_suppression_matches() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let user_id = UserId::new("user1".to_string()).unwrap();
+
+        let violation = PolicyViolation {
+            rule_id: "rule-1".to_string(),
+            policy_id: "policy-1".to_string(),
+            severity: ConstraintSeverity::Warn,
+            message: "Test violation message".to_string(),
+            context: std::collections::HashMap::new(),
+        };
+
+        let suppression_match = DriftSuppression::new(
+            "proj-1".to_string(),
+            tenant_id.clone(),
+            "policy-1".to_string(),
+            "Match all".to_string(),
+            user_id.clone(),
+        );
+        assert!(suppression_match.matches(&violation));
+
+        let suppression_no_match = DriftSuppression::new(
+            "proj-1".to_string(),
+            tenant_id.clone(),
+            "policy-2".to_string(),
+            "Different policy".to_string(),
+            user_id.clone(),
+        );
+        assert!(!suppression_no_match.matches(&violation));
+
+        let suppression_pattern_match = DriftSuppression::new(
+            "proj-1".to_string(),
+            tenant_id.clone(),
+            "policy-1".to_string(),
+            "Pattern match".to_string(),
+            user_id.clone(),
+        )
+        .with_pattern(".*violation.*".to_string());
+        assert!(suppression_pattern_match.matches(&violation));
+
+        let suppression_pattern_no_match = DriftSuppression::new(
+            "proj-1".to_string(),
+            tenant_id,
+            "policy-1".to_string(),
+            "Pattern no match".to_string(),
+            user_id,
+        )
+        .with_pattern(".*xyz.*".to_string());
+        assert!(!suppression_pattern_no_match.matches(&violation));
+    }
+
+    #[test]
+    fn test_drift_config_default() {
+        let config = DriftConfig::default();
+        assert!(config.project_id.is_empty());
+        assert_eq!(config.threshold, 0.2);
+        assert_eq!(config.low_confidence_threshold, 0.7);
+        assert!(!config.auto_suppress_info);
+    }
+
+    #[test]
+    fn test_drift_config_new() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let config = DriftConfig::new("proj-1".to_string(), tenant_id.clone());
+
+        assert_eq!(config.project_id, "proj-1");
+        assert_eq!(config.tenant_id, tenant_id);
+        assert_eq!(config.threshold, 0.2);
+    }
+
+    #[test]
+    fn test_drift_config_for_project() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let config = DriftConfig::for_project("proj-2".to_string(), tenant_id.clone());
+
+        assert_eq!(config.project_id, "proj-2");
+        assert_eq!(config.tenant_id, tenant_id);
+    }
+
+    #[test]
+    fn test_drift_config_with_threshold() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let config = DriftConfig::new("proj-1".to_string(), tenant_id).with_threshold(0.5);
+
+        assert_eq!(config.threshold, 0.5);
+    }
+
+    #[test]
+    fn test_drift_config_with_threshold_clamped() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+
+        let config_low =
+            DriftConfig::new("proj-1".to_string(), tenant_id.clone()).with_threshold(-0.5);
+        assert_eq!(config_low.threshold, 0.0);
+
+        let config_high = DriftConfig::new("proj-1".to_string(), tenant_id).with_threshold(1.5);
+        assert_eq!(config_high.threshold, 1.0);
+    }
+
+    #[test]
+    fn test_drift_result_active_violation_count() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let violations = vec![
+            PolicyViolation {
+                rule_id: "r1".to_string(),
+                policy_id: "p1".to_string(),
+                severity: ConstraintSeverity::Warn,
+                message: "Warning".to_string(),
+                context: std::collections::HashMap::new(),
+            },
+            PolicyViolation {
+                rule_id: "r2".to_string(),
+                policy_id: "p1".to_string(),
+                severity: ConstraintSeverity::Block,
+                message: "Blocking".to_string(),
+                context: std::collections::HashMap::new(),
+            },
+        ];
+
+        let result = DriftResult::new("proj-1".to_string(), tenant_id, violations);
+        assert_eq!(result.active_violation_count(), 2);
+    }
+
+    #[test]
+    fn test_drift_result_suppressed_count() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let mut result = DriftResult::new("proj-1".to_string(), tenant_id, vec![]);
+        result.suppressed_violations = vec![PolicyViolation {
+            rule_id: "r1".to_string(),
+            policy_id: "p1".to_string(),
+            severity: ConstraintSeverity::Info,
+            message: "Suppressed".to_string(),
+            context: std::collections::HashMap::new(),
+        }];
+
+        assert_eq!(result.suppressed_count(), 1);
+    }
+
+    #[test]
+    fn test_job_coordination_metrics_new() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let metrics = JobCoordinationMetrics::new("drift_scan".to_string(), tenant_id.clone());
+
+        assert_eq!(metrics.job_name, "drift_scan");
+        assert_eq!(metrics.tenant_id, tenant_id);
+        assert_eq!(metrics.total_runs, 0);
+        assert_eq!(metrics.successful_runs, 0);
+        assert_eq!(metrics.failed_runs, 0);
+        assert_eq!(metrics.skipped_runs, 0);
+        assert_eq!(metrics.timeout_count, 0);
+        assert_eq!(metrics.total_duration_ms, 0);
+        assert!(metrics.last_run_at.is_none());
+        assert!(metrics.last_success_at.is_none());
+    }
+
+    #[test]
+    fn test_job_coordination_metrics_record_run_success() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let mut metrics = JobCoordinationMetrics::new("test_job".to_string(), tenant_id);
+        metrics.record_run(1000, true);
+
+        assert_eq!(metrics.total_runs, 1);
+        assert_eq!(metrics.successful_runs, 1);
+        assert_eq!(metrics.failed_runs, 0);
+        assert_eq!(metrics.total_duration_ms, 1000);
+        assert!(metrics.last_run_at.is_some());
+        assert!(metrics.last_success_at.is_some());
+    }
+
+    #[test]
+    fn test_job_coordination_metrics_record_run_failure() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let mut metrics = JobCoordinationMetrics::new("test_job".to_string(), tenant_id);
+        metrics.record_run(500, false);
+
+        assert_eq!(metrics.total_runs, 1);
+        assert_eq!(metrics.successful_runs, 0);
+        assert_eq!(metrics.failed_runs, 1);
+        assert_eq!(metrics.total_duration_ms, 500);
+        assert!(metrics.last_run_at.is_some());
+        assert!(metrics.last_success_at.is_none());
+    }
+
+    #[test]
+    fn test_job_coordination_metrics_record_skip() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let mut metrics = JobCoordinationMetrics::new("test_job".to_string(), tenant_id);
+        metrics.record_skip();
+
+        assert_eq!(metrics.skipped_runs, 1);
+        assert_eq!(metrics.total_runs, 0);
+    }
+
+    #[test]
+    fn test_job_coordination_metrics_record_timeout() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let mut metrics = JobCoordinationMetrics::new("test_job".to_string(), tenant_id);
+        metrics.record_timeout();
+
+        assert_eq!(metrics.timeout_count, 1);
+        assert_eq!(metrics.failed_runs, 1);
+    }
+
+    #[test]
+    fn test_job_coordination_metrics_avg_duration_ms() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let mut metrics = JobCoordinationMetrics::new("test_job".to_string(), tenant_id);
+        assert!(metrics.avg_duration_ms().is_none());
+
+        metrics.record_run(1000, true);
+        metrics.record_run(2000, true);
+        assert_eq!(metrics.avg_duration_ms(), Some(1500.0));
+    }
+
+    #[test]
+    fn test_job_coordination_metrics_success_rate() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let mut metrics = JobCoordinationMetrics::new("test_job".to_string(), tenant_id);
+        assert_eq!(metrics.success_rate(), 1.0);
+
+        metrics.record_run(100, true);
+        metrics.record_run(100, true);
+        metrics.record_run(100, false);
+        let rate = metrics.success_rate();
+        assert!((rate - 0.6666666666666666).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_partial_job_result_new() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let result = PartialJobResult::new("drift_scan".to_string(), tenant_id.clone());
+
+        assert_eq!(result.job_name, "drift_scan");
+        assert_eq!(result.tenant_id, tenant_id);
+        assert_eq!(result.processed_count, 0);
+        assert!(result.total_count.is_none());
+        assert!(result.last_processed_id.is_none());
+        assert_eq!(result.partial_data, serde_json::Value::Null);
+        assert!(!result.checkpoint_id.is_empty());
+    }
+
+    #[test]
+    fn test_partial_job_result_with_progress() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let result =
+            PartialJobResult::new("drift_scan".to_string(), tenant_id).with_progress(50, Some(100));
+
+        assert_eq!(result.processed_count, 50);
+        assert_eq!(result.total_count, Some(100));
+    }
+
+    #[test]
+    fn test_partial_job_result_with_last_id() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let result = PartialJobResult::new("drift_scan".to_string(), tenant_id)
+            .with_last_id("item-50".to_string());
+
+        assert_eq!(result.last_processed_id, Some("item-50".to_string()));
+    }
+
+    #[test]
+    fn test_partial_job_result_with_data() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let data = serde_json::json!({"key": "value"});
+        let result =
+            PartialJobResult::new("drift_scan".to_string(), tenant_id).with_data(data.clone());
+
+        assert_eq!(result.partial_data, data);
+    }
+
+    #[test]
+    fn test_partial_job_result_progress_percentage() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+
+        let no_total = PartialJobResult::new("drift_scan".to_string(), tenant_id.clone());
+        assert!(no_total.progress_percentage().is_none());
+
+        let with_total =
+            PartialJobResult::new("drift_scan".to_string(), tenant_id).with_progress(25, Some(100));
+        assert_eq!(with_total.progress_percentage(), Some(25.0));
+    }
+
+    #[test]
+    fn test_persistent_event_mark_published() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let event = GovernanceEvent::UnitCreated {
+            unit_id: "u1".to_string(),
+            unit_type: UnitType::Company,
+            tenant_id: tenant_id.clone(),
+            parent_id: None,
+            timestamp: 0,
+        };
+
+        let mut persistent = PersistentEvent::new(event);
+        assert_eq!(persistent.status, EventStatus::Pending);
+        assert!(persistent.published_at.is_none());
+
+        persistent.mark_published();
+        assert_eq!(persistent.status, EventStatus::Published);
+        assert!(persistent.published_at.is_some());
+    }
+
+    #[test]
+    fn test_persistent_event_mark_acknowledged() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let event = GovernanceEvent::UnitCreated {
+            unit_id: "u1".to_string(),
+            unit_type: UnitType::Company,
+            tenant_id: tenant_id.clone(),
+            parent_id: None,
+            timestamp: 0,
+        };
+
+        let mut persistent = PersistentEvent::new(event);
+        persistent.mark_acknowledged();
+
+        assert_eq!(persistent.status, EventStatus::Acknowledged);
+        assert!(persistent.acknowledged_at.is_some());
+    }
+
+    #[test]
+    fn test_persistent_event_mark_failed_retriable() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let event = GovernanceEvent::UnitCreated {
+            unit_id: "u1".to_string(),
+            unit_type: UnitType::Company,
+            tenant_id: tenant_id.clone(),
+            parent_id: None,
+            timestamp: 0,
+        };
+
+        let mut persistent = PersistentEvent::new(event);
+        let can_retry = persistent.mark_failed("Connection timeout".to_string());
+
+        assert!(can_retry);
+        assert_eq!(persistent.retry_count, 1);
+        assert_eq!(
+            persistent.last_error,
+            Some("Connection timeout".to_string())
+        );
+        assert_eq!(persistent.status, EventStatus::Pending);
+    }
+
+    #[test]
+    fn test_persistent_event_mark_failed_dead_lettered() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let event = GovernanceEvent::UnitCreated {
+            unit_id: "u1".to_string(),
+            unit_type: UnitType::Company,
+            tenant_id: tenant_id.clone(),
+            parent_id: None,
+            timestamp: 0,
+        };
+
+        let mut persistent = PersistentEvent::new(event);
+        persistent.mark_failed("Error 1".to_string());
+        persistent.mark_failed("Error 2".to_string());
+        let can_retry = persistent.mark_failed("Error 3".to_string());
+
+        assert!(!can_retry);
+        assert_eq!(persistent.status, EventStatus::DeadLettered);
+        assert!(persistent.dead_lettered_at.is_some());
+    }
+
+    #[test]
+    fn test_persistent_event_is_retriable() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let event = GovernanceEvent::UnitCreated {
+            unit_id: "u1".to_string(),
+            unit_type: UnitType::Company,
+            tenant_id: tenant_id.clone(),
+            parent_id: None,
+            timestamp: 0,
+        };
+
+        let mut persistent = PersistentEvent::new(event);
+        assert!(persistent.is_retriable());
+
+        persistent.mark_failed("Error 1".to_string());
+        assert!(persistent.is_retriable());
+
+        persistent.mark_failed("Error 2".to_string());
+        assert!(persistent.is_retriable());
+
+        persistent.mark_failed("Error 3".to_string());
+        assert!(!persistent.is_retriable());
+    }
+
+    #[test]
+    fn test_event_delivery_metrics_new() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let metrics =
+            EventDeliveryMetrics::new(tenant_id.clone(), "drift_detected".to_string(), 1000, 2000);
+
+        assert_eq!(metrics.tenant_id, tenant_id);
+        assert_eq!(metrics.event_type, "drift_detected");
+        assert_eq!(metrics.period_start, 1000);
+        assert_eq!(metrics.period_end, 2000);
+        assert_eq!(metrics.total_events, 0);
+        assert_eq!(metrics.delivered_events, 0);
+    }
+
+    #[test]
+    fn test_event_delivery_metrics_success_rate() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let mut metrics =
+            EventDeliveryMetrics::new(tenant_id, "drift_detected".to_string(), 1000, 2000);
+
+        assert_eq!(metrics.delivery_success_rate(), 1.0);
+
+        metrics.total_events = 10;
+        metrics.delivered_events = 8;
+        assert_eq!(metrics.delivery_success_rate(), 0.8);
+    }
+
+    #[test]
+    fn test_consumer_state_new() {
+        let tenant_id = TenantId::new("acme".to_string()).unwrap();
+        let state = ConsumerState::new(
+            "drift_processor".to_string(),
+            "idempotency-key-123".to_string(),
+            tenant_id.clone(),
+        );
+
+        assert_eq!(state.consumer_group, "drift_processor");
+        assert_eq!(state.idempotency_key, "idempotency-key-123");
+        assert_eq!(state.tenant_id, tenant_id);
+        assert!(state.processed_at > 0);
     }
 }

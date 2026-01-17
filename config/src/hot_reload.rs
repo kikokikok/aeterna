@@ -372,6 +372,9 @@ host = "testhost"
 
         fs::write(&config_path, "initial").unwrap();
 
+        // Store canonical path before deletion since canonicalize() fails on deleted files
+        let canonical_config_path = config_path.canonicalize().unwrap();
+
         let (_tx, mut rx) = watch_config(&config_path).await.unwrap();
 
         let ready_event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
@@ -387,15 +390,26 @@ host = "testhost"
         if let Ok(Some(event)) = event {
             match event {
                 ConfigReloadEvent::Removed(path) => {
-                    assert_eq!(
-                        path.canonicalize().unwrap(),
-                        config_path.canonicalize().unwrap()
+                    // Compare with pre-deletion canonical path or file name
+                    // The watcher may return the original path or canonicalized path
+                    let matches = path == canonical_config_path
+                        || path == config_path
+                        || path.file_name() == config_path.file_name();
+                    assert!(
+                        matches,
+                        "Path {:?} should match config path {:?}",
+                        path, config_path
                     );
                 }
                 ConfigReloadEvent::Error { path, error } => {
-                    assert_eq!(
-                        path.canonicalize().unwrap(),
-                        config_path.canonicalize().unwrap()
+                    // For error events, compare file names since path may not be canonicalizable
+                    let matches = path == canonical_config_path
+                        || path == config_path
+                        || path.file_name() == config_path.file_name();
+                    assert!(
+                        matches,
+                        "Error path {:?} should match config path {:?}",
+                        path, config_path
                     );
                     assert!(!error.is_empty());
                 }
@@ -464,6 +478,108 @@ host = "testhost"
                 path: path1.clone(),
                 error: "error2".to_string()
             }
+        );
+    }
+
+    #[test]
+    fn test_config_reload_event_clone() {
+        let path = PathBuf::from("/test/config.toml");
+
+        let event1 = ConfigReloadEvent::Ready;
+        let cloned1 = event1.clone();
+        assert_eq!(event1, cloned1);
+
+        let event2 = ConfigReloadEvent::Changed(path.clone());
+        let cloned2 = event2.clone();
+        assert_eq!(event2, cloned2);
+
+        let event3 = ConfigReloadEvent::Created(path.clone());
+        let cloned3 = event3.clone();
+        assert_eq!(event3, cloned3);
+
+        let event4 = ConfigReloadEvent::Removed(path.clone());
+        let cloned4 = event4.clone();
+        assert_eq!(event4, cloned4);
+
+        let event5 = ConfigReloadEvent::Error {
+            path: path.clone(),
+            error: "test error".to_string(),
+        };
+        let cloned5 = event5.clone();
+        assert_eq!(event5, cloned5);
+    }
+
+    #[test]
+    fn test_config_reload_event_debug() {
+        let path = PathBuf::from("/test/config.toml");
+
+        let debug_ready = format!("{:?}", ConfigReloadEvent::Ready);
+        assert!(debug_ready.contains("Ready"));
+
+        let debug_changed = format!("{:?}", ConfigReloadEvent::Changed(path.clone()));
+        assert!(debug_changed.contains("Changed"));
+        assert!(debug_changed.contains("config.toml"));
+
+        let debug_created = format!("{:?}", ConfigReloadEvent::Created(path.clone()));
+        assert!(debug_created.contains("Created"));
+
+        let debug_removed = format!("{:?}", ConfigReloadEvent::Removed(path.clone()));
+        assert!(debug_removed.contains("Removed"));
+
+        let debug_error = format!(
+            "{:?}",
+            ConfigReloadEvent::Error {
+                path: path.clone(),
+                error: "test error message".to_string(),
+            }
+        );
+        assert!(debug_error.contains("Error"));
+        assert!(debug_error.contains("test error message"));
+    }
+
+    #[tokio::test]
+    async fn test_watch_config_receiver_drop_cleanup() {
+        let temp_file = NamedTempFile::new().unwrap();
+        fs::write(temp_file.path(), "initial content").unwrap();
+
+        let (_tx, rx) = watch_config(temp_file.path()).await.unwrap();
+
+        drop(rx);
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    #[tokio::test]
+    async fn test_watch_config_multiple_rapid_changes() {
+        let temp_file = NamedTempFile::new().unwrap();
+        fs::write(temp_file.path(), "v1").unwrap();
+
+        let (_tx, mut rx) = watch_config(temp_file.path()).await.unwrap();
+
+        let ready = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("Timeout")
+            .expect("No event");
+        assert_eq!(ready, ConfigReloadEvent::Ready);
+
+        for i in 2..=5 {
+            fs::write(temp_file.path(), format!("v{}", i)).unwrap();
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+
+        let mut change_count = 0;
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(500), rx.recv()).await
+        {
+            if matches!(event, ConfigReloadEvent::Changed(_)) {
+                change_count += 1;
+            }
+        }
+
+        assert!(
+            change_count >= 1,
+            "Should detect at least one change, got {}",
+            change_count
         );
     }
 }

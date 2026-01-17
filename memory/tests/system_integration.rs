@@ -9,6 +9,7 @@ use mk_core::types::{MemoryEntry, MemoryLayer, TenantContext};
 use qdrant_client::{Qdrant, config::QdrantConfig};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use storage::postgres::PostgresBackend;
 use storage::redis::RedisStorage;
 use testcontainers::{
@@ -18,69 +19,126 @@ use testcontainers::{
 };
 use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::redis::Redis;
+use tokio::sync::OnceCell;
+
+struct PostgresFixture {
+    #[allow(dead_code)]
+    container: ContainerAsync<Postgres>,
+    url: String,
+}
+
+struct RedisFixture {
+    #[allow(dead_code)]
+    container: ContainerAsync<Redis>,
+    url: String,
+}
+
+struct QdrantFixture {
+    #[allow(dead_code)]
+    container: ContainerAsync<GenericImage>,
+    url: String,
+}
+
+static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
+static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
+static QDRANT: OnceCell<Option<QdrantFixture>> = OnceCell::const_new();
+static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
+    POSTGRES
+        .get_or_init(|| async {
+            let container = match Postgres::default()
+                .with_db_name("aeterna_test")
+                .with_user("aeterna")
+                .with_password("aeterna")
+                .start()
+                .await
+            {
+                Ok(c) => c,
+                Err(_) => return None,
+            };
+            let port = match container.get_host_port_ipv4(5432).await {
+                Ok(p) => p,
+                Err(_) => return None,
+            };
+            let url = format!("postgres://aeterna:aeterna@localhost:{}/aeterna_test", port);
+            Some(PostgresFixture { container, url })
+        })
+        .await
+        .as_ref()
+}
+
+async fn get_redis_fixture() -> Option<&'static RedisFixture> {
+    REDIS
+        .get_or_init(|| async {
+            let container = match Redis::default().start().await {
+                Ok(c) => c,
+                Err(_) => return None,
+            };
+            let port = match container.get_host_port_ipv4(6379).await {
+                Ok(p) => p,
+                Err(_) => return None,
+            };
+            let url = format!("redis://localhost:{}", port);
+            Some(RedisFixture { container, url })
+        })
+        .await
+        .as_ref()
+}
+
+async fn get_qdrant_fixture() -> Option<&'static QdrantFixture> {
+    QDRANT
+        .get_or_init(|| async {
+            let container = match GenericImage::new("qdrant/qdrant", "latest")
+                .with_exposed_port(ContainerPort::Tcp(6334))
+                .with_wait_for(WaitFor::message_on_stdout(
+                    "Qdrant is ready to accept connections",
+                ))
+                .start()
+                .await
+            {
+                Ok(c) => c,
+                Err(_) => return None,
+            };
+            let port = match container.get_host_port_ipv4(6334).await {
+                Ok(p) => p,
+                Err(_) => return None,
+            };
+            let url = format!("http://localhost:{}", port);
+            Some(QdrantFixture { container, url })
+        })
+        .await
+        .as_ref()
+}
+
+fn unique_id(prefix: &str) -> String {
+    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+    format!("{}_{}", prefix, id)
+}
 
 fn test_ctx() -> TenantContext {
     TenantContext::default()
 }
 
-async fn setup_postgres() -> Result<(ContainerAsync<Postgres>, String), Box<dyn std::error::Error>>
-{
-    let container = Postgres::default()
-        .with_db_name("aeterna_test")
-        .with_user("aeterna")
-        .with_password("aeterna")
-        .start()
-        .await?;
-    let port = container.get_host_port_ipv4(5432).await?;
-    let url = format!("postgres://aeterna:aeterna@localhost:{}/aeterna_test", port);
-    Ok((container, url))
-}
-
-async fn setup_redis() -> Result<(ContainerAsync<Redis>, String), Box<dyn std::error::Error>> {
-    let container = Redis::default().start().await?;
-    let port = container.get_host_port_ipv4(6379).await?;
-    let url = format!("redis://localhost:{}", port);
-    Ok((container, url))
-}
-
-async fn setup_qdrant() -> Result<(ContainerAsync<GenericImage>, String), Box<dyn std::error::Error>>
-{
-    let container = GenericImage::new("qdrant/qdrant", "latest")
-        .with_exposed_port(ContainerPort::Tcp(6334))
-        .with_wait_for(WaitFor::message_on_stdout(
-            "Qdrant is ready to accept connections",
-        ))
-        .start()
-        .await?;
-    let port = container.get_host_port_ipv4(6334).await?;
-    let url = format!("http://localhost:{}", port);
-    Ok((container, url))
-}
-
 #[tokio::test]
-#[ignore = "requires Docker with PostgreSQL, Redis, and Qdrant containers"]
 async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>> {
-    let postgres_setup = setup_postgres().await;
-    let redis_setup = setup_redis().await;
-    let qdrant_setup = setup_qdrant().await;
-
-    let (_pg_container, pg_url) = match postgres_setup {
-        Ok(res) => res,
-        Err(_) => {
-            eprintln!("Skipping system test: Docker not available");
-            return Ok(());
-        }
+    let (Some(pg_fixture), Some(redis_fixture), Some(qdrant_fixture)) = (
+        get_postgres_fixture().await,
+        get_redis_fixture().await,
+        get_qdrant_fixture().await,
+    ) else {
+        eprintln!("Skipping system test: Docker not available");
+        return Ok(());
     };
-    let (_redis_container, redis_url) = redis_setup?;
-    let (_qdrant_container, qdrant_url) = qdrant_setup?;
 
-    let pg_backend = PostgresBackend::new(&pg_url).await?;
+    let pg_backend = PostgresBackend::new(&pg_fixture.url).await?;
     pg_backend.initialize_schema().await?;
 
-    let _redis_storage = RedisStorage::new(&redis_url).await?;
+    let _redis_storage = RedisStorage::new(&redis_fixture.url).await?;
 
-    let qdrant_client = Qdrant::new(QdrantConfig::from_url(&qdrant_url))?;
-    let qdrant_provider = QdrantProvider::new(qdrant_client, "system_test".to_string(), 128);
+    let user_collection = unique_id("system_test");
+    let qdrant_client = Qdrant::new(QdrantConfig::from_url(&qdrant_fixture.url))?;
+    let qdrant_provider = QdrantProvider::new(qdrant_client, user_collection.clone(), 128);
     qdrant_provider
         .ensure_collection()
         .await
@@ -91,11 +149,12 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         .register_provider(MemoryLayer::User, Arc::new(qdrant_provider))
         .await;
 
+    let msg_id = unique_id("system_msg");
     let entry = MemoryEntry {
         summaries: std::collections::HashMap::new(),
         context_vector: None,
         importance_score: None,
-        id: "system_msg_1".to_string(),
+        id: msg_id.clone(),
         content: "System integration test content".to_string(),
         embedding: Some(vec![0.1; 128]),
         layer: MemoryLayer::User,
@@ -112,7 +171,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         .map_err(|e| e.to_string())?;
 
     let retrieved = manager
-        .get_from_layer(ctx.clone(), MemoryLayer::User, "system_msg_1")
+        .get_from_layer(ctx.clone(), MemoryLayer::User, &msg_id)
         .await
         .map_err(|e| e.to_string())?;
     assert!(retrieved.is_some());
@@ -124,13 +183,39 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         .await
         .map_err(|e| e.to_string())?;
     assert_eq!(search_results.len(), 1);
-    assert_eq!(search_results[0].id, "system_msg_1");
+    assert_eq!(search_results[0].id, msg_id);
 
+    let session_collection = unique_id("session_test");
+    let session_qdrant_client = Qdrant::new(QdrantConfig::from_url(&qdrant_fixture.url))?;
+    let session_provider =
+        QdrantProvider::new(session_qdrant_client, session_collection.clone(), 128);
+    session_provider
+        .ensure_collection()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let project_collection = unique_id("project_test");
+    let project_qdrant_client = Qdrant::new(QdrantConfig::from_url(&qdrant_fixture.url))?;
+    let project_provider =
+        QdrantProvider::new(project_qdrant_client, project_collection.clone(), 128);
+    project_provider
+        .ensure_collection()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    manager
+        .register_provider(MemoryLayer::Session, Arc::new(session_provider))
+        .await;
+    manager
+        .register_provider(MemoryLayer::Project, Arc::new(project_provider))
+        .await;
+
+    let session_msg_id = unique_id("session_important");
     let session_entry = MemoryEntry {
         summaries: std::collections::HashMap::new(),
         context_vector: None,
         importance_score: None,
-        id: "session_important".to_string(),
+        id: session_msg_id.clone(),
         content: "Important session content for promotion".to_string(),
         embedding: Some(vec![0.2; 128]),
         layer: MemoryLayer::Session,
@@ -148,29 +233,6 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         updated_at: 1736400000,
     };
 
-    let session_qdrant_client = Qdrant::new(QdrantConfig::from_url(&qdrant_url))?;
-    let session_provider =
-        QdrantProvider::new(session_qdrant_client, "session_test".to_string(), 128);
-    session_provider
-        .ensure_collection()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let project_qdrant_client = Qdrant::new(QdrantConfig::from_url(&qdrant_url))?;
-    let project_provider =
-        QdrantProvider::new(project_qdrant_client, "project_test".to_string(), 128);
-    project_provider
-        .ensure_collection()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    manager
-        .register_provider(MemoryLayer::Session, Arc::new(session_provider))
-        .await;
-    manager
-        .register_provider(MemoryLayer::Project, Arc::new(project_provider))
-        .await;
-
     manager
         .add_to_layer(ctx.clone(), MemoryLayer::Session, session_entry)
         .await
@@ -181,7 +243,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         .await
         .map_err(|e| e.to_string())?;
     assert_eq!(promoted_ids.len(), 1);
-    assert!(promoted_ids[0].contains("session_important_promoted"));
+    assert!(promoted_ids[0].contains(&format!("{}_promoted", session_msg_id)));
 
     let promoted_entry = manager
         .get_from_layer(ctx, MemoryLayer::Project, &promoted_ids[0])

@@ -10,364 +10,409 @@ use storage::graph_duckdb::{ContentionAlertConfig, WriteCoordinator, WriteCoordi
 use testcontainers::ContainerAsync;
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::redis::Redis;
-use tokio::sync::Barrier;
+use tokio::sync::{Barrier, OnceCell};
 
-async fn setup_redis_container()
--> Result<(ContainerAsync<Redis>, String), Box<dyn std::error::Error>> {
-    let container = Redis::default().start().await?;
-    let port = container.get_host_port_ipv4(6379).await?;
-    let connection_url = format!("redis://localhost:{}", port);
+struct RedisFixture {
+    #[allow(dead_code)]
+    container: ContainerAsync<Redis>,
+    url: String,
+}
 
-    // Wait for Redis to be ready by attempting to connect with retries
-    let client = redis::Client::open(connection_url.as_str())?;
-    let mut retries = 10;
-    loop {
-        match client.get_multiplexed_async_connection().await {
-            Ok(mut conn) => {
-                // Verify Redis is responding to commands
-                let pong: Result<String, _> = redis::cmd("PING").query_async(&mut conn).await;
-                if pong.is_ok() {
-                    break;
+static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
+static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+async fn get_redis_fixture() -> Option<&'static RedisFixture> {
+    REDIS
+        .get_or_init(|| async {
+            match Redis::default().start().await {
+                Ok(container) => {
+                    let port = match container.get_host_port_ipv4(6379).await {
+                        Ok(p) => p,
+                        Err(_) => return None,
+                    };
+                    let url = format!("redis://localhost:{}", port);
+
+                    // Wait for Redis to be ready
+                    let client = match redis::Client::open(url.as_str()) {
+                        Ok(c) => c,
+                        Err(_) => return None,
+                    };
+                    let mut retries = 10;
+                    loop {
+                        match client.get_multiplexed_async_connection().await {
+                            Ok(mut conn) => {
+                                let pong: Result<String, _> =
+                                    redis::cmd("PING").query_async(&mut conn).await;
+                                if pong.is_ok() {
+                                    break;
+                                }
+                            }
+                            Err(_) if retries > 0 => {
+                                retries -= 1;
+                                tokio::time::sleep(Duration::from_millis(100)).await;
+                            }
+                            Err(_) => return None,
+                        }
+                    }
+
+                    Some(RedisFixture { container, url })
                 }
+                Err(_) => None,
             }
-            Err(_) if retries > 0 => {
-                retries -= 1;
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
-            Err(e) => return Err(Box::new(e)),
-        }
-    }
+        })
+        .await
+        .as_ref()
+}
 
-    Ok((container, connection_url))
+/// Generate a unique tenant ID for each test to avoid lock collisions
+fn unique_tenant_id(prefix: &str) -> String {
+    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+    format!("{}-{}", prefix, id)
 }
 
 #[tokio::test]
 async fn test_write_coordinator_single_lock_acquire_release() {
-    match setup_redis_container().await {
-        Ok((_container, redis_url)) => {
-            let config = WriteCoordinatorConfig::default();
-            let coordinator = WriteCoordinator::new(redis_url, config);
+    let Some(fixture) = get_redis_fixture().await else {
+        eprintln!("Skipping test: Docker not available");
+        return;
+    };
 
-            let acquired_at = Instant::now();
-            let lock_result = coordinator.acquire_lock("tenant-1").await;
-            assert!(lock_result.is_ok(), "Should acquire lock successfully");
+    let tenant = unique_tenant_id("tenant");
+    let config = WriteCoordinatorConfig::default();
+    let coordinator = WriteCoordinator::new(fixture.url.clone(), config);
 
-            let lock_value = lock_result.unwrap();
-            assert!(
-                !lock_value.is_empty(),
-                "Lock value should be non-empty UUID"
-            );
+    let acquired_at = Instant::now();
+    let lock_result = coordinator.acquire_lock(&tenant).await;
+    assert!(lock_result.is_ok(), "Should acquire lock successfully");
 
-            let release_result = coordinator
-                .release_lock("tenant-1", &lock_value, acquired_at)
-                .await;
-            assert!(release_result.is_ok(), "Should release lock successfully");
-        }
-        Err(_) => {
-            eprintln!("Skipping test: Docker not available");
-        }
-    }
+    let lock_value = lock_result.unwrap();
+    assert!(
+        !lock_value.is_empty(),
+        "Lock value should be non-empty UUID"
+    );
+
+    let release_result = coordinator
+        .release_lock(&tenant, &lock_value, acquired_at)
+        .await;
+    assert!(release_result.is_ok(), "Should release lock successfully");
 }
 
 #[tokio::test]
 async fn test_write_coordinator_lock_blocks_second_acquirer() {
-    match setup_redis_container().await {
-        Ok((_container, redis_url)) => {
-            let config = WriteCoordinatorConfig {
-                lock_ttl_ms: 5000,
-                max_retries: 2,
-                base_backoff_ms: 50,
-                max_backoff_ms: 100,
-                alert_config: ContentionAlertConfig::default(),
-            };
-            let coordinator = Arc::new(WriteCoordinator::new(redis_url, config));
+    let Some(fixture) = get_redis_fixture().await else {
+        eprintln!("Skipping test: Docker not available");
+        return;
+    };
 
-            let acquired_at = Instant::now();
-            let first_lock = coordinator.acquire_lock("tenant-1").await;
-            assert!(first_lock.is_ok(), "First lock should succeed");
-            let first_lock_value = first_lock.unwrap();
+    let tenant = unique_tenant_id("tenant");
+    let config = WriteCoordinatorConfig {
+        lock_ttl_ms: 5000,
+        max_retries: 2,
+        base_backoff_ms: 50,
+        max_backoff_ms: 100,
+        alert_config: ContentionAlertConfig::default(),
+    };
+    let coordinator = Arc::new(WriteCoordinator::new(fixture.url.clone(), config));
 
-            let coordinator_clone = coordinator.clone();
-            let second_lock_handle =
-                tokio::spawn(async move { coordinator_clone.acquire_lock("tenant-1").await });
+    let acquired_at = Instant::now();
+    let first_lock = coordinator.acquire_lock(&tenant).await;
+    assert!(first_lock.is_ok(), "First lock should succeed");
+    let first_lock_value = first_lock.unwrap();
 
-            let second_result = second_lock_handle.await.unwrap();
-            assert!(
-                second_result.is_err(),
-                "Second lock should timeout while first holds lock"
-            );
+    let coordinator_clone = coordinator.clone();
+    let tenant_clone = tenant.clone();
+    let second_lock_handle =
+        tokio::spawn(async move { coordinator_clone.acquire_lock(&tenant_clone).await });
 
-            let release_result = coordinator
-                .release_lock("tenant-1", &first_lock_value, acquired_at)
-                .await;
-            assert!(release_result.is_ok());
-        }
-        Err(_) => {
-            eprintln!("Skipping test: Docker not available");
-        }
-    }
+    let second_result = second_lock_handle.await.unwrap();
+    assert!(
+        second_result.is_err(),
+        "Second lock should timeout while first holds lock"
+    );
+
+    let release_result = coordinator
+        .release_lock(&tenant, &first_lock_value, acquired_at)
+        .await;
+    assert!(release_result.is_ok());
 }
 
 #[tokio::test]
 async fn test_write_coordinator_lock_acquired_after_release() {
-    match setup_redis_container().await {
-        Ok((_container, redis_url)) => {
-            let config = WriteCoordinatorConfig::default();
-            let coordinator = Arc::new(WriteCoordinator::new(redis_url, config));
+    let Some(fixture) = get_redis_fixture().await else {
+        eprintln!("Skipping test: Docker not available");
+        return;
+    };
 
-            let acquired_at = Instant::now();
-            let first_lock = coordinator.acquire_lock("tenant-1").await.unwrap();
-            coordinator
-                .release_lock("tenant-1", &first_lock, acquired_at)
-                .await
-                .unwrap();
+    let tenant = unique_tenant_id("tenant");
+    let config = WriteCoordinatorConfig::default();
+    let coordinator = Arc::new(WriteCoordinator::new(fixture.url.clone(), config));
 
-            let second_lock = coordinator.acquire_lock("tenant-1").await;
-            assert!(
-                second_lock.is_ok(),
-                "Should acquire lock after previous release"
-            );
+    let acquired_at = Instant::now();
+    let first_lock = coordinator.acquire_lock(&tenant).await.unwrap();
+    coordinator
+        .release_lock(&tenant, &first_lock, acquired_at)
+        .await
+        .unwrap();
 
-            let second_acquired_at = Instant::now();
-            let second_lock_value = second_lock.unwrap();
-            coordinator
-                .release_lock("tenant-1", &second_lock_value, second_acquired_at)
-                .await
-                .unwrap();
-        }
-        Err(_) => {
-            eprintln!("Skipping test: Docker not available");
-        }
-    }
+    let second_lock = coordinator.acquire_lock(&tenant).await;
+    assert!(
+        second_lock.is_ok(),
+        "Should acquire lock after previous release"
+    );
+
+    let second_acquired_at = Instant::now();
+    let second_lock_value = second_lock.unwrap();
+    coordinator
+        .release_lock(&tenant, &second_lock_value, second_acquired_at)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
 async fn test_write_coordinator_tenant_isolation() {
-    match setup_redis_container().await {
-        Ok((_container, redis_url)) => {
-            let config = WriteCoordinatorConfig::default();
-            let coordinator = WriteCoordinator::new(redis_url, config);
+    let Some(fixture) = get_redis_fixture().await else {
+        eprintln!("Skipping test: Docker not available");
+        return;
+    };
 
-            let acquired_at_1 = Instant::now();
-            let lock_tenant_1 = coordinator.acquire_lock("tenant-1").await;
-            assert!(lock_tenant_1.is_ok(), "Tenant-1 lock should succeed");
+    let tenant1 = unique_tenant_id("tenant");
+    let tenant2 = unique_tenant_id("tenant");
+    let config = WriteCoordinatorConfig::default();
+    let coordinator = WriteCoordinator::new(fixture.url.clone(), config);
 
-            let lock_tenant_2 = coordinator.acquire_lock("tenant-2").await;
-            assert!(
-                lock_tenant_2.is_ok(),
-                "Tenant-2 lock should succeed (isolated from tenant-1)"
-            );
+    let acquired_at_1 = Instant::now();
+    let lock_tenant_1 = coordinator.acquire_lock(&tenant1).await;
+    assert!(lock_tenant_1.is_ok(), "Tenant-1 lock should succeed");
 
-            let lock_value_1 = lock_tenant_1.unwrap();
-            let lock_value_2 = lock_tenant_2.unwrap();
+    let lock_tenant_2 = coordinator.acquire_lock(&tenant2).await;
+    assert!(
+        lock_tenant_2.is_ok(),
+        "Tenant-2 lock should succeed (isolated from tenant-1)"
+    );
 
-            assert_ne!(
-                lock_value_1, lock_value_2,
-                "Lock values should be different"
-            );
+    let lock_value_1 = lock_tenant_1.unwrap();
+    let lock_value_2 = lock_tenant_2.unwrap();
 
-            let acquired_at_2 = Instant::now();
-            coordinator
-                .release_lock("tenant-1", &lock_value_1, acquired_at_1)
-                .await
-                .unwrap();
-            coordinator
-                .release_lock("tenant-2", &lock_value_2, acquired_at_2)
-                .await
-                .unwrap();
-        }
-        Err(_) => {
-            eprintln!("Skipping test: Docker not available");
-        }
-    }
+    assert_ne!(
+        lock_value_1, lock_value_2,
+        "Lock values should be different"
+    );
+
+    let acquired_at_2 = Instant::now();
+    coordinator
+        .release_lock(&tenant1, &lock_value_1, acquired_at_1)
+        .await
+        .unwrap();
+    coordinator
+        .release_lock(&tenant2, &lock_value_2, acquired_at_2)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
 async fn test_write_coordinator_concurrent_contention() {
-    match setup_redis_container().await {
-        Ok((_container, redis_url)) => {
-            let config = WriteCoordinatorConfig {
-                lock_ttl_ms: 200,
-                max_retries: 10,
-                base_backoff_ms: 10,
-                max_backoff_ms: 50,
-                alert_config: ContentionAlertConfig::default(),
-            };
-            let coordinator = Arc::new(WriteCoordinator::new(redis_url, config));
+    let Some(fixture) = get_redis_fixture().await else {
+        eprintln!("Skipping test: Docker not available");
+        return;
+    };
 
-            let num_tasks = 5;
-            let barrier = Arc::new(Barrier::new(num_tasks));
-            let success_count = Arc::new(AtomicU32::new(0));
+    let tenant = unique_tenant_id("shared-tenant");
+    let config = WriteCoordinatorConfig {
+        lock_ttl_ms: 200,
+        max_retries: 10,
+        base_backoff_ms: 10,
+        max_backoff_ms: 50,
+        alert_config: ContentionAlertConfig::default(),
+    };
+    let coordinator = Arc::new(WriteCoordinator::new(fixture.url.clone(), config));
 
-            let mut handles = vec![];
+    let num_tasks = 5;
+    let barrier = Arc::new(Barrier::new(num_tasks));
+    let success_count = Arc::new(AtomicU32::new(0));
 
-            for task_id in 0..num_tasks {
-                let coord = coordinator.clone();
-                let bar = barrier.clone();
-                let count = success_count.clone();
+    let mut handles = vec![];
 
-                let handle = tokio::spawn(async move {
-                    bar.wait().await;
+    for task_id in 0..num_tasks {
+        let coord = coordinator.clone();
+        let bar = barrier.clone();
+        let count = success_count.clone();
+        let tenant_clone = tenant.clone();
 
-                    let acquired_at = Instant::now();
-                    match coord.acquire_lock("shared-tenant").await {
-                        Ok(lock_value) => {
-                            tokio::time::sleep(Duration::from_millis(20)).await;
+        let handle = tokio::spawn(async move {
+            bar.wait().await;
 
-                            let release_result = coord
-                                .release_lock("shared-tenant", &lock_value, acquired_at)
-                                .await;
+            let acquired_at = Instant::now();
+            match coord.acquire_lock(&tenant_clone).await {
+                Ok(lock_value) => {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
 
-                            if release_result.is_ok() {
-                                count.fetch_add(1, Ordering::SeqCst);
-                                (task_id, true)
-                            } else {
-                                (task_id, false)
-                            }
-                        }
-                        Err(_) => (task_id, false),
+                    let release_result = coord
+                        .release_lock(&tenant_clone, &lock_value, acquired_at)
+                        .await;
+
+                    if release_result.is_ok() {
+                        count.fetch_add(1, Ordering::SeqCst);
+                        (task_id, true)
+                    } else {
+                        (task_id, false)
                     }
-                });
-
-                handles.push(handle);
+                }
+                Err(_) => (task_id, false),
             }
+        });
 
-            let mut results = vec![];
-            for handle in handles {
-                results.push(handle.await.unwrap());
-            }
-
-            let successes = success_count.load(Ordering::SeqCst);
-
-            assert!(
-                successes >= 1,
-                "At least one task should successfully acquire and release lock"
-            );
-            assert!(
-                successes <= num_tasks as u32,
-                "Cannot have more successes than tasks"
-            );
-
-            let successful_tasks: Vec<_> = results.iter().filter(|(_, success)| *success).collect();
-            assert!(
-                !successful_tasks.is_empty(),
-                "At least one task should succeed"
-            );
-        }
-        Err(_) => {
-            eprintln!("Skipping test: Docker not available");
-        }
+        handles.push(handle);
     }
+
+    let mut results = vec![];
+    for handle in handles {
+        results.push(handle.await.unwrap());
+    }
+
+    let successes = success_count.load(Ordering::SeqCst);
+
+    assert!(
+        successes >= 1,
+        "At least one task should successfully acquire and release lock"
+    );
+    assert!(
+        successes <= num_tasks as u32,
+        "Cannot have more successes than tasks"
+    );
+
+    let successful_tasks: Vec<_> = results.iter().filter(|(_, success)| *success).collect();
+    assert!(
+        !successful_tasks.is_empty(),
+        "At least one task should succeed"
+    );
 }
 
 #[tokio::test]
 async fn test_write_coordinator_lock_ttl_expiry() {
-    match setup_redis_container().await {
-        Ok((_container, redis_url)) => {
-            let config = WriteCoordinatorConfig {
-                lock_ttl_ms: 100,
-                max_retries: 3,
-                base_backoff_ms: 50,
-                max_backoff_ms: 100,
-                alert_config: ContentionAlertConfig::default(),
-            };
-            let coordinator = Arc::new(WriteCoordinator::new(redis_url, config));
+    let Some(fixture) = get_redis_fixture().await else {
+        eprintln!("Skipping test: Docker not available");
+        return;
+    };
 
-            let _first_lock = coordinator.acquire_lock("tenant-1").await.unwrap();
+    let tenant = unique_tenant_id("tenant");
+    let config = WriteCoordinatorConfig {
+        lock_ttl_ms: 100,
+        max_retries: 3,
+        base_backoff_ms: 50,
+        max_backoff_ms: 100,
+        alert_config: ContentionAlertConfig::default(),
+    };
+    let coordinator = Arc::new(WriteCoordinator::new(fixture.url.clone(), config));
 
-            tokio::time::sleep(Duration::from_millis(150)).await;
+    let _first_lock = coordinator.acquire_lock(&tenant).await.unwrap();
 
-            let second_lock = coordinator.acquire_lock("tenant-1").await;
-            assert!(
-                second_lock.is_ok(),
-                "Should acquire lock after TTL expiry even without explicit release"
-            );
-        }
-        Err(_) => {
-            eprintln!("Skipping test: Docker not available");
-        }
-    }
+    tokio::time::sleep(Duration::from_millis(150)).await;
+
+    let second_lock = coordinator.acquire_lock(&tenant).await;
+    assert!(
+        second_lock.is_ok(),
+        "Should acquire lock after TTL expiry even without explicit release"
+    );
 }
 
 #[tokio::test]
 async fn test_write_coordinator_exponential_backoff() {
-    match setup_redis_container().await {
-        Ok((_container, redis_url)) => {
-            let config = WriteCoordinatorConfig {
-                lock_ttl_ms: 10000,
-                max_retries: 4,
-                base_backoff_ms: 50,
-                max_backoff_ms: 500,
-                alert_config: ContentionAlertConfig::default(),
-            };
-            let coordinator = Arc::new(WriteCoordinator::new(redis_url, config));
+    let Some(fixture) = get_redis_fixture().await else {
+        eprintln!("Skipping test: Docker not available");
+        return;
+    };
 
-            let acquired_at = Instant::now();
-            let first_lock = coordinator.acquire_lock("tenant-1").await.unwrap();
+    let tenant = unique_tenant_id("tenant");
+    let config = WriteCoordinatorConfig {
+        lock_ttl_ms: 10000,
+        max_retries: 4,
+        base_backoff_ms: 50,
+        max_backoff_ms: 500,
+        alert_config: ContentionAlertConfig::default(),
+    };
+    let coordinator = Arc::new(WriteCoordinator::new(fixture.url.clone(), config));
 
-            let coordinator_clone = coordinator.clone();
-            let start = Instant::now();
-            let second_result = coordinator_clone.acquire_lock("tenant-1").await;
-            let elapsed = start.elapsed();
+    let acquired_at = Instant::now();
+    let first_lock = coordinator.acquire_lock(&tenant).await.unwrap();
 
-            assert!(second_result.is_err(), "Second lock should timeout");
+    let coordinator_clone = coordinator.clone();
+    let tenant_clone = tenant.clone();
+    let start = Instant::now();
+    let second_result = coordinator_clone.acquire_lock(&tenant_clone).await;
+    let elapsed = start.elapsed();
 
-            let expected_min_wait = Duration::from_millis(50 + 100 + 200);
-            assert!(
-                elapsed >= expected_min_wait,
-                "Should wait at least {:?} due to exponential backoff, but only waited {:?}",
-                expected_min_wait,
-                elapsed
-            );
+    assert!(second_result.is_err(), "Second lock should timeout");
 
-            coordinator
-                .release_lock("tenant-1", &first_lock, acquired_at)
-                .await
-                .unwrap();
-        }
-        Err(_) => {
-            eprintln!("Skipping test: Docker not available");
-        }
-    }
+    let expected_min_wait = Duration::from_millis(50 + 100 + 200);
+    assert!(
+        elapsed >= expected_min_wait,
+        "Should wait at least {:?} due to exponential backoff, but only waited {:?}",
+        expected_min_wait,
+        elapsed
+    );
+
+    coordinator
+        .release_lock(&tenant, &first_lock, acquired_at)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
 async fn test_write_coordinator_wrong_lock_value_release() {
-    match setup_redis_container().await {
-        Ok((_container, redis_url)) => {
-            let config = WriteCoordinatorConfig {
-                lock_ttl_ms: 5000,
-                max_retries: 2,
-                base_backoff_ms: 50,
-                max_backoff_ms: 100,
-                alert_config: ContentionAlertConfig::default(),
-            };
-            let coordinator = WriteCoordinator::new(redis_url, config);
+    let Some(fixture) = get_redis_fixture().await else {
+        eprintln!("Skipping test: Docker not available");
+        return;
+    };
 
-            let acquired_at = Instant::now();
-            let lock_value = coordinator.acquire_lock("tenant-1").await.unwrap();
+    let tenant = unique_tenant_id("tenant");
+    let config = WriteCoordinatorConfig {
+        lock_ttl_ms: 5000,
+        max_retries: 2,
+        base_backoff_ms: 50,
+        max_backoff_ms: 100,
+        alert_config: ContentionAlertConfig::default(),
+    };
+    let coordinator = WriteCoordinator::new(fixture.url.clone(), config);
 
-            let wrong_release = coordinator
-                .release_lock("tenant-1", "wrong-uuid-value", acquired_at)
-                .await;
-            assert!(
-                wrong_release.is_ok(),
-                "Release with wrong value should not error (Lua script returns 0)"
-            );
+    let acquired_at = Instant::now();
+    let lock_value = coordinator.acquire_lock(&tenant).await.unwrap();
 
-            let second_lock_attempt = coordinator.acquire_lock("tenant-1").await;
-            assert!(
-                second_lock_attempt.is_err(),
-                "Lock should still be held since wrong value didn't release it"
-            );
+    let wrong_release = coordinator
+        .release_lock(&tenant, "wrong-uuid-value", acquired_at)
+        .await;
+    assert!(
+        wrong_release.is_ok(),
+        "Release with wrong value should not error (Lua script returns 0)"
+    );
 
-            coordinator
-                .release_lock("tenant-1", &lock_value, acquired_at)
-                .await
-                .unwrap();
+    let second_lock_attempt = coordinator.acquire_lock(&tenant).await;
+    assert!(
+        second_lock_attempt.is_err(),
+        "Lock should still be held since wrong value didn't release it"
+    );
+
+    coordinator
+        .release_lock(&tenant, &lock_value, acquired_at)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn test_write_coordinator_induced_redis_failure() {
+    let Some(fixture) = get_redis_fixture().await else {
+        eprintln!("Skipping test: Docker not available");
+        return;
+    };
+
+    let config = WriteCoordinatorConfig::default();
+    let coordinator = WriteCoordinator::new(fixture.url.clone(), config);
+
+    let result = coordinator.acquire_lock("TRIGGER_REDIS_ERROR").await;
+    assert!(result.is_err());
+    match result {
+        Err(storage::graph_duckdb::GraphError::S3(msg)) => {
+            assert!(msg.contains("Induced Redis failure"));
         }
-        Err(_) => {
-            eprintln!("Skipping test: Docker not available");
-        }
+        _ => panic!("Expected induced Redis failure, got {:?}", result),
     }
 }

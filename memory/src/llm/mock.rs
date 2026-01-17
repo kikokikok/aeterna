@@ -26,6 +26,124 @@ impl MockLlmService {
     }
 }
 
+impl Default for MockLlmService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mk_core::types::{
+        ConstraintOperator, ConstraintSeverity, ConstraintTarget, Policy, PolicyMode, PolicyRule,
+        RuleMergeStrategy,
+    };
+
+    #[tokio::test]
+    async fn test_mock_llm_new() {
+        let service = MockLlmService::new();
+        let result = service.generate("test prompt").await.unwrap();
+        assert!(result.contains("Mock response for: test prompt"));
+    }
+
+    #[tokio::test]
+    async fn test_mock_llm_add_response() {
+        let service = MockLlmService::new();
+        service
+            .add_response("hello".to_string(), "world".to_string())
+            .await;
+
+        let result = service.generate("hello").await.unwrap();
+        assert_eq!(result, "world");
+    }
+
+    #[tokio::test]
+    async fn test_mock_llm_set_response() {
+        let mut service = MockLlmService::new();
+        service.set_response("default response").await;
+
+        let result = service.generate("any prompt").await.unwrap();
+        assert_eq!(result, "default response");
+    }
+
+    #[tokio::test]
+    async fn test_mock_llm_generate_default_fallback() {
+        let service = MockLlmService::new();
+        let result = service.generate("unknown").await.unwrap();
+        assert!(result.contains("Mock response for:"));
+    }
+
+    #[tokio::test]
+    async fn test_mock_llm_analyze_drift_no_violations() {
+        let service = MockLlmService::new();
+        let policies = vec![Policy {
+            id: "policy1".to_string(),
+            name: "Test Policy".to_string(),
+            description: Some("A test policy".to_string()),
+            layer: mk_core::types::KnowledgeLayer::Team,
+            mode: PolicyMode::Mandatory,
+            merge_strategy: RuleMergeStrategy::Merge,
+            metadata: std::collections::HashMap::new(),
+            rules: vec![PolicyRule {
+                id: "rule1".to_string(),
+                rule_type: mk_core::types::RuleType::Deny,
+                target: ConstraintTarget::Code,
+                operator: ConstraintOperator::MustNotUse,
+                value: serde_json::json!("test"),
+                severity: ConstraintSeverity::Warn,
+                message: "Test rule".to_string(),
+            }],
+        }];
+
+        let result = service
+            .analyze_drift("clean content", &policies)
+            .await
+            .unwrap();
+        assert!(result.is_valid);
+        assert!(result.violations.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_mock_llm_analyze_drift_with_violation() {
+        let service = MockLlmService::new();
+        let policies = vec![Policy {
+            id: "policy1".to_string(),
+            name: "Test Policy".to_string(),
+            description: Some("A test policy".to_string()),
+            layer: mk_core::types::KnowledgeLayer::Team,
+            mode: PolicyMode::Mandatory,
+            merge_strategy: RuleMergeStrategy::Merge,
+            metadata: std::collections::HashMap::new(),
+            rules: vec![PolicyRule {
+                id: "rule1".to_string(),
+                rule_type: mk_core::types::RuleType::Deny,
+                target: ConstraintTarget::Code,
+                operator: ConstraintOperator::MustNotUse,
+                value: serde_json::json!("test"),
+                severity: ConstraintSeverity::Warn,
+                message: "Test rule".to_string(),
+            }],
+        }];
+
+        let result = service
+            .analyze_drift("content with violate:rule1", &policies)
+            .await
+            .unwrap();
+        assert!(!result.is_valid);
+        assert_eq!(result.violations.len(), 1);
+        assert_eq!(result.violations[0].rule_id, "rule1");
+        assert_eq!(result.violations[0].policy_id, "policy1");
+    }
+
+    #[tokio::test]
+    async fn test_mock_llm_default() {
+        let service = MockLlmService::default();
+        let result = service.generate("test").await.unwrap();
+        assert!(result.contains("Mock response for:"));
+    }
+}
+
 #[async_trait]
 impl LlmService for MockLlmService {
     type Error = Box<dyn std::error::Error + Send + Sync>;

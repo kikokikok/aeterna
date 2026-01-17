@@ -384,3 +384,73 @@ pub trait LlmService: Send + Sync {
         policies: &[crate::types::Policy],
     ) -> Result<crate::types::ValidationResult, Self::Error>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestEmbeddingService;
+
+    #[async_trait]
+    impl EmbeddingService for TestEmbeddingService {
+        type Error = Box<dyn std::error::Error + Send + Sync>;
+
+        async fn embed(&self, text: &str) -> Result<Vec<f32>, Self::Error> {
+            Ok(vec![text.len() as f32; 128])
+        }
+
+        fn dimension(&self) -> usize {
+            128
+        }
+    }
+
+    #[tokio::test]
+    async fn test_embedding_service_default_embed_batch() {
+        let service = TestEmbeddingService;
+
+        let texts = vec![
+            "short".to_string(),
+            "medium text".to_string(),
+            "this is a longer text".to_string(),
+        ];
+
+        let embeddings = service.embed_batch(&texts).await.unwrap();
+
+        assert_eq!(embeddings.len(), 3);
+        assert_eq!(embeddings[0].len(), 128);
+        assert_eq!(embeddings[1].len(), 128);
+        assert_eq!(embeddings[2].len(), 128);
+
+        assert_eq!(embeddings[0][0], 5.0);
+        assert_eq!(embeddings[1][0], 11.0);
+        assert_eq!(embeddings[2][0], 21.0);
+    }
+
+    #[tokio::test]
+    async fn test_embedding_service_dimension() {
+        let service = TestEmbeddingService;
+        assert_eq!(service.dimension(), 128);
+    }
+
+    #[tokio::test]
+    async fn test_embedding_service_embed_batch_empty() {
+        let service = TestEmbeddingService;
+        let texts: Vec<String> = vec![];
+        let embeddings = service.embed_batch(&texts).await.unwrap();
+        assert!(embeddings.is_empty());
+    }
+
+    #[test]
+    fn test_health_status_derive() {
+        let healthy = HealthStatus::Healthy;
+        let degraded = HealthStatus::Degraded;
+        let unhealthy = HealthStatus::Unhealthy;
+
+        assert_eq!(healthy.clone(), HealthStatus::Healthy);
+        assert_ne!(healthy, degraded);
+        assert_ne!(degraded, unhealthy);
+
+        let json = serde_json::to_string(&healthy).unwrap();
+        assert!(json.contains("Healthy"));
+    }
+}
