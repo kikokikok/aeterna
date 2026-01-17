@@ -833,7 +833,7 @@ mod tests {
 
     #[test]
     fn test_merge_all_fields() {
-        let mut base = Config::default();
+        let base = Config::default();
         let mut override_config = Config::default();
 
         override_config.providers.postgres.host = "new_pg_host".to_string();
@@ -921,43 +921,44 @@ mod tests {
 
     #[test]
     fn test_merge_tools_api_key_scenarios() {
-        let mut base = ToolConfig {
+        let mut base_val = ToolConfig {
             api_key: None,
             ..Default::default()
         };
-        let mut override_config = ToolConfig {
+        let override_config = ToolConfig {
             api_key: Some("new_key".to_string()),
             ..Default::default()
         };
         let mut changes = Vec::new();
-        merge_tools(&mut base, &override_config, "test", &mut changes);
-        assert_eq!(base.api_key, Some("new_key".to_string()));
+        merge_tools(&mut base_val, &override_config, "test", &mut changes);
+        assert_eq!(base_val.api_key, Some("new_key".to_string()));
         assert_eq!(changes.len(), 1);
         assert!(changes[0].contains("api_key = ***"));
 
-        let mut base = ToolConfig {
+        let mut base_val = ToolConfig {
             api_key: Some("old_key".to_string()),
             ..Default::default()
         };
-        let mut override_config = ToolConfig {
+        let override_config = ToolConfig {
             api_key: None,
             ..Default::default()
         };
         let mut changes = Vec::new();
-        merge_tools(&mut base, &override_config, "test", &mut changes);
-        assert_eq!(base.api_key, Some("old_key".to_string()));
+        merge_tools(&mut base_val, &override_config, "test", &mut changes);
+        assert_eq!(base_val.api_key, Some("old_key".to_string()));
         assert_eq!(changes.len(), 0);
 
-        let mut base = ToolConfig {
+        let base_val = ToolConfig {
             api_key: Some("same_key".to_string()),
             ..Default::default()
         };
-        let mut override_config = ToolConfig {
+        let override_config = ToolConfig {
             api_key: Some("same_key".to_string()),
             ..Default::default()
         };
         let mut changes = Vec::new();
-        merge_tools(&mut base, &override_config, "test", &mut changes);
+        let mut base_mut = base_val;
+        merge_tools(&mut base_mut, &override_config, "test", &mut changes);
         assert_eq!(changes.len(), 0);
     }
 

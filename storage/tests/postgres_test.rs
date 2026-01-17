@@ -7,15 +7,22 @@ use mk_core::traits::StorageBackend;
 use mk_core::types::{TenantContext, TenantId, UserId};
 use std::sync::atomic::{AtomicU32, Ordering};
 use storage::postgres::{PostgresBackend, PostgresError};
+use testcontainers::ContainerAsync;
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
 use tokio::sync::OnceCell;
 
-static POSTGRES_URL: OnceCell<Option<String>> = OnceCell::const_new();
+struct PostgresFixture {
+    #[allow(dead_code)]
+    container: ContainerAsync<Postgres>,
+    url: String,
+}
+
+static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
 static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
-async fn get_connection_url() -> Option<&'static String> {
-    POSTGRES_URL
+async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
+    POSTGRES
         .get_or_init(|| async {
             let container_result = Postgres::default()
                 .with_db_name("testdb")
@@ -28,10 +35,7 @@ async fn get_connection_url() -> Option<&'static String> {
                 Ok(container) => {
                     let port = container.get_host_port_ipv4(5432).await.ok()?;
                     let url = format!("postgres://testuser:testpass@localhost:{}/testdb", port);
-
-                    // Leak container to keep it alive for the entire test run
-                    Box::leak(Box::new(container));
-                    Some(url)
+                    Some(PostgresFixture { container, url })
                 }
                 Err(_) => None,
             }
@@ -40,11 +44,9 @@ async fn get_connection_url() -> Option<&'static String> {
         .as_ref()
 }
 
-/// Create a test backend with shared PostgreSQL container.
-/// Each test uses unique tenant IDs for isolation.
 async fn create_test_backend() -> Option<PostgresBackend> {
-    let url = get_connection_url().await?;
-    let backend = PostgresBackend::new(url).await.ok()?;
+    let fixture = get_postgres_fixture().await?;
+    let backend = PostgresBackend::new(&fixture.url).await.ok()?;
     backend.initialize_schema().await.ok()?;
     Some(backend)
 }

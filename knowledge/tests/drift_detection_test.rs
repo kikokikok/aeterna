@@ -14,6 +14,54 @@ use mk_core::types::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use storage::postgres::PostgresBackend;
+use testcontainers::ContainerAsync;
+use testcontainers::runners::AsyncRunner;
+use testcontainers_modules::postgres::Postgres;
+use tokio::sync::OnceCell;
+
+struct PostgresFixture {
+    #[allow(dead_code)]
+    container: ContainerAsync<Postgres>,
+    url: String,
+}
+
+static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
+static DRIFT_TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
+    POSTGRES
+        .get_or_init(|| async {
+            match Postgres::default()
+                .with_db_name("testdb")
+                .with_user("testuser")
+                .with_password("testpass")
+                .start()
+                .await
+            {
+                Ok(container) => {
+                    let port = container.get_host_port_ipv4(5432).await.ok()?;
+                    let url = format!("postgres://testuser:testpass@localhost:{}/testdb", port);
+                    Some(PostgresFixture { container, url })
+                }
+                Err(_) => None,
+            }
+        })
+        .await
+        .as_ref()
+}
+
+async fn create_test_backend() -> Option<PostgresBackend> {
+    let fixture = get_postgres_fixture().await?;
+    let backend = PostgresBackend::new(&fixture.url).await.ok()?;
+    backend.initialize_schema().await.ok()?;
+    Some(backend)
+}
+
+fn unique_drift_test_id() -> u32 {
+    DRIFT_TEST_COUNTER.fetch_add(1, Ordering::SeqCst)
+}
 
 fn create_test_context() -> TenantContext {
     TenantContext::new(
@@ -975,5 +1023,228 @@ async fn test_llm_does_not_duplicate_existing_violations() {
     assert_eq!(
         drift_score, 1.0,
         "Score should be capped at 1.0, not doubled"
+    );
+}
+
+#[tokio::test]
+async fn test_drift_auto_suppress_info_filters_info_violations() {
+    let Some(backend) = create_test_backend().await else {
+        eprintln!("Skipping PostgreSQL test: Docker not available");
+        return;
+    };
+
+    let test_id = unique_drift_test_id();
+    let tenant_id = TenantId::new(format!("tenant-auto-suppress-{}", test_id)).unwrap();
+    let ctx = TenantContext::new(
+        tenant_id.clone(),
+        UserId::new("user-1".to_string()).unwrap(),
+    );
+
+    let drift_config = mk_core::types::DriftConfig {
+        project_id: format!("proj-auto-suppress-{}", test_id),
+        tenant_id: tenant_id.clone(),
+        threshold: 0.2,
+        low_confidence_threshold: 0.7,
+        auto_suppress_info: true,
+        updated_at: chrono::Utc::now().timestamp(),
+    };
+
+    use mk_core::traits::StorageBackend;
+    backend.save_drift_config(drift_config).await.unwrap();
+
+    let mut engine = GovernanceEngine::new().with_storage(Arc::new(backend));
+
+    let policy = Policy {
+        id: format!("auto-suppress-policy-{}", test_id),
+        name: "Auto Suppress Policy".to_string(),
+        description: None,
+        layer: KnowledgeLayer::Company,
+        mode: PolicyMode::Mandatory,
+        merge_strategy: RuleMergeStrategy::Override,
+        rules: vec![
+            PolicyRule {
+                id: "info-rule".to_string(),
+                rule_type: RuleType::Allow,
+                target: ConstraintTarget::Dependency,
+                operator: ConstraintOperator::MustUse,
+                value: serde_json::json!("optional-lib"),
+                severity: ConstraintSeverity::Info,
+                message: "Optional library missing".to_string(),
+            },
+            PolicyRule {
+                id: "warn-rule".to_string(),
+                rule_type: RuleType::Allow,
+                target: ConstraintTarget::Dependency,
+                operator: ConstraintOperator::MustUse,
+                value: serde_json::json!("recommended-lib"),
+                severity: ConstraintSeverity::Warn,
+                message: "Recommended library missing".to_string(),
+            },
+        ],
+        metadata: HashMap::new(),
+    };
+    engine.add_policy(policy);
+
+    let mut context = HashMap::new();
+    context.insert("dependencies".to_string(), serde_json::json!([]));
+
+    let drift_score = engine
+        .check_drift(&ctx, &format!("proj-auto-suppress-{}", test_id), &context)
+        .await
+        .unwrap();
+
+    assert!(
+        (drift_score - 0.5).abs() < 0.01,
+        "With auto_suppress_info=true, Info violations should be filtered; only Warn (0.5) should count. Got: {}",
+        drift_score
+    );
+}
+
+#[tokio::test]
+async fn test_drift_without_auto_suppress_includes_info_violations() {
+    let Some(backend) = create_test_backend().await else {
+        eprintln!("Skipping PostgreSQL test: Docker not available");
+        return;
+    };
+
+    let test_id = unique_drift_test_id();
+    let tenant_id = TenantId::new(format!("tenant-no-suppress-{}", test_id)).unwrap();
+    let ctx = TenantContext::new(
+        tenant_id.clone(),
+        UserId::new("user-1".to_string()).unwrap(),
+    );
+
+    let drift_config = mk_core::types::DriftConfig {
+        project_id: format!("proj-no-suppress-{}", test_id),
+        tenant_id: tenant_id.clone(),
+        threshold: 0.2,
+        low_confidence_threshold: 0.7,
+        auto_suppress_info: false,
+        updated_at: chrono::Utc::now().timestamp(),
+    };
+
+    use mk_core::traits::StorageBackend;
+    backend.save_drift_config(drift_config).await.unwrap();
+
+    let mut engine = GovernanceEngine::new().with_storage(Arc::new(backend));
+
+    let policy = Policy {
+        id: format!("no-suppress-policy-{}", test_id),
+        name: "No Suppress Policy".to_string(),
+        description: None,
+        layer: KnowledgeLayer::Company,
+        mode: PolicyMode::Mandatory,
+        merge_strategy: RuleMergeStrategy::Override,
+        rules: vec![
+            PolicyRule {
+                id: "info-rule".to_string(),
+                rule_type: RuleType::Allow,
+                target: ConstraintTarget::Dependency,
+                operator: ConstraintOperator::MustUse,
+                value: serde_json::json!("optional-lib"),
+                severity: ConstraintSeverity::Info,
+                message: "Optional library missing".to_string(),
+            },
+            PolicyRule {
+                id: "warn-rule".to_string(),
+                rule_type: RuleType::Allow,
+                target: ConstraintTarget::Dependency,
+                operator: ConstraintOperator::MustUse,
+                value: serde_json::json!("recommended-lib"),
+                severity: ConstraintSeverity::Warn,
+                message: "Recommended library missing".to_string(),
+            },
+        ],
+        metadata: HashMap::new(),
+    };
+    engine.add_policy(policy);
+
+    let mut context = HashMap::new();
+    context.insert("dependencies".to_string(), serde_json::json!([]));
+
+    let drift_score = engine
+        .check_drift(&ctx, &format!("proj-no-suppress-{}", test_id), &context)
+        .await
+        .unwrap();
+
+    assert!(
+        (drift_score - 0.6).abs() < 0.01,
+        "With auto_suppress_info=false, both Info (0.1) and Warn (0.5) should count. Got: {}",
+        drift_score
+    );
+}
+
+#[tokio::test]
+async fn test_drift_stores_result_with_suppressions() {
+    let Some(backend) = create_test_backend().await else {
+        eprintln!("Skipping PostgreSQL test: Docker not available");
+        return;
+    };
+
+    let test_id = unique_drift_test_id();
+    let tenant_id = TenantId::new(format!("tenant-store-result-{}", test_id)).unwrap();
+    let ctx = TenantContext::new(
+        tenant_id.clone(),
+        UserId::new("user-1".to_string()).unwrap(),
+    );
+    let project_id = format!("proj-store-result-{}", test_id);
+
+    let drift_config = mk_core::types::DriftConfig {
+        project_id: project_id.clone(),
+        tenant_id: tenant_id.clone(),
+        threshold: 0.2,
+        low_confidence_threshold: 0.7,
+        auto_suppress_info: true,
+        updated_at: chrono::Utc::now().timestamp(),
+    };
+
+    use mk_core::traits::StorageBackend;
+    backend.save_drift_config(drift_config).await.unwrap();
+
+    let backend_arc = Arc::new(backend);
+    let mut engine = GovernanceEngine::new().with_storage(backend_arc.clone());
+
+    let policy = Policy {
+        id: "store-result-policy".to_string(),
+        name: "Store Result Policy".to_string(),
+        description: None,
+        layer: KnowledgeLayer::Company,
+        mode: PolicyMode::Mandatory,
+        merge_strategy: RuleMergeStrategy::Override,
+        rules: vec![PolicyRule {
+            id: "info-rule".to_string(),
+            rule_type: RuleType::Allow,
+            target: ConstraintTarget::Dependency,
+            operator: ConstraintOperator::MustUse,
+            value: serde_json::json!("optional-lib"),
+            severity: ConstraintSeverity::Info,
+            message: "Optional library missing".to_string(),
+        }],
+        metadata: HashMap::new(),
+    };
+    engine.add_policy(policy);
+
+    let mut context = HashMap::new();
+    context.insert("dependencies".to_string(), serde_json::json!([]));
+
+    let _ = engine
+        .check_drift(&ctx, &project_id, &context)
+        .await
+        .unwrap();
+
+    let stored_result = backend_arc
+        .get_latest_drift_result(ctx, &project_id)
+        .await
+        .unwrap();
+
+    assert!(stored_result.is_some(), "Drift result should be stored");
+    let result = stored_result.unwrap();
+    assert_eq!(
+        result.drift_score, 0.0,
+        "With Info auto-suppressed, drift should be 0"
+    );
+    assert!(
+        !result.suppressed_violations.is_empty(),
+        "Info violation should be in suppressed list"
     );
 }

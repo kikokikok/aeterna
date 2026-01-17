@@ -1,17 +1,48 @@
-//! MinIO/S3 integration tests for DuckDB graph store persistence
-//!
-//! These tests use testcontainers to spin up a MinIO instance for S3-compatible
-//! storage testing. They are marked #[ignore] by default and require Docker.
-
 use mk_core::types::{TenantContext, TenantId, UserId};
 use std::time::Duration;
 use storage::graph::{GraphEdge, GraphNode, GraphStore};
-use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore, GraphError};
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use storage::graph_duckdb::{ColdStartConfig, DuckDbGraphConfig, DuckDbGraphStore, GraphError};
+use testcontainers::{ContainerAsync, GenericImage, ImageExt, runners::AsyncRunner};
+use tokio::sync::OnceCell;
 
 const MINIO_ACCESS_KEY: &str = "minioadmin";
 const MINIO_SECRET_KEY: &str = "minioadmin";
 const TEST_BUCKET: &str = "aeterna-test";
+
+struct MinioFixture {
+    #[allow(dead_code)]
+    container: ContainerAsync<GenericImage>,
+    endpoint: String,
+}
+
+static MINIO: OnceCell<MinioFixture> = OnceCell::const_new();
+
+async fn get_minio() -> &'static MinioFixture {
+    MINIO
+        .get_or_init(|| async {
+            let container = GenericImage::new("minio/minio", "latest")
+                .with_exposed_port(9000.into())
+                .with_env_var("MINIO_ROOT_USER", MINIO_ACCESS_KEY)
+                .with_env_var("MINIO_ROOT_PASSWORD", MINIO_SECRET_KEY)
+                .with_cmd(vec!["server", "/data"])
+                .start()
+                .await
+                .expect("Failed to start MinIO container");
+
+            let port = container.get_host_port_ipv4(9000).await.unwrap();
+            let endpoint = format!("http://localhost:{}", port);
+
+            tokio::time::sleep(Duration::from_secs(2)).await;
+
+            setup_minio_bucket(&endpoint).await;
+
+            MinioFixture {
+                container,
+                endpoint,
+            }
+        })
+        .await
+}
 
 fn test_tenant_context() -> TenantContext {
     let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
@@ -33,7 +64,10 @@ async fn setup_minio_bucket(endpoint: &str) {
         .load()
         .await;
 
-    let s3_client = aws_sdk_s3::Client::new(&config);
+    let s3_config = aws_sdk_s3::config::Builder::from(&config)
+        .force_path_style(true)
+        .build();
+    let s3_client = aws_sdk_s3::Client::from_conf(s3_config);
 
     match s3_client.create_bucket().bucket(TEST_BUCKET).send().await {
         Ok(_) => {}
@@ -48,34 +82,39 @@ async fn setup_minio_bucket(endpoint: &str) {
     }
 }
 
-#[tokio::test]
-#[ignore = "requires Docker"]
-async fn test_persist_and_load_s3_roundtrip() {
-    let minio = GenericImage::new("minio/minio", "latest")
-        .with_exposed_port(9000.into())
-        .with_env_var("MINIO_ROOT_USER", MINIO_ACCESS_KEY)
-        .with_env_var("MINIO_ROOT_PASSWORD", MINIO_SECRET_KEY)
-        .with_cmd(vec!["server", "/data"])
-        .start()
-        .await
-        .expect("Failed to start MinIO");
-
-    let host = minio.get_host().await.unwrap();
-    let port = minio.get_host_port_ipv4(9000).await.unwrap();
-    let endpoint = format!("http://{}:{}", host, port);
-
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    setup_minio_bucket(&endpoint).await;
-
-    let config = DuckDbGraphConfig {
+fn make_config(endpoint: &str, prefix: &str) -> DuckDbGraphConfig {
+    DuckDbGraphConfig {
         path: ":memory:".to_string(),
         s3_bucket: Some(TEST_BUCKET.to_string()),
-        s3_prefix: Some("test-graphs".to_string()),
-        s3_endpoint: Some(endpoint.clone()),
+        s3_prefix: Some(prefix.to_string()),
+        s3_endpoint: Some(endpoint.to_string()),
         s3_region: Some("us-east-1".to_string()),
+        s3_force_path_style: true,
         ..Default::default()
-    };
+    }
+}
+
+fn make_config_with_cold_start(
+    endpoint: &str,
+    prefix: &str,
+    cold_start: ColdStartConfig,
+) -> DuckDbGraphConfig {
+    DuckDbGraphConfig {
+        path: ":memory:".to_string(),
+        s3_bucket: Some(TEST_BUCKET.to_string()),
+        s3_prefix: Some(prefix.to_string()),
+        s3_endpoint: Some(endpoint.to_string()),
+        s3_region: Some("us-east-1".to_string()),
+        s3_force_path_style: true,
+        cold_start,
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn test_persist_and_load_s3_roundtrip() {
+    let minio = get_minio().await;
+    let config = make_config(&minio.endpoint, "test-graphs");
 
     let store = DuckDbGraphStore::new(config.clone()).expect("Failed to create store");
     let ctx = test_tenant_context();
@@ -123,33 +162,9 @@ async fn test_persist_and_load_s3_roundtrip() {
 }
 
 #[tokio::test]
-#[ignore = "requires Docker"]
 async fn test_s3_checksum_verification() {
-    let minio = GenericImage::new("minio/minio", "latest")
-        .with_exposed_port(9000.into())
-        .with_env_var("MINIO_ROOT_USER", MINIO_ACCESS_KEY)
-        .with_env_var("MINIO_ROOT_PASSWORD", MINIO_SECRET_KEY)
-        .with_cmd(vec!["server", "/data"])
-        .start()
-        .await
-        .expect("Failed to start MinIO");
-
-    let host = minio.get_host().await.unwrap();
-    let port = minio.get_host_port_ipv4(9000).await.unwrap();
-    let endpoint = format!("http://{}:{}", host, port);
-
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    setup_minio_bucket(&endpoint).await;
-
-    let config = DuckDbGraphConfig {
-        path: ":memory:".to_string(),
-        s3_bucket: Some(TEST_BUCKET.to_string()),
-        s3_prefix: Some("checksum-test".to_string()),
-        s3_endpoint: Some(endpoint),
-        s3_region: Some("us-east-1".to_string()),
-        ..Default::default()
-    };
+    let minio = get_minio().await;
+    let config = make_config(&minio.endpoint, "checksum-test");
 
     let store = DuckDbGraphStore::new(config.clone()).expect("Failed to create store");
     let ctx = test_tenant_context();
@@ -171,7 +186,6 @@ async fn test_s3_checksum_verification() {
 }
 
 #[tokio::test]
-#[ignore = "requires Docker"]
 async fn test_s3_not_configured_error() {
     let store =
         DuckDbGraphStore::new(DuckDbGraphConfig::default()).expect("Failed to create store");
@@ -184,33 +198,9 @@ async fn test_s3_not_configured_error() {
 }
 
 #[tokio::test]
-#[ignore = "requires Docker"]
 async fn test_multi_tenant_s3_isolation() {
-    let minio = GenericImage::new("minio/minio", "latest")
-        .with_exposed_port(9000.into())
-        .with_env_var("MINIO_ROOT_USER", MINIO_ACCESS_KEY)
-        .with_env_var("MINIO_ROOT_PASSWORD", MINIO_SECRET_KEY)
-        .with_cmd(vec!["server", "/data"])
-        .start()
-        .await
-        .expect("Failed to start MinIO");
-
-    let host = minio.get_host().await.unwrap();
-    let port = minio.get_host_port_ipv4(9000).await.unwrap();
-    let endpoint = format!("http://{}:{}", host, port);
-
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    setup_minio_bucket(&endpoint).await;
-
-    let config = DuckDbGraphConfig {
-        path: ":memory:".to_string(),
-        s3_bucket: Some(TEST_BUCKET.to_string()),
-        s3_prefix: Some("multi-tenant".to_string()),
-        s3_endpoint: Some(endpoint),
-        s3_region: Some("us-east-1".to_string()),
-        ..Default::default()
-    };
+    let minio = get_minio().await;
+    let config = make_config(&minio.endpoint, "multi-tenant");
 
     let store = DuckDbGraphStore::new(config.clone()).expect("Failed to create store");
 
@@ -254,4 +244,170 @@ async fn test_multi_tenant_s3_isolation() {
 
     let stats2 = store2.get_stats(ctx2).unwrap();
     assert_eq!(stats2.node_count, 0);
+}
+
+#[tokio::test]
+async fn test_s3_partition_fetch_error_trigger() {
+    let minio = get_minio().await;
+    let cold_start = ColdStartConfig {
+        lazy_loading_enabled: true,
+        budget_ms: 5000,
+        access_tracking_enabled: true,
+        prewarm_partition_count: 5,
+        warm_pool_enabled: false,
+        warm_pool_min_instances: 0,
+    };
+    let config = make_config_with_cold_start(&minio.endpoint, "partition-error-test", cold_start);
+
+    let store = DuckDbGraphStore::new(config).expect("Failed to create store");
+
+    let partition_keys = vec!["partition-1".to_string(), "partition-2".to_string()];
+    let result = store
+        .lazy_load_partitions("TRIGGER_S3_PARTITION_ERROR", &partition_keys)
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "lazy_load_partitions should not fail entirely"
+    );
+    let load_result = result.unwrap();
+
+    assert_eq!(
+        load_result.partitions_loaded, 0,
+        "No partitions should be successfully loaded"
+    );
+    assert_eq!(
+        load_result.deferred_partitions.len(),
+        2,
+        "Both partitions should be deferred"
+    );
+    assert!(
+        load_result
+            .deferred_partitions
+            .contains(&"partition-1".to_string())
+    );
+    assert!(
+        load_result
+            .deferred_partitions
+            .contains(&"partition-2".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_s3_partition_not_found_graceful_handling() {
+    let minio = get_minio().await;
+    let cold_start = ColdStartConfig {
+        lazy_loading_enabled: true,
+        budget_ms: 5000,
+        access_tracking_enabled: true,
+        prewarm_partition_count: 5,
+        warm_pool_enabled: false,
+        warm_pool_min_instances: 0,
+    };
+    let config = make_config_with_cold_start(&minio.endpoint, "not-found-test", cold_start);
+
+    let store = DuckDbGraphStore::new(config).expect("Failed to create store");
+
+    let partition_keys = vec![
+        "nonexistent-partition-1".to_string(),
+        "nonexistent-partition-2".to_string(),
+    ];
+    let result = store
+        .lazy_load_partitions("valid-tenant-id", &partition_keys)
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "lazy_load_partitions should handle missing partitions gracefully: {:?}",
+        result.err()
+    );
+    let load_result = result.unwrap();
+
+    assert_eq!(
+        load_result.partitions_loaded, 2,
+        "Missing partitions should be counted as loaded (NoSuchKey returns Ok)"
+    );
+    assert!(
+        load_result.deferred_partitions.is_empty(),
+        "No partitions should be deferred for missing keys"
+    );
+}
+
+#[tokio::test]
+async fn test_s3_partition_budget_exhaustion_defers_remaining() {
+    let minio = get_minio().await;
+    let cold_start = ColdStartConfig {
+        lazy_loading_enabled: true,
+        budget_ms: 1,
+        access_tracking_enabled: true,
+        prewarm_partition_count: 5,
+        warm_pool_enabled: false,
+        warm_pool_min_instances: 0,
+    };
+    let config = make_config_with_cold_start(&minio.endpoint, "budget-test", cold_start);
+
+    let store = DuckDbGraphStore::new(config).expect("Failed to create store");
+
+    let partition_keys: Vec<String> = (1..=10).map(|i| format!("partition-{}", i)).collect();
+    let result = store
+        .lazy_load_partitions("budget-test-tenant", &partition_keys)
+        .await;
+
+    assert!(result.is_ok(), "lazy_load_partitions should succeed");
+    let load_result = result.unwrap();
+
+    assert!(
+        load_result.deferred_partitions.len() > 0 || load_result.partitions_loaded > 0,
+        "Either some partitions loaded or some were deferred"
+    );
+
+    assert_eq!(
+        load_result.partitions_loaded + load_result.deferred_partitions.len(),
+        10,
+        "Sum of loaded and deferred should equal requested partitions"
+    );
+
+    assert!(
+        load_result.budget_remaining_ms < load_result.total_load_time_ms
+            || load_result.budget_remaining_ms == 0,
+        "Budget should be consumed or exceeded"
+    );
+}
+
+#[tokio::test]
+async fn test_s3_lazy_loading_disabled_skips_all() {
+    let cold_start = ColdStartConfig {
+        lazy_loading_enabled: false,
+        budget_ms: 5000,
+        access_tracking_enabled: false,
+        prewarm_partition_count: 0,
+        warm_pool_enabled: false,
+        warm_pool_min_instances: 0,
+    };
+    let config = DuckDbGraphConfig {
+        path: ":memory:".to_string(),
+        s3_bucket: Some(TEST_BUCKET.to_string()),
+        s3_prefix: Some("disabled-test".to_string()),
+        s3_endpoint: Some("http://localhost:9000".to_string()),
+        s3_region: Some("us-east-1".to_string()),
+        s3_force_path_style: true,
+        cold_start,
+        ..Default::default()
+    };
+
+    let store = DuckDbGraphStore::new(config).expect("Failed to create store");
+
+    let partition_keys = vec!["partition-1".to_string(), "partition-2".to_string()];
+    let result = store
+        .lazy_load_partitions("any-tenant", &partition_keys)
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "Should succeed when lazy loading is disabled"
+    );
+    let load_result = result.unwrap();
+
+    assert_eq!(load_result.partitions_loaded, 0);
+    assert!(load_result.deferred_partitions.is_empty());
 }

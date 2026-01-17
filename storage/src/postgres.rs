@@ -128,6 +128,20 @@ impl PostgresBackend {
         .await?;
 
         sqlx::query(
+            "CREATE TABLE IF NOT EXISTS drift_configs (
+                project_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                threshold REAL NOT NULL DEFAULT 0.3,
+                low_confidence_threshold REAL NOT NULL DEFAULT 0.7,
+                auto_suppress_info BOOLEAN NOT NULL DEFAULT FALSE,
+                updated_at BIGINT NOT NULL,
+                PRIMARY KEY (project_id, tenant_id)
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
             "CREATE TABLE IF NOT EXISTS job_status (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 job_name TEXT NOT NULL,

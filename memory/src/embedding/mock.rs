@@ -92,4 +92,52 @@ mod tests {
             assert_eq!(embedding.len(), 384);
         }
     }
+
+    #[tokio::test]
+    async fn test_mock_embedding_dimension() {
+        let service = MockEmbeddingService::new(512);
+        assert_eq!(service.dimension(), 512);
+
+        let service2 = MockEmbeddingService::new(1024);
+        assert_eq!(service2.dimension(), 1024);
+    }
+
+    #[tokio::test]
+    async fn test_mock_embedding_typescript_javascript() {
+        let service = MockEmbeddingService::new(384);
+
+        let ts_embedding = service.embed("TypeScript framework").await.unwrap();
+        assert!(ts_embedding[2] > 0.0);
+        assert!(ts_embedding[3] > 0.0);
+
+        let js_embedding = service.embed("JavaScript library").await.unwrap();
+        assert!(js_embedding[2] > 0.0);
+        assert!(js_embedding[3] > 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_mock_embedding_database() {
+        let service = MockEmbeddingService::new(384);
+        let embedding = service.embed("Database management system").await.unwrap();
+        assert!(embedding[6] > 0.0);
+        assert!(embedding[7] > 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_mock_embedding_api() {
+        let service = MockEmbeddingService::new(384);
+        let embedding = service.embed("API endpoint design").await.unwrap();
+        assert!(embedding[8] > 0.0);
+        assert!(embedding[9] > 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_mock_embedding_length_factor() {
+        let service = MockEmbeddingService::new(384);
+
+        let short_text = service.embed("short").await.unwrap();
+        let long_text = service.embed(&"a".repeat(500)).await.unwrap();
+
+        assert!(long_text[10] > short_text[10]);
+    }
 }

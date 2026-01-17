@@ -672,7 +672,16 @@ mod tests {
             _ctx: TenantContext,
             _unit_id: &str,
         ) -> Result<Vec<Policy>, Self::Error> {
-            Ok(Vec::new())
+            Ok(vec![Policy {
+                id: "test-policy".to_string(),
+                name: "Test Policy".to_string(),
+                description: Some("Test Policy Description".to_string()),
+                layer: KnowledgeLayer::Project,
+                rules: vec![],
+                mode: mk_core::types::PolicyMode::Mandatory,
+                merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
+                metadata: HashMap::new(),
+            }])
         }
 
         async fn create_unit(&self, _unit: &OrganizationalUnit) -> Result<(), Self::Error> {

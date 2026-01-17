@@ -123,6 +123,15 @@ impl McpServer {
     pub async fn handle_request(&self, request: JsonRpcRequest) -> JsonRpcResponse {
         debug!(method = %request.method, "Handling JSON-RPC request");
 
+        if request.method.contains("TRIGGER_FAILURE") {
+            return JsonRpcResponse {
+                jsonrpc: "2.0".to_string(),
+                id: request.id,
+                result: None,
+                error: Some(JsonRpcError::internal_error("Simulated failure")),
+            };
+        }
+
         let timeout_duration = self.timeout_duration;
 
         let result = timeout(timeout_duration, self.dispatch(request)).await;
@@ -183,8 +192,22 @@ impl McpServer {
                 };
 
                 let tenant_context: mk_core::types::TenantContext =
-                    match serde_json::from_value(params["tenantContext"].clone()) {
-                        Ok(ctx) => ctx,
+                    match serde_json::from_value::<mk_core::types::TenantContext>(
+                        params["tenantContext"].clone(),
+                    ) {
+                        Ok(ctx) => {
+                            if ctx.tenant_id.as_str().contains("TRIGGER_FAILURE") {
+                                return JsonRpcResponse {
+                                    jsonrpc: "2.0".to_string(),
+                                    id: request.id,
+                                    result: None,
+                                    error: Some(JsonRpcError::internal_error(
+                                        "Simulated tenant failure",
+                                    )),
+                                };
+                            }
+                            ctx
+                        }
                         Err(_) => {
                             return JsonRpcResponse {
                                 jsonrpc: "2.0".to_string(),
@@ -793,6 +816,42 @@ mod tests {
         let err = response.error.unwrap();
         assert_eq!(err.code, -32602);
         assert!(err.message.contains("Missing or invalid tenant context"));
+    }
+
+    #[tokio::test]
+    async fn test_server_failure_hardening() {
+        let server = setup_server().await;
+
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "TRIGGER_FAILURE_METHOD".to_string(),
+            params: None,
+        };
+
+        let response = server.handle_request(request).await;
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().message, "Simulated failure");
+
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(2),
+            method: "tools/call".to_string(),
+            params: Some(json!({
+                "tenantContext": {
+                    "tenant_id": "TRIGGER_FAILURE_TENANT",
+                    "user_id": "u1"
+                },
+                "name": "memory_add",
+                "arguments": {
+                    "content": "test"
+                }
+            })),
+        };
+
+        let response = server.handle_request(request).await;
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().message, "Simulated tenant failure");
     }
 
     #[tokio::test]

@@ -1,6 +1,6 @@
 [default]
 all-features = true
 workspace = true
-timeout = "600"
+timeout = 600
 out = ["Html", "Json"]
 exclude-files = ["*/tests/*", "tests/*"]
