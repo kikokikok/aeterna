@@ -521,4 +521,145 @@ mod tests {
         assert_eq!(result.unwrap(), "trait success");
         assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
+
+    #[tokio::test]
+    async fn test_with_retry_no_jitter() {
+        let counter = AtomicUsize::new(0);
+
+        let config = RetryConfig {
+            max_retries: 2,
+            initial_backoff: std::time::Duration::from_millis(10),
+            max_backoff: std::time::Duration::from_millis(100),
+            backoff_multiplier: 2.0,
+            jitter: false,
+        };
+
+        let result = with_retry(
+            || async {
+                let count = counter.fetch_add(1, Ordering::SeqCst);
+                if count < 2 {
+                    Err(MemoryError::NetworkError("No jitter retry".to_string()))
+                } else {
+                    Ok("no jitter success")
+                }
+            },
+            config,
+        )
+        .await;
+
+        assert_eq!(result.unwrap(), "no jitter success");
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn test_with_retry_max_backoff_cap() {
+        let counter = AtomicUsize::new(0);
+
+        let config = RetryConfig {
+            max_retries: 3,
+            initial_backoff: std::time::Duration::from_millis(50),
+            max_backoff: std::time::Duration::from_millis(60),
+            backoff_multiplier: 10.0,
+            jitter: false,
+        };
+
+        let result = with_retry(
+            || async {
+                let count = counter.fetch_add(1, Ordering::SeqCst);
+                if count < 3 {
+                    Err(MemoryError::NetworkError("Backoff cap test".to_string()))
+                } else {
+                    Ok("capped backoff success")
+                }
+            },
+            config,
+        )
+        .await;
+
+        assert_eq!(result.unwrap(), "capped backoff success");
+        assert_eq!(counter.load(Ordering::SeqCst), 4);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_remains_closed_under_threshold() {
+        let breaker = CircuitBreaker::new(3, std::time::Duration::from_millis(100));
+
+        let _: Result<(), _> = breaker
+            .execute(|| async { Err(MemoryError::NetworkError("fail 1".into())) })
+            .await;
+        let _: Result<(), _> = breaker
+            .execute(|| async { Err(MemoryError::NetworkError("fail 2".into())) })
+            .await;
+
+        let result = breaker.execute(|| async { Ok("still open") }).await;
+        assert_eq!(result.unwrap(), "still open");
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_opens_at_threshold() {
+        let breaker = CircuitBreaker::new(2, std::time::Duration::from_millis(100));
+
+        let _: Result<(), _> = breaker
+            .execute(|| async { Err(MemoryError::NetworkError("fail 1".into())) })
+            .await;
+        let _: Result<(), _> = breaker
+            .execute(|| async { Err(MemoryError::NetworkError("fail 2".into())) })
+            .await;
+
+        let result = breaker.execute(|| async { Ok("should be blocked") }).await;
+        assert!(matches!(
+            result,
+            Err(MemoryError::NetworkError(msg)) if msg.contains("Circuit breaker is open")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_multiple_successes_after_half_open() {
+        let breaker = CircuitBreaker::new(1, std::time::Duration::from_millis(50));
+
+        let _: Result<(), _> = breaker
+            .execute(|| async { Err(MemoryError::NetworkError("open it".into())) })
+            .await;
+
+        tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+
+        let result1 = breaker.execute(|| async { Ok("first success") }).await;
+        assert_eq!(result1.unwrap(), "first success");
+
+        let result2 = breaker.execute(|| async { Ok("second success") }).await;
+        assert_eq!(result2.unwrap(), "second success");
+
+        let result3 = breaker.execute(|| async { Ok("third success") }).await;
+        assert_eq!(result3.unwrap(), "third success");
+    }
+
+    #[tokio::test]
+    async fn test_with_retry_returns_last_error_on_exhausted_retries() {
+        let counter = AtomicUsize::new(0);
+
+        let config = RetryConfig {
+            max_retries: 2,
+            initial_backoff: std::time::Duration::from_millis(1),
+            max_backoff: std::time::Duration::from_millis(10),
+            backoff_multiplier: 1.0,
+            jitter: false,
+        };
+
+        let result: Result<&str, _> = with_retry(
+            || async {
+                let count = counter.fetch_add(1, Ordering::SeqCst);
+                Err(MemoryError::NetworkError(format!("attempt {}", count)))
+            },
+            config,
+        )
+        .await;
+
+        assert!(result.is_err());
+        match result {
+            Err(MemoryError::NetworkError(msg)) => {
+                assert!(msg.contains("attempt"));
+            }
+            _ => panic!("Expected NetworkError"),
+        }
+    }
 }

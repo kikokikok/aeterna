@@ -136,6 +136,8 @@ pub struct DuckDbGraphConfig {
 
     pub s3_region: Option<String>,
 
+    pub s3_force_path_style: bool,
+
     pub cold_start: ColdStartConfig,
 }
 
@@ -150,6 +152,7 @@ impl Default for DuckDbGraphConfig {
             s3_prefix: None,
             s3_endpoint: None,
             s3_region: None,
+            s3_force_path_style: false,
             cold_start: ColdStartConfig::default(),
         }
     }
@@ -618,6 +621,28 @@ impl DuckDbGraphStore {
 
         info!("DuckDB graph store initialized successfully");
         Ok(store)
+    }
+
+    async fn create_s3_client(&self) -> Result<aws_sdk_s3::Client, GraphError> {
+        use aws_config::BehaviorVersion;
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(endpoint) = &self.config.s3_endpoint {
+            config_builder = config_builder.endpoint_url(endpoint);
+        }
+        if let Some(region) = &self.config.s3_region {
+            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+        let aws_config = config_builder.load().await;
+
+        if self.config.s3_force_path_style {
+            let s3_config = aws_sdk_s3::config::Builder::from(&aws_config)
+                .force_path_style(true)
+                .build();
+            Ok(aws_sdk_s3::Client::from_conf(s3_config))
+        } else {
+            Ok(aws_sdk_s3::Client::new(&aws_config))
+        }
     }
 
     #[instrument(skip(self))]
@@ -1452,7 +1477,6 @@ impl DuckDbGraphStore {
 
     #[instrument(skip(self), fields(tenant_id = %tenant_id))]
     pub async fn persist_to_s3(&self, tenant_id: &str) -> Result<String, GraphError> {
-        use aws_config::BehaviorVersion;
         use aws_sdk_s3::primitives::ByteStream;
         use sha2::{Digest, Sha256};
 
@@ -1463,15 +1487,7 @@ impl DuckDbGraphStore {
             .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
         let prefix = self.config.s3_prefix.as_deref().unwrap_or("graph");
 
-        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
-        if let Some(endpoint) = &self.config.s3_endpoint {
-            config_builder = config_builder.endpoint_url(endpoint);
-        }
-        if let Some(region) = &self.config.s3_region {
-            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
-        }
-        let aws_config = config_builder.load().await;
-        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+        let s3_client = self.create_s3_client().await?;
 
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
         let snapshot_key = format!("{}/{}/snapshot_{}.parquet", prefix, tenant_id, timestamp);
@@ -1527,7 +1543,6 @@ impl DuckDbGraphStore {
         tenant_id: &str,
         snapshot_key: &str,
     ) -> Result<(), GraphError> {
-        use aws_config::BehaviorVersion;
         use sha2::{Digest, Sha256};
 
         let bucket = self
@@ -1536,15 +1551,7 @@ impl DuckDbGraphStore {
             .as_ref()
             .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
 
-        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
-        if let Some(endpoint) = &self.config.s3_endpoint {
-            config_builder = config_builder.endpoint_url(endpoint);
-        }
-        if let Some(region) = &self.config.s3_region {
-            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
-        }
-        let aws_config = config_builder.load().await;
-        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+        let s3_client = self.create_s3_client().await?;
 
         let response = s3_client
             .get_object()
@@ -1677,7 +1684,6 @@ impl DuckDbGraphStore {
         tenant_id: &str,
         backup_config: &BackupConfig,
     ) -> Result<BackupResult, GraphError> {
-        use aws_config::BehaviorVersion;
         use aws_sdk_s3::primitives::ByteStream;
         use sha2::{Digest, Sha256};
 
@@ -1690,15 +1696,7 @@ impl DuckDbGraphStore {
             .as_ref()
             .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
 
-        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
-        if let Some(endpoint) = &self.config.s3_endpoint {
-            config_builder = config_builder.endpoint_url(endpoint);
-        }
-        if let Some(region) = &self.config.s3_region {
-            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
-        }
-        let aws_config = config_builder.load().await;
-        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+        let s3_client = self.create_s3_client().await?;
 
         let snapshot_id = Uuid::new_v4().to_string();
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
@@ -1767,8 +1765,6 @@ impl DuckDbGraphStore {
         tenant_id: &str,
         backup_config: &BackupConfig,
     ) -> Result<Vec<SnapshotMetadata>, GraphError> {
-        use aws_config::BehaviorVersion;
-
         Self::validate_tenant_id_format(tenant_id)?;
 
         let bucket = self
@@ -1777,15 +1773,7 @@ impl DuckDbGraphStore {
             .as_ref()
             .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
 
-        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
-        if let Some(endpoint) = &self.config.s3_endpoint {
-            config_builder = config_builder.endpoint_url(endpoint);
-        }
-        if let Some(region) = &self.config.s3_region {
-            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
-        }
-        let aws_config = config_builder.load().await;
-        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+        let s3_client = self.create_s3_client().await?;
 
         let prefix = format!("{}/{}/", backup_config.backup_prefix, tenant_id);
 
@@ -1836,7 +1824,6 @@ impl DuckDbGraphStore {
         snapshot_id: &str,
         backup_config: &BackupConfig,
     ) -> Result<RecoveryResult, GraphError> {
-        use aws_config::BehaviorVersion;
         use sha2::{Digest, Sha256};
 
         let start = std::time::Instant::now();
@@ -1854,15 +1841,7 @@ impl DuckDbGraphStore {
             .as_ref()
             .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
 
-        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
-        if let Some(endpoint) = &self.config.s3_endpoint {
-            config_builder = config_builder.endpoint_url(endpoint);
-        }
-        if let Some(region) = &self.config.s3_region {
-            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
-        }
-        let aws_config = config_builder.load().await;
-        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+        let s3_client = self.create_s3_client().await?;
 
         let response = s3_client
             .get_object()
@@ -1917,8 +1896,6 @@ impl DuckDbGraphStore {
         tenant_id: &str,
         backup_config: &BackupConfig,
     ) -> Result<usize, GraphError> {
-        use aws_config::BehaviorVersion;
-
         Self::validate_tenant_id_format(tenant_id)?;
 
         let bucket = self
@@ -1927,15 +1904,7 @@ impl DuckDbGraphStore {
             .as_ref()
             .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
 
-        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
-        if let Some(endpoint) = &self.config.s3_endpoint {
-            config_builder = config_builder.endpoint_url(endpoint);
-        }
-        if let Some(region) = &self.config.s3_region {
-            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
-        }
-        let aws_config = config_builder.load().await;
-        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+        let s3_client = self.create_s3_client().await?;
 
         let mut snapshots = self.list_snapshots(tenant_id, backup_config).await?;
         let mut deleted_count = 0;
@@ -2358,8 +2327,6 @@ impl DuckDbGraphStore {
     }
 
     pub async fn check_s3_connectivity(&self) -> ComponentHealth {
-        use aws_config::BehaviorVersion;
-
         let bucket = match &self.config.s3_bucket {
             Some(b) => b,
             None => {
@@ -2370,15 +2337,15 @@ impl DuckDbGraphStore {
             }
         };
 
-        let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
-        if let Some(endpoint) = &self.config.s3_endpoint {
-            config_builder = config_builder.endpoint_url(endpoint);
-        }
-        if let Some(region) = &self.config.s3_region {
-            config_builder = config_builder.region(aws_config::Region::new(region.clone()));
-        }
-        let aws_config = config_builder.load().await;
-        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+        let s3_client = match self.create_s3_client().await {
+            Ok(c) => c,
+            Err(e) => {
+                return ComponentHealth {
+                    is_healthy: false,
+                    message: format!("Failed to create S3 client: {}", e),
+                };
+            }
+        };
 
         match s3_client.head_bucket().bucket(bucket).send().await {
             Ok(_) => ComponentHealth {
@@ -2570,16 +2537,7 @@ impl DuckDbGraphStore {
                 let prefix = self.config.s3_prefix.as_deref().unwrap_or("partitions");
                 let s3_key = format!("{}/{}/{}.parquet", prefix, tenant_id, partition_key);
 
-                use aws_config::BehaviorVersion;
-                let mut config_builder = aws_config::defaults(BehaviorVersion::latest());
-                if let Some(endpoint) = &self.config.s3_endpoint {
-                    config_builder = config_builder.endpoint_url(endpoint);
-                }
-                if let Some(region) = &self.config.s3_region {
-                    config_builder = config_builder.region(aws_config::Region::new(region.clone()));
-                }
-                let aws_config = config_builder.load().await;
-                let s3_client = aws_sdk_s3::Client::new(&aws_config);
+                let s3_client = self.create_s3_client().await?;
 
                 match s3_client
                     .get_object()

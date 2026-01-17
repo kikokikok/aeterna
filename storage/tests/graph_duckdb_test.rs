@@ -917,7 +917,7 @@ async fn test_duckdb_checksum_mismatch() {
 
 #[tokio::test]
 async fn test_duckdb_s3_atomicity() {
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     unsafe {
@@ -1045,7 +1045,10 @@ async fn test_duckdb_lazy_load_partition_error() {
         .record_partition_access(tenant_id, "part1", 10.5)
         .unwrap();
 
-    let result = store.lazy_load_partitions(tenant_id).await.unwrap();
+    let result = store
+        .lazy_load_partitions(tenant_id, &["part1".to_string()])
+        .await
+        .unwrap();
     assert_eq!(result.partitions_loaded, 0);
     assert_eq!(result.deferred_partitions.len(), 1);
     assert_eq!(result.deferred_partitions[0], "part1");
@@ -1053,8 +1056,8 @@ async fn test_duckdb_lazy_load_partition_error() {
 
 #[tokio::test]
 async fn test_duckdb_redis_lock_failure() {
-    let config = DuckDbGraphConfig::default();
-    let store = DuckDbGraphStore::new(config).expect("Failed to create DuckDbGraphStore");
+    let _config = DuckDbGraphConfig::default();
+    let _store = DuckDbGraphStore::new(_config).expect("Failed to create DuckDbGraphStore");
 
     // DuckDbGraphStore doesn't expose WriteCoordinator directly, so we need to find how it's used.
     // Looking at the code, DuckDbGraphStore doesn't seem to use WriteCoordinator yet.

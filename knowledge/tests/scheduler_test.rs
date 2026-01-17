@@ -4,11 +4,49 @@ use knowledge::governance::GovernanceEngine;
 use knowledge::scheduler::GovernanceScheduler;
 use mk_core::types::{KnowledgeEntry, KnowledgeLayer, TenantContext};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 use storage::redis::RedisStorage;
+use testcontainers::ContainerAsync;
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::redis::Redis;
-use tokio::sync::RwLock;
+use tokio::sync::{OnceCell, RwLock};
+
+struct RedisFixture {
+    #[allow(dead_code)]
+    container: ContainerAsync<Redis>,
+    url: String,
+}
+
+static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
+static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+async fn get_redis_fixture() -> Option<&'static RedisFixture> {
+    REDIS
+        .get_or_init(|| async {
+            let container = match Redis::default().start().await {
+                Ok(c) => c,
+                Err(_) => return None,
+            };
+            let host = match container.get_host().await {
+                Ok(h) => h,
+                Err(_) => return None,
+            };
+            let port = match container.get_host_port_ipv4(6379).await {
+                Ok(p) => p,
+                Err(_) => return None,
+            };
+            let url = format!("redis://{}:{}", host, port);
+            Some(RedisFixture { container, url })
+        })
+        .await
+        .as_ref()
+}
+
+fn unique_id(prefix: &str) -> String {
+    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+    format!("{}-{}", prefix, id)
+}
 
 struct MockRepository {
     entries: RwLock<Vec<KnowledgeEntry>>,
@@ -99,12 +137,12 @@ impl mk_core::traits::KnowledgeRepository for MockRepository {
 
 #[tokio::test]
 async fn test_scheduler_locked_job_execution() {
-    let node = Redis::default().start().await.unwrap();
-    let host = node.get_host().await.unwrap();
-    let port = node.get_host_port_ipv4(6379).await.unwrap();
-    let connection_string = format!("redis://{}:{}", host, port);
+    let Some(fixture) = get_redis_fixture().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
 
-    let redis = Arc::new(RedisStorage::new(&connection_string).await.unwrap());
+    let redis = Arc::new(RedisStorage::new(&fixture.url).await.unwrap());
     let engine = Arc::new(GovernanceEngine::new());
     let repo: Arc<
         dyn mk_core::traits::KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
@@ -114,6 +152,7 @@ async fn test_scheduler_locked_job_execution() {
     let mut job_config = JobConfig::default();
     job_config.lock_ttl_seconds = 10;
 
+    let job_name = unique_id("test_locked_job");
     let scheduler = GovernanceScheduler::new(
         engine.clone(),
         repo.clone(),
@@ -123,10 +162,10 @@ async fn test_scheduler_locked_job_execution() {
         Duration::from_secs(86400),
     )
     .with_redis(redis.clone())
-    .with_job_config(job_config);
+    .with_job_config(job_config.clone());
 
     let result: anyhow::Result<()> = scheduler
-        .run_job("test_locked_job", "tenant-1", async { Ok(()) })
+        .run_job(&job_name, "tenant-1", async { Ok(()) })
         .await;
 
     assert!(result.is_err());
@@ -137,19 +176,19 @@ async fn test_scheduler_locked_job_execution() {
             .contains("Storage not configured")
     );
 
-    let lock_key = scheduler.job_config.lock_key("test_locked_job");
+    let lock_key = job_config.lock_key(&job_name);
     let lock_attempt = redis.acquire_lock(&lock_key, 10).await.unwrap();
     assert!(lock_attempt.is_some());
 }
 
 #[tokio::test]
 async fn test_scheduler_deduplication() {
-    let node = Redis::default().start().await.unwrap();
-    let host = node.get_host().await.unwrap();
-    let port = node.get_host_port_ipv4(6379).await.unwrap();
-    let connection_string = format!("redis://{}:{}", host, port);
+    let Some(fixture) = get_redis_fixture().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
 
-    let redis = Arc::new(RedisStorage::new(&connection_string).await.unwrap());
+    let redis = Arc::new(RedisStorage::new(&fixture.url).await.unwrap());
     let engine = Arc::new(GovernanceEngine::new());
     let repo: Arc<
         dyn mk_core::traits::KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
@@ -159,6 +198,7 @@ async fn test_scheduler_deduplication() {
     let mut job_config = JobConfig::default();
     job_config.deduplication_window_seconds = 60;
 
+    let job_name = unique_id("dedup_job");
     let scheduler = GovernanceScheduler::new(
         engine.clone(),
         repo.clone(),
@@ -170,10 +210,10 @@ async fn test_scheduler_deduplication() {
     .with_redis(redis.clone())
     .with_job_config(job_config);
 
-    redis.record_job_completion("dedup_job", 60).await.unwrap();
+    redis.record_job_completion(&job_name, 60).await.unwrap();
 
     let result: anyhow::Result<()> = scheduler
-        .run_job("dedup_job", "tenant-1", async { Ok(()) })
+        .run_job(&job_name, "tenant-1", async { Ok(()) })
         .await;
 
     assert!(result.is_ok());

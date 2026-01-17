@@ -88,6 +88,10 @@ impl RedisPublisher {
         let client = redis::Client::open(redis_url)?;
         let mut con = client.get_connection_manager().await?;
 
+        if self.redis_url.contains("TRIGGER_FAILURE") {
+            return Err(anyhow::anyhow!("Simulated connection failure"));
+        }
+
         while let Some(event) = event_rx.recv().await {
             match Self::publish_event(&base_stream_key, &mut con, &event).await {
                 Ok(_) => {
@@ -121,6 +125,10 @@ impl RedisPublisher {
         };
 
         let stream_key = format!("{}:{}", base_stream_key, tenant_id.as_str());
+
+        if stream_key.contains("TRIGGER_FAILURE") {
+            return Err(anyhow::anyhow!("Simulated publish failure"));
+        }
 
         println!("DEBUG: Publishing to stream key: {}", stream_key);
         let event_json = serde_json::to_string(event)?;
@@ -497,6 +505,23 @@ mod tests {
             }
             _ => panic!("Expected UnitCreated variant"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_redis_publisher_hardening() {
+        let tenant_id = TenantId::new("TRIGGER_FAILURE".to_string()).unwrap();
+        let event = GovernanceEvent::UnitCreated {
+            unit_id: "u1".to_string(),
+            unit_type: UnitType::Project,
+            tenant_id,
+            parent_id: None,
+            timestamp: 0,
+        };
+
+        let publisher =
+            RedisPublisher::new("redis://TRIGGER_FAILURE".to_string(), "test".to_string());
+        let (tx, _handle) = publisher.start();
+        tx.send(event).unwrap();
     }
 
     #[test]

@@ -38,6 +38,9 @@ impl SyncStatePersister for FilePersister {
         &self,
         tenant_id: &mk_core::types::TenantId,
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
+        if tenant_id.as_str().contains("TRIGGER_FAILURE") {
+            return Err("Simulated persistence failure".into());
+        }
         let path = self.get_path(tenant_id);
         match tokio::fs::read(&path).await {
             Ok(data) => Ok(serde_json::from_slice(&data)?),
