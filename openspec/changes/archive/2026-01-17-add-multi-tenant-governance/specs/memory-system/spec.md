@@ -130,6 +130,8 @@ The system SHALL enforce layer access based on provided identifiers and tenant c
 - **WHEN** attempting to access any layer without TenantContext
 - **THEN** system SHALL return MISSING_TENANT_CONTEXT error
 
+## ADDED Requirements
+
 ### Requirement: Governance Validation
 The system SHALL validate all memory operations against tenant governance policies before execution.
 
@@ -147,8 +149,6 @@ The system SHALL validate all memory operations against tenant governance polici
 - **WHEN** searching memories with content that matches policy-filtered terms
 - **THEN** system SHALL filter out results that violate tenant policies
 - **AND** system SHALL log the filtering action for audit purposes
-
-## ADDED Requirements
 
 ### Requirement: Tenant Context Propagation
 All memory operations SHALL require a TenantContext parameter for tenant isolation and authorization.
