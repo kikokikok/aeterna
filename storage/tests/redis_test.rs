@@ -4,22 +4,28 @@ use errors::StorageError;
 use mk_core::types::{PartialJobResult, TenantContext, TenantId, UserId};
 use std::sync::atomic::{AtomicU32, Ordering};
 use storage::redis::RedisStorage;
+use testcontainers::ContainerAsync;
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::redis::Redis;
 use tokio::sync::OnceCell;
 
-static REDIS_URL: OnceCell<Option<String>> = OnceCell::const_new();
+struct RedisFixture {
+    #[allow(dead_code)]
+    container: ContainerAsync<Redis>,
+    url: String,
+}
+
+static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
 static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
-async fn get_redis_url() -> Option<&'static String> {
-    REDIS_URL
+async fn get_redis_fixture() -> Option<&'static RedisFixture> {
+    REDIS
         .get_or_init(|| async {
             match Redis::default().start().await {
                 Ok(container) => {
                     let port = container.get_host_port_ipv4(6379).await.ok()?;
                     let url = format!("redis://localhost:{}", port);
-                    Box::leak(Box::new(container));
-                    Some(url)
+                    Some(RedisFixture { container, url })
                 }
                 Err(_) => None,
             }
@@ -29,8 +35,8 @@ async fn get_redis_url() -> Option<&'static String> {
 }
 
 async fn create_test_redis() -> Option<RedisStorage> {
-    let url = get_redis_url().await?;
-    RedisStorage::new(url).await.ok()
+    let fixture = get_redis_fixture().await?;
+    RedisStorage::new(&fixture.url).await.ok()
 }
 
 fn unique_key(prefix: &str) -> String {
@@ -766,4 +772,243 @@ async fn test_redis_storage_backend_trait() {
 
     let exists_after = redis.exists(ctx, &key).await.unwrap();
     assert!(!exists_after);
+}
+
+#[tokio::test]
+async fn test_redis_subscribe_receives_governance_events() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_tenant_id();
+    let stream_key = format!("governance:events:{}", tenant_id);
+
+    use mk_core::traits::EventPublisher;
+    let mut rx = redis.subscribe(&[&stream_key]).await.unwrap();
+
+    let event = mk_core::types::GovernanceEvent::DriftDetected {
+        project_id: "proj-subscribe-test".to_string(),
+        tenant_id: tenant_id.clone(),
+        drift_score: 0.85,
+        timestamp: chrono::Utc::now().timestamp(),
+    };
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    redis.publish(event.clone()).await.unwrap();
+
+    let received = tokio::time::timeout(tokio::time::Duration::from_secs(5), rx.recv()).await;
+
+    assert!(
+        received.is_ok(),
+        "Should receive event within timeout period"
+    );
+    let received_event = received.unwrap();
+    assert!(received_event.is_some(), "Channel should not be closed");
+
+    if let mk_core::types::GovernanceEvent::DriftDetected {
+        project_id,
+        drift_score,
+        ..
+    } = received_event.unwrap()
+    {
+        assert_eq!(project_id, "proj-subscribe-test");
+        assert!((drift_score - 0.85).abs() < 0.01);
+    } else {
+        panic!("Expected DriftDetected event");
+    }
+}
+
+#[tokio::test]
+async fn test_redis_subscribe_multiple_channels() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id1 = unique_tenant_id();
+    let tenant_id2 = unique_tenant_id();
+    let stream1 = format!("governance:events:{}", tenant_id1);
+    let stream2 = format!("governance:events:{}", tenant_id2);
+
+    use mk_core::traits::EventPublisher;
+
+    let mut received_count = 0;
+    for attempt in 1..=3 {
+        let mut rx = redis.subscribe(&[&stream1, &stream2]).await.unwrap();
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(300 * attempt as u64)).await;
+
+        let event1 = mk_core::types::GovernanceEvent::PolicyUpdated {
+            policy_id: format!("policy-{}", attempt),
+            layer: mk_core::types::KnowledgeLayer::Company,
+            tenant_id: tenant_id1.clone(),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        redis.publish(event1).await.unwrap();
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let event2 = mk_core::types::GovernanceEvent::UnitCreated {
+            unit_id: format!("unit-{}", attempt),
+            unit_type: mk_core::types::UnitType::Team,
+            tenant_id: tenant_id2.clone(),
+            parent_id: None,
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        redis.publish(event2).await.unwrap();
+
+        received_count = 0;
+        for _ in 0..2 {
+            if let Ok(Some(_)) =
+                tokio::time::timeout(tokio::time::Duration::from_secs(3), rx.recv()).await
+            {
+                received_count += 1;
+            }
+        }
+
+        if received_count == 2 {
+            break;
+        }
+    }
+
+    assert_eq!(received_count, 2, "Should receive events from both streams");
+}
+
+#[tokio::test]
+async fn test_redis_subscribe_multiple_events_in_sequence() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_tenant_id();
+    let stream_key = format!("governance:events:{}", tenant_id);
+
+    use mk_core::traits::EventPublisher;
+    let mut rx = redis.subscribe(&[&stream_key]).await.unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    for i in 0..5 {
+        let event = mk_core::types::GovernanceEvent::DriftDetected {
+            project_id: format!("proj-seq-{}", i),
+            tenant_id: tenant_id.clone(),
+            drift_score: 0.1 * (i as f32 + 1.0),
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        redis.publish(event).await.unwrap();
+    }
+
+    let mut received_projects = Vec::new();
+    for _ in 0..5 {
+        let received = tokio::time::timeout(tokio::time::Duration::from_secs(5), rx.recv()).await;
+        if let Ok(Some(mk_core::types::GovernanceEvent::DriftDetected { project_id, .. })) =
+            received
+        {
+            received_projects.push(project_id);
+        }
+    }
+
+    assert_eq!(received_projects.len(), 5, "Should receive all 5 events");
+    for i in 0..5 {
+        assert!(
+            received_projects.contains(&format!("proj-seq-{}", i)),
+            "Should contain proj-seq-{}",
+            i
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_redis_subscribe_channel_closed_on_drop() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_tenant_id();
+    let stream_key = format!("governance:events:{}", tenant_id);
+
+    use mk_core::traits::EventPublisher;
+    let rx = redis.subscribe(&[&stream_key]).await.unwrap();
+
+    drop(rx);
+
+    let event = mk_core::types::GovernanceEvent::DriftDetected {
+        project_id: "proj-drop-test".to_string(),
+        tenant_id: tenant_id.clone(),
+        drift_score: 0.3,
+        timestamp: chrono::Utc::now().timestamp(),
+    };
+
+    let result = redis.publish(event).await;
+    assert!(
+        result.is_ok(),
+        "Publish should succeed even if no subscribers"
+    );
+}
+
+#[tokio::test]
+async fn test_redis_subscribe_receives_all_event_types() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_tenant_id();
+    let user_id = UserId::new("user-event-types".to_string()).unwrap();
+    let stream_key = format!("governance:events:{}", tenant_id);
+
+    use mk_core::traits::EventPublisher;
+    let mut rx = redis.subscribe(&[&stream_key]).await.unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    let events = vec![
+        mk_core::types::GovernanceEvent::DriftDetected {
+            project_id: "proj-1".to_string(),
+            tenant_id: tenant_id.clone(),
+            drift_score: 0.5,
+            timestamp: chrono::Utc::now().timestamp(),
+        },
+        mk_core::types::GovernanceEvent::UnitCreated {
+            unit_id: "unit-1".to_string(),
+            unit_type: mk_core::types::UnitType::Team,
+            tenant_id: tenant_id.clone(),
+            parent_id: None,
+            timestamp: chrono::Utc::now().timestamp(),
+        },
+        mk_core::types::GovernanceEvent::RoleAssigned {
+            user_id: user_id.clone(),
+            unit_id: "unit-1".to_string(),
+            role: mk_core::types::Role::Developer,
+            tenant_id: tenant_id.clone(),
+            timestamp: chrono::Utc::now().timestamp(),
+        },
+        mk_core::types::GovernanceEvent::PolicyUpdated {
+            policy_id: "policy-1".to_string(),
+            layer: mk_core::types::KnowledgeLayer::Team,
+            tenant_id: tenant_id.clone(),
+            timestamp: chrono::Utc::now().timestamp(),
+        },
+    ];
+
+    for event in &events {
+        redis.publish(event.clone()).await.unwrap();
+    }
+
+    let mut received_count = 0;
+    for _ in 0..events.len() {
+        let received = tokio::time::timeout(tokio::time::Duration::from_secs(5), rx.recv()).await;
+        if received.is_ok() && received.unwrap().is_some() {
+            received_count += 1;
+        }
+    }
+
+    assert_eq!(
+        received_count,
+        events.len(),
+        "Should receive all published event types"
+    );
 }
