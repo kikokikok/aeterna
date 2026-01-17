@@ -5,6 +5,38 @@ use mk_core::types::GovernanceEvent;
 use redis::AsyncCommands;
 use std::sync::Arc;
 
+/// Result of a distributed lock acquisition attempt
+#[derive(Debug, Clone)]
+pub struct LockResult {
+    /// The unique token identifying this lock holder
+    pub lock_token: String,
+    /// The key that was locked
+    pub lock_key: String,
+    /// TTL in seconds
+    pub ttl_seconds: u64,
+}
+
+/// Reason why a job was skipped
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JobSkipReason {
+    /// Another instance is currently running this job
+    AlreadyRunning,
+    /// Job was recently completed within deduplication window
+    RecentlyCompleted,
+    /// Job is disabled via configuration
+    Disabled,
+}
+
+impl std::fmt::Display for JobSkipReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JobSkipReason::AlreadyRunning => write!(f, "already_running"),
+            JobSkipReason::RecentlyCompleted => write!(f, "recently_completed"),
+            JobSkipReason::Disabled => write!(f, "disabled"),
+        }
+    }
+}
+
 pub struct RedisStorage {
     client: Arc<redis::Client>,
     connection_manager: redis::aio::ConnectionManager,
@@ -84,6 +116,164 @@ impl RedisStorage {
     }
     pub fn scoped_key(&self, ctx: &mk_core::types::TenantContext, key: &str) -> String {
         format!("{}:{}", ctx.tenant_id.as_str(), key)
+    }
+
+    pub async fn acquire_lock(
+        &self,
+        lock_key: &str,
+        ttl_seconds: u64,
+    ) -> Result<Option<LockResult>, StorageError> {
+        let lock_token = uuid::Uuid::new_v4().to_string();
+        let mut conn = self.connection_manager.clone();
+
+        let result: Option<String> = redis::cmd("SET")
+            .arg(lock_key)
+            .arg(&lock_token)
+            .arg("NX")
+            .arg("EX")
+            .arg(ttl_seconds)
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| StorageError::QueryError {
+                backend: "Redis".to_string(),
+                reason: e.to_string(),
+            })?;
+
+        Ok(result.map(|_| LockResult {
+            lock_token,
+            lock_key: lock_key.to_string(),
+            ttl_seconds,
+        }))
+    }
+
+    pub async fn release_lock(
+        &self,
+        lock_key: &str,
+        lock_token: &str,
+    ) -> Result<bool, StorageError> {
+        let script = redis::Script::new(
+            r#"
+            if redis.call("GET", KEYS[1]) == ARGV[1] then
+                return redis.call("DEL", KEYS[1])
+            else
+                return 0
+            end
+            "#,
+        );
+
+        let mut conn = self.connection_manager.clone();
+        let result: i32 = script
+            .key(lock_key)
+            .arg(lock_token)
+            .invoke_async(&mut conn)
+            .await
+            .map_err(|e| StorageError::QueryError {
+                backend: "Redis".to_string(),
+                reason: e.to_string(),
+            })?;
+
+        Ok(result == 1)
+    }
+
+    pub async fn extend_lock(
+        &self,
+        lock_key: &str,
+        lock_token: &str,
+        ttl_seconds: u64,
+    ) -> Result<bool, StorageError> {
+        let script = redis::Script::new(
+            r#"
+            if redis.call("GET", KEYS[1]) == ARGV[1] then
+                return redis.call("EXPIRE", KEYS[1], ARGV[2])
+            else
+                return 0
+            end
+            "#,
+        );
+
+        let mut conn = self.connection_manager.clone();
+        let result: i32 = script
+            .key(lock_key)
+            .arg(lock_token)
+            .arg(ttl_seconds)
+            .invoke_async(&mut conn)
+            .await
+            .map_err(|e| StorageError::QueryError {
+                backend: "Redis".to_string(),
+                reason: e.to_string(),
+            })?;
+
+        Ok(result == 1)
+    }
+
+    pub async fn check_lock_exists(&self, lock_key: &str) -> Result<bool, StorageError> {
+        self.exists_key(lock_key).await
+    }
+
+    pub async fn record_job_completion(
+        &self,
+        job_name: &str,
+        deduplication_window_seconds: u64,
+    ) -> Result<(), StorageError> {
+        let key = format!("job_completed:{}", job_name);
+        let timestamp = chrono::Utc::now().timestamp().to_string();
+        self.set(
+            &key,
+            &timestamp,
+            Some(deduplication_window_seconds as usize),
+        )
+        .await
+    }
+
+    pub async fn check_job_recently_completed(&self, job_name: &str) -> Result<bool, StorageError> {
+        let key = format!("job_completed:{}", job_name);
+        let result = self.get(&key).await?;
+        Ok(result.is_some())
+    }
+
+    pub async fn save_job_checkpoint(
+        &self,
+        checkpoint: &mk_core::types::PartialJobResult,
+        ttl_seconds: u64,
+    ) -> Result<(), StorageError> {
+        let key = format!(
+            "job_checkpoint:{}:{}",
+            checkpoint.job_name, checkpoint.tenant_id
+        );
+        let value =
+            serde_json::to_string(checkpoint).map_err(|e| StorageError::SerializationError {
+                error_type: "JSON".to_string(),
+                reason: e.to_string(),
+            })?;
+        self.set(&key, &value, Some(ttl_seconds as usize)).await
+    }
+
+    pub async fn get_job_checkpoint(
+        &self,
+        job_name: &str,
+        tenant_id: &mk_core::types::TenantId,
+    ) -> Result<Option<mk_core::types::PartialJobResult>, StorageError> {
+        let key = format!("job_checkpoint:{}:{}", job_name, tenant_id);
+        match self.get(&key).await? {
+            Some(value) => {
+                let checkpoint =
+                    serde_json::from_str(&value).map_err(|e| StorageError::SerializationError {
+                        error_type: "JSON".to_string(),
+                        reason: e.to_string(),
+                    })?;
+                Ok(Some(checkpoint))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub async fn delete_job_checkpoint(
+        &self,
+        job_name: &str,
+        tenant_id: &mk_core::types::TenantId,
+    ) -> Result<(), StorageError> {
+        let key = format!("job_checkpoint:{}:{}", job_name, tenant_id);
+        self.delete_key(&key).await
     }
 }
 
@@ -424,7 +614,97 @@ mod tests {
     use super::*;
     use errors::StorageError;
 
-    // Test error type conversions and patterns
+    #[test]
+    fn test_lock_result_fields() {
+        let lock = LockResult {
+            lock_token: "token-123".to_string(),
+            lock_key: "job:drift_scan".to_string(),
+            ttl_seconds: 300,
+        };
+
+        assert_eq!(lock.lock_token, "token-123");
+        assert_eq!(lock.lock_key, "job:drift_scan");
+        assert_eq!(lock.ttl_seconds, 300);
+    }
+
+    #[test]
+    fn test_lock_result_clone() {
+        let lock = LockResult {
+            lock_token: "token-456".to_string(),
+            lock_key: "job:semantic".to_string(),
+            ttl_seconds: 600,
+        };
+
+        let cloned = lock.clone();
+        assert_eq!(cloned.lock_token, lock.lock_token);
+        assert_eq!(cloned.lock_key, lock.lock_key);
+        assert_eq!(cloned.ttl_seconds, lock.ttl_seconds);
+    }
+
+    #[test]
+    fn test_lock_result_debug() {
+        let lock = LockResult {
+            lock_token: "token".to_string(),
+            lock_key: "key".to_string(),
+            ttl_seconds: 60,
+        };
+
+        let debug_str = format!("{:?}", lock);
+        assert!(debug_str.contains("LockResult"));
+        assert!(debug_str.contains("token"));
+        assert!(debug_str.contains("key"));
+    }
+
+    #[test]
+    fn test_job_skip_reason_display_already_running() {
+        let reason = JobSkipReason::AlreadyRunning;
+        assert_eq!(reason.to_string(), "already_running");
+    }
+
+    #[test]
+    fn test_job_skip_reason_display_recently_completed() {
+        let reason = JobSkipReason::RecentlyCompleted;
+        assert_eq!(reason.to_string(), "recently_completed");
+    }
+
+    #[test]
+    fn test_job_skip_reason_display_disabled() {
+        let reason = JobSkipReason::Disabled;
+        assert_eq!(reason.to_string(), "disabled");
+    }
+
+    #[test]
+    fn test_job_skip_reason_equality() {
+        assert_eq!(JobSkipReason::AlreadyRunning, JobSkipReason::AlreadyRunning);
+        assert_eq!(
+            JobSkipReason::RecentlyCompleted,
+            JobSkipReason::RecentlyCompleted
+        );
+        assert_eq!(JobSkipReason::Disabled, JobSkipReason::Disabled);
+        assert_ne!(JobSkipReason::AlreadyRunning, JobSkipReason::Disabled);
+    }
+
+    #[test]
+    fn test_job_skip_reason_copy() {
+        let reason = JobSkipReason::AlreadyRunning;
+        let copied = reason;
+        assert_eq!(copied, JobSkipReason::AlreadyRunning);
+    }
+
+    #[test]
+    fn test_job_skip_reason_clone() {
+        let reason = JobSkipReason::RecentlyCompleted;
+        let cloned = reason.clone();
+        assert_eq!(cloned, JobSkipReason::RecentlyCompleted);
+    }
+
+    #[test]
+    fn test_job_skip_reason_debug() {
+        let reason = JobSkipReason::Disabled;
+        let debug_str = format!("{:?}", reason);
+        assert!(debug_str.contains("Disabled"));
+    }
+
     #[test]
     fn test_storage_error_display() {
         let conn_error = StorageError::ConnectionError {
@@ -448,13 +728,8 @@ mod tests {
         );
     }
 
-    // Test RedisStorage struct creation (without actual connection)
     #[tokio::test]
     async fn test_redis_storage_error_handling() {
-        // This test verifies that invalid connection strings produce appropriate errors
-        // Note: We can't easily mock the redis client, but we can verify error types
-
-        // Test with obviously invalid URL
         let result = RedisStorage::new("not-a-valid-url").await;
         assert!(result.is_err());
 
@@ -465,19 +740,15 @@ mod tests {
         }
     }
 
-    // Test StorageBackend trait implementation consistency
     #[test]
     fn test_storage_backend_trait_bounds() {
         use mk_core::traits::StorageBackend;
 
-        // This is a compile-time test to ensure RedisStorage implements StorageBackend
         fn assert_storage_backend<T: StorageBackend>() {}
 
-        // If this compiles, RedisStorage implements StorageBackend
         assert_storage_backend::<RedisStorage>();
     }
 
-    // Test error message formatting for different scenarios
     #[test]
     fn test_error_messages_include_backend_name() {
         let errors = vec![
@@ -513,14 +784,42 @@ mod tests {
         }
     }
 
-    // Test that RedisStorage methods have correct signatures
     #[test]
     fn test_method_signatures() {
-        // This is a compile-time check
-
-        // Verify RedisStorage has the expected method signature
-        // The existence of the method is verified by compilation
-        // We can't easily test async method signatures in a unit test
         let _ = RedisStorage::new;
+    }
+
+    #[test]
+    fn test_scoped_key_format() {
+        use mk_core::types::{TenantContext, TenantId, UserId};
+
+        let tenant_id = TenantId::new("acme-corp".to_string()).unwrap();
+        let user_id = UserId::new("user-1".to_string()).unwrap();
+        let ctx = TenantContext::new(tenant_id, user_id);
+
+        let key = format!("{}:{}", ctx.tenant_id.as_str(), "test-key");
+        assert_eq!(key, "acme-corp:test-key");
+    }
+
+    #[test]
+    fn test_job_checkpoint_key_format() {
+        let job_name = "drift_scan";
+        let tenant_id = "tenant-123";
+        let key = format!("job_checkpoint:{}:{}", job_name, tenant_id);
+        assert_eq!(key, "job_checkpoint:drift_scan:tenant-123");
+    }
+
+    #[test]
+    fn test_job_completed_key_format() {
+        let job_name = "semantic_analysis";
+        let key = format!("job_completed:{}", job_name);
+        assert_eq!(key, "job_completed:semantic_analysis");
+    }
+
+    #[test]
+    fn test_governance_events_stream_key_format() {
+        let tenant_id = "acme-corp";
+        let stream_key = format!("governance:events:{}", tenant_id);
+        assert_eq!(stream_key, "governance:events:acme-corp");
     }
 }

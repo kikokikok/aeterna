@@ -277,7 +277,7 @@ fn merge_sync(
     _source: &str,
     changes: &mut Vec<String>,
 ) {
-    if override_config.enabled != base.enabled {
+    if !override_config.enabled && override_config.enabled != base.enabled {
         changes.push(format!("sync.enabled = {}", override_config.enabled));
         base.enabled = override_config.enabled;
     }
@@ -294,7 +294,9 @@ fn merge_sync(
         changes.push(format!("sync.batch_size = {}", override_config.batch_size));
         base.batch_size = override_config.batch_size;
     }
-    if override_config.checkpoint_enabled != base.checkpoint_enabled {
+    if !override_config.checkpoint_enabled
+        && override_config.checkpoint_enabled != base.checkpoint_enabled
+    {
         changes.push(format!(
             "sync.checkpoint_enabled = {}",
             override_config.checkpoint_enabled
@@ -319,7 +321,7 @@ fn merge_tools(
     _source: &str,
     changes: &mut Vec<String>,
 ) {
-    if override_config.enabled != base.enabled {
+    if !override_config.enabled && override_config.enabled != base.enabled {
         changes.push(format!("tools.enabled = {}", override_config.enabled));
         base.enabled = override_config.enabled;
     }
@@ -331,10 +333,9 @@ fn merge_tools(
         changes.push(format!("tools.port = {}", override_config.port));
         base.port = override_config.port;
     }
-    if override_config.api_key != base.api_key {
+    if override_config.api_key.is_some() && override_config.api_key != base.api_key {
         match (&override_config.api_key, &base.api_key) {
             (Some(_), None) => changes.push("tools.api_key = ***".to_string()),
-            (None, Some(_)) => changes.push("tools.api_key = (none)".to_string()),
             (Some(new_key), Some(old_key)) if new_key != old_key => {
                 changes.push("tools.api_key = ***".to_string())
             }
@@ -359,14 +360,14 @@ fn merge_observability(
     _source: &str,
     changes: &mut Vec<String>,
 ) {
-    if override_config.metrics_enabled != base.metrics_enabled {
+    if !override_config.metrics_enabled && override_config.metrics_enabled != base.metrics_enabled {
         changes.push(format!(
             "observability.metrics_enabled = {}",
             override_config.metrics_enabled
         ));
         base.metrics_enabled = override_config.metrics_enabled;
     }
-    if override_config.tracing_enabled != base.tracing_enabled {
+    if !override_config.tracing_enabled && override_config.tracing_enabled != base.tracing_enabled {
         changes.push(format!(
             "observability.tracing_enabled = {}",
             override_config.tracing_enabled
@@ -680,9 +681,8 @@ mod tests {
         let mut changes = Vec::new();
         merge_tools(&mut base, &override_config, "test", &mut changes);
 
-        assert_eq!(base.api_key, None);
-        assert_eq!(changes.len(), 1);
-        assert!(changes[0].contains("api_key = (none)"));
+        assert_eq!(base.api_key, Some("old_key".to_string()));
+        assert_eq!(changes.len(), 0);
     }
 
     #[test]
@@ -829,5 +829,171 @@ mod tests {
 
         assert_eq!(changes.len(), 0);
         assert_eq!(base, ObservabilityConfig::default());
+    }
+
+    #[test]
+    fn test_merge_all_fields() {
+        let base = Config::default();
+        let mut override_config = Config::default();
+
+        override_config.providers.postgres.host = "new_pg_host".to_string();
+        override_config.providers.postgres.port = 5433;
+        override_config.providers.postgres.database = "new_pg_db".to_string();
+        override_config.providers.postgres.username = "new_pg_user".to_string();
+        override_config.providers.postgres.password = "new_pg_pass".to_string();
+        override_config.providers.postgres.pool_size = 20;
+        override_config.providers.postgres.timeout_seconds = 60;
+
+        override_config.providers.qdrant.host = "new_qdrant_host".to_string();
+        override_config.providers.qdrant.port = 6334;
+        override_config.providers.qdrant.collection = "new_collection".to_string();
+        override_config.providers.qdrant.timeout_seconds = 60;
+
+        override_config.providers.redis.host = "new_redis_host".to_string();
+        override_config.providers.redis.port = 6380;
+        override_config.providers.redis.db = 1;
+        override_config.providers.redis.pool_size = 20;
+        override_config.providers.redis.timeout_seconds = 60;
+
+        override_config.sync.enabled = false;
+        override_config.sync.sync_interval_seconds = 120;
+        override_config.sync.batch_size = 200;
+        override_config.sync.checkpoint_enabled = false;
+        override_config.sync.conflict_resolution = "prefer_memory".to_string();
+
+        override_config.tools.enabled = false;
+        override_config.tools.host = "new_tool_host".to_string();
+        override_config.tools.port = 8081;
+        override_config.tools.api_key = Some("new_api_key".to_string());
+        override_config.tools.rate_limit_requests_per_minute = 120;
+
+        override_config.observability.metrics_enabled = false;
+        override_config.observability.tracing_enabled = false;
+        override_config.observability.logging_level = "debug".to_string();
+        override_config.observability.metrics_port = 9091;
+
+        let merged = merge_configs(
+            base,
+            override_config.clone(),
+            "file",
+            Config::default(),
+            "env",
+            None,
+            "cli",
+        );
+
+        assert_eq!(merged.providers.postgres.host, "new_pg_host");
+        assert_eq!(merged.providers.postgres.port, 5433);
+        assert_eq!(merged.providers.postgres.database, "new_pg_db");
+        assert_eq!(merged.providers.postgres.username, "new_pg_user");
+        assert_eq!(merged.providers.postgres.password, "new_pg_pass");
+        assert_eq!(merged.providers.postgres.pool_size, 20);
+        assert_eq!(merged.providers.postgres.timeout_seconds, 60);
+
+        assert_eq!(merged.providers.qdrant.host, "new_qdrant_host");
+        assert_eq!(merged.providers.qdrant.port, 6334);
+        assert_eq!(merged.providers.qdrant.collection, "new_collection");
+        assert_eq!(merged.providers.qdrant.timeout_seconds, 60);
+
+        assert_eq!(merged.providers.redis.host, "new_redis_host");
+        assert_eq!(merged.providers.redis.port, 6380);
+        assert_eq!(merged.providers.redis.db, 1);
+        assert_eq!(merged.providers.redis.pool_size, 20);
+        assert_eq!(merged.providers.redis.timeout_seconds, 60);
+
+        assert_eq!(merged.sync.enabled, false);
+        assert_eq!(merged.sync.sync_interval_seconds, 120);
+        assert_eq!(merged.sync.batch_size, 200);
+        assert_eq!(merged.sync.checkpoint_enabled, false);
+        assert_eq!(merged.sync.conflict_resolution, "prefer_memory");
+
+        assert_eq!(merged.tools.enabled, false);
+        assert_eq!(merged.tools.host, "new_tool_host");
+        assert_eq!(merged.tools.port, 8081);
+        assert_eq!(merged.tools.api_key, Some("new_api_key".to_string()));
+        assert_eq!(merged.tools.rate_limit_requests_per_minute, 120);
+
+        assert_eq!(merged.observability.metrics_enabled, false);
+        assert_eq!(merged.observability.tracing_enabled, false);
+        assert_eq!(merged.observability.logging_level, "debug");
+        assert_eq!(merged.observability.metrics_port, 9091);
+    }
+
+    #[test]
+    fn test_merge_tools_api_key_scenarios() {
+        let mut base_val = ToolConfig {
+            api_key: None,
+            ..Default::default()
+        };
+        let override_config = ToolConfig {
+            api_key: Some("new_key".to_string()),
+            ..Default::default()
+        };
+        let mut changes = Vec::new();
+        merge_tools(&mut base_val, &override_config, "test", &mut changes);
+        assert_eq!(base_val.api_key, Some("new_key".to_string()));
+        assert_eq!(changes.len(), 1);
+        assert!(changes[0].contains("api_key = ***"));
+
+        let mut base_val = ToolConfig {
+            api_key: Some("old_key".to_string()),
+            ..Default::default()
+        };
+        let override_config = ToolConfig {
+            api_key: None,
+            ..Default::default()
+        };
+        let mut changes = Vec::new();
+        merge_tools(&mut base_val, &override_config, "test", &mut changes);
+        assert_eq!(base_val.api_key, Some("old_key".to_string()));
+        assert_eq!(changes.len(), 0);
+
+        let base_val = ToolConfig {
+            api_key: Some("same_key".to_string()),
+            ..Default::default()
+        };
+        let override_config = ToolConfig {
+            api_key: Some("same_key".to_string()),
+            ..Default::default()
+        };
+        let mut changes = Vec::new();
+        let mut base_mut = base_val;
+        merge_tools(&mut base_mut, &override_config, "test", &mut changes);
+        assert_eq!(changes.len(), 0);
+    }
+
+    #[test]
+    fn test_merge_postgres_non_default_base() {
+        let mut base = PostgresConfig {
+            host: "not_localhost".to_string(),
+            port: 5433,
+            database: "not_memory_knowledge".to_string(),
+            username: "not_postgres".to_string(),
+            password: "old_password".to_string(),
+            pool_size: 20,
+            timeout_seconds: 60,
+        };
+
+        let override_config = PostgresConfig {
+            host: "even_newer_host".to_string(),
+            port: 5434,
+            database: "even_newer_db".to_string(),
+            username: "even_newer_user".to_string(),
+            password: "even_newer_password".to_string(),
+            pool_size: 30,
+            timeout_seconds: 90,
+        };
+
+        let mut changes = Vec::new();
+        merge_postgres(&mut base, &override_config, "test", &mut changes);
+
+        assert_eq!(base.host, "even_newer_host");
+        assert_eq!(base.port, 5434);
+        assert_eq!(base.database, "even_newer_db");
+        assert_eq!(base.username, "even_newer_user");
+        assert_eq!(base.password, "even_newer_password");
+        assert_eq!(base.pool_size, 30);
+        assert_eq!(base.timeout_seconds, 90);
+        assert_eq!(changes.len(), 7);
     }
 }

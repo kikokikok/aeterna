@@ -85,6 +85,15 @@ impl<'a> TenantQueryBuilder<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use mk_core::types::{TenantId, UserId};
+
+    fn create_test_tenant_context() -> TenantContext {
+        let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
+        let user_id = UserId::new("test-user".to_string()).unwrap();
+        TenantContext::new(tenant_id, user_id)
+    }
+
     #[test]
     fn test_query_builder_construction() {
         let mut query = "SELECT id, name FROM ".to_string();
@@ -110,5 +119,150 @@ mod tests {
         query = format!("{} AND created_at > $3", query);
 
         assert!(query.contains("tenant_id = $1 AND status = $2 AND created_at > $3"));
+    }
+
+    #[tokio::test]
+    async fn test_select_method() {
+        let ctx = create_test_tenant_context();
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let builder = TenantQueryBuilder::new(&pool, &ctx).select("id, name, email");
+
+        assert_eq!(builder.build_query(), "SELECT id, name, email FROM ");
+    }
+
+    #[tokio::test]
+    async fn test_from_method() {
+        let ctx = create_test_tenant_context();
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let builder = TenantQueryBuilder::new(&pool, &ctx)
+            .select("id, name")
+            .from("users");
+
+        assert_eq!(
+            builder.build_query(),
+            "SELECT id, name FROM users WHERE tenant_id = $1"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_where_clause_with_existing_where() {
+        let ctx = create_test_tenant_context();
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let builder = TenantQueryBuilder::new(&pool, &ctx)
+            .select("*")
+            .from("users")
+            .where_clause("active = true");
+
+        assert_eq!(
+            builder.build_query(),
+            "SELECT * FROM users WHERE tenant_id = $1 AND active = true"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_where_clause_without_existing_where() {
+        let ctx = create_test_tenant_context();
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let builder = TenantQueryBuilder::new(&pool, &ctx)
+            .select("*")
+            .where_clause("active = true");
+
+        assert_eq!(builder.build_query(), "SELECT * FROM  WHERE active = true");
+    }
+
+    #[tokio::test]
+    async fn test_order_by_method() {
+        let ctx = create_test_tenant_context();
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let builder = TenantQueryBuilder::new(&pool, &ctx)
+            .select("*")
+            .from("users")
+            .order_by("created_at DESC");
+
+        assert_eq!(
+            builder.build_query(),
+            "SELECT * FROM users WHERE tenant_id = $1 ORDER BY created_at DESC"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_limit_method() {
+        let ctx = create_test_tenant_context();
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let builder = TenantQueryBuilder::new(&pool, &ctx)
+            .select("*")
+            .from("users")
+            .limit(10);
+
+        assert_eq!(
+            builder.build_query(),
+            "SELECT * FROM users WHERE tenant_id = $1 LIMIT 10"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tenant_id_accessor() {
+        let ctx = create_test_tenant_context();
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let builder = TenantQueryBuilder::new(&pool, &ctx);
+
+        assert_eq!(builder.tenant_id(), "test-tenant");
+    }
+
+    #[tokio::test]
+    async fn test_full_query_chain() {
+        let ctx = create_test_tenant_context();
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let builder = TenantQueryBuilder::new(&pool, &ctx)
+            .select("id, name, email")
+            .from("users")
+            .where_clause("active = true")
+            .where_clause("role = $2")
+            .order_by("created_at DESC")
+            .limit(25);
+
+        let expected = "SELECT id, name, email FROM users WHERE tenant_id = $1 AND active = true AND role = $2 ORDER BY created_at DESC LIMIT 25";
+        assert_eq!(builder.build_query(), expected);
+    }
+
+    #[tokio::test]
+    async fn test_query_builder_with_different_tenant() {
+        let tenant_id = TenantId::new("other-tenant".to_string()).unwrap();
+        let user_id = UserId::new("other-user".to_string()).unwrap();
+        let ctx = TenantContext::new(tenant_id, user_id);
+
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let builder = TenantQueryBuilder::new(&pool, &ctx);
+
+        assert_eq!(builder.tenant_id(), "other-tenant");
+    }
+
+    #[tokio::test]
+    async fn test_query_builder_select_star() {
+        let ctx = create_test_tenant_context();
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let builder = TenantQueryBuilder::new(&pool, &ctx)
+            .select("*")
+            .from("orders");
+
+        assert_eq!(
+            builder.build_query(),
+            "SELECT * FROM orders WHERE tenant_id = $1"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_query_builder_multiple_where_clauses() {
+        let ctx = create_test_tenant_context();
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let builder = TenantQueryBuilder::new(&pool, &ctx)
+            .select("*")
+            .from("items")
+            .where_clause("status = $2")
+            .where_clause("created_at > $3")
+            .where_clause("category = $4");
+
+        let expected = "SELECT * FROM items WHERE tenant_id = $1 AND status = $2 AND created_at > $3 AND category = $4";
+        assert_eq!(builder.build_query(), expected);
     }
 }

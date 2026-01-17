@@ -1380,4 +1380,460 @@ mod tests {
         let similarity = engine.cosine_similarity(&v1, &v2);
         assert_eq!(similarity, 0.0);
     }
+
+    #[test]
+    fn test_governance_engine_default() {
+        let engine = GovernanceEngine::default();
+        assert!(engine.storage().is_none());
+        assert!(engine.llm_service().is_none());
+        assert!(engine.repository().is_none());
+        assert!(engine.event_publisher().is_none());
+    }
+
+    #[test]
+    fn test_calculate_drift_score_empty_violations() {
+        let engine = GovernanceEngine::new();
+        let violations: Vec<PolicyViolation> = vec![];
+        let score = engine.calculate_drift_score(&violations);
+        assert_eq!(score, 0.0);
+    }
+
+    #[test]
+    fn test_calculate_drift_score_single_block() {
+        let engine = GovernanceEngine::new();
+        let violations = vec![PolicyViolation {
+            rule_id: "test".to_string(),
+            policy_id: "test".to_string(),
+            severity: ConstraintSeverity::Block,
+            message: "Test".to_string(),
+            context: HashMap::new(),
+        }];
+        let score = engine.calculate_drift_score(&violations);
+        assert_eq!(score, 1.0);
+    }
+
+    #[test]
+    fn test_calculate_drift_score_single_warn() {
+        let engine = GovernanceEngine::new();
+        let violations = vec![PolicyViolation {
+            rule_id: "test".to_string(),
+            policy_id: "test".to_string(),
+            severity: ConstraintSeverity::Warn,
+            message: "Test".to_string(),
+            context: HashMap::new(),
+        }];
+        let score = engine.calculate_drift_score(&violations);
+        assert!((score - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_calculate_drift_score_single_info() {
+        let engine = GovernanceEngine::new();
+        let violations = vec![PolicyViolation {
+            rule_id: "test".to_string(),
+            policy_id: "test".to_string(),
+            severity: ConstraintSeverity::Info,
+            message: "Test".to_string(),
+            context: HashMap::new(),
+        }];
+        let score = engine.calculate_drift_score(&violations);
+        assert!((score - 0.1).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_calculate_drift_score_capped_at_one() {
+        let engine = GovernanceEngine::new();
+        let violations = vec![
+            PolicyViolation {
+                rule_id: "test1".to_string(),
+                policy_id: "test".to_string(),
+                severity: ConstraintSeverity::Block,
+                message: "Test".to_string(),
+                context: HashMap::new(),
+            },
+            PolicyViolation {
+                rule_id: "test2".to_string(),
+                policy_id: "test".to_string(),
+                severity: ConstraintSeverity::Block,
+                message: "Test".to_string(),
+                context: HashMap::new(),
+            },
+        ];
+        let score = engine.calculate_drift_score(&violations);
+        assert_eq!(score, 1.0);
+    }
+
+    #[test]
+    fn test_calculate_drift_score_mixed_severities() {
+        let engine = GovernanceEngine::new();
+        let violations = vec![
+            PolicyViolation {
+                rule_id: "warn".to_string(),
+                policy_id: "test".to_string(),
+                severity: ConstraintSeverity::Warn,
+                message: "Test".to_string(),
+                context: HashMap::new(),
+            },
+            PolicyViolation {
+                rule_id: "info".to_string(),
+                policy_id: "test".to_string(),
+                severity: ConstraintSeverity::Info,
+                message: "Test".to_string(),
+                context: HashMap::new(),
+            },
+        ];
+        let score = engine.calculate_drift_score(&violations);
+        assert!((score - 0.6).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_apply_suppressions_no_suppressions() {
+        let engine = GovernanceEngine::new();
+        let violations = vec![PolicyViolation {
+            rule_id: "rule1".to_string(),
+            policy_id: "policy1".to_string(),
+            severity: ConstraintSeverity::Block,
+            message: "Test".to_string(),
+            context: HashMap::new(),
+        }];
+        let suppressions: Vec<mk_core::types::DriftSuppression> = vec![];
+
+        let (active, suppressed) = engine.apply_suppressions(violations, &suppressions);
+        assert_eq!(active.len(), 1);
+        assert_eq!(suppressed.len(), 0);
+    }
+
+    #[test]
+    fn test_apply_suppressions_with_matching_suppression() {
+        use mk_core::types::{TenantId, UserId};
+        let engine = GovernanceEngine::new();
+        let violations = vec![
+            PolicyViolation {
+                rule_id: "rule1".to_string(),
+                policy_id: "policy1".to_string(),
+                severity: ConstraintSeverity::Block,
+                message: "Test message for policy1".to_string(),
+                context: HashMap::new(),
+            },
+            PolicyViolation {
+                rule_id: "rule2".to_string(),
+                policy_id: "policy2".to_string(),
+                severity: ConstraintSeverity::Warn,
+                message: "Test message for policy2".to_string(),
+                context: HashMap::new(),
+            },
+        ];
+        let suppressions = vec![
+            mk_core::types::DriftSuppression::new(
+                "project1".to_string(),
+                TenantId::new("tenant1".to_string()).unwrap(),
+                "policy1".to_string(),
+                "Test suppression".to_string(),
+                UserId::new("tester".to_string()).unwrap(),
+            )
+            .with_expiry(chrono::Utc::now().timestamp() + 3600),
+        ];
+
+        let (active, suppressed) = engine.apply_suppressions(violations, &suppressions);
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].rule_id, "rule2");
+        assert_eq!(suppressed.len(), 1);
+        assert_eq!(suppressed[0].rule_id, "rule1");
+    }
+
+    #[test]
+    fn test_apply_suppressions_all_suppressed() {
+        use mk_core::types::{TenantId, UserId};
+        let engine = GovernanceEngine::new();
+        let violations = vec![PolicyViolation {
+            rule_id: "rule1".to_string(),
+            policy_id: "policy1".to_string(),
+            severity: ConstraintSeverity::Block,
+            message: "Test message".to_string(),
+            context: HashMap::new(),
+        }];
+        let suppressions = vec![mk_core::types::DriftSuppression::new(
+            "project1".to_string(),
+            TenantId::new("tenant1".to_string()).unwrap(),
+            "policy1".to_string(),
+            "Test suppression".to_string(),
+            UserId::new("tester".to_string()).unwrap(),
+        )];
+
+        let (active, suppressed) = engine.apply_suppressions(violations, &suppressions);
+        assert_eq!(active.len(), 0);
+        assert_eq!(suppressed.len(), 1);
+    }
+
+    #[test]
+    fn test_apply_suppressions_with_rule_pattern() {
+        use mk_core::types::{TenantId, UserId};
+        let engine = GovernanceEngine::new();
+        let violations = vec![PolicyViolation {
+            rule_id: "rule1".to_string(),
+            policy_id: "policy1".to_string(),
+            severity: ConstraintSeverity::Block,
+            message: "Violation for rule1 detected".to_string(),
+            context: HashMap::new(),
+        }];
+        let suppressions = vec![
+            mk_core::types::DriftSuppression::new(
+                "project1".to_string(),
+                TenantId::new("tenant1".to_string()).unwrap(),
+                "policy1".to_string(),
+                "Test suppression".to_string(),
+                UserId::new("tester".to_string()).unwrap(),
+            )
+            .with_pattern("rule1".to_string()),
+        ];
+
+        let (active, suppressed) = engine.apply_suppressions(violations, &suppressions);
+        assert_eq!(active.len(), 0);
+        assert_eq!(suppressed.len(), 1);
+    }
+
+    #[test]
+    fn test_apply_suppressions_pattern_not_matching() {
+        use mk_core::types::{TenantId, UserId};
+        let engine = GovernanceEngine::new();
+        let violations = vec![PolicyViolation {
+            rule_id: "rule1".to_string(),
+            policy_id: "policy1".to_string(),
+            severity: ConstraintSeverity::Block,
+            message: "Some other message".to_string(),
+            context: HashMap::new(),
+        }];
+        let suppressions = vec![
+            mk_core::types::DriftSuppression::new(
+                "project1".to_string(),
+                TenantId::new("tenant1".to_string()).unwrap(),
+                "policy1".to_string(),
+                "Test suppression".to_string(),
+                UserId::new("tester".to_string()).unwrap(),
+            )
+            .with_pattern("specific_pattern".to_string()),
+        ];
+
+        let (active, suppressed) = engine.apply_suppressions(violations, &suppressions);
+        assert_eq!(active.len(), 1);
+        assert_eq!(suppressed.len(), 0);
+    }
+
+    #[test]
+    fn test_merge_policy_override_strategy() {
+        let mut engine = GovernanceEngine::new();
+
+        let company_policy = Policy {
+            id: "merge-test".to_string(),
+            name: "Company Policy".to_string(),
+            description: None,
+            layer: KnowledgeLayer::Company,
+            mode: mk_core::types::PolicyMode::Optional,
+            merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
+            rules: vec![PolicyRule {
+                id: "r1".to_string(),
+                target: ConstraintTarget::Code,
+                operator: ConstraintOperator::MustExist,
+                value: serde_json::json!(null),
+                severity: ConstraintSeverity::Block,
+                message: "Company rule".to_string(),
+                rule_type: mk_core::types::RuleType::Allow,
+            }],
+            metadata: HashMap::new(),
+        };
+
+        let org_policy = Policy {
+            id: "merge-test".to_string(),
+            name: "Org Policy".to_string(),
+            description: None,
+            layer: KnowledgeLayer::Org,
+            mode: mk_core::types::PolicyMode::Optional,
+            merge_strategy: mk_core::types::RuleMergeStrategy::Override,
+            rules: vec![PolicyRule {
+                id: "r2".to_string(),
+                target: ConstraintTarget::Code,
+                operator: ConstraintOperator::MustExist,
+                value: serde_json::json!(null),
+                severity: ConstraintSeverity::Warn,
+                message: "Org rule".to_string(),
+                rule_type: mk_core::types::RuleType::Allow,
+            }],
+            metadata: HashMap::new(),
+        };
+
+        engine.add_policy(company_policy);
+        engine.add_policy(org_policy);
+
+        let context = HashMap::new();
+        let result = engine.validate(KnowledgeLayer::Org, &context);
+
+        assert!(!result.is_valid);
+        assert_eq!(result.violations.len(), 1);
+        assert_eq!(result.violations[0].message, "Org rule");
+    }
+
+    #[test]
+    fn test_merge_policy_intersect_strategy() {
+        let mut engine = GovernanceEngine::new();
+
+        let company_policy = Policy {
+            id: "intersect-test".to_string(),
+            name: "Company Policy".to_string(),
+            description: None,
+            layer: KnowledgeLayer::Company,
+            mode: mk_core::types::PolicyMode::Optional,
+            merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
+            rules: vec![
+                PolicyRule {
+                    id: "r1".to_string(),
+                    target: ConstraintTarget::Code,
+                    operator: ConstraintOperator::MustExist,
+                    value: serde_json::json!(null),
+                    severity: ConstraintSeverity::Block,
+                    message: "Rule 1".to_string(),
+                    rule_type: mk_core::types::RuleType::Allow,
+                },
+                PolicyRule {
+                    id: "r2".to_string(),
+                    target: ConstraintTarget::File,
+                    operator: ConstraintOperator::MustExist,
+                    value: serde_json::json!(null),
+                    severity: ConstraintSeverity::Block,
+                    message: "Rule 2".to_string(),
+                    rule_type: mk_core::types::RuleType::Allow,
+                },
+            ],
+            metadata: HashMap::new(),
+        };
+
+        let org_policy = Policy {
+            id: "intersect-test".to_string(),
+            name: "Org Policy".to_string(),
+            description: None,
+            layer: KnowledgeLayer::Org,
+            mode: mk_core::types::PolicyMode::Optional,
+            merge_strategy: mk_core::types::RuleMergeStrategy::Intersect,
+            rules: vec![PolicyRule {
+                id: "r1".to_string(),
+                target: ConstraintTarget::Code,
+                operator: ConstraintOperator::MustExist,
+                value: serde_json::json!(null),
+                severity: ConstraintSeverity::Warn,
+                message: "Rule 1 only".to_string(),
+                rule_type: mk_core::types::RuleType::Allow,
+            }],
+            metadata: HashMap::new(),
+        };
+
+        engine.add_policy(company_policy);
+        engine.add_policy(org_policy);
+
+        let context = HashMap::new();
+        let result = engine.validate(KnowledgeLayer::Org, &context);
+
+        assert!(!result.is_valid);
+        assert_eq!(result.violations.len(), 1);
+    }
+
+    #[test]
+    fn test_merge_policy_metadata_merged() {
+        let mut engine = GovernanceEngine::new();
+
+        let mut metadata1 = HashMap::new();
+        metadata1.insert("key1".to_string(), serde_json::json!("value1"));
+
+        let company_policy = Policy {
+            id: "metadata-test".to_string(),
+            name: "Company Policy".to_string(),
+            description: None,
+            layer: KnowledgeLayer::Company,
+            mode: mk_core::types::PolicyMode::Optional,
+            merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
+            rules: vec![],
+            metadata: metadata1,
+        };
+
+        let mut metadata2 = HashMap::new();
+        metadata2.insert("key2".to_string(), serde_json::json!("value2"));
+
+        let org_policy = Policy {
+            id: "metadata-test".to_string(),
+            name: "Org Policy".to_string(),
+            description: None,
+            layer: KnowledgeLayer::Org,
+            mode: mk_core::types::PolicyMode::Optional,
+            merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
+            rules: vec![],
+            metadata: metadata2,
+        };
+
+        engine.add_policy(company_policy);
+        engine.add_policy(org_policy);
+
+        let context = HashMap::new();
+        let result = engine.validate(KnowledgeLayer::Org, &context);
+
+        assert!(result.is_valid);
+    }
+
+    #[test]
+    fn test_mandatory_policy_cannot_be_overridden_at_lower_layer() {
+        let mut engine = GovernanceEngine::new();
+
+        let company_policy = Policy {
+            id: "mandatory-test".to_string(),
+            name: "Mandatory Company Policy".to_string(),
+            description: None,
+            layer: KnowledgeLayer::Company,
+            mode: mk_core::types::PolicyMode::Mandatory,
+            merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
+            rules: vec![PolicyRule {
+                id: "mandatory-rule".to_string(),
+                target: ConstraintTarget::Code,
+                operator: ConstraintOperator::MustNotMatch,
+                value: serde_json::json!("FORBIDDEN"),
+                severity: ConstraintSeverity::Block,
+                message: "Forbidden content".to_string(),
+                rule_type: mk_core::types::RuleType::Allow,
+            }],
+            metadata: HashMap::new(),
+        };
+
+        let org_policy = Policy {
+            id: "mandatory-test".to_string(),
+            name: "Org Override Attempt".to_string(),
+            description: None,
+            layer: KnowledgeLayer::Org,
+            mode: mk_core::types::PolicyMode::Optional,
+            merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
+            rules: vec![],
+            metadata: HashMap::new(),
+        };
+
+        engine.add_policy(company_policy);
+        engine.add_policy(org_policy);
+
+        let mut context = HashMap::new();
+        context.insert("content".to_string(), serde_json::json!("FORBIDDEN text"));
+
+        let result = engine.validate(KnowledgeLayer::Org, &context);
+        assert!(
+            !result.is_valid,
+            "Mandatory policy should still apply despite org override attempt"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_publish_event_without_publisher() {
+        let engine = GovernanceEngine::new();
+        let event = mk_core::types::GovernanceEvent::DriftDetected {
+            project_id: "test".to_string(),
+            tenant_id: mk_core::types::TenantId::new("test".to_string()).unwrap(),
+            drift_score: 0.5,
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+
+        let result = engine.publish_event(event).await;
+        assert!(result.is_ok());
+    }
 }

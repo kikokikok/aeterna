@@ -155,6 +155,107 @@ impl StorageBackend for MockStorage {
     ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
         Ok(Vec::new())
     }
+
+    async fn create_suppression(
+        &self,
+        _suppression: mk_core::types::DriftSuppression,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn list_suppressions(
+        &self,
+        _ctx: TenantContext,
+        _project_id: &str,
+    ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn delete_suppression(
+        &self,
+        _ctx: TenantContext,
+        _suppression_id: &str,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn get_drift_config(
+        &self,
+        _ctx: TenantContext,
+        _project_id: &str,
+    ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
+        Ok(None)
+    }
+
+    async fn save_drift_config(
+        &self,
+        _config: mk_core::types::DriftConfig,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn persist_event(
+        &self,
+        _event: mk_core::types::PersistentEvent,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn get_pending_events(
+        &self,
+        _ctx: TenantContext,
+        _limit: usize,
+    ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn update_event_status(
+        &self,
+        _event_id: &str,
+        _status: mk_core::types::EventStatus,
+        _error: Option<String>,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn get_dead_letter_events(
+        &self,
+        _ctx: TenantContext,
+        _limit: usize,
+    ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn check_idempotency(
+        &self,
+        _consumer_group: &str,
+        _idempotency_key: &str,
+    ) -> Result<bool, Self::Error> {
+        Ok(false)
+    }
+
+    async fn record_consumer_state(
+        &self,
+        _state: mk_core::types::ConsumerState,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn get_event_metrics(
+        &self,
+        _ctx: TenantContext,
+        _period_start: i64,
+        _period_end: i64,
+    ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn record_event_metrics(
+        &self,
+        _metrics: mk_core::types::EventDeliveryMetrics,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }
 
 pub struct SimplePersister {

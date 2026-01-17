@@ -26,7 +26,14 @@ impl PostgresBackend {
     }
 
     pub async fn new(connection_url: &str) -> Result<Self, PostgresError> {
-        let pool = Pool::connect(connection_url).await?;
+        use sqlx::postgres::PgPoolOptions;
+        use std::time::Duration;
+
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(Duration::from_secs(30))
+            .connect(connection_url)
+            .await?;
         Ok(Self { pool })
     }
 
@@ -115,6 +122,20 @@ impl PostgresBackend {
                 requires_manual_review BOOLEAN NOT NULL DEFAULT FALSE,
                 timestamp BIGINT NOT NULL,
                 PRIMARY KEY (project_id, tenant_id, timestamp)
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS drift_configs (
+                project_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                threshold REAL NOT NULL DEFAULT 0.3,
+                low_confidence_threshold REAL NOT NULL DEFAULT 0.7,
+                auto_suppress_info BOOLEAN NOT NULL DEFAULT FALSE,
+                updated_at BIGINT NOT NULL,
+                PRIMARY KEY (project_id, tenant_id)
             )",
         )
         .execute(&self.pool)

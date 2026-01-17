@@ -5,11 +5,51 @@ use mk_core::traits::MemoryProviderAdapter;
 use mk_core::types::{MemoryEntry, MemoryLayer, TenantContext};
 use qdrant_client::{Qdrant, config::QdrantConfig};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
 use testcontainers::{
-    GenericImage,
+    ContainerAsync, GenericImage,
     core::{ContainerPort, WaitFor},
     runners::AsyncRunner,
 };
+use tokio::sync::OnceCell;
+
+struct QdrantFixture {
+    #[allow(dead_code)]
+    container: ContainerAsync<GenericImage>,
+    url: String,
+}
+
+static QDRANT: OnceCell<Option<QdrantFixture>> = OnceCell::const_new();
+static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+async fn get_qdrant_fixture() -> Option<&'static QdrantFixture> {
+    QDRANT
+        .get_or_init(|| async {
+            match GenericImage::new("qdrant/qdrant", "latest")
+                .with_exposed_port(ContainerPort::Tcp(6334))
+                .with_wait_for(WaitFor::message_on_stdout(
+                    "Qdrant is ready to accept connections",
+                ))
+                .start()
+                .await
+            {
+                Ok(container) => {
+                    let host = container.get_host().await.ok()?;
+                    let port = container.get_host_port_ipv4(6334).await.ok()?;
+                    let url = format!("http://{}:{}", host, port);
+                    Some(QdrantFixture { container, url })
+                }
+                Err(_) => None,
+            }
+        })
+        .await
+        .as_ref()
+}
+
+fn unique_collection_name(prefix: &str) -> String {
+    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+    format!("{}_{}", prefix, id)
+}
 
 fn test_ctx() -> TenantContext {
     TenantContext::default()
@@ -17,29 +57,16 @@ fn test_ctx() -> TenantContext {
 
 #[tokio::test]
 async fn test_qdrant_full_lifecycle() {
-    let container = match GenericImage::new("qdrant/qdrant", "latest")
-        .with_exposed_port(ContainerPort::Tcp(6334))
-        .with_wait_for(WaitFor::message_on_stdout(
-            "Qdrant is ready to accept connections",
-        ))
-        .start()
-        .await
-    {
-        Ok(c) => c,
-        Err(_) => {
-            eprintln!("Skipping Qdrant test: Docker not available");
-            return;
-        }
+    let Some(fixture) = get_qdrant_fixture().await else {
+        eprintln!("Skipping Qdrant test: Docker not available");
+        return;
     };
 
-    let host = container.get_host().await.unwrap();
-    let port = container.get_host_port_ipv4(6334).await.unwrap();
-    let connection_url = format!("http://{}:{}", host, port);
+    let client =
+        Qdrant::new(QdrantConfig::from_url(&fixture.url)).expect("Failed to create Qdrant client");
 
-    let client = Qdrant::new(QdrantConfig::from_url(&connection_url))
-        .expect("Failed to create Qdrant client");
-
-    let provider = QdrantProvider::new(client, "lifecycle_test".to_string(), 128);
+    let collection = unique_collection_name("lifecycle_test");
+    let provider = QdrantProvider::new(client, collection, 128);
 
     provider
         .ensure_collection()
@@ -115,29 +142,16 @@ async fn test_qdrant_full_lifecycle() {
 
 #[tokio::test]
 async fn test_qdrant_error_conditions() {
-    let container = match GenericImage::new("qdrant/qdrant", "latest")
-        .with_exposed_port(ContainerPort::Tcp(6334))
-        .with_wait_for(WaitFor::message_on_stdout(
-            "Qdrant is ready to accept connections",
-        ))
-        .start()
-        .await
-    {
-        Ok(c) => c,
-        Err(_) => {
-            eprintln!("Skipping Qdrant test: Docker not available");
-            return;
-        }
+    let Some(fixture) = get_qdrant_fixture().await else {
+        eprintln!("Skipping Qdrant test: Docker not available");
+        return;
     };
 
-    let host = container.get_host().await.unwrap();
-    let port = container.get_host_port_ipv4(6334).await.unwrap();
-    let connection_url = format!("http://{}:{}", host, port);
+    let client =
+        Qdrant::new(QdrantConfig::from_url(&fixture.url)).expect("Failed to create Qdrant client");
 
-    let client = Qdrant::new(QdrantConfig::from_url(&connection_url))
-        .expect("Failed to create Qdrant client");
-
-    let provider = QdrantProvider::new(client, "error_test".to_string(), 128);
+    let collection = unique_collection_name("error_test");
+    let provider = QdrantProvider::new(client, collection, 128);
 
     let entry_no_emb = MemoryEntry {
         summaries: std::collections::HashMap::new(),
@@ -172,29 +186,16 @@ async fn test_qdrant_error_conditions() {
 
 #[tokio::test]
 async fn test_qdrant_complex_metadata() {
-    let container = match GenericImage::new("qdrant/qdrant", "latest")
-        .with_exposed_port(ContainerPort::Tcp(6334))
-        .with_wait_for(WaitFor::message_on_stdout(
-            "Qdrant is ready to accept connections",
-        ))
-        .start()
-        .await
-    {
-        Ok(c) => c,
-        Err(_) => {
-            eprintln!("Skipping Qdrant test: Docker not available");
-            return;
-        }
+    let Some(fixture) = get_qdrant_fixture().await else {
+        eprintln!("Skipping Qdrant test: Docker not available");
+        return;
     };
 
-    let host = container.get_host().await.unwrap();
-    let port = container.get_host_port_ipv4(6334).await.unwrap();
-    let connection_url = format!("http://{}:{}", host, port);
+    let client =
+        Qdrant::new(QdrantConfig::from_url(&fixture.url)).expect("Failed to create Qdrant client");
 
-    let client = Qdrant::new(QdrantConfig::from_url(&connection_url))
-        .expect("Failed to create Qdrant client");
-
-    let provider = QdrantProvider::new(client, "metadata_test".to_string(), 128);
+    let collection = unique_collection_name("metadata_test");
+    let provider = QdrantProvider::new(client, collection, 128);
 
     let mut metadata = HashMap::new();
     metadata.insert("tags".to_string(), serde_json::json!(["rust", "ai"]));
@@ -267,29 +268,16 @@ async fn test_qdrant_complex_metadata() {
 
 #[tokio::test]
 async fn test_qdrant_collection_management() {
-    let container = match GenericImage::new("qdrant/qdrant", "latest")
-        .with_exposed_port(ContainerPort::Tcp(6334))
-        .with_wait_for(WaitFor::message_on_stdout(
-            "Qdrant is ready to accept connections",
-        ))
-        .start()
-        .await
-    {
-        Ok(c) => c,
-        Err(_) => {
-            eprintln!("Skipping Qdrant test: Docker not available");
-            return;
-        }
+    let Some(fixture) = get_qdrant_fixture().await else {
+        eprintln!("Skipping Qdrant test: Docker not available");
+        return;
     };
 
-    let host = container.get_host().await.unwrap();
-    let port = container.get_host_port_ipv4(6334).await.unwrap();
-    let connection_url = format!("http://{}:{}", host, port);
+    let client =
+        Qdrant::new(QdrantConfig::from_url(&fixture.url)).expect("Failed to create Qdrant client");
 
-    let client = Qdrant::new(QdrantConfig::from_url(&connection_url))
-        .expect("Failed to create Qdrant client");
-
-    let provider = QdrantProvider::new(client, "mgmt_test".to_string(), 384);
+    let collection = unique_collection_name("mgmt_test");
+    let provider = QdrantProvider::new(client, collection, 384);
 
     provider
         .ensure_collection()

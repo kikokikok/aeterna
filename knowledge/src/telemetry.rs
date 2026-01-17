@@ -19,3 +19,24 @@ impl KnowledgeTelemetry {
         increment_counter!("knowledge_violations_total", "layer" => layer.to_string(), "severity" => severity.to_string());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_record_operation() {
+        let telemetry = KnowledgeTelemetry;
+        telemetry.record_operation("read", "success");
+        telemetry.record_operation("write", "failure");
+        telemetry.record_operation("delete", "success");
+    }
+
+    #[test]
+    fn test_record_violation() {
+        let telemetry = KnowledgeTelemetry;
+        telemetry.record_violation("team", "warn");
+        telemetry.record_violation("project", "block");
+        telemetry.record_violation("org", "info");
+    }
+}

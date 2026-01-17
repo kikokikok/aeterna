@@ -94,6 +94,7 @@ pub fn load_from_env() -> Result<Config, Box<dyn std::error::Error>> {
         tools: load_tools_from_env()?,
         observability: load_observability_from_env()?,
         deployment: load_deployment_from_env()?,
+        job: load_job_from_env()?,
     };
 
     Ok(config)
@@ -105,6 +106,17 @@ fn load_deployment_from_env() -> Result<crate::config::DeploymentConfig, Box<dyn
         mode: env::var("AETERNA_DEPLOYMENT_MODE").unwrap_or_else(|_| "local".to_string()),
         remote_url: env::var("AETERNA_REMOTE_GOVERNANCE_URL").ok(),
         sync_enabled: parse_env("AETERNA_SYNC_ENABLED").unwrap_or(true),
+    })
+}
+
+fn load_job_from_env() -> Result<crate::config::JobConfig, Box<dyn std::error::Error>> {
+    Ok(crate::config::JobConfig {
+        lock_ttl_seconds: parse_env("AETERNA_JOB_LOCK_TTL_SECONDS").unwrap_or(2100),
+        job_timeout_seconds: parse_env("AETERNA_JOB_TIMEOUT_SECONDS").unwrap_or(1800),
+        deduplication_window_seconds: parse_env("AETERNA_JOB_DEDUP_WINDOW_SECONDS").unwrap_or(300),
+        checkpoint_interval: parse_env("AETERNA_JOB_CHECKPOINT_INTERVAL").unwrap_or(100),
+        graceful_shutdown_timeout_seconds: parse_env("AETERNA_JOB_SHUTDOWN_TIMEOUT_SECONDS")
+            .unwrap_or(30),
     })
 }
 
