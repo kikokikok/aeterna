@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub struct PruningManager {
-    trajectories: Arc<RwLock<HashMap<String, Vec<MemoryTrajectoryEvent>>>>,
+    trajectories: Arc<RwLock<HashMap<String, Vec<MemoryTrajectoryEvent>>>>
 }
 
 impl PruningManager {
@@ -58,33 +58,34 @@ impl PruningManager {
 pub struct CompressionManager {
     llm_service:
         Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
-    trajectories: Arc<RwLock<HashMap<String, Vec<MemoryTrajectoryEvent>>>>,
+    trajectories: Arc<RwLock<HashMap<String, Vec<MemoryTrajectoryEvent>>>>
 }
 
 impl CompressionManager {
     pub fn new(
         llm_service: Arc<
-            dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+            dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
         >,
-        trajectories: Arc<RwLock<HashMap<String, Vec<MemoryTrajectoryEvent>>>>,
+        trajectories: Arc<RwLock<HashMap<String, Vec<MemoryTrajectoryEvent>>>>
     ) -> Self {
         Self {
             llm_service,
-            trajectories,
+            trajectories
         }
     }
 
     pub async fn compress(
         &self,
         _ctx: &TenantContext,
-        memories: &[MemoryEntry],
+        memories: &[MemoryEntry]
     ) -> Result<MemoryEntry, Box<dyn std::error::Error + Send + Sync>> {
         if memories.is_empty() {
             return Err("No memories to compress".into());
         }
 
         let mut prompt = String::from(
-            "Compress the following related memories into a single, high-density summary. Preserve all key facts and entities:\n\n",
+            "Compress the following related memories into a single, high-density summary. \
+             Preserve all key facts and entities:\n\n"
         );
         for (i, m) in memories.iter().enumerate() {
             prompt.push_str(&format!("{}. {}\n", i + 1, m.content));
@@ -97,7 +98,7 @@ impl CompressionManager {
         metadata.insert("compressed_from".to_string(), serde_json::json!(source_ids));
         metadata.insert(
             "compression_ratio".to_string(),
-            serde_json::json!(memories.len()),
+            serde_json::json!(memories.len())
         );
 
         let avg_importance = memories
@@ -116,7 +117,7 @@ impl CompressionManager {
             importance_score: Some(avg_importance),
             metadata,
             created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp()
         };
 
         let source_trajectories: Vec<Vec<MemoryTrajectoryEvent>> = {
@@ -142,7 +143,7 @@ impl CompressionManager {
                                 "Inherited reward from source memory {}",
                                 memories[i].id
                             )),
-                            timestamp: chrono::Utc::now().timestamp(),
+                            timestamp: chrono::Utc::now().timestamp()
                         });
                     }
                 }
@@ -174,21 +175,21 @@ mod tests {
             importance_score: importance,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         }
     }
 
     fn create_trajectory_event(
         entry_id: &str,
         operation: MemoryOperation,
-        reward: Option<RewardSignal>,
+        reward: Option<RewardSignal>
     ) -> MemoryTrajectoryEvent {
         MemoryTrajectoryEvent {
             operation,
             entry_id: entry_id.to_string(),
             reward,
             reasoning: None,
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         }
     }
 
@@ -235,8 +236,8 @@ mod tests {
                         score: -0.5,
                         reasoning: None,
                         agent_id: None,
-                        timestamp: chrono::Utc::now().timestamp(),
-                    }),
+                        timestamp: chrono::Utc::now().timestamp()
+                    })
                 ),
                 create_trajectory_event(
                     "negative-rewards",
@@ -246,8 +247,8 @@ mod tests {
                         score: -0.3,
                         reasoning: None,
                         agent_id: None,
-                        timestamp: chrono::Utc::now().timestamp(),
-                    }),
+                        timestamp: chrono::Utc::now().timestamp()
+                    })
                 ),
                 create_trajectory_event(
                     "negative-rewards",
@@ -257,8 +258,8 @@ mod tests {
                         score: -0.8,
                         reasoning: None,
                         agent_id: None,
-                        timestamp: chrono::Utc::now().timestamp(),
-                    }),
+                        timestamp: chrono::Utc::now().timestamp()
+                    })
                 ),
             ];
             t.insert("negative-rewards".to_string(), events);
@@ -308,7 +309,7 @@ mod tests {
             events.push(create_trajectory_event(
                 "recently-used",
                 MemoryOperation::Retrieve,
-                None,
+                None
             ));
             t.insert("recently-used".to_string(), events);
         }
@@ -384,9 +385,9 @@ mod tests {
                         score: 0.9,
                         reasoning: Some("useful".to_string()),
                         agent_id: None,
-                        timestamp: chrono::Utc::now().timestamp(),
-                    }),
-                )],
+                        timestamp: chrono::Utc::now().timestamp()
+                    })
+                )]
             );
         }
 

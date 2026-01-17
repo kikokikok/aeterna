@@ -12,17 +12,17 @@ use validator::Validate;
 /// Tool to create a new organizational unit.
 pub struct UnitCreateTool {
     backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
-    governance_engine: Arc<GovernanceEngine>,
+    governance_engine: Arc<GovernanceEngine>
 }
 
 impl UnitCreateTool {
     pub fn new(
         backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
-        governance_engine: Arc<GovernanceEngine>,
+        governance_engine: Arc<GovernanceEngine>
     ) -> Self {
         Self {
             backend,
-            governance_engine,
+            governance_engine
         }
     }
 }
@@ -35,7 +35,7 @@ pub struct UnitCreateParams {
     #[serde(rename = "tenantContext")]
     pub tenant_context: Option<TenantContext>,
     #[serde(default)]
-    pub metadata: HashMap<String, Value>,
+    pub metadata: HashMap<String, Value>
 }
 
 #[async_trait]
@@ -77,7 +77,7 @@ impl Tool for UnitCreateTool {
             "organization" => UnitType::Organization,
             "team" => UnitType::Team,
             "project" => UnitType::Project,
-            _ => return Err("Invalid unit type".into()),
+            _ => return Err("Invalid unit type".into())
         };
 
         let unit = OrganizationalUnit {
@@ -88,7 +88,7 @@ impl Tool for UnitCreateTool {
             tenant_id: ctx.tenant_id.clone(),
             metadata: p.metadata,
             created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp()
         };
 
         self.backend.create_unit(&unit).await?;
@@ -100,7 +100,7 @@ impl Tool for UnitCreateTool {
                 unit_type: unit.unit_type,
                 tenant_id: ctx.tenant_id.clone(),
                 parent_id: unit.parent_id.clone(),
-                timestamp: chrono::Utc::now().timestamp(),
+                timestamp: chrono::Utc::now().timestamp()
             })
             .await;
 
@@ -114,17 +114,17 @@ impl Tool for UnitCreateTool {
 /// Tool to add a policy to an organizational unit.
 pub struct UnitPolicyAddTool {
     backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
-    governance_engine: Arc<GovernanceEngine>,
+    governance_engine: Arc<GovernanceEngine>
 }
 
 impl UnitPolicyAddTool {
     pub fn new(
         backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
-        governance_engine: Arc<GovernanceEngine>,
+        governance_engine: Arc<GovernanceEngine>
     ) -> Self {
         Self {
             backend,
-            governance_engine,
+            governance_engine
         }
     }
 }
@@ -134,7 +134,7 @@ pub struct UnitPolicyAddParams {
     pub unit_id: String,
     pub policy: mk_core::types::Policy,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[async_trait]
@@ -175,7 +175,7 @@ impl Tool for UnitPolicyAddTool {
                 policy_id: p.policy.id.clone(),
                 layer: p.policy.layer,
                 tenant_id: ctx.tenant_id.clone(),
-                timestamp: chrono::Utc::now().timestamp(),
+                timestamp: chrono::Utc::now().timestamp()
             })
             .await;
 
@@ -189,17 +189,17 @@ impl Tool for UnitPolicyAddTool {
 /// Tool to assign a role to a user within an organizational unit.
 pub struct UserRoleAssignTool {
     backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
-    governance_engine: Arc<GovernanceEngine>,
+    governance_engine: Arc<GovernanceEngine>
 }
 
 impl UserRoleAssignTool {
     pub fn new(
         backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
-        governance_engine: Arc<GovernanceEngine>,
+        governance_engine: Arc<GovernanceEngine>
     ) -> Self {
         Self {
             backend,
-            governance_engine,
+            governance_engine
         }
     }
 }
@@ -210,7 +210,7 @@ pub struct UserRoleAssignParams {
     pub unit_id: String,
     pub role: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[async_trait]
@@ -259,7 +259,7 @@ impl Tool for UserRoleAssignTool {
                 unit_id: p.unit_id.clone(),
                 role,
                 tenant_id: ctx.tenant_id.clone(),
-                timestamp: chrono::Utc::now().timestamp(),
+                timestamp: chrono::Utc::now().timestamp()
             })
             .await;
 
@@ -272,17 +272,17 @@ impl Tool for UserRoleAssignTool {
 /// Tool to remove a role from a user within an organizational unit.
 pub struct UserRoleRemoveTool {
     backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
-    governance_engine: Arc<GovernanceEngine>,
+    governance_engine: Arc<GovernanceEngine>
 }
 
 impl UserRoleRemoveTool {
     pub fn new(
         backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
-        governance_engine: Arc<GovernanceEngine>,
+        governance_engine: Arc<GovernanceEngine>
     ) -> Self {
         Self {
             backend,
-            governance_engine,
+            governance_engine
         }
     }
 }
@@ -293,7 +293,7 @@ pub struct UserRoleRemoveParams {
     pub unit_id: String,
     pub role: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[async_trait]
@@ -342,7 +342,7 @@ impl Tool for UserRoleRemoveTool {
                 unit_id: p.unit_id.clone(),
                 role,
                 tenant_id: ctx.tenant_id.clone(),
-                timestamp: chrono::Utc::now().timestamp(),
+                timestamp: chrono::Utc::now().timestamp()
             })
             .await;
 
@@ -353,12 +353,12 @@ impl Tool for UserRoleRemoveTool {
 }
 
 pub struct HierarchyNavigateTool {
-    backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
+    backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>
 }
 
 impl HierarchyNavigateTool {
     pub fn new(
-        backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
+        backend: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>
     ) -> Self {
         Self { backend }
     }
@@ -369,7 +369,7 @@ pub struct HierarchyNavigateParams {
     pub unit_id: String,
     pub direction: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[async_trait]
@@ -407,7 +407,7 @@ impl Tool for HierarchyNavigateTool {
         let units = match p.direction.as_str() {
             "ancestors" => self.backend.get_ancestors(ctx, &p.unit_id).await?,
             "descendants" => self.backend.get_descendants(ctx, &p.unit_id).await?,
-            _ => return Err("Invalid direction".into()),
+            _ => return Err("Invalid direction".into())
         };
 
         Ok(json!({

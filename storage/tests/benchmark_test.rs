@@ -20,7 +20,7 @@ fn create_store() -> DuckDbGraphStore {
 fn create_tenant_context(tenant_id: &str) -> TenantContext {
     TenantContext::new(
         TenantId::new(tenant_id.to_string()).unwrap(),
-        UserId::new("benchmark-user".to_string()).unwrap(),
+        UserId::new("benchmark-user".to_string()).unwrap()
     )
 }
 
@@ -29,7 +29,7 @@ fn create_test_node(id: &str, tenant_id: &str) -> GraphNode {
         id: id.to_string(),
         label: format!("node-{}", id),
         properties: json!({"key": "value", "index": id}),
-        tenant_id: tenant_id.to_string(),
+        tenant_id: tenant_id.to_string()
     }
 }
 
@@ -40,7 +40,7 @@ fn create_test_edge(id: &str, source: &str, target: &str, tenant_id: &str) -> Gr
         target_id: target.to_string(),
         relation: "related_to".to_string(),
         properties: json!({}),
-        tenant_id: tenant_id.to_string(),
+        tenant_id: tenant_id.to_string()
     }
 }
 
@@ -88,7 +88,7 @@ fn bench_find_related_small_graph() {
                 &format!("s-edge-{}", i),
                 &format!("s-node-{}", i),
                 &format!("s-node-{}", i + 1),
-                "tenant-small",
+                "tenant-small"
             )
         })
         .collect();
@@ -134,7 +134,7 @@ fn bench_find_related_medium_graph() {
                 &format!("m-edge-{}", i),
                 &format!("m-node-{}", i),
                 &format!("m-node-{}", i + 1),
-                "tenant-medium",
+                "tenant-medium"
             )
         })
         .collect();
@@ -180,7 +180,7 @@ fn bench_shortest_path() {
                 &format!("p-edge-{}", i),
                 &format!("p-node-{}", i),
                 &format!("p-node-{}", i + 1),
-                "tenant-path",
+                "tenant-path"
             )
         })
         .collect();
@@ -228,7 +228,7 @@ fn bench_get_stats() {
                 &format!("st-edge-{}", i),
                 &format!("st-node-{}", i),
                 &format!("st-node-{}", i + 1),
-                "tenant-stats",
+                "tenant-stats"
             )
         })
         .collect();
@@ -287,7 +287,8 @@ fn bench_tenant_isolation_query() {
     let avg_ms = elapsed.as_millis() as f64 / iterations as f64;
 
     println!(
-        "Tenant isolated query (5 tenants, 100 nodes each): {} iterations in {:?} (avg: {:.3}ms/query)",
+        "Tenant isolated query (5 tenants, 100 nodes each): {} iterations in {:?} (avg: \
+         {:.3}ms/query)",
         iterations, elapsed, avg_ms
     );
 
@@ -445,7 +446,7 @@ fn bench_atomic_transaction() {
                 &format!("atomic-edge-{}", i),
                 &format!("atomic-node-{}", i),
                 &format!("atomic-node-{}", i + 1),
-                "tenant-atomic",
+                "tenant-atomic"
             )
         })
         .collect();
@@ -550,7 +551,7 @@ fn bench_large_graph_traversal() {
                 &format!("lg-edge-{}", i),
                 &format!("lg-node-{}", i),
                 &format!("lg-node-{}", i + 1),
-                "tenant-large",
+                "tenant-large"
             )
         })
         .collect();
@@ -560,7 +561,7 @@ fn bench_large_graph_traversal() {
             &format!("lg-cross-{}", i),
             &format!("lg-node-{}", i),
             &format!("lg-node-{}", i + 20),
-            "tenant-large",
+            "tenant-large"
         ));
     }
 

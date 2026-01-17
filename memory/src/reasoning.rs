@@ -9,7 +9,7 @@ use std::sync::Arc;
 pub struct ReasoningPlan {
     pub strategy: ReasoningStrategy,
     pub refined_query: String,
-    pub reasoning: String,
+    pub reasoning: String
 }
 
 #[async_trait]
@@ -17,12 +17,12 @@ pub trait ReflectiveReasoner: Send + Sync {
     async fn reason(
         &self,
         query: &str,
-        context_summary: Option<&str>,
+        context_summary: Option<&str>
     ) -> anyhow::Result<ReasoningTrace>;
 }
 
 pub struct DefaultReflectiveReasoner {
-    llm: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>,
+    llm: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>
 }
 
 impl DefaultReflectiveReasoner {
@@ -36,21 +36,16 @@ impl ReflectiveReasoner for DefaultReflectiveReasoner {
     async fn reason(
         &self,
         query: &str,
-        context_summary: Option<&str>,
+        context_summary: Option<&str>
     ) -> anyhow::Result<ReasoningTrace> {
         let start_time = Utc::now();
 
         let prompt = format!(
-            "Given the following user query and optional context summary, determine the best retrieval strategy \
-            and refine the query for vector search.\n\n\
-            Query: {}\n\
-            Context Summary: {}\n\n\
-            Return your response in JSON format:\n\
-            {{\n\
-              \"strategy\": \"exhaustive\" | \"targeted\" | \"semanticOnly\",\n\
-              \"refined_query\": \"...\",\n\
-              \"reasoning\": \"...\"\n\
-            }}",
+            "Given the following user query and optional context summary, determine the best \
+             retrieval strategy and refine the query for vector search.\n\nQuery: {}\nContext \
+             Summary: {}\n\nReturn your response in JSON format:\n{{\n\"strategy\": \
+             \"exhaustive\" | \"targeted\" | \"semanticOnly\",\n\"refined_query\": \
+             \"...\",\n\"reasoning\": \"...\"\n}}",
             query,
             context_summary.unwrap_or("None")
         );
@@ -80,7 +75,7 @@ impl ReflectiveReasoner for DefaultReflectiveReasoner {
             refined_query: Some(plan.refined_query),
             start_time,
             end_time: Utc::now(),
-            metadata: std::collections::HashMap::new(),
+            metadata: std::collections::HashMap::new()
         })
     }
 }
@@ -93,7 +88,9 @@ mod tests {
     #[tokio::test]
     async fn test_reasoning_logic() {
         let mut mock_llm = MockLlmService::new();
-        let plan_json = "{\"strategy\": \"exhaustive\", \"refined_query\": \"deep search for memory-r1 architecture\", \"reasoning\": \"The query is specific and complex, requiring cross-layer verification.\"}";
+        let plan_json = "{\"strategy\": \"exhaustive\", \"refined_query\": \"deep search for \
+                         memory-r1 architecture\", \"reasoning\": \"The query is specific and \
+                         complex, requiring cross-layer verification.\"}";
         mock_llm.set_response(plan_json).await;
 
         let reasoner = DefaultReflectiveReasoner::new(Arc::new(mock_llm));

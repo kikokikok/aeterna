@@ -18,7 +18,7 @@ pub struct GovernanceScheduler {
     pub report_interval: Duration,
     pub dlq_processing_interval: Duration,
     pub redis: Option<Arc<RedisStorage>>,
-    pub job_config: JobConfig,
+    pub job_config: JobConfig
 }
 
 impl GovernanceScheduler {
@@ -28,7 +28,7 @@ impl GovernanceScheduler {
         deployment_config: DeploymentConfig,
         quick_scan_interval: Duration,
         semantic_scan_interval: Duration,
-        report_interval: Duration,
+        report_interval: Duration
     ) -> Self {
         Self {
             engine,
@@ -39,7 +39,7 @@ impl GovernanceScheduler {
             report_interval,
             dlq_processing_interval: Duration::from_secs(300),
             redis: None,
-            job_config: JobConfig::default(),
+            job_config: JobConfig::default()
         }
     }
 
@@ -95,7 +95,7 @@ impl GovernanceScheduler {
 
     pub async fn run_job<F>(&self, name: &str, tenant_id: &str, job_future: F) -> anyhow::Result<()>
     where
-        F: std::future::Future<Output = anyhow::Result<()>>,
+        F: std::future::Future<Output = anyhow::Result<()>>
     {
         if name.contains("TRIGGER_FAILURE") {
             return Err(anyhow::anyhow!("TRIGGER_FAILURE: Forced job failure"));
@@ -125,7 +125,7 @@ impl GovernanceScheduler {
                             tenant_id,
                             &lock_result.lock_token,
                             &lock_key,
-                            job_future,
+                            job_future
                         )
                         .await;
 
@@ -167,7 +167,7 @@ impl GovernanceScheduler {
     async fn check_job_can_run(
         &self,
         redis: &RedisStorage,
-        job_name: &str,
+        job_name: &str
     ) -> Result<(), JobSkipReason> {
         if self.job_config.deduplication_window_seconds > 0 {
             match redis.check_job_recently_completed(job_name).await {
@@ -192,10 +192,10 @@ impl GovernanceScheduler {
         tenant_id: &str,
         _lock_token: &str,
         _lock_key: &str,
-        job_future: F,
+        job_future: F
     ) -> anyhow::Result<()>
     where
-        F: std::future::Future<Output = anyhow::Result<()>>,
+        F: std::future::Future<Output = anyhow::Result<()>>
     {
         let result = self
             .execute_job_without_lock(name, tenant_id, job_future)
@@ -221,10 +221,10 @@ impl GovernanceScheduler {
         &self,
         name: &str,
         tenant_id: &str,
-        job_future: F,
+        job_future: F
     ) -> anyhow::Result<()>
     where
-        F: std::future::Future<Output = anyhow::Result<()>>,
+        F: std::future::Future<Output = anyhow::Result<()>>
     {
         let started_at = chrono::Utc::now().timestamp();
         tracing::info!("Starting job: {}", name);
@@ -251,7 +251,7 @@ impl GovernanceScheduler {
                         "completed",
                         None,
                         started_at,
-                        Some(finished_at),
+                        Some(finished_at)
                     )
                     .await;
                 Ok(())
@@ -266,7 +266,7 @@ impl GovernanceScheduler {
                         "failed",
                         Some(&message),
                         started_at,
-                        Some(finished_at),
+                        Some(finished_at)
                     )
                     .await;
                 Err(e)
@@ -289,7 +289,7 @@ impl GovernanceScheduler {
                             self.job_config.job_timeout_seconds
                         )),
                         started_at,
-                        Some(finished_at),
+                        Some(finished_at)
                     )
                     .await;
                 Err(anyhow::anyhow!(
@@ -383,7 +383,7 @@ impl GovernanceScheduler {
                         let drift_result = DriftResult::new(
                             unit.id.clone(),
                             unit.tenant_id.clone(),
-                            result.violations,
+                            result.violations
                         );
                         let _ = storage.store_drift_result(drift_result).await;
                     }
@@ -423,7 +423,7 @@ impl GovernanceScheduler {
                 let children = storage
                     .get_descendants(
                         TenantContext::new(unit.tenant_id.clone(), UserId::default()),
-                        &unit.id,
+                        &unit.id
                     )
                     .await
                     .map_err(|e| anyhow::anyhow!("Failed to list projects: {:?}", e))?;
@@ -439,7 +439,7 @@ impl GovernanceScheduler {
                         if let Some(result) = storage
                             .get_latest_drift_result(
                                 TenantContext::new(child.tenant_id.clone(), UserId::default()),
-                                &child.id,
+                                &child.id
                             )
                             .await
                             .map_err(|e| anyhow::anyhow!("Failed to fetch drift: {:?}", e))?
@@ -466,23 +466,24 @@ impl GovernanceScheduler {
                 report_data.insert("average_drift".to_string(), serde_json::json!(avg_drift));
                 report_data.insert(
                     "project_count".to_string(),
-                    serde_json::json!(project_count),
+                    serde_json::json!(project_count)
                 );
                 report_data.insert(
                     "active_violation_count".to_string(),
-                    serde_json::json!(all_violations.len()),
+                    serde_json::json!(all_violations.len())
                 );
                 report_data.insert(
                     "suppressed_violation_count".to_string(),
-                    serde_json::json!(all_suppressed.len()),
+                    serde_json::json!(all_suppressed.len())
                 );
                 report_data.insert(
                     "manual_review_required".to_string(),
-                    serde_json::json!(manual_review_count),
+                    serde_json::json!(manual_review_count)
                 );
 
                 tracing::info!(
-                    "Weekly report for Org {}: Avg Drift: {:.2}, Projects: {}, Active Violations: {}, Suppressed: {}, Manual Review: {}",
+                    "Weekly report for Org {}: Avg Drift: {:.2}, Projects: {}, Active Violations: \
+                     {}, Suppressed: {}, Manual Review: {}",
                     unit.id,
                     avg_drift,
                     project_count,
@@ -541,7 +542,7 @@ impl GovernanceScheduler {
                                     .update_event_status(
                                         &event.event_id,
                                         EventStatus::Published,
-                                        None,
+                                        None
                                     )
                                     .await
                                     .ok();
@@ -552,7 +553,7 @@ impl GovernanceScheduler {
                                     .update_event_status(
                                         &event.event_id,
                                         EventStatus::DeadLettered,
-                                        Some("DLQ reprocessing failed".to_string()),
+                                        Some("DLQ reprocessing failed".to_string())
                                     )
                                     .await
                                     .ok();
@@ -587,7 +588,7 @@ mod tests {
     use async_trait::async_trait;
     use mk_core::traits::StorageBackend;
     use mk_core::types::{
-        GovernanceEvent, KnowledgeEntry, KnowledgeLayer, OrganizationalUnit, Policy, Role, TenantId,
+        GovernanceEvent, KnowledgeEntry, KnowledgeLayer, OrganizationalUnit, Policy, Role, TenantId
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::sync::RwLock;
@@ -595,7 +596,7 @@ mod tests {
     struct MockStorage {
         units: RwLock<Vec<OrganizationalUnit>>,
         drift_results: RwLock<Vec<DriftResult>>,
-        job_records: Arc<AtomicUsize>,
+        job_records: Arc<AtomicUsize>
     }
 
     impl MockStorage {
@@ -603,7 +604,7 @@ mod tests {
             Self {
                 units: RwLock::new(Vec::new()),
                 drift_results: RwLock::new(Vec::new()),
-                job_records: Arc::new(AtomicUsize::new(0)),
+                job_records: Arc::new(AtomicUsize::new(0))
             }
         }
 
@@ -611,7 +612,7 @@ mod tests {
             Self {
                 units: RwLock::new(units),
                 drift_results: RwLock::new(Vec::new()),
-                job_records: Arc::new(AtomicUsize::new(0)),
+                job_records: Arc::new(AtomicUsize::new(0))
             }
         }
     }
@@ -624,7 +625,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _key: &str,
-            _value: &[u8],
+            _value: &[u8]
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -632,7 +633,7 @@ mod tests {
         async fn retrieve(
             &self,
             _ctx: TenantContext,
-            _key: &str,
+            _key: &str
         ) -> Result<Option<Vec<u8>>, Self::Error> {
             Ok(None)
         }
@@ -648,7 +649,7 @@ mod tests {
         async fn get_ancestors(
             &self,
             _ctx: TenantContext,
-            _unit_id: &str,
+            _unit_id: &str
         ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
             Ok(Vec::new())
         }
@@ -656,7 +657,7 @@ mod tests {
         async fn get_descendants(
             &self,
             _ctx: TenantContext,
-            unit_id: &str,
+            unit_id: &str
         ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
             let units = self.units.read().await;
             let children: Vec<_> = units
@@ -670,7 +671,7 @@ mod tests {
         async fn get_unit_policies(
             &self,
             _ctx: TenantContext,
-            _unit_id: &str,
+            _unit_id: &str
         ) -> Result<Vec<Policy>, Self::Error> {
             Ok(vec![Policy {
                 id: "test-policy".to_string(),
@@ -680,7 +681,7 @@ mod tests {
                 rules: vec![],
                 mode: mk_core::types::PolicyMode::Mandatory,
                 merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
-                metadata: HashMap::new(),
+                metadata: HashMap::new()
             }])
         }
 
@@ -692,7 +693,7 @@ mod tests {
             &self,
             _ctx: &TenantContext,
             _unit_id: &str,
-            _policy: &Policy,
+            _policy: &Policy
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -702,7 +703,7 @@ mod tests {
             _user_id: &UserId,
             _tenant_id: &TenantId,
             _unit_id: &str,
-            _role: Role,
+            _role: Role
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -712,7 +713,7 @@ mod tests {
             _user_id: &UserId,
             _tenant_id: &TenantId,
             _unit_id: &str,
-            _role: Role,
+            _role: Role
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -725,7 +726,7 @@ mod tests {
         async fn get_latest_drift_result(
             &self,
             _ctx: TenantContext,
-            project_id: &str,
+            project_id: &str
         ) -> Result<Option<DriftResult>, Self::Error> {
             let results = self.drift_results.read().await;
             let result = results.iter().find(|r| r.project_id == project_id).cloned();
@@ -743,7 +744,7 @@ mod tests {
             _status: &str,
             _message: Option<&str>,
             _started_at: i64,
-            _finished_at: Option<i64>,
+            _finished_at: Option<i64>
         ) -> Result<(), Self::Error> {
             self.job_records.fetch_add(1, Ordering::SeqCst);
             Ok(())
@@ -753,14 +754,14 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _since_timestamp: i64,
-            _limit: usize,
+            _limit: usize
         ) -> Result<Vec<GovernanceEvent>, Self::Error> {
             Ok(Vec::new())
         }
 
         async fn persist_event(
             &self,
-            _event: mk_core::types::PersistentEvent,
+            _event: mk_core::types::PersistentEvent
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -768,7 +769,7 @@ mod tests {
         async fn get_pending_events(
             &self,
             _ctx: TenantContext,
-            _limit: usize,
+            _limit: usize
         ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
             Ok(Vec::new())
         }
@@ -777,7 +778,7 @@ mod tests {
             &self,
             _event_id: &str,
             _status: EventStatus,
-            _error: Option<String>,
+            _error: Option<String>
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -785,7 +786,7 @@ mod tests {
         async fn get_dead_letter_events(
             &self,
             _ctx: TenantContext,
-            _limit: usize,
+            _limit: usize
         ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
             Ok(Vec::new())
         }
@@ -793,14 +794,14 @@ mod tests {
         async fn check_idempotency(
             &self,
             _consumer_group: &str,
-            _idempotency_key: &str,
+            _idempotency_key: &str
         ) -> Result<bool, Self::Error> {
             Ok(false)
         }
 
         async fn record_consumer_state(
             &self,
-            _state: mk_core::types::ConsumerState,
+            _state: mk_core::types::ConsumerState
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -809,21 +810,21 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _period_start: i64,
-            _period_end: i64,
+            _period_end: i64
         ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
             Ok(Vec::new())
         }
 
         async fn record_event_metrics(
             &self,
-            _metrics: mk_core::types::EventDeliveryMetrics,
+            _metrics: mk_core::types::EventDeliveryMetrics
         ) -> Result<(), Self::Error> {
             Ok(())
         }
 
         async fn create_suppression(
             &self,
-            _suppression: mk_core::types::DriftSuppression,
+            _suppression: mk_core::types::DriftSuppression
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -831,7 +832,7 @@ mod tests {
         async fn list_suppressions(
             &self,
             _ctx: TenantContext,
-            _project_id: &str,
+            _project_id: &str
         ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
             Ok(Vec::new())
         }
@@ -839,7 +840,7 @@ mod tests {
         async fn delete_suppression(
             &self,
             _ctx: TenantContext,
-            _suppression_id: &str,
+            _suppression_id: &str
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -847,27 +848,27 @@ mod tests {
         async fn get_drift_config(
             &self,
             _ctx: TenantContext,
-            _project_id: &str,
+            _project_id: &str
         ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
             Ok(None)
         }
 
         async fn save_drift_config(
             &self,
-            _config: mk_core::types::DriftConfig,
+            _config: mk_core::types::DriftConfig
         ) -> Result<(), Self::Error> {
             Ok(())
         }
     }
 
     struct MockRepository {
-        entries: RwLock<Vec<KnowledgeEntry>>,
+        entries: RwLock<Vec<KnowledgeEntry>>
     }
 
     impl MockRepository {
         fn new() -> Self {
             Self {
-                entries: RwLock::new(Vec::new()),
+                entries: RwLock::new(Vec::new())
             }
         }
     }
@@ -880,7 +881,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _layer: KnowledgeLayer,
-            path: &str,
+            path: &str
         ) -> Result<Option<KnowledgeEntry>, Self::Error> {
             let entries = self.entries.read().await;
             Ok(entries.iter().find(|e| e.path == path).cloned())
@@ -890,7 +891,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             entry: KnowledgeEntry,
-            _message: &str,
+            _message: &str
         ) -> Result<String, Self::Error> {
             self.entries.write().await.push(entry);
             Ok("hash123".to_string())
@@ -900,7 +901,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             layer: KnowledgeLayer,
-            _prefix: &str,
+            _prefix: &str
         ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
             let entries = self.entries.read().await;
             Ok(entries
@@ -915,14 +916,14 @@ mod tests {
             _ctx: TenantContext,
             _layer: KnowledgeLayer,
             _path: &str,
-            _message: &str,
+            _message: &str
         ) -> Result<String, Self::Error> {
             Ok("hash123".to_string())
         }
 
         async fn get_head_commit(
             &self,
-            _ctx: TenantContext,
+            _ctx: TenantContext
         ) -> Result<Option<String>, Self::Error> {
             Ok(Some("head123".to_string()))
         }
@@ -930,7 +931,7 @@ mod tests {
         async fn get_affected_items(
             &self,
             _ctx: TenantContext,
-            _since_commit: &str,
+            _since_commit: &str
         ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
             Ok(Vec::new())
         }
@@ -940,7 +941,7 @@ mod tests {
             _ctx: TenantContext,
             _query: &str,
             _layers: Vec<KnowledgeLayer>,
-            _limit: usize,
+            _limit: usize
         ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
             Ok(Vec::new())
         }
@@ -963,7 +964,7 @@ mod tests {
             parent_id: Some("org-1".to_string()),
             metadata: HashMap::new(),
             created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp()
         }
     }
 
@@ -976,7 +977,7 @@ mod tests {
             parent_id: None,
             metadata: HashMap::new(),
             created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp()
         }
     }
 
@@ -992,7 +993,7 @@ mod tests {
         let storage = Arc::new(MockStorage::with_units(units));
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let config = DeploymentConfig::default();
@@ -1003,7 +1004,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_batch_drift_scan().await;
@@ -1014,7 +1015,7 @@ mod tests {
     async fn test_run_batch_drift_scan_without_storage() {
         let engine = Arc::new(GovernanceEngine::new());
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let config = DeploymentConfig::default();
@@ -1025,7 +1026,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_batch_drift_scan().await;
@@ -1049,7 +1050,7 @@ mod tests {
         let storage = Arc::new(MockStorage::with_units(units));
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let config = DeploymentConfig::default();
@@ -1060,7 +1061,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_semantic_analysis_job().await;
@@ -1091,7 +1092,7 @@ mod tests {
 
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let config = DeploymentConfig::default();
@@ -1102,7 +1103,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_weekly_report_job().await;
@@ -1113,7 +1114,7 @@ mod tests {
     async fn test_run_weekly_report_job_without_storage() {
         let engine = Arc::new(GovernanceEngine::new());
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let config = DeploymentConfig::default();
@@ -1124,7 +1125,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_weekly_report_job().await;
@@ -1142,7 +1143,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let config = DeploymentConfig::default();
@@ -1153,7 +1154,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler
@@ -1168,7 +1169,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let config = DeploymentConfig::default();
@@ -1179,7 +1180,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler
@@ -1195,7 +1196,7 @@ mod tests {
     async fn test_run_job_without_storage() {
         let engine = Arc::new(GovernanceEngine::new());
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let config = DeploymentConfig::default();
@@ -1206,7 +1207,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler
@@ -1229,7 +1230,7 @@ mod tests {
         let storage = Arc::new(MockStorage::with_units(units));
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let config = DeploymentConfig::default();
@@ -1240,7 +1241,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_weekly_report_job().await;
@@ -1264,7 +1265,7 @@ mod tests {
 
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let config = DeploymentConfig::default();
@@ -1275,7 +1276,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_weekly_report_job().await;
@@ -1287,7 +1288,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let config = DeploymentConfig::default();
@@ -1298,7 +1299,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_batch_drift_scan().await;
@@ -1310,7 +1311,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
         let config = DeploymentConfig::default();
 
@@ -1320,7 +1321,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         )
         .with_dlq_interval(Duration::from_secs(600));
 
@@ -1332,7 +1333,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
         let config = DeploymentConfig::default();
 
@@ -1341,7 +1342,7 @@ mod tests {
             job_timeout_seconds: 600,
             deduplication_window_seconds: 3600,
             checkpoint_interval: 100,
-            graceful_shutdown_timeout_seconds: 30,
+            graceful_shutdown_timeout_seconds: 30
         };
 
         let scheduler = GovernanceScheduler::new(
@@ -1350,7 +1351,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         )
         .with_job_config(job_config.clone());
 
@@ -1363,7 +1364,7 @@ mod tests {
     async fn test_run_dlq_processing_job_without_storage() {
         let engine = Arc::new(GovernanceEngine::new());
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
         let config = DeploymentConfig::default();
 
@@ -1373,7 +1374,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_dlq_processing_job().await;
@@ -1397,7 +1398,7 @@ mod tests {
         let storage = Arc::new(MockStorage::with_units(units));
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
         let config = DeploymentConfig::default();
 
@@ -1407,7 +1408,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_dlq_processing_job().await;
@@ -1423,7 +1424,7 @@ mod tests {
             parent_id: None,
             metadata: HashMap::new(),
             created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp()
         }
     }
 
@@ -1435,7 +1436,7 @@ mod tests {
         let storage = Arc::new(MockStorage::with_units(units));
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
         let config = DeploymentConfig::default();
 
@@ -1445,7 +1446,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_dlq_processing_job().await;
@@ -1457,7 +1458,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
         let config = DeploymentConfig::default();
 
@@ -1466,7 +1467,7 @@ mod tests {
             job_timeout_seconds: 1,
             deduplication_window_seconds: 0,
             checkpoint_interval: 100,
-            graceful_shutdown_timeout_seconds: 30,
+            graceful_shutdown_timeout_seconds: 30
         };
 
         let scheduler = GovernanceScheduler::new(
@@ -1475,7 +1476,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         )
         .with_job_config(job_config);
 
@@ -1495,7 +1496,7 @@ mod tests {
     async fn test_semantic_analysis_job_without_storage() {
         let engine = Arc::new(GovernanceEngine::new());
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
         let config = DeploymentConfig::default();
 
@@ -1505,7 +1506,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_semantic_analysis_job().await;
@@ -1529,7 +1530,7 @@ mod tests {
         let storage = Arc::new(MockStorage::with_units(units));
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
         let config = DeploymentConfig::default();
 
@@ -1539,7 +1540,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_batch_drift_scan().await;
@@ -1551,7 +1552,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
         let config = DeploymentConfig::default();
 
@@ -1561,7 +1562,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         assert_eq!(scheduler.quick_scan_interval, Duration::from_secs(300));
@@ -1576,7 +1577,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
         let config = DeploymentConfig::default();
 
@@ -1586,7 +1587,7 @@ mod tests {
             config,
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler
@@ -1603,7 +1604,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
         let mut config = DeploymentConfig::default();
         config.mode = "remote".to_string();
@@ -1614,7 +1615,7 @@ mod tests {
             config,
             Duration::from_millis(10),
             Duration::from_millis(10),
-            Duration::from_millis(10),
+            Duration::from_millis(10)
         );
 
         scheduler.start().await;
@@ -1640,7 +1641,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let scheduler = GovernanceScheduler::new(
@@ -1649,7 +1650,7 @@ mod tests {
             DeploymentConfig::default(),
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         )
         .with_redis(redis_storage)
         .with_job_config(JobConfig {
@@ -1657,7 +1658,7 @@ mod tests {
             job_timeout_seconds: 60,
             deduplication_window_seconds: 3600,
             checkpoint_interval: 10,
-            graceful_shutdown_timeout_seconds: 10,
+            graceful_shutdown_timeout_seconds: 10
         });
 
         let result = scheduler
@@ -1694,7 +1695,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let job_name = "contended_job";
@@ -1707,7 +1708,7 @@ mod tests {
             DeploymentConfig::default(),
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         )
         .with_redis(redis_storage);
 
@@ -1739,7 +1740,7 @@ mod tests {
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
         let repo: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
         > = Arc::new(MockRepository::new());
 
         let scheduler = GovernanceScheduler::new(
@@ -1748,7 +1749,7 @@ mod tests {
             DeploymentConfig::default(),
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         )
         .with_redis(redis_storage.clone())
         .with_job_config(JobConfig {
@@ -1778,7 +1779,7 @@ mod tests {
     async fn test_run_semantic_analysis_job_success() {
         use mk_core::traits::LlmService;
         use mk_core::types::{
-            ConstraintSeverity, KnowledgeStatus, KnowledgeType, PolicyViolation, ValidationResult,
+            ConstraintSeverity, KnowledgeStatus, KnowledgeType, PolicyViolation, ValidationResult
         };
 
         struct MockLlm;
@@ -1793,7 +1794,7 @@ mod tests {
             async fn analyze_drift(
                 &self,
                 _content: &str,
-                _policies: &[Policy],
+                _policies: &[Policy]
             ) -> Result<ValidationResult, Self::Error> {
                 Ok(ValidationResult {
                     is_valid: false,
@@ -1802,8 +1803,8 @@ mod tests {
                         policy_id: "pol-1".to_string(),
                         severity: ConstraintSeverity::Warn,
                         message: "violation".to_string(),
-                        context: HashMap::new(),
-                    }],
+                        context: HashMap::new()
+                    }]
                 })
             }
         }
@@ -1814,7 +1815,7 @@ mod tests {
         let engine = Arc::new(
             GovernanceEngine::new()
                 .with_storage(storage.clone())
-                .with_llm_service(Arc::new(MockLlm)),
+                .with_llm_service(Arc::new(MockLlm))
         );
 
         let repo = Arc::new(MockRepository::new());
@@ -1830,9 +1831,9 @@ mod tests {
                 metadata: HashMap::new(),
                 commit_hash: Some("abc".to_string()),
                 author: Some("test".to_string()),
-                updated_at: chrono::Utc::now().timestamp(),
+                updated_at: chrono::Utc::now().timestamp()
             },
-            "initial",
+            "initial"
         )
         .await
         .unwrap();
@@ -1843,7 +1844,7 @@ mod tests {
             DeploymentConfig::default(),
             Duration::from_secs(300),
             Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_secs(86400)
         );
 
         let result = scheduler.run_semantic_analysis_job().await;

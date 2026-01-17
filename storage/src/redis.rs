@@ -13,7 +13,7 @@ pub struct LockResult {
     /// The key that was locked
     pub lock_key: String,
     /// TTL in seconds
-    pub ttl_seconds: u64,
+    pub ttl_seconds: u64
 }
 
 /// Reason why a job was skipped
@@ -24,7 +24,7 @@ pub enum JobSkipReason {
     /// Job was recently completed within deduplication window
     RecentlyCompleted,
     /// Job is disabled via configuration
-    Disabled,
+    Disabled
 }
 
 impl std::fmt::Display for JobSkipReason {
@@ -32,14 +32,14 @@ impl std::fmt::Display for JobSkipReason {
         match self {
             JobSkipReason::AlreadyRunning => write!(f, "already_running"),
             JobSkipReason::RecentlyCompleted => write!(f, "recently_completed"),
-            JobSkipReason::Disabled => write!(f, "disabled"),
+            JobSkipReason::Disabled => write!(f, "disabled")
         }
     }
 }
 
 pub struct RedisStorage {
     client: Arc<redis::Client>,
-    connection_manager: redis::aio::ConnectionManager,
+    connection_manager: redis::aio::ConnectionManager
 }
 
 impl RedisStorage {
@@ -47,7 +47,7 @@ impl RedisStorage {
         let client =
             redis::Client::open(connection_string).map_err(|e| StorageError::ConnectionError {
                 backend: "Redis".to_string(),
-                reason: e.to_string(),
+                reason: e.to_string()
             })?;
 
         let connection_manager =
@@ -56,12 +56,12 @@ impl RedisStorage {
                 .await
                 .map_err(|e| StorageError::ConnectionError {
                     backend: "Redis".to_string(),
-                    reason: e.to_string(),
+                    reason: e.to_string()
                 })?;
 
         Ok(Self {
             client: Arc::new(client),
-            connection_manager,
+            connection_manager
         })
     }
 
@@ -69,7 +69,7 @@ impl RedisStorage {
         let mut conn = self.connection_manager.clone();
         conn.get(key).await.map_err(|e| StorageError::QueryError {
             backend: "Redis".to_string(),
-            reason: e.to_string(),
+            reason: e.to_string()
         })
     }
 
@@ -77,7 +77,7 @@ impl RedisStorage {
         &self,
         key: &str,
         value: &str,
-        ttl_seconds: Option<usize>,
+        ttl_seconds: Option<usize>
     ) -> Result<(), StorageError> {
         let mut conn = self.connection_manager.clone();
         if let Some(ttl) = ttl_seconds {
@@ -85,14 +85,14 @@ impl RedisStorage {
                 .await
                 .map_err(|e| StorageError::QueryError {
                     backend: "Redis".to_string(),
-                    reason: e.to_string(),
+                    reason: e.to_string()
                 })
         } else {
             conn.set(key, value)
                 .await
                 .map_err(|e| StorageError::QueryError {
                     backend: "Redis".to_string(),
-                    reason: e.to_string(),
+                    reason: e.to_string()
                 })
         }
     }
@@ -101,7 +101,7 @@ impl RedisStorage {
         let mut conn = self.connection_manager.clone();
         conn.del(key).await.map_err(|e| StorageError::QueryError {
             backend: "Redis".to_string(),
-            reason: e.to_string(),
+            reason: e.to_string()
         })
     }
 
@@ -111,7 +111,7 @@ impl RedisStorage {
             .await
             .map_err(|e| StorageError::QueryError {
                 backend: "Redis".to_string(),
-                reason: e.to_string(),
+                reason: e.to_string()
             })
     }
     pub fn scoped_key(&self, ctx: &mk_core::types::TenantContext, key: &str) -> String {
@@ -121,7 +121,7 @@ impl RedisStorage {
     pub async fn acquire_lock(
         &self,
         lock_key: &str,
-        ttl_seconds: u64,
+        ttl_seconds: u64
     ) -> Result<Option<LockResult>, StorageError> {
         let lock_token = uuid::Uuid::new_v4().to_string();
         let mut conn = self.connection_manager.clone();
@@ -136,20 +136,20 @@ impl RedisStorage {
             .await
             .map_err(|e| StorageError::QueryError {
                 backend: "Redis".to_string(),
-                reason: e.to_string(),
+                reason: e.to_string()
             })?;
 
         Ok(result.map(|_| LockResult {
             lock_token,
             lock_key: lock_key.to_string(),
-            ttl_seconds,
+            ttl_seconds
         }))
     }
 
     pub async fn release_lock(
         &self,
         lock_key: &str,
-        lock_token: &str,
+        lock_token: &str
     ) -> Result<bool, StorageError> {
         let script = redis::Script::new(
             r#"
@@ -158,7 +158,7 @@ impl RedisStorage {
             else
                 return 0
             end
-            "#,
+            "#
         );
 
         let mut conn = self.connection_manager.clone();
@@ -169,7 +169,7 @@ impl RedisStorage {
             .await
             .map_err(|e| StorageError::QueryError {
                 backend: "Redis".to_string(),
-                reason: e.to_string(),
+                reason: e.to_string()
             })?;
 
         Ok(result == 1)
@@ -179,7 +179,7 @@ impl RedisStorage {
         &self,
         lock_key: &str,
         lock_token: &str,
-        ttl_seconds: u64,
+        ttl_seconds: u64
     ) -> Result<bool, StorageError> {
         let script = redis::Script::new(
             r#"
@@ -188,7 +188,7 @@ impl RedisStorage {
             else
                 return 0
             end
-            "#,
+            "#
         );
 
         let mut conn = self.connection_manager.clone();
@@ -200,7 +200,7 @@ impl RedisStorage {
             .await
             .map_err(|e| StorageError::QueryError {
                 backend: "Redis".to_string(),
-                reason: e.to_string(),
+                reason: e.to_string()
             })?;
 
         Ok(result == 1)
@@ -213,14 +213,14 @@ impl RedisStorage {
     pub async fn record_job_completion(
         &self,
         job_name: &str,
-        deduplication_window_seconds: u64,
+        deduplication_window_seconds: u64
     ) -> Result<(), StorageError> {
         let key = format!("job_completed:{}", job_name);
         let timestamp = chrono::Utc::now().timestamp().to_string();
         self.set(
             &key,
             &timestamp,
-            Some(deduplication_window_seconds as usize),
+            Some(deduplication_window_seconds as usize)
         )
         .await
     }
@@ -234,7 +234,7 @@ impl RedisStorage {
     pub async fn save_job_checkpoint(
         &self,
         checkpoint: &mk_core::types::PartialJobResult,
-        ttl_seconds: u64,
+        ttl_seconds: u64
     ) -> Result<(), StorageError> {
         let key = format!(
             "job_checkpoint:{}:{}",
@@ -243,7 +243,7 @@ impl RedisStorage {
         let value =
             serde_json::to_string(checkpoint).map_err(|e| StorageError::SerializationError {
                 error_type: "JSON".to_string(),
-                reason: e.to_string(),
+                reason: e.to_string()
             })?;
         self.set(&key, &value, Some(ttl_seconds as usize)).await
     }
@@ -251,7 +251,7 @@ impl RedisStorage {
     pub async fn get_job_checkpoint(
         &self,
         job_name: &str,
-        tenant_id: &mk_core::types::TenantId,
+        tenant_id: &mk_core::types::TenantId
     ) -> Result<Option<mk_core::types::PartialJobResult>, StorageError> {
         let key = format!("job_checkpoint:{}:{}", job_name, tenant_id);
         match self.get(&key).await? {
@@ -259,18 +259,18 @@ impl RedisStorage {
                 let checkpoint =
                     serde_json::from_str(&value).map_err(|e| StorageError::SerializationError {
                         error_type: "JSON".to_string(),
-                        reason: e.to_string(),
+                        reason: e.to_string()
                     })?;
                 Ok(Some(checkpoint))
             }
-            None => Ok(None),
+            None => Ok(None)
         }
     }
 
     pub async fn delete_job_checkpoint(
         &self,
         job_name: &str,
-        tenant_id: &mk_core::types::TenantId,
+        tenant_id: &mk_core::types::TenantId
     ) -> Result<(), StorageError> {
         let key = format!("job_checkpoint:{}:{}", job_name, tenant_id);
         self.delete_key(&key).await
@@ -286,7 +286,7 @@ impl EventPublisher for RedisStorage {
         let event_json =
             serde_json::to_string(&event).map_err(|e| StorageError::SerializationError {
                 error_type: "JSON".to_string(),
-                reason: e.to_string(),
+                reason: e.to_string()
             })?;
 
         let stream_key = format!("governance:events:{}", event.tenant_id());
@@ -295,7 +295,7 @@ impl EventPublisher for RedisStorage {
             .await
             .map_err(|e| StorageError::QueryError {
                 backend: "Redis".to_string(),
-                reason: e.to_string(),
+                reason: e.to_string()
             })?;
 
         Ok(())
@@ -303,7 +303,7 @@ impl EventPublisher for RedisStorage {
 
     async fn subscribe(
         &self,
-        channels: &[&str],
+        channels: &[&str]
     ) -> Result<tokio::sync::mpsc::Receiver<GovernanceEvent>, Self::Error> {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let client = self.client.clone();
@@ -362,7 +362,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
         &self,
         ctx: mk_core::types::TenantContext,
         key: &str,
-        value: &[u8],
+        value: &[u8]
     ) -> Result<(), Self::Error> {
         let mut conn = self.connection_manager.clone();
         let scoped_key = self.scoped_key(&ctx, key);
@@ -370,14 +370,14 @@ impl mk_core::traits::StorageBackend for RedisStorage {
             .await
             .map_err(|e| StorageError::QueryError {
                 backend: "Redis".to_string(),
-                reason: e.to_string(),
+                reason: e.to_string()
             })
     }
 
     async fn retrieve(
         &self,
         ctx: mk_core::types::TenantContext,
-        key: &str,
+        key: &str
     ) -> Result<Option<Vec<u8>>, Self::Error> {
         let mut conn = self.connection_manager.clone();
         let scoped_key = self.scoped_key(&ctx, key);
@@ -385,14 +385,14 @@ impl mk_core::traits::StorageBackend for RedisStorage {
             .await
             .map_err(|e| StorageError::QueryError {
                 backend: "Redis".to_string(),
-                reason: e.to_string(),
+                reason: e.to_string()
             })
     }
 
     async fn delete(
         &self,
         ctx: mk_core::types::TenantContext,
-        key: &str,
+        key: &str
     ) -> Result<(), Self::Error> {
         let scoped_key = self.scoped_key(&ctx, key);
         self.delete_key(&scoped_key).await
@@ -401,7 +401,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
     async fn exists(
         &self,
         ctx: mk_core::types::TenantContext,
-        key: &str,
+        key: &str
     ) -> Result<bool, Self::Error> {
         let scoped_key = self.scoped_key(&ctx, key);
         self.exists_key(&scoped_key).await
@@ -410,7 +410,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
     async fn get_ancestors(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _unit_id: &str,
+        _unit_id: &str
     ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
         Ok(Vec::new())
     }
@@ -418,14 +418,14 @@ impl mk_core::traits::StorageBackend for RedisStorage {
     async fn get_unit_policies(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _unit_id: &str,
+        _unit_id: &str
     ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
         Ok(Vec::new())
     }
 
     async fn create_unit(
         &self,
-        _unit: &mk_core::types::OrganizationalUnit,
+        _unit: &mk_core::types::OrganizationalUnit
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -434,7 +434,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
         &self,
         _ctx: &mk_core::types::TenantContext,
         _unit_id: &str,
-        _policy: &mk_core::types::Policy,
+        _policy: &mk_core::types::Policy
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -444,7 +444,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
         _user_id: &mk_core::types::UserId,
         _tenant_id: &mk_core::types::TenantId,
         _unit_id: &str,
-        _role: mk_core::types::Role,
+        _role: mk_core::types::Role
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -454,7 +454,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
         _user_id: &mk_core::types::UserId,
         _tenant_id: &mk_core::types::TenantId,
         _unit_id: &str,
-        _role: mk_core::types::Role,
+        _role: mk_core::types::Role
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -462,14 +462,14 @@ impl mk_core::traits::StorageBackend for RedisStorage {
     async fn get_descendants(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _unit_id: &str,
+        _unit_id: &str
     ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
         Ok(Vec::new())
     }
 
     async fn store_drift_result(
         &self,
-        _result: mk_core::types::DriftResult,
+        _result: mk_core::types::DriftResult
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -477,7 +477,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
     async fn get_latest_drift_result(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _project_id: &str,
+        _project_id: &str
     ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
         Ok(None)
     }
@@ -493,7 +493,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
         _status: &str,
         _message: Option<&str>,
         _started_at: i64,
-        _finished_at: Option<i64>,
+        _finished_at: Option<i64>
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -502,14 +502,14 @@ impl mk_core::traits::StorageBackend for RedisStorage {
         &self,
         _ctx: mk_core::types::TenantContext,
         _since_timestamp: i64,
-        _limit: usize,
+        _limit: usize
     ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
         Ok(Vec::new())
     }
 
     async fn create_suppression(
         &self,
-        _suppression: mk_core::types::DriftSuppression,
+        _suppression: mk_core::types::DriftSuppression
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -517,7 +517,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
     async fn list_suppressions(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _project_id: &str,
+        _project_id: &str
     ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
         Ok(Vec::new())
     }
@@ -525,7 +525,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
     async fn delete_suppression(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _suppression_id: &str,
+        _suppression_id: &str
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -533,21 +533,21 @@ impl mk_core::traits::StorageBackend for RedisStorage {
     async fn get_drift_config(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _project_id: &str,
+        _project_id: &str
     ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
         Ok(None)
     }
 
     async fn save_drift_config(
         &self,
-        _config: mk_core::types::DriftConfig,
+        _config: mk_core::types::DriftConfig
     ) -> Result<(), Self::Error> {
         Ok(())
     }
 
     async fn persist_event(
         &self,
-        _event: mk_core::types::PersistentEvent,
+        _event: mk_core::types::PersistentEvent
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -555,7 +555,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
     async fn get_pending_events(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _limit: usize,
+        _limit: usize
     ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
         Ok(Vec::new())
     }
@@ -564,7 +564,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
         &self,
         _event_id: &str,
         _status: mk_core::types::EventStatus,
-        _error: Option<String>,
+        _error: Option<String>
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -572,7 +572,7 @@ impl mk_core::traits::StorageBackend for RedisStorage {
     async fn get_dead_letter_events(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _limit: usize,
+        _limit: usize
     ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
         Ok(Vec::new())
     }
@@ -580,14 +580,14 @@ impl mk_core::traits::StorageBackend for RedisStorage {
     async fn check_idempotency(
         &self,
         _consumer_group: &str,
-        _idempotency_key: &str,
+        _idempotency_key: &str
     ) -> Result<bool, Self::Error> {
         Ok(false)
     }
 
     async fn record_consumer_state(
         &self,
-        _state: mk_core::types::ConsumerState,
+        _state: mk_core::types::ConsumerState
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -596,14 +596,14 @@ impl mk_core::traits::StorageBackend for RedisStorage {
         &self,
         _ctx: mk_core::types::TenantContext,
         _period_start: i64,
-        _period_end: i64,
+        _period_end: i64
     ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
         Ok(Vec::new())
     }
 
     async fn record_event_metrics(
         &self,
-        _metrics: mk_core::types::EventDeliveryMetrics,
+        _metrics: mk_core::types::EventDeliveryMetrics
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -619,7 +619,7 @@ mod tests {
         let lock = LockResult {
             lock_token: "token-123".to_string(),
             lock_key: "job:drift_scan".to_string(),
-            ttl_seconds: 300,
+            ttl_seconds: 300
         };
 
         assert_eq!(lock.lock_token, "token-123");
@@ -632,7 +632,7 @@ mod tests {
         let lock = LockResult {
             lock_token: "token-456".to_string(),
             lock_key: "job:semantic".to_string(),
-            ttl_seconds: 600,
+            ttl_seconds: 600
         };
 
         let cloned = lock.clone();
@@ -646,7 +646,7 @@ mod tests {
         let lock = LockResult {
             lock_token: "token".to_string(),
             lock_key: "key".to_string(),
-            ttl_seconds: 60,
+            ttl_seconds: 60
         };
 
         let debug_str = format!("{:?}", lock);
@@ -709,12 +709,12 @@ mod tests {
     fn test_storage_error_display() {
         let conn_error = StorageError::ConnectionError {
             backend: "Redis".to_string(),
-            reason: "Connection refused".to_string(),
+            reason: "Connection refused".to_string()
         };
 
         let query_error = StorageError::QueryError {
             backend: "Redis".to_string(),
-            reason: "Command failed".to_string(),
+            reason: "Command failed".to_string()
         };
 
         assert_eq!(
@@ -754,23 +754,23 @@ mod tests {
         let errors = vec![
             StorageError::ConnectionError {
                 backend: "Redis".to_string(),
-                reason: "test".to_string(),
+                reason: "test".to_string()
             },
             StorageError::QueryError {
                 backend: "Redis".to_string(),
-                reason: "test".to_string(),
+                reason: "test".to_string()
             },
             StorageError::SerializationError {
                 error_type: "JSON".to_string(),
-                reason: "test".to_string(),
+                reason: "test".to_string()
             },
             StorageError::NotFound {
                 backend: "Redis".to_string(),
-                id: "key123".to_string(),
+                id: "key123".to_string()
             },
             StorageError::TransactionError {
                 backend: "Redis".to_string(),
-                reason: "test".to_string(),
+                reason: "test".to_string()
             },
         ];
 

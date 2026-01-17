@@ -12,10 +12,10 @@ async fn test_memory_tools() -> Result<(), Box<dyn std::error::Error + Send + Sy
     // GIVEN a MemoryManager and tools
     let memory_manager = Arc::new(
         MemoryManager::new()
-            .with_embedding_service(Arc::new(memory::embedding::MockEmbeddingService::new(1536))),
+            .with_embedding_service(Arc::new(memory::embedding::MockEmbeddingService::new(1536)))
     );
     let provider: Arc<
-        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
     > = Arc::new(MockProvider::new());
     memory_manager
         .register_provider(MemoryLayer::User, provider)

@@ -24,7 +24,8 @@ async fn enable_rls_for_table(pool: &PgPool, table: &str) -> Result<(), sqlx::Er
         .ok();
 
     let create_policy = format!(
-        "CREATE POLICY {} ON {} FOR ALL USING (tenant_id = current_setting('app.tenant_id', true)::text)",
+        "CREATE POLICY {} ON {} FOR ALL USING (tenant_id = current_setting('app.tenant_id', \
+         true)::text)",
         policy_name, table
     );
     sqlx::query(AssertSqlSafe(create_policy.as_str()))

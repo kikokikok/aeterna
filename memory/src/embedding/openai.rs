@@ -9,7 +9,7 @@ pub struct OpenAIEmbeddingService {
     model: String,
     dimension: usize,
     cache: Arc<RwLock<lru::LruCache<String, Vec<f32>>>>,
-    redis: Option<Arc<RwLock<RedisStorage>>>,
+    redis: Option<Arc<RwLock<RedisStorage>>>
 }
 
 impl OpenAIEmbeddingService {
@@ -21,7 +21,7 @@ impl OpenAIEmbeddingService {
             "text-embedding-ada-002" => 1536,
             "text-embedding-3-small" => 1536,
             "text-embedding-3-large" => 3072,
-            _ => 1536,
+            _ => 1536
         };
 
         Self {
@@ -29,9 +29,9 @@ impl OpenAIEmbeddingService {
             model: model.to_string(),
             dimension,
             cache: Arc::new(RwLock::new(lru::LruCache::new(
-                std::num::NonZeroUsize::new(1000).unwrap(),
+                std::num::NonZeroUsize::new(1000).unwrap()
             ))),
-            redis: None,
+            redis: None
         }
     }
 
@@ -48,7 +48,7 @@ impl OpenAIEmbeddingService {
             "text-embedding-ada-002" => 1536,
             "text-embedding-3-small" => 1536,
             "text-embedding-3-large" => 3072,
-            _ => 1536,
+            _ => 1536
         };
 
         Self {
@@ -56,9 +56,9 @@ impl OpenAIEmbeddingService {
             model: model.to_string(),
             dimension,
             cache: Arc::new(RwLock::new(lru::LruCache::new(
-                std::num::NonZeroUsize::new(cache_size).unwrap(),
+                std::num::NonZeroUsize::new(cache_size).unwrap()
             ))),
-            redis: None,
+            redis: None
         }
     }
 
@@ -195,7 +195,7 @@ mod tests {
         let service = OpenAIEmbeddingService::with_cache_size(
             "sk-fake-key".to_string(),
             "text-embedding-ada-002",
-            10,
+            10
         );
 
         let mut cache = service.cache.write().await;
@@ -213,7 +213,7 @@ mod tests {
         let service = OpenAIEmbeddingService::with_cache_size(
             "sk-fake-key".to_string(),
             "text-embedding-ada-002",
-            10,
+            10
         );
 
         let mut cache = service.cache.write().await;
@@ -251,7 +251,7 @@ mod tests {
         let service = OpenAIEmbeddingService::with_cache_size(
             "sk-test".to_string(),
             "text-embedding-ada-002",
-            500,
+            500
         );
 
         let cache = service.cache.read().await;

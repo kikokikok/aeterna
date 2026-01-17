@@ -15,13 +15,13 @@ use tokio::sync::OnceCell;
 struct PostgresFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Postgres>,
-    url: String,
+    url: String
 }
 
 struct RedisFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Redis>,
-    url: String,
+    url: String
 }
 
 static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
@@ -39,11 +39,11 @@ async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
                 .await
             {
                 Ok(c) => c,
-                Err(_) => return None,
+                Err(_) => return None
             };
             let port = match container.get_host_port_ipv4(5432).await {
                 Ok(p) => p,
-                Err(_) => return None,
+                Err(_) => return None
             };
             let url = format!("postgres://govuser:govpass@localhost:{}/govdb", port);
             Some(PostgresFixture { container, url })
@@ -57,11 +57,11 @@ async fn get_redis_fixture() -> Option<&'static RedisFixture> {
         .get_or_init(|| async {
             let container = match Redis::default().start().await {
                 Ok(c) => c,
-                Err(_) => return None,
+                Err(_) => return None
             };
             let port = match container.get_host_port_ipv4(6379).await {
                 Ok(p) => p,
-                Err(_) => return None,
+                Err(_) => return None
             };
             let url = format!("redis://localhost:{}", port);
             Some(RedisFixture { container, url })
@@ -101,7 +101,7 @@ async fn test_governance_event_propagation() {
         project_id: project_id.clone(),
         tenant_id: tenant_id.clone(),
         drift_score: 0.75,
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: chrono::Utc::now().timestamp()
     };
 
     pg_backend.publish(event.clone()).await.unwrap();
@@ -146,7 +146,7 @@ async fn test_full_governance_workflow() {
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     pg_backend.create_unit(&company).await.unwrap();
 
@@ -158,7 +158,7 @@ async fn test_full_governance_workflow() {
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     pg_backend.create_unit(&org).await.unwrap();
 
@@ -170,7 +170,7 @@ async fn test_full_governance_workflow() {
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     pg_backend.create_unit(&team).await.unwrap();
 
@@ -182,7 +182,7 @@ async fn test_full_governance_workflow() {
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     pg_backend.create_unit(&project).await.unwrap();
 
@@ -215,7 +215,7 @@ async fn test_full_governance_workflow() {
             "completed",
             None,
             chrono::Utc::now().timestamp() - 100,
-            Some(chrono::Utc::now().timestamp()),
+            Some(chrono::Utc::now().timestamp())
         )
         .await
         .unwrap();
@@ -228,7 +228,7 @@ async fn test_full_governance_workflow() {
         violations: vec![],
         suppressed_violations: vec![],
         requires_manual_review: false,
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: chrono::Utc::now().timestamp()
     };
     pg_backend.store_drift_result(drift).await.unwrap();
 
@@ -238,7 +238,7 @@ async fn test_full_governance_workflow() {
     let api = Arc::new(knowledge::api::GovernanceDashboardApi::new(
         engine,
         pg_backend.clone(),
-        deployment_config,
+        deployment_config
     ));
 
     let drift_status = knowledge::api::get_drift_status(api.clone(), &ctx, &proj_id)

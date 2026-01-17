@@ -15,7 +15,7 @@ use tokio::sync::OnceCell;
 struct PostgresFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Postgres>,
-    url: String,
+    url: String
 }
 
 static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
@@ -33,11 +33,11 @@ async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
                 .await
             {
                 Ok(c) => c,
-                Err(_) => return None,
+                Err(_) => return None
             };
             let port = match container.get_host_port_ipv4(5432).await {
                 Ok(p) => p,
-                Err(_) => return None,
+                Err(_) => return None
             };
             let url = format!("postgres://test:test@localhost:{}/graph_test", port);
             Some(PostgresFixture { container, url })
@@ -89,7 +89,7 @@ async fn test_graph_based_reasoning() -> Result<(), Box<dyn std::error::Error + 
         "relations": [
             { "source": "Rust", "target": "Borrow Checker", "relation": "has", "properties": {} }
         ]
-    }"#,
+    }"#
         )
         .await;
     let llm = Arc::new(llm_service);
@@ -111,13 +111,13 @@ async fn test_graph_based_reasoning() -> Result<(), Box<dyn std::error::Error + 
         importance_score: None,
         metadata: HashMap::new(),
         created_at: 0,
-        updated_at: 0,
+        updated_at: 0
     };
 
     manager
         .register_provider(
             MemoryLayer::User,
-            Arc::new(memory::providers::MockProvider::new()),
+            Arc::new(memory::providers::MockProvider::new())
         )
         .await;
     manager
@@ -141,7 +141,7 @@ async fn test_duckdb_graph_entity_extraction_and_traversal()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let graph_store = Arc::new(
         DuckDbGraphStore::new(DuckDbGraphConfig::default())
-            .expect("Failed to create DuckDB graph store"),
+            .expect("Failed to create DuckDB graph store")
     );
 
     let ctx = test_tenant_context();
@@ -151,19 +151,19 @@ async fn test_duckdb_graph_entity_extraction_and_traversal()
         id: "Rust".to_string(),
         label: "Language".to_string(),
         properties: serde_json::json!({"source_memory_id": "mem_1"}),
-        tenant_id: tenant_id.clone(),
+        tenant_id: tenant_id.clone()
     };
     let node_borrow = storage::graph::GraphNode {
         id: "BorrowChecker".to_string(),
         label: "Feature".to_string(),
         properties: serde_json::json!({"source_memory_id": "mem_1"}),
-        tenant_id: tenant_id.clone(),
+        tenant_id: tenant_id.clone()
     };
     let node_safety = storage::graph::GraphNode {
         id: "MemorySafety".to_string(),
         label: "Concept".to_string(),
         properties: serde_json::json!({"source_memory_id": "mem_2"}),
-        tenant_id: tenant_id.clone(),
+        tenant_id: tenant_id.clone()
     };
 
     graph_store.add_node(ctx.clone(), node_rust).await?;
@@ -176,7 +176,7 @@ async fn test_duckdb_graph_entity_extraction_and_traversal()
         target_id: "BorrowChecker".to_string(),
         relation: "HAS_FEATURE".to_string(),
         properties: serde_json::Value::Null,
-        tenant_id: tenant_id.clone(),
+        tenant_id: tenant_id.clone()
     };
     let edge_provides = storage::graph::GraphEdge {
         id: "borrow_provides_safety".to_string(),
@@ -184,7 +184,7 @@ async fn test_duckdb_graph_entity_extraction_and_traversal()
         target_id: "MemorySafety".to_string(),
         relation: "PROVIDES".to_string(),
         properties: serde_json::Value::Null,
-        tenant_id: tenant_id.clone(),
+        tenant_id: tenant_id.clone()
     };
 
     graph_store.add_edge(ctx.clone(), edge_has).await?;
@@ -218,7 +218,7 @@ async fn test_duckdb_graph_multi_hop_reasoning()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let graph_store = Arc::new(
         DuckDbGraphStore::new(DuckDbGraphConfig::default())
-            .expect("Failed to create DuckDB graph store"),
+            .expect("Failed to create DuckDB graph store")
     );
 
     let ctx = test_tenant_context();
@@ -237,7 +237,7 @@ async fn test_duckdb_graph_multi_hop_reasoning()
             id: name.to_string(),
             label: label.to_string(),
             properties: serde_json::json!({"source_memory_id": "architecture_doc"}),
-            tenant_id: tenant_id.clone(),
+            tenant_id: tenant_id.clone()
         };
         graph_store.add_node(ctx.clone(), node).await?;
     }
@@ -256,7 +256,7 @@ async fn test_duckdb_graph_multi_hop_reasoning()
             target_id: tgt.to_string(),
             relation: rel.to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone(),
+            tenant_id: tenant_id.clone()
         };
         graph_store.add_edge(ctx.clone(), edge).await?;
     }
@@ -282,7 +282,7 @@ async fn test_duckdb_graph_memory_deletion_cleanup()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let graph_store = Arc::new(
         DuckDbGraphStore::new(DuckDbGraphConfig::default())
-            .expect("Failed to create DuckDB graph store"),
+            .expect("Failed to create DuckDB graph store")
     );
 
     let ctx = test_tenant_context();
@@ -295,19 +295,19 @@ async fn test_duckdb_graph_memory_deletion_cleanup()
         id: "Entity1".to_string(),
         label: "TestEntity".to_string(),
         properties: serde_json::json!({"source_memory_id": mem_to_delete.clone()}),
-        tenant_id: tenant_id.clone(),
+        tenant_id: tenant_id.clone()
     };
     let node2 = storage::graph::GraphNode {
         id: "Entity2".to_string(),
         label: "TestEntity".to_string(),
         properties: serde_json::json!({"source_memory_id": mem_to_delete.clone()}),
-        tenant_id: tenant_id.clone(),
+        tenant_id: tenant_id.clone()
     };
     let node3 = storage::graph::GraphNode {
         id: "UnrelatedEntity".to_string(),
         label: "TestEntity".to_string(),
         properties: serde_json::json!({"source_memory_id": other_mem}),
-        tenant_id: tenant_id.clone(),
+        tenant_id: tenant_id.clone()
     };
 
     graph_store.add_node(ctx.clone(), node1).await?;
@@ -320,7 +320,7 @@ async fn test_duckdb_graph_memory_deletion_cleanup()
         target_id: "Entity2".to_string(),
         relation: "RELATED".to_string(),
         properties: serde_json::Value::Null,
-        tenant_id: tenant_id.clone(),
+        tenant_id: tenant_id.clone()
     };
     graph_store.add_edge(ctx.clone(), edge).await?;
 
@@ -332,7 +332,7 @@ async fn test_duckdb_graph_memory_deletion_cleanup()
     let deleted = GraphStore::soft_delete_nodes_by_source_memory_id(
         graph_store.as_ref(),
         ctx.clone(),
-        &mem_to_delete,
+        &mem_to_delete
     )
     .await?;
     assert_eq!(deleted, 2);
@@ -351,7 +351,7 @@ async fn test_duckdb_graph_community_detection()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let graph_store = Arc::new(
         DuckDbGraphStore::new(DuckDbGraphConfig::default())
-            .expect("Failed to create DuckDB graph store"),
+            .expect("Failed to create DuckDB graph store")
     );
 
     let ctx = test_tenant_context();
@@ -362,7 +362,7 @@ async fn test_duckdb_graph_community_detection()
             id: format!("cluster_a_{}", i),
             label: "ClusterA".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone(),
+            tenant_id: tenant_id.clone()
         };
         graph_store.add_node(ctx.clone(), node).await?;
     }
@@ -372,7 +372,7 @@ async fn test_duckdb_graph_community_detection()
             id: format!("cluster_b_{}", i),
             label: "ClusterB".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone(),
+            tenant_id: tenant_id.clone()
         };
         graph_store.add_node(ctx.clone(), node).await?;
     }
@@ -390,7 +390,7 @@ async fn test_duckdb_graph_community_detection()
             target_id: tgt.to_string(),
             relation: "CONNECTED".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone(),
+            tenant_id: tenant_id.clone()
         };
         graph_store.add_edge(ctx.clone(), edge).await?;
     }
@@ -406,7 +406,7 @@ async fn test_duckdb_graph_community_detection()
             target_id: tgt.to_string(),
             relation: "CONNECTED".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone(),
+            tenant_id: tenant_id.clone()
         };
         graph_store.add_edge(ctx.clone(), edge).await?;
     }
@@ -455,13 +455,13 @@ async fn test_memory_add_with_graph_extraction_malformed_json()
         importance_score: None,
         metadata: HashMap::new(),
         created_at: 0,
-        updated_at: 0,
+        updated_at: 0
     };
 
     manager
         .register_provider(
             MemoryLayer::User,
-            Arc::new(memory::providers::MockProvider::new()),
+            Arc::new(memory::providers::MockProvider::new())
         )
         .await;
 
@@ -513,13 +513,13 @@ async fn test_memory_add_with_graph_extraction_no_json_in_response()
         importance_score: None,
         metadata: HashMap::new(),
         created_at: 0,
-        updated_at: 0,
+        updated_at: 0
     };
 
     manager
         .register_provider(
             MemoryLayer::User,
-            Arc::new(memory::providers::MockProvider::new()),
+            Arc::new(memory::providers::MockProvider::new())
         )
         .await;
 
@@ -573,13 +573,13 @@ async fn test_memory_add_with_valid_extraction_creates_graph_entities()
         importance_score: None,
         metadata: HashMap::new(),
         created_at: 0,
-        updated_at: 0,
+        updated_at: 0
     };
 
     manager
         .register_provider(
             MemoryLayer::User,
-            Arc::new(memory::providers::MockProvider::new()),
+            Arc::new(memory::providers::MockProvider::new())
         )
         .await;
 
@@ -635,13 +635,13 @@ async fn test_memory_add_without_graph_store_skips_extraction()
         importance_score: None,
         metadata: HashMap::new(),
         created_at: 0,
-        updated_at: 0,
+        updated_at: 0
     };
 
     manager
         .register_provider(
             MemoryLayer::User,
-            Arc::new(memory::providers::MockProvider::new()),
+            Arc::new(memory::providers::MockProvider::new())
         )
         .await;
 
@@ -679,13 +679,13 @@ async fn test_memory_add_without_llm_service_skips_extraction()
         importance_score: None,
         metadata: HashMap::new(),
         created_at: 0,
-        updated_at: 0,
+        updated_at: 0
     };
 
     manager
         .register_provider(
             MemoryLayer::User,
-            Arc::new(memory::providers::MockProvider::new()),
+            Arc::new(memory::providers::MockProvider::new())
         )
         .await;
 
