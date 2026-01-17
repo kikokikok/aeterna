@@ -15,7 +15,7 @@ use tokio::sync::{OnceCell, RwLock};
 struct RedisFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Redis>,
-    url: String,
+    url: String
 }
 
 static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
@@ -26,15 +26,15 @@ async fn get_redis_fixture() -> Option<&'static RedisFixture> {
         .get_or_init(|| async {
             let container = match Redis::default().start().await {
                 Ok(c) => c,
-                Err(_) => return None,
+                Err(_) => return None
             };
             let host = match container.get_host().await {
                 Ok(h) => h,
-                Err(_) => return None,
+                Err(_) => return None
             };
             let port = match container.get_host_port_ipv4(6379).await {
                 Ok(p) => p,
-                Err(_) => return None,
+                Err(_) => return None
             };
             let url = format!("redis://{}:{}", host, port);
             Some(RedisFixture { container, url })
@@ -49,13 +49,13 @@ fn unique_id(prefix: &str) -> String {
 }
 
 struct MockRepository {
-    entries: RwLock<Vec<KnowledgeEntry>>,
+    entries: RwLock<Vec<KnowledgeEntry>>
 }
 
 impl MockRepository {
     fn new() -> Self {
         Self {
-            entries: RwLock::new(Vec::new()),
+            entries: RwLock::new(Vec::new())
         }
     }
 }
@@ -68,7 +68,7 @@ impl mk_core::traits::KnowledgeRepository for MockRepository {
         &self,
         _ctx: TenantContext,
         _layer: KnowledgeLayer,
-        path: &str,
+        path: &str
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
         let entries = self.entries.read().await;
         Ok(entries.iter().find(|e| e.path == path).cloned())
@@ -78,7 +78,7 @@ impl mk_core::traits::KnowledgeRepository for MockRepository {
         &self,
         _ctx: TenantContext,
         entry: KnowledgeEntry,
-        _message: &str,
+        _message: &str
     ) -> Result<String, Self::Error> {
         self.entries.write().await.push(entry);
         Ok("hash123".to_string())
@@ -88,7 +88,7 @@ impl mk_core::traits::KnowledgeRepository for MockRepository {
         &self,
         _ctx: TenantContext,
         layer: KnowledgeLayer,
-        _prefix: &str,
+        _prefix: &str
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         let entries = self.entries.read().await;
         Ok(entries
@@ -103,7 +103,7 @@ impl mk_core::traits::KnowledgeRepository for MockRepository {
         _ctx: TenantContext,
         _layer: KnowledgeLayer,
         _path: &str,
-        _message: &str,
+        _message: &str
     ) -> Result<String, Self::Error> {
         Ok("hash123".to_string())
     }
@@ -115,7 +115,7 @@ impl mk_core::traits::KnowledgeRepository for MockRepository {
     async fn get_affected_items(
         &self,
         _ctx: TenantContext,
-        _since_commit: &str,
+        _since_commit: &str
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         Ok(Vec::new())
     }
@@ -125,7 +125,7 @@ impl mk_core::traits::KnowledgeRepository for MockRepository {
         _ctx: TenantContext,
         _query: &str,
         _layers: Vec<KnowledgeLayer>,
-        _limit: usize,
+        _limit: usize
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         Ok(Vec::new())
     }
@@ -145,7 +145,7 @@ async fn test_scheduler_locked_job_execution() {
     let redis = Arc::new(RedisStorage::new(&fixture.url).await.unwrap());
     let engine = Arc::new(GovernanceEngine::new());
     let repo: Arc<
-        dyn mk_core::traits::KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
+        dyn mk_core::traits::KnowledgeRepository<Error = knowledge::repository::RepositoryError>
     > = Arc::new(MockRepository::new());
     let config = DeploymentConfig::default();
 
@@ -159,7 +159,7 @@ async fn test_scheduler_locked_job_execution() {
         config,
         Duration::from_secs(300),
         Duration::from_secs(3600),
-        Duration::from_secs(86400),
+        Duration::from_secs(86400)
     )
     .with_redis(redis.clone())
     .with_job_config(job_config.clone());
@@ -191,7 +191,7 @@ async fn test_scheduler_deduplication() {
     let redis = Arc::new(RedisStorage::new(&fixture.url).await.unwrap());
     let engine = Arc::new(GovernanceEngine::new());
     let repo: Arc<
-        dyn mk_core::traits::KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
+        dyn mk_core::traits::KnowledgeRepository<Error = knowledge::repository::RepositoryError>
     > = Arc::new(MockRepository::new());
     let config = DeploymentConfig::default();
 
@@ -205,7 +205,7 @@ async fn test_scheduler_deduplication() {
         config,
         Duration::from_secs(300),
         Duration::from_secs(3600),
-        Duration::from_secs(86400),
+        Duration::from_secs(86400)
     )
     .with_redis(redis.clone())
     .with_job_config(job_config);

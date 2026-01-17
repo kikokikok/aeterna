@@ -15,7 +15,7 @@ use tokio::sync::{Barrier, OnceCell};
 struct RedisFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Redis>,
-    url: String,
+    url: String
 }
 
 static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
@@ -28,14 +28,14 @@ async fn get_redis_fixture() -> Option<&'static RedisFixture> {
                 Ok(container) => {
                     let port = match container.get_host_port_ipv4(6379).await {
                         Ok(p) => p,
-                        Err(_) => return None,
+                        Err(_) => return None
                     };
                     let url = format!("redis://localhost:{}", port);
 
                     // Wait for Redis to be ready
                     let client = match redis::Client::open(url.as_str()) {
                         Ok(c) => c,
-                        Err(_) => return None,
+                        Err(_) => return None
                     };
                     let mut retries = 10;
                     loop {
@@ -51,13 +51,13 @@ async fn get_redis_fixture() -> Option<&'static RedisFixture> {
                                 retries -= 1;
                                 tokio::time::sleep(Duration::from_millis(100)).await;
                             }
-                            Err(_) => return None,
+                            Err(_) => return None
                         }
                     }
 
                     Some(RedisFixture { container, url })
                 }
-                Err(_) => None,
+                Err(_) => None
             }
         })
         .await
@@ -110,7 +110,7 @@ async fn test_write_coordinator_lock_blocks_second_acquirer() {
         max_retries: 2,
         base_backoff_ms: 50,
         max_backoff_ms: 100,
-        alert_config: ContentionAlertConfig::default(),
+        alert_config: ContentionAlertConfig::default()
     };
     let coordinator = Arc::new(WriteCoordinator::new(fixture.url.clone(), config));
 
@@ -222,7 +222,7 @@ async fn test_write_coordinator_concurrent_contention() {
         max_retries: 10,
         base_backoff_ms: 10,
         max_backoff_ms: 50,
-        alert_config: ContentionAlertConfig::default(),
+        alert_config: ContentionAlertConfig::default()
     };
     let coordinator = Arc::new(WriteCoordinator::new(fixture.url.clone(), config));
 
@@ -257,7 +257,7 @@ async fn test_write_coordinator_concurrent_contention() {
                         (task_id, false)
                     }
                 }
-                Err(_) => (task_id, false),
+                Err(_) => (task_id, false)
             }
         });
 
@@ -300,7 +300,7 @@ async fn test_write_coordinator_lock_ttl_expiry() {
         max_retries: 3,
         base_backoff_ms: 50,
         max_backoff_ms: 100,
-        alert_config: ContentionAlertConfig::default(),
+        alert_config: ContentionAlertConfig::default()
     };
     let coordinator = Arc::new(WriteCoordinator::new(fixture.url.clone(), config));
 
@@ -328,7 +328,7 @@ async fn test_write_coordinator_exponential_backoff() {
         max_retries: 4,
         base_backoff_ms: 50,
         max_backoff_ms: 500,
-        alert_config: ContentionAlertConfig::default(),
+        alert_config: ContentionAlertConfig::default()
     };
     let coordinator = Arc::new(WriteCoordinator::new(fixture.url.clone(), config));
 
@@ -370,7 +370,7 @@ async fn test_write_coordinator_wrong_lock_value_release() {
         max_retries: 2,
         base_backoff_ms: 50,
         max_backoff_ms: 100,
-        alert_config: ContentionAlertConfig::default(),
+        alert_config: ContentionAlertConfig::default()
     };
     let coordinator = WriteCoordinator::new(fixture.url.clone(), config);
 
@@ -413,6 +413,6 @@ async fn test_write_coordinator_induced_redis_failure() {
         Err(storage::graph_duckdb::GraphError::S3(msg)) => {
             assert!(msg.contains("Induced Redis failure"));
         }
-        _ => panic!("Expected induced Redis failure, got {:?}", result),
+        _ => panic!("Expected induced Redis failure, got {:?}", result)
     }
 }

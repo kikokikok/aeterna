@@ -14,7 +14,7 @@ impl ContextHooks for MemoryContextHooks {
     async fn on_session_start(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _session_id: &str,
+        _session_id: &str
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -22,7 +22,7 @@ impl ContextHooks for MemoryContextHooks {
     async fn on_session_end(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _session_id: &str,
+        _session_id: &str
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -31,7 +31,7 @@ impl ContextHooks for MemoryContextHooks {
         &self,
         _ctx: mk_core::types::TenantContext,
         _session_id: &str,
-        _message: &str,
+        _message: &str
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -41,7 +41,7 @@ impl ContextHooks for MemoryContextHooks {
         _ctx: mk_core::types::TenantContext,
         _session_id: &str,
         _tool_name: &str,
-        _params: serde_json::Value,
+        _params: serde_json::Value
     ) -> anyhow::Result<()> {
         Ok(())
     }

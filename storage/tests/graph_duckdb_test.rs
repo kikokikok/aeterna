@@ -39,7 +39,7 @@ async fn test_duckdb_tenant_validation() {
         id: Uuid::new_v4().to_string(),
         label: "Test".to_string(),
         properties: json!({}),
-        tenant_id: "valid-tenant_123".to_string(),
+        tenant_id: "valid-tenant_123".to_string()
     };
     let _: () = store
         .add_node(ctx, node)
@@ -52,7 +52,7 @@ async fn test_duckdb_tenant_validation() {
         id: Uuid::new_v4().to_string(),
         label: "Test".to_string(),
         properties: json!({}),
-        tenant_id: "invalid;tenant".to_string(),
+        tenant_id: "invalid;tenant".to_string()
     };
     let result: Result<(), _> = store.add_node(ctx_invalid, node_invalid).await;
     assert!(result.is_err());
@@ -62,7 +62,7 @@ async fn test_duckdb_tenant_validation() {
         id: Uuid::new_v4().to_string(),
         label: "Test".to_string(),
         properties: json!({}),
-        tenant_id: "tenant' OR '1'='1".to_string(),
+        tenant_id: "tenant' OR '1'='1".to_string()
     };
     let result: Result<(), _> = store.add_node(ctx_sql, node_sql).await;
     assert!(result.is_err());
@@ -86,8 +86,8 @@ async fn test_duckdb_graph_operations() {
                 id: node1_id.to_string(),
                 label: "User".to_string(),
                 properties: json!({"name": "Alice"}),
-                tenant_id: tenant_str.to_string(),
-            },
+                tenant_id: tenant_str.to_string()
+            }
         )
         .await
         .unwrap();
@@ -99,8 +99,8 @@ async fn test_duckdb_graph_operations() {
                 id: node2_id.to_string(),
                 label: "User".to_string(),
                 properties: json!({"name": "Bob"}),
-                tenant_id: tenant_str.to_string(),
-            },
+                tenant_id: tenant_str.to_string()
+            }
         )
         .await
         .unwrap();
@@ -114,8 +114,8 @@ async fn test_duckdb_graph_operations() {
                 target_id: node2_id.to_string(),
                 relation: "FOLLOWS".to_string(),
                 properties: json!({"since": "2023-01-01"}),
-                tenant_id: tenant_str.to_string(),
-            },
+                tenant_id: tenant_str.to_string()
+            }
         )
         .await
         .unwrap();
@@ -148,8 +148,8 @@ async fn test_duckdb_soft_delete_and_cleanup() {
                 id: node_id.to_string(),
                 label: "Item".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_str.to_string(),
-            },
+                tenant_id: tenant_str.to_string()
+            }
         )
         .await
         .unwrap();
@@ -163,8 +163,8 @@ async fn test_duckdb_soft_delete_and_cleanup() {
                 target_id: node_id.to_string(),
                 relation: "SELF".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_str.to_string(),
-            },
+                tenant_id: tenant_str.to_string()
+            }
         )
         .await
         .unwrap();
@@ -192,13 +192,13 @@ async fn test_duckdb_atomic_operations() {
             id: "a".to_string(),
             label: "Node".to_string(),
             properties: json!({}),
-            tenant_id: tenant_str.to_string(),
+            tenant_id: tenant_str.to_string()
         },
         GraphNode {
             id: "b".to_string(),
             label: "Node".to_string(),
             properties: json!({}),
-            tenant_id: tenant_str.to_string(),
+            tenant_id: tenant_str.to_string()
         },
     ];
 
@@ -208,7 +208,7 @@ async fn test_duckdb_atomic_operations() {
         target_id: "b".to_string(),
         relation: "CONNECTS".to_string(),
         properties: json!({}),
-        tenant_id: tenant_str.to_string(),
+        tenant_id: tenant_str.to_string()
     }];
 
     store
@@ -235,7 +235,7 @@ async fn test_duckdb_entities_atomic() {
         properties: json!({}),
         tenant_id: tenant_id_str.to_string(),
         created_at: Utc::now(),
-        deleted_at: None,
+        deleted_at: None
     }];
 
     let edges = vec![EntityEdge {
@@ -246,7 +246,7 @@ async fn test_duckdb_entities_atomic() {
         properties: json!({}),
         tenant_id: tenant_id_str.to_string(),
         created_at: Utc::now(),
-        deleted_at: None,
+        deleted_at: None
     }];
 
     store
@@ -265,7 +265,7 @@ async fn test_duckdb_shortest_path() {
     let tenant_id = "test-tenant";
     let ctx = TenantContext::new(
         TenantId::from_str(tenant_id).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     store
@@ -275,8 +275,8 @@ async fn test_duckdb_shortest_path() {
                 id: "A".to_string(),
                 label: "L".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -287,8 +287,8 @@ async fn test_duckdb_shortest_path() {
                 id: "B".to_string(),
                 label: "L".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -299,8 +299,8 @@ async fn test_duckdb_shortest_path() {
                 id: "C".to_string(),
                 label: "L".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -314,8 +314,8 @@ async fn test_duckdb_shortest_path() {
                 target_id: "B".to_string(),
                 relation: "R".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -328,8 +328,8 @@ async fn test_duckdb_shortest_path() {
                 target_id: "C".to_string(),
                 relation: "R".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -380,7 +380,7 @@ async fn test_duckdb_parquet_export_import() {
     let tenant_id = "test-tenant";
     let ctx = TenantContext::new(
         TenantId::from_str(tenant_id).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     store
@@ -390,8 +390,8 @@ async fn test_duckdb_parquet_export_import() {
                 id: "A".to_string(),
                 label: "L".to_string(),
                 properties: json!({"k": "v"}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -415,7 +415,7 @@ async fn test_duckdb_community_detection() {
     let tenant_id = "test-tenant";
     let ctx = TenantContext::new(
         TenantId::from_str(tenant_id).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     store
@@ -425,8 +425,8 @@ async fn test_duckdb_community_detection() {
                 id: "A".to_string(),
                 label: "L".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -437,8 +437,8 @@ async fn test_duckdb_community_detection() {
                 id: "B".to_string(),
                 label: "L".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -449,8 +449,8 @@ async fn test_duckdb_community_detection() {
                 id: "C".to_string(),
                 label: "L".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -464,8 +464,8 @@ async fn test_duckdb_community_detection() {
                 target_id: "B".to_string(),
                 relation: "R".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -478,8 +478,8 @@ async fn test_duckdb_community_detection() {
                 target_id: "C".to_string(),
                 relation: "R".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -492,8 +492,8 @@ async fn test_duckdb_community_detection() {
                 target_id: "A".to_string(),
                 relation: "R".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -511,7 +511,7 @@ async fn test_duckdb_entity_crud_and_linking() {
     let tenant_id = "test-tenant";
     let ctx = TenantContext::new(
         TenantId::from_str(tenant_id).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     let entity1 = Entity {
@@ -521,7 +521,7 @@ async fn test_duckdb_entity_crud_and_linking() {
         properties: json!({"importance": "high"}),
         tenant_id: tenant_id.to_string(),
         created_at: Utc::now(),
-        deleted_at: None,
+        deleted_at: None
     };
 
     let entity2 = Entity {
@@ -531,7 +531,7 @@ async fn test_duckdb_entity_crud_and_linking() {
         properties: json!({"importance": "medium"}),
         tenant_id: tenant_id.to_string(),
         created_at: Utc::now(),
-        deleted_at: None,
+        deleted_at: None
     };
 
     store.add_entity(ctx.clone(), entity1).unwrap();
@@ -560,7 +560,7 @@ async fn test_duckdb_referential_integrity_violation() {
         target_id: "non-existent-target".to_string(),
         relation: "RELATES".to_string(),
         properties: json!({}),
-        tenant_id: tenant_str.to_string(),
+        tenant_id: tenant_str.to_string()
     };
 
     let result = store.add_edge(ctx.clone(), edge).await;
@@ -569,7 +569,7 @@ async fn test_duckdb_referential_integrity_violation() {
         Err(storage::graph_duckdb::GraphError::ReferentialIntegrity(msg)) => {
             assert!(msg.contains("Source node"));
         }
-        _ => panic!("Expected ReferentialIntegrity error, got {:?}", result),
+        _ => panic!("Expected ReferentialIntegrity error, got {:?}", result)
     }
 
     store
@@ -579,8 +579,8 @@ async fn test_duckdb_referential_integrity_violation() {
                 id: "source".to_string(),
                 label: "L".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_str.to_string(),
-            },
+                tenant_id: tenant_str.to_string()
+            }
         )
         .await
         .unwrap();
@@ -591,7 +591,7 @@ async fn test_duckdb_referential_integrity_violation() {
         target_id: "non-existent-target".to_string(),
         relation: "RELATES".to_string(),
         properties: json!({}),
-        tenant_id: tenant_str.to_string(),
+        tenant_id: tenant_str.to_string()
     };
 
     let result2 = store.add_edge(ctx, edge2).await;
@@ -600,7 +600,7 @@ async fn test_duckdb_referential_integrity_violation() {
         Err(storage::graph_duckdb::GraphError::ReferentialIntegrity(msg)) => {
             assert!(msg.contains("Target node"));
         }
-        _ => panic!("Expected ReferentialIntegrity error, got {:?}", result2),
+        _ => panic!("Expected ReferentialIntegrity error, got {:?}", result2)
     }
 }
 
@@ -619,8 +619,8 @@ async fn test_duckdb_search_edge_cases() {
                 id: "node1".to_string(),
                 label: "Node".to_string(),
                 properties: json!({"desc": "Special characters like % _ and ' quotes"}),
-                tenant_id: tenant_str.to_string(),
-            },
+                tenant_id: tenant_str.to_string()
+            }
         )
         .await
         .unwrap();
@@ -645,7 +645,7 @@ async fn test_duckdb_detect_communities_multi_cluster() {
     let tenant_id = "test-tenant";
     let ctx = TenantContext::new(
         TenantId::from_str(tenant_id).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     store
@@ -655,8 +655,8 @@ async fn test_duckdb_detect_communities_multi_cluster() {
                 id: "A1".to_string(),
                 label: "L".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -667,8 +667,8 @@ async fn test_duckdb_detect_communities_multi_cluster() {
                 id: "A2".to_string(),
                 label: "L".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -681,8 +681,8 @@ async fn test_duckdb_detect_communities_multi_cluster() {
                 target_id: "A2".to_string(),
                 relation: "R".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -694,8 +694,8 @@ async fn test_duckdb_detect_communities_multi_cluster() {
                 id: "B1".to_string(),
                 label: "L".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -706,8 +706,8 @@ async fn test_duckdb_detect_communities_multi_cluster() {
                 id: "B2".to_string(),
                 label: "L".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -720,8 +720,8 @@ async fn test_duckdb_detect_communities_multi_cluster() {
                 target_id: "B2".to_string(),
                 relation: "R".to_string(),
                 properties: json!({}),
-                tenant_id: tenant_id.to_string(),
-            },
+                tenant_id: tenant_id.to_string()
+            }
         )
         .await
         .unwrap();
@@ -738,14 +738,14 @@ async fn test_duckdb_tenant_isolation_atomic() {
     let tenant1 = "tenant1";
     let ctx1 = TenantContext::new(
         TenantId::from_str(tenant1).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     let nodes1 = vec![GraphNode {
         id: "n1".to_string(),
         label: "L".to_string(),
         properties: json!({}),
-        tenant_id: tenant1.to_string(),
+        tenant_id: tenant1.to_string()
     }];
 
     store
@@ -755,14 +755,14 @@ async fn test_duckdb_tenant_isolation_atomic() {
     let tenant2 = "tenant2";
     let ctx2 = TenantContext::new(
         TenantId::from_str(tenant2).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     let nodes2 = vec![GraphNode {
         id: "n1".to_string(),
         label: "L".to_string(),
         properties: json!({}),
-        tenant_id: tenant1.to_string(),
+        tenant_id: tenant1.to_string()
     }];
 
     let result = store.add_nodes_and_edges_atomic(&ctx2, tenant2, nodes2, vec![]);
@@ -779,14 +779,14 @@ async fn test_duckdb_soft_delete_node_not_found() {
     let tenant_id = "test-tenant";
     let ctx = TenantContext::new(
         TenantId::from_str(tenant_id).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     let result = store.soft_delete_node(ctx, "non-existent");
     assert!(result.is_err());
     match result {
         Err(storage::graph_duckdb::GraphError::NodeNotFound(_)) => {}
-        _ => panic!("Expected NodeNotFound, got {:?}", result),
+        _ => panic!("Expected NodeNotFound, got {:?}", result)
     }
 }
 
@@ -800,14 +800,14 @@ async fn test_duckdb_find_path_max_depth_exceeded() {
     let tenant_id = "test-tenant";
     let ctx = TenantContext::new(
         TenantId::from_str(tenant_id).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     let result = store.find_path(ctx.clone(), "A", "B", 5).await;
     assert!(result.is_err());
     match result {
         Err(storage::graph_duckdb::GraphError::MaxDepthExceeded(_)) => {}
-        _ => panic!("Expected MaxDepthExceeded, got {:?}", result),
+        _ => panic!("Expected MaxDepthExceeded, got {:?}", result)
     }
 
     let result_shortest = store.shortest_path(ctx, "A", "B", Some(5));
@@ -817,7 +817,7 @@ async fn test_duckdb_find_path_max_depth_exceeded() {
         _ => panic!(
             "Expected MaxDepthExceeded for shortest_path, got {:?}",
             result_shortest
-        ),
+        )
     }
 }
 
@@ -833,7 +833,7 @@ async fn test_duckdb_s3_not_configured() {
         Err(storage::graph_duckdb::GraphError::S3(msg)) => {
             assert!(msg.contains("S3 bucket not configured"));
         }
-        _ => panic!("Expected S3 error, got {:?}", result),
+        _ => panic!("Expected S3 error, got {:?}", result)
     }
 }
 
@@ -844,21 +844,21 @@ async fn test_duckdb_serialization_error() {
     let tenant_id = "test-tenant";
     let ctx = TenantContext::new(
         TenantId::from_str(tenant_id).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     let node = GraphNode {
         id: "TRIGGER_SERIALIZATION_ERROR".to_string(),
         label: "L".to_string(),
         properties: json!({}),
-        tenant_id: tenant_id.to_string(),
+        tenant_id: tenant_id.to_string()
     };
 
     let result = store.add_node(ctx.clone(), node).await;
     assert!(result.is_err());
     match result {
         Err(storage::graph_duckdb::GraphError::Serialization(_)) => {}
-        _ => panic!("Expected Serialization error, got {:?}", result),
+        _ => panic!("Expected Serialization error, got {:?}", result)
     }
 
     let entities = vec![Entity {
@@ -868,7 +868,7 @@ async fn test_duckdb_serialization_error() {
         properties: json!({}),
         tenant_id: tenant_id.to_string(),
         created_at: Utc::now(),
-        deleted_at: None,
+        deleted_at: None
     }];
     let result = store.add_entities_atomic(&ctx, tenant_id, entities, vec![]);
     assert!(result.is_err());
@@ -894,7 +894,7 @@ async fn test_duckdb_checksum_mismatch() {
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_bytes(vec![1, 2, 3])
-                .insert_header("x-amz-meta-checksum", "valid_checksum"),
+                .insert_header("x-amz-meta-checksum", "valid_checksum")
         )
         .mount(&server)
         .await;
@@ -911,7 +911,7 @@ async fn test_duckdb_checksum_mismatch() {
     assert!(result.is_err());
     match result {
         Err(storage::graph_duckdb::GraphError::ChecksumMismatch { .. }) => {}
-        _ => panic!("Expected ChecksumMismatch, got {:?}", result),
+        _ => panic!("Expected ChecksumMismatch, got {:?}", result)
     }
 }
 
@@ -952,7 +952,7 @@ async fn test_duckdb_s3_atomicity() {
     match result {
         Err(storage::graph_duckdb::GraphError::S3(msg))
             if msg.contains("Induced commit failure") => {}
-        _ => panic!("Expected S3 induced commit failure, got {:?}", result),
+        _ => panic!("Expected S3 induced commit failure, got {:?}", result)
     }
 }
 #[tokio::test]
@@ -962,7 +962,7 @@ async fn test_duckdb_edge_not_found() {
     let tenant_id = "test-tenant";
     let ctx = TenantContext::new(
         TenantId::from_str(tenant_id).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     let neighbors = store.get_neighbors(ctx, "non-existent").await.unwrap();
@@ -977,21 +977,21 @@ async fn test_duckdb_invalid_tenant_context() {
     let tenant2 = "tenant2";
     let ctx = TenantContext::new(
         TenantId::from_str(tenant1).unwrap(),
-        UserId::from_str("user-1").unwrap(),
+        UserId::from_str("user-1").unwrap()
     );
 
     let node = GraphNode {
         id: "n1".to_string(),
         label: "L".to_string(),
         properties: json!({}),
-        tenant_id: tenant2.to_string(),
+        tenant_id: tenant2.to_string()
     };
 
     let result = store.add_node(ctx, node).await;
     assert!(result.is_err());
     match result {
         Err(storage::graph_duckdb::GraphError::TenantViolation(_)) => {}
-        _ => panic!("Expected TenantViolation, got {:?}", result),
+        _ => panic!("Expected TenantViolation, got {:?}", result)
     }
 }
 
@@ -1059,8 +1059,9 @@ async fn test_duckdb_redis_lock_failure() {
     let _config = DuckDbGraphConfig::default();
     let _store = DuckDbGraphStore::new(_config).expect("Failed to create DuckDbGraphStore");
 
-    // DuckDbGraphStore doesn't expose WriteCoordinator directly, so we need to find how it's used.
-    // Looking at the code, DuckDbGraphStore doesn't seem to use WriteCoordinator yet.
-    // Ah, wait. WriteCoordinator is in graph_duckdb.rs but not in DuckDbGraphStore struct?
-    // Let's check the struct definition again.
+    // DuckDbGraphStore doesn't expose WriteCoordinator directly, so we need to
+    // find how it's used. Looking at the code, DuckDbGraphStore doesn't
+    // seem to use WriteCoordinator yet. Ah, wait. WriteCoordinator is in
+    // graph_duckdb.rs but not in DuckDbGraphStore struct? Let's check the
+    // struct definition again.
 }

@@ -6,11 +6,11 @@ use tracing::{error, info, warn};
 pub struct DurableEventPublisher<S, P>
 where
     S: StorageBackend + Send + Sync,
-    P: EventPublisher + Send + Sync,
+    P: EventPublisher + Send + Sync
 {
     storage: Arc<S>,
     redis_publisher: Arc<P>,
-    tenant_ctx: TenantContext,
+    tenant_ctx: TenantContext
 }
 
 impl<S, P> DurableEventPublisher<S, P>
@@ -18,19 +18,19 @@ where
     S: StorageBackend + Send + Sync,
     S::Error: std::error::Error + Send + Sync + 'static,
     P: EventPublisher + Send + Sync,
-    P::Error: std::error::Error + Send + Sync + 'static,
+    P::Error: std::error::Error + Send + Sync + 'static
 {
     pub fn new(storage: Arc<S>, redis_publisher: Arc<P>, tenant_ctx: TenantContext) -> Self {
         Self {
             storage,
             redis_publisher,
-            tenant_ctx,
+            tenant_ctx
         }
     }
 
     pub async fn publish_durable(
         &self,
-        event: GovernanceEvent,
+        event: GovernanceEvent
     ) -> Result<String, DurablePublishError> {
         let persistent_event = PersistentEvent::new(event.clone());
         let event_id = persistent_event.event_id.clone();
@@ -65,7 +65,7 @@ where
 
     pub async fn retry_pending_events(
         &self,
-        limit: usize,
+        limit: usize
     ) -> Result<RetryResult, DurablePublishError> {
         let pending = self
             .storage
@@ -98,7 +98,7 @@ where
                             .update_event_status(
                                 &event.event_id,
                                 EventStatus::Pending,
-                                Some(e.to_string()),
+                                Some(e.to_string())
                             )
                             .await
                             .ok();
@@ -108,7 +108,7 @@ where
                             .update_event_status(
                                 &event.event_id,
                                 EventStatus::DeadLettered,
-                                Some(e.to_string()),
+                                Some(e.to_string())
                             )
                             .await
                             .ok();
@@ -128,7 +128,7 @@ where
     pub async fn process_dead_letter_queue(
         &self,
         limit: usize,
-        handler: impl Fn(&PersistentEvent) -> bool,
+        handler: impl Fn(&PersistentEvent) -> bool
     ) -> Result<DlqResult, DurablePublishError> {
         let dead_letters = self
             .storage
@@ -172,7 +172,7 @@ pub struct RetryResult {
     pub total: usize,
     pub succeeded: usize,
     pub retried: usize,
-    pub dead_lettered: usize,
+    pub dead_lettered: usize
 }
 
 #[derive(Debug, Default)]
@@ -180,7 +180,7 @@ pub struct DlqResult {
     pub total: usize,
     pub reprocessed: usize,
     pub failed: usize,
-    pub skipped: usize,
+    pub skipped: usize
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -195,26 +195,26 @@ pub enum DurablePublishError {
     StatusUpdateError(String),
 
     #[error("Storage operation failed: {0}")]
-    StorageError(String),
+    StorageError(String)
 }
 
 pub struct IdempotentConsumer<S>
 where
-    S: StorageBackend + Send + Sync,
+    S: StorageBackend + Send + Sync
 {
     storage: Arc<S>,
-    consumer_group: String,
+    consumer_group: String
 }
 
 impl<S> IdempotentConsumer<S>
 where
     S: StorageBackend + Send + Sync,
-    S::Error: std::error::Error + Send + Sync + 'static,
+    S::Error: std::error::Error + Send + Sync + 'static
 {
     pub fn new(storage: Arc<S>, consumer_group: String) -> Self {
         Self {
             storage,
-            consumer_group,
+            consumer_group
         }
     }
 
@@ -222,11 +222,11 @@ where
         &self,
         idempotency_key: &str,
         tenant_id: &mk_core::types::TenantId,
-        handler: F,
+        handler: F
     ) -> Result<Option<T>, IdempotentConsumerError>
     where
         F: std::future::Future<Output = Result<T, E>>,
-        E: std::error::Error,
+        E: std::error::Error
     {
         let already_processed = self
             .storage
@@ -245,7 +245,7 @@ where
         let state = mk_core::types::ConsumerState::new(
             self.consumer_group.clone(),
             idempotency_key.to_string(),
-            tenant_id.clone(),
+            tenant_id.clone()
         );
 
         self.storage
@@ -263,7 +263,7 @@ pub enum IdempotentConsumerError {
     StorageError(String),
 
     #[error("Event processing failed: {0}")]
-    ProcessingError(String),
+    ProcessingError(String)
 }
 
 #[cfg(test)]
@@ -273,7 +273,7 @@ mod tests {
     use mk_core::types::{
         ConsumerState, DriftConfig, DriftResult, DriftSuppression, EventDeliveryMetrics,
         GovernanceEvent, OrganizationalUnit, PersistentEvent, Policy, Role, TenantId, UnitType,
-        UserId,
+        UserId
     };
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -286,7 +286,7 @@ mod tests {
         pending_events: Arc<RwLock<Vec<PersistentEvent>>>,
         dead_letter_events: Arc<RwLock<Vec<PersistentEvent>>>,
         idempotency_keys: Arc<RwLock<Vec<String>>>,
-        should_fail: Arc<RwLock<bool>>,
+        should_fail: Arc<RwLock<bool>>
     }
 
     impl MockStorage {
@@ -297,7 +297,7 @@ mod tests {
                 pending_events: Arc::new(RwLock::new(Vec::new())),
                 dead_letter_events: Arc::new(RwLock::new(Vec::new())),
                 idempotency_keys: Arc::new(RwLock::new(Vec::new())),
-                should_fail: Arc::new(RwLock::new(false)),
+                should_fail: Arc::new(RwLock::new(false))
             }
         }
 
@@ -339,7 +339,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _key: &str,
-            _value: &[u8],
+            _value: &[u8]
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -347,7 +347,7 @@ mod tests {
         async fn retrieve(
             &self,
             _ctx: TenantContext,
-            _key: &str,
+            _key: &str
         ) -> Result<Option<Vec<u8>>, Self::Error> {
             Ok(None)
         }
@@ -363,7 +363,7 @@ mod tests {
         async fn get_ancestors(
             &self,
             _ctx: TenantContext,
-            _unit_id: &str,
+            _unit_id: &str
         ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
             Ok(Vec::new())
         }
@@ -371,7 +371,7 @@ mod tests {
         async fn get_descendants(
             &self,
             _ctx: TenantContext,
-            _unit_id: &str,
+            _unit_id: &str
         ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
             Ok(Vec::new())
         }
@@ -379,7 +379,7 @@ mod tests {
         async fn get_unit_policies(
             &self,
             _ctx: TenantContext,
-            _unit_id: &str,
+            _unit_id: &str
         ) -> Result<Vec<Policy>, Self::Error> {
             Ok(Vec::new())
         }
@@ -392,7 +392,7 @@ mod tests {
             &self,
             _ctx: &TenantContext,
             _unit_id: &str,
-            _policy: &Policy,
+            _policy: &Policy
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -402,7 +402,7 @@ mod tests {
             _user_id: &UserId,
             _tenant_id: &TenantId,
             _unit_id: &str,
-            _role: Role,
+            _role: Role
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -412,7 +412,7 @@ mod tests {
             _user_id: &UserId,
             _tenant_id: &TenantId,
             _unit_id: &str,
-            _role: Role,
+            _role: Role
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -424,7 +424,7 @@ mod tests {
         async fn get_latest_drift_result(
             &self,
             _ctx: TenantContext,
-            _project_id: &str,
+            _project_id: &str
         ) -> Result<Option<DriftResult>, Self::Error> {
             Ok(None)
         }
@@ -440,7 +440,7 @@ mod tests {
             _status: &str,
             _message: Option<&str>,
             _started_at: i64,
-            _finished_at: Option<i64>,
+            _finished_at: Option<i64>
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -449,7 +449,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _since_timestamp: i64,
-            _limit: usize,
+            _limit: usize
         ) -> Result<Vec<GovernanceEvent>, Self::Error> {
             Ok(Vec::new())
         }
@@ -465,7 +465,7 @@ mod tests {
         async fn get_pending_events(
             &self,
             _ctx: TenantContext,
-            _limit: usize,
+            _limit: usize
         ) -> Result<Vec<PersistentEvent>, Self::Error> {
             Ok(self.pending_events.read().await.clone())
         }
@@ -474,7 +474,7 @@ mod tests {
             &self,
             _event_id: &str,
             _status: EventStatus,
-            _error: Option<String>,
+            _error: Option<String>
         ) -> Result<(), Self::Error> {
             self.update_calls.fetch_add(1, Ordering::SeqCst);
             Ok(())
@@ -483,7 +483,7 @@ mod tests {
         async fn get_dead_letter_events(
             &self,
             _ctx: TenantContext,
-            _limit: usize,
+            _limit: usize
         ) -> Result<Vec<PersistentEvent>, Self::Error> {
             Ok(self.dead_letter_events.read().await.clone())
         }
@@ -491,7 +491,7 @@ mod tests {
         async fn check_idempotency(
             &self,
             _consumer_group: &str,
-            idempotency_key: &str,
+            idempotency_key: &str
         ) -> Result<bool, Self::Error> {
             let keys = self.idempotency_keys.read().await;
             Ok(keys.contains(&idempotency_key.to_string()))
@@ -509,21 +509,21 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _period_start: i64,
-            _period_end: i64,
+            _period_end: i64
         ) -> Result<Vec<EventDeliveryMetrics>, Self::Error> {
             Ok(Vec::new())
         }
 
         async fn record_event_metrics(
             &self,
-            _metrics: EventDeliveryMetrics,
+            _metrics: EventDeliveryMetrics
         ) -> Result<(), Self::Error> {
             Ok(())
         }
 
         async fn create_suppression(
             &self,
-            _suppression: DriftSuppression,
+            _suppression: DriftSuppression
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -531,7 +531,7 @@ mod tests {
         async fn list_suppressions(
             &self,
             _ctx: TenantContext,
-            _project_id: &str,
+            _project_id: &str
         ) -> Result<Vec<DriftSuppression>, Self::Error> {
             Ok(Vec::new())
         }
@@ -539,7 +539,7 @@ mod tests {
         async fn delete_suppression(
             &self,
             _ctx: TenantContext,
-            _suppression_id: &str,
+            _suppression_id: &str
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -547,7 +547,7 @@ mod tests {
         async fn get_drift_config(
             &self,
             _ctx: TenantContext,
-            _project_id: &str,
+            _project_id: &str
         ) -> Result<Option<DriftConfig>, Self::Error> {
             Ok(None)
         }
@@ -559,21 +559,21 @@ mod tests {
 
     struct MockPublisher {
         publish_calls: Arc<AtomicUsize>,
-        should_fail: Arc<RwLock<bool>>,
+        should_fail: Arc<RwLock<bool>>
     }
 
     impl MockPublisher {
         fn new() -> Self {
             Self {
                 publish_calls: Arc::new(AtomicUsize::new(0)),
-                should_fail: Arc::new(RwLock::new(false)),
+                should_fail: Arc::new(RwLock::new(false))
             }
         }
 
         fn failing() -> Self {
             Self {
                 publish_calls: Arc::new(AtomicUsize::new(0)),
-                should_fail: Arc::new(RwLock::new(true)),
+                should_fail: Arc::new(RwLock::new(true))
             }
         }
     }
@@ -603,7 +603,7 @@ mod tests {
 
         async fn subscribe(
             &self,
-            _channels: &[&str],
+            _channels: &[&str]
         ) -> Result<tokio::sync::mpsc::Receiver<GovernanceEvent>, Self::Error> {
             let (_tx, rx) = tokio::sync::mpsc::channel(1);
             Ok(rx)
@@ -617,7 +617,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id,
             parent_id: None,
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         }
     }
 

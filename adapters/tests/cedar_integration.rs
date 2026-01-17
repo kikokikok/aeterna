@@ -2,7 +2,7 @@
 //!
 //! Comprehensive tests for Cedar policy evaluation including:
 //! - Multi-tenant authorization isolation
-//! - Agent delegation (ActAs) scenarios  
+//! - Agent delegation (ActAs) scenarios
 //! - Role-based access control (RBAC)
 //! - Hierarchical unit inheritance
 //! - Policy evaluation edge cases
@@ -68,14 +68,14 @@ const TEST_SCHEMA: &str = r#"{
 fn create_tenant_context(tenant: &str, user: &str) -> TenantContext {
     TenantContext::new(
         TenantId::new(tenant.into()).unwrap(),
-        UserId::new(user.into()).unwrap(),
+        UserId::new(user.into()).unwrap()
     )
 }
 
 fn create_agent_context(tenant: &str, user: &str, agent: &str) -> TenantContext {
     let mut ctx = TenantContext::new(
         TenantId::new(tenant.into()).unwrap(),
-        UserId::new(user.into()).unwrap(),
+        UserId::new(user.into()).unwrap()
     );
     ctx.agent_id = Some(agent.to_string());
     ctx
@@ -524,7 +524,8 @@ mod hierarchical_permissions {
 
     #[tokio::test]
     async fn test_parent_unit_access_does_not_grant_child_access() {
-        // In this basic policy model, parent access doesn't automatically grant child access
+        // In this basic policy model, parent access doesn't automatically grant child
+        // access
         let policies = r#"
             permit(principal == User::"manager", action == Action::"View", resource == Unit::"org");
         "#;
@@ -745,7 +746,7 @@ mod edge_cases {
             .check_permission(
                 &ctx,
                 "View",
-                "Unit::\"a3bb189e-8bf9-3888-9912-ace4e6543002\"",
+                "Unit::\"a3bb189e-8bf9-3888-9912-ace4e6543002\""
             )
             .await
             .unwrap();
@@ -812,7 +813,8 @@ mod error_handling {
         let policies = r#"
             permit(principal, action, resource);
         "#;
-        // Empty schema string should still work (schema validation is not strict in current impl)
+        // Empty schema string should still work (schema validation is not strict in
+        // current impl)
         let result = CedarAuthorizer::new(policies, "");
         assert!(result.is_ok(), "Empty schema should be accepted");
     }
@@ -1080,7 +1082,8 @@ mod performance {
         let mut policies = String::new();
         for i in 0..100 {
             policies.push_str(&format!(
-                "permit(principal == User::\"user{}\", action == Action::\"View\", resource == Unit::\"data{}\");\n",
+                "permit(principal == User::\"user{}\", action == Action::\"View\", resource == \
+                 Unit::\"data{}\");\n",
                 i, i
             ));
         }

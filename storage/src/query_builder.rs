@@ -4,7 +4,7 @@ use sqlx::{AssertSqlSafe, PgPool, postgres::PgRow};
 pub struct TenantQueryBuilder<'a> {
     pool: &'a PgPool,
     tenant_id: String,
-    base_query: String,
+    base_query: String
 }
 
 impl<'a> TenantQueryBuilder<'a> {
@@ -12,7 +12,7 @@ impl<'a> TenantQueryBuilder<'a> {
         Self {
             pool,
             tenant_id: ctx.tenant_id.to_string(),
-            base_query: String::new(),
+            base_query: String::new()
         }
     }
 
@@ -102,7 +102,8 @@ mod tests {
         query = format!("{} ORDER BY id", query);
         query = format!("{} LIMIT 10", query);
 
-        let expected = "SELECT id, name FROM users WHERE tenant_id = $1 AND active = true ORDER BY id LIMIT 10";
+        let expected = "SELECT id, name FROM users WHERE tenant_id = $1 AND active = true ORDER \
+                        BY id LIMIT 10";
         assert_eq!(query, expected);
     }
 
@@ -221,7 +222,8 @@ mod tests {
             .order_by("created_at DESC")
             .limit(25);
 
-        let expected = "SELECT id, name, email FROM users WHERE tenant_id = $1 AND active = true AND role = $2 ORDER BY created_at DESC LIMIT 25";
+        let expected = "SELECT id, name, email FROM users WHERE tenant_id = $1 AND active = true \
+                        AND role = $2 ORDER BY created_at DESC LIMIT 25";
         assert_eq!(builder.build_query(), expected);
     }
 
@@ -262,7 +264,8 @@ mod tests {
             .where_clause("created_at > $3")
             .where_clause("category = $4");
 
-        let expected = "SELECT * FROM items WHERE tenant_id = $1 AND status = $2 AND created_at > $3 AND category = $4";
+        let expected = "SELECT * FROM items WHERE tenant_id = $1 AND status = $2 AND created_at > \
+                        $3 AND category = $4";
         assert_eq!(builder.build_query(), expected);
     }
 }

@@ -1,5 +1,5 @@
 use knowledge::federation::{
-    FederationConfig, FederationProvider, KnowledgeManifest, UpstreamConfig,
+    FederationConfig, FederationProvider, KnowledgeManifest, UpstreamConfig
 };
 use knowledge::governance::GovernanceEngine;
 use knowledge::repository::RepositoryError;
@@ -8,7 +8,7 @@ use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{
     ConstraintOperator, ConstraintSeverity, ConstraintTarget, KnowledgeEntry, KnowledgeLayer,
     KnowledgeStatus, KnowledgeType, Policy, PolicyMode, PolicyRule, RuleMergeStrategy, RuleType,
-    TenantContext, TenantId,
+    TenantContext, TenantId
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,7 +18,7 @@ use sync::state_persister::SyncStatePersister;
 
 struct MockFedProvider {
     config: FederationConfig,
-    should_fail: bool,
+    should_fail: bool
 }
 
 #[async_trait::async_trait]
@@ -29,22 +29,22 @@ impl FederationProvider for MockFedProvider {
 
     async fn fetch_upstream_manifest(
         &self,
-        _id: &str,
+        _id: &str
     ) -> Result<KnowledgeManifest, RepositoryError> {
         Ok(KnowledgeManifest {
             version: "1.0".to_string(),
-            items: HashMap::new(),
+            items: HashMap::new()
         })
     }
 
     async fn sync_upstream(
         &self,
         _id: &str,
-        _path: &std::path::Path,
+        _path: &std::path::Path
     ) -> Result<(), RepositoryError> {
         if self.should_fail {
             return Err(RepositoryError::InvalidPath(
-                "Local changes conflict with upstream".to_string(),
+                "Local changes conflict with upstream".to_string()
             ));
         }
         Ok(())
@@ -60,7 +60,7 @@ impl KnowledgeRepository for MockRepo {
         &self,
         _ctx: TenantContext,
         _e: KnowledgeEntry,
-        _m: &str,
+        _m: &str
     ) -> Result<String, Self::Error> {
         Ok("hash".into())
     }
@@ -68,7 +68,7 @@ impl KnowledgeRepository for MockRepo {
         &self,
         _ctx: TenantContext,
         _l: KnowledgeLayer,
-        _p: &str,
+        _p: &str
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
         Ok(None)
     }
@@ -76,7 +76,7 @@ impl KnowledgeRepository for MockRepo {
         &self,
         _ctx: TenantContext,
         _l: KnowledgeLayer,
-        _p: &str,
+        _p: &str
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         Ok(vec![])
     }
@@ -85,7 +85,7 @@ impl KnowledgeRepository for MockRepo {
         _ctx: TenantContext,
         _l: KnowledgeLayer,
         _p: &str,
-        _m: &str,
+        _m: &str
     ) -> Result<String, Self::Error> {
         Ok("hash".into())
     }
@@ -95,7 +95,7 @@ impl KnowledgeRepository for MockRepo {
     async fn get_affected_items(
         &self,
         _ctx: TenantContext,
-        _f: &str,
+        _f: &str
     ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
         Ok(vec![])
     }
@@ -104,7 +104,7 @@ impl KnowledgeRepository for MockRepo {
         _ctx: TenantContext,
         _q: &str,
         _l: Vec<KnowledgeLayer>,
-        _li: usize,
+        _li: usize
     ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
         Ok(vec![])
     }
@@ -118,14 +118,14 @@ struct MockPersister;
 impl SyncStatePersister for MockPersister {
     async fn load(
         &self,
-        _tenant_id: &TenantId,
+        _tenant_id: &TenantId
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         Ok(SyncState::default())
     }
     async fn save(
         &self,
         _tenant_id: &TenantId,
-        _s: &SyncState,
+        _s: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
@@ -141,13 +141,13 @@ async fn test_sync_federation_conflict_recording() {
             id: "hub-1".to_string(),
             url: "http://test".to_string(),
             branch: "main".to_string(),
-            auth_token: None,
+            auth_token: None
         }],
-        sync_interval_secs: 60,
+        sync_interval_secs: 60
     };
     let fed = Arc::new(MockFedProvider {
         config: fed_config,
-        should_fail: true,
+        should_fail: true
     });
     let persister = Arc::new(MockPersister);
 
@@ -158,6 +158,7 @@ async fn test_sync_federation_conflict_recording() {
         config::config::DeploymentConfig::default(),
         Some(fed.clone() as Arc<dyn FederationProvider>),
         persister,
+        None
     )
     .await
     .unwrap();
@@ -194,9 +195,9 @@ async fn test_sync_governance_telemetry() {
             operator: ConstraintOperator::MustMatch,
             value: serde_json::json!("forbidden"),
             severity: ConstraintSeverity::Block,
-            message: "Forbidden content detected".to_string(),
+            message: "Forbidden content detected".to_string()
         }],
-        metadata: HashMap::new(),
+        metadata: HashMap::new()
     });
 
     let gov = Arc::new(gov);
@@ -209,6 +210,7 @@ async fn test_sync_governance_telemetry() {
         config::config::DeploymentConfig::default(),
         None,
         persister,
+        None
     )
     .await
     .unwrap();
@@ -223,7 +225,7 @@ async fn test_sync_governance_telemetry() {
         commit_hash: None,
         author: None,
         updated_at: chrono::Utc::now().timestamp(),
-        summaries: HashMap::new(),
+        summaries: HashMap::new()
     };
 
     let mut state = SyncState::default();

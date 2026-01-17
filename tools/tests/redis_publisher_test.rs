@@ -12,7 +12,7 @@ use uuid::Uuid;
 struct RedisFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Redis>,
-    url: String,
+    url: String
 }
 
 static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
@@ -27,7 +27,7 @@ async fn get_redis_fixture() -> Option<&'static RedisFixture> {
                     let url = format!("redis://localhost:{}", port);
                     Some(RedisFixture { container, url })
                 }
-                Err(_) => None,
+                Err(_) => None
             }
         })
         .await
@@ -48,7 +48,7 @@ async fn test_redis_publisher_start_run() {
 
     let publisher = RedisPublisher::new_with_tenant_isolation(
         fixture.url.clone(),
-        "governance:events".to_string(),
+        "governance:events".to_string()
     );
     let (tx, _handle) = publisher.start();
 
@@ -58,7 +58,7 @@ async fn test_redis_publisher_start_run() {
         unit_type: UnitType::Project,
         tenant_id: tenant_id.clone(),
         parent_id: None,
-        timestamp: 1000,
+        timestamp: 1000
     };
 
     tx.send(event).unwrap();
@@ -96,7 +96,7 @@ async fn test_publish_to_dlq_and_read() {
     let gov_event = GovernanceEvent::UnitDeleted {
         unit_id: "unit-dlq".to_string(),
         tenant_id: tenant_id.clone(),
-        timestamp: 1234567890,
+        timestamp: 1234567890
     };
 
     let event = PersistentEvent {
@@ -113,7 +113,7 @@ async fn test_publish_to_dlq_and_read() {
         created_at: 1234567890,
         published_at: None,
         acknowledged_at: None,
-        dead_lettered_at: Some(1234567891),
+        dead_lettered_at: Some(1234567891)
     };
 
     RedisPublisher::publish_to_dlq(&fixture.url, &event)

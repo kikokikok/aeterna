@@ -11,35 +11,35 @@ use tokio::sync::RwLock;
 
 pub type ProviderMap = HashMap<
     MemoryLayer,
-    Arc<dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
+    Arc<dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
 >;
 
 pub struct MemoryManager {
     providers: Arc<RwLock<ProviderMap>>,
     embedding_service: Option<
-        Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
+        Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
     >,
     governance_service: Arc<GovernanceService>,
     auth_service: Option<
         Arc<
             dyn AuthorizationService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     >,
     telemetry: Arc<MemoryTelemetry>,
     config: config::MemoryConfig,
     trajectories: Arc<RwLock<HashMap<String, Vec<mk_core::types::MemoryTrajectoryEvent>>>>,
     graph_store: Option<
-        Arc<dyn storage::graph::GraphStore<Error = storage::postgres::PostgresError> + Send + Sync>,
+        Arc<dyn storage::graph::GraphStore<Error = storage::postgres::PostgresError> + Send + Sync>
     >,
     llm_service: Option<
         Arc<
             dyn mk_core::traits::LlmService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
-    >,
+                + Sync
+        >
+    >
 }
 
 impl MemoryManager {
@@ -53,15 +53,15 @@ impl MemoryManager {
             config: config::MemoryConfig::default(),
             trajectories: Arc::new(RwLock::new(HashMap::new())),
             graph_store: None,
-            llm_service: None,
+            llm_service: None
         }
     }
 
     pub fn with_graph_store(
         mut self,
         graph_store: Arc<
-            dyn storage::graph::GraphStore<Error = storage::postgres::PostgresError> + Send + Sync,
-        >,
+            dyn storage::graph::GraphStore<Error = storage::postgres::PostgresError> + Send + Sync
+        >
     ) -> Self {
         self.graph_store = Some(graph_store);
         self
@@ -72,8 +72,8 @@ impl MemoryManager {
         llm_service: Arc<
             dyn mk_core::traits::LlmService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     ) -> Self {
         self.llm_service = Some(llm_service);
         self
@@ -87,8 +87,8 @@ impl MemoryManager {
     pub fn with_embedding_service(
         mut self,
         embedding_service: Arc<
-            dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
-        >,
+            dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
+        >
     ) -> Self {
         self.embedding_service = Some(embedding_service);
         self
@@ -99,8 +99,8 @@ impl MemoryManager {
         auth_service: Arc<
             dyn AuthorizationService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     ) -> Self {
         self.auth_service = Some(auth_service);
         self
@@ -121,14 +121,14 @@ impl MemoryManager {
             config: self.config.clone(),
             trajectories: self.trajectories.clone(),
             graph_store: self.graph_store.clone(),
-            llm_service: self.llm_service.clone(),
+            llm_service: self.llm_service.clone()
         }
     }
 
     pub async fn optimize_layer(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer,
+        layer: MemoryLayer
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.optimize_layer_internal(ctx, layer).await
     }
@@ -136,7 +136,7 @@ impl MemoryManager {
     async fn optimize_layer_internal(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer,
+        layer: MemoryLayer
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if ctx.tenant_id.to_string().contains("TRIGGER_FAILURE") {
             return Err("Simulated optimization failure".into());
@@ -199,7 +199,7 @@ impl MemoryManager {
                         chunk.len(),
                         layer
                     )),
-                    timestamp: chrono::Utc::now().timestamp(),
+                    timestamp: chrono::Utc::now().timestamp()
                 };
                 trajectories.entry(id).or_default().push(event);
             }
@@ -222,8 +222,8 @@ impl MemoryManager {
         provider: Arc<
             dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     ) {
         let mut providers = self.providers.write().await;
         providers.insert(layer, provider);
@@ -234,7 +234,7 @@ impl MemoryManager {
         ctx: mk_core::types::TenantContext,
         query_vector: Vec<f32>,
         limit: usize,
-        filters: HashMap<String, serde_json::Value>,
+        filters: HashMap<String, serde_json::Value>
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         if ctx.tenant_id.to_string().contains("TRIGGER_FAILURE") {
             return Err("Simulated search failure".into());
@@ -264,7 +264,7 @@ impl MemoryManager {
                     self.telemetry.record_operation_success(
                         "search",
                         &layer_str,
-                        start.elapsed().as_millis() as f64,
+                        start.elapsed().as_millis() as f64
                     );
                     for mut entry in results {
                         entry.layer = *layer;
@@ -279,7 +279,7 @@ impl MemoryManager {
                                 "Memory retrieved during search in layer {:?}",
                                 layer
                             )),
-                            timestamp: chrono::Utc::now().timestamp(),
+                            timestamp: chrono::Utc::now().timestamp()
                         };
                         trajectories
                             .entry(entry.id.clone())
@@ -309,7 +309,7 @@ impl MemoryManager {
         query_vector: Vec<f32>,
         limit: usize,
         threshold: f32,
-        filters: HashMap<String, serde_json::Value>,
+        filters: HashMap<String, serde_json::Value>
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
         let mut all_results = Vec::new();
@@ -341,7 +341,7 @@ impl MemoryManager {
                                     "Memory retrieved during threshold search in layer {:?}",
                                     layer
                                 )),
-                                timestamp: chrono::Utc::now().timestamp(),
+                                timestamp: chrono::Utc::now().timestamp()
                             };
                             trajectories
                                 .entry(entry.id.clone())
@@ -350,7 +350,7 @@ impl MemoryManager {
                         }
                     }
                 }
-                Err(e) => tracing::error!("Error searching layer {:?}: {}", layer, e),
+                Err(e) => tracing::error!("Error searching layer {:?}: {}", layer, e)
             }
         }
 
@@ -365,7 +365,7 @@ impl MemoryManager {
         query_text: &str,
         limit: usize,
         threshold: f32,
-        filters: HashMap<String, serde_json::Value>,
+        filters: HashMap<String, serde_json::Value>
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         if query_text.contains("TRIGGER_FAILURE") {
             return Err("Simulated embedding failure".into());
@@ -386,7 +386,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        mut entry: MemoryEntry,
+        mut entry: MemoryEntry
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         if entry.content.contains("TRIGGER_FAILURE") {
             return Err("Simulated add failure".into());
@@ -424,7 +424,7 @@ impl MemoryManager {
                 self.telemetry.record_operation_success(
                     "add",
                     &layer_str,
-                    start.elapsed().as_millis() as f64,
+                    start.elapsed().as_millis() as f64
                 );
 
                 let layer_count = provider
@@ -459,7 +459,7 @@ impl MemoryManager {
                     entry_id: id.clone(),
                     reward: None,
                     reasoning: Some(format!("Memory added to layer {:?}", layer)),
-                    timestamp: chrono::Utc::now().timestamp(),
+                    timestamp: chrono::Utc::now().timestamp()
                 };
                 trajectories.entry(id.clone()).or_default().push(event);
 
@@ -473,14 +473,14 @@ impl MemoryManager {
                             if let Some(obj) = properties.as_object_mut() {
                                 obj.insert(
                                     "source_memory_id".to_string(),
-                                    serde_json::Value::String(id.clone()),
+                                    serde_json::Value::String(id.clone())
                                 );
                             }
                             let node = storage::graph::GraphNode {
                                 id: entity.name.clone(),
                                 label: entity.label,
                                 properties,
-                                tenant_id: ctx.tenant_id.to_string(),
+                                tenant_id: ctx.tenant_id.to_string()
                             };
                             let _ = graph_store.add_node(ctx.clone(), node).await;
                         }
@@ -495,7 +495,7 @@ impl MemoryManager {
                                 target_id: relation.target,
                                 relation: relation.relation,
                                 properties: relation.properties,
-                                tenant_id: ctx.tenant_id.to_string(),
+                                tenant_id: ctx.tenant_id.to_string()
                             };
                             let _ = graph_store.add_edge(ctx.clone(), edge).await;
                         }
@@ -516,7 +516,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        id: &str,
+        id: &str
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let provider = {
             let providers = self.providers.read().await;
@@ -543,12 +543,12 @@ impl MemoryManager {
                     entry_id: id.to_string(),
                     reward: None,
                     reasoning: Some(format!("Memory deleted from layer {:?}", layer)),
-                    timestamp: chrono::Utc::now().timestamp(),
+                    timestamp: chrono::Utc::now().timestamp()
                 };
                 trajectories.entry(id.to_string()).or_default().push(event);
                 Ok(())
             }
-            Err(e) => Err(e),
+            Err(e) => Err(e)
         }
     }
 
@@ -557,7 +557,7 @@ impl MemoryManager {
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
         memory_id: &str,
-        reward: mk_core::types::RewardSignal,
+        reward: mk_core::types::RewardSignal
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let entry = self
             .get_from_layer(ctx.clone(), layer, memory_id)
@@ -585,7 +585,7 @@ impl MemoryManager {
             entry_id: memory_id.to_string(),
             reward: Some(reward),
             reasoning: Some("Reward signal recorded".to_string()),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         };
         trajectories
             .entry(memory_id.to_string())
@@ -599,7 +599,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        threshold: f32,
+        threshold: f32
     ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         let memories = self.list_all_from_layer(ctx.clone(), layer).await?;
         let mut pruned_ids = Vec::new();
@@ -649,7 +649,7 @@ impl MemoryManager {
                     "Memory pruned due to low utility (score: {:.2})",
                     score
                 )),
-                timestamp: chrono::Utc::now().timestamp(),
+                timestamp: chrono::Utc::now().timestamp()
             };
             trajectories_write
                 .entry(id.clone())
@@ -664,7 +664,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        id: &str,
+        id: &str
     ) -> Result<Option<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let provider = {
             let providers = self.providers.read().await;
@@ -701,7 +701,7 @@ impl MemoryManager {
                 entry_id: id.to_string(),
                 reward: None,
                 reasoning: Some(format!("Memory retrieved from layer {:?}", layer)),
-                timestamp: chrono::Utc::now().timestamp(),
+                timestamp: chrono::Utc::now().timestamp()
             };
             trajectories.entry(id.to_string()).or_default().push(event);
 
@@ -714,7 +714,7 @@ impl MemoryManager {
     pub async fn list_all_from_layer(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer,
+        layer: MemoryLayer
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let provider = {
             let providers = self.providers.read().await;
@@ -731,7 +731,7 @@ impl MemoryManager {
     pub async fn apply_reward_decay(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer,
+        layer: MemoryLayer
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         let memories = self.list_all_from_layer(ctx.clone(), layer).await?;
         let mut decayed_count = 0;
@@ -773,7 +773,7 @@ impl MemoryManager {
                             "Importance decayed by {:.4} due to inactivity ({} intervals)",
                             reduction, intervals_passed
                         )),
-                        timestamp: now,
+                        timestamp: now
                     };
                     trajectories
                         .entry(entry.id.clone())
@@ -793,7 +793,7 @@ impl MemoryManager {
         ctx: mk_core::types::TenantContext,
         id: &str,
         source_layer: MemoryLayer,
-        target_layer: MemoryLayer,
+        target_layer: MemoryLayer
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         if id.contains("TRIGGER_FAILURE") {
             return Err("Simulated promotion failure".into());
@@ -811,7 +811,7 @@ impl MemoryManager {
         let now = chrono::Utc::now().timestamp();
         promoted_entry.metadata.insert(
             "original_memory_id".to_string(),
-            serde_json::json!(entry.id),
+            serde_json::json!(entry.id)
         );
         promoted_entry
             .metadata
@@ -823,7 +823,7 @@ impl MemoryManager {
     pub async fn promote_important_memories(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer,
+        layer: MemoryLayer
     ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         use crate::promotion::PromotionService;
         let promotion_service = PromotionService::new(Arc::new(MemoryManager {
@@ -835,7 +835,7 @@ impl MemoryManager {
             config: self.config.clone(),
             trajectories: self.trajectories.clone(),
             graph_store: self.graph_store.clone(),
-            llm_service: self.llm_service.clone(),
+            llm_service: self.llm_service.clone()
         }))
         .with_config(self.config.clone())
         .with_telemetry(self.telemetry.clone());
@@ -846,7 +846,7 @@ impl MemoryManager {
             .map_err(|e| {
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    e.to_string(),
+                    e.to_string()
                 )) as Box<dyn std::error::Error + Send + Sync>
             })
     }
@@ -854,7 +854,7 @@ impl MemoryManager {
     pub async fn close_session(
         &self,
         ctx: mk_core::types::TenantContext,
-        session_id: &str,
+        session_id: &str
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("Closing session: {}", session_id);
 
@@ -873,7 +873,7 @@ impl MemoryManager {
     pub async fn close_agent(
         &self,
         ctx: mk_core::types::TenantContext,
-        agent_id: &str,
+        agent_id: &str
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("Closing agent: {}", agent_id);
 
@@ -892,7 +892,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         query: &str,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<storage::graph::GraphNode>, Box<dyn std::error::Error + Send + Sync>> {
         let graph_store = self
             .graph_store
@@ -907,10 +907,10 @@ impl MemoryManager {
     pub async fn get_graph_neighbors(
         &self,
         ctx: mk_core::types::TenantContext,
-        node_id: &str,
+        node_id: &str
     ) -> Result<
         Vec<(storage::graph::GraphEdge, storage::graph::GraphNode)>,
-        Box<dyn std::error::Error + Send + Sync>,
+        Box<dyn std::error::Error + Send + Sync>
     > {
         let graph_store = self
             .graph_store
@@ -927,7 +927,7 @@ impl MemoryManager {
         ctx: mk_core::types::TenantContext,
         start_id: &str,
         end_id: &str,
-        max_depth: usize,
+        max_depth: usize
     ) -> Result<Vec<storage::graph::GraphEdge>, Box<dyn std::error::Error + Send + Sync>> {
         let graph_store = self
             .graph_store
@@ -951,7 +951,7 @@ pub(crate) mod tests {
         TenantContext {
             tenant_id: mk_core::types::TenantId::from_str("test-tenant").unwrap(),
             user_id: mk_core::types::UserId::from_str("test-user").unwrap(),
-            agent_id: None,
+            agent_id: None
         }
     }
 
@@ -961,15 +961,15 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let agent_provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         let session_provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
 
         manager
@@ -989,7 +989,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::Agent,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         let session_entry = MemoryEntry {
@@ -1002,7 +1002,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1030,9 +1030,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -1046,7 +1046,7 @@ pub(crate) mod tests {
             importance_score: Some(0.5),
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1076,9 +1076,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -1092,7 +1092,7 @@ pub(crate) mod tests {
             importance_score: Some(0.5),
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1112,7 +1112,7 @@ pub(crate) mod tests {
             score: 0.2,
             reasoning: Some("Very helpful".to_string()),
             agent_id: None,
-            timestamp: 0,
+            timestamp: 0
         };
 
         manager
@@ -1159,9 +1159,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
 
         manager.register_provider(MemoryLayer::User, provider).await;
@@ -1180,7 +1180,7 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         let entry_low_score = MemoryEntry {
@@ -1197,7 +1197,7 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1231,9 +1231,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
 
         manager.register_provider(MemoryLayer::User, provider).await;
@@ -1248,7 +1248,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1271,9 +1271,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -1287,7 +1287,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1313,9 +1313,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -1329,7 +1329,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1354,15 +1354,15 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let mock_session: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         let mock_project: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         manager
             .register_provider(MemoryLayer::Session, mock_session)
@@ -1381,7 +1381,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1393,7 +1393,7 @@ pub(crate) mod tests {
                 ctx.clone(),
                 "session_mem",
                 MemoryLayer::Session,
-                MemoryLayer::Project,
+                MemoryLayer::Project
             )
             .await
             .unwrap();
@@ -1411,15 +1411,15 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let agent_provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         let user_provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
 
         manager
@@ -1443,7 +1443,7 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         let user_entry = MemoryEntry {
@@ -1460,7 +1460,7 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1498,11 +1498,11 @@ pub(crate) mod tests {
             async fn analyze_drift(
                 &self,
                 _c: &str,
-                _p: &[mk_core::types::Policy],
+                _p: &[mk_core::types::Policy]
             ) -> Result<ValidationResult, Self::Error> {
                 Ok(ValidationResult {
                     is_valid: true,
-                    violations: vec![],
+                    violations: vec![]
                 })
             }
         }
@@ -1513,20 +1513,20 @@ pub(crate) mod tests {
                 promotion_threshold: 0.5,
                 decay_interval_secs: 86400,
                 decay_rate: 0.05,
-                optimization_trigger_count: 100,
+                optimization_trigger_count: 100
             });
         let ctx = test_ctx();
         let mock_session: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         let mock_project: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         manager
             .register_provider(MemoryLayer::Session, mock_session)
@@ -1549,7 +1549,7 @@ pub(crate) mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1571,9 +1571,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
 
         manager.register_provider(MemoryLayer::User, provider).await;
@@ -1600,14 +1600,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry,
+                _e: MemoryEntry
             ) -> Result<String, Self::Error> {
                 Ok("id".to_string())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str,
+                _id: &str
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -1616,21 +1616,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>,
+                _f: HashMap<String, serde_json::Value>
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("search failed".into())
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry,
+                _e: MemoryEntry
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str,
+                _id: &str
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -1639,7 +1639,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>,
+                _c: Option<String>
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Ok((vec![], None))
             }
@@ -1674,11 +1674,11 @@ pub(crate) mod tests {
             async fn analyze_drift(
                 &self,
                 _c: &str,
-                _p: &[mk_core::types::Policy],
+                _p: &[mk_core::types::Policy]
             ) -> Result<ValidationResult, Self::Error> {
                 Ok(ValidationResult {
                     is_valid: true,
-                    violations: vec![],
+                    violations: vec![]
                 })
             }
         }
@@ -1689,20 +1689,20 @@ pub(crate) mod tests {
                 promotion_threshold: 0.5,
                 decay_interval_secs: 86400,
                 decay_rate: 0.05,
-                optimization_trigger_count: 100,
+                optimization_trigger_count: 100
             });
         let ctx = test_ctx();
         let mock_agent: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         let mock_user: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         manager
             .register_provider(MemoryLayer::Agent, mock_agent)
@@ -1725,7 +1725,7 @@ pub(crate) mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1754,9 +1754,9 @@ pub(crate) mod tests {
 
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -1774,7 +1774,7 @@ pub(crate) mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         manager
@@ -1811,7 +1811,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         let result = manager.add_to_layer(ctx, MemoryLayer::User, entry).await;
@@ -1831,14 +1831,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry,
+                _e: MemoryEntry
             ) -> Result<String, Self::Error> {
                 Ok("id".into())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str,
+                _id: &str
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -1847,21 +1847,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>,
+                _f: HashMap<String, serde_json::Value>
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("search failed".into())
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry,
+                _e: MemoryEntry
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str,
+                _id: &str
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -1870,7 +1870,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>,
+                _c: Option<String>
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Ok((vec![], None))
             }
@@ -1898,14 +1898,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry,
+                _e: MemoryEntry
             ) -> Result<String, Self::Error> {
                 Ok("id".into())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str,
+                _id: &str
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -1914,21 +1914,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>,
+                _f: HashMap<String, serde_json::Value>
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("list failed".into())
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry,
+                _e: MemoryEntry
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str,
+                _id: &str
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -1937,7 +1937,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>,
+                _c: Option<String>
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Err("list failed".into())
             }
@@ -1964,14 +1964,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry,
+                _e: MemoryEntry
             ) -> Result<String, Self::Error> {
                 Err("add failed".into())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str,
+                _id: &str
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -1980,21 +1980,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>,
+                _f: HashMap<String, serde_json::Value>
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Ok(vec![])
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry,
+                _e: MemoryEntry
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str,
+                _id: &str
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -2003,7 +2003,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>,
+                _c: Option<String>
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Ok((vec![], None))
             }
@@ -2025,7 +2025,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
 
         let result = manager.add_to_layer(ctx, MemoryLayer::User, entry).await;
@@ -2039,14 +2039,14 @@ pub(crate) mod tests {
             promotion_threshold: 0.8,
             decay_interval_secs: 3600,
             decay_rate: 0.1,
-            optimization_trigger_count: 100,
+            optimization_trigger_count: 100
         });
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -2063,7 +2063,7 @@ pub(crate) mod tests {
             importance_score: Some(1.0),
             metadata: HashMap::new(),
             created_at,
-            updated_at: created_at,
+            updated_at: created_at
         };
 
         manager
@@ -2115,11 +2115,11 @@ pub(crate) mod tests {
             async fn analyze_drift(
                 &self,
                 _c: &str,
-                _p: &[mk_core::types::Policy],
+                _p: &[mk_core::types::Policy]
             ) -> Result<ValidationResult, Self::Error> {
                 Ok(ValidationResult {
                     is_valid: true,
-                    violations: vec![],
+                    violations: vec![]
                 })
             }
         }
@@ -2130,15 +2130,15 @@ pub(crate) mod tests {
                 promotion_threshold: 0.8,
                 decay_interval_secs: 3600,
                 decay_rate: 0.1,
-                optimization_trigger_count: 100,
+                optimization_trigger_count: 100
             });
 
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -2155,7 +2155,7 @@ pub(crate) mod tests {
                 importance_score: Some(0.3),
                 metadata: HashMap::new(),
                 created_at: 0,
-                updated_at: 0,
+                updated_at: 0
             };
 
             if i == 0 {
@@ -2170,11 +2170,11 @@ pub(crate) mod tests {
                             score: 0.1,
                             reasoning: Some("Test reward".to_string()),
                             agent_id: None,
-                            timestamp: 0,
+                            timestamp: 0
                         }),
                         reasoning: None,
-                        timestamp: 0,
-                    }],
+                        timestamp: 0
+                    }]
                 );
             }
 
@@ -2224,11 +2224,11 @@ pub(crate) mod tests {
             async fn analyze_drift(
                 &self,
                 _c: &str,
-                _p: &[mk_core::types::Policy],
+                _p: &[mk_core::types::Policy]
             ) -> Result<ValidationResult, Self::Error> {
                 Ok(ValidationResult {
                     is_valid: true,
-                    violations: vec![],
+                    violations: vec![]
                 })
             }
         }
@@ -2239,15 +2239,15 @@ pub(crate) mod tests {
                 promotion_threshold: 0.8,
                 decay_interval_secs: 3600,
                 decay_rate: 0.1,
-                optimization_trigger_count: 10,
+                optimization_trigger_count: 10
             });
 
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>,
+                    Error = Box<dyn std::error::Error + Send + Sync>
                 > + Send
-                + Sync,
+                + Sync
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -2262,7 +2262,7 @@ pub(crate) mod tests {
                 importance_score: Some(0.3),
                 metadata: HashMap::new(),
                 created_at: 0,
-                updated_at: 0,
+                updated_at: 0
             };
 
             manager
@@ -2393,7 +2393,7 @@ pub(crate) mod tests {
             importance_score: None,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0,
+            updated_at: 0
         };
         let result = manager
             .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
@@ -2423,7 +2423,7 @@ pub(crate) mod tests {
                 ctx.clone(),
                 "TRIGGER_FAILURE",
                 MemoryLayer::Session,
-                MemoryLayer::Project,
+                MemoryLayer::Project
             )
             .await;
         assert!(result.is_err());

@@ -12,7 +12,7 @@ mod tests {
         async fn reason(
             &self,
             query: &str,
-            _context: Option<&str>,
+            _context: Option<&str>
         ) -> anyhow::Result<ReasoningTrace> {
             Ok(ReasoningTrace {
                 strategy: ReasoningStrategy::Targeted,
@@ -20,7 +20,7 @@ mod tests {
                 refined_query: Some(query.to_string()),
                 start_time: Utc::now(),
                 end_time: Utc::now(),
-                metadata: std::collections::HashMap::new(),
+                metadata: std::collections::HashMap::new()
             })
         }
     }

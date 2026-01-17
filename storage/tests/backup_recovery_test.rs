@@ -1,6 +1,6 @@
 use storage::graph_duckdb::{
     BackupConfig, BackupResult, DuckDbGraphConfig, DuckDbGraphStore, GraphError, RecoveryResult,
-    SnapshotMetadata,
+    SnapshotMetadata
 };
 
 #[test]
@@ -20,7 +20,7 @@ fn test_backup_config_custom() {
         retention_count: 48,
         retention_max_age_secs: 86400 * 14,
         auto_backup_enabled: true,
-        backup_prefix: "custom-backups".to_string(),
+        backup_prefix: "custom-backups".to_string()
     };
     assert_eq!(config.snapshot_interval_secs, 1800);
     assert_eq!(config.retention_count, 48);
@@ -38,7 +38,7 @@ fn test_snapshot_metadata_serialization() {
         checksum: "abc123".to_string(),
         node_count: 100,
         edge_count: 50,
-        schema_version: 1,
+        schema_version: 1
     };
 
     let json = serde_json::to_string(&metadata).unwrap();
@@ -57,7 +57,7 @@ fn test_backup_result_fields() {
         s3_key: "backups/tenant/snapshot.parquet".to_string(),
         size_bytes: 2048,
         duration_ms: 150,
-        checksum: "def456".to_string(),
+        checksum: "def456".to_string()
     };
 
     assert_eq!(result.snapshot_id, "snap-456");
@@ -71,7 +71,7 @@ fn test_recovery_result_fields() {
         snapshot_id: "snap-789".to_string(),
         nodes_restored: 100,
         edges_restored: 50,
-        duration_ms: 200,
+        duration_ms: 200
     };
 
     assert_eq!(result.snapshot_id, "snap-789");
@@ -179,7 +179,7 @@ fn test_backup_config_retention_calculations() {
         retention_count: 24,
         retention_max_age_secs: 86400,
         auto_backup_enabled: true,
-        backup_prefix: "backups".to_string(),
+        backup_prefix: "backups".to_string()
     };
 
     let expected_daily_snapshots = 86400 / config.snapshot_interval_secs;
