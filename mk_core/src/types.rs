@@ -266,7 +266,8 @@ pub enum KnowledgeType {
     Adr,
     Policy,
     Pattern,
-    Spec
+    Spec,
+    Hindsight
 }
 
 /// Knowledge status
@@ -425,6 +426,7 @@ pub struct LayerSummary {
     pub token_count: u32,
     pub generated_at: i64,
     pub source_hash: String,
+    pub content_hash: Option<String>,
     pub personalized: bool,
     pub personalization_context: Option<String>
 }
@@ -441,6 +443,48 @@ pub struct SummaryConfig {
 }
 
 pub type ContextVector = Vec<f32>;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorSignature {
+    pub error_type: String,
+    pub message_pattern: String,
+    pub stack_patterns: Vec<String>,
+    pub context_patterns: Vec<String>,
+    pub embedding: Option<Vec<f32>>
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeChange {
+    pub file_path: String,
+    pub diff: String,
+    pub description: Option<String>
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Resolution {
+    pub id: String,
+    pub error_signature_id: String,
+    pub description: String,
+    pub changes: Vec<CodeChange>,
+    pub success_rate: f32,
+    pub application_count: u32,
+    pub last_success_at: i64
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HindsightNote {
+    pub id: String,
+    pub error_signature: ErrorSignature,
+    pub resolutions: Vec<Resolution>,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub created_at: i64,
+    pub updated_at: i64
+}
 
 #[derive(
     Debug,
@@ -488,6 +532,51 @@ pub struct MemoryEntry {
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub created_at: i64,
     pub updated_at: i64
+}
+
+impl MemoryEntry {
+    pub fn needs_summary_update(&self, config: &SummaryConfig, current_time: i64) -> bool {
+        use sha2::{Digest, Sha256};
+
+        for depth in &config.depths {
+            if let Some(summary) = self.summaries.get(depth) {
+                let content_hash = hex::encode(Sha256::digest(self.content.as_bytes()));
+                let content_changed = summary.source_hash != content_hash;
+
+                if content_changed {
+                    return true;
+                }
+
+                if config.skip_if_unchanged {
+                    continue;
+                }
+
+                if let Some(interval_secs) = config.update_interval_secs {
+                    let elapsed = current_time - summary.generated_at;
+                    if elapsed >= interval_secs as i64 {
+                        return true;
+                    }
+                }
+            } else {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn compute_content_hash(&self) -> String {
+        use sha2::{Digest, Sha256};
+        hex::encode(Sha256::digest(self.content.as_bytes()))
+    }
+
+    pub fn compute_content_hash_xxh64(&self) -> String {
+        compute_xxhash64(self.content.as_bytes())
+    }
+}
+
+pub fn compute_xxhash64(data: &[u8]) -> String {
+    use xxhash_rust::xxh64::xxh64;
+    format!("{:016x}", xxh64(data, 0))
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -2355,5 +2444,746 @@ mod tests {
         assert_eq!(state.idempotency_key, "idempotency-key-123");
         assert_eq!(state.tenant_id, tenant_id);
         assert!(state.processed_at > 0);
+    }
+
+    // ==========================================================================
+    // CCA Types Tests (Phase 1.1.5)
+    // ==========================================================================
+
+    #[test]
+    fn test_summary_depth_serialization() {
+        let sentence = SummaryDepth::Sentence;
+        let json = serde_json::to_string(&sentence).unwrap();
+        assert_eq!(json, "\"sentence\"");
+
+        let paragraph = SummaryDepth::Paragraph;
+        let json = serde_json::to_string(&paragraph).unwrap();
+        assert_eq!(json, "\"paragraph\"");
+
+        let detailed = SummaryDepth::Detailed;
+        let json = serde_json::to_string(&detailed).unwrap();
+        assert_eq!(json, "\"detailed\"");
+    }
+
+    #[test]
+    fn test_summary_depth_deserialization() {
+        let sentence: SummaryDepth = serde_json::from_str("\"sentence\"").unwrap();
+        assert_eq!(sentence, SummaryDepth::Sentence);
+
+        let paragraph: SummaryDepth = serde_json::from_str("\"paragraph\"").unwrap();
+        assert_eq!(paragraph, SummaryDepth::Paragraph);
+
+        let detailed: SummaryDepth = serde_json::from_str("\"detailed\"").unwrap();
+        assert_eq!(detailed, SummaryDepth::Detailed);
+    }
+
+    #[test]
+    fn test_summary_depth_hash_key() {
+        let mut map = std::collections::HashMap::new();
+        map.insert(SummaryDepth::Sentence, "short");
+        map.insert(SummaryDepth::Paragraph, "medium");
+        map.insert(SummaryDepth::Detailed, "long");
+
+        assert_eq!(map.get(&SummaryDepth::Sentence), Some(&"short"));
+        assert_eq!(map.get(&SummaryDepth::Paragraph), Some(&"medium"));
+        assert_eq!(map.get(&SummaryDepth::Detailed), Some(&"long"));
+        assert_eq!(map.len(), 3);
+    }
+
+    #[test]
+    fn test_layer_summary_creation() {
+        let summary = LayerSummary {
+            depth: SummaryDepth::Sentence,
+            content: "This is a one-sentence summary.".to_string(),
+            token_count: 8,
+            generated_at: 1705500000,
+            source_hash: "abc123def456".to_string(),
+            content_hash: None,
+            personalized: false,
+            personalization_context: None
+        };
+
+        assert_eq!(summary.depth, SummaryDepth::Sentence);
+        assert_eq!(summary.content, "This is a one-sentence summary.");
+        assert_eq!(summary.token_count, 8);
+        assert_eq!(summary.source_hash, "abc123def456");
+        assert!(!summary.personalized);
+        assert!(summary.personalization_context.is_none());
+    }
+
+    #[test]
+    fn test_layer_summary_with_personalization() {
+        let summary = LayerSummary {
+            depth: SummaryDepth::Detailed,
+            content: "Detailed summary for backend developers...".to_string(),
+            token_count: 150,
+            generated_at: 1705500000,
+            source_hash: "hash789".to_string(),
+            content_hash: None,
+            personalized: true,
+            personalization_context: Some("backend developer, Rust experience".to_string())
+        };
+
+        assert!(summary.personalized);
+        assert_eq!(
+            summary.personalization_context,
+            Some("backend developer, Rust experience".to_string())
+        );
+    }
+
+    #[test]
+    fn test_layer_summary_serialization_roundtrip() {
+        let summary = LayerSummary {
+            depth: SummaryDepth::Paragraph,
+            content: "A paragraph-length summary explaining the concept.".to_string(),
+            token_count: 42,
+            generated_at: 1705500000,
+            source_hash: "source_hash_value".to_string(),
+            content_hash: None,
+            personalized: true,
+            personalization_context: Some("security focus".to_string())
+        };
+
+        let json = serde_json::to_string(&summary).unwrap();
+        let deserialized: LayerSummary = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(summary, deserialized);
+    }
+
+    #[test]
+    fn test_layer_summary_json_structure() {
+        let summary = LayerSummary {
+            depth: SummaryDepth::Sentence,
+            content: "Summary".to_string(),
+            token_count: 1,
+            generated_at: 1000,
+            source_hash: "hash".to_string(),
+            content_hash: None,
+            personalized: false,
+            personalization_context: None
+        };
+
+        let json: serde_json::Value = serde_json::to_value(&summary).unwrap();
+
+        assert!(json.get("depth").is_some());
+        assert!(json.get("content").is_some());
+        assert!(json.get("tokenCount").is_some());
+        assert!(json.get("generatedAt").is_some());
+        assert!(json.get("sourceHash").is_some());
+        assert!(json.get("personalized").is_some());
+        assert!(json.get("personalizationContext").is_some());
+    }
+
+    #[test]
+    fn test_summary_config_creation() {
+        let config = SummaryConfig {
+            layer: MemoryLayer::Project,
+            update_interval_secs: Some(3600),
+            update_on_changes: Some(10),
+            skip_if_unchanged: true,
+            personalized: false,
+            depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph]
+        };
+
+        assert_eq!(config.layer, MemoryLayer::Project);
+        assert_eq!(config.update_interval_secs, Some(3600));
+        assert_eq!(config.update_on_changes, Some(10));
+        assert!(config.skip_if_unchanged);
+        assert!(!config.personalized);
+        assert_eq!(config.depths.len(), 2);
+    }
+
+    #[test]
+    fn test_summary_config_time_based_trigger() {
+        let config = SummaryConfig {
+            layer: MemoryLayer::Session,
+            update_interval_secs: Some(300),
+            update_on_changes: None,
+            skip_if_unchanged: true,
+            personalized: false,
+            depths: vec![SummaryDepth::Sentence]
+        };
+
+        assert!(config.update_interval_secs.is_some());
+        assert!(config.update_on_changes.is_none());
+    }
+
+    #[test]
+    fn test_summary_config_change_based_trigger() {
+        let config = SummaryConfig {
+            layer: MemoryLayer::Team,
+            update_interval_secs: None,
+            update_on_changes: Some(5),
+            skip_if_unchanged: false,
+            personalized: true,
+            depths: vec![SummaryDepth::Detailed]
+        };
+
+        assert!(config.update_interval_secs.is_none());
+        assert_eq!(config.update_on_changes, Some(5));
+    }
+
+    #[test]
+    fn test_summary_config_serialization_roundtrip() {
+        let config = SummaryConfig {
+            layer: MemoryLayer::Company,
+            update_interval_secs: Some(86400),
+            update_on_changes: Some(100),
+            skip_if_unchanged: true,
+            personalized: true,
+            depths: vec![
+                SummaryDepth::Sentence,
+                SummaryDepth::Paragraph,
+                SummaryDepth::Detailed,
+            ]
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: SummaryConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(config, deserialized);
+    }
+
+    #[test]
+    fn test_summary_config_json_structure() {
+        let config = SummaryConfig {
+            layer: MemoryLayer::User,
+            update_interval_secs: Some(600),
+            update_on_changes: None,
+            skip_if_unchanged: false,
+            personalized: true,
+            depths: vec![SummaryDepth::Sentence]
+        };
+
+        let json: serde_json::Value = serde_json::to_value(&config).unwrap();
+
+        assert!(json.get("layer").is_some());
+        assert!(json.get("updateIntervalSecs").is_some());
+        assert!(json.get("updateOnChanges").is_some());
+        assert!(json.get("skipIfUnchanged").is_some());
+        assert!(json.get("personalized").is_some());
+        assert!(json.get("depths").is_some());
+    }
+
+    #[test]
+    fn test_context_vector_type() {
+        let vector: ContextVector = vec![0.1, 0.2, 0.3, 0.4, 0.5];
+        assert_eq!(vector.len(), 5);
+        assert_eq!(vector[0], 0.1);
+    }
+
+    #[test]
+    fn test_memory_entry_with_summaries() {
+        let mut summaries = std::collections::HashMap::new();
+        summaries.insert(
+            SummaryDepth::Sentence,
+            LayerSummary {
+                depth: SummaryDepth::Sentence,
+                content: "Short summary.".to_string(),
+                token_count: 3,
+                generated_at: 1705500000,
+                source_hash: "hash1".to_string(),
+                content_hash: None,
+                personalized: false,
+                personalization_context: None
+            }
+        );
+        summaries.insert(
+            SummaryDepth::Paragraph,
+            LayerSummary {
+                depth: SummaryDepth::Paragraph,
+                content: "This is a longer paragraph summary with more details.".to_string(),
+                token_count: 25,
+                generated_at: 1705500000,
+                source_hash: "hash1".to_string(),
+                content_hash: None,
+                personalized: false,
+                personalization_context: None
+            }
+        );
+
+        let entry = MemoryEntry {
+            id: "mem_001".to_string(),
+            content: "Original content that was summarized.".to_string(),
+            embedding: Some(vec![0.1, 0.2, 0.3]),
+            layer: MemoryLayer::Project,
+            summaries,
+            context_vector: Some(vec![0.4, 0.5, 0.6]),
+            importance_score: Some(0.85),
+            metadata: std::collections::HashMap::new(),
+            created_at: 1705500000,
+            updated_at: 1705500000
+        };
+
+        assert_eq!(entry.summaries.len(), 2);
+        assert!(entry.summaries.contains_key(&SummaryDepth::Sentence));
+        assert!(entry.summaries.contains_key(&SummaryDepth::Paragraph));
+        assert!(entry.context_vector.is_some());
+        assert_eq!(entry.context_vector.as_ref().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_memory_entry_without_summaries() {
+        let entry = MemoryEntry {
+            id: "mem_002".to_string(),
+            content: "Content without summaries yet.".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Session,
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: std::collections::HashMap::new(),
+            created_at: 1705500000,
+            updated_at: 1705500000
+        };
+
+        assert!(entry.summaries.is_empty());
+        assert!(entry.context_vector.is_none());
+    }
+
+    #[test]
+    fn test_memory_entry_serialization_with_summaries() {
+        let mut summaries = std::collections::HashMap::new();
+        summaries.insert(
+            SummaryDepth::Detailed,
+            LayerSummary {
+                depth: SummaryDepth::Detailed,
+                content: "Detailed summary content.".to_string(),
+                token_count: 50,
+                generated_at: 1705500000,
+                source_hash: "hash_abc".to_string(),
+                content_hash: None,
+                personalized: true,
+                personalization_context: Some("developer".to_string())
+            }
+        );
+
+        let entry = MemoryEntry {
+            id: "test".to_string(),
+            content: "Test content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            summaries,
+            context_vector: Some(vec![1.0, 2.0]),
+            importance_score: None,
+            metadata: std::collections::HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        let json = serde_json::to_string(&entry).unwrap();
+        let deserialized: MemoryEntry = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(entry.id, deserialized.id);
+        assert_eq!(entry.summaries.len(), deserialized.summaries.len());
+        assert_eq!(entry.context_vector, deserialized.context_vector);
+    }
+
+    #[test]
+    fn test_summary_depth_all_layers_supported() {
+        let layers = vec![
+            MemoryLayer::Agent,
+            MemoryLayer::User,
+            MemoryLayer::Session,
+            MemoryLayer::Project,
+            MemoryLayer::Team,
+            MemoryLayer::Org,
+            MemoryLayer::Company,
+        ];
+
+        for layer in layers {
+            let config = SummaryConfig {
+                layer,
+                update_interval_secs: Some(3600),
+                update_on_changes: None,
+                skip_if_unchanged: true,
+                personalized: false,
+                depths: vec![SummaryDepth::Sentence]
+            };
+
+            let json = serde_json::to_string(&config).unwrap();
+            let deserialized: SummaryConfig = serde_json::from_str(&json).unwrap();
+            assert_eq!(config.layer, deserialized.layer);
+        }
+    }
+
+    #[test]
+    fn test_memory_entry_needs_summary_update_missing_summary() {
+        let entry = MemoryEntry {
+            id: "test".to_string(),
+            content: "Test content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Project,
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: std::collections::HashMap::new(),
+            created_at: 1000,
+            updated_at: 1000
+        };
+
+        let config = SummaryConfig {
+            layer: MemoryLayer::Project,
+            update_interval_secs: Some(3600),
+            update_on_changes: None,
+            skip_if_unchanged: true,
+            personalized: false,
+            depths: vec![SummaryDepth::Sentence]
+        };
+
+        assert!(entry.needs_summary_update(&config, 2000));
+    }
+
+    #[test]
+    fn test_memory_entry_needs_summary_update_stale_time() {
+        let content = "Test content";
+        let content_hash = {
+            use sha2::{Digest, Sha256};
+            hex::encode(Sha256::digest(content.as_bytes()))
+        };
+
+        let mut summaries = std::collections::HashMap::new();
+        summaries.insert(
+            SummaryDepth::Sentence,
+            LayerSummary {
+                depth: SummaryDepth::Sentence,
+                content: "Summary".to_string(),
+                token_count: 1,
+                generated_at: 1000,
+                source_hash: content_hash,
+                content_hash: None,
+                personalized: false,
+                personalization_context: None
+            }
+        );
+
+        let entry = MemoryEntry {
+            id: "test".to_string(),
+            content: content.to_string(),
+            embedding: None,
+            layer: MemoryLayer::Project,
+            summaries,
+            context_vector: None,
+            importance_score: None,
+            metadata: std::collections::HashMap::new(),
+            created_at: 1000,
+            updated_at: 1000
+        };
+
+        let config = SummaryConfig {
+            layer: MemoryLayer::Project,
+            update_interval_secs: Some(3600),
+            update_on_changes: None,
+            skip_if_unchanged: false,
+            personalized: false,
+            depths: vec![SummaryDepth::Sentence]
+        };
+
+        assert!(!entry.needs_summary_update(&config, 2000));
+        assert!(entry.needs_summary_update(&config, 5000));
+    }
+
+    #[test]
+    fn test_memory_entry_needs_summary_update_content_changed() {
+        let mut summaries = std::collections::HashMap::new();
+        summaries.insert(
+            SummaryDepth::Sentence,
+            LayerSummary {
+                depth: SummaryDepth::Sentence,
+                content: "Summary".to_string(),
+                token_count: 1,
+                generated_at: 1000,
+                source_hash: "old_hash".to_string(),
+                content_hash: None,
+                personalized: false,
+                personalization_context: None
+            }
+        );
+
+        let entry = MemoryEntry {
+            id: "test".to_string(),
+            content: "New content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::Project,
+            summaries,
+            context_vector: None,
+            importance_score: None,
+            metadata: std::collections::HashMap::new(),
+            created_at: 1000,
+            updated_at: 2000
+        };
+
+        let config = SummaryConfig {
+            layer: MemoryLayer::Project,
+            update_interval_secs: Some(3600),
+            update_on_changes: None,
+            skip_if_unchanged: true,
+            personalized: false,
+            depths: vec![SummaryDepth::Sentence]
+        };
+
+        assert!(entry.needs_summary_update(&config, 1500));
+    }
+
+    #[test]
+    fn test_memory_entry_needs_summary_update_no_update_needed() {
+        let content = "Same content";
+        let content_hash = {
+            use sha2::{Digest, Sha256};
+            hex::encode(Sha256::digest(content.as_bytes()))
+        };
+
+        let mut summaries = std::collections::HashMap::new();
+        summaries.insert(
+            SummaryDepth::Sentence,
+            LayerSummary {
+                depth: SummaryDepth::Sentence,
+                content: "Summary".to_string(),
+                token_count: 1,
+                generated_at: 1000,
+                source_hash: content_hash,
+                content_hash: None,
+                personalized: false,
+                personalization_context: None
+            }
+        );
+
+        let entry = MemoryEntry {
+            id: "test".to_string(),
+            content: content.to_string(),
+            embedding: None,
+            layer: MemoryLayer::Project,
+            summaries,
+            context_vector: None,
+            importance_score: None,
+            metadata: std::collections::HashMap::new(),
+            created_at: 1000,
+            updated_at: 1000
+        };
+
+        let config = SummaryConfig {
+            layer: MemoryLayer::Project,
+            update_interval_secs: Some(3600),
+            update_on_changes: None,
+            skip_if_unchanged: true,
+            personalized: false,
+            depths: vec![SummaryDepth::Sentence]
+        };
+
+        assert!(!entry.needs_summary_update(&config, 2000));
+    }
+
+    #[test]
+    fn test_memory_entry_compute_content_hash() {
+        let entry = MemoryEntry {
+            id: "test".to_string(),
+            content: "Test content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: std::collections::HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        let hash = entry.compute_content_hash();
+        assert!(!hash.is_empty());
+        assert_eq!(hash.len(), 64);
+
+        let hash2 = entry.compute_content_hash();
+        assert_eq!(hash, hash2);
+    }
+
+    #[test]
+    fn test_memory_entry_compute_content_hash_different_content() {
+        let entry1 = MemoryEntry {
+            id: "test1".to_string(),
+            content: "Content A".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: std::collections::HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        let entry2 = MemoryEntry {
+            id: "test2".to_string(),
+            content: "Content B".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: std::collections::HashMap::new(),
+            created_at: 0,
+            updated_at: 0
+        };
+
+        assert_ne!(entry1.compute_content_hash(), entry2.compute_content_hash());
+    }
+
+    #[test]
+    fn test_knowledge_type_hindsight_variant() {
+        let hindsight = KnowledgeType::Hindsight;
+        let json = serde_json::to_string(&hindsight).unwrap();
+        assert_eq!(json, "\"hindsight\"");
+
+        let parsed: KnowledgeType = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, KnowledgeType::Hindsight);
+    }
+
+    #[test]
+    fn test_error_signature_creation() {
+        let sig = ErrorSignature {
+            error_type: "NullPointerException".to_string(),
+            message_pattern: "Cannot read property '.*' of undefined".to_string(),
+            stack_patterns: vec!["at UserService".to_string(), "at AuthHandler".to_string()],
+            context_patterns: vec!["typescript".to_string(), "react".to_string()],
+            embedding: Some(vec![0.1, 0.2, 0.3])
+        };
+
+        assert_eq!(sig.error_type, "NullPointerException");
+        assert_eq!(sig.stack_patterns.len(), 2);
+        assert!(sig.embedding.is_some());
+    }
+
+    #[test]
+    fn test_error_signature_serialization() {
+        let sig = ErrorSignature {
+            error_type: "TypeError".to_string(),
+            message_pattern: ".*is not a function".to_string(),
+            stack_patterns: vec![],
+            context_patterns: vec!["javascript".to_string()],
+            embedding: None
+        };
+
+        let json = serde_json::to_string(&sig).unwrap();
+        assert!(json.contains("\"errorType\""));
+        assert!(json.contains("\"messagePattern\""));
+
+        let parsed: ErrorSignature = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.error_type, sig.error_type);
+    }
+
+    #[test]
+    fn test_code_change_creation() {
+        let change = CodeChange {
+            file_path: "src/auth.rs".to_string(),
+            diff: "+ if let Some(token) = token_option {\n+     // handle\n+ }".to_string(),
+            description: Some("Added null check for token".to_string())
+        };
+
+        assert_eq!(change.file_path, "src/auth.rs");
+        assert!(change.description.is_some());
+    }
+
+    #[test]
+    fn test_resolution_creation() {
+        let resolution = Resolution {
+            id: "res_001".to_string(),
+            error_signature_id: "sig_001".to_string(),
+            description: "Add null check before accessing token fields".to_string(),
+            changes: vec![CodeChange {
+                file_path: "src/auth.rs".to_string(),
+                diff: "+ if token.is_some()".to_string(),
+                description: None
+            }],
+            success_rate: 0.95,
+            application_count: 12,
+            last_success_at: 1705500000
+        };
+
+        assert_eq!(resolution.success_rate, 0.95);
+        assert_eq!(resolution.application_count, 12);
+        assert_eq!(resolution.changes.len(), 1);
+    }
+
+    #[test]
+    fn test_resolution_serialization() {
+        let resolution = Resolution {
+            id: "res_002".to_string(),
+            error_signature_id: "sig_002".to_string(),
+            description: "Fix".to_string(),
+            changes: vec![],
+            success_rate: 1.0,
+            application_count: 5,
+            last_success_at: 1705600000
+        };
+
+        let json = serde_json::to_string(&resolution).unwrap();
+        assert!(json.contains("\"successRate\""));
+        assert!(json.contains("\"applicationCount\""));
+
+        let parsed: Resolution = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, resolution.id);
+    }
+
+    #[test]
+    fn test_hindsight_note_creation() {
+        let note = HindsightNote {
+            id: "hn_001".to_string(),
+            error_signature: ErrorSignature {
+                error_type: "CompileError".to_string(),
+                message_pattern: "missing lifetime specifier".to_string(),
+                stack_patterns: vec![],
+                context_patterns: vec!["rust".to_string()],
+                embedding: None
+            },
+            resolutions: vec![Resolution {
+                id: "res_001".to_string(),
+                error_signature_id: "sig_001".to_string(),
+                description: "Add explicit lifetime annotation".to_string(),
+                changes: vec![],
+                success_rate: 0.88,
+                application_count: 8,
+                last_success_at: 1705500000
+            }],
+            content: "# Rust Lifetime Error\n\nWhen encountering...".to_string(),
+            tags: vec![
+                "rust".to_string(),
+                "lifetimes".to_string(),
+                "borrow-checker".to_string(),
+            ],
+            created_at: 1705400000,
+            updated_at: 1705500000
+        };
+
+        assert_eq!(note.id, "hn_001");
+        assert_eq!(note.resolutions.len(), 1);
+        assert_eq!(note.tags.len(), 3);
+    }
+
+    #[test]
+    fn test_hindsight_note_serialization_roundtrip() {
+        let note = HindsightNote {
+            id: "hn_002".to_string(),
+            error_signature: ErrorSignature {
+                error_type: "RuntimeError".to_string(),
+                message_pattern: "index out of bounds".to_string(),
+                stack_patterns: vec!["at main".to_string()],
+                context_patterns: vec!["rust".to_string()],
+                embedding: Some(vec![0.5, 0.6])
+            },
+            resolutions: vec![],
+            content: "# Array Bounds Error".to_string(),
+            tags: vec!["rust".to_string()],
+            created_at: 1705400000,
+            updated_at: 1705400000
+        };
+
+        let json = serde_json::to_string(&note).unwrap();
+        let parsed: HindsightNote = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.id, note.id);
+        assert_eq!(
+            parsed.error_signature.error_type,
+            note.error_signature.error_type
+        );
+        assert_eq!(parsed.tags, note.tags);
     }
 }

@@ -17,12 +17,16 @@
 //! - Provides clear error messages for invalid configuration
 //! - Thread-safe configuration access
 
+pub mod cca;
 pub mod config;
 pub mod file_loader;
 pub mod hot_reload;
 pub mod loader;
 pub mod precedence;
 
+pub use cca::{
+    CcaConfig, ContextArchitectConfig, HindsightConfig, MetaAgentConfig, NoteTakingConfig
+};
 pub use config::{
     Config, DeploymentConfig, GraphConfig, MemoryConfig, ObservabilityConfig, ProviderConfig,
     SyncConfig, ToolConfig

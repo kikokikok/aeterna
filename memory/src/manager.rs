@@ -1513,7 +1513,8 @@ pub(crate) mod tests {
                 promotion_threshold: 0.5,
                 decay_interval_secs: 86400,
                 decay_rate: 0.05,
-                optimization_trigger_count: 100
+                optimization_trigger_count: 100,
+                layer_summary_configs: std::collections::HashMap::new()
             });
         let ctx = test_ctx();
         let mock_session: Arc<
@@ -1689,7 +1690,8 @@ pub(crate) mod tests {
                 promotion_threshold: 0.5,
                 decay_interval_secs: 86400,
                 decay_rate: 0.05,
-                optimization_trigger_count: 100
+                optimization_trigger_count: 100,
+                layer_summary_configs: std::collections::HashMap::new()
             });
         let ctx = test_ctx();
         let mock_agent: Arc<
@@ -2039,7 +2041,8 @@ pub(crate) mod tests {
             promotion_threshold: 0.8,
             decay_interval_secs: 3600,
             decay_rate: 0.1,
-            optimization_trigger_count: 100
+            optimization_trigger_count: 100,
+            layer_summary_configs: std::collections::HashMap::new()
         });
         let ctx = test_ctx();
         let provider: Arc<
@@ -2130,7 +2133,8 @@ pub(crate) mod tests {
                 promotion_threshold: 0.8,
                 decay_interval_secs: 3600,
                 decay_rate: 0.1,
-                optimization_trigger_count: 100
+                optimization_trigger_count: 100,
+                layer_summary_configs: std::collections::HashMap::new()
             });
 
         let ctx = test_ctx();
@@ -2239,7 +2243,8 @@ pub(crate) mod tests {
                 promotion_threshold: 0.8,
                 decay_interval_secs: 3600,
                 decay_rate: 0.1,
-                optimization_trigger_count: 10
+                optimization_trigger_count: 10,
+                layer_summary_configs: std::collections::HashMap::new()
             });
 
         let ctx = test_ctx();

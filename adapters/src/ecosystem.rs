@@ -447,7 +447,8 @@ mod tests {
                 Arc::new(knowledge::governance::GovernanceEngine::new()),
                 config::config::DeploymentConfig::default(),
                 None,
-                Arc::new(MockPersister)
+                Arc::new(MockPersister),
+                None
             )
             .await
             .unwrap()
@@ -880,7 +881,8 @@ mod tests {
                 Arc::new(knowledge::governance::GovernanceEngine::new()),
                 config::config::DeploymentConfig::default(),
                 None,
-                Arc::new(MockPersister)
+                Arc::new(MockPersister),
+                None
             )
             .await
             .unwrap()

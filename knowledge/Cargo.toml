@@ -35,6 +35,12 @@ utoipa.workspace = true
 reqwest.workspace = true
 uuid.workspace = true
 sqlx.workspace = true
+sha2.workspace = true
+hex = "0.4"
+xxhash-rust.workspace = true
+dashmap.workspace = true
+tokio-retry.workspace = true
+backoff.workspace = true
 
 [dev-dependencies]
 memory.workspace = true

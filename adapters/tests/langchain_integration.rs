@@ -118,7 +118,8 @@ async fn setup_server() -> Arc<McpServer> {
             governance.clone(),
             deployment_config,
             None,
-            Arc::new(MockPersister)
+            Arc::new(MockPersister),
+            None
         )
         .await
         .unwrap()

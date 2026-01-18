@@ -310,7 +310,8 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
             governance_engine.clone(),
             config::config::DeploymentConfig::default(),
             None,
-            Arc::new(MockPersister)
+            Arc::new(MockPersister),
+            None
         )
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))?

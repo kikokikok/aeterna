@@ -359,7 +359,8 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
             Arc::new(knowledge::governance::GovernanceEngine::new()),
             config::config::DeploymentConfig::default(),
             None,
-            persister
+            persister,
+            None
         )
         .await
         .map_err(|e| anyhow::anyhow!(e))?

@@ -55,7 +55,8 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
             Arc::new(knowledge::governance::GovernanceEngine::new()),
             config::config::DeploymentConfig::default(),
             None,
-            persister
+            persister,
+            None
         )
         .await?
     );
