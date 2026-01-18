@@ -275,6 +275,122 @@ impl RedisStorage {
         let key = format!("job_checkpoint:{}:{}", job_name, tenant_id);
         self.delete_key(&key).await
     }
+
+    fn summary_cache_key(
+        tenant_id: &str,
+        layer: &mk_core::types::MemoryLayer,
+        entry_id: &str,
+        depth: &mk_core::types::SummaryDepth
+    ) -> String {
+        format!(
+            "summary:{}:{}:{}:{}",
+            tenant_id,
+            layer.to_string().to_lowercase(),
+            entry_id,
+            serde_json::to_string(depth)
+                .unwrap_or_else(|_| "unknown".to_string())
+                .trim_matches('"')
+        )
+    }
+
+    pub async fn get_summary_cache(
+        &self,
+        tenant_id: &str,
+        layer: &mk_core::types::MemoryLayer,
+        entry_id: &str,
+        depth: &mk_core::types::SummaryDepth
+    ) -> Result<Option<mk_core::types::LayerSummary>, StorageError> {
+        let key = Self::summary_cache_key(tenant_id, layer, entry_id, depth);
+        match self.get(&key).await? {
+            Some(value) => {
+                let summary =
+                    serde_json::from_str(&value).map_err(|e| StorageError::SerializationError {
+                        error_type: "JSON".to_string(),
+                        reason: e.to_string()
+                    })?;
+                Ok(Some(summary))
+            }
+            None => Ok(None)
+        }
+    }
+
+    pub async fn set_summary_cache(
+        &self,
+        tenant_id: &str,
+        layer: &mk_core::types::MemoryLayer,
+        entry_id: &str,
+        summary: &mk_core::types::LayerSummary,
+        ttl_seconds: Option<usize>
+    ) -> Result<(), StorageError> {
+        let key = Self::summary_cache_key(tenant_id, layer, entry_id, &summary.depth);
+        let value =
+            serde_json::to_string(summary).map_err(|e| StorageError::SerializationError {
+                error_type: "JSON".to_string(),
+                reason: e.to_string()
+            })?;
+        self.set(&key, &value, ttl_seconds).await
+    }
+
+    pub async fn invalidate_summary_cache(
+        &self,
+        tenant_id: &str,
+        layer: &mk_core::types::MemoryLayer,
+        entry_id: &str,
+        depth: Option<&mk_core::types::SummaryDepth>
+    ) -> Result<u32, StorageError> {
+        let mut deleted_count = 0u32;
+
+        if let Some(d) = depth {
+            let key = Self::summary_cache_key(tenant_id, layer, entry_id, d);
+            if self.exists_key(&key).await? {
+                self.delete_key(&key).await?;
+                deleted_count = 1;
+            }
+        } else {
+            let depths = [
+                mk_core::types::SummaryDepth::Sentence,
+                mk_core::types::SummaryDepth::Paragraph,
+                mk_core::types::SummaryDepth::Detailed
+            ];
+            for d in &depths {
+                let key = Self::summary_cache_key(tenant_id, layer, entry_id, d);
+                if self.exists_key(&key).await? {
+                    self.delete_key(&key).await?;
+                    deleted_count += 1;
+                }
+            }
+        }
+
+        Ok(deleted_count)
+    }
+
+    pub async fn get_all_summaries_for_entry(
+        &self,
+        tenant_id: &str,
+        layer: &mk_core::types::MemoryLayer,
+        entry_id: &str
+    ) -> Result<
+        std::collections::HashMap<mk_core::types::SummaryDepth, mk_core::types::LayerSummary>,
+        StorageError
+    > {
+        let mut result = std::collections::HashMap::new();
+        let depths = [
+            mk_core::types::SummaryDepth::Sentence,
+            mk_core::types::SummaryDepth::Paragraph,
+            mk_core::types::SummaryDepth::Detailed
+        ];
+
+        for depth in &depths {
+            if let Some(summary) = self
+                .get_summary_cache(tenant_id, layer, entry_id, depth)
+                .await?
+            {
+                result.insert(*depth, summary);
+            }
+        }
+
+        Ok(result)
+    }
 }
 
 #[async_trait]
@@ -821,5 +937,132 @@ mod tests {
         let tenant_id = "acme-corp";
         let stream_key = format!("governance:events:{}", tenant_id);
         assert_eq!(stream_key, "governance:events:acme-corp");
+    }
+
+    #[test]
+    fn test_summary_cache_key_format() {
+        use mk_core::types::{MemoryLayer, SummaryDepth};
+
+        let key = RedisStorage::summary_cache_key(
+            "acme-corp",
+            &MemoryLayer::Project,
+            "entry-123",
+            &SummaryDepth::Sentence
+        );
+        assert_eq!(key, "summary:acme-corp:project:entry-123:sentence");
+
+        let key_para = RedisStorage::summary_cache_key(
+            "tenant-1",
+            &MemoryLayer::Team,
+            "mem-456",
+            &SummaryDepth::Paragraph
+        );
+        assert_eq!(key_para, "summary:tenant-1:team:mem-456:paragraph");
+
+        let key_detailed = RedisStorage::summary_cache_key(
+            "org-x",
+            &MemoryLayer::Company,
+            "entry-789",
+            &SummaryDepth::Detailed
+        );
+        assert_eq!(key_detailed, "summary:org-x:company:entry-789:detailed");
+    }
+
+    #[test]
+    fn test_summary_cache_key_all_layers() {
+        use mk_core::types::{MemoryLayer, SummaryDepth};
+
+        let layers = [
+            (MemoryLayer::Company, "company"),
+            (MemoryLayer::Org, "org"),
+            (MemoryLayer::Team, "team"),
+            (MemoryLayer::Project, "project"),
+            (MemoryLayer::Session, "session"),
+            (MemoryLayer::User, "user"),
+            (MemoryLayer::Agent, "agent")
+        ];
+
+        for (layer, expected_str) in layers {
+            let key = RedisStorage::summary_cache_key("t1", &layer, "e1", &SummaryDepth::Sentence);
+            assert!(
+                key.contains(expected_str),
+                "Key '{}' should contain layer '{}'",
+                key,
+                expected_str
+            );
+        }
+    }
+
+    #[test]
+    fn test_summary_cache_key_all_depths() {
+        use mk_core::types::{MemoryLayer, SummaryDepth};
+
+        let depths = [
+            (SummaryDepth::Sentence, "sentence"),
+            (SummaryDepth::Paragraph, "paragraph"),
+            (SummaryDepth::Detailed, "detailed")
+        ];
+
+        for (depth, expected_str) in depths {
+            let key =
+                RedisStorage::summary_cache_key("tenant", &MemoryLayer::Project, "entry", &depth);
+            assert!(
+                key.contains(expected_str),
+                "Key '{}' should contain depth '{}'",
+                key,
+                expected_str
+            );
+        }
+    }
+
+    #[test]
+    fn test_layer_summary_serialization_roundtrip() {
+        use mk_core::types::{LayerSummary, SummaryDepth};
+
+        let summary = LayerSummary {
+            depth: SummaryDepth::Paragraph,
+            content: "Test summary content".to_string(),
+            token_count: 42,
+            generated_at: 1704067200,
+            source_hash: "abc123def456".to_string(),
+            content_hash: None,
+            personalized: false,
+            personalization_context: None
+        };
+
+        let json = serde_json::to_string(&summary).expect("Serialization should succeed");
+        let parsed: LayerSummary =
+            serde_json::from_str(&json).expect("Deserialization should succeed");
+
+        assert_eq!(parsed.depth, summary.depth);
+        assert_eq!(parsed.content, summary.content);
+        assert_eq!(parsed.token_count, summary.token_count);
+        assert_eq!(parsed.source_hash, summary.source_hash);
+    }
+
+    #[test]
+    fn test_layer_summary_with_personalization() {
+        use mk_core::types::{LayerSummary, SummaryDepth};
+
+        let summary = LayerSummary {
+            depth: SummaryDepth::Detailed,
+            content: "Personalized summary for user".to_string(),
+            token_count: 150,
+            generated_at: 1704067200,
+            source_hash: "hash123".to_string(),
+            content_hash: None,
+            personalized: true,
+            personalization_context: Some("User prefers concise responses".to_string())
+        };
+
+        let json = serde_json::to_string(&summary).expect("Serialization should succeed");
+        let parsed: LayerSummary =
+            serde_json::from_str(&json).expect("Deserialization should succeed");
+
+        assert!(parsed.personalized);
+        assert_eq!(
+            parsed.personalization_context,
+            Some("User prefers concise responses".to_string())
+        );
     }
 }

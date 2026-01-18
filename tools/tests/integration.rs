@@ -185,7 +185,8 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
             Arc::new(knowledge::governance::GovernanceEngine::new()),
             config::config::DeploymentConfig::default(),
             None,
-            Arc::new(MockPersister)
+            Arc::new(MockPersister),
+            None
         )
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))?
@@ -253,7 +254,8 @@ async fn test_server_timeout() -> anyhow::Result<()> {
             Arc::new(knowledge::governance::GovernanceEngine::new()),
             config::config::DeploymentConfig::default(),
             None,
-            Arc::new(MockPersister)
+            Arc::new(MockPersister),
+            None
         )
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))?

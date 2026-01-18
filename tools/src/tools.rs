@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Core trait for implementing MCP (Model Context Protocol) tools.
 ///
@@ -57,7 +58,7 @@ use std::collections::HashMap;
 /// - `input_schema`: JSON Schema defining valid input parameters
 /// - `call`: Async execution method that processes input and returns output
 #[async_trait]
-pub trait Tool: Send + Sync {
+pub trait Tool: Send + Sync + 'static {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
     fn input_schema(&self) -> Value;
@@ -239,8 +240,17 @@ impl ToolError {
 /// - `register`: Registers a tool by its unique name
 /// - `call`: Invokes a registered tool with the given parameters
 /// - `list_tools`: Returns metadata for all registered tools
+#[derive(Clone)]
 pub struct ToolRegistry {
-    tools: HashMap<String, Box<dyn Tool>>
+    tools: HashMap<String, Arc<dyn Tool>>
+}
+
+impl std::fmt::Debug for ToolRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolRegistry")
+            .field("tools", &self.tools.keys().collect::<Vec<_>>())
+            .finish()
+    }
 }
 
 #[allow(clippy::new_without_default)]
@@ -258,6 +268,10 @@ impl ToolRegistry {
     }
 
     pub fn register(&mut self, tool: Box<dyn Tool>) {
+        self.tools.insert(tool.name().to_string(), tool.into());
+    }
+
+    pub fn register_arc(&mut self, tool: Arc<dyn Tool>) {
         self.tools.insert(tool.name().to_string(), tool);
     }
 

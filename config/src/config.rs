@@ -9,6 +9,7 @@
 //! - Follow Microsoft Pragmatic Rust Guidelines
 //! - Include comprehensive M-CANONICAL-DOCS
 
+use crate::cca::CcaConfig;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -21,7 +22,8 @@ use validator::Validate;
 ///
 /// ## Purpose
 /// Provides centralized configuration for the entire Memory-Knowledge system,
-/// including storage providers, sync behavior, MCP tools, and observability.
+/// including storage providers, sync behavior, MCP tools, observability, and
+/// CCA.
 ///
 /// ## Usage
 /// ```rust,no_run
@@ -37,6 +39,7 @@ use validator::Validate;
 /// - `sync`: Configuration for memory-knowledge synchronization
 /// - `tools`: Configuration for MCP server tools
 /// - `observability`: Configuration for metrics and tracing
+/// - `cca`: Configuration for CCA (Confucius Code Agent) capabilities
 ///
 /// ## Validation
 /// All nested configurations must pass their own validation rules.
@@ -68,7 +71,11 @@ pub struct Config {
 
     /// Job coordination configuration (locks, timeouts, checkpoints)
     #[serde(default)]
-    pub job: JobConfig
+    pub job: JobConfig,
+
+    /// CCA (Confucius Code Agent) capabilities configuration
+    #[serde(default)]
+    pub cca: CcaConfig
 }
 
 impl Config {
@@ -835,7 +842,11 @@ pub struct MemoryConfig {
 
     #[serde(default = "default_optimization_trigger_count")]
     #[validate(range(min = 10, max = 1000))]
-    pub optimization_trigger_count: usize
+    pub optimization_trigger_count: usize,
+
+    #[serde(default)]
+    pub layer_summary_configs:
+        std::collections::HashMap<mk_core::types::MemoryLayer, mk_core::types::SummaryConfig>
 }
 
 fn default_promotion_threshold() -> f32 {
@@ -860,7 +871,8 @@ impl Default for MemoryConfig {
             promotion_threshold: default_promotion_threshold(),
             decay_interval_secs: default_decay_interval(),
             decay_rate: default_decay_rate(),
-            optimization_trigger_count: default_optimization_trigger_count()
+            optimization_trigger_count: default_optimization_trigger_count(),
+            layer_summary_configs: std::collections::HashMap::new()
         }
     }
 }

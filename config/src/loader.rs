@@ -94,7 +94,8 @@ pub fn load_from_env() -> Result<Config, Box<dyn std::error::Error>> {
         tools: load_tools_from_env()?,
         observability: load_observability_from_env()?,
         deployment: load_deployment_from_env()?,
-        job: load_job_from_env()?
+        job: load_job_from_env()?,
+        cca: crate::cca::CcaConfig::default()
     };
 
     Ok(config)
@@ -188,7 +189,8 @@ fn load_memory_from_env() -> Result<MemoryConfig, Box<dyn std::error::Error>> {
         promotion_threshold: parse_env("MK_PROMOTION_THRESHOLD").unwrap_or(0.8),
         decay_interval_secs: parse_env("MK_DECAY_INTERVAL_SECS").unwrap_or(86400),
         decay_rate: parse_env("MK_DECAY_RATE").unwrap_or(0.05),
-        optimization_trigger_count: parse_env("MK_OPTIMIZATION_TRIGGER_COUNT").unwrap_or(100)
+        optimization_trigger_count: parse_env("MK_OPTIMIZATION_TRIGGER_COUNT").unwrap_or(100),
+        layer_summary_configs: std::collections::HashMap::new()
     })
 }
 

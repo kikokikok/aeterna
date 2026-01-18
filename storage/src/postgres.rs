@@ -1690,6 +1690,348 @@ impl StorageBackend for PostgresBackend {
     }
 }
 
+impl PostgresBackend {
+    pub async fn create_error_signature(
+        &self,
+        tenant_id: &str,
+        signature: &mk_core::types::ErrorSignature
+    ) -> Result<String, PostgresError> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().timestamp();
+
+        sqlx::query(
+            "INSERT INTO error_signatures (id, tenant_id, error_type, message_pattern, \
+             stack_patterns, context_patterns, embedding, occurrence_count, first_seen_at, \
+             last_seen_at, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"
+        )
+        .bind(&id)
+        .bind(tenant_id)
+        .bind(&signature.error_type)
+        .bind(&signature.message_pattern)
+        .bind(serde_json::to_value(&signature.stack_patterns)?)
+        .bind(serde_json::to_value(&signature.context_patterns)?)
+        .bind(serde_json::to_value(&signature.embedding)?)
+        .bind(1i32)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(id)
+    }
+
+    pub async fn get_error_signature(
+        &self,
+        tenant_id: &str,
+        id: &str
+    ) -> Result<Option<mk_core::types::ErrorSignature>, PostgresError> {
+        let row = sqlx::query(
+            "SELECT error_type, message_pattern, stack_patterns, context_patterns, embedding
+             FROM error_signatures WHERE id = $1 AND tenant_id = $2"
+        )
+        .bind(id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(row) => {
+                let embedding: Option<serde_json::Value> = row.get("embedding");
+                Ok(Some(mk_core::types::ErrorSignature {
+                    error_type: row.get("error_type"),
+                    message_pattern: row.get("message_pattern"),
+                    stack_patterns: serde_json::from_value(row.get("stack_patterns"))?,
+                    context_patterns: serde_json::from_value(row.get("context_patterns"))?,
+                    embedding: embedding.and_then(|v| serde_json::from_value(v).ok())
+                }))
+            }
+            None => Ok(None)
+        }
+    }
+
+    pub async fn delete_error_signature(
+        &self,
+        tenant_id: &str,
+        id: &str
+    ) -> Result<bool, PostgresError> {
+        let result = sqlx::query("DELETE FROM error_signatures WHERE id = $1 AND tenant_id = $2")
+            .bind(id)
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn create_resolution(
+        &self,
+        tenant_id: &str,
+        resolution: &mk_core::types::Resolution
+    ) -> Result<(), PostgresError> {
+        let now = chrono::Utc::now().timestamp();
+
+        sqlx::query(
+            "INSERT INTO resolutions (id, tenant_id, error_signature_id, description, changes, \
+             success_rate, application_count, last_success_at, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
+        )
+        .bind(&resolution.id)
+        .bind(tenant_id)
+        .bind(&resolution.error_signature_id)
+        .bind(&resolution.description)
+        .bind(serde_json::to_value(&resolution.changes)?)
+        .bind(resolution.success_rate)
+        .bind(resolution.application_count as i32)
+        .bind(if resolution.last_success_at > 0 {
+            Some(resolution.last_success_at)
+        } else {
+            None
+        })
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_resolution(
+        &self,
+        tenant_id: &str,
+        id: &str
+    ) -> Result<Option<mk_core::types::Resolution>, PostgresError> {
+        let row = sqlx::query(
+            "SELECT id, error_signature_id, description, changes, success_rate, \
+             application_count, last_success_at FROM resolutions WHERE id = $1 AND tenant_id = $2"
+        )
+        .bind(id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(row) => {
+                let last_success_at: Option<i64> = row.get("last_success_at");
+                Ok(Some(mk_core::types::Resolution {
+                    id: row.get("id"),
+                    error_signature_id: row.get("error_signature_id"),
+                    description: row.get("description"),
+                    changes: serde_json::from_value(row.get("changes"))?,
+                    success_rate: row.get("success_rate"),
+                    application_count: row.get::<i32, _>("application_count") as u32,
+                    last_success_at: last_success_at.unwrap_or(0)
+                }))
+            }
+            None => Ok(None)
+        }
+    }
+
+    pub async fn get_resolutions_for_error(
+        &self,
+        tenant_id: &str,
+        error_signature_id: &str
+    ) -> Result<Vec<mk_core::types::Resolution>, PostgresError> {
+        let rows = sqlx::query(
+            "SELECT id, error_signature_id, description, changes, success_rate, \
+             application_count, last_success_at FROM resolutions 
+             WHERE error_signature_id = $1 AND tenant_id = $2
+             ORDER BY success_rate DESC, application_count DESC"
+        )
+        .bind(error_signature_id)
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut resolutions = Vec::new();
+        for row in rows {
+            let last_success_at: Option<i64> = row.get("last_success_at");
+            resolutions.push(mk_core::types::Resolution {
+                id: row.get("id"),
+                error_signature_id: row.get("error_signature_id"),
+                description: row.get("description"),
+                changes: serde_json::from_value(row.get("changes"))?,
+                success_rate: row.get("success_rate"),
+                application_count: row.get::<i32, _>("application_count") as u32,
+                last_success_at: last_success_at.unwrap_or(0)
+            });
+        }
+
+        Ok(resolutions)
+    }
+
+    pub async fn delete_resolution(
+        &self,
+        tenant_id: &str,
+        id: &str
+    ) -> Result<bool, PostgresError> {
+        let result = sqlx::query("DELETE FROM resolutions WHERE id = $1 AND tenant_id = $2")
+            .bind(id)
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn create_hindsight_note(
+        &self,
+        tenant_id: &str,
+        note: &mk_core::types::HindsightNote
+    ) -> Result<(), PostgresError> {
+        let resolution_ids: Vec<String> = note.resolutions.iter().map(|r| r.id.clone()).collect();
+
+        sqlx::query(
+            "INSERT INTO hindsight_notes (id, tenant_id, error_signature_id, content, tags, \
+             resolution_ids, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+        )
+        .bind(&note.id)
+        .bind(tenant_id)
+        .bind(&note.error_signature.error_type)
+        .bind(&note.content)
+        .bind(serde_json::to_value(&note.tags)?)
+        .bind(serde_json::to_value(&resolution_ids)?)
+        .bind(note.created_at)
+        .bind(note.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_hindsight_note(
+        &self,
+        tenant_id: &str,
+        id: &str
+    ) -> Result<Option<mk_core::types::HindsightNote>, PostgresError> {
+        let row = sqlx::query(
+            "SELECT h.id, h.error_signature_id, h.content, h.tags, h.resolution_ids, \
+             h.created_at, h.updated_at,
+             e.error_type, e.message_pattern, e.stack_patterns, e.context_patterns, e.embedding
+             FROM hindsight_notes h
+             LEFT JOIN error_signatures e ON h.error_signature_id = e.error_type AND e.tenant_id = \
+             $2
+             WHERE h.id = $1 AND h.tenant_id = $2"
+        )
+        .bind(id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(row) => {
+                let resolution_ids: Vec<String> =
+                    serde_json::from_value(row.get("resolution_ids"))?;
+                let mut resolutions = Vec::new();
+                for res_id in resolution_ids {
+                    if let Some(resolution) = self.get_resolution(tenant_id, &res_id).await? {
+                        resolutions.push(resolution);
+                    }
+                }
+
+                let embedding: Option<serde_json::Value> = row.get("embedding");
+
+                Ok(Some(mk_core::types::HindsightNote {
+                    id: row.get("id"),
+                    error_signature: mk_core::types::ErrorSignature {
+                        error_type: row
+                            .get::<Option<String>, _>("error_type")
+                            .unwrap_or_else(|| row.get("error_signature_id")),
+                        message_pattern: row
+                            .get::<Option<String>, _>("message_pattern")
+                            .unwrap_or_default(),
+                        stack_patterns: row
+                            .get::<Option<serde_json::Value>, _>("stack_patterns")
+                            .and_then(|v| serde_json::from_value(v).ok())
+                            .unwrap_or_default(),
+                        context_patterns: row
+                            .get::<Option<serde_json::Value>, _>("context_patterns")
+                            .and_then(|v| serde_json::from_value(v).ok())
+                            .unwrap_or_default(),
+                        embedding: embedding.and_then(|v| serde_json::from_value(v).ok())
+                    },
+                    resolutions,
+                    content: row.get("content"),
+                    tags: serde_json::from_value(row.get("tags"))?,
+                    created_at: row.get("created_at"),
+                    updated_at: row.get("updated_at")
+                }))
+            }
+            None => Ok(None)
+        }
+    }
+
+    pub async fn update_hindsight_note(
+        &self,
+        tenant_id: &str,
+        note: &mk_core::types::HindsightNote
+    ) -> Result<bool, PostgresError> {
+        let resolution_ids: Vec<String> = note.resolutions.iter().map(|r| r.id.clone()).collect();
+
+        let result = sqlx::query(
+            "UPDATE hindsight_notes 
+             SET content = $3, tags = $4, resolution_ids = $5, updated_at = $6
+             WHERE id = $1 AND tenant_id = $2"
+        )
+        .bind(&note.id)
+        .bind(tenant_id)
+        .bind(&note.content)
+        .bind(serde_json::to_value(&note.tags)?)
+        .bind(serde_json::to_value(&resolution_ids)?)
+        .bind(note.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn delete_hindsight_note(
+        &self,
+        tenant_id: &str,
+        id: &str
+    ) -> Result<bool, PostgresError> {
+        let result = sqlx::query("DELETE FROM hindsight_notes WHERE id = $1 AND tenant_id = $2")
+            .bind(id)
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn list_hindsight_notes(
+        &self,
+        tenant_id: &str,
+        limit: i64,
+        offset: i64
+    ) -> Result<Vec<mk_core::types::HindsightNote>, PostgresError> {
+        let rows = sqlx::query(
+            "SELECT id FROM hindsight_notes 
+             WHERE tenant_id = $1
+             ORDER BY updated_at DESC
+             LIMIT $2 OFFSET $3"
+        )
+        .bind(tenant_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut notes = Vec::new();
+        for row in rows {
+            let id: String = row.get("id");
+            if let Some(note) = self.get_hindsight_note(tenant_id, &id).await? {
+                notes.push(note);
+            }
+        }
+
+        Ok(notes)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -25,6 +25,7 @@ chrono.workspace = true
 tempfile.workspace = true
 anyhow.workspace = true
 redis.workspace = true
+flate2 = "1.0"
 
 [dev-dependencies]
 adapters = { path = "../adapters" }

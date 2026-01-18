@@ -88,7 +88,8 @@ mod tests {
                 governance.clone(),
                 deployment_config,
                 None,
-                Arc::new(MockPersister)
+                Arc::new(MockPersister),
+                None
             )
             .await
             .unwrap()

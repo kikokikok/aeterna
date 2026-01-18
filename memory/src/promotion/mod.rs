@@ -231,7 +231,8 @@ mod tests {
             promotion_threshold: 0.7,
             decay_interval_secs: 86400,
             decay_rate: 0.05,
-            optimization_trigger_count: 100
+            optimization_trigger_count: 100,
+            layer_summary_configs: std::collections::HashMap::new()
         });
 
         let entry = MemoryEntry {
@@ -286,7 +287,8 @@ mod tests {
             promotion_threshold: 0.7,
             decay_interval_secs: 86400,
             decay_rate: 0.05,
-            optimization_trigger_count: 100
+            optimization_trigger_count: 100,
+            layer_summary_configs: std::collections::HashMap::new()
         });
 
         let entry = MemoryEntry {
@@ -365,7 +367,8 @@ mod tests {
             promotion_threshold: 0.0,
             decay_interval_secs: 86400,
             decay_rate: 0.05,
-            optimization_trigger_count: 100
+            optimization_trigger_count: 100,
+            layer_summary_configs: std::collections::HashMap::new()
         });
 
         let entry = MemoryEntry {
@@ -423,7 +426,8 @@ mod tests {
                 promotion_threshold: 0.0,
                 decay_interval_secs: 86400,
                 decay_rate: 0.05,
-                optimization_trigger_count: 100
+                optimization_trigger_count: 100,
+                layer_summary_configs: std::collections::HashMap::new()
             })
             .with_cleanup(true);
 

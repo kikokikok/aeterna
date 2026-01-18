@@ -1,4 +1,5 @@
 use crate::bridge::{ResolveFederationConflictTool, SyncNowTool, SyncStatusTool};
+use crate::cca::{ContextAssembleTool, HindsightQueryTool, MetaLoopStatusTool, NoteCaptureTool};
 use crate::governance::{
     HierarchyNavigateTool, UnitCreateTool, UnitPolicyAddTool, UserRoleAssignTool,
     UserRoleRemoveTool
@@ -29,6 +30,7 @@ pub struct McpServer {
     registry: ToolRegistry,
     auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>,
     event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
+    extension_executor: Option<Arc<crate::extensions::ExtensionExecutor>>,
     timeout_duration: Duration
 }
 
@@ -98,12 +100,39 @@ impl McpServer {
         )));
         registry.register(Box::new(HierarchyNavigateTool::new(storage_backend)));
 
+        // Register CCA tools
+        registry.register(Box::new(ContextAssembleTool::with_default_provider(
+            Arc::new(knowledge::context_architect::ContextAssembler::new(
+                knowledge::context_architect::AssemblerConfig::default()
+            ))
+        )));
+        registry.register(Box::new(NoteCaptureTool::new(Arc::new(
+            std::sync::RwLock::new(knowledge::note_taking::TrajectoryCapture::new(
+                knowledge::note_taking::TrajectoryConfig::default()
+            ))
+        ))));
+        registry.register(Box::new(HindsightQueryTool::with_default_provider(
+            Arc::new(knowledge::hindsight::HindsightQuery::new(
+                knowledge::hindsight::HindsightQueryConfig::default()
+            ))
+        )));
+        registry.register(Box::new(MetaLoopStatusTool::with_default_provider()));
+
         Self {
             registry,
             auth_service,
             event_publisher,
+            extension_executor: None,
             timeout_duration: Duration::from_secs(30)
         }
+    }
+
+    pub fn with_extension_executor(
+        mut self,
+        executor: Arc<crate::extensions::ExtensionExecutor>
+    ) -> Self {
+        self.extension_executor = Some(executor);
+        self
     }
 
     pub fn with_timeout(mut self, duration: Duration) -> Self {
@@ -231,6 +260,28 @@ impl McpServer {
                         };
                     }
                 };
+
+                let mut tool_params = tool_params;
+                let tool_registry = Arc::new(self.registry.clone());
+                if let Some(executor) = &self.extension_executor {
+                    if let Some(session_id) = params.get("sessionId").and_then(|v| v.as_str()) {
+                        if let Some(input) = tool_params.get("input").and_then(|v| v.as_str()) {
+                            let updated = executor
+                                .on_plain_text(
+                                    tenant_context.clone(),
+                                    session_id,
+                                    tool_registry.clone(),
+                                    input.to_string()
+                                )
+                                .await;
+                            if let Ok(text) = updated {
+                                if let Some(obj) = tool_params.as_object_mut() {
+                                    obj.insert("input".to_string(), Value::String(text));
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Span::current().record("tool_name", &name);
                 info!(tool = %name, "Calling tool");
@@ -496,9 +547,6 @@ mod tests {
     use serde_json::json;
     use sync::bridge::SyncManager;
     use sync::state_persister::SyncStatePersister;
-    use testcontainers::ContainerAsync;
-    use testcontainers::runners::AsyncRunner;
-    use testcontainers_modules::postgres::Postgres;
 
     struct MockRepo;
     #[async_trait::async_trait]
@@ -619,25 +667,217 @@ mod tests {
         }
     }
 
-    async fn setup_postgres_container()
-    -> Result<(ContainerAsync<Postgres>, String), Box<dyn std::error::Error + Send + Sync>> {
-        let container = Postgres::default()
-            .with_db_name("testdb")
-            .with_user("testuser")
-            .with_password("testpass")
-            .start()
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
-
-        let connection_url = format!(
-            "postgres://testuser:testpass@localhost:{}/testdb",
-            container
-                .get_host_port_ipv4(5432)
-                .await
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
-        );
-
-        Ok((container, connection_url))
+    struct MockStorageBackend;
+    #[async_trait::async_trait]
+    impl mk_core::traits::StorageBackend for MockStorageBackend {
+        type Error = storage::postgres::PostgresError;
+        async fn store(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _key: &str,
+            _value: &[u8]
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn retrieve(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _key: &str
+        ) -> Result<Option<Vec<u8>>, Self::Error> {
+            Ok(None)
+        }
+        async fn delete(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _key: &str
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn exists(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _key: &str
+        ) -> Result<bool, Self::Error> {
+            Ok(false)
+        }
+        async fn get_ancestors(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str
+        ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn get_descendants(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str
+        ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn get_unit_policies(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str
+        ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn create_unit(
+            &self,
+            _unit: &mk_core::types::OrganizationalUnit
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn add_unit_policy(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _unit_id: &str,
+            _policy: &mk_core::types::Policy
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn assign_role(
+            &self,
+            _user_id: &mk_core::types::UserId,
+            _tenant_id: &mk_core::types::TenantId,
+            _unit_id: &str,
+            _role: mk_core::types::Role
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn remove_role(
+            &self,
+            _user_id: &mk_core::types::UserId,
+            _tenant_id: &mk_core::types::TenantId,
+            _unit_id: &str,
+            _role: mk_core::types::Role
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn store_drift_result(
+            &self,
+            _result: mk_core::types::DriftResult
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_latest_drift_result(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _project_id: &str
+        ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
+            Ok(None)
+        }
+        async fn list_all_units(
+            &self
+        ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn record_job_status(
+            &self,
+            _job_name: &str,
+            _tenant_id: &str,
+            _status: &str,
+            _message: Option<&str>,
+            _started_at: i64,
+            _finished_at: Option<i64>
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_governance_events(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _since_timestamp: i64,
+            _limit: usize
+        ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn create_suppression(
+            &self,
+            _suppression: mk_core::types::DriftSuppression
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn list_suppressions(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _project_id: &str
+        ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn delete_suppression(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _suppression_id: &str
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_drift_config(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _project_id: &str
+        ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
+            Ok(None)
+        }
+        async fn save_drift_config(
+            &self,
+            _config: mk_core::types::DriftConfig
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn persist_event(
+            &self,
+            _event: mk_core::types::PersistentEvent
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_pending_events(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _limit: usize
+        ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn update_event_status(
+            &self,
+            _event_id: &str,
+            _status: mk_core::types::EventStatus,
+            _error: Option<String>
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_dead_letter_events(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _limit: usize
+        ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn check_idempotency(
+            &self,
+            _consumer_group: &str,
+            _idempotency_key: &str
+        ) -> Result<bool, Self::Error> {
+            Ok(false)
+        }
+        async fn record_consumer_state(
+            &self,
+            _state: mk_core::types::ConsumerState
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_event_metrics(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _period_start: i64,
+            _period_end: i64
+        ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn record_event_metrics(
+            &self,
+            _metrics: mk_core::types::EventDeliveryMetrics
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
     }
 
     async fn setup_server() -> McpServer {
@@ -651,21 +891,12 @@ mod tests {
                 governance.clone(),
                 config::config::DeploymentConfig::default(),
                 None,
-                Arc::new(MockPersister)
+                Arc::new(MockPersister),
+                None
             )
             .await
             .unwrap()
         );
-
-        let (container, connection_url) = setup_postgres_container()
-            .await
-            .expect("Failed to setup PostgreSQL test container. Make sure Docker is running.");
-
-        let backend = storage::postgres::PostgresBackend::new(&connection_url)
-            .await
-            .expect("Failed to connect to PostgreSQL test container");
-
-        let _container = container;
 
         let mock_reasoner = Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
             memory::llm::mock::MockLlmService::new()
@@ -675,7 +906,7 @@ mod tests {
             memory_manager,
             sync_manager,
             repo,
-            Arc::new(backend),
+            Arc::new(MockStorageBackend),
             governance,
             mock_reasoner,
             Arc::new(MockAuthService),
