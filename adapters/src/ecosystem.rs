@@ -11,7 +11,7 @@ pub trait EcosystemAdapter: Send + Sync {
 }
 
 pub struct OpenCodeAdapter {
-    server: Arc<McpServer>
+    server: Arc<McpServer>,
 }
 
 impl OpenCodeAdapter {
@@ -75,13 +75,13 @@ mod tests {
                 &self,
                 _ctx: &mk_core::types::TenantContext,
                 _action: &str,
-                _resource: &str
+                _resource: &str,
             ) -> Result<bool, Self::Error> {
                 Ok(true)
             }
             async fn get_user_roles(
                 &self,
-                _ctx: &mk_core::types::TenantContext
+                _ctx: &mk_core::types::TenantContext,
             ) -> Result<Vec<mk_core::types::Role>, Self::Error> {
                 Ok(vec![])
             }
@@ -89,7 +89,7 @@ mod tests {
                 &self,
                 _ctx: &mk_core::types::TenantContext,
                 _user_id: &mk_core::types::UserId,
-                _role: mk_core::types::Role
+                _role: mk_core::types::Role,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -97,7 +97,7 @@ mod tests {
                 &self,
                 _ctx: &mk_core::types::TenantContext,
                 _user_id: &mk_core::types::UserId,
-                _role: mk_core::types::Role
+                _role: mk_core::types::Role,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -109,13 +109,13 @@ mod tests {
             type Error = EventError;
             async fn publish(
                 &self,
-                _event: mk_core::types::GovernanceEvent
+                _event: mk_core::types::GovernanceEvent,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn subscribe(
                 &self,
-                _channels: &[&str]
+                _channels: &[&str],
             ) -> Result<tokio::sync::mpsc::Receiver<mk_core::types::GovernanceEvent>, Self::Error>
             {
                 let (_, rx) = tokio::sync::mpsc::channel(1);
@@ -131,7 +131,7 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _entry: mk_core::types::KnowledgeEntry,
-                _msg: &str
+                _msg: &str,
             ) -> Result<String, Self::Error> {
                 Ok("hash".into())
             }
@@ -139,7 +139,7 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _layer: mk_core::types::KnowledgeLayer,
-                _id: &str
+                _id: &str,
             ) -> Result<Option<mk_core::types::KnowledgeEntry>, Self::Error> {
                 Ok(None)
             }
@@ -147,7 +147,7 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _layer: mk_core::types::KnowledgeLayer,
-                _prefix: &str
+                _prefix: &str,
             ) -> Result<Vec<mk_core::types::KnowledgeEntry>, Self::Error> {
                 Ok(vec![])
             }
@@ -156,20 +156,20 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _layer: mk_core::types::KnowledgeLayer,
                 _id: &str,
-                _msg: &str
+                _msg: &str,
             ) -> Result<String, Self::Error> {
                 Ok("hash".into())
             }
             async fn get_head_commit(
                 &self,
-                _ctx: mk_core::types::TenantContext
+                _ctx: mk_core::types::TenantContext,
             ) -> Result<Option<String>, Self::Error> {
                 Ok(None)
             }
             async fn get_affected_items(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _commit: &str
+                _commit: &str,
             ) -> Result<Vec<(mk_core::types::KnowledgeLayer, String)>, Self::Error> {
                 Ok(vec![])
             }
@@ -178,7 +178,7 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _query: &str,
                 _layers: Vec<mk_core::types::KnowledgeLayer>,
-                _limit: usize
+                _limit: usize,
             ) -> Result<Vec<mk_core::types::KnowledgeEntry>, Self::Error> {
                 Ok(vec![])
             }
@@ -195,55 +195,55 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _key: &str,
-                _value: &[u8]
+                _value: &[u8],
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn retrieve(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _key: &str
+                _key: &str,
             ) -> Result<Option<Vec<u8>>, Self::Error> {
                 Ok(None)
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _key: &str
+                _key: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn exists(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _key: &str
+                _key: &str,
             ) -> Result<bool, Self::Error> {
                 Ok(false)
             }
             async fn get_ancestors(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _unit_id: &str
+                _unit_id: &str,
             ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
                 Ok(vec![])
             }
             async fn get_descendants(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _unit_id: &str
+                _unit_id: &str,
             ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
                 Ok(vec![])
             }
             async fn get_unit_policies(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _unit_id: &str
+                _unit_id: &str,
             ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
                 Ok(vec![])
             }
             async fn create_unit(
                 &self,
-                _unit: &mk_core::types::OrganizationalUnit
+                _unit: &mk_core::types::OrganizationalUnit,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -251,7 +251,7 @@ mod tests {
                 &self,
                 _ctx: &mk_core::types::TenantContext,
                 _unit_id: &str,
-                _policy: &mk_core::types::Policy
+                _policy: &mk_core::types::Policy,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -260,7 +260,7 @@ mod tests {
                 _user_id: &mk_core::types::UserId,
                 _tenant_id: &mk_core::types::TenantId,
                 _unit_id: &str,
-                _role: mk_core::types::Role
+                _role: mk_core::types::Role,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -269,25 +269,25 @@ mod tests {
                 _user_id: &mk_core::types::UserId,
                 _tenant_id: &mk_core::types::TenantId,
                 _unit_id: &str,
-                _role: mk_core::types::Role
+                _role: mk_core::types::Role,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn store_drift_result(
                 &self,
-                _result: mk_core::types::DriftResult
+                _result: mk_core::types::DriftResult,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn get_latest_drift_result(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _project_id: &str
+                _project_id: &str,
             ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
                 Ok(None)
             }
             async fn list_all_units(
-                &self
+                &self,
             ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
                 Ok(vec![])
             }
@@ -298,7 +298,7 @@ mod tests {
                 _status: &str,
                 _msg: Option<&str>,
                 _start: i64,
-                _finish: Option<i64>
+                _finish: Option<i64>,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -306,53 +306,53 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _since: i64,
-                _limit: usize
+                _limit: usize,
             ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
                 Ok(vec![])
             }
             async fn create_suppression(
                 &self,
-                _suppression: mk_core::types::DriftSuppression
+                _suppression: mk_core::types::DriftSuppression,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn list_suppressions(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _project: &str
+                _project: &str,
             ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
                 Ok(vec![])
             }
             async fn delete_suppression(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn get_drift_config(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _project: &str
+                _project: &str,
             ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
                 Ok(None)
             }
             async fn save_drift_config(
                 &self,
-                _config: mk_core::types::DriftConfig
+                _config: mk_core::types::DriftConfig,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn persist_event(
                 &self,
-                _event: mk_core::types::PersistentEvent
+                _event: mk_core::types::PersistentEvent,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn get_pending_events(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _limit: usize
+                _limit: usize,
             ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
                 Ok(vec![])
             }
@@ -360,27 +360,27 @@ mod tests {
                 &self,
                 _id: &str,
                 _status: mk_core::types::EventStatus,
-                _error: Option<String>
+                _error: Option<String>,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn get_dead_letter_events(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _limit: usize
+                _limit: usize,
             ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
                 Ok(vec![])
             }
             async fn check_idempotency(
                 &self,
                 _group: &str,
-                _key: &str
+                _key: &str,
             ) -> Result<bool, Self::Error> {
                 Ok(false)
             }
             async fn record_consumer_state(
                 &self,
-                _state: mk_core::types::ConsumerState
+                _state: mk_core::types::ConsumerState,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -388,13 +388,13 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _start: i64,
-                _end: i64
+                _end: i64,
             ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
                 Ok(vec![])
             }
             async fn record_event_metrics(
                 &self,
-                _metrics: mk_core::types::EventDeliveryMetrics
+                _metrics: mk_core::types::EventDeliveryMetrics,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -406,7 +406,7 @@ mod tests {
             async fn reason(
                 &self,
                 _query: &str,
-                _context: Option<&str>
+                _context: Option<&str>,
             ) -> anyhow::Result<mk_core::types::ReasoningTrace> {
                 Ok(mk_core::types::ReasoningTrace {
                     thought_process: "thought".into(),
@@ -414,7 +414,7 @@ mod tests {
                     strategy: mk_core::types::ReasoningStrategy::SemanticOnly,
                     start_time: chrono::DateTime::from_timestamp(0, 0).unwrap(),
                     end_time: chrono::DateTime::from_timestamp(0, 0).unwrap(),
-                    metadata: std::collections::HashMap::new()
+                    metadata: std::collections::HashMap::new(),
                 })
             }
         }
@@ -424,7 +424,7 @@ mod tests {
         impl sync::state_persister::SyncStatePersister for MockPersister {
             async fn load(
                 &self,
-                _tenant_id: &mk_core::types::TenantId
+                _tenant_id: &mk_core::types::TenantId,
             ) -> Result<sync::state::SyncState, Box<dyn std::error::Error + Send + Sync>>
             {
                 Ok(sync::state::SyncState::default())
@@ -432,7 +432,7 @@ mod tests {
             async fn save(
                 &self,
                 _tenant_id: &mk_core::types::TenantId,
-                _state: &sync::state::SyncState
+                _state: &sync::state::SyncState,
             ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 Ok(())
             }
@@ -448,10 +448,10 @@ mod tests {
                 config::config::DeploymentConfig::default(),
                 None,
                 Arc::new(MockPersister),
-                None
+                None,
             )
             .await
-            .unwrap()
+            .unwrap(),
         );
 
         let server = Arc::new(McpServer::new(
@@ -463,7 +463,7 @@ mod tests {
             Arc::new(MockReasoner),
             Arc::new(MockAuthService),
             Some(Arc::new(MockPublisher)),
-            None
+            None,
         ));
         let adapter = OpenCodeAdapter::new(server);
 
@@ -509,13 +509,13 @@ mod tests {
                 &self,
                 _ctx: &mk_core::types::TenantContext,
                 _action: &str,
-                _resource: &str
+                _resource: &str,
             ) -> Result<bool, Self::Error> {
                 Ok(true)
             }
             async fn get_user_roles(
                 &self,
-                _ctx: &mk_core::types::TenantContext
+                _ctx: &mk_core::types::TenantContext,
             ) -> Result<Vec<mk_core::types::Role>, Self::Error> {
                 Ok(vec![])
             }
@@ -523,7 +523,7 @@ mod tests {
                 &self,
                 _ctx: &mk_core::types::TenantContext,
                 _user_id: &mk_core::types::UserId,
-                _role: mk_core::types::Role
+                _role: mk_core::types::Role,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -531,7 +531,7 @@ mod tests {
                 &self,
                 _ctx: &mk_core::types::TenantContext,
                 _user_id: &mk_core::types::UserId,
-                _role: mk_core::types::Role
+                _role: mk_core::types::Role,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -543,13 +543,13 @@ mod tests {
             type Error = EventError;
             async fn publish(
                 &self,
-                _event: mk_core::types::GovernanceEvent
+                _event: mk_core::types::GovernanceEvent,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn subscribe(
                 &self,
-                _channels: &[&str]
+                _channels: &[&str],
             ) -> Result<tokio::sync::mpsc::Receiver<mk_core::types::GovernanceEvent>, Self::Error>
             {
                 let (_, rx) = tokio::sync::mpsc::channel(1);
@@ -565,7 +565,7 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _entry: mk_core::types::KnowledgeEntry,
-                _msg: &str
+                _msg: &str,
             ) -> Result<String, Self::Error> {
                 Ok("hash".into())
             }
@@ -573,7 +573,7 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _layer: mk_core::types::KnowledgeLayer,
-                _id: &str
+                _id: &str,
             ) -> Result<Option<mk_core::types::KnowledgeEntry>, Self::Error> {
                 Ok(None)
             }
@@ -581,7 +581,7 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _layer: mk_core::types::KnowledgeLayer,
-                _prefix: &str
+                _prefix: &str,
             ) -> Result<Vec<mk_core::types::KnowledgeEntry>, Self::Error> {
                 Ok(vec![])
             }
@@ -590,20 +590,20 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _layer: mk_core::types::KnowledgeLayer,
                 _id: &str,
-                _msg: &str
+                _msg: &str,
             ) -> Result<String, Self::Error> {
                 Ok("hash".into())
             }
             async fn get_head_commit(
                 &self,
-                _ctx: mk_core::types::TenantContext
+                _ctx: mk_core::types::TenantContext,
             ) -> Result<Option<String>, Self::Error> {
                 Ok(None)
             }
             async fn get_affected_items(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _commit: &str
+                _commit: &str,
             ) -> Result<Vec<(mk_core::types::KnowledgeLayer, String)>, Self::Error> {
                 Ok(vec![])
             }
@@ -612,7 +612,7 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _query: &str,
                 _layers: Vec<mk_core::types::KnowledgeLayer>,
-                _limit: usize
+                _limit: usize,
             ) -> Result<Vec<mk_core::types::KnowledgeEntry>, Self::Error> {
                 Ok(vec![])
             }
@@ -629,55 +629,55 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _key: &str,
-                _value: &[u8]
+                _value: &[u8],
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn retrieve(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _key: &str
+                _key: &str,
             ) -> Result<Option<Vec<u8>>, Self::Error> {
                 Ok(None)
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _key: &str
+                _key: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn exists(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _key: &str
+                _key: &str,
             ) -> Result<bool, Self::Error> {
                 Ok(false)
             }
             async fn get_ancestors(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _unit_id: &str
+                _unit_id: &str,
             ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
                 Ok(vec![])
             }
             async fn get_descendants(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _unit_id: &str
+                _unit_id: &str,
             ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
                 Ok(vec![])
             }
             async fn get_unit_policies(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _unit_id: &str
+                _unit_id: &str,
             ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
                 Ok(vec![])
             }
             async fn create_unit(
                 &self,
-                _unit: &mk_core::types::OrganizationalUnit
+                _unit: &mk_core::types::OrganizationalUnit,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -685,7 +685,7 @@ mod tests {
                 &self,
                 _ctx: &mk_core::types::TenantContext,
                 _unit_id: &str,
-                _policy: &mk_core::types::Policy
+                _policy: &mk_core::types::Policy,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -694,7 +694,7 @@ mod tests {
                 _user_id: &mk_core::types::UserId,
                 _tenant_id: &mk_core::types::TenantId,
                 _unit_id: &str,
-                _role: mk_core::types::Role
+                _role: mk_core::types::Role,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -703,25 +703,25 @@ mod tests {
                 _user_id: &mk_core::types::UserId,
                 _tenant_id: &mk_core::types::TenantId,
                 _unit_id: &str,
-                _role: mk_core::types::Role
+                _role: mk_core::types::Role,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn store_drift_result(
                 &self,
-                _result: mk_core::types::DriftResult
+                _result: mk_core::types::DriftResult,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn get_latest_drift_result(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _project_id: &str
+                _project_id: &str,
             ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
                 Ok(None)
             }
             async fn list_all_units(
-                &self
+                &self,
             ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
                 Ok(vec![])
             }
@@ -732,7 +732,7 @@ mod tests {
                 _status: &str,
                 _msg: Option<&str>,
                 _start: i64,
-                _finish: Option<i64>
+                _finish: Option<i64>,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -740,53 +740,53 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _since: i64,
-                _limit: usize
+                _limit: usize,
             ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
                 Ok(vec![])
             }
             async fn create_suppression(
                 &self,
-                _suppression: mk_core::types::DriftSuppression
+                _suppression: mk_core::types::DriftSuppression,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn list_suppressions(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _project: &str
+                _project: &str,
             ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
                 Ok(vec![])
             }
             async fn delete_suppression(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn get_drift_config(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _project: &str
+                _project: &str,
             ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
                 Ok(None)
             }
             async fn save_drift_config(
                 &self,
-                _config: mk_core::types::DriftConfig
+                _config: mk_core::types::DriftConfig,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn persist_event(
                 &self,
-                _event: mk_core::types::PersistentEvent
+                _event: mk_core::types::PersistentEvent,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn get_pending_events(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _limit: usize
+                _limit: usize,
             ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
                 Ok(vec![])
             }
@@ -794,27 +794,27 @@ mod tests {
                 &self,
                 _id: &str,
                 _status: mk_core::types::EventStatus,
-                _error: Option<String>
+                _error: Option<String>,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn get_dead_letter_events(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _limit: usize
+                _limit: usize,
             ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
                 Ok(vec![])
             }
             async fn check_idempotency(
                 &self,
                 _group: &str,
-                _key: &str
+                _key: &str,
             ) -> Result<bool, Self::Error> {
                 Ok(false)
             }
             async fn record_consumer_state(
                 &self,
-                _state: mk_core::types::ConsumerState
+                _state: mk_core::types::ConsumerState,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -822,13 +822,13 @@ mod tests {
                 &self,
                 _ctx: mk_core::types::TenantContext,
                 _start: i64,
-                _end: i64
+                _end: i64,
             ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
                 Ok(vec![])
             }
             async fn record_event_metrics(
                 &self,
-                _metrics: mk_core::types::EventDeliveryMetrics
+                _metrics: mk_core::types::EventDeliveryMetrics,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -840,7 +840,7 @@ mod tests {
             async fn reason(
                 &self,
                 _query: &str,
-                _context: Option<&str>
+                _context: Option<&str>,
             ) -> anyhow::Result<mk_core::types::ReasoningTrace> {
                 Ok(mk_core::types::ReasoningTrace {
                     thought_process: "thought".into(),
@@ -848,7 +848,7 @@ mod tests {
                     strategy: mk_core::types::ReasoningStrategy::SemanticOnly,
                     start_time: chrono::DateTime::from_timestamp(0, 0).unwrap(),
                     end_time: chrono::DateTime::from_timestamp(0, 0).unwrap(),
-                    metadata: std::collections::HashMap::new()
+                    metadata: std::collections::HashMap::new(),
                 })
             }
         }
@@ -858,7 +858,7 @@ mod tests {
         impl sync::state_persister::SyncStatePersister for MockPersister {
             async fn load(
                 &self,
-                _tenant_id: &mk_core::types::TenantId
+                _tenant_id: &mk_core::types::TenantId,
             ) -> Result<sync::state::SyncState, Box<dyn std::error::Error + Send + Sync>>
             {
                 Ok(sync::state::SyncState::default())
@@ -866,7 +866,7 @@ mod tests {
             async fn save(
                 &self,
                 _tenant_id: &mk_core::types::TenantId,
-                _state: &sync::state::SyncState
+                _state: &sync::state::SyncState,
             ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 Ok(())
             }
@@ -882,10 +882,10 @@ mod tests {
                 config::config::DeploymentConfig::default(),
                 None,
                 Arc::new(MockPersister),
-                None
+                None,
             )
             .await
-            .unwrap()
+            .unwrap(),
         );
 
         let server = Arc::new(McpServer::new(
@@ -897,7 +897,7 @@ mod tests {
             Arc::new(MockReasoner),
             Arc::new(MockAuthService),
             Some(Arc::new(MockPublisher)),
-            None
+            None,
         ));
         let adapter = OpenCodeAdapter::new(server);
 

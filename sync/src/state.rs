@@ -19,7 +19,7 @@ pub struct SyncState {
     #[serde(default)]
     pub summary_state: SummaryPointerState,
     #[serde(default)]
-    pub hindsight_state: HindsightPointerState
+    pub hindsight_state: HindsightPointerState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -27,7 +27,7 @@ pub struct SyncState {
 pub struct FederationConflict {
     pub upstream_id: String,
     pub reason: String,
-    pub detected_at: i64
+    pub detected_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -36,7 +36,7 @@ pub struct SyncFailure {
     pub knowledge_id: String,
     pub error: String,
     pub failed_at: i64,
-    pub retry_count: u32
+    pub retry_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -45,48 +45,48 @@ pub enum SyncConflict {
         knowledge_id: String,
         memory_id: String,
         expected_hash: String,
-        actual_hash: String
+        actual_hash: String,
     },
     OrphanedPointer {
         memory_id: String,
-        knowledge_id: String
+        knowledge_id: String,
     },
     MissingPointer {
         knowledge_id: String,
-        expected_memory_id: String
+        expected_memory_id: String,
     },
     DuplicatePointer {
         knowledge_id: String,
-        memory_ids: Vec<String>
+        memory_ids: Vec<String>,
     },
     StatusChange {
         knowledge_id: String,
         memory_id: String,
-        new_status: mk_core::types::KnowledgeStatus
+        new_status: mk_core::types::KnowledgeStatus,
     },
     LayerMismatch {
         knowledge_id: String,
         memory_id: String,
         expected_layer: mk_core::types::KnowledgeLayer,
-        actual_layer: mk_core::types::KnowledgeLayer
+        actual_layer: mk_core::types::KnowledgeLayer,
     },
     DetectionError {
         target_id: String,
-        error: String
-    }
+        error: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SyncTrigger {
     Staleness {
         last_sync_at: i64,
-        threshold_mins: u32
+        threshold_mins: u32,
     },
     CommitMismatch {
         last_commit: String,
-        head_commit: String
+        head_commit: String,
     },
-    Manual
+    Manual,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -101,7 +101,7 @@ pub struct SyncStats {
     pub policy_violations: u64,
     pub total_summaries_synced: u64,
     pub total_summaries_invalidated: u64,
-    pub total_hindsight_patterns: u64
+    pub total_hindsight_patterns: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -110,34 +110,34 @@ pub enum SummarySyncTrigger {
         entry_id: String,
         layer: MemoryLayer,
         previous_hash: String,
-        new_hash: String
+        new_hash: String,
     },
     TimeThresholdExceeded {
         entry_id: String,
         layer: MemoryLayer,
         age_seconds: u64,
-        threshold_seconds: u64
+        threshold_seconds: u64,
     },
     ChangeCountExceeded {
         entry_id: String,
         layer: MemoryLayer,
         change_count: u32,
-        threshold: u32
+        threshold: u32,
     },
     ManualRefresh {
         entry_id: String,
-        layer: MemoryLayer
+        layer: MemoryLayer,
     },
     LayerConfigChanged {
         layer: MemoryLayer,
         depths_added: Vec<SummaryDepth>,
-        depths_removed: Vec<SummaryDepth>
+        depths_removed: Vec<SummaryDepth>,
     },
     ParentSummaryInvalidated {
         entry_id: String,
         layer: MemoryLayer,
-        parent_layer: MemoryLayer
-    }
+        parent_layer: MemoryLayer,
+    },
 }
 
 impl Default for SyncState {
@@ -154,7 +154,7 @@ impl Default for SyncState {
             upstream_commits: HashMap::new(),
             stats: SyncStats::default(),
             summary_state: SummaryPointerState::default(),
-            hindsight_state: HindsightPointerState::default()
+            hindsight_state: HindsightPointerState::default(),
         }
     }
 }
@@ -187,33 +187,33 @@ mod tests {
                 entry_id: "entry-1".to_string(),
                 layer: MemoryLayer::Project,
                 previous_hash: "old".to_string(),
-                new_hash: "new".to_string()
+                new_hash: "new".to_string(),
             },
             SummarySyncTrigger::TimeThresholdExceeded {
                 entry_id: "entry-1".to_string(),
                 layer: MemoryLayer::Project,
                 age_seconds: 3600,
-                threshold_seconds: 1800
+                threshold_seconds: 1800,
             },
             SummarySyncTrigger::ChangeCountExceeded {
                 entry_id: "entry-1".to_string(),
                 layer: MemoryLayer::Project,
                 change_count: 10,
-                threshold: 5
+                threshold: 5,
             },
             SummarySyncTrigger::ManualRefresh {
                 entry_id: "entry-1".to_string(),
-                layer: MemoryLayer::Project
+                layer: MemoryLayer::Project,
             },
             SummarySyncTrigger::LayerConfigChanged {
                 layer: MemoryLayer::Project,
                 depths_added: vec![SummaryDepth::Detailed],
-                depths_removed: vec![]
+                depths_removed: vec![],
             },
             SummarySyncTrigger::ParentSummaryInvalidated {
                 entry_id: "entry-1".to_string(),
                 layer: MemoryLayer::Project,
-                parent_layer: MemoryLayer::Team
+                parent_layer: MemoryLayer::Team,
             },
         ];
 
@@ -234,7 +234,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "source".to_string(),
-            50
+            50,
         );
         state.summary_state.set_pointer(ptr);
 

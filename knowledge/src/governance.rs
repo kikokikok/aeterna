@@ -2,7 +2,7 @@ use crate::telemetry::KnowledgeTelemetry;
 use mk_core::traits::{EmbeddingService, EventPublisher, LlmService};
 use mk_core::types::{
     ConstraintSeverity, GovernanceEvent, KnowledgeLayer, Policy, PolicyViolation, TenantContext,
-    ValidationResult
+    ValidationResult,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,8 +17,8 @@ pub struct GovernanceEngine {
     embedding_service: Option<Arc<dyn EmbeddingService<Error = anyhow::Error>>>,
     llm_service: Option<Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>>,
     knowledge_repository: Option<
-        Arc<dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>>
-    >
+        Arc<dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>>,
+    >,
 }
 
 impl GovernanceEngine {
@@ -30,13 +30,13 @@ impl GovernanceEngine {
             event_publisher: None,
             embedding_service: None,
             llm_service: None,
-            knowledge_repository: None
+            knowledge_repository: None,
         }
     }
 
     pub fn with_storage(
         mut self,
-        storage: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>
+        storage: Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>,
     ) -> Self {
         self.storage = Some(storage);
         self
@@ -44,7 +44,7 @@ impl GovernanceEngine {
 
     pub fn with_event_publisher(
         mut self,
-        publisher: Arc<dyn EventPublisher<Error = EventError>>
+        publisher: Arc<dyn EventPublisher<Error = EventError>>,
     ) -> Self {
         self.event_publisher = Some(publisher);
         self
@@ -52,7 +52,7 @@ impl GovernanceEngine {
 
     pub fn with_embedding_service(
         mut self,
-        embedding_service: Arc<dyn EmbeddingService<Error = anyhow::Error>>
+        embedding_service: Arc<dyn EmbeddingService<Error = anyhow::Error>>,
     ) -> Self {
         self.embedding_service = Some(embedding_service);
         self
@@ -60,7 +60,7 @@ impl GovernanceEngine {
 
     pub fn with_llm_service(
         mut self,
-        llm_service: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>
+        llm_service: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>,
     ) -> Self {
         self.llm_service = Some(llm_service);
         self
@@ -69,30 +69,30 @@ impl GovernanceEngine {
     pub fn with_repository(
         mut self,
         repository: Arc<
-            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>
-        >
+            dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>,
+        >,
     ) -> Self {
         self.knowledge_repository = Some(repository);
         self
     }
 
     pub fn storage(
-        &self
+        &self,
     ) -> Option<Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>>
     {
         self.storage.clone()
     }
 
     pub fn llm_service(
-        &self
+        &self,
     ) -> Option<Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>> {
         self.llm_service.clone()
     }
 
     pub fn repository(
-        &self
+        &self,
     ) -> Option<
-        Arc<dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>>
+        Arc<dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>>,
     > {
         self.knowledge_repository.clone()
     }
@@ -123,7 +123,7 @@ impl GovernanceEngine {
     pub fn validate(
         &self,
         target_layer: KnowledgeLayer,
-        context: &HashMap<String, serde_json::Value>
+        context: &HashMap<String, serde_json::Value>,
     ) -> ValidationResult {
         let mut resolved_map: HashMap<String, Policy> = HashMap::new();
         let mut mandatory_policies: HashMap<String, KnowledgeLayer> = HashMap::new();
@@ -132,7 +132,7 @@ impl GovernanceEngine {
             KnowledgeLayer::Company,
             KnowledgeLayer::Org,
             KnowledgeLayer::Team,
-            KnowledgeLayer::Project
+            KnowledgeLayer::Project,
         ];
 
         for layer in &layers {
@@ -157,7 +157,7 @@ impl GovernanceEngine {
                 if let Some(violation) = self.evaluate_rule(&policy, rule, context) {
                     self.telemetry.record_violation(
                         &format!("{:?}", policy.layer),
-                        &format!("{:?}", rule.severity)
+                        &format!("{:?}", rule.severity),
                     );
                     violations.push(violation);
                 }
@@ -166,7 +166,7 @@ impl GovernanceEngine {
 
         ValidationResult {
             is_valid: violations.is_empty(),
-            violations
+            violations,
         }
     }
 
@@ -174,7 +174,7 @@ impl GovernanceEngine {
         &self,
         target_layer: KnowledgeLayer,
         context: &HashMap<String, serde_json::Value>,
-        tenant_ctx: Option<&TenantContext>
+        tenant_ctx: Option<&TenantContext>,
     ) -> ValidationResult {
         let mut violations = Vec::new();
 
@@ -187,7 +187,7 @@ impl GovernanceEngine {
                 if let Some(violation) = self.evaluate_rule(&policy, rule, context) {
                     self.telemetry.record_violation(
                         &format!("{:?}", policy.layer),
-                        &format!("{:?}", rule.severity)
+                        &format!("{:?}", rule.severity),
                     );
                     violations.push(violation);
                 }
@@ -201,7 +201,7 @@ impl GovernanceEngine {
 
         ValidationResult {
             is_valid: violations.is_empty(),
-            violations
+            violations,
         }
     }
 
@@ -209,7 +209,7 @@ impl GovernanceEngine {
         &self,
         target_layer: KnowledgeLayer,
         context: &HashMap<String, serde_json::Value>,
-        tenant_ctx: Option<&TenantContext>
+        tenant_ctx: Option<&TenantContext>,
     ) -> Vec<Policy> {
         let mut resolved_map: HashMap<String, Policy> = HashMap::new();
         let mut mandatory_policies: HashMap<String, KnowledgeLayer> = HashMap::new();
@@ -218,7 +218,7 @@ impl GovernanceEngine {
             KnowledgeLayer::Company,
             KnowledgeLayer::Org,
             KnowledgeLayer::Team,
-            KnowledgeLayer::Project
+            KnowledgeLayer::Project,
         ];
 
         for layer in &layers {
@@ -273,7 +273,7 @@ impl GovernanceEngine {
         &self,
         resolved: &mut HashMap<String, Policy>,
         mandatory_policies: &mut HashMap<String, KnowledgeLayer>,
-        incoming: Policy
+        incoming: Policy,
     ) {
         use mk_core::types::{PolicyMode, RuleMergeStrategy};
 
@@ -323,7 +323,7 @@ impl GovernanceEngine {
         &self,
         tenant_ctx: &TenantContext,
         _project_id: &str,
-        context: &HashMap<String, serde_json::Value>
+        context: &HashMap<String, serde_json::Value>,
     ) -> Result<f32, anyhow::Error> {
         let mut violations = Vec::new();
         let mut confidence: f32 = 1.0;
@@ -362,7 +362,7 @@ impl GovernanceEngine {
                 policy_id: "governance_requirement".to_string(),
                 severity: ConstraintSeverity::Warn,
                 message: "No mandatory policies detected for this project layer".to_string(),
-                context: context.clone()
+                context: context.clone(),
             });
         }
 
@@ -381,7 +381,7 @@ impl GovernanceEngine {
                                 "Project uses stale policy version (expected: {}, actual: {})",
                                 expected_hash, actual
                             ),
-                            context: context.clone()
+                            context: context.clone(),
                         });
                     }
                 }
@@ -458,7 +458,7 @@ impl GovernanceEngine {
                 let drift_result = mk_core::types::DriftResult::new(
                     _project_id.to_string(),
                     tenant_ctx.tenant_id.clone(),
-                    filtered
+                    filtered,
                 )
                 .with_confidence(confidence)
                 .with_suppressions(all_suppressed);
@@ -479,7 +479,7 @@ impl GovernanceEngine {
             let drift_result = mk_core::types::DriftResult::new(
                 _project_id.to_string(),
                 tenant_ctx.tenant_id.clone(),
-                active_violations
+                active_violations,
             )
             .with_confidence(confidence)
             .with_suppressions(suppressed_violations);
@@ -492,7 +492,7 @@ impl GovernanceEngine {
     fn apply_suppressions(
         &self,
         violations: Vec<PolicyViolation>,
-        suppressions: &[mk_core::types::DriftSuppression]
+        suppressions: &[mk_core::types::DriftSuppression],
     ) -> (Vec<PolicyViolation>, Vec<PolicyViolation>) {
         let mut active = Vec::new();
         let mut suppressed = Vec::new();
@@ -513,7 +513,7 @@ impl GovernanceEngine {
         &self,
         content: &str,
         policies: &[Policy],
-        context: &HashMap<String, serde_json::Value>
+        context: &HashMap<String, serde_json::Value>,
     ) -> Option<Vec<PolicyViolation>> {
         let llm = self.llm_service.as_ref()?;
 
@@ -535,7 +535,7 @@ impl GovernanceEngine {
                         policy_id: v.policy_id,
                         severity: v.severity,
                         message: format!("[LLM Analysis] {}", v.message),
-                        context: context.clone()
+                        context: context.clone(),
                     })
                     .collect();
 
@@ -558,7 +558,7 @@ impl GovernanceEngine {
             .map(|v| match v.severity {
                 ConstraintSeverity::Block => 1.0,
                 ConstraintSeverity::Warn => 0.5,
-                ConstraintSeverity::Info => 0.1
+                ConstraintSeverity::Info => 0.1,
             })
             .sum::<f32>();
 
@@ -569,7 +569,7 @@ impl GovernanceEngine {
         &self,
         context: &HashMap<String, serde_json::Value>,
         tenant_ctx: Option<&TenantContext>,
-        violations: &[PolicyViolation]
+        violations: &[PolicyViolation],
     ) {
         if let Some(publisher) = &self.event_publisher {
             let project_id = context
@@ -583,7 +583,7 @@ impl GovernanceEngine {
                     .map(|v| match v.severity {
                         mk_core::types::ConstraintSeverity::Block => 1.0,
                         mk_core::types::ConstraintSeverity::Warn => 0.5,
-                        mk_core::types::ConstraintSeverity::Info => 0.1
+                        mk_core::types::ConstraintSeverity::Info => 0.1,
                     })
                     .sum::<f32>();
 
@@ -592,7 +592,7 @@ impl GovernanceEngine {
                         project_id: pid.to_string(),
                         tenant_id: tenant_ctx.map(|c| c.tenant_id.clone()).unwrap_or_default(),
                         drift_score: drift_score.min(1.0),
-                        timestamp: chrono::Utc::now().timestamp()
+                        timestamp: chrono::Utc::now().timestamp(),
                     })
                     .await;
             }
@@ -603,7 +603,7 @@ impl GovernanceEngine {
         &self,
         policy: &Policy,
         rule: &mk_core::types::PolicyRule,
-        context: &HashMap<String, serde_json::Value>
+        context: &HashMap<String, serde_json::Value>,
     ) -> Option<PolicyViolation> {
         use mk_core::types::{ConstraintOperator, RuleType};
 
@@ -612,7 +612,7 @@ impl GovernanceEngine {
             mk_core::types::ConstraintTarget::Code => "content",
             mk_core::types::ConstraintTarget::Dependency => "dependencies",
             mk_core::types::ConstraintTarget::Import => "imports",
-            mk_core::types::ConstraintTarget::Config => "config"
+            mk_core::types::ConstraintTarget::Config => "config",
         };
 
         let value = context.get(target_key);
@@ -684,7 +684,7 @@ impl GovernanceEngine {
 
         let is_violated = match rule.rule_type {
             RuleType::Allow => !is_condition_met,
-            RuleType::Deny => is_condition_met
+            RuleType::Deny => is_condition_met,
         };
 
         if is_violated {
@@ -693,7 +693,7 @@ impl GovernanceEngine {
                 policy_id: policy.id.clone(),
                 severity: rule.severity,
                 message: rule.message.clone(),
-                context: context.clone()
+                context: context.clone(),
             })
         } else {
             None
@@ -704,7 +704,7 @@ impl GovernanceEngine {
         &self,
         tenant_ctx: &TenantContext,
         content: &str,
-        threshold: f32
+        threshold: f32,
     ) -> Result<Vec<PolicyViolation>, anyhow::Error> {
         let embedding_service = self
             .embedding_service
@@ -741,7 +741,7 @@ impl GovernanceEngine {
                                     "Semantic contradiction detected (similarity: {:.2}): {}",
                                     similarity, rule.message
                                 ),
-                                context: context.clone()
+                                context: context.clone(),
                             });
                         }
                     }
@@ -790,7 +790,7 @@ mod tests {
                     value: serde_json::json!("unsafe-lib"),
                     severity: ConstraintSeverity::Block,
                     message: "unsafe-lib is banned".to_string(),
-                    rule_type: mk_core::types::RuleType::Allow
+                    rule_type: mk_core::types::RuleType::Allow,
                 },
                 PolicyRule {
                     id: "r2".to_string(),
@@ -799,12 +799,12 @@ mod tests {
                     value: serde_json::json!("^# ADR"),
                     severity: ConstraintSeverity::Warn,
                     message: "ADRs must start with # ADR".to_string(),
-                    rule_type: mk_core::types::RuleType::Allow
+                    rule_type: mk_core::types::RuleType::Allow,
                 },
             ],
             metadata: HashMap::new(),
             mode: mk_core::types::PolicyMode::Optional,
-            merge_strategy: mk_core::types::RuleMergeStrategy::Merge
+            merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
         };
 
         engine.add_policy(company_policy);
@@ -812,7 +812,7 @@ mod tests {
         let mut context = HashMap::new();
         context.insert(
             "dependencies".to_string(),
-            serde_json::json!(["safe-lib", "unsafe-lib"])
+            serde_json::json!(["safe-lib", "unsafe-lib"]),
         );
         context.insert("content".to_string(), serde_json::json!("# ADR 001\n..."));
 
@@ -847,14 +847,14 @@ mod tests {
             rules: vec![rule],
             metadata: HashMap::new(),
             mode: mk_core::types::PolicyMode::Optional,
-            merge_strategy: mk_core::types::RuleMergeStrategy::Merge
+            merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
         }
     }
 
     fn create_rule(
         operator: ConstraintOperator,
         target: ConstraintTarget,
-        value: serde_json::Value
+        value: serde_json::Value,
     ) -> PolicyRule {
         PolicyRule {
             id: "test-rule".to_string(),
@@ -863,7 +863,7 @@ mod tests {
             value,
             severity: ConstraintSeverity::Block,
             message: "Test rule violation".to_string(),
-            rule_type: mk_core::types::RuleType::Allow
+            rule_type: mk_core::types::RuleType::Allow,
         }
     }
 
@@ -873,7 +873,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustExist,
             ConstraintTarget::File,
-            serde_json::json!(null)
+            serde_json::json!(null),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -890,7 +890,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustExist,
             ConstraintTarget::File,
-            serde_json::json!(null)
+            serde_json::json!(null),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -906,7 +906,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustNotExist,
             ConstraintTarget::File,
-            serde_json::json!(null)
+            serde_json::json!(null),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -922,7 +922,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustNotExist,
             ConstraintTarget::File,
-            serde_json::json!(null)
+            serde_json::json!(null),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -939,14 +939,14 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustUse,
             ConstraintTarget::Dependency,
-            serde_json::json!("required-lib")
+            serde_json::json!("required-lib"),
         );
         let policy = create_test_policy(rule.clone());
 
         let mut context = HashMap::new();
         context.insert(
             "dependencies".to_string(),
-            serde_json::json!(["required-lib", "other-lib"])
+            serde_json::json!(["required-lib", "other-lib"]),
         );
 
         let result = engine.evaluate_rule(&policy, &rule, &context);
@@ -959,7 +959,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustUse,
             ConstraintTarget::Dependency,
-            serde_json::json!("required-lib")
+            serde_json::json!("required-lib"),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -976,7 +976,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustUse,
             ConstraintTarget::Config,
-            serde_json::json!("production")
+            serde_json::json!("production"),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -993,7 +993,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustUse,
             ConstraintTarget::Dependency,
-            serde_json::json!("required-lib")
+            serde_json::json!("required-lib"),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -1009,14 +1009,14 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustNotUse,
             ConstraintTarget::Dependency,
-            serde_json::json!("banned-lib")
+            serde_json::json!("banned-lib"),
         );
         let policy = create_test_policy(rule.clone());
 
         let mut context = HashMap::new();
         context.insert(
             "dependencies".to_string(),
-            serde_json::json!(["safe-lib", "another-lib"])
+            serde_json::json!(["safe-lib", "another-lib"]),
         );
 
         let result = engine.evaluate_rule(&policy, &rule, &context);
@@ -1029,14 +1029,14 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustNotUse,
             ConstraintTarget::Dependency,
-            serde_json::json!("banned-lib")
+            serde_json::json!("banned-lib"),
         );
         let policy = create_test_policy(rule.clone());
 
         let mut context = HashMap::new();
         context.insert(
             "dependencies".to_string(),
-            serde_json::json!(["safe-lib", "banned-lib"])
+            serde_json::json!(["safe-lib", "banned-lib"]),
         );
 
         let result = engine.evaluate_rule(&policy, &rule, &context);
@@ -1049,7 +1049,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustNotUse,
             ConstraintTarget::Dependency,
-            serde_json::json!("banned-lib")
+            serde_json::json!("banned-lib"),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -1065,14 +1065,14 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustMatch,
             ConstraintTarget::Code,
-            serde_json::json!("^# ADR")
+            serde_json::json!("^# ADR"),
         );
         let policy = create_test_policy(rule.clone());
 
         let mut context = HashMap::new();
         context.insert(
             "content".to_string(),
-            serde_json::json!("# ADR 001\nDecision...")
+            serde_json::json!("# ADR 001\nDecision..."),
         );
 
         let result = engine.evaluate_rule(&policy, &rule, &context);
@@ -1085,14 +1085,14 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustMatch,
             ConstraintTarget::Code,
-            serde_json::json!("^# ADR")
+            serde_json::json!("^# ADR"),
         );
         let policy = create_test_policy(rule.clone());
 
         let mut context = HashMap::new();
         context.insert(
             "content".to_string(),
-            serde_json::json!("Some other content")
+            serde_json::json!("Some other content"),
         );
 
         let result = engine.evaluate_rule(&policy, &rule, &context);
@@ -1105,7 +1105,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustMatch,
             ConstraintTarget::Code,
-            serde_json::json!("^# ADR")
+            serde_json::json!("^# ADR"),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -1121,7 +1121,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustMatch,
             ConstraintTarget::Code,
-            serde_json::json!("^# ADR")
+            serde_json::json!("^# ADR"),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -1138,7 +1138,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustMatch,
             ConstraintTarget::Code,
-            serde_json::json!("[invalid(regex")
+            serde_json::json!("[invalid(regex"),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -1155,7 +1155,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustNotMatch,
             ConstraintTarget::Code,
-            serde_json::json!("TODO|FIXME")
+            serde_json::json!("TODO|FIXME"),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -1172,14 +1172,14 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustNotMatch,
             ConstraintTarget::Code,
-            serde_json::json!("TODO|FIXME")
+            serde_json::json!("TODO|FIXME"),
         );
         let policy = create_test_policy(rule.clone());
 
         let mut context = HashMap::new();
         context.insert(
             "content".to_string(),
-            serde_json::json!("// TODO: fix this later")
+            serde_json::json!("// TODO: fix this later"),
         );
 
         let result = engine.evaluate_rule(&policy, &rule, &context);
@@ -1192,7 +1192,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustNotMatch,
             ConstraintTarget::Code,
-            serde_json::json!("TODO")
+            serde_json::json!("TODO"),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -1208,14 +1208,14 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustNotMatch,
             ConstraintTarget::Code,
-            serde_json::json!("pattern")
+            serde_json::json!("pattern"),
         );
         let policy = create_test_policy(rule.clone());
 
         let mut context = HashMap::new();
         context.insert(
             "content".to_string(),
-            serde_json::json!(["not", "a", "string"])
+            serde_json::json!(["not", "a", "string"]),
         );
 
         let result = engine.evaluate_rule(&policy, &rule, &context);
@@ -1228,7 +1228,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustNotMatch,
             ConstraintTarget::Code,
-            serde_json::json!("[invalid(regex")
+            serde_json::json!("[invalid(regex"),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -1245,7 +1245,7 @@ mod tests {
         let rule = create_rule(
             ConstraintOperator::MustNotMatch,
             ConstraintTarget::Code,
-            serde_json::json!(12345)
+            serde_json::json!(12345),
         );
         let policy = create_test_policy(rule.clone());
 
@@ -1262,7 +1262,7 @@ mod tests {
         let mut rule = create_rule(
             ConstraintOperator::MustExist,
             ConstraintTarget::File,
-            serde_json::json!(null)
+            serde_json::json!(null),
         );
         rule.rule_type = mk_core::types::RuleType::Deny;
         let policy = create_test_policy(rule.clone());
@@ -1283,14 +1283,14 @@ mod tests {
             (ConstraintTarget::Code, "content"),
             (ConstraintTarget::Dependency, "dependencies"),
             (ConstraintTarget::Import, "imports"),
-            (ConstraintTarget::Config, "config")
+            (ConstraintTarget::Config, "config"),
         ];
 
         for (target, key) in targets_and_keys {
             let rule = create_rule(
                 ConstraintOperator::MustExist,
                 target,
-                serde_json::json!(null)
+                serde_json::json!(null),
             );
             let policy = create_test_policy(rule.clone());
 
@@ -1313,7 +1313,7 @@ mod tests {
         let mut rule = create_rule(
             ConstraintOperator::MustExist,
             ConstraintTarget::File,
-            serde_json::json!(null)
+            serde_json::json!(null),
         );
         rule.id = "specific-rule-id".to_string();
         rule.message = "Custom error message".to_string();
@@ -1406,7 +1406,7 @@ mod tests {
             policy_id: "test".to_string(),
             severity: ConstraintSeverity::Block,
             message: "Test".to_string(),
-            context: HashMap::new()
+            context: HashMap::new(),
         }];
         let score = engine.calculate_drift_score(&violations);
         assert_eq!(score, 1.0);
@@ -1420,7 +1420,7 @@ mod tests {
             policy_id: "test".to_string(),
             severity: ConstraintSeverity::Warn,
             message: "Test".to_string(),
-            context: HashMap::new()
+            context: HashMap::new(),
         }];
         let score = engine.calculate_drift_score(&violations);
         assert!((score - 0.5).abs() < 0.001);
@@ -1434,7 +1434,7 @@ mod tests {
             policy_id: "test".to_string(),
             severity: ConstraintSeverity::Info,
             message: "Test".to_string(),
-            context: HashMap::new()
+            context: HashMap::new(),
         }];
         let score = engine.calculate_drift_score(&violations);
         assert!((score - 0.1).abs() < 0.001);
@@ -1449,14 +1449,14 @@ mod tests {
                 policy_id: "test".to_string(),
                 severity: ConstraintSeverity::Block,
                 message: "Test".to_string(),
-                context: HashMap::new()
+                context: HashMap::new(),
             },
             PolicyViolation {
                 rule_id: "test2".to_string(),
                 policy_id: "test".to_string(),
                 severity: ConstraintSeverity::Block,
                 message: "Test".to_string(),
-                context: HashMap::new()
+                context: HashMap::new(),
             },
         ];
         let score = engine.calculate_drift_score(&violations);
@@ -1472,14 +1472,14 @@ mod tests {
                 policy_id: "test".to_string(),
                 severity: ConstraintSeverity::Warn,
                 message: "Test".to_string(),
-                context: HashMap::new()
+                context: HashMap::new(),
             },
             PolicyViolation {
                 rule_id: "info".to_string(),
                 policy_id: "test".to_string(),
                 severity: ConstraintSeverity::Info,
                 message: "Test".to_string(),
-                context: HashMap::new()
+                context: HashMap::new(),
             },
         ];
         let score = engine.calculate_drift_score(&violations);
@@ -1494,7 +1494,7 @@ mod tests {
             policy_id: "policy1".to_string(),
             severity: ConstraintSeverity::Block,
             message: "Test".to_string(),
-            context: HashMap::new()
+            context: HashMap::new(),
         }];
         let suppressions: Vec<mk_core::types::DriftSuppression> = vec![];
 
@@ -1513,14 +1513,14 @@ mod tests {
                 policy_id: "policy1".to_string(),
                 severity: ConstraintSeverity::Block,
                 message: "Test message for policy1".to_string(),
-                context: HashMap::new()
+                context: HashMap::new(),
             },
             PolicyViolation {
                 rule_id: "rule2".to_string(),
                 policy_id: "policy2".to_string(),
                 severity: ConstraintSeverity::Warn,
                 message: "Test message for policy2".to_string(),
-                context: HashMap::new()
+                context: HashMap::new(),
             },
         ];
         let suppressions = vec![
@@ -1529,7 +1529,7 @@ mod tests {
                 TenantId::new("tenant1".to_string()).unwrap(),
                 "policy1".to_string(),
                 "Test suppression".to_string(),
-                UserId::new("tester".to_string()).unwrap()
+                UserId::new("tester".to_string()).unwrap(),
             )
             .with_expiry(chrono::Utc::now().timestamp() + 3600),
         ];
@@ -1550,14 +1550,14 @@ mod tests {
             policy_id: "policy1".to_string(),
             severity: ConstraintSeverity::Block,
             message: "Test message".to_string(),
-            context: HashMap::new()
+            context: HashMap::new(),
         }];
         let suppressions = vec![mk_core::types::DriftSuppression::new(
             "project1".to_string(),
             TenantId::new("tenant1".to_string()).unwrap(),
             "policy1".to_string(),
             "Test suppression".to_string(),
-            UserId::new("tester".to_string()).unwrap()
+            UserId::new("tester".to_string()).unwrap(),
         )];
 
         let (active, suppressed) = engine.apply_suppressions(violations, &suppressions);
@@ -1574,7 +1574,7 @@ mod tests {
             policy_id: "policy1".to_string(),
             severity: ConstraintSeverity::Block,
             message: "Violation for rule1 detected".to_string(),
-            context: HashMap::new()
+            context: HashMap::new(),
         }];
         let suppressions = vec![
             mk_core::types::DriftSuppression::new(
@@ -1582,7 +1582,7 @@ mod tests {
                 TenantId::new("tenant1".to_string()).unwrap(),
                 "policy1".to_string(),
                 "Test suppression".to_string(),
-                UserId::new("tester".to_string()).unwrap()
+                UserId::new("tester".to_string()).unwrap(),
             )
             .with_pattern("rule1".to_string()),
         ];
@@ -1601,7 +1601,7 @@ mod tests {
             policy_id: "policy1".to_string(),
             severity: ConstraintSeverity::Block,
             message: "Some other message".to_string(),
-            context: HashMap::new()
+            context: HashMap::new(),
         }];
         let suppressions = vec![
             mk_core::types::DriftSuppression::new(
@@ -1609,7 +1609,7 @@ mod tests {
                 TenantId::new("tenant1".to_string()).unwrap(),
                 "policy1".to_string(),
                 "Test suppression".to_string(),
-                UserId::new("tester".to_string()).unwrap()
+                UserId::new("tester".to_string()).unwrap(),
             )
             .with_pattern("specific_pattern".to_string()),
         ];
@@ -1637,9 +1637,9 @@ mod tests {
                 value: serde_json::json!(null),
                 severity: ConstraintSeverity::Block,
                 message: "Company rule".to_string(),
-                rule_type: mk_core::types::RuleType::Allow
+                rule_type: mk_core::types::RuleType::Allow,
             }],
-            metadata: HashMap::new()
+            metadata: HashMap::new(),
         };
 
         let org_policy = Policy {
@@ -1656,9 +1656,9 @@ mod tests {
                 value: serde_json::json!(null),
                 severity: ConstraintSeverity::Warn,
                 message: "Org rule".to_string(),
-                rule_type: mk_core::types::RuleType::Allow
+                rule_type: mk_core::types::RuleType::Allow,
             }],
-            metadata: HashMap::new()
+            metadata: HashMap::new(),
         };
 
         engine.add_policy(company_policy);
@@ -1691,7 +1691,7 @@ mod tests {
                     value: serde_json::json!(null),
                     severity: ConstraintSeverity::Block,
                     message: "Rule 1".to_string(),
-                    rule_type: mk_core::types::RuleType::Allow
+                    rule_type: mk_core::types::RuleType::Allow,
                 },
                 PolicyRule {
                     id: "r2".to_string(),
@@ -1700,10 +1700,10 @@ mod tests {
                     value: serde_json::json!(null),
                     severity: ConstraintSeverity::Block,
                     message: "Rule 2".to_string(),
-                    rule_type: mk_core::types::RuleType::Allow
+                    rule_type: mk_core::types::RuleType::Allow,
                 },
             ],
-            metadata: HashMap::new()
+            metadata: HashMap::new(),
         };
 
         let org_policy = Policy {
@@ -1720,9 +1720,9 @@ mod tests {
                 value: serde_json::json!(null),
                 severity: ConstraintSeverity::Warn,
                 message: "Rule 1 only".to_string(),
-                rule_type: mk_core::types::RuleType::Allow
+                rule_type: mk_core::types::RuleType::Allow,
             }],
-            metadata: HashMap::new()
+            metadata: HashMap::new(),
         };
 
         engine.add_policy(company_policy);
@@ -1750,7 +1750,7 @@ mod tests {
             mode: mk_core::types::PolicyMode::Optional,
             merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
             rules: vec![],
-            metadata: metadata1
+            metadata: metadata1,
         };
 
         let mut metadata2 = HashMap::new();
@@ -1764,7 +1764,7 @@ mod tests {
             mode: mk_core::types::PolicyMode::Optional,
             merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
             rules: vec![],
-            metadata: metadata2
+            metadata: metadata2,
         };
 
         engine.add_policy(company_policy);
@@ -1794,9 +1794,9 @@ mod tests {
                 value: serde_json::json!("FORBIDDEN"),
                 severity: ConstraintSeverity::Block,
                 message: "Forbidden content".to_string(),
-                rule_type: mk_core::types::RuleType::Allow
+                rule_type: mk_core::types::RuleType::Allow,
             }],
-            metadata: HashMap::new()
+            metadata: HashMap::new(),
         };
 
         let org_policy = Policy {
@@ -1807,7 +1807,7 @@ mod tests {
             mode: mk_core::types::PolicyMode::Optional,
             merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
             rules: vec![],
-            metadata: HashMap::new()
+            metadata: HashMap::new(),
         };
 
         engine.add_policy(company_policy);
@@ -1830,7 +1830,7 @@ mod tests {
             project_id: "test".to_string(),
             tenant_id: mk_core::types::TenantId::new("test".to_string()).unwrap(),
             drift_score: 0.5,
-            timestamp: chrono::Utc::now().timestamp()
+            timestamp: chrono::Utc::now().timestamp(),
         };
 
         let result = engine.publish_event(event).await;

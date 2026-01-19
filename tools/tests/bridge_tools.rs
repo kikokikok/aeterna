@@ -18,14 +18,14 @@ struct MockPersister;
 impl SyncStatePersister for MockPersister {
     async fn load(
         &self,
-        _tenant_id: &TenantId
+        _tenant_id: &TenantId,
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         Ok(SyncState::default())
     }
     async fn save(
         &self,
         _tenant_id: &TenantId,
-        _state: &SyncState
+        _state: &SyncState,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
@@ -40,7 +40,7 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
 
     use memory::providers::MockProvider;
     let provider: Arc<
-        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
     > = Arc::new(MockProvider::new());
     memory_manager
         .register_provider(mk_core::types::MemoryLayer::Project, provider)
@@ -56,9 +56,9 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
             config::config::DeploymentConfig::default(),
             None,
             persister,
-            None
+            None,
         )
-        .await?
+        .await?,
     );
 
     let sync_now_tool = SyncNowTool::new(sync_manager.clone());
@@ -94,7 +94,7 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
         status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
     };
     knowledge_repo.store(ctx, entry, "commit").await?;
 

@@ -16,7 +16,7 @@ pub struct DeduplicationConfig {
     pub context_weight: f32,
     pub stack_weight: f32,
     pub background_scan_interval_secs: u64,
-    pub max_signatures_per_scan: usize
+    pub max_signatures_per_scan: usize,
 }
 
 impl Default for DeduplicationConfig {
@@ -28,7 +28,7 @@ impl Default for DeduplicationConfig {
             context_weight: 0.1,
             stack_weight: 0.1,
             background_scan_interval_secs: 3600,
-            max_signatures_per_scan: 1000
+            max_signatures_per_scan: 1000,
         }
     }
 }
@@ -41,7 +41,7 @@ pub struct IndexedSignature {
     pub context_hash: u64,
     pub embedding: Option<Vec<f32>>,
     pub created_at: i64,
-    pub merge_count: u32
+    pub merge_count: u32,
 }
 
 impl IndexedSignature {
@@ -54,7 +54,7 @@ impl IndexedSignature {
             context_hash,
             embedding: sig.embedding.clone(),
             created_at: current_timestamp(),
-            merge_count: 0
+            merge_count: 0,
         }
     }
 }
@@ -66,7 +66,7 @@ pub struct DeduplicationMetrics {
     pub unique_signatures: u64,
     pub last_scan_at: Option<i64>,
     pub last_scan_duration_ms: Option<u64>,
-    pub scans_completed: u64
+    pub scans_completed: u64,
 }
 
 impl Default for DeduplicationMetrics {
@@ -77,7 +77,7 @@ impl Default for DeduplicationMetrics {
             unique_signatures: 0,
             last_scan_at: None,
             last_scan_duration_ms: None,
-            scans_completed: 0
+            scans_completed: 0,
         }
     }
 }
@@ -89,7 +89,7 @@ pub enum DeduplicationError {
     #[error("Storage error: {0}")]
     Storage(String),
     #[error("Merge error: {0}")]
-    Merge(String)
+    Merge(String),
 }
 
 #[async_trait]
@@ -99,25 +99,25 @@ pub trait SignatureStorage: Send + Sync {
     async fn save_signature(&self, sig: &IndexedSignature) -> Result<(), DeduplicationError>;
     async fn list_signatures_by_type(
         &self,
-        error_type: &str
+        error_type: &str,
     ) -> Result<Vec<IndexedSignature>, DeduplicationError>;
     async fn delete_signature(&self, id: &str) -> Result<(), DeduplicationError>;
     async fn get_all_signatures(&self) -> Result<Vec<IndexedSignature>, DeduplicationError>;
     async fn merge_signatures(
         &self,
         keep_id: &str,
-        remove_id: &str
+        remove_id: &str,
     ) -> Result<(), DeduplicationError>;
 }
 
 pub struct InMemorySignatureStorage {
-    signatures: RwLock<HashMap<String, IndexedSignature>>
+    signatures: RwLock<HashMap<String, IndexedSignature>>,
 }
 
 impl InMemorySignatureStorage {
     pub fn new() -> Self {
         Self {
-            signatures: RwLock::new(HashMap::new())
+            signatures: RwLock::new(HashMap::new()),
         }
     }
 }
@@ -132,7 +132,7 @@ impl Default for InMemorySignatureStorage {
 impl SignatureStorage for InMemorySignatureStorage {
     async fn get_signature(
         &self,
-        id: &str
+        id: &str,
     ) -> Result<Option<IndexedSignature>, DeduplicationError> {
         let sigs = self
             .signatures
@@ -152,7 +152,7 @@ impl SignatureStorage for InMemorySignatureStorage {
 
     async fn list_signatures_by_type(
         &self,
-        error_type: &str
+        error_type: &str,
     ) -> Result<Vec<IndexedSignature>, DeduplicationError> {
         let sigs = self
             .signatures
@@ -185,7 +185,7 @@ impl SignatureStorage for InMemorySignatureStorage {
     async fn merge_signatures(
         &self,
         keep_id: &str,
-        remove_id: &str
+        remove_id: &str,
     ) -> Result<(), DeduplicationError> {
         let mut sigs = self
             .signatures
@@ -204,7 +204,7 @@ impl SignatureStorage for InMemorySignatureStorage {
 pub struct ErrorSignatureIndex<S: SignatureStorage> {
     storage: Arc<S>,
     cfg: DeduplicationConfig,
-    metrics: Arc<RwLock<DeduplicationMetrics>>
+    metrics: Arc<RwLock<DeduplicationMetrics>>,
 }
 
 impl<S: SignatureStorage> ErrorSignatureIndex<S> {
@@ -212,7 +212,7 @@ impl<S: SignatureStorage> ErrorSignatureIndex<S> {
         Self {
             storage,
             cfg,
-            metrics: Arc::new(RwLock::new(DeduplicationMetrics::default()))
+            metrics: Arc::new(RwLock::new(DeduplicationMetrics::default())),
         }
     }
 
@@ -223,7 +223,7 @@ impl<S: SignatureStorage> ErrorSignatureIndex<S> {
     #[instrument(skip(self, signature), fields(error_type = %signature.error_type))]
     pub async fn find_duplicate(
         &self,
-        signature: &ErrorSignature
+        signature: &ErrorSignature,
     ) -> Result<Option<IndexedSignature>, DeduplicationError> {
         let candidates = self
             .storage
@@ -253,7 +253,7 @@ impl<S: SignatureStorage> ErrorSignatureIndex<S> {
     pub async fn insert_or_deduplicate(
         &self,
         id: impl Into<String>,
-        signature: &ErrorSignature
+        signature: &ErrorSignature,
     ) -> Result<DeduplicationResult, DeduplicationError> {
         let id = id.into();
 
@@ -265,7 +265,7 @@ impl<S: SignatureStorage> ErrorSignatureIndex<S> {
             );
             return Ok(DeduplicationResult::Duplicate {
                 existing_id: existing.id,
-                new_id: id
+                new_id: id,
             });
         }
 
@@ -291,7 +291,7 @@ impl<S: SignatureStorage> ErrorSignatureIndex<S> {
 
         let msg_sim = jaccard_similarity(
             &tokenize(&a.normalized_message),
-            &tokenize(&b.normalized_message)
+            &tokenize(&b.normalized_message),
         );
         weighted_score += msg_sim * self.cfg.message_weight;
         total_weight += self.cfg.message_weight;
@@ -383,7 +383,7 @@ impl<S: SignatureStorage> ErrorSignatureIndex<S> {
         Ok(ScanResult {
             duplicates_found,
             merges_performed,
-            duration_ms
+            duration_ms,
         })
     }
 }
@@ -391,7 +391,7 @@ impl<S: SignatureStorage> ErrorSignatureIndex<S> {
 #[derive(Debug, Clone)]
 pub enum DeduplicationResult {
     Unique { id: String },
-    Duplicate { existing_id: String, new_id: String }
+    Duplicate { existing_id: String, new_id: String },
 }
 
 impl DeduplicationResult {
@@ -402,7 +402,7 @@ impl DeduplicationResult {
     pub fn effective_id(&self) -> &str {
         match self {
             DeduplicationResult::Unique { id } => id,
-            DeduplicationResult::Duplicate { existing_id, .. } => existing_id
+            DeduplicationResult::Duplicate { existing_id, .. } => existing_id,
         }
     }
 }
@@ -411,7 +411,7 @@ impl DeduplicationResult {
 pub struct ScanResult {
     pub duplicates_found: u64,
     pub merges_performed: u64,
-    pub duration_ms: u64
+    pub duration_ms: u64,
 }
 
 pub struct ResolutionMerger;
@@ -538,21 +538,21 @@ mod tests {
             message_pattern: message.to_string(),
             stack_patterns: vec![],
             context_patterns: vec![],
-            embedding: None
+            embedding: None,
         }
     }
 
     fn sample_signature_with_embedding(
         error_type: &str,
         message: &str,
-        embedding: Vec<f32>
+        embedding: Vec<f32>,
     ) -> ErrorSignature {
         ErrorSignature {
             error_type: error_type.to_string(),
             message_pattern: message.to_string(),
             stack_patterns: vec![],
             context_patterns: vec![],
-            embedding: Some(embedding)
+            embedding: Some(embedding),
         }
     }
 
@@ -642,7 +642,7 @@ mod tests {
             context_hash: 0,
             embedding: None,
             created_at: 100,
-            merge_count: 0
+            merge_count: 0,
         };
         let sig2 = IndexedSignature {
             id: "s2".to_string(),
@@ -651,7 +651,7 @@ mod tests {
             context_hash: 0,
             embedding: None,
             created_at: 200,
-            merge_count: 0
+            merge_count: 0,
         };
 
         storage.save_signature(&sig1).await.unwrap();
@@ -671,7 +671,7 @@ mod tests {
             changes: vec![],
             success_rate: 0.8,
             application_count: 10,
-            last_success_at: 100
+            last_success_at: 100,
         };
 
         let secondary = Resolution {
@@ -681,7 +681,7 @@ mod tests {
             changes: vec![],
             success_rate: 0.9,
             application_count: 5,
-            last_success_at: 200
+            last_success_at: 200,
         };
 
         ResolutionMerger::merge_resolutions(&mut primary, &secondary);
@@ -701,7 +701,7 @@ mod tests {
             content: "Primary note".to_string(),
             tags: vec!["tag1".to_string()],
             created_at: 100,
-            updated_at: 100
+            updated_at: 100,
         };
 
         let secondary = HindsightNote {
@@ -711,7 +711,7 @@ mod tests {
             content: "Secondary note".to_string(),
             tags: vec!["tag1".to_string(), "tag2".to_string()],
             created_at: 50,
-            updated_at: 200
+            updated_at: 200,
         };
 
         ResolutionMerger::merge_hindsight_notes(&mut primary, &secondary);
@@ -756,14 +756,14 @@ mod tests {
     #[test]
     fn test_deduplication_result() {
         let unique = DeduplicationResult::Unique {
-            id: "sig1".to_string()
+            id: "sig1".to_string(),
         };
         assert!(!unique.is_duplicate());
         assert_eq!(unique.effective_id(), "sig1");
 
         let duplicate = DeduplicationResult::Duplicate {
             existing_id: "sig1".to_string(),
-            new_id: "sig2".to_string()
+            new_id: "sig2".to_string(),
         };
         assert!(duplicate.is_duplicate());
         assert_eq!(duplicate.effective_id(), "sig1");

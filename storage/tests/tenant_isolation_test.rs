@@ -19,7 +19,7 @@ async fn test_tenant_isolation_cross_tenant_node_access() {
         id: "node-1".to_string(),
         label: "test".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-a".to_string()
+        tenant_id: "tenant-a".to_string(),
     };
 
     store.add_node(ctx_a.clone(), node).await.unwrap();
@@ -42,7 +42,7 @@ async fn test_tenant_isolation_cross_tenant_edge_creation_blocked() {
         id: "node-a".to_string(),
         label: "test".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-a".to_string()
+        tenant_id: "tenant-a".to_string(),
     };
     store.add_node(ctx_a.clone(), node_a).await.unwrap();
 
@@ -50,7 +50,7 @@ async fn test_tenant_isolation_cross_tenant_edge_creation_blocked() {
         id: "node-b".to_string(),
         label: "test".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-b".to_string()
+        tenant_id: "tenant-b".to_string(),
     };
     store.add_node(ctx_b.clone(), node_b).await.unwrap();
 
@@ -60,7 +60,7 @@ async fn test_tenant_isolation_cross_tenant_edge_creation_blocked() {
         target_id: "node-b".to_string(),
         relation: "relates_to".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-a".to_string()
+        tenant_id: "tenant-a".to_string(),
     };
 
     let result = store.add_edge(ctx_a, edge).await;
@@ -90,7 +90,7 @@ async fn test_tenant_id_validation_sql_injection_single_quote() {
             id: "node-1".to_string(),
             label: "test".to_string(),
             properties: serde_json::json!({}),
-            tenant_id: "tenant'; DROP TABLE memory_nodes; --".to_string()
+            tenant_id: "tenant'; DROP TABLE memory_nodes; --".to_string(),
         };
 
         let result = store.add_node(ctx, node).await;
@@ -116,7 +116,7 @@ async fn test_tenant_id_validation_sql_injection_double_dash() {
             id: "node-1".to_string(),
             label: "test".to_string(),
             properties: serde_json::json!({}),
-            tenant_id: "tenant--comment".to_string()
+            tenant_id: "tenant--comment".to_string(),
         };
 
         let result = store.add_node(ctx, node).await;
@@ -142,7 +142,7 @@ async fn test_tenant_id_validation_sql_injection_union() {
             id: "node-1".to_string(),
             label: "test".to_string(),
             properties: serde_json::json!({}),
-            tenant_id: "tenantUNIONSELECT".to_string()
+            tenant_id: "tenantUNIONSELECT".to_string(),
         };
 
         let result = store.add_node(ctx, node).await;
@@ -168,7 +168,7 @@ async fn test_tenant_id_validation_sql_injection_semicolon() {
             id: "node-1".to_string(),
             label: "test".to_string(),
             properties: serde_json::json!({}),
-            tenant_id: "tenant;DELETE".to_string()
+            tenant_id: "tenant;DELETE".to_string(),
         };
 
         let result = store.add_node(ctx, node).await;
@@ -212,7 +212,7 @@ async fn test_tenant_id_validation_valid_patterns() {
             id: format!("node-{}", tenant_id),
             label: "test".to_string(),
             properties: serde_json::json!({}),
-            tenant_id: tenant_id.to_string()
+            tenant_id: tenant_id.to_string(),
         };
 
         let result = store.add_node(ctx, node).await;
@@ -234,7 +234,7 @@ async fn test_tenant_isolation_node_mismatch_rejected() {
         id: "node-1".to_string(),
         label: "test".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-b".to_string()
+        tenant_id: "tenant-b".to_string(),
     };
 
     let result = store.add_node(ctx, node).await;
@@ -255,13 +255,13 @@ async fn test_tenant_isolation_edge_mismatch_rejected() {
         id: "node-1".to_string(),
         label: "test".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-a".to_string()
+        tenant_id: "tenant-a".to_string(),
     };
     let node2 = GraphNode {
         id: "node-2".to_string(),
         label: "test".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-a".to_string()
+        tenant_id: "tenant-a".to_string(),
     };
     store.add_node(ctx.clone(), node1).await.unwrap();
     store.add_node(ctx.clone(), node2).await.unwrap();
@@ -272,7 +272,7 @@ async fn test_tenant_isolation_edge_mismatch_rejected() {
         target_id: "node-2".to_string(),
         relation: "relates_to".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-b".to_string()
+        tenant_id: "tenant-b".to_string(),
     };
 
     let result = store.add_edge(ctx, edge).await;
@@ -294,13 +294,13 @@ async fn test_tenant_isolation_find_related_cross_tenant() {
         id: "node-a1".to_string(),
         label: "test".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-a".to_string()
+        tenant_id: "tenant-a".to_string(),
     };
     let node_a2 = GraphNode {
         id: "node-a2".to_string(),
         label: "test".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-a".to_string()
+        tenant_id: "tenant-a".to_string(),
     };
     store.add_node(ctx_a.clone(), node_a1).await.unwrap();
     store.add_node(ctx_a.clone(), node_a2).await.unwrap();
@@ -311,7 +311,7 @@ async fn test_tenant_isolation_find_related_cross_tenant() {
         target_id: "node-a2".to_string(),
         relation: "relates_to".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-a".to_string()
+        tenant_id: "tenant-a".to_string(),
     };
     store.add_edge(ctx_a.clone(), edge_a).await.unwrap();
 
@@ -340,7 +340,7 @@ async fn test_tenant_isolation_stats_per_tenant() {
             id: format!("node-a-{}", i),
             label: "test".to_string(),
             properties: serde_json::json!({}),
-            tenant_id: "tenant-a".to_string()
+            tenant_id: "tenant-a".to_string(),
         };
         store.add_node(ctx_a.clone(), node).await.unwrap();
     }
@@ -349,7 +349,7 @@ async fn test_tenant_isolation_stats_per_tenant() {
         id: "node-b-0".to_string(),
         label: "test".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: "tenant-b".to_string()
+        tenant_id: "tenant-b".to_string(),
     };
     store.add_node(ctx_b.clone(), node_b).await.unwrap();
 

@@ -13,30 +13,30 @@ mod triggers;
 
 pub use assembler::{
     AssembledContext, AssemblerConfig, ContextAssembler, ContextEntry, ContextMetadata,
-    ContextView, SummarySource, cosine_similarity
+    ContextView, SummarySource, cosine_similarity,
 };
 pub use budget::{
     BudgetCheck, BudgetError, BudgetExhaustedAction, BudgetMetrics, BudgetStatus, BudgetTracker,
-    BudgetTrackerConfig, QueuedRequest, SummarizationBudget, TieredModelConfig
+    BudgetTrackerConfig, QueuedRequest, SummarizationBudget, TieredModelConfig,
 };
 pub use compressor::{
     CompressedEntry, CompressedLayer, CompressionResult, CompressorConfig, HierarchicalCompressor,
-    LayerContent, LayerEntry, ViewMode
+    LayerContent, LayerEntry, ViewMode,
 };
 pub use failure_handling::{
     CachedSummaryStore, CircuitBreaker, CircuitBreakerConfig, CircuitState, FailureMetrics,
-    RetryConfig, alert_on_consecutive_failures, retry_with_backoff
+    RetryConfig, alert_on_consecutive_failures, retry_with_backoff,
 };
 pub use generator::{
     BatchSummaryRequest, BatchSummaryResult, BatchedSummarizer,
     BatchedSummaryResult as BatchedResult, BudgetAwareSummaryGenerator, BudgetAwareSummaryRequest,
     BudgetAwareSummaryResult, GenerationError, LayerBatchResult, SummaryGenerator,
-    SummaryGeneratorConfig, SummaryRequest, SummaryResult, estimate_tokens
+    SummaryGeneratorConfig, SummaryRequest, SummaryResult, estimate_tokens,
 };
 pub use prompts::{PromptTemplate, PromptTemplates};
 pub use triggers::{
     EntryState, SummaryState, SummaryTriggerMonitor, TriggerMonitorConfig, TriggerReason,
-    TriggerResult
+    TriggerResult,
 };
 
 use async_trait::async_trait;
@@ -63,5 +63,5 @@ pub enum LlmError {
     NotConfigured(String),
 
     #[error("Timeout after {0} seconds")]
-    Timeout(u64)
+    Timeout(u64),
 }

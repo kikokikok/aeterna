@@ -87,7 +87,7 @@ fn test_migration_struct_fields() {
         version: 2,
         description: "Add new column".to_string(),
         up_sql: vec!["ALTER TABLE test ADD COLUMN foo VARCHAR"],
-        down_sql: vec!["ALTER TABLE test DROP COLUMN foo"]
+        down_sql: vec!["ALTER TABLE test DROP COLUMN foo"],
     };
 
     assert_eq!(migration.version, 2);
@@ -101,7 +101,7 @@ fn test_migration_record_serialization() {
     let record = MigrationRecord {
         version: 1,
         applied_at: "2024-01-01T00:00:00".to_string(),
-        description: "Initial migration".to_string()
+        description: "Initial migration".to_string(),
     };
 
     let json = serde_json::to_string(&record).unwrap();

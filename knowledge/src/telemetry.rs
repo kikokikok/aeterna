@@ -24,7 +24,7 @@ impl KnowledgeTelemetry {
         depth: &str,
         status: &str,
         tokens_used: u32,
-        latency_ms: f64
+        latency_ms: f64,
     ) {
         increment_counter!("cca_summary_generation_total", "depth" => depth.to_string(), "status" => status.to_string());
         histogram!("cca_summary_generation_tokens", tokens_used as f64, "depth" => depth.to_string());
@@ -48,7 +48,7 @@ impl KnowledgeTelemetry {
         phase: &str,
         status: &str,
         iteration: u32,
-        latency_ms: f64
+        latency_ms: f64,
     ) {
         increment_counter!("cca_meta_agent_loop_total", "phase" => phase.to_string(), "status" => status.to_string());
         gauge!("cca_meta_agent_loop_iteration", iteration as f64, "phase" => phase.to_string());
@@ -60,7 +60,7 @@ impl KnowledgeTelemetry {
         status: &str,
         layers_included: usize,
         tokens_used: u32,
-        latency_ms: f64
+        latency_ms: f64,
     ) {
         increment_counter!("cca_context_assembly_total", "status" => status.to_string());
         histogram!("cca_context_assembly_layers", layers_included as f64);

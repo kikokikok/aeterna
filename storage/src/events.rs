@@ -12,12 +12,12 @@ pub enum EventError {
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
     #[error("Internal error: {0}")]
-    Internal(String)
+    Internal(String),
 }
 
 pub struct RedisPublisher {
     client: Arc<redis::Client>,
-    stream_name: String
+    stream_name: String,
 }
 
 impl RedisPublisher {
@@ -25,7 +25,7 @@ impl RedisPublisher {
         let client = redis::Client::open(connection_url)?;
         Ok(Self {
             client: Arc::new(client),
-            stream_name: stream_name.to_string()
+            stream_name: stream_name.to_string(),
         })
     }
 }
@@ -47,7 +47,7 @@ impl EventPublisher for RedisPublisher {
 
     async fn subscribe(
         &self,
-        _channels: &[&str]
+        _channels: &[&str],
     ) -> Result<tokio::sync::mpsc::Receiver<GovernanceEvent>, Self::Error> {
         let client = self.client.clone();
         let stream_name = self.stream_name.clone();
@@ -100,7 +100,7 @@ impl EventPublisher for RedisPublisher {
 }
 
 pub struct MultiPublisher<E: std::error::Error + Send + Sync + 'static> {
-    publishers: Vec<Box<dyn EventPublisher<Error = E> + Send + Sync>>
+    publishers: Vec<Box<dyn EventPublisher<Error = E> + Send + Sync>>,
 }
 
 impl<E: std::error::Error + Send + Sync + 'static> MultiPublisher<E> {
@@ -122,7 +122,7 @@ impl<E: std::error::Error + Send + Sync + 'static> EventPublisher for MultiPubli
 
     async fn subscribe(
         &self,
-        _channels: &[&str]
+        _channels: &[&str],
     ) -> Result<tokio::sync::mpsc::Receiver<GovernanceEvent>, Self::Error> {
         panic!("Subscribe not implemented for multi-publisher")
     }

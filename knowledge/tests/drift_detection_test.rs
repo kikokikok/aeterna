@@ -10,7 +10,7 @@
 use knowledge::governance::GovernanceEngine;
 use mk_core::types::{
     ConstraintOperator, ConstraintSeverity, ConstraintTarget, KnowledgeLayer, Policy, PolicyMode,
-    PolicyRule, RuleMergeStrategy, RuleType, TenantContext, TenantId, UserId
+    PolicyRule, RuleMergeStrategy, RuleType, TenantContext, TenantId, UserId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -24,7 +24,7 @@ use tokio::sync::OnceCell;
 struct PostgresFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Postgres>,
-    url: String
+    url: String,
 }
 
 static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
@@ -45,7 +45,7 @@ async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
                     let url = format!("postgres://testuser:testpass@localhost:{}/testdb", port);
                     Some(PostgresFixture { container, url })
                 }
-                Err(_) => None
+                Err(_) => None,
             }
         })
         .await
@@ -66,7 +66,7 @@ fn unique_drift_test_id() -> u32 {
 fn create_test_context() -> TenantContext {
     TenantContext::new(
         TenantId::new("test-tenant".to_string()).unwrap(),
-        UserId::new("test-user".to_string()).unwrap()
+        UserId::new("test-user".to_string()).unwrap(),
     )
 }
 
@@ -79,7 +79,7 @@ fn create_mandatory_policy(id: &str, rules: Vec<PolicyRule>) -> Policy {
         mode: PolicyMode::Mandatory,
         merge_strategy: RuleMergeStrategy::Override,
         rules,
-        metadata: HashMap::new()
+        metadata: HashMap::new(),
     }
 }
 
@@ -92,7 +92,7 @@ fn create_advisory_policy(id: &str, rules: Vec<PolicyRule>) -> Policy {
         mode: PolicyMode::Optional,
         merge_strategy: RuleMergeStrategy::Override,
         rules,
-        metadata: HashMap::new()
+        metadata: HashMap::new(),
     }
 }
 
@@ -110,8 +110,8 @@ async fn test_drift_score_zero_when_no_violations() {
             operator: ConstraintOperator::MustExist,
             value: serde_json::json!(null),
             severity: ConstraintSeverity::Block,
-            message: "File must exist".to_string()
-        }]
+            message: "File must exist".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -142,8 +142,8 @@ async fn test_drift_score_block_severity_yields_one() {
             operator: ConstraintOperator::MustUse,
             value: serde_json::json!("required-lib"),
             severity: ConstraintSeverity::Block,
-            message: "Required library missing".to_string()
-        }]
+            message: "Required library missing".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -174,8 +174,8 @@ async fn test_drift_score_warn_severity_yields_half() {
             operator: ConstraintOperator::MustUse,
             value: serde_json::json!("recommended-lib"),
             severity: ConstraintSeverity::Warn,
-            message: "Recommended library missing".to_string()
-        }]
+            message: "Recommended library missing".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -206,8 +206,8 @@ async fn test_drift_score_info_severity_yields_point_one() {
             operator: ConstraintOperator::MustUse,
             value: serde_json::json!("optional-lib"),
             severity: ConstraintSeverity::Info,
-            message: "Optional library missing".to_string()
-        }]
+            message: "Optional library missing".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -239,7 +239,7 @@ async fn test_drift_score_capped_at_one() {
                 operator: ConstraintOperator::MustUse,
                 value: serde_json::json!("lib-1"),
                 severity: ConstraintSeverity::Block,
-                message: "Missing lib-1".to_string()
+                message: "Missing lib-1".to_string(),
             },
             PolicyRule {
                 id: "block-2".to_string(),
@@ -248,7 +248,7 @@ async fn test_drift_score_capped_at_one() {
                 operator: ConstraintOperator::MustUse,
                 value: serde_json::json!("lib-2"),
                 severity: ConstraintSeverity::Block,
-                message: "Missing lib-2".to_string()
+                message: "Missing lib-2".to_string(),
             },
             PolicyRule {
                 id: "block-3".to_string(),
@@ -257,9 +257,9 @@ async fn test_drift_score_capped_at_one() {
                 operator: ConstraintOperator::MustUse,
                 value: serde_json::json!("lib-3"),
                 severity: ConstraintSeverity::Block,
-                message: "Missing lib-3".to_string()
+                message: "Missing lib-3".to_string(),
             },
-        ]
+        ],
     );
     engine.add_policy(policy);
 
@@ -291,7 +291,7 @@ async fn test_drift_score_mixed_severities() {
                 operator: ConstraintOperator::MustUse,
                 value: serde_json::json!("warn-lib"),
                 severity: ConstraintSeverity::Warn,
-                message: "Missing warn-lib".to_string()
+                message: "Missing warn-lib".to_string(),
             },
             PolicyRule {
                 id: "info-rule".to_string(),
@@ -300,9 +300,9 @@ async fn test_drift_score_mixed_severities() {
                 operator: ConstraintOperator::MustUse,
                 value: serde_json::json!("info-lib"),
                 severity: ConstraintSeverity::Info,
-                message: "Missing info-lib".to_string()
+                message: "Missing info-lib".to_string(),
             },
-        ]
+        ],
     );
     engine.add_policy(policy);
 
@@ -356,7 +356,7 @@ async fn test_stale_policy_version_detection() {
         mode: PolicyMode::Mandatory,
         merge_strategy: RuleMergeStrategy::Override,
         rules: vec![],
-        metadata
+        metadata,
     };
     engine.add_policy(policy);
 
@@ -389,7 +389,7 @@ async fn test_no_stale_policy_when_versions_match() {
         mode: PolicyMode::Mandatory,
         merge_strategy: RuleMergeStrategy::Override,
         rules: vec![],
-        metadata
+        metadata,
     };
     engine.add_policy(policy);
 
@@ -420,8 +420,8 @@ async fn test_advisory_policies_dont_count_as_mandatory() {
             operator: ConstraintOperator::MustExist,
             value: serde_json::json!(null),
             severity: ConstraintSeverity::Info,
-            message: "Advisory check".to_string()
-        }]
+            message: "Advisory check".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -452,8 +452,8 @@ async fn test_multiple_policies_accumulate_violations() {
             operator: ConstraintOperator::MustUse,
             value: serde_json::json!("lib-a"),
             severity: ConstraintSeverity::Info,
-            message: "Missing lib-a".to_string()
-        }]
+            message: "Missing lib-a".to_string(),
+        }],
     );
 
     let policy2 = create_mandatory_policy(
@@ -465,8 +465,8 @@ async fn test_multiple_policies_accumulate_violations() {
             operator: ConstraintOperator::MustUse,
             value: serde_json::json!("lib-b"),
             severity: ConstraintSeverity::Info,
-            message: "Missing lib-b".to_string()
-        }]
+            message: "Missing lib-b".to_string(),
+        }],
     );
 
     engine.add_policy(policy1);
@@ -499,15 +499,15 @@ async fn test_deny_rule_violation_detection() {
             operator: ConstraintOperator::MustUse,
             value: serde_json::json!("forbidden-lib"),
             severity: ConstraintSeverity::Block,
-            message: "Forbidden library detected".to_string()
-        }]
+            message: "Forbidden library detected".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
     let mut context = HashMap::new();
     context.insert(
         "dependencies".to_string(),
-        serde_json::json!(["forbidden-lib", "good-lib"])
+        serde_json::json!(["forbidden-lib", "good-lib"]),
     );
 
     let drift_score = engine
@@ -534,8 +534,8 @@ async fn test_empty_context_with_mandatory_policies() {
             operator: ConstraintOperator::MustExist,
             value: serde_json::json!(null),
             severity: ConstraintSeverity::Block,
-            message: "Dependencies must be declared".to_string()
-        }]
+            message: "Dependencies must be declared".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -565,8 +565,8 @@ async fn test_drift_with_must_not_use_satisfied() {
             operator: ConstraintOperator::MustNotUse,
             value: serde_json::json!("bad-lib"),
             severity: ConstraintSeverity::Block,
-            message: "Bad library forbidden".to_string()
-        }]
+            message: "Bad library forbidden".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -597,15 +597,15 @@ async fn test_drift_with_must_not_use_violated() {
             operator: ConstraintOperator::MustNotUse,
             value: serde_json::json!("bad-lib"),
             severity: ConstraintSeverity::Block,
-            message: "Bad library forbidden".to_string()
-        }]
+            message: "Bad library forbidden".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
     let mut context = HashMap::new();
     context.insert(
         "dependencies".to_string(),
-        serde_json::json!(["good-lib", "bad-lib"])
+        serde_json::json!(["good-lib", "bad-lib"]),
     );
 
     let drift_score = engine
@@ -632,8 +632,8 @@ async fn test_drift_with_regex_match_satisfied() {
             operator: ConstraintOperator::MustMatch,
             value: serde_json::json!(r"^[a-z_]+\.rs$"),
             severity: ConstraintSeverity::Block,
-            message: "File must match naming convention".to_string()
-        }]
+            message: "File must match naming convention".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -661,8 +661,8 @@ async fn test_drift_with_regex_match_violated() {
             operator: ConstraintOperator::MustMatch,
             value: serde_json::json!(r"^[a-z_]+\.rs$"),
             severity: ConstraintSeverity::Block,
-            message: "File must match naming convention".to_string()
-        }]
+            message: "File must match naming convention".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -693,8 +693,8 @@ async fn test_drift_with_must_not_match_satisfied() {
             operator: ConstraintOperator::MustNotMatch,
             value: serde_json::json!(r"_test\.rs$"),
             severity: ConstraintSeverity::Block,
-            message: "Test files not allowed in src".to_string()
-        }]
+            message: "Test files not allowed in src".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -722,8 +722,8 @@ async fn test_drift_with_must_not_match_violated() {
             operator: ConstraintOperator::MustNotMatch,
             value: serde_json::json!(r"_test\.rs$"),
             severity: ConstraintSeverity::Block,
-            message: "Test files not allowed in src".to_string()
-        }]
+            message: "Test files not allowed in src".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -756,9 +756,9 @@ async fn test_drift_layer_filtering() {
             operator: ConstraintOperator::MustUse,
             value: serde_json::json!("company-lib"),
             severity: ConstraintSeverity::Block,
-            message: "Company lib required".to_string()
+            message: "Company lib required".to_string(),
         }],
-        metadata: HashMap::new()
+        metadata: HashMap::new(),
     };
 
     let project_policy = Policy {
@@ -775,9 +775,9 @@ async fn test_drift_layer_filtering() {
             operator: ConstraintOperator::MustUse,
             value: serde_json::json!("project-lib"),
             severity: ConstraintSeverity::Warn,
-            message: "Project lib required".to_string()
+            message: "Project lib required".to_string(),
         }],
-        metadata: HashMap::new()
+        metadata: HashMap::new(),
     };
 
     engine.add_policy(company_policy);
@@ -786,7 +786,7 @@ async fn test_drift_layer_filtering() {
     let mut context = HashMap::new();
     context.insert(
         "dependencies".to_string(),
-        serde_json::json!(["company-lib"])
+        serde_json::json!(["company-lib"]),
     );
 
     let drift_score = engine
@@ -817,8 +817,8 @@ async fn test_drift_idempotent_check() {
             operator: ConstraintOperator::MustUse,
             value: serde_json::json!("required-lib"),
             severity: ConstraintSeverity::Warn,
-            message: "Required lib missing".to_string()
-        }]
+            message: "Required lib missing".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -852,7 +852,7 @@ async fn test_llm_enhanced_drift_detects_semantic_violations() {
     let mut context = HashMap::new();
     context.insert(
         "content".to_string(),
-        serde_json::json!("This code violate:security-rule violates security practices")
+        serde_json::json!("This code violate:security-rule violates security practices"),
     );
 
     let drift_score = engine
@@ -876,7 +876,7 @@ async fn test_llm_enhanced_drift_no_false_positives() {
     let mut context = HashMap::new();
     context.insert(
         "content".to_string(),
-        serde_json::json!("This is perfectly compliant code with no issues")
+        serde_json::json!("This is perfectly compliant code with no issues"),
     );
 
     let drift_score = engine
@@ -906,15 +906,15 @@ async fn test_llm_violations_prefixed_with_llm_marker() {
             operator: ConstraintOperator::MustMatch,
             value: serde_json::json!(".*"),
             severity: ConstraintSeverity::Warn,
-            message: "Semantic policy".to_string()
-        }]
+            message: "Semantic policy".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
     let mut context = HashMap::new();
     context.insert(
         "content".to_string(),
-        serde_json::json!("Code that violate:semantic-check triggers LLM analysis")
+        serde_json::json!("Code that violate:semantic-check triggers LLM analysis"),
     );
 
     let drift_score = engine
@@ -932,7 +932,7 @@ async fn test_llm_graceful_degradation_without_service() {
     let mut context = HashMap::new();
     context.insert(
         "content".to_string(),
-        serde_json::json!("Content that would trigger LLM analysis if available")
+        serde_json::json!("Content that would trigger LLM analysis if available"),
     );
 
     let result = engine.check_drift(&ctx, "project-1", &context).await;
@@ -956,7 +956,7 @@ async fn test_llm_combined_with_rule_based_violations() {
                 operator: ConstraintOperator::MustUse,
                 value: serde_json::json!("required-lib"),
                 severity: ConstraintSeverity::Warn,
-                message: "Required lib missing".to_string()
+                message: "Required lib missing".to_string(),
             },
             PolicyRule {
                 id: "llm-checked".to_string(),
@@ -965,9 +965,9 @@ async fn test_llm_combined_with_rule_based_violations() {
                 operator: ConstraintOperator::MustMatch,
                 value: serde_json::json!(".*"),
                 severity: ConstraintSeverity::Info,
-                message: "LLM semantic check".to_string()
+                message: "LLM semantic check".to_string(),
             },
-        ]
+        ],
     );
     engine.add_policy(policy);
 
@@ -975,7 +975,7 @@ async fn test_llm_combined_with_rule_based_violations() {
     context.insert("dependencies".to_string(), serde_json::json!(["other-lib"]));
     context.insert(
         "content".to_string(),
-        serde_json::json!("Code that violate:llm-checked")
+        serde_json::json!("Code that violate:llm-checked"),
     );
 
     let drift_score = engine
@@ -1004,8 +1004,8 @@ async fn test_llm_does_not_duplicate_existing_violations() {
             operator: ConstraintOperator::MustUse,
             value: serde_json::json!("must-have-lib"),
             severity: ConstraintSeverity::Block,
-            message: "Must have lib".to_string()
-        }]
+            message: "Must have lib".to_string(),
+        }],
     );
     engine.add_policy(policy);
 
@@ -1013,7 +1013,7 @@ async fn test_llm_does_not_duplicate_existing_violations() {
     context.insert("dependencies".to_string(), serde_json::json!([]));
     context.insert(
         "content".to_string(),
-        serde_json::json!("Content that triggers violate:shared-rule")
+        serde_json::json!("Content that triggers violate:shared-rule"),
     );
 
     let drift_score = engine
@@ -1037,7 +1037,7 @@ async fn test_drift_auto_suppress_info_filters_info_violations() {
     let tenant_id = TenantId::new(format!("tenant-auto-suppress-{}", test_id)).unwrap();
     let ctx = TenantContext::new(
         tenant_id.clone(),
-        UserId::new("user-1".to_string()).unwrap()
+        UserId::new("user-1".to_string()).unwrap(),
     );
 
     let drift_config = mk_core::types::DriftConfig {
@@ -1046,7 +1046,7 @@ async fn test_drift_auto_suppress_info_filters_info_violations() {
         threshold: 0.2,
         low_confidence_threshold: 0.7,
         auto_suppress_info: true,
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
     };
 
     use mk_core::traits::StorageBackend;
@@ -1069,7 +1069,7 @@ async fn test_drift_auto_suppress_info_filters_info_violations() {
                 operator: ConstraintOperator::MustUse,
                 value: serde_json::json!("optional-lib"),
                 severity: ConstraintSeverity::Info,
-                message: "Optional library missing".to_string()
+                message: "Optional library missing".to_string(),
             },
             PolicyRule {
                 id: "warn-rule".to_string(),
@@ -1078,10 +1078,10 @@ async fn test_drift_auto_suppress_info_filters_info_violations() {
                 operator: ConstraintOperator::MustUse,
                 value: serde_json::json!("recommended-lib"),
                 severity: ConstraintSeverity::Warn,
-                message: "Recommended library missing".to_string()
+                message: "Recommended library missing".to_string(),
             },
         ],
-        metadata: HashMap::new()
+        metadata: HashMap::new(),
     };
     engine.add_policy(policy);
 
@@ -1112,7 +1112,7 @@ async fn test_drift_without_auto_suppress_includes_info_violations() {
     let tenant_id = TenantId::new(format!("tenant-no-suppress-{}", test_id)).unwrap();
     let ctx = TenantContext::new(
         tenant_id.clone(),
-        UserId::new("user-1".to_string()).unwrap()
+        UserId::new("user-1".to_string()).unwrap(),
     );
 
     let drift_config = mk_core::types::DriftConfig {
@@ -1121,7 +1121,7 @@ async fn test_drift_without_auto_suppress_includes_info_violations() {
         threshold: 0.2,
         low_confidence_threshold: 0.7,
         auto_suppress_info: false,
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
     };
 
     use mk_core::traits::StorageBackend;
@@ -1144,7 +1144,7 @@ async fn test_drift_without_auto_suppress_includes_info_violations() {
                 operator: ConstraintOperator::MustUse,
                 value: serde_json::json!("optional-lib"),
                 severity: ConstraintSeverity::Info,
-                message: "Optional library missing".to_string()
+                message: "Optional library missing".to_string(),
             },
             PolicyRule {
                 id: "warn-rule".to_string(),
@@ -1153,10 +1153,10 @@ async fn test_drift_without_auto_suppress_includes_info_violations() {
                 operator: ConstraintOperator::MustUse,
                 value: serde_json::json!("recommended-lib"),
                 severity: ConstraintSeverity::Warn,
-                message: "Recommended library missing".to_string()
+                message: "Recommended library missing".to_string(),
             },
         ],
-        metadata: HashMap::new()
+        metadata: HashMap::new(),
     };
     engine.add_policy(policy);
 
@@ -1186,7 +1186,7 @@ async fn test_drift_stores_result_with_suppressions() {
     let tenant_id = TenantId::new(format!("tenant-store-result-{}", test_id)).unwrap();
     let ctx = TenantContext::new(
         tenant_id.clone(),
-        UserId::new("user-1".to_string()).unwrap()
+        UserId::new("user-1".to_string()).unwrap(),
     );
     let project_id = format!("proj-store-result-{}", test_id);
 
@@ -1196,7 +1196,7 @@ async fn test_drift_stores_result_with_suppressions() {
         threshold: 0.2,
         low_confidence_threshold: 0.7,
         auto_suppress_info: true,
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
     };
 
     use mk_core::traits::StorageBackend;
@@ -1219,9 +1219,9 @@ async fn test_drift_stores_result_with_suppressions() {
             operator: ConstraintOperator::MustUse,
             value: serde_json::json!("optional-lib"),
             severity: ConstraintSeverity::Info,
-            message: "Optional library missing".to_string()
+            message: "Optional library missing".to_string(),
         }],
-        metadata: HashMap::new()
+        metadata: HashMap::new(),
     };
     engine.add_policy(policy);
 

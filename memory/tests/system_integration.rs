@@ -15,7 +15,7 @@ use storage::redis::RedisStorage;
 use testcontainers::{
     ContainerAsync, GenericImage,
     core::{ContainerPort, WaitFor},
-    runners::AsyncRunner
+    runners::AsyncRunner,
 };
 use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::redis::Redis;
@@ -24,19 +24,19 @@ use tokio::sync::OnceCell;
 struct PostgresFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Postgres>,
-    url: String
+    url: String,
 }
 
 struct RedisFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Redis>,
-    url: String
+    url: String,
 }
 
 struct QdrantFixture {
     #[allow(dead_code)]
     container: ContainerAsync<GenericImage>,
-    url: String
+    url: String,
 }
 
 static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
@@ -55,11 +55,11 @@ async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
                 .await
             {
                 Ok(c) => c,
-                Err(_) => return None
+                Err(_) => return None,
             };
             let port = match container.get_host_port_ipv4(5432).await {
                 Ok(p) => p,
-                Err(_) => return None
+                Err(_) => return None,
             };
             let url = format!("postgres://aeterna:aeterna@localhost:{}/aeterna_test", port);
             Some(PostgresFixture { container, url })
@@ -73,11 +73,11 @@ async fn get_redis_fixture() -> Option<&'static RedisFixture> {
         .get_or_init(|| async {
             let container = match Redis::default().start().await {
                 Ok(c) => c,
-                Err(_) => return None
+                Err(_) => return None,
             };
             let port = match container.get_host_port_ipv4(6379).await {
                 Ok(p) => p,
-                Err(_) => return None
+                Err(_) => return None,
             };
             let url = format!("redis://localhost:{}", port);
             Some(RedisFixture { container, url })
@@ -92,17 +92,17 @@ async fn get_qdrant_fixture() -> Option<&'static QdrantFixture> {
             let container = match GenericImage::new("qdrant/qdrant", "latest")
                 .with_exposed_port(ContainerPort::Tcp(6334))
                 .with_wait_for(WaitFor::message_on_stdout(
-                    "Qdrant is ready to accept connections"
+                    "Qdrant is ready to accept connections",
                 ))
                 .start()
                 .await
             {
                 Ok(c) => c,
-                Err(_) => return None
+                Err(_) => return None,
             };
             let port = match container.get_host_port_ipv4(6334).await {
                 Ok(p) => p,
-                Err(_) => return None
+                Err(_) => return None,
             };
             let url = format!("http://localhost:{}", port);
             Some(QdrantFixture { container, url })
@@ -125,7 +125,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
     let (Some(pg_fixture), Some(redis_fixture), Some(qdrant_fixture)) = (
         get_postgres_fixture().await,
         get_redis_fixture().await,
-        get_qdrant_fixture().await
+        get_qdrant_fixture().await,
     ) else {
         eprintln!("Skipping system test: Docker not available");
         return Ok(());
@@ -160,7 +160,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         layer: MemoryLayer::User,
         metadata: HashMap::new(),
         created_at: 1736400000,
-        updated_at: 1736400000
+        updated_at: 1736400000,
     };
 
     let ctx = test_ctx();
@@ -225,12 +225,12 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
             m.insert("access_count".to_string(), serde_json::json!(10));
             m.insert(
                 "last_accessed_at".to_string(),
-                serde_json::json!(chrono::Utc::now().timestamp())
+                serde_json::json!(chrono::Utc::now().timestamp()),
             );
             m
         },
         created_at: 1736400000,
-        updated_at: 1736400000
+        updated_at: 1736400000,
     };
 
     manager

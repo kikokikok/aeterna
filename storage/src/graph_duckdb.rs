@@ -63,7 +63,7 @@ pub enum GraphError {
     ChecksumMismatch { expected: String, actual: String },
 
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error)
+    Io(#[from] std::io::Error),
 }
 
 #[derive(Debug, Clone)]
@@ -78,7 +78,7 @@ pub struct ColdStartConfig {
 
     pub warm_pool_enabled: bool,
 
-    pub warm_pool_min_instances: u32
+    pub warm_pool_min_instances: u32,
 }
 
 impl Default for ColdStartConfig {
@@ -89,7 +89,7 @@ impl Default for ColdStartConfig {
             access_tracking_enabled: true,
             prewarm_partition_count: 5,
             warm_pool_enabled: false,
-            warm_pool_min_instances: 1
+            warm_pool_min_instances: 1,
         }
     }
 }
@@ -100,7 +100,7 @@ pub struct PartitionAccessRecord {
     pub tenant_id: String,
     pub access_count: u64,
     pub last_access: DateTime<Utc>,
-    pub avg_load_time_ms: f64
+    pub avg_load_time_ms: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -108,14 +108,14 @@ pub struct LazyLoadResult {
     pub partitions_loaded: usize,
     pub total_load_time_ms: u64,
     pub budget_remaining_ms: u64,
-    pub deferred_partitions: Vec<String>
+    pub deferred_partitions: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct WarmPoolRecommendation {
     pub recommended: bool,
     pub min_instances: u32,
-    pub reason: String
+    pub reason: String,
 }
 
 #[derive(Debug, Clone)]
@@ -138,7 +138,7 @@ pub struct DuckDbGraphConfig {
 
     pub s3_force_path_style: bool,
 
-    pub cold_start: ColdStartConfig
+    pub cold_start: ColdStartConfig,
 }
 
 impl Default for DuckDbGraphConfig {
@@ -153,7 +153,7 @@ impl Default for DuckDbGraphConfig {
             s3_endpoint: None,
             s3_region: None,
             s3_force_path_style: false,
-            cold_start: ColdStartConfig::default()
+            cold_start: ColdStartConfig::default(),
         }
     }
 }
@@ -166,7 +166,7 @@ pub struct Entity {
     pub properties: serde_json::Value,
     pub tenant_id: String,
     pub created_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -178,7 +178,7 @@ pub struct EntityEdge {
     pub properties: serde_json::Value,
     pub tenant_id: String,
     pub created_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -190,7 +190,7 @@ pub struct GraphNodeExtended {
     pub memory_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,7 +203,7 @@ pub struct GraphEdgeExtended {
     pub tenant_id: String,
     pub weight: f64,
     pub created_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 #[async_trait]
@@ -212,7 +212,7 @@ pub trait EntityExtractor: Send + Sync {
     async fn extract_relationships(
         &self,
         text: &str,
-        entities: &[Entity]
+        entities: &[Entity],
     ) -> Result<Vec<EntityEdge>, GraphError>;
 }
 
@@ -220,7 +220,7 @@ pub trait EntityExtractor: Send + Sync {
 pub struct Community {
     pub id: String,
     pub member_node_ids: Vec<String>,
-    pub density: f64
+    pub density: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -230,7 +230,7 @@ pub struct ContentionAlertConfig {
     pub wait_time_warn_ms: u64,
     pub wait_time_critical_ms: u64,
     pub timeout_rate_warn_percent: f64,
-    pub timeout_rate_critical_percent: f64
+    pub timeout_rate_critical_percent: f64,
 }
 
 impl Default for ContentionAlertConfig {
@@ -241,7 +241,7 @@ impl Default for ContentionAlertConfig {
             wait_time_warn_ms: 1000,
             wait_time_critical_ms: 3000,
             timeout_rate_warn_percent: 5.0,
-            timeout_rate_critical_percent: 15.0
+            timeout_rate_critical_percent: 15.0,
         }
     }
 }
@@ -252,7 +252,7 @@ pub struct WriteCoordinatorConfig {
     pub max_retries: u32,
     pub base_backoff_ms: u64,
     pub max_backoff_ms: u64,
-    pub alert_config: ContentionAlertConfig
+    pub alert_config: ContentionAlertConfig,
 }
 
 impl Default for WriteCoordinatorConfig {
@@ -262,7 +262,7 @@ impl Default for WriteCoordinatorConfig {
             max_retries: 5,
             base_backoff_ms: 50,
             max_backoff_ms: 2000,
-            alert_config: ContentionAlertConfig::default()
+            alert_config: ContentionAlertConfig::default(),
         }
     }
 }
@@ -277,7 +277,7 @@ pub struct BackupConfig {
 
     pub auto_backup_enabled: bool,
 
-    pub backup_prefix: String
+    pub backup_prefix: String,
 }
 
 impl Default for BackupConfig {
@@ -287,7 +287,7 @@ impl Default for BackupConfig {
             retention_count: 24,
             retention_max_age_secs: 86400 * 7,
             auto_backup_enabled: false,
-            backup_prefix: "backups".to_string()
+            backup_prefix: "backups".to_string(),
         }
     }
 }
@@ -302,7 +302,7 @@ pub struct SnapshotMetadata {
     pub checksum: String,
     pub node_count: u64,
     pub edge_count: u64,
-    pub schema_version: i32
+    pub schema_version: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -311,7 +311,7 @@ pub struct BackupResult {
     pub s3_key: String,
     pub size_bytes: u64,
     pub duration_ms: u64,
-    pub checksum: String
+    pub checksum: String,
 }
 
 #[derive(Debug, Clone)]
@@ -319,13 +319,13 @@ pub struct RecoveryResult {
     pub snapshot_id: String,
     pub nodes_restored: u64,
     pub edges_restored: u64,
-    pub duration_ms: u64
+    pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentHealth {
     pub is_healthy: bool,
-    pub message: String
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -336,7 +336,7 @@ pub struct HealthCheckResult {
     pub schema_version: i32,
     pub total_latency_ms: u64,
     pub duckdb_latency_ms: u64,
-    pub s3_latency_ms: u64
+    pub s3_latency_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -344,7 +344,7 @@ pub struct ReadinessResult {
     pub ready: bool,
     pub duckdb_ready: bool,
     pub schema_ready: bool,
-    pub latency_ms: u64
+    pub latency_ms: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -352,20 +352,20 @@ pub struct Migration {
     pub version: i32,
     pub description: String,
     pub up_sql: Vec<&'static str>,
-    pub down_sql: Vec<&'static str>
+    pub down_sql: Vec<&'static str>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MigrationRecord {
     pub version: i32,
     pub applied_at: String,
-    pub description: String
+    pub description: String,
 }
 
 pub struct WriteCoordinator {
     redis_url: String,
     config: WriteCoordinatorConfig,
-    metrics: GraphMetrics
+    metrics: GraphMetrics,
 }
 
 impl WriteCoordinator {
@@ -374,7 +374,7 @@ impl WriteCoordinator {
         Self {
             redis_url,
             config,
-            metrics
+            metrics,
         }
     }
 
@@ -443,7 +443,7 @@ impl WriteCoordinator {
         &self,
         tenant_id: &str,
         lock_value: &str,
-        acquired_at: std::time::Instant
+        acquired_at: std::time::Instant,
     ) -> Result<(), GraphError> {
         let client = redis::Client::open(self.redis_url.as_str())
             .map_err(|e| GraphError::S3(format!("Redis connection failed: {}", e)))?;
@@ -461,7 +461,7 @@ impl WriteCoordinator {
             else
                 return 0
             end
-            "#
+            "#,
         );
 
         let _: i32 = script
@@ -480,7 +480,7 @@ impl WriteCoordinator {
 
 #[derive(Clone, Debug)]
 pub struct GraphMetrics {
-    alert_config: Option<ContentionAlertConfig>
+    alert_config: Option<ContentionAlertConfig>,
 }
 
 impl Default for GraphMetrics {
@@ -492,7 +492,7 @@ impl Default for GraphMetrics {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlertSeverity {
     Warn,
-    Critical
+    Critical,
 }
 
 impl GraphMetrics {
@@ -502,14 +502,14 @@ impl GraphMetrics {
 
     pub fn with_alert_config(alert_config: ContentionAlertConfig) -> Self {
         Self {
-            alert_config: Some(alert_config)
+            alert_config: Some(alert_config),
         }
     }
 
     fn emit_alert(&self, severity: AlertSeverity, metric_name: &str, value: f64, threshold: f64) {
         let severity_str = match severity {
             AlertSeverity::Warn => "warn",
-            AlertSeverity::Critical => "critical"
+            AlertSeverity::Critical => "critical",
         };
         metrics::counter!(
             "graph_contention_alerts_total",
@@ -533,14 +533,14 @@ impl GraphMetrics {
                     AlertSeverity::Critical,
                     "wait_time_ms",
                     wait_time_ms as f64,
-                    config.wait_time_critical_ms as f64
+                    config.wait_time_critical_ms as f64,
                 );
             } else if wait_time_ms >= config.wait_time_warn_ms {
                 self.emit_alert(
                     AlertSeverity::Warn,
                     "wait_time_ms",
                     wait_time_ms as f64,
-                    config.wait_time_warn_ms as f64
+                    config.wait_time_warn_ms as f64,
                 );
             }
         }
@@ -597,7 +597,7 @@ impl GraphMetrics {
 
 pub struct DuckDbGraphStore {
     conn: Arc<Mutex<Connection>>,
-    config: DuckDbGraphConfig
+    config: DuckDbGraphConfig,
 }
 
 impl DuckDbGraphStore {
@@ -613,7 +613,7 @@ impl DuckDbGraphStore {
 
         let store = Self {
             conn: Arc::new(Mutex::new(conn)),
-            config
+            config,
         };
 
         store.initialize_schema()?;
@@ -656,7 +656,7 @@ impl DuckDbGraphStore {
                 applied_at TIMESTAMP DEFAULT (now()),
                 description VARCHAR
             );
-            "#
+            "#,
         )?;
 
         conn.execute_batch(
@@ -713,7 +713,7 @@ impl DuckDbGraphStore {
             CREATE INDEX IF NOT EXISTS idx_entities_tenant ON entities(tenant_id);
             CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(tenant_id, entity_type);
             CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(tenant_id, name);
-            "#
+            "#,
         )?;
 
         conn.execute_batch(
@@ -761,7 +761,7 @@ impl DuckDbGraphStore {
             .query_row(
                 "SELECT COALESCE(MAX(version), 0) FROM schema_version",
                 [],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .unwrap_or(0);
 
@@ -793,7 +793,7 @@ impl DuckDbGraphStore {
 
                     conn.execute(
                         "INSERT INTO schema_version (version, description) VALUES (?, ?)",
-                        params![migration.version, migration.description]
+                        params![migration.version, migration.description],
                     )?;
 
                     Ok(())
@@ -830,7 +830,7 @@ impl DuckDbGraphStore {
             version: 1,
             description: "Initial schema with soft-delete support".to_string(),
             up_sql: vec![],
-            down_sql: vec![]
+            down_sql: vec![],
         }]
     }
 
@@ -843,7 +843,7 @@ impl DuckDbGraphStore {
 
         let mut stmt = conn.prepare(
             "SELECT version, CAST(applied_at AS VARCHAR) as applied_at, description FROM \
-             schema_version ORDER BY version ASC"
+             schema_version ORDER BY version ASC",
         )?;
 
         let records = stmt
@@ -851,7 +851,7 @@ impl DuckDbGraphStore {
                 Ok(MigrationRecord {
                     version: row.get(0)?,
                     applied_at: row.get(1)?,
-                    description: row.get(2)?
+                    description: row.get(2)?,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -875,7 +875,7 @@ impl DuckDbGraphStore {
         if tenant_id.is_empty() {
             Self::log_security_audit("REJECTED", "empty_tenant_id", tenant_id, "Empty tenant ID");
             return Err(GraphError::InvalidTenantIdFormat(
-                "Tenant ID cannot be empty".to_string()
+                "Tenant ID cannot be empty".to_string(),
             ));
         }
 
@@ -884,10 +884,10 @@ impl DuckDbGraphStore {
                 "REJECTED",
                 "tenant_id_too_long",
                 tenant_id,
-                "Tenant ID exceeds 128 chars"
+                "Tenant ID exceeds 128 chars",
             );
             return Err(GraphError::InvalidTenantIdFormat(
-                "Tenant ID exceeds maximum length of 128 characters".to_string()
+                "Tenant ID exceeds maximum length of 128 characters".to_string(),
             ));
         }
 
@@ -899,16 +899,16 @@ impl DuckDbGraphStore {
                 "REJECTED",
                 "invalid_tenant_id_chars",
                 tenant_id,
-                "Invalid characters in tenant ID"
+                "Invalid characters in tenant ID",
             );
             return Err(GraphError::InvalidTenantIdFormat(
-                "Tenant ID contains invalid characters (allowed: alphanumeric, -, _)".to_string()
+                "Tenant ID contains invalid characters (allowed: alphanumeric, -, _)".to_string(),
             ));
         }
 
         let sql_injection_patterns = [
             "--", ";", "'", "\"", "/*", "*/", "UNION", "SELECT", "INSERT", "UPDATE", "DELETE",
-            "DROP", "EXEC", "EXECUTE", "xp_"
+            "DROP", "EXEC", "EXECUTE", "xp_",
         ];
 
         let upper_tenant_id = tenant_id.to_uppercase();
@@ -918,10 +918,10 @@ impl DuckDbGraphStore {
                     "BLOCKED",
                     "sql_injection_attempt",
                     tenant_id,
-                    &format!("SQL injection pattern detected: {}", pattern)
+                    &format!("SQL injection pattern detected: {}", pattern),
                 );
                 return Err(GraphError::InvalidTenantIdFormat(
-                    "Tenant ID contains disallowed pattern".to_string()
+                    "Tenant ID contains disallowed pattern".to_string(),
                 ));
             }
         }
@@ -946,13 +946,13 @@ impl DuckDbGraphStore {
         &self,
         conn: &Connection,
         node_id: &str,
-        tenant_id: &str
+        tenant_id: &str,
     ) -> Result<bool, GraphError> {
         let count: i32 = conn.query_row(
             "SELECT COUNT(*) FROM memory_nodes WHERE id = ? AND tenant_id = ? AND deleted_at IS \
              NULL",
             params![node_id, tenant_id],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
         Ok(count > 0)
     }
@@ -966,7 +966,7 @@ impl DuckDbGraphStore {
         let updated = conn.execute(
             "UPDATE memory_nodes SET deleted_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at \
              IS NULL",
-            params![now, node_id, tenant_id]
+            params![now, node_id, tenant_id],
         )?;
 
         if updated == 0 {
@@ -976,7 +976,7 @@ impl DuckDbGraphStore {
         conn.execute(
             "UPDATE memory_edges SET deleted_at = ? WHERE (source_id = ? OR target_id = ?) AND \
              tenant_id = ? AND deleted_at IS NULL",
-            params![now, node_id, node_id, tenant_id]
+            params![now, node_id, node_id, tenant_id],
         )?;
 
         info!("Soft-deleted node {} and cascaded to edges", node_id);
@@ -987,7 +987,7 @@ impl DuckDbGraphStore {
     pub fn soft_delete_nodes_by_source_memory_id(
         &self,
         ctx: TenantContext,
-        source_memory_id: &str
+        source_memory_id: &str,
     ) -> Result<usize, GraphError> {
         let tenant_id = self.validate_tenant(&ctx)?;
         let conn = self.conn.lock();
@@ -997,7 +997,7 @@ impl DuckDbGraphStore {
             "SELECT id FROM memory_nodes 
              WHERE tenant_id = ? 
              AND deleted_at IS NULL 
-             AND json_extract_string(properties, '$.source_memory_id') = ?"
+             AND json_extract_string(properties, '$.source_memory_id') = ?",
         )?;
 
         let node_ids: Vec<String> = stmt
@@ -1015,7 +1015,7 @@ impl DuckDbGraphStore {
              WHERE tenant_id = ? 
              AND deleted_at IS NULL 
              AND json_extract_string(properties, '$.source_memory_id') = ?",
-            params![now, tenant_id, source_memory_id]
+            params![now, tenant_id, source_memory_id],
         )?;
 
         for node_id in &node_ids {
@@ -1024,7 +1024,7 @@ impl DuckDbGraphStore {
                  WHERE (source_id = ? OR target_id = ?) 
                  AND tenant_id = ? 
                  AND deleted_at IS NULL",
-                params![now, node_id, node_id, tenant_id]
+                params![now, node_id, node_id, tenant_id],
             )?;
         }
 
@@ -1042,22 +1042,22 @@ impl DuckDbGraphStore {
 
         let edges_deleted = conn.execute(
             "DELETE FROM memory_edges WHERE deleted_at IS NOT NULL AND deleted_at < ?",
-            params![cutoff]
+            params![cutoff],
         )?;
 
         let nodes_deleted = conn.execute(
             "DELETE FROM memory_nodes WHERE deleted_at IS NOT NULL AND deleted_at < ?",
-            params![cutoff]
+            params![cutoff],
         )?;
 
         let entity_edges_deleted = conn.execute(
             "DELETE FROM entity_edges WHERE deleted_at IS NOT NULL AND deleted_at < ?",
-            params![cutoff]
+            params![cutoff],
         )?;
 
         let entities_deleted = conn.execute(
             "DELETE FROM entities WHERE deleted_at IS NOT NULL AND deleted_at < ?",
-            params![cutoff]
+            params![cutoff],
         )?;
 
         let total = edges_deleted + nodes_deleted + entity_edges_deleted + entities_deleted;
@@ -1070,7 +1070,7 @@ impl DuckDbGraphStore {
         &self,
         ctx: TenantContext,
         node_id: &str,
-        max_hops: usize
+        max_hops: usize,
     ) -> Result<Vec<(GraphEdgeExtended, GraphNodeExtended)>, GraphError> {
         let tenant_id = self.validate_tenant(&ctx)?;
         let effective_max_hops = max_hops.min(self.config.max_path_depth);
@@ -1171,7 +1171,7 @@ impl DuckDbGraphStore {
                             .get::<_, Option<String>>(6)?
                             .and_then(|s| s.parse().ok())
                             .unwrap_or_else(Utc::now),
-                        deleted_at: None
+                        deleted_at: None,
                     },
                     GraphNodeExtended {
                         id: row.get(7)?,
@@ -1190,10 +1190,10 @@ impl DuckDbGraphStore {
                             .get::<_, Option<String>>(12)?
                             .and_then(|s| s.parse().ok())
                             .unwrap_or_else(Utc::now),
-                        deleted_at: None
-                    }
+                        deleted_at: None,
+                    },
                 ))
-            }
+            },
         )?;
 
         let mut results = Vec::new();
@@ -1215,7 +1215,7 @@ impl DuckDbGraphStore {
         ctx: TenantContext,
         start_id: &str,
         end_id: &str,
-        max_depth: Option<usize>
+        max_depth: Option<usize>,
     ) -> Result<Vec<GraphEdgeExtended>, GraphError> {
         let tenant_id = self.validate_tenant(&ctx)?;
         if let Some(depth) = max_depth {
@@ -1283,7 +1283,7 @@ impl DuckDbGraphStore {
             |row| {
                 let path_str: String = row.get(0)?;
                 Ok(path_str)
-            }
+            },
         );
 
         match result {
@@ -1301,7 +1301,7 @@ impl DuckDbGraphStore {
                 debug!("No path found between {} and {}", start_id, end_id);
                 Ok(vec![])
             }
-            Err(e) => Err(GraphError::DuckDb(e))
+            Err(e) => Err(GraphError::DuckDb(e)),
         }
     }
 
@@ -1309,7 +1309,7 @@ impl DuckDbGraphStore {
         &self,
         conn: &Connection,
         edge_id: &str,
-        tenant_id: &str
+        tenant_id: &str,
     ) -> Result<GraphEdgeExtended, GraphError> {
         conn.query_row(
             r#"
@@ -1338,13 +1338,13 @@ impl DuckDbGraphStore {
                         .unwrap_or_else(Utc::now),
                     deleted_at: row
                         .get::<_, Option<String>>(7)?
-                        .and_then(|s| s.parse().ok())
+                        .and_then(|s| s.parse().ok()),
                 })
-            }
+            },
         )
         .map_err(|e| match e {
             duckdb::Error::QueryReturnedNoRows => GraphError::EdgeNotFound(edge_id.to_string()),
-            _ => GraphError::DuckDb(e)
+            _ => GraphError::DuckDb(e),
         })
     }
 
@@ -1354,7 +1354,7 @@ impl DuckDbGraphStore {
 
         if entity.tenant_id != tenant_id {
             return Err(GraphError::TenantViolation(
-                "Entity tenant_id does not match context".to_string()
+                "Entity tenant_id does not match context".to_string(),
             ));
         }
 
@@ -1378,7 +1378,7 @@ impl DuckDbGraphStore {
                 properties_json,
                 tenant_id,
                 entity.created_at.to_rfc3339()
-            ]
+            ],
         )?;
 
         debug!("Added entity {} of type {}", entity.id, entity.entity_type);
@@ -1392,7 +1392,7 @@ impl DuckDbGraphStore {
         source_id: &str,
         target_id: &str,
         relation: &str,
-        properties: Option<serde_json::Value>
+        properties: Option<serde_json::Value>,
     ) -> Result<String, GraphError> {
         let tenant_id = self.validate_tenant(&ctx)?;
         let conn = self.conn.lock();
@@ -1400,13 +1400,13 @@ impl DuckDbGraphStore {
         let source_exists: i32 = conn.query_row(
             "SELECT COUNT(*) FROM entities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL",
             params![source_id, tenant_id],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
 
         let target_exists: i32 = conn.query_row(
             "SELECT COUNT(*) FROM entities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL",
             params![target_id, tenant_id],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
 
         if source_exists == 0 {
@@ -1450,32 +1450,32 @@ impl DuckDbGraphStore {
         let node_count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL",
             params![tenant_id],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
 
         let edge_count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM memory_edges WHERE tenant_id = ? AND deleted_at IS NULL",
             params![tenant_id],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
 
         let entity_count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM entities WHERE tenant_id = ? AND deleted_at IS NULL",
             params![tenant_id],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
 
         let entity_edge_count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM entity_edges WHERE tenant_id = ? AND deleted_at IS NULL",
             params![tenant_id],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
 
         Ok(GraphStats {
             node_count: node_count as usize,
             edge_count: edge_count as usize,
             entity_count: entity_count as usize,
-            entity_edge_count: entity_edge_count as usize
+            entity_edge_count: entity_edge_count as usize,
         })
     }
 
@@ -1545,7 +1545,7 @@ impl DuckDbGraphStore {
     pub async fn load_from_s3(
         &self,
         tenant_id: &str,
-        snapshot_key: &str
+        snapshot_key: &str,
     ) -> Result<(), GraphError> {
         use sha2::{Digest, Sha256};
 
@@ -1623,7 +1623,7 @@ impl DuckDbGraphStore {
         if tenant_id == "TRIGGER_IO_ERROR" {
             return Err(GraphError::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                "Induced IO error"
+                "Induced IO error",
             )));
         }
 
@@ -1643,11 +1643,11 @@ impl DuckDbGraphStore {
 
         conn.execute(
             "DELETE FROM memory_edges WHERE tenant_id = ?",
-            params![tenant_id]
+            params![tenant_id],
         )?;
         conn.execute(
             "DELETE FROM memory_nodes WHERE tenant_id = ?",
-            params![tenant_id]
+            params![tenant_id],
         )?;
 
         let import_nodes_sql = format!(
@@ -1686,7 +1686,7 @@ impl DuckDbGraphStore {
     pub async fn create_backup(
         &self,
         tenant_id: &str,
-        backup_config: &BackupConfig
+        backup_config: &BackupConfig,
     ) -> Result<BackupResult, GraphError> {
         use aws_sdk_s3::primitives::ByteStream;
         use sha2::{Digest, Sha256};
@@ -1726,7 +1726,7 @@ impl DuckDbGraphStore {
             checksum: checksum.clone(),
             node_count: stats.node_count as u64,
             edge_count: stats.edge_count as u64,
-            schema_version: SCHEMA_VERSION
+            schema_version: SCHEMA_VERSION,
         };
 
         let metadata_json = serde_json::to_string(&metadata)
@@ -1759,7 +1759,7 @@ impl DuckDbGraphStore {
             s3_key,
             size_bytes,
             duration_ms,
-            checksum
+            checksum,
         })
     }
 
@@ -1767,7 +1767,7 @@ impl DuckDbGraphStore {
     pub async fn list_snapshots(
         &self,
         tenant_id: &str,
-        backup_config: &BackupConfig
+        backup_config: &BackupConfig,
     ) -> Result<Vec<SnapshotMetadata>, GraphError> {
         Self::validate_tenant_id_format(tenant_id)?;
 
@@ -1826,7 +1826,7 @@ impl DuckDbGraphStore {
         &self,
         tenant_id: &str,
         snapshot_id: &str,
-        backup_config: &BackupConfig
+        backup_config: &BackupConfig,
     ) -> Result<RecoveryResult, GraphError> {
         use sha2::{Digest, Sha256};
 
@@ -1869,7 +1869,7 @@ impl DuckDbGraphStore {
         if actual_checksum != snapshot.checksum {
             return Err(GraphError::ChecksumMismatch {
                 expected: snapshot.checksum.clone(),
-                actual: actual_checksum
+                actual: actual_checksum,
             });
         }
 
@@ -1890,7 +1890,7 @@ impl DuckDbGraphStore {
             snapshot_id: snapshot_id.to_string(),
             nodes_restored: stats.node_count as u64,
             edges_restored: stats.edge_count as u64,
-            duration_ms
+            duration_ms,
         })
     }
 
@@ -1898,7 +1898,7 @@ impl DuckDbGraphStore {
     pub async fn apply_retention_policy(
         &self,
         tenant_id: &str,
-        backup_config: &BackupConfig
+        backup_config: &BackupConfig,
     ) -> Result<usize, GraphError> {
         Self::validate_tenant_id_format(tenant_id)?;
 
@@ -1963,7 +1963,7 @@ impl DuckDbGraphStore {
             .query_row(
                 "SELECT COUNT(*) FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL",
                 params![tenant_id],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .unwrap_or(0);
 
@@ -1971,7 +1971,7 @@ impl DuckDbGraphStore {
             .query_row(
                 "SELECT COUNT(*) FROM memory_edges WHERE tenant_id = ? AND deleted_at IS NULL",
                 params![tenant_id],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .unwrap_or(0);
 
@@ -1979,7 +1979,7 @@ impl DuckDbGraphStore {
             .query_row(
                 "SELECT COUNT(*) FROM entities WHERE tenant_id = ? AND deleted_at IS NULL",
                 params![tenant_id],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .unwrap_or(0);
 
@@ -1987,7 +1987,7 @@ impl DuckDbGraphStore {
             .query_row(
                 "SELECT COUNT(*) FROM entity_edges WHERE tenant_id = ? AND deleted_at IS NULL",
                 params![tenant_id],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .unwrap_or(0);
 
@@ -1995,7 +1995,7 @@ impl DuckDbGraphStore {
             node_count: node_count as usize,
             edge_count: edge_count as usize,
             entity_count: entity_count as usize,
-            entity_edge_count: entity_edge_count as usize
+            entity_edge_count: entity_edge_count as usize,
         })
     }
 
@@ -2005,7 +2005,7 @@ impl DuckDbGraphStore {
         ctx: &TenantContext,
         tenant_id: &str,
         nodes: Vec<GraphNode>,
-        edges: Vec<GraphEdge>
+        edges: Vec<GraphEdge>,
     ) -> Result<(), GraphError> {
         let _ = ctx;
         Self::validate_tenant_id_format(tenant_id)?;
@@ -2018,7 +2018,7 @@ impl DuckDbGraphStore {
             for node in &nodes {
                 if node.tenant_id != tenant_id {
                     return Err(GraphError::TenantViolation(
-                        "Node tenant_id does not match context".to_string()
+                        "Node tenant_id does not match context".to_string(),
                     ));
                 }
 
@@ -2034,14 +2034,14 @@ impl DuckDbGraphStore {
                         properties = EXCLUDED.properties,
                         updated_at = now()
                     "#,
-                    params![node.id, node.label, properties_json, tenant_id]
+                    params![node.id, node.label, properties_json, tenant_id],
                 )?;
             }
 
             for edge in &edges {
                 if edge.tenant_id != tenant_id {
                     return Err(GraphError::TenantViolation(
-                        "Edge tenant_id does not match context".to_string()
+                        "Edge tenant_id does not match context".to_string(),
                     ));
                 }
 
@@ -2108,7 +2108,7 @@ impl DuckDbGraphStore {
         ctx: &TenantContext,
         tenant_id: &str,
         entities: Vec<Entity>,
-        entity_edges: Vec<EntityEdge>
+        entity_edges: Vec<EntityEdge>,
     ) -> Result<(), GraphError> {
         let _ = ctx;
         Self::validate_tenant_id_format(tenant_id)?;
@@ -2121,7 +2121,7 @@ impl DuckDbGraphStore {
             for entity in &entities {
                 if entity.tenant_id != tenant_id {
                     return Err(GraphError::TenantViolation(
-                        "Entity tenant_id does not match context".to_string()
+                        "Entity tenant_id does not match context".to_string(),
                     ));
                 }
 
@@ -2147,14 +2147,14 @@ impl DuckDbGraphStore {
                         entity.entity_type,
                         properties_json,
                         tenant_id
-                    ]
+                    ],
                 )?;
             }
 
             for edge in &entity_edges {
                 if edge.tenant_id != tenant_id {
                     return Err(GraphError::TenantViolation(
-                        "EntityEdge tenant_id does not match context".to_string()
+                        "EntityEdge tenant_id does not match context".to_string(),
                     ));
                 }
 
@@ -2203,7 +2203,7 @@ impl DuckDbGraphStore {
 
     pub fn with_transaction<F, T>(&self, f: F) -> Result<T, GraphError>
     where
-        F: FnOnce(&duckdb::Connection) -> Result<T, GraphError>
+        F: FnOnce(&duckdb::Connection) -> Result<T, GraphError>,
     {
         let conn = self.conn.lock();
 
@@ -2242,7 +2242,7 @@ impl DuckDbGraphStore {
             schema_version,
             total_latency_ms: start.elapsed().as_millis() as u64,
             duckdb_latency_ms,
-            s3_latency_ms
+            s3_latency_ms,
         }
     }
 
@@ -2258,7 +2258,7 @@ impl DuckDbGraphStore {
             ready,
             duckdb_ready,
             schema_ready,
-            latency_ms: start.elapsed().as_millis() as u64
+            latency_ms: start.elapsed().as_millis() as u64,
         }
     }
 
@@ -2268,16 +2268,16 @@ impl DuckDbGraphStore {
         match conn.query_row("SELECT 1", [], |row| row.get::<_, i32>(0)) {
             Ok(1) => ComponentHealth {
                 is_healthy: true,
-                message: "DuckDB connection OK".to_string()
+                message: "DuckDB connection OK".to_string(),
             },
             Ok(_) => ComponentHealth {
                 is_healthy: false,
-                message: "DuckDB returned unexpected value".to_string()
+                message: "DuckDB returned unexpected value".to_string(),
             },
             Err(e) => ComponentHealth {
                 is_healthy: false,
-                message: format!("DuckDB query failed: {}", e)
-            }
+                message: format!("DuckDB query failed: {}", e),
+            },
         }
     }
 
@@ -2285,7 +2285,7 @@ impl DuckDbGraphStore {
         if self.config.s3_bucket.is_none() {
             return ComponentHealth {
                 is_healthy: true,
-                message: "S3 not configured (optional)".to_string()
+                message: "S3 not configured (optional)".to_string(),
             };
         }
 
@@ -2294,7 +2294,7 @@ impl DuckDbGraphStore {
             message: format!(
                 "S3 configured: bucket={}",
                 self.config.s3_bucket.as_ref().unwrap()
-            )
+            ),
         }
     }
 
@@ -2312,7 +2312,7 @@ impl DuckDbGraphStore {
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN \
                  ('memory_nodes', 'memory_edges', 'entities', 'entity_edges', 'schema_version')",
                 [],
-                |row| row.get::<_, i64>(0)
+                |row| row.get::<_, i64>(0),
             )
             .unwrap_or(0);
 
@@ -2325,7 +2325,7 @@ impl DuckDbGraphStore {
         let version: i32 = conn.query_row(
             "SELECT COALESCE(MAX(version), 0) FROM schema_version",
             [],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
 
         Ok(version)
@@ -2337,7 +2337,7 @@ impl DuckDbGraphStore {
             None => {
                 return ComponentHealth {
                     is_healthy: true,
-                    message: "S3 not configured".to_string()
+                    message: "S3 not configured".to_string(),
                 };
             }
         };
@@ -2347,7 +2347,7 @@ impl DuckDbGraphStore {
             Err(e) => {
                 return ComponentHealth {
                     is_healthy: false,
-                    message: format!("Failed to create S3 client: {}", e)
+                    message: format!("Failed to create S3 client: {}", e),
                 };
             }
         };
@@ -2355,12 +2355,12 @@ impl DuckDbGraphStore {
         match s3_client.head_bucket().bucket(bucket).send().await {
             Ok(_) => ComponentHealth {
                 is_healthy: true,
-                message: format!("S3 bucket '{}' accessible", bucket)
+                message: format!("S3 bucket '{}' accessible", bucket),
             },
             Err(e) => ComponentHealth {
                 is_healthy: false,
-                message: format!("S3 bucket '{}' not accessible: {}", bucket, e)
-            }
+                message: format!("S3 bucket '{}' not accessible: {}", bucket, e),
+            },
         }
     }
 
@@ -2368,7 +2368,7 @@ impl DuckDbGraphStore {
         &self,
         tenant_id: &str,
         partition_key: &str,
-        load_time_ms: f64
+        load_time_ms: f64,
     ) -> Result<(), GraphError> {
         if !self.config.cold_start.access_tracking_enabled {
             return Ok(());
@@ -2394,7 +2394,7 @@ impl DuckDbGraphStore {
 
     pub fn get_partition_access_records(
         &self,
-        tenant_id: &str
+        tenant_id: &str,
     ) -> Result<Vec<PartitionAccessRecord>, GraphError> {
         Self::validate_tenant_id_format(tenant_id)?;
         let conn = self.conn.lock();
@@ -2432,9 +2432,9 @@ impl DuckDbGraphStore {
                         tenant_id: row.get(1)?,
                         access_count: row.get(2)?,
                         last_access,
-                        avg_load_time_ms: row.get(4)?
+                        avg_load_time_ms: row.get(4)?,
                     })
-                }
+                },
             )?
             .filter_map(|r| r.ok())
             .collect();
@@ -2450,14 +2450,14 @@ impl DuckDbGraphStore {
     pub async fn lazy_load_partitions(
         &self,
         tenant_id: &str,
-        partition_keys: &[String]
+        partition_keys: &[String],
     ) -> Result<LazyLoadResult, GraphError> {
         if !self.config.cold_start.lazy_loading_enabled {
             return Ok(LazyLoadResult {
                 partitions_loaded: 0,
                 total_load_time_ms: 0,
                 budget_remaining_ms: self.config.cold_start.budget_ms,
-                deferred_partitions: vec![]
+                deferred_partitions: vec![],
             });
         }
 
@@ -2517,14 +2517,14 @@ impl DuckDbGraphStore {
             partitions_loaded: loaded,
             total_load_time_ms,
             budget_remaining_ms,
-            deferred_partitions: deferred
+            deferred_partitions: deferred,
         })
     }
 
     async fn load_partition_data(
         &self,
         tenant_id: &str,
-        partition_key: &str
+        partition_key: &str,
     ) -> Result<(), GraphError> {
         debug!(
             tenant_id = tenant_id,
@@ -2536,7 +2536,7 @@ impl DuckDbGraphStore {
             Some(bucket) => {
                 if tenant_id == "TRIGGER_S3_PARTITION_ERROR" {
                     return Err(GraphError::S3(
-                        "Induced partition fetch failure".to_string()
+                        "Induced partition fetch failure".to_string(),
                     ));
                 }
                 let prefix = self.config.s3_prefix.as_deref().unwrap_or("partitions");
@@ -2567,7 +2567,7 @@ impl DuckDbGraphStore {
                     Err(e) => Err(GraphError::S3(format!(
                         "Failed to load partition {}: {}",
                         partition_key, e
-                    )))
+                    ))),
                 }
             }
             None => {
@@ -2579,7 +2579,7 @@ impl DuckDbGraphStore {
 
     pub fn enforce_cold_start_budget(
         &self,
-        operation_start: std::time::Instant
+        operation_start: std::time::Instant,
     ) -> Result<(), GraphError> {
         let elapsed_ms = operation_start.elapsed().as_millis() as u64;
         let budget_ms = self.config.cold_start.budget_ms;
@@ -2608,7 +2608,7 @@ impl DuckDbGraphStore {
             return WarmPoolRecommendation {
                 recommended: false,
                 min_instances: 0,
-                reason: "Warm pool disabled in configuration".to_string()
+                reason: "Warm pool disabled in configuration".to_string(),
             };
         }
 
@@ -2618,7 +2618,7 @@ impl DuckDbGraphStore {
             reason: format!(
                 "Maintain {} warm instances for cold start optimization",
                 config.warm_pool_min_instances
-            )
+            ),
         }
     }
 
@@ -2626,7 +2626,7 @@ impl DuckDbGraphStore {
     pub fn detect_communities(
         &self,
         ctx: TenantContext,
-        min_community_size: usize
+        min_community_size: usize,
     ) -> Result<Vec<Community>, GraphError> {
         let tenant_id = self.validate_tenant(&ctx)?;
         let conn = self.conn.lock();
@@ -2635,7 +2635,7 @@ impl DuckDbGraphStore {
             r#"
             SELECT id FROM memory_nodes
             WHERE tenant_id = ? AND deleted_at IS NULL
-            "#
+            "#,
         )?;
 
         let node_ids: Vec<String> = stmt
@@ -2658,7 +2658,7 @@ impl DuckDbGraphStore {
             r#"
             SELECT source_id, target_id FROM memory_edges
             WHERE tenant_id = ? AND deleted_at IS NULL
-            "#
+            "#,
         )?;
 
         let edges: Vec<(String, String)> = edge_stmt
@@ -2712,7 +2712,7 @@ impl DuckDbGraphStore {
                 communities.push(Community {
                     id: Uuid::new_v4().to_string(),
                     member_node_ids: component,
-                    density
+                    density,
                 });
             }
         }
@@ -2731,7 +2731,7 @@ pub struct GraphStats {
     pub node_count: usize,
     pub edge_count: usize,
     pub entity_count: usize,
-    pub entity_edge_count: usize
+    pub entity_edge_count: usize,
 }
 
 #[async_trait]
@@ -2744,7 +2744,7 @@ impl GraphStore for DuckDbGraphStore {
 
         if node.tenant_id != tenant_id {
             return Err(GraphError::TenantViolation(
-                "Node tenant_id does not match context".to_string()
+                "Node tenant_id does not match context".to_string(),
             ));
         }
 
@@ -2767,7 +2767,7 @@ impl GraphStore for DuckDbGraphStore {
                 properties = EXCLUDED.properties,
                 updated_at = now()
             "#,
-            params![node.id, node.label, properties_json, tenant_id]
+            params![node.id, node.label, properties_json, tenant_id],
         )?;
 
         debug!("Added/updated node {}", node.id);
@@ -2780,7 +2780,7 @@ impl GraphStore for DuckDbGraphStore {
 
         if edge.tenant_id != tenant_id {
             return Err(GraphError::TenantViolation(
-                "Edge tenant_id does not match context".to_string()
+                "Edge tenant_id does not match context".to_string(),
             ));
         }
 
@@ -2818,7 +2818,7 @@ impl GraphStore for DuckDbGraphStore {
                 edge.relation,
                 properties_json,
                 tenant_id
-            ]
+            ],
         )?;
 
         debug!(
@@ -2832,7 +2832,7 @@ impl GraphStore for DuckDbGraphStore {
     async fn get_neighbors(
         &self,
         ctx: TenantContext,
-        node_id: &str
+        node_id: &str,
     ) -> Result<Vec<(GraphEdge, GraphNode)>, Self::Error> {
         let tenant_id = self.validate_tenant(&ctx)?;
         let conn = self.conn.lock();
@@ -2851,7 +2851,7 @@ impl GraphStore for DuckDbGraphStore {
                 AND e.deleted_at IS NULL
                 AND n.tenant_id = ?
                 AND n.deleted_at IS NULL
-            "#
+            "#,
         )?;
 
         let rows = stmt.query_map(
@@ -2866,7 +2866,7 @@ impl GraphStore for DuckDbGraphStore {
                         .get::<_, Option<String>>(4)?
                         .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
                         .unwrap_or(serde_json::Value::Null),
-                    tenant_id: tenant_id.clone()
+                    tenant_id: tenant_id.clone(),
                 };
                 let node = GraphNode {
                     id: row.get(5)?,
@@ -2875,10 +2875,10 @@ impl GraphStore for DuckDbGraphStore {
                         .get::<_, Option<String>>(7)?
                         .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
                         .unwrap_or(serde_json::Value::Null),
-                    tenant_id: tenant_id.clone()
+                    tenant_id: tenant_id.clone(),
                 };
                 Ok((edge, node))
-            }
+            },
         )?;
 
         let mut results = Vec::new();
@@ -2896,7 +2896,7 @@ impl GraphStore for DuckDbGraphStore {
         ctx: TenantContext,
         start_id: &str,
         end_id: &str,
-        max_depth: usize
+        max_depth: usize,
     ) -> Result<Vec<GraphEdge>, Self::Error> {
         let extended_edges = self.shortest_path(ctx, start_id, end_id, Some(max_depth))?;
 
@@ -2908,7 +2908,7 @@ impl GraphStore for DuckDbGraphStore {
                 target_id: e.target_id,
                 relation: e.relation,
                 properties: e.properties,
-                tenant_id: e.tenant_id
+                tenant_id: e.tenant_id,
             })
             .collect())
     }
@@ -2918,7 +2918,7 @@ impl GraphStore for DuckDbGraphStore {
         &self,
         ctx: TenantContext,
         query: &str,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<GraphNode>, Self::Error> {
         let tenant_id = self.validate_tenant(&ctx)?;
         let conn = self.conn.lock();
@@ -2934,7 +2934,7 @@ impl GraphStore for DuckDbGraphStore {
                 AND (label ILIKE ? OR properties::TEXT ILIKE ?)
             ORDER BY created_at DESC
             LIMIT ?
-            "#
+            "#,
         )?;
 
         let rows = stmt.query_map(
@@ -2947,9 +2947,9 @@ impl GraphStore for DuckDbGraphStore {
                         .get::<_, Option<String>>(2)?
                         .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
                         .unwrap_or(serde_json::Value::Null),
-                    tenant_id: tenant_id.clone()
+                    tenant_id: tenant_id.clone(),
                 })
-            }
+            },
         )?;
 
         let mut results = Vec::new();
@@ -2965,7 +2965,7 @@ impl GraphStore for DuckDbGraphStore {
     async fn soft_delete_nodes_by_source_memory_id(
         &self,
         ctx: TenantContext,
-        source_memory_id: &str
+        source_memory_id: &str,
     ) -> Result<usize, Self::Error> {
         DuckDbGraphStore::soft_delete_nodes_by_source_memory_id(self, ctx, source_memory_id)
     }
@@ -2996,7 +2996,7 @@ mod tests {
             id: "node-1".to_string(),
             label: "TestNode".to_string(),
             properties: serde_json::json!({"key": "value"}),
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
 
         store.add_node(ctx.clone(), node.clone()).await.unwrap();
@@ -3017,7 +3017,7 @@ mod tests {
             target_id: "node-2".to_string(),
             relation: "RELATES_TO".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
 
         let result = store.add_edge(ctx.clone(), edge).await;
@@ -3034,13 +3034,13 @@ mod tests {
             id: "node-1".to_string(),
             label: "Node1".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
         let node2 = GraphNode {
             id: "node-2".to_string(),
             label: "Node2".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
 
         store.add_node(ctx.clone(), node1).await.unwrap();
@@ -3052,7 +3052,7 @@ mod tests {
             target_id: "node-2".to_string(),
             relation: "RELATES_TO".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
 
         store.add_edge(ctx.clone(), edge).await.unwrap();
@@ -3072,13 +3072,13 @@ mod tests {
             id: "node-1".to_string(),
             label: "Node1".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
         let node2 = GraphNode {
             id: "node-2".to_string(),
             label: "Node2".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
         let edge = GraphEdge {
             id: "edge-1".to_string(),
@@ -3086,7 +3086,7 @@ mod tests {
             target_id: "node-2".to_string(),
             relation: "RELATES_TO".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
 
         store.add_node(ctx.clone(), node1).await.unwrap();
@@ -3104,18 +3104,18 @@ mod tests {
         let store = create_test_store();
         let ctx1 = TenantContext::new(
             TenantId::new("tenant-1".to_string()).unwrap(),
-            UserId::new("user-1".to_string()).unwrap()
+            UserId::new("user-1".to_string()).unwrap(),
         );
         let ctx2 = TenantContext::new(
             TenantId::new("tenant-2".to_string()).unwrap(),
-            UserId::new("user-2".to_string()).unwrap()
+            UserId::new("user-2".to_string()).unwrap(),
         );
 
         let node = GraphNode {
             id: "node-1".to_string(),
             label: "TenantNode".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: ctx1.tenant_id.as_str().to_string()
+            tenant_id: ctx1.tenant_id.as_str().to_string(),
         };
 
         store.add_node(ctx1.clone(), node).await.unwrap();
@@ -3135,7 +3135,7 @@ mod tests {
                 id: format!("node-{}", i),
                 label: format!("TestNode-{}", i),
                 properties: serde_json::json!({"index": i}),
-                tenant_id: tenant_id.clone()
+                tenant_id: tenant_id.clone(),
             };
             store.add_node(ctx.clone(), node).await.unwrap();
         }
@@ -3155,7 +3155,7 @@ mod tests {
                 id: format!("node-{}", i),
                 label: format!("Node{}", i),
                 properties: serde_json::Value::Null,
-                tenant_id: tenant_id.clone()
+                tenant_id: tenant_id.clone(),
             };
             store.add_node(ctx.clone(), node).await.unwrap();
         }
@@ -3167,7 +3167,7 @@ mod tests {
                 target_id: format!("node-{}", i + 1),
                 relation: "NEXT".to_string(),
                 properties: serde_json::Value::Null,
-                tenant_id: tenant_id.clone()
+                tenant_id: tenant_id.clone(),
             };
             store.add_edge(ctx.clone(), edge).await.unwrap();
         }
@@ -3187,7 +3187,7 @@ mod tests {
                 id: format!("node-{}", i),
                 label: format!("Node{}", i),
                 properties: serde_json::Value::Null,
-                tenant_id: tenant_id.clone()
+                tenant_id: tenant_id.clone(),
             };
             store.add_node(ctx.clone(), node).await.unwrap();
         }
@@ -3198,7 +3198,7 @@ mod tests {
             target_id: "node-2".to_string(),
             relation: "RELATES".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
         store.add_edge(ctx.clone(), edge).await.unwrap();
 
@@ -3218,7 +3218,7 @@ mod tests {
                 id: format!("node-{}", i),
                 label: format!("Node{}", i),
                 properties: serde_json::Value::Null,
-                tenant_id: tenant_id.clone()
+                tenant_id: tenant_id.clone(),
             };
             store.add_node(ctx.clone(), node).await.unwrap();
         }
@@ -3236,7 +3236,7 @@ mod tests {
                 target_id: tgt.to_string(),
                 relation: "CONNECTS".to_string(),
                 properties: serde_json::Value::Null,
-                tenant_id: tenant_id.clone()
+                tenant_id: tenant_id.clone(),
             };
             store.add_edge(ctx.clone(), edge).await.unwrap();
         }
@@ -3258,7 +3258,7 @@ mod tests {
                 id: format!("node-{}", i),
                 label: format!("Node{}", i),
                 properties: serde_json::Value::Null,
-                tenant_id: tenant_id.clone()
+                tenant_id: tenant_id.clone(),
             };
             store.add_node(ctx.clone(), node).await.unwrap();
         }
@@ -3269,7 +3269,7 @@ mod tests {
             target_id: "node-2".to_string(),
             relation: "CONNECTS".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
         store.add_edge(ctx.clone(), edge1).await.unwrap();
 
@@ -3279,7 +3279,7 @@ mod tests {
             target_id: "node-5".to_string(),
             relation: "CONNECTS".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
         store.add_edge(ctx.clone(), edge2).await.unwrap();
 
@@ -3298,7 +3298,7 @@ mod tests {
                 id: format!("node-{}", i),
                 label: format!("Node{}", i),
                 properties: serde_json::Value::Null,
-                tenant_id: tenant_id.clone()
+                tenant_id: tenant_id.clone(),
             };
             store.add_node(ctx.clone(), node).await.unwrap();
         }
@@ -3309,7 +3309,7 @@ mod tests {
             target_id: "node-2".to_string(),
             relation: "CONNECTS".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
         store.add_edge(ctx.clone(), edge).await.unwrap();
 
@@ -3327,19 +3327,19 @@ mod tests {
             id: "entity-person".to_string(),
             label: "Person".to_string(),
             properties: serde_json::json!({"source_memory_id": "memory-123", "name": "Alice"}),
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
         let node2 = GraphNode {
             id: "entity-place".to_string(),
             label: "Place".to_string(),
             properties: serde_json::json!({"source_memory_id": "memory-123", "name": "Office"}),
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
         let node3 = GraphNode {
             id: "entity-other".to_string(),
             label: "Other".to_string(),
             properties: serde_json::json!({"source_memory_id": "memory-456", "name": "Unrelated"}),
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
 
         store.add_node(ctx.clone(), node1).await.unwrap();
@@ -3352,7 +3352,7 @@ mod tests {
             target_id: "entity-place".to_string(),
             relation: "WORKS_AT".to_string(),
             properties: serde_json::Value::Null,
-            tenant_id: tenant_id.clone()
+            tenant_id: tenant_id.clone(),
         };
         store.add_edge(ctx.clone(), edge).await.unwrap();
 

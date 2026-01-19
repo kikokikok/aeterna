@@ -9,7 +9,7 @@ use std::sync::Arc;
 pub struct ReasoningPlan {
     pub strategy: ReasoningStrategy,
     pub refined_query: String,
-    pub reasoning: String
+    pub reasoning: String,
 }
 
 #[async_trait]
@@ -17,12 +17,12 @@ pub trait ReflectiveReasoner: Send + Sync {
     async fn reason(
         &self,
         query: &str,
-        context_summary: Option<&str>
+        context_summary: Option<&str>,
     ) -> anyhow::Result<ReasoningTrace>;
 }
 
 pub struct DefaultReflectiveReasoner {
-    llm: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>
+    llm: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>,
 }
 
 impl DefaultReflectiveReasoner {
@@ -36,7 +36,7 @@ impl ReflectiveReasoner for DefaultReflectiveReasoner {
     async fn reason(
         &self,
         query: &str,
-        context_summary: Option<&str>
+        context_summary: Option<&str>,
     ) -> anyhow::Result<ReasoningTrace> {
         let start_time = Utc::now();
 
@@ -69,13 +69,18 @@ impl ReflectiveReasoner for DefaultReflectiveReasoner {
 
         let plan: ReasoningPlan = serde_json::from_str(json_str)?;
 
+        let end_time = Utc::now();
+        let duration_ms = (end_time - start_time).num_milliseconds().max(0) as u64;
+
         Ok(ReasoningTrace {
             strategy: plan.strategy,
             thought_process: plan.reasoning,
             refined_query: Some(plan.refined_query),
             start_time,
-            end_time: Utc::now(),
-            metadata: std::collections::HashMap::new()
+            end_time,
+            timed_out: false,
+            duration_ms,
+            metadata: std::collections::HashMap::new(),
         })
     }
 }

@@ -11,7 +11,7 @@ pub struct PromotionService {
     telemetry: Arc<MemoryTelemetry>,
     config: config::MemoryConfig,
     promote_important: bool,
-    cleanup_after_promotion: bool
+    cleanup_after_promotion: bool,
 }
 
 impl PromotionService {
@@ -22,7 +22,7 @@ impl PromotionService {
             telemetry: Arc::new(MemoryTelemetry::new()),
             config: config::MemoryConfig::default(),
             promote_important: true,
-            cleanup_after_promotion: false
+            cleanup_after_promotion: false,
         }
     }
 
@@ -49,7 +49,7 @@ impl PromotionService {
     pub async fn evaluate_and_promote(
         &self,
         ctx: mk_core::types::TenantContext,
-        entry: &MemoryEntry
+        entry: &MemoryEntry,
     ) -> Result<Option<String>> {
         if !self.promote_important {
             return Ok(None);
@@ -72,7 +72,7 @@ impl PromotionService {
             if let Some(target) = self.determine_target_layer(entry.layer) {
                 self.telemetry.record_promotion_attempt(
                     &format!("{:?}", entry.layer),
-                    &format!("{:?}", target)
+                    &format!("{:?}", target),
                 );
                 tracing::info!(
                     "Promoting memory {} from {:?} to {:?} (score: {:.2})",
@@ -95,11 +95,11 @@ impl PromotionService {
 
                 promoted_entry.metadata.insert(
                     "original_memory_id".to_string(),
-                    serde_json::json!(entry.id)
+                    serde_json::json!(entry.id),
                 );
                 promoted_entry.metadata.insert(
                     "promoted_at".to_string(),
-                    serde_json::json!(chrono::Utc::now().timestamp())
+                    serde_json::json!(chrono::Utc::now().timestamp()),
                 );
                 promoted_entry
                     .metadata
@@ -127,7 +127,7 @@ impl PromotionService {
 
                 self.telemetry.record_promotion_success(
                     &format!("{:?}", entry.layer),
-                    &format!("{:?}", target)
+                    &format!("{:?}", target),
                 );
                 return Ok(Some(new_id));
             }
@@ -169,7 +169,7 @@ impl PromotionService {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        _identifiers: &mk_core::types::LayerIdentifiers
+        _identifiers: &mk_core::types::LayerIdentifiers,
     ) -> Result<Vec<String>> {
         let entries = self
             .memory_manager
@@ -190,7 +190,7 @@ impl PromotionService {
         match current_layer {
             MemoryLayer::Agent => Some(MemoryLayer::User),
             MemoryLayer::Session => Some(MemoryLayer::Project),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -209,15 +209,15 @@ mod tests {
         let ctx = test_ctx();
         let mock_session: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         let mock_project: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
 
         manager
@@ -232,7 +232,8 @@ mod tests {
             decay_interval_secs: 86400,
             decay_rate: 0.05,
             optimization_trigger_count: 100,
-            layer_summary_configs: std::collections::HashMap::new()
+            layer_summary_configs: std::collections::HashMap::new(),
+            reasoning: config::ReasoningConfig::default(),
         });
 
         let entry = MemoryEntry {
@@ -249,12 +250,12 @@ mod tests {
                 m.insert("access_count".to_string(), serde_json::json!(10));
                 m.insert(
                     "last_accessed_at".to_string(),
-                    serde_json::json!(chrono::Utc::now().timestamp())
+                    serde_json::json!(chrono::Utc::now().timestamp()),
                 );
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service
@@ -288,7 +289,8 @@ mod tests {
             decay_interval_secs: 86400,
             decay_rate: 0.05,
             optimization_trigger_count: 100,
-            layer_summary_configs: std::collections::HashMap::new()
+            layer_summary_configs: std::collections::HashMap::new(),
+            reasoning: config::ReasoningConfig::default(),
         });
 
         let entry = MemoryEntry {
@@ -305,7 +307,7 @@ mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();
@@ -333,7 +335,7 @@ mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();
@@ -346,15 +348,15 @@ mod tests {
         let ctx = test_ctx();
         let mock_session: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         let mock_project: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager
             .register_provider(MemoryLayer::Session, mock_session)
@@ -368,7 +370,8 @@ mod tests {
             decay_interval_secs: 86400,
             decay_rate: 0.05,
             optimization_trigger_count: 100,
-            layer_summary_configs: std::collections::HashMap::new()
+            layer_summary_configs: std::collections::HashMap::new(),
+            reasoning: config::ReasoningConfig::default(),
         });
 
         let entry = MemoryEntry {
@@ -381,7 +384,7 @@ mod tests {
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service
@@ -404,15 +407,15 @@ mod tests {
         let ctx = test_ctx();
         let mock_session: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         let mock_project: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager
             .register_provider(MemoryLayer::Session, mock_session)
@@ -427,7 +430,8 @@ mod tests {
                 decay_interval_secs: 86400,
                 decay_rate: 0.05,
                 optimization_trigger_count: 100,
-                layer_summary_configs: std::collections::HashMap::new()
+                layer_summary_configs: std::collections::HashMap::new(),
+                reasoning: config::ReasoningConfig::default(),
             })
             .with_cleanup(true);
 
@@ -441,7 +445,7 @@ mod tests {
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -484,7 +488,7 @@ mod tests {
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();
@@ -507,7 +511,7 @@ mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();

@@ -25,7 +25,7 @@ mod tests {
         let sink = MetaAgentTelemetrySink;
         sink.record(&MetaAgentTelemetry {
             iterations: 2,
-            success: true
+            success: true,
         });
     }
 }

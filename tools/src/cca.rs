@@ -13,7 +13,7 @@ use validator::Validate;
 
 pub struct ContextAssembleTool {
     assembler: Arc<ContextAssembler>,
-    sources_provider: Arc<dyn SummarySourceProvider + Send + Sync>
+    sources_provider: Arc<dyn SummarySourceProvider + Send + Sync>,
 }
 
 pub trait SummarySourceProvider: Send + Sync {
@@ -31,11 +31,11 @@ impl SummarySourceProvider for DefaultSummarySourceProvider {
 impl ContextAssembleTool {
     pub fn new(
         assembler: Arc<ContextAssembler>,
-        sources_provider: Arc<dyn SummarySourceProvider + Send + Sync>
+        sources_provider: Arc<dyn SummarySourceProvider + Send + Sync>,
     ) -> Self {
         Self {
             assembler,
-            sources_provider
+            sources_provider,
         }
     }
 
@@ -53,7 +53,7 @@ pub struct ContextAssembleParams {
     pub token_budget: u32,
 
     #[serde(default)]
-    pub layers: Vec<String>
+    pub layers: Vec<String>,
 }
 
 fn default_token_budget() -> u32 {
@@ -69,7 +69,7 @@ fn parse_layer(s: &str) -> Option<MemoryLayer> {
         "team" => Some(MemoryLayer::Team),
         "org" => Some(MemoryLayer::Org),
         "company" => Some(MemoryLayer::Company),
-        _ => None
+        _ => None,
     }
 }
 
@@ -123,7 +123,7 @@ impl Tool for ContextAssembleTool {
 }
 
 pub struct NoteCaptureTool {
-    capture: Arc<RwLock<TrajectoryCapture>>
+    capture: Arc<RwLock<TrajectoryCapture>>,
 }
 
 impl NoteCaptureTool {
@@ -143,7 +143,7 @@ pub struct NoteCaptureParams {
     pub tool_name: String,
 
     #[serde(default)]
-    pub success: bool
+    pub success: bool,
 }
 
 fn default_tool_name() -> String {
@@ -197,7 +197,7 @@ impl Tool for NoteCaptureTool {
 
 pub struct HindsightQueryTool {
     query_engine: Arc<HindsightQuery>,
-    notes_provider: Arc<dyn HindsightNotesProvider + Send + Sync>
+    notes_provider: Arc<dyn HindsightNotesProvider + Send + Sync>,
 }
 
 pub trait HindsightNotesProvider: Send + Sync {
@@ -215,11 +215,11 @@ impl HindsightNotesProvider for DefaultHindsightNotesProvider {
 impl HindsightQueryTool {
     pub fn new(
         query_engine: Arc<HindsightQuery>,
-        notes_provider: Arc<dyn HindsightNotesProvider + Send + Sync>
+        notes_provider: Arc<dyn HindsightNotesProvider + Send + Sync>,
     ) -> Self {
         Self {
             query_engine,
-            notes_provider
+            notes_provider,
         }
     }
 
@@ -237,7 +237,7 @@ pub struct HindsightQueryParams {
     pub message_pattern: String,
 
     #[serde(rename = "contextPatterns", default)]
-    pub context_patterns: Vec<String>
+    pub context_patterns: Vec<String>,
 }
 
 #[async_trait]
@@ -274,7 +274,7 @@ impl Tool for HindsightQueryTool {
             message_pattern: p.message_pattern.clone(),
             stack_patterns: vec![],
             context_patterns: p.context_patterns.clone(),
-            embedding: None
+            embedding: None,
         };
 
         let notes = self.notes_provider.get_notes();
@@ -305,7 +305,7 @@ impl Tool for HindsightQueryTool {
 }
 
 pub struct MetaLoopStatusTool {
-    state_provider: Arc<dyn MetaLoopStateProvider + Send + Sync>
+    state_provider: Arc<dyn MetaLoopStateProvider + Send + Sync>,
 }
 
 pub trait MetaLoopStateProvider: Send + Sync {
@@ -341,7 +341,7 @@ pub struct MetaLoopStatusParams {
     pub loop_id: Option<String>,
 
     #[serde(rename = "includeDetails", default)]
-    pub include_details: bool
+    pub include_details: bool,
 }
 
 #[async_trait]
@@ -432,7 +432,7 @@ mod tests {
     #[tokio::test]
     async fn test_note_capture_tool() {
         let capture = Arc::new(RwLock::new(TrajectoryCapture::new(
-            TrajectoryConfig::default()
+            TrajectoryConfig::default(),
         )));
         let tool = NoteCaptureTool::new(capture.clone());
 

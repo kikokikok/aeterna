@@ -1,5 +1,5 @@
 use storage::graph_duckdb::{
-    ComponentHealth, DuckDbGraphConfig, DuckDbGraphStore, HealthCheckResult, ReadinessResult
+    ComponentHealth, DuckDbGraphConfig, DuckDbGraphStore, HealthCheckResult, ReadinessResult,
 };
 
 #[test]
@@ -75,7 +75,7 @@ fn test_health_check_latency_measurements() {
 fn test_component_health_serialization() {
     let health = ComponentHealth {
         is_healthy: true,
-        message: "All systems operational".to_string()
+        message: "All systems operational".to_string(),
     };
 
     let json = serde_json::to_string(&health).unwrap();
@@ -91,16 +91,16 @@ fn test_health_check_result_serialization() {
         healthy: true,
         duckdb: ComponentHealth {
             is_healthy: true,
-            message: "OK".to_string()
+            message: "OK".to_string(),
         },
         s3: ComponentHealth {
             is_healthy: true,
-            message: "OK".to_string()
+            message: "OK".to_string(),
         },
         schema_version: 1,
         total_latency_ms: 10,
         duckdb_latency_ms: 5,
-        s3_latency_ms: 3
+        s3_latency_ms: 3,
     };
 
     let json = serde_json::to_string(&result).unwrap();
@@ -116,7 +116,7 @@ fn test_readiness_result_serialization() {
         ready: true,
         duckdb_ready: true,
         schema_ready: true,
-        latency_ms: 5
+        latency_ms: 5,
     };
 
     let json = serde_json::to_string(&result).unwrap();

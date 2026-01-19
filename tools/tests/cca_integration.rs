@@ -9,7 +9,7 @@ use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
 use mk_core::traits::{AuthorizationService, KnowledgeRepository, MemoryProviderAdapter};
 use mk_core::types::{
-    KnowledgeEntry, KnowledgeLayer, MemoryLayer, Role, TenantContext, TenantId, UserId
+    KnowledgeEntry, KnowledgeLayer, MemoryLayer, Role, TenantContext, TenantId, UserId,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ use tempfile;
 use testcontainers::{
     ContainerAsync, GenericImage,
     core::{ContainerPort, WaitFor},
-    runners::AsyncRunner
+    runners::AsyncRunner,
 };
 use testcontainers_modules::{postgres::Postgres, redis::Redis};
 use tokio::sync::OnceCell;
@@ -37,7 +37,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         _ctx: &TenantContext,
         _action: &str,
-        _resource: &str
+        _resource: &str,
     ) -> anyhow::Result<bool> {
         Ok(true)
     }
@@ -50,7 +50,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role
+        _role: Role,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -59,7 +59,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role
+        _role: Role,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -69,7 +69,7 @@ impl AuthorizationService for MockAuthService {
 struct PostgresFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Postgres>,
-    url: String
+    url: String,
 }
 
 static POSTGRES_FIXTURE: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
@@ -101,7 +101,7 @@ async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
 struct RedisFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Redis>,
-    url: String
+    url: String,
 }
 
 static REDIS_FIXTURE: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
@@ -123,7 +123,7 @@ async fn get_redis_fixture() -> Option<&'static RedisFixture> {
 struct QdrantFixture {
     #[allow(dead_code)]
     container: ContainerAsync<GenericImage>,
-    url: String
+    url: String,
 }
 
 static QDRANT_FIXTURE: OnceCell<Option<QdrantFixture>> = OnceCell::const_new();
@@ -134,7 +134,7 @@ async fn get_qdrant_fixture() -> Option<&'static QdrantFixture> {
             let container = GenericImage::new("qdrant/qdrant", "latest")
                 .with_exposed_port(ContainerPort::Tcp(6334))
                 .with_wait_for(WaitFor::message_on_stdout(
-                    "Qdrant is ready to accept connections"
+                    "Qdrant is ready to accept connections",
                 ))
                 .start()
                 .await
@@ -169,7 +169,7 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
     // Create mock memory provider for compilation (real tests would use Qdrant)
     let memory_manager = Arc::new(MemoryManager::new());
     let provider: Arc<
-        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
     > = Arc::new(MockProvider::new());
 
     memory_manager
@@ -181,7 +181,7 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
     let storage_backend = Arc::new(
         PostgresBackend::new(&postgres_fixture.url)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to create PostgreSQL backend: {}", e))?
+            .map_err(|e| anyhow::anyhow!("Failed to create PostgreSQL backend: {}", e))?,
     );
 
     // Create real Redis storage
@@ -189,7 +189,7 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
     let _redis_storage = Arc::new(
         RedisStorage::new(&redis_fixture.url)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to create Redis storage: {}", e))?
+            .map_err(|e| anyhow::anyhow!("Failed to create Redis storage: {}", e))?,
     );
 
     // Create real Git repository for knowledge
@@ -198,14 +198,14 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
         .map_err(|e| anyhow::anyhow!("Failed to create temp directory: {}", e))?;
     let knowledge_repo = Arc::new(
         GitRepository::new(temp_dir.path())
-            .map_err(|e| anyhow::anyhow!("Failed to create Git repository: {}", e))?
+            .map_err(|e| anyhow::anyhow!("Failed to create Git repository: {}", e))?,
     );
 
     // Create real sync persister
     use sync::state_persister::DatabasePersister;
     let persister = Arc::new(DatabasePersister::new(
         storage_backend.clone(),
-        "cca_sync_state".to_string()
+        "cca_sync_state".to_string(),
     ));
 
     let sync_manager = Arc::new(
@@ -216,10 +216,10 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
             config::config::DeploymentConfig::default(),
             None,
             persister,
-            None
+            None,
         )
         .await
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?,
     );
 
     let server = Arc::new(McpServer::new(
@@ -229,11 +229,11 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
         storage_backend,
         Arc::new(knowledge::governance::GovernanceEngine::new()),
         Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
-            memory::llm::mock::MockLlmService::new()
+            memory::llm::mock::MockLlmService::new(),
         ))),
         Arc::new(MockAuthService),
         None,
-        None
+        None,
     ));
 
     Ok(server)
@@ -261,7 +261,7 @@ async fn test_context_assembly_hierarchical_compression() -> anyhow::Result<()> 
                 "hierarchy": true,
                 "compression_threshold": 0.8
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;
@@ -311,7 +311,7 @@ async fn test_note_generation_from_trajectory() -> anyhow::Result<()> {
                 "format": "markdown",
                 "sections": ["decisions", "outcomes", "patterns"]
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;
@@ -368,7 +368,7 @@ async fn test_hindsight_capture_and_retrieval() -> anyhow::Result<()> {
                 },
                 "format": "error_pattern"
             }
-        }))
+        })),
     };
 
     let capture_response = server.handle_request(capture_request).await;
@@ -393,7 +393,7 @@ async fn test_hindsight_capture_and_retrieval() -> anyhow::Result<()> {
                 "similarity_threshold": 0.7,
                 "max_results": 5
             }
-        }))
+        })),
     };
 
     let query_response = server.handle_request(query_request).await;
@@ -444,7 +444,7 @@ async fn test_meta_agent_loop_failure_recovery() -> anyhow::Result<()> {
                 "recovery_attempts": 2,
                 "max_attempts": 3
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;
@@ -507,7 +507,7 @@ async fn test_extension_callback_chain() -> anyhow::Result<()> {
                     }
                 ]
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;

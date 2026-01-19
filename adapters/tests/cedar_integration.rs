@@ -68,14 +68,14 @@ const TEST_SCHEMA: &str = r#"{
 fn create_tenant_context(tenant: &str, user: &str) -> TenantContext {
     TenantContext::new(
         TenantId::new(tenant.into()).unwrap(),
-        UserId::new(user.into()).unwrap()
+        UserId::new(user.into()).unwrap(),
     )
 }
 
 fn create_agent_context(tenant: &str, user: &str, agent: &str) -> TenantContext {
     let mut ctx = TenantContext::new(
         TenantId::new(tenant.into()).unwrap(),
-        UserId::new(user.into()).unwrap()
+        UserId::new(user.into()).unwrap(),
     );
     ctx.agent_id = Some(agent.to_string());
     ctx
@@ -746,7 +746,7 @@ mod edge_cases {
             .check_permission(
                 &ctx,
                 "View",
-                "Unit::\"a3bb189e-8bf9-3888-9912-ace4e6543002\""
+                "Unit::\"a3bb189e-8bf9-3888-9912-ace4e6543002\"",
             )
             .await
             .unwrap();
