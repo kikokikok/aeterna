@@ -6,7 +6,7 @@ use opentelemetry::trace::Tracer;
 
 #[derive(Debug)]
 pub struct MemoryTelemetry {
-    tracer: BoxedTracer
+    tracer: BoxedTracer,
 }
 
 impl MemoryTelemetry {
@@ -125,6 +125,91 @@ impl MemoryTelemetry {
             "layer" => layer.to_string()
         );
     }
+
+    pub fn record_reasoning_latency(&self, duration_ms: f64, timed_out: bool) {
+        histogram!("memory_reasoning_latency_seconds", duration_ms / 1000.0);
+        counter!("memory_reasoning_total", 1,
+            "timed_out" => timed_out.to_string()
+        );
+
+        if timed_out {
+            counter!("memory_reasoning_timeouts_total", 1);
+        }
+    }
+
+    pub fn record_reasoning_p95_exceeded(&self, latency_ms: f64, threshold_ms: f64) {
+        counter!("memory_reasoning_p95_exceeded_total", 1);
+        gauge!("memory_reasoning_last_exceeded_latency_ms", latency_ms);
+        gauge!("memory_reasoning_p95_threshold_ms", threshold_ms);
+    }
+
+    pub fn record_reasoning_cache_hit(&self) {
+        counter!("memory_reasoning_cache_hits_total", 1);
+    }
+
+    pub fn record_reasoning_cache_miss(&self) {
+        counter!("memory_reasoning_cache_misses_total", 1);
+    }
+
+    pub fn record_reasoning_cache_eviction(&self, evicted_count: usize) {
+        counter!(
+            "memory_reasoning_cache_evictions_total",
+            evicted_count as u64
+        );
+    }
+
+    pub fn record_reasoning_llm_call(&self) {
+        counter!("memory_reasoning_llm_calls_total", 1);
+    }
+
+    pub fn record_reasoning_failure(&self, error: &str) {
+        counter!("memory_reasoning_failures_total", 1,
+            "error_type" => error.to_string()
+        );
+    }
+
+    pub fn record_reasoning_circuit_opened(&self, failure_rate: f64) {
+        counter!("memory_reasoning_circuit_opened_total", 1);
+        gauge!("memory_reasoning_unavailable", 1.0);
+        gauge!("memory_reasoning_circuit_failure_rate", failure_rate);
+    }
+
+    pub fn record_reasoning_circuit_closed(&self) {
+        counter!("memory_reasoning_circuit_closed_total", 1);
+        gauge!("memory_reasoning_unavailable", 0.0);
+    }
+
+    pub fn record_reasoning_circuit_half_open(&self) {
+        counter!("memory_reasoning_circuit_half_open_total", 1);
+        gauge!("memory_reasoning_unavailable", 0.5);
+    }
+
+    pub fn record_reasoning_circuit_rejected(&self) {
+        counter!("memory_reasoning_circuit_rejected_total", 1);
+    }
+
+    pub fn record_multi_hop_metrics(&self, metrics: &crate::multi_hop::MultiHopMetrics) {
+        gauge!(
+            "memory_multi_hop_depth_reached",
+            metrics.max_depth_reached as f64
+        );
+        counter!(
+            "memory_multi_hop_queries_total",
+            metrics.total_queries as u64
+        );
+        counter!(
+            "memory_multi_hop_paths_terminated_depth_total",
+            metrics.paths_terminated_depth as u64
+        );
+        counter!(
+            "memory_multi_hop_paths_terminated_relevance_total",
+            metrics.paths_terminated_relevance as u64
+        );
+        counter!(
+            "memory_multi_hop_paths_terminated_budget_total",
+            metrics.paths_terminated_budget as u64
+        );
+    }
 }
 
 pub fn init_telemetry() -> Result<MemoryTelemetry, Box<dyn std::error::Error + Send + Sync>> {
@@ -138,7 +223,7 @@ pub fn init_telemetry() -> Result<MemoryTelemetry, Box<dyn std::error::Error + S
 }
 
 pub fn init_telemetry_with_endpoint(
-    endpoint: std::net::SocketAddr
+    endpoint: std::net::SocketAddr,
 ) -> Result<MemoryTelemetry, Box<dyn std::error::Error + Send + Sync>> {
     let telemetry = MemoryTelemetry::new();
 

@@ -20,14 +20,14 @@ const ALERT_THRESHOLD_PERCENT: f32 = 0.8;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionStateConfig {
     pub max_state_size_bytes: usize,
-    pub state_ttl_secs: u64
+    pub state_ttl_secs: u64,
 }
 
 impl Default for ExtensionStateConfig {
     fn default() -> Self {
         Self {
             max_state_size_bytes: DEFAULT_MAX_STATE_SIZE_BYTES,
-            state_ttl_secs: DEFAULT_STATE_TTL_SECS
+            state_ttl_secs: DEFAULT_STATE_TTL_SECS,
         }
     }
 }
@@ -36,7 +36,7 @@ impl ExtensionStateConfig {
     pub fn new(max_state_size_bytes: usize, state_ttl_secs: u64) -> Self {
         Self {
             max_state_size_bytes,
-            state_ttl_secs
+            state_ttl_secs,
         }
     }
 }
@@ -46,21 +46,21 @@ pub struct ExtensionStateMetrics {
     pub size_bytes: u64,
     pub keys_count: u64,
     pub evictions: u64,
-    pub alerts_triggered: u64
+    pub alerts_triggered: u64,
 }
 
 #[derive(Debug, Clone)]
 pub struct LruEntry {
     pub key: String,
     pub size_bytes: usize,
-    pub last_access_at: i64
+    pub last_access_at: i64,
 }
 
 pub struct ExtensionStateLimiter {
     redis_url: String,
     tenant_total_limit_bytes: usize,
     extension_configs: Arc<RwLock<HashMap<String, ExtensionStateConfig>>>,
-    metrics: Arc<RwLock<HashMap<String, ExtensionStateMetrics>>>
+    metrics: Arc<RwLock<HashMap<String, ExtensionStateMetrics>>>,
 }
 
 impl ExtensionStateLimiter {
@@ -69,7 +69,7 @@ impl ExtensionStateLimiter {
             redis_url,
             tenant_total_limit_bytes: DEFAULT_TENANT_TOTAL_LIMIT_BYTES,
             extension_configs: Arc::new(RwLock::new(HashMap::new())),
-            metrics: Arc::new(RwLock::new(HashMap::new()))
+            metrics: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -91,7 +91,7 @@ impl ExtensionStateLimiter {
     pub async fn check_size_limit(
         &self,
         extension_id: &str,
-        state_bytes: usize
+        state_bytes: usize,
     ) -> Result<(), ExtensionStateError> {
         let config = self.get_config(extension_id).await;
 
@@ -121,7 +121,7 @@ impl ExtensionStateLimiter {
     pub async fn enforce_tenant_limit(
         &self,
         tenant_id: &str,
-        incoming_bytes: usize
+        incoming_bytes: usize,
     ) -> Result<Vec<String>, ExtensionStateError> {
         let mut con = self.connection().await?;
         let pattern = format!("extension:{}:*", tenant_id);
@@ -153,7 +153,7 @@ impl ExtensionStateLimiter {
             entries.push(LruEntry {
                 key: key.clone(),
                 size_bytes: size,
-                last_access_at: idle.unwrap_or(0)
+                last_access_at: idle.unwrap_or(0),
             });
         }
 
@@ -193,7 +193,7 @@ impl ExtensionStateLimiter {
         &self,
         key: &str,
         data: &[u8],
-        extension_id: &str
+        extension_id: &str,
     ) -> Result<(), ExtensionStateError> {
         let config = self.get_config(extension_id).await;
         let mut con = self.connection().await?;

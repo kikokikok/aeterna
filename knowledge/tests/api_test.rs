@@ -1,12 +1,12 @@
 use knowledge::api::{
     GovernanceDashboardApi, approve_proposal, get_drift_status, get_job_status, get_org_report,
-    reject_proposal, replay_events
+    reject_proposal, replay_events,
 };
 use knowledge::governance::GovernanceEngine;
 use mk_core::traits::{EventPublisher, KnowledgeRepository, StorageBackend};
 use mk_core::types::{
     GovernanceEvent, KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType,
-    OrganizationalUnit, TenantContext, TenantId, UnitType
+    OrganizationalUnit, TenantContext, TenantId, UnitType,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -19,7 +19,7 @@ use tokio::sync::OnceCell;
 struct PostgresFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Postgres>,
-    url: String
+    url: String,
 }
 
 static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
@@ -31,15 +31,15 @@ async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
         .get_or_init(|| async {
             let container = match Postgres::default().start().await {
                 Ok(c) => c,
-                Err(_) => return None
+                Err(_) => return None,
             };
             let host = match container.get_host().await {
                 Ok(h) => h,
-                Err(_) => return None
+                Err(_) => return None,
             };
             let port = match container.get_host_port_ipv4(5432).await {
                 Ok(p) => p,
-                Err(_) => return None
+                Err(_) => return None,
             };
             let url = format!(
                 "postgres://postgres:postgres@{}:{}/postgres?sslmode=disable",
@@ -89,7 +89,7 @@ async fn test_governance_dashboard_api_get_drift_status() {
     let api = Arc::new(GovernanceDashboardApi::new(
         engine.clone(),
         storage.clone(),
-        deployment_config
+        deployment_config,
     ));
 
     let tenant_id = TenantId::new(unique_id("t")).unwrap();
@@ -97,7 +97,7 @@ async fn test_governance_dashboard_api_get_drift_status() {
     let ctx = TenantContext {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new(unique_id("u")).unwrap(),
-        agent_id: Some(unique_id("a"))
+        agent_id: Some(unique_id("a")),
     };
 
     let res = get_drift_status(api.clone(), &ctx, &project_id)
@@ -113,7 +113,7 @@ async fn test_governance_dashboard_api_get_drift_status() {
         timestamp: 123456789,
         confidence: 0.9,
         suppressed_violations: vec![],
-        requires_manual_review: false
+        requires_manual_review: false,
     };
     storage.store_drift_result(drift).await.unwrap();
 
@@ -141,7 +141,7 @@ async fn test_governance_dashboard_api_get_org_report() {
     let api = Arc::new(GovernanceDashboardApi::new(
         engine.clone(),
         storage.clone(),
-        deployment_config
+        deployment_config,
     ));
 
     let tenant_id = TenantId::new(unique_id("t")).unwrap();
@@ -153,7 +153,7 @@ async fn test_governance_dashboard_api_get_org_report() {
     let ctx = TenantContext {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new(unique_id("u")).unwrap(),
-        agent_id: Some(unique_id("a"))
+        agent_id: Some(unique_id("a")),
     };
 
     let company_unit = OrganizationalUnit {
@@ -164,7 +164,7 @@ async fn test_governance_dashboard_api_get_org_report() {
         parent_id: None,
         metadata: std::collections::HashMap::new(),
         created_at: 1000,
-        updated_at: 1000
+        updated_at: 1000,
     };
     storage.create_unit(&company_unit).await.unwrap();
 
@@ -176,7 +176,7 @@ async fn test_governance_dashboard_api_get_org_report() {
         parent_id: Some(company_id.clone()),
         metadata: std::collections::HashMap::new(),
         created_at: 1000,
-        updated_at: 1000
+        updated_at: 1000,
     };
     storage.create_unit(&org_unit).await.unwrap();
 
@@ -188,7 +188,7 @@ async fn test_governance_dashboard_api_get_org_report() {
         parent_id: Some(org_id.clone()),
         metadata: std::collections::HashMap::new(),
         created_at: 1000,
-        updated_at: 1000
+        updated_at: 1000,
     };
     storage.create_unit(&team_unit).await.unwrap();
 
@@ -200,7 +200,7 @@ async fn test_governance_dashboard_api_get_org_report() {
         parent_id: Some(team_id.clone()),
         metadata: std::collections::HashMap::new(),
         created_at: 1000,
-        updated_at: 1000
+        updated_at: 1000,
     };
     storage.create_unit(&project_unit).await.unwrap();
 
@@ -212,7 +212,7 @@ async fn test_governance_dashboard_api_get_org_report() {
         timestamp: 123456789,
         confidence: 0.9,
         suppressed_violations: vec![],
-        requires_manual_review: false
+        requires_manual_review: false,
     };
     storage.store_drift_result(drift).await.unwrap();
 
@@ -233,7 +233,7 @@ async fn test_governance_dashboard_api_proposals() {
 
     let temp_dir = tempfile::tempdir().unwrap();
     let repo = Arc::new(
-        knowledge::repository::GitRepository::new(temp_dir.path().to_str().unwrap()).unwrap()
+        knowledge::repository::GitRepository::new(temp_dir.path().to_str().unwrap()).unwrap(),
     );
 
     let engine = Arc::new(GovernanceEngine::new().with_repository(repo.clone()));
@@ -246,7 +246,7 @@ async fn test_governance_dashboard_api_proposals() {
     let api = Arc::new(GovernanceDashboardApi::new(
         engine.clone(),
         storage.clone(),
-        deployment_config
+        deployment_config,
     ));
 
     let tenant_id = TenantId::new(unique_id("t")).unwrap();
@@ -254,7 +254,7 @@ async fn test_governance_dashboard_api_proposals() {
     let ctx = TenantContext {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new(user_id.clone()).unwrap(),
-        agent_id: Some(unique_id("a"))
+        agent_id: Some(unique_id("a")),
     };
 
     let prop1_path = unique_id("prop");
@@ -268,7 +268,7 @@ async fn test_governance_dashboard_api_proposals() {
         commit_hash: None,
         author: Some(user_id.clone()),
         updated_at: 1000,
-        summaries: std::collections::HashMap::new()
+        summaries: std::collections::HashMap::new(),
     };
     repo.store(ctx.clone(), entry, "Initial proposal")
         .await
@@ -299,7 +299,7 @@ async fn test_governance_dashboard_api_proposals() {
         commit_hash: None,
         author: Some(user_id.clone()),
         updated_at: 1000,
-        summaries: std::collections::HashMap::new()
+        summaries: std::collections::HashMap::new(),
     };
     repo.store(ctx.clone(), entry2, "Initial proposal")
         .await
@@ -331,14 +331,14 @@ async fn test_governance_dashboard_api_get_job_status() {
     let api = Arc::new(GovernanceDashboardApi::new(
         engine,
         storage.clone(),
-        config::config::DeploymentConfig::default()
+        config::config::DeploymentConfig::default(),
     ));
 
     let tenant_id = TenantId::new(unique_id("t")).unwrap();
     let ctx = TenantContext {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new(unique_id("u")).unwrap(),
-        agent_id: Some(unique_id("a"))
+        agent_id: Some(unique_id("a")),
     };
 
     let job1 = unique_id("test-job");
@@ -352,7 +352,7 @@ async fn test_governance_dashboard_api_get_job_status() {
             "completed",
             Some("Done"),
             1000,
-            Some(1001)
+            Some(1001),
         )
         .await
         .unwrap();
@@ -387,14 +387,14 @@ async fn test_governance_dashboard_api_replay_events() {
     let api = Arc::new(GovernanceDashboardApi::new(
         engine,
         storage.clone(),
-        config::config::DeploymentConfig::default()
+        config::config::DeploymentConfig::default(),
     ));
 
     let tenant_id = TenantId::new(unique_id("t")).unwrap();
     let ctx = TenantContext {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new(unique_id("u")).unwrap(),
-        agent_id: Some(unique_id("a"))
+        agent_id: Some(unique_id("a")),
     };
 
     let unit1_id = unique_id("u");
@@ -404,14 +404,14 @@ async fn test_governance_dashboard_api_replay_events() {
         unit_type: UnitType::Project,
         tenant_id: tenant_id.clone(),
         parent_id: None,
-        timestamp: 1000
+        timestamp: 1000,
     };
     let event2 = GovernanceEvent::UnitCreated {
         unit_id: unit2_id.clone(),
         unit_type: UnitType::Project,
         tenant_id: tenant_id.clone(),
         parent_id: None,
-        timestamp: 2000
+        timestamp: 2000,
     };
 
     storage.publish(event1).await.unwrap();

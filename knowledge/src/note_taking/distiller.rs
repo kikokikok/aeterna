@@ -11,7 +11,7 @@ pub enum DistillationTrigger {
     SessionEnd,
     SignificantSuccess,
     ManualRequest,
-    FailurePattern
+    FailurePattern,
 }
 
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub struct DistillerConfig {
     pub min_events_for_distillation: usize,
     pub min_success_ratio: f32,
     pub extract_code_snippets: bool,
-    pub max_tags: usize
+    pub max_tags: usize,
 }
 
 impl Default for DistillerConfig {
@@ -28,7 +28,7 @@ impl Default for DistillerConfig {
             min_events_for_distillation: 3,
             min_success_ratio: 0.5,
             extract_code_snippets: true,
-            max_tags: 10
+            max_tags: 10,
         }
     }
 }
@@ -36,7 +36,7 @@ impl Default for DistillerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractedSection {
     pub name: String,
-    pub content: String
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,7 +51,7 @@ pub struct DistillationResult {
     pub code_snippets: Vec<String>,
     pub quality_score: f32,
     pub distilled_at: u64,
-    pub source_event_count: usize
+    pub source_event_count: usize,
 }
 
 impl DistillationResult {
@@ -62,7 +62,7 @@ impl DistillationResult {
 
 pub struct Distiller<C: LlmClient> {
     config: DistillerConfig,
-    llm_client: C
+    llm_client: C,
 }
 
 impl<C: LlmClient> Distiller<C> {
@@ -73,7 +73,7 @@ impl<C: LlmClient> Distiller<C> {
     pub async fn distill(
         &self,
         events: &[TrajectoryEvent],
-        trigger: DistillationTrigger
+        trigger: DistillationTrigger,
     ) -> Result<DistillationResult, DistillationError> {
         let span = info_span!(
             "distill",
@@ -87,7 +87,7 @@ impl<C: LlmClient> Distiller<C> {
             if events.len() < self.config.min_events_for_distillation {
                 return Err(DistillationError::InsufficientEvents {
                     provided: events.len(),
-                    required: self.config.min_events_for_distillation
+                    required: self.config.min_events_for_distillation,
                 });
             }
 
@@ -99,7 +99,7 @@ impl<C: LlmClient> Distiller<C> {
             {
                 return Err(DistillationError::LowSuccessRatio {
                     ratio: success_ratio,
-                    required: self.config.min_success_ratio
+                    required: self.config.min_success_ratio,
                 });
             }
 
@@ -136,7 +136,7 @@ impl<C: LlmClient> Distiller<C> {
                 code_snippets,
                 quality_score,
                 distilled_at: timestamp,
-                source_event_count: events.len()
+                source_event_count: events.len(),
             })
         }
         .instrument(span)
@@ -178,7 +178,7 @@ impl<C: LlmClient> Distiller<C> {
 
     fn parse_distillation_response(
         &self,
-        response: &str
+        response: &str,
     ) -> Result<ParsedDistillation, DistillationError> {
         let context = self
             .extract_section(response, "CONTEXT:")
@@ -196,7 +196,7 @@ impl<C: LlmClient> Distiller<C> {
 
         if context.is_empty() && problem.is_empty() && solution.is_empty() {
             return Err(DistillationError::ParseError(
-                "Could not extract any sections from LLM response".to_string()
+                "Could not extract any sections from LLM response".to_string(),
             ));
         }
 
@@ -217,7 +217,7 @@ impl<C: LlmClient> Distiller<C> {
             problem,
             solution,
             patterns,
-            tags
+            tags,
         })
     }
 
@@ -298,7 +298,7 @@ impl<C: LlmClient> Distiller<C> {
     fn calculate_quality_score(
         &self,
         parsed: &ParsedDistillation,
-        events: &[TrajectoryEvent]
+        events: &[TrajectoryEvent],
     ) -> f32 {
         let mut score = 0.0;
 
@@ -331,7 +331,7 @@ struct ParsedDistillation {
     problem: String,
     solution: String,
     patterns: Vec<String>,
-    tags: Vec<String>
+    tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -346,7 +346,7 @@ pub enum DistillationError {
     LlmError(String),
 
     #[error("Parse error: {0}")]
-    ParseError(String)
+    ParseError(String),
 }
 
 const DISTILLATION_SYSTEM_PROMPT: &str = r#"You are a learning distillation agent. Your task is to analyze agent tool execution trajectories and extract reusable learnings.
@@ -367,13 +367,13 @@ mod tests {
     use async_trait::async_trait;
 
     struct MockLlmClient {
-        response: String
+        response: String,
     }
 
     impl MockLlmClient {
         fn new(response: impl Into<String>) -> Self {
             Self {
-                response: response.into()
+                response: response.into(),
             }
         }
     }
@@ -387,7 +387,7 @@ mod tests {
         async fn complete_with_system(
             &self,
             _system: &str,
-            _user: &str
+            _user: &str,
         ) -> Result<String, LlmError> {
             Ok(self.response.clone())
         }
@@ -523,7 +523,7 @@ mod tests {
             "```rust\nfn main() {}\n```",
             "success",
             true,
-            100
+            100,
         )];
 
         let snippets = distiller.extract_code_snippets(&events);

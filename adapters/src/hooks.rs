@@ -19,7 +19,7 @@ pub enum CcaHookEvent {
         session_id: String,
         token_budget: u32,
         layers_included: Vec<String>,
-        entry_count: usize
+        entry_count: usize,
     },
 
     /// Tool trajectory has been captured for note distillation
@@ -28,7 +28,7 @@ pub enum CcaHookEvent {
         session_id: String,
         tool_name: String,
         success: bool,
-        event_count: usize
+        event_count: usize,
     },
 
     /// Error has been captured for hindsight learning
@@ -37,8 +37,8 @@ pub enum CcaHookEvent {
         session_id: String,
         error_type: String,
         message_pattern: String,
-        context_patterns: Vec<String>
-    }
+        context_patterns: Vec<String>,
+    },
 }
 
 /// Mapping of CCA hooks to ContextHooks trait methods
@@ -83,7 +83,7 @@ impl ContextHooks for MemoryContextHooks {
     async fn on_session_start(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _session_id: &str
+        _session_id: &str,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -91,7 +91,7 @@ impl ContextHooks for MemoryContextHooks {
     async fn on_session_end(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _session_id: &str
+        _session_id: &str,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -100,7 +100,7 @@ impl ContextHooks for MemoryContextHooks {
         &self,
         _ctx: mk_core::types::TenantContext,
         _session_id: &str,
-        _message: &str
+        _message: &str,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -110,7 +110,7 @@ impl ContextHooks for MemoryContextHooks {
         _ctx: mk_core::types::TenantContext,
         _session_id: &str,
         _tool_name: &str,
-        _params: serde_json::Value
+        _params: serde_json::Value,
     ) -> anyhow::Result<()> {
         Ok(())
     }

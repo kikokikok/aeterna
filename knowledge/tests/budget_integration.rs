@@ -1,7 +1,7 @@
 use knowledge::context_architect::{
     BatchedSummarizer, BudgetAwareSummaryGenerator, BudgetAwareSummaryRequest, BudgetError,
     BudgetExhaustedAction, BudgetStatus, BudgetTracker, BudgetTrackerConfig, LlmClient, LlmError,
-    SummarizationBudget, SummaryGenerator, SummaryGeneratorConfig, TieredModelConfig
+    SummarizationBudget, SummaryGenerator, SummaryGeneratorConfig, TieredModelConfig,
 };
 use mk_core::types::{MemoryLayer, SummaryDepth};
 use std::sync::Arc;
@@ -9,14 +9,14 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 struct MockLlmClient {
     call_count: AtomicU32,
-    response: String
+    response: String,
 }
 
 impl MockLlmClient {
     fn new(response: &str) -> Self {
         Self {
             call_count: AtomicU32::new(0),
-            response: response.to_string()
+            response: response.to_string(),
         }
     }
 
@@ -117,12 +117,12 @@ fn test_budget_exhaustion_reject_mode() {
     match result {
         Err(BudgetError::RequestTooLarge {
             requested,
-            available
+            available,
         }) => {
             assert_eq!(requested, 300);
             assert_eq!(available, 200);
         }
-        _ => panic!("Expected RequestTooLarge error")
+        _ => panic!("Expected RequestTooLarge error"),
     }
 }
 
@@ -134,7 +134,7 @@ fn test_budget_exhaustion_queue_mode() {
             .with_hourly_limit(1000),
         exhausted_action: BudgetExhaustedAction::Queue,
         enable_alerts: false,
-        queue_max_size: 5
+        queue_max_size: 5,
     };
     let tracker = BudgetTracker::new(config);
 
@@ -159,7 +159,7 @@ fn test_budget_queue_full_error() {
             .with_hourly_limit(100),
         exhausted_action: BudgetExhaustedAction::Queue,
         enable_alerts: false,
-        queue_max_size: 2
+        queue_max_size: 2,
     };
     let tracker = BudgetTracker::new(config);
 
@@ -205,7 +205,7 @@ fn test_budget_metrics() {
             .with_hourly_limit(10_000),
         exhausted_action: BudgetExhaustedAction::Queue,
         enable_alerts: false,
-        queue_max_size: 10
+        queue_max_size: 10,
     };
     let tracker = BudgetTracker::new(config);
 
@@ -281,14 +281,14 @@ fn create_budget_tracker(daily_limit: u64, hourly_limit: u64) -> Arc<BudgetTrack
             .with_hourly_limit(hourly_limit),
         exhausted_action: BudgetExhaustedAction::Reject,
         enable_alerts: false,
-        queue_max_size: 10
+        queue_max_size: 10,
     };
     Arc::new(BudgetTracker::new(config))
 }
 
 fn create_budget_aware_generator(
     response: &str,
-    budget_tracker: Arc<BudgetTracker>
+    budget_tracker: Arc<BudgetTracker>,
 ) -> BudgetAwareSummaryGenerator<MockLlmClient> {
     let mock = Arc::new(MockLlmClient::new(response));
     let generator = SummaryGenerator::new(mock, SummaryGeneratorConfig::default());
@@ -305,7 +305,7 @@ async fn test_budget_aware_generator_success() {
         depth: SummaryDepth::Sentence,
         layer: MemoryLayer::Session,
         context: None,
-        personalization_context: None
+        personalization_context: None,
     };
 
     let result = budget_generator.generate_with_budget(request).await;
@@ -337,7 +337,7 @@ async fn test_budget_aware_generator_exhausted() {
         depth: SummaryDepth::Sentence,
         layer: MemoryLayer::Session,
         context: None,
-        personalization_context: None
+        personalization_context: None,
     };
 
     let result = budget_generator.generate_with_budget(request).await;
@@ -360,21 +360,21 @@ async fn test_batched_summarizer_layer_prioritization() {
             layer: MemoryLayer::User,
             depth: SummaryDepth::Sentence,
             context: None,
-            personalization_context: None
+            personalization_context: None,
         },
         BudgetAwareSummaryRequest {
             content: "Company content that is long enough to process.".to_string(),
             layer: MemoryLayer::Company,
             depth: SummaryDepth::Sentence,
             context: None,
-            personalization_context: None
+            personalization_context: None,
         },
         BudgetAwareSummaryRequest {
             content: "Team content that is long enough to process.".to_string(),
             layer: MemoryLayer::Team,
             depth: SummaryDepth::Sentence,
             context: None,
-            personalization_context: None
+            personalization_context: None,
         },
     ];
 
@@ -414,14 +414,14 @@ async fn test_batched_summarizer_partial_budget() {
             layer: MemoryLayer::Company,
             depth: SummaryDepth::Sentence,
             context: None,
-            personalization_context: None
+            personalization_context: None,
         },
         BudgetAwareSummaryRequest {
             content: "Second content that is long enough.".to_string(),
             layer: MemoryLayer::User,
             depth: SummaryDepth::Sentence,
             context: None,
-            personalization_context: None
+            personalization_context: None,
         },
     ];
 
@@ -502,7 +502,7 @@ async fn test_budget_generator_model_selection_by_layer() {
         layer: MemoryLayer::User,
         depth: SummaryDepth::Sentence,
         context: None,
-        personalization_context: None
+        personalization_context: None,
     };
     let result = budget_generator
         .generate_with_budget(user_request)
@@ -515,7 +515,7 @@ async fn test_budget_generator_model_selection_by_layer() {
         layer: MemoryLayer::Company,
         depth: SummaryDepth::Sentence,
         context: None,
-        personalization_context: None
+        personalization_context: None,
     };
     let result = budget_generator
         .generate_with_budget(company_request)

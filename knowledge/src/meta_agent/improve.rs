@@ -7,7 +7,7 @@ use super::{HindsightLookup, HindsightStore, ImproveAction, ImproveResult, TestR
 
 #[derive(Debug, Clone)]
 pub struct ImprovePhaseConfig {
-    pub max_tokens: u32
+    pub max_tokens: u32,
 }
 
 impl Default for ImprovePhaseConfig {
@@ -19,12 +19,12 @@ impl Default for ImprovePhaseConfig {
 #[derive(Debug, Clone)]
 pub struct ImprovePromptTemplate {
     pub system: String,
-    pub user: String
+    pub user: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct ImprovePromptTemplates {
-    pub default: ImprovePromptTemplate
+    pub default: ImprovePromptTemplate,
 }
 
 impl Default for ImprovePromptTemplates {
@@ -32,8 +32,8 @@ impl Default for ImprovePromptTemplates {
         Self {
             default: ImprovePromptTemplate {
                 system: DEFAULT_SYSTEM.to_string(),
-                user: DEFAULT_USER.to_string()
-            }
+                user: DEFAULT_USER.to_string(),
+            },
         }
     }
 }
@@ -43,7 +43,7 @@ pub struct ImprovePhase<C: LlmClient> {
     config: ImprovePhaseConfig,
     prompt_templates: ImprovePromptTemplates,
     hindsight_lookup: Option<Arc<dyn HindsightLookup>>,
-    hindsight_store: Option<Arc<dyn HindsightStore>>
+    hindsight_store: Option<Arc<dyn HindsightStore>>,
 }
 
 impl<C: LlmClient> ImprovePhase<C> {
@@ -53,7 +53,7 @@ impl<C: LlmClient> ImprovePhase<C> {
             config,
             prompt_templates: ImprovePromptTemplates::default(),
             hindsight_lookup: None,
-            hindsight_store: None
+            hindsight_store: None,
         }
     }
 
@@ -74,7 +74,7 @@ impl<C: LlmClient> ImprovePhase<C> {
 
     pub async fn execute(
         &self,
-        test_result: &TestResult
+        test_result: &TestResult,
     ) -> Result<ImproveResult, crate::context_architect::LlmError> {
         let span = info_span!(
             "improve_phase",
@@ -89,7 +89,7 @@ impl<C: LlmClient> ImprovePhase<C> {
             let hindsight = match (&self.hindsight_store, &self.hindsight_lookup) {
                 (Some(store), _) => store.retrieve(&test_result.output, 5).await,
                 (None, Some(lookup)) => lookup.retrieve(&test_result.output, 5).await,
-                _ => Vec::new()
+                _ => Vec::new(),
             };
 
             let (system, user) = self.build_prompt(test_result, &hindsight);
@@ -113,7 +113,7 @@ impl<C: LlmClient> ImprovePhase<C> {
             Ok(ImproveResult {
                 analysis: response,
                 action,
-                escalation_message
+                escalation_message,
             })
         }
         .instrument(span)
@@ -162,13 +162,13 @@ mod tests {
     use std::sync::Mutex;
 
     struct MockLlmClient {
-        responses: Mutex<Vec<String>>
+        responses: Mutex<Vec<String>>,
     }
 
     impl MockLlmClient {
         fn new(responses: Vec<String>) -> Self {
             Self {
-                responses: Mutex::new(responses)
+                responses: Mutex::new(responses),
             }
         }
     }
@@ -185,7 +185,7 @@ mod tests {
         async fn complete_with_system(
             &self,
             _system: &str,
-            _user: &str
+            _user: &str,
         ) -> Result<String, LlmError> {
             let mut responses = self.responses.lock().unwrap();
             responses
@@ -202,7 +202,7 @@ mod tests {
             .execute(&TestResult {
                 status: TestStatus::Fail,
                 output: "failed".to_string(),
-                duration_ms: 1
+                duration_ms: 1,
             })
             .await
             .unwrap();
@@ -240,7 +240,7 @@ mod tests {
             .execute(&TestResult {
                 status: TestStatus::Fail,
                 output: "error".to_string(),
-                duration_ms: 1
+                duration_ms: 1,
             })
             .await
             .unwrap();
@@ -259,7 +259,7 @@ mod tests {
             .execute(&TestResult {
                 status: TestStatus::Fail,
                 output: "critical error".to_string(),
-                duration_ms: 1
+                duration_ms: 1,
             })
             .await
             .unwrap();

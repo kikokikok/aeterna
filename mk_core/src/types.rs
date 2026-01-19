@@ -14,7 +14,7 @@ pub enum Role {
     TechLead,
     Architect,
     Admin,
-    Agent
+    Agent,
 }
 
 #[derive(
@@ -26,7 +26,7 @@ pub enum UnitType {
     Company,
     Organization,
     Team,
-    Project
+    Project,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -39,7 +39,7 @@ pub struct OrganizationalUnit {
     pub tenant_id: TenantId,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub created_at: i64,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 #[derive(
@@ -90,7 +90,7 @@ impl Default for TenantContext {
         Self {
             tenant_id: TenantId::default(),
             user_id: UserId::default(),
-            agent_id: None
+            agent_id: None,
         }
     }
 }
@@ -142,7 +142,7 @@ impl Default for UserId {
 pub struct TenantContext {
     pub tenant_id: TenantId,
     pub user_id: UserId,
-    pub agent_id: Option<String>
+    pub agent_id: Option<String>,
 }
 
 impl TenantContext {
@@ -150,7 +150,7 @@ impl TenantContext {
         Self {
             tenant_id,
             user_id,
-            agent_id: None
+            agent_id: None,
         }
     }
 
@@ -158,7 +158,7 @@ impl TenantContext {
         Self {
             tenant_id,
             user_id,
-            agent_id: Some(agent_id)
+            agent_id: Some(agent_id),
         }
     }
 }
@@ -168,7 +168,7 @@ pub struct HierarchyPath {
     pub company: String,
     pub org: Option<String>,
     pub team: Option<String>,
-    pub project: Option<String>
+    pub project: Option<String>,
 }
 
 impl HierarchyPath {
@@ -177,7 +177,7 @@ impl HierarchyPath {
             company: id,
             org: None,
             team: None,
-            project: None
+            project: None,
         }
     }
 
@@ -186,7 +186,7 @@ impl HierarchyPath {
             company,
             org: Some(id),
             team: None,
-            project: None
+            project: None,
         }
     }
 
@@ -195,7 +195,7 @@ impl HierarchyPath {
             company,
             org: Some(org),
             team: Some(id),
-            project: None
+            project: None,
         }
     }
 
@@ -204,7 +204,7 @@ impl HierarchyPath {
             company,
             org: Some(org),
             team: Some(team),
-            project: Some(id)
+            project: Some(id),
         }
     }
 
@@ -243,7 +243,7 @@ impl Role {
             Role::Architect => 3,
             Role::TechLead => 2,
             Role::Developer => 1,
-            Role::Agent => 0
+            Role::Agent => 0,
         }
     }
 
@@ -254,7 +254,7 @@ impl Role {
             Role::TechLead => "Tech Lead",
             Role::Architect => "Architect",
             Role::Admin => "Admin",
-            Role::Agent => "Agent"
+            Role::Agent => "Agent",
         }
     }
 }
@@ -267,7 +267,7 @@ pub enum KnowledgeType {
     Policy,
     Pattern,
     Spec,
-    Hindsight
+    Hindsight,
 }
 
 /// Knowledge status
@@ -278,7 +278,7 @@ pub enum KnowledgeStatus {
     Proposed,
     Accepted,
     Deprecated,
-    Superseded
+    Superseded,
 }
 
 #[derive(
@@ -300,7 +300,7 @@ pub enum KnowledgeLayer {
     Company,
     Org,
     Team,
-    Project
+    Project,
 }
 
 /// Constraint severity levels
@@ -309,7 +309,7 @@ pub enum KnowledgeLayer {
 pub enum ConstraintSeverity {
     Info,
     Warn,
-    Block
+    Block,
 }
 
 /// Constraint operators
@@ -321,7 +321,7 @@ pub enum ConstraintOperator {
     MustMatch,
     MustNotMatch,
     MustExist,
-    MustNotExist
+    MustNotExist,
 }
 
 /// Constraint targets
@@ -332,7 +332,7 @@ pub enum ConstraintTarget {
     Code,
     Dependency,
     Import,
-    Config
+    Config,
 }
 
 /// Memory layers for hierarchical storage
@@ -358,7 +358,7 @@ pub enum MemoryLayer {
     Project,
     Team,
     Org,
-    Company
+    Company,
 }
 
 impl MemoryLayer {
@@ -371,7 +371,7 @@ impl MemoryLayer {
             MemoryLayer::Project => 4,
             MemoryLayer::Team => 5,
             MemoryLayer::Org => 6,
-            MemoryLayer::Company => 7
+            MemoryLayer::Company => 7,
         }
     }
 
@@ -384,7 +384,7 @@ impl MemoryLayer {
             MemoryLayer::Project => "Project",
             MemoryLayer::Team => "Team",
             MemoryLayer::Org => "Organization",
-            MemoryLayer::Company => "Company"
+            MemoryLayer::Company => "Company",
         }
     }
 }
@@ -407,7 +407,7 @@ pub struct LayerIdentifiers {
     #[validate(custom(function = "validate_org_id"))]
     pub org_id: Option<String>,
     #[validate(custom(function = "validate_company_id"))]
-    pub company_id: Option<String>
+    pub company_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -415,7 +415,7 @@ pub struct LayerIdentifiers {
 pub enum SummaryDepth {
     Sentence,
     Paragraph,
-    Detailed
+    Detailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -428,7 +428,7 @@ pub struct LayerSummary {
     pub source_hash: String,
     pub content_hash: Option<String>,
     pub personalized: bool,
-    pub personalization_context: Option<String>
+    pub personalization_context: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -439,7 +439,7 @@ pub struct SummaryConfig {
     pub update_on_changes: Option<u32>,
     pub skip_if_unchanged: bool,
     pub personalized: bool,
-    pub depths: Vec<SummaryDepth>
+    pub depths: Vec<SummaryDepth>,
 }
 
 pub type ContextVector = Vec<f32>;
@@ -451,7 +451,7 @@ pub struct ErrorSignature {
     pub message_pattern: String,
     pub stack_patterns: Vec<String>,
     pub context_patterns: Vec<String>,
-    pub embedding: Option<Vec<f32>>
+    pub embedding: Option<Vec<f32>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -459,7 +459,7 @@ pub struct ErrorSignature {
 pub struct CodeChange {
     pub file_path: String,
     pub diff: String,
-    pub description: Option<String>
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -471,7 +471,7 @@ pub struct Resolution {
     pub changes: Vec<CodeChange>,
     pub success_rate: f32,
     pub application_count: u32,
-    pub last_success_at: i64
+    pub last_success_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -483,7 +483,7 @@ pub struct HindsightNote {
     pub content: String,
     pub tags: Vec<String>,
     pub created_at: i64,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 #[derive(
@@ -505,7 +505,7 @@ pub struct HindsightNote {
 pub enum ReasoningStrategy {
     Exhaustive,
     Targeted,
-    SemanticOnly
+    SemanticOnly,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -516,7 +516,13 @@ pub struct ReasoningTrace {
     pub refined_query: Option<String>,
     pub start_time: chrono::DateTime<chrono::Utc>,
     pub end_time: chrono::DateTime<chrono::Utc>,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>
+    /// Indicates if reasoning was interrupted by timeout (partial results may be available)
+    #[serde(default)]
+    pub timed_out: bool,
+    /// Duration of the reasoning step in milliseconds
+    #[serde(default)]
+    pub duration_ms: u64,
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -531,7 +537,7 @@ pub struct MemoryEntry {
     pub importance_score: Option<f32>,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub created_at: i64,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 impl MemoryEntry {
@@ -588,7 +594,7 @@ pub enum MemoryOperation {
     Retrieve,
     Prune,
     Compress,
-    Noop
+    Noop,
 }
 
 #[derive(
@@ -612,7 +618,7 @@ pub enum RewardType {
     Irrelevant,
     Outdated,
     Inaccurate,
-    Duplicate
+    Duplicate,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -622,7 +628,7 @@ pub struct RewardSignal {
     pub score: f32, // -1.0 to 1.0
     pub reasoning: Option<String>,
     pub agent_id: Option<String>,
-    pub timestamp: i64
+    pub timestamp: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -632,7 +638,7 @@ pub struct MemoryTrajectoryEvent {
     pub entry_id: String,
     pub reward: Option<RewardSignal>,
     pub reasoning: Option<String>,
-    pub timestamp: i64
+    pub timestamp: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -643,7 +649,7 @@ pub struct Entity {
     pub entity_type: String,
     pub description: Option<String>,
     pub embedding: Option<Vec<f32>>,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -655,7 +661,7 @@ pub struct Relationship {
     pub relation_type: String,
     pub weight: f32,
     pub description: Option<String>,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -666,7 +672,7 @@ pub struct Community {
     pub summary: String,
     pub level: u32,
     pub entity_ids: Vec<String>,
-    pub relationship_ids: Vec<String>
+    pub relationship_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -681,7 +687,7 @@ pub struct KnowledgeEntry {
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub commit_hash: Option<String>,
     pub author: Option<String>,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 #[derive(
@@ -691,7 +697,7 @@ pub struct KnowledgeEntry {
 pub enum PolicyMode {
     #[default]
     Optional,
-    Mandatory
+    Mandatory,
 }
 
 #[derive(
@@ -702,7 +708,7 @@ pub enum RuleMergeStrategy {
     #[default]
     Override,
     Merge,
-    Intersect
+    Intersect,
 }
 
 #[derive(
@@ -712,7 +718,7 @@ pub enum RuleMergeStrategy {
 pub enum RuleType {
     #[default]
     Allow,
-    Deny
+    Deny,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -727,7 +733,7 @@ pub struct Policy {
     #[serde(default)]
     pub merge_strategy: RuleMergeStrategy,
     pub rules: Vec<PolicyRule>,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -740,14 +746,14 @@ pub struct PolicyRule {
     pub operator: ConstraintOperator,
     pub value: serde_json::Value,
     pub severity: ConstraintSeverity,
-    pub message: String
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationResult {
     pub is_valid: bool,
-    pub violations: Vec<PolicyViolation>
+    pub violations: Vec<PolicyViolation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -757,7 +763,7 @@ pub struct PolicyViolation {
     pub policy_id: String,
     pub severity: ConstraintSeverity,
     pub message: String,
-    pub context: std::collections::HashMap<String, serde_json::Value>
+    pub context: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Governance event types for auditing and real-time updates
@@ -770,21 +776,21 @@ pub enum GovernanceEvent {
         unit_type: UnitType,
         tenant_id: TenantId,
         parent_id: Option<String>,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Organizational unit updated
     UnitUpdated {
         unit_id: String,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Organizational unit deleted
     UnitDeleted {
         unit_id: String,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Role assigned to a user for a specific unit
@@ -793,7 +799,7 @@ pub enum GovernanceEvent {
         unit_id: String,
         role: Role,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Role removed from a user
@@ -802,7 +808,7 @@ pub enum GovernanceEvent {
         unit_id: String,
         role: Role,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Policy created or updated
@@ -810,14 +816,14 @@ pub enum GovernanceEvent {
         policy_id: String,
         layer: KnowledgeLayer,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Policy deleted
     PolicyDeleted {
         policy_id: String,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Drift detected in a project
@@ -825,8 +831,8 @@ pub enum GovernanceEvent {
         project_id: String,
         tenant_id: TenantId,
         drift_score: f32,
-        timestamp: i64
-    }
+        timestamp: i64,
+    },
 }
 
 impl GovernanceEvent {
@@ -840,7 +846,7 @@ impl GovernanceEvent {
             GovernanceEvent::RoleRemoved { tenant_id, .. } => tenant_id,
             GovernanceEvent::PolicyUpdated { tenant_id, .. } => tenant_id,
             GovernanceEvent::PolicyDeleted { tenant_id, .. } => tenant_id,
-            GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id
+            GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id,
         }
     }
 }
@@ -856,7 +862,7 @@ pub struct DriftResult {
     pub violations: Vec<PolicyViolation>,
     pub suppressed_violations: Vec<PolicyViolation>,
     pub requires_manual_review: bool,
-    pub timestamp: i64
+    pub timestamp: i64,
 }
 
 impl DriftResult {
@@ -870,7 +876,7 @@ impl DriftResult {
             violations,
             suppressed_violations: Vec::new(),
             requires_manual_review: false,
-            timestamp: chrono::Utc::now().timestamp()
+            timestamp: chrono::Utc::now().timestamp(),
         }
     }
 
@@ -894,7 +900,7 @@ impl DriftResult {
             .map(|v| match v.severity {
                 ConstraintSeverity::Block => 1.0,
                 ConstraintSeverity::Warn => 0.5,
-                ConstraintSeverity::Info => 0.1
+                ConstraintSeverity::Info => 0.1,
             })
             .sum::<f32>()
             .min(1.0)
@@ -921,7 +927,7 @@ pub struct DriftSuppression {
     pub reason: String,
     pub created_by: UserId,
     pub expires_at: Option<i64>,
-    pub created_at: i64
+    pub created_at: i64,
 }
 
 impl DriftSuppression {
@@ -930,7 +936,7 @@ impl DriftSuppression {
         tenant_id: TenantId,
         policy_id: String,
         reason: String,
-        created_by: UserId
+        created_by: UserId,
     ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -941,7 +947,7 @@ impl DriftSuppression {
             reason,
             created_by,
             expires_at: None,
-            created_at: chrono::Utc::now().timestamp()
+            created_at: chrono::Utc::now().timestamp(),
         }
     }
 
@@ -985,7 +991,7 @@ pub struct DriftConfig {
     pub threshold: f32,
     pub low_confidence_threshold: f32,
     pub auto_suppress_info: bool,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 impl Default for DriftConfig {
@@ -996,7 +1002,7 @@ impl Default for DriftConfig {
             threshold: 0.2,
             low_confidence_threshold: 0.7,
             auto_suppress_info: false,
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         }
     }
 }
@@ -1033,7 +1039,7 @@ pub fn validate_user_id(id: &&String) -> Result<(), validator::ValidationError> 
 pub fn validate_session_id(id: &&String) -> Result<(), validator::ValidationError> {
     if id.is_empty() {
         return Err(validator::ValidationError::new(
-            "Session ID cannot be empty"
+            "Session ID cannot be empty",
         ));
     }
     Ok(())
@@ -1042,7 +1048,7 @@ pub fn validate_session_id(id: &&String) -> Result<(), validator::ValidationErro
 pub fn validate_project_id(id: &&String) -> Result<(), validator::ValidationError> {
     if id.is_empty() {
         return Err(validator::ValidationError::new(
-            "Project ID cannot be empty"
+            "Project ID cannot be empty",
         ));
     }
     Ok(())
@@ -1065,7 +1071,7 @@ pub fn validate_org_id(id: &&String) -> Result<(), validator::ValidationError> {
 pub fn validate_company_id(id: &&String) -> Result<(), validator::ValidationError> {
     if id.is_empty() {
         return Err(validator::ValidationError::new(
-            "Company ID cannot be empty"
+            "Company ID cannot be empty",
         ));
     }
     Ok(())
@@ -1087,7 +1093,7 @@ pub enum EventStatus {
     Pending,
     Published,
     Acknowledged,
-    DeadLettered
+    DeadLettered,
 }
 
 impl std::fmt::Display for EventStatus {
@@ -1096,7 +1102,7 @@ impl std::fmt::Display for EventStatus {
             EventStatus::Pending => write!(f, "pending"),
             EventStatus::Published => write!(f, "published"),
             EventStatus::Acknowledged => write!(f, "acknowledged"),
-            EventStatus::DeadLettered => write!(f, "dead_lettered")
+            EventStatus::DeadLettered => write!(f, "dead_lettered"),
         }
     }
 }
@@ -1117,7 +1123,7 @@ pub struct PersistentEvent {
     pub created_at: i64,
     pub published_at: Option<i64>,
     pub acknowledged_at: Option<i64>,
-    pub dead_lettered_at: Option<i64>
+    pub dead_lettered_at: Option<i64>,
 }
 
 impl PersistentEvent {
@@ -1142,7 +1148,7 @@ impl PersistentEvent {
             created_at: timestamp,
             published_at: None,
             acknowledged_at: None,
-            dead_lettered_at: None
+            dead_lettered_at: None,
         }
     }
 
@@ -1162,7 +1168,7 @@ impl PersistentEvent {
             GovernanceEvent::RoleRemoved { .. } => "role_removed".to_string(),
             GovernanceEvent::PolicyUpdated { .. } => "policy_updated".to_string(),
             GovernanceEvent::PolicyDeleted { .. } => "policy_deleted".to_string(),
-            GovernanceEvent::DriftDetected { .. } => "drift_detected".to_string()
+            GovernanceEvent::DriftDetected { .. } => "drift_detected".to_string(),
         }
     }
 
@@ -1206,7 +1212,7 @@ pub struct EventDeliveryMetrics {
     pub delivered_events: i64,
     pub retried_events: i64,
     pub dead_lettered_events: i64,
-    pub avg_delivery_time_ms: Option<f64>
+    pub avg_delivery_time_ms: Option<f64>,
 }
 
 impl EventDeliveryMetrics {
@@ -1214,7 +1220,7 @@ impl EventDeliveryMetrics {
         tenant_id: TenantId,
         event_type: String,
         period_start: i64,
-        period_end: i64
+        period_end: i64,
     ) -> Self {
         Self {
             tenant_id,
@@ -1225,7 +1231,7 @@ impl EventDeliveryMetrics {
             delivered_events: 0,
             retried_events: 0,
             dead_lettered_events: 0,
-            avg_delivery_time_ms: None
+            avg_delivery_time_ms: None,
         }
     }
 
@@ -1242,7 +1248,7 @@ pub struct ConsumerState {
     pub consumer_group: String,
     pub idempotency_key: String,
     pub tenant_id: TenantId,
-    pub processed_at: i64
+    pub processed_at: i64,
 }
 
 impl ConsumerState {
@@ -1251,7 +1257,7 @@ impl ConsumerState {
             consumer_group,
             idempotency_key,
             tenant_id,
-            processed_at: chrono::Utc::now().timestamp()
+            processed_at: chrono::Utc::now().timestamp(),
         }
     }
 }
@@ -1268,7 +1274,7 @@ pub struct JobCoordinationMetrics {
     pub timeout_count: u64,
     pub total_duration_ms: u64,
     pub last_run_at: Option<i64>,
-    pub last_success_at: Option<i64>
+    pub last_success_at: Option<i64>,
 }
 
 impl JobCoordinationMetrics {
@@ -1283,7 +1289,7 @@ impl JobCoordinationMetrics {
             timeout_count: 0,
             total_duration_ms: 0,
             last_run_at: None,
-            last_success_at: None
+            last_success_at: None,
         }
     }
 
@@ -1335,7 +1341,7 @@ pub struct PartialJobResult {
     pub total_count: Option<usize>,
     pub last_processed_id: Option<String>,
     pub partial_data: serde_json::Value,
-    pub created_at: i64
+    pub created_at: i64,
 }
 
 impl PartialJobResult {
@@ -1348,7 +1354,7 @@ impl PartialJobResult {
             total_count: None,
             last_processed_id: None,
             partial_data: serde_json::Value::Null,
-            created_at: chrono::Utc::now().timestamp()
+            created_at: chrono::Utc::now().timestamp(),
         }
     }
 
@@ -1462,7 +1468,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1234567890,
-            updated_at: 1234567890
+            updated_at: 1234567890,
         };
 
         assert_eq!(entry.id, "test_id");
@@ -1483,7 +1489,7 @@ mod tests {
             commit_hash: Some("abc123".to_string()),
             author: Some("Alice".to_string()),
             status: KnowledgeStatus::Accepted,
-            updated_at: 1234567890
+            updated_at: 1234567890,
         };
 
         assert_eq!(entry.path, "docs/adr/001.md");
@@ -1501,7 +1507,7 @@ mod tests {
             operator: ConstraintOperator::MustNotUse,
             value: serde_json::json!("unsafe-lib"),
             severity: ConstraintSeverity::Block,
-            message: "Do not use unsafe libraries".to_string()
+            message: "Do not use unsafe libraries".to_string(),
         };
 
         let policy = Policy {
@@ -1512,7 +1518,7 @@ mod tests {
             mode: PolicyMode::Mandatory,
             merge_strategy: RuleMergeStrategy::Merge,
             rules: vec![rule],
-            metadata: std::collections::HashMap::new()
+            metadata: std::collections::HashMap::new(),
         };
 
         assert_eq!(policy.id, "policy_1");
@@ -1528,12 +1534,12 @@ mod tests {
             policy_id: "policy_1".to_string(),
             severity: ConstraintSeverity::Warn,
             message: "Warning message".to_string(),
-            context: std::collections::HashMap::new()
+            context: std::collections::HashMap::new(),
         };
 
         let result = ValidationResult {
             is_valid: false,
-            violations: vec![violation]
+            violations: vec![violation],
         };
 
         assert!(!result.is_valid);
@@ -1606,7 +1612,7 @@ mod tests {
             project_id: Some("project_789".to_string()),
             team_id: Some("team_abc".to_string()),
             org_id: Some("org_xyz".to_string()),
-            company_id: Some("company_123".to_string())
+            company_id: Some("company_123".to_string()),
         };
 
         let result = identifiers.validate();
@@ -1622,7 +1628,7 @@ mod tests {
             project_id: None,
             team_id: None,
             org_id: None,
-            company_id: None
+            company_id: None,
         };
 
         let result = identifiers.validate();
@@ -1777,7 +1783,7 @@ mod tests {
             "c1".to_string(),
             "o1".to_string(),
             "t1".to_string(),
-            "p1".to_string()
+            "p1".to_string(),
         );
         assert_eq!(project.depth(), 4);
     }
@@ -1788,7 +1794,7 @@ mod tests {
             "c1".to_string(),
             "o1".to_string(),
             "t1".to_string(),
-            "p1".to_string()
+            "p1".to_string(),
         );
         assert_eq!(project.path_string(), "c1 > o1 > t1 > p1");
     }
@@ -1864,48 +1870,48 @@ mod tests {
                 unit_type: UnitType::Company,
                 tenant_id: tenant_id.clone(),
                 parent_id: None,
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::UnitUpdated {
                 unit_id: "u1".to_string(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::UnitDeleted {
                 unit_id: "u1".to_string(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::RoleAssigned {
                 user_id: user_id.clone(),
                 unit_id: "u1".to_string(),
                 role: Role::Admin,
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::RoleRemoved {
                 user_id: user_id.clone(),
                 unit_id: "u1".to_string(),
                 role: Role::Admin,
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::PolicyUpdated {
                 policy_id: "p1".to_string(),
                 layer: KnowledgeLayer::Company,
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::PolicyDeleted {
                 policy_id: "p1".to_string(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::DriftDetected {
                 project_id: "proj-1".to_string(),
                 tenant_id: tenant_id.clone(),
                 drift_score: 0.5,
-                timestamp: 0
+                timestamp: 0,
             },
         ];
 
@@ -1933,7 +1939,7 @@ mod tests {
             tenant_id.clone(),
             "policy-1".to_string(),
             "False positive".to_string(),
-            user_id.clone()
+            user_id.clone(),
         );
 
         assert_eq!(suppression.project_id, "proj-1");
@@ -1955,7 +1961,7 @@ mod tests {
             tenant_id,
             "policy-1".to_string(),
             "Known issue".to_string(),
-            user_id
+            user_id,
         )
         .with_pattern(".*test.*".to_string());
 
@@ -1973,7 +1979,7 @@ mod tests {
             tenant_id,
             "policy-1".to_string(),
             "Temporary".to_string(),
-            user_id
+            user_id,
         )
         .with_expiry(future_time);
 
@@ -1990,7 +1996,7 @@ mod tests {
             tenant_id.clone(),
             "policy-1".to_string(),
             "Not expired".to_string(),
-            user_id.clone()
+            user_id.clone(),
         );
         assert!(!not_expired.is_expired());
 
@@ -1999,7 +2005,7 @@ mod tests {
             tenant_id.clone(),
             "policy-1".to_string(),
             "Future".to_string(),
-            user_id.clone()
+            user_id.clone(),
         )
         .with_expiry(chrono::Utc::now().timestamp() + 86400);
         assert!(!future_expiry.is_expired());
@@ -2009,7 +2015,7 @@ mod tests {
             tenant_id,
             "policy-1".to_string(),
             "Expired".to_string(),
-            user_id
+            user_id,
         )
         .with_expiry(chrono::Utc::now().timestamp() - 86400);
         assert!(past_expiry.is_expired());
@@ -2025,7 +2031,7 @@ mod tests {
             policy_id: "policy-1".to_string(),
             severity: ConstraintSeverity::Warn,
             message: "Test violation message".to_string(),
-            context: std::collections::HashMap::new()
+            context: std::collections::HashMap::new(),
         };
 
         let suppression_match = DriftSuppression::new(
@@ -2033,7 +2039,7 @@ mod tests {
             tenant_id.clone(),
             "policy-1".to_string(),
             "Match all".to_string(),
-            user_id.clone()
+            user_id.clone(),
         );
         assert!(suppression_match.matches(&violation));
 
@@ -2042,7 +2048,7 @@ mod tests {
             tenant_id.clone(),
             "policy-2".to_string(),
             "Different policy".to_string(),
-            user_id.clone()
+            user_id.clone(),
         );
         assert!(!suppression_no_match.matches(&violation));
 
@@ -2051,7 +2057,7 @@ mod tests {
             tenant_id.clone(),
             "policy-1".to_string(),
             "Pattern match".to_string(),
-            user_id.clone()
+            user_id.clone(),
         )
         .with_pattern(".*violation.*".to_string());
         assert!(suppression_pattern_match.matches(&violation));
@@ -2061,7 +2067,7 @@ mod tests {
             tenant_id,
             "policy-1".to_string(),
             "Pattern no match".to_string(),
-            user_id
+            user_id,
         )
         .with_pattern(".*xyz.*".to_string());
         assert!(!suppression_pattern_no_match.matches(&violation));
@@ -2124,14 +2130,14 @@ mod tests {
                 policy_id: "p1".to_string(),
                 severity: ConstraintSeverity::Warn,
                 message: "Warning".to_string(),
-                context: std::collections::HashMap::new()
+                context: std::collections::HashMap::new(),
             },
             PolicyViolation {
                 rule_id: "r2".to_string(),
                 policy_id: "p1".to_string(),
                 severity: ConstraintSeverity::Block,
                 message: "Blocking".to_string(),
-                context: std::collections::HashMap::new()
+                context: std::collections::HashMap::new(),
             },
         ];
 
@@ -2148,7 +2154,7 @@ mod tests {
             policy_id: "p1".to_string(),
             severity: ConstraintSeverity::Info,
             message: "Suppressed".to_string(),
-            context: std::collections::HashMap::new()
+            context: std::collections::HashMap::new(),
         }];
 
         assert_eq!(result.suppressed_count(), 1);
@@ -2306,7 +2312,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         let mut persistent = PersistentEvent::new(event);
@@ -2326,7 +2332,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         let mut persistent = PersistentEvent::new(event);
@@ -2344,7 +2350,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         let mut persistent = PersistentEvent::new(event);
@@ -2367,7 +2373,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         let mut persistent = PersistentEvent::new(event);
@@ -2388,7 +2394,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         let mut persistent = PersistentEvent::new(event);
@@ -2437,7 +2443,7 @@ mod tests {
         let state = ConsumerState::new(
             "drift_processor".to_string(),
             "idempotency-key-123".to_string(),
-            tenant_id.clone()
+            tenant_id.clone(),
         );
 
         assert_eq!(state.consumer_group, "drift_processor");
@@ -2500,7 +2506,7 @@ mod tests {
             source_hash: "abc123def456".to_string(),
             content_hash: None,
             personalized: false,
-            personalization_context: None
+            personalization_context: None,
         };
 
         assert_eq!(summary.depth, SummaryDepth::Sentence);
@@ -2521,7 +2527,7 @@ mod tests {
             source_hash: "hash789".to_string(),
             content_hash: None,
             personalized: true,
-            personalization_context: Some("backend developer, Rust experience".to_string())
+            personalization_context: Some("backend developer, Rust experience".to_string()),
         };
 
         assert!(summary.personalized);
@@ -2541,7 +2547,7 @@ mod tests {
             source_hash: "source_hash_value".to_string(),
             content_hash: None,
             personalized: true,
-            personalization_context: Some("security focus".to_string())
+            personalization_context: Some("security focus".to_string()),
         };
 
         let json = serde_json::to_string(&summary).unwrap();
@@ -2560,7 +2566,7 @@ mod tests {
             source_hash: "hash".to_string(),
             content_hash: None,
             personalized: false,
-            personalization_context: None
+            personalization_context: None,
         };
 
         let json: serde_json::Value = serde_json::to_value(&summary).unwrap();
@@ -2582,7 +2588,7 @@ mod tests {
             update_on_changes: Some(10),
             skip_if_unchanged: true,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph]
+            depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph],
         };
 
         assert_eq!(config.layer, MemoryLayer::Project);
@@ -2601,7 +2607,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: true,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         assert!(config.update_interval_secs.is_some());
@@ -2616,7 +2622,7 @@ mod tests {
             update_on_changes: Some(5),
             skip_if_unchanged: false,
             personalized: true,
-            depths: vec![SummaryDepth::Detailed]
+            depths: vec![SummaryDepth::Detailed],
         };
 
         assert!(config.update_interval_secs.is_none());
@@ -2635,7 +2641,7 @@ mod tests {
                 SummaryDepth::Sentence,
                 SummaryDepth::Paragraph,
                 SummaryDepth::Detailed,
-            ]
+            ],
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -2652,7 +2658,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: false,
             personalized: true,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         let json: serde_json::Value = serde_json::to_value(&config).unwrap();
@@ -2685,8 +2691,8 @@ mod tests {
                 source_hash: "hash1".to_string(),
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
         summaries.insert(
             SummaryDepth::Paragraph,
@@ -2698,8 +2704,8 @@ mod tests {
                 source_hash: "hash1".to_string(),
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let entry = MemoryEntry {
@@ -2712,7 +2718,7 @@ mod tests {
             importance_score: Some(0.85),
             metadata: std::collections::HashMap::new(),
             created_at: 1705500000,
-            updated_at: 1705500000
+            updated_at: 1705500000,
         };
 
         assert_eq!(entry.summaries.len(), 2);
@@ -2734,7 +2740,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1705500000,
-            updated_at: 1705500000
+            updated_at: 1705500000,
         };
 
         assert!(entry.summaries.is_empty());
@@ -2754,8 +2760,8 @@ mod tests {
                 source_hash: "hash_abc".to_string(),
                 content_hash: None,
                 personalized: true,
-                personalization_context: Some("developer".to_string())
-            }
+                personalization_context: Some("developer".to_string()),
+            },
         );
 
         let entry = MemoryEntry {
@@ -2768,7 +2774,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let json = serde_json::to_string(&entry).unwrap();
@@ -2798,7 +2804,7 @@ mod tests {
                 update_on_changes: None,
                 skip_if_unchanged: true,
                 personalized: false,
-                depths: vec![SummaryDepth::Sentence]
+                depths: vec![SummaryDepth::Sentence],
             };
 
             let json = serde_json::to_string(&config).unwrap();
@@ -2819,7 +2825,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1000,
-            updated_at: 1000
+            updated_at: 1000,
         };
 
         let config = SummaryConfig {
@@ -2828,7 +2834,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: true,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         assert!(entry.needs_summary_update(&config, 2000));
@@ -2853,8 +2859,8 @@ mod tests {
                 source_hash: content_hash,
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let entry = MemoryEntry {
@@ -2867,7 +2873,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1000,
-            updated_at: 1000
+            updated_at: 1000,
         };
 
         let config = SummaryConfig {
@@ -2876,7 +2882,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: false,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         assert!(!entry.needs_summary_update(&config, 2000));
@@ -2896,8 +2902,8 @@ mod tests {
                 source_hash: "old_hash".to_string(),
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let entry = MemoryEntry {
@@ -2910,7 +2916,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1000,
-            updated_at: 2000
+            updated_at: 2000,
         };
 
         let config = SummaryConfig {
@@ -2919,7 +2925,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: true,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         assert!(entry.needs_summary_update(&config, 1500));
@@ -2944,8 +2950,8 @@ mod tests {
                 source_hash: content_hash,
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let entry = MemoryEntry {
@@ -2958,7 +2964,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1000,
-            updated_at: 1000
+            updated_at: 1000,
         };
 
         let config = SummaryConfig {
@@ -2967,7 +2973,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: true,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         assert!(!entry.needs_summary_update(&config, 2000));
@@ -2985,7 +2991,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let hash = entry.compute_content_hash();
@@ -3008,7 +3014,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let entry2 = MemoryEntry {
@@ -3021,7 +3027,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         assert_ne!(entry1.compute_content_hash(), entry2.compute_content_hash());
@@ -3044,7 +3050,7 @@ mod tests {
             message_pattern: "Cannot read property '.*' of undefined".to_string(),
             stack_patterns: vec!["at UserService".to_string(), "at AuthHandler".to_string()],
             context_patterns: vec!["typescript".to_string(), "react".to_string()],
-            embedding: Some(vec![0.1, 0.2, 0.3])
+            embedding: Some(vec![0.1, 0.2, 0.3]),
         };
 
         assert_eq!(sig.error_type, "NullPointerException");
@@ -3059,7 +3065,7 @@ mod tests {
             message_pattern: ".*is not a function".to_string(),
             stack_patterns: vec![],
             context_patterns: vec!["javascript".to_string()],
-            embedding: None
+            embedding: None,
         };
 
         let json = serde_json::to_string(&sig).unwrap();
@@ -3075,7 +3081,7 @@ mod tests {
         let change = CodeChange {
             file_path: "src/auth.rs".to_string(),
             diff: "+ if let Some(token) = token_option {\n+     // handle\n+ }".to_string(),
-            description: Some("Added null check for token".to_string())
+            description: Some("Added null check for token".to_string()),
         };
 
         assert_eq!(change.file_path, "src/auth.rs");
@@ -3091,11 +3097,11 @@ mod tests {
             changes: vec![CodeChange {
                 file_path: "src/auth.rs".to_string(),
                 diff: "+ if token.is_some()".to_string(),
-                description: None
+                description: None,
             }],
             success_rate: 0.95,
             application_count: 12,
-            last_success_at: 1705500000
+            last_success_at: 1705500000,
         };
 
         assert_eq!(resolution.success_rate, 0.95);
@@ -3112,7 +3118,7 @@ mod tests {
             changes: vec![],
             success_rate: 1.0,
             application_count: 5,
-            last_success_at: 1705600000
+            last_success_at: 1705600000,
         };
 
         let json = serde_json::to_string(&resolution).unwrap();
@@ -3132,7 +3138,7 @@ mod tests {
                 message_pattern: "missing lifetime specifier".to_string(),
                 stack_patterns: vec![],
                 context_patterns: vec!["rust".to_string()],
-                embedding: None
+                embedding: None,
             },
             resolutions: vec![Resolution {
                 id: "res_001".to_string(),
@@ -3141,7 +3147,7 @@ mod tests {
                 changes: vec![],
                 success_rate: 0.88,
                 application_count: 8,
-                last_success_at: 1705500000
+                last_success_at: 1705500000,
             }],
             content: "# Rust Lifetime Error\n\nWhen encountering...".to_string(),
             tags: vec![
@@ -3150,7 +3156,7 @@ mod tests {
                 "borrow-checker".to_string(),
             ],
             created_at: 1705400000,
-            updated_at: 1705500000
+            updated_at: 1705500000,
         };
 
         assert_eq!(note.id, "hn_001");
@@ -3167,13 +3173,13 @@ mod tests {
                 message_pattern: "index out of bounds".to_string(),
                 stack_patterns: vec!["at main".to_string()],
                 context_patterns: vec!["rust".to_string()],
-                embedding: Some(vec![0.5, 0.6])
+                embedding: Some(vec![0.5, 0.6]),
             },
             resolutions: vec![],
             content: "# Array Bounds Error".to_string(),
             tags: vec!["rust".to_string()],
             created_at: 1705400000,
-            updated_at: 1705400000
+            updated_at: 1705400000,
         };
 
         let json = serde_json::to_string(&note).unwrap();

@@ -9,14 +9,14 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use testcontainers::{
     ContainerAsync, GenericImage,
     core::{ContainerPort, WaitFor},
-    runners::AsyncRunner
+    runners::AsyncRunner,
 };
 use tokio::sync::OnceCell;
 
 struct QdrantFixture {
     #[allow(dead_code)]
     container: ContainerAsync<GenericImage>,
-    url: String
+    url: String,
 }
 
 static QDRANT: OnceCell<Option<QdrantFixture>> = OnceCell::const_new();
@@ -28,7 +28,7 @@ async fn get_qdrant_fixture() -> Option<&'static QdrantFixture> {
             match GenericImage::new("qdrant/qdrant", "latest")
                 .with_exposed_port(ContainerPort::Tcp(6334))
                 .with_wait_for(WaitFor::message_on_stdout(
-                    "Qdrant is ready to accept connections"
+                    "Qdrant is ready to accept connections",
                 ))
                 .start()
                 .await
@@ -39,7 +39,7 @@ async fn get_qdrant_fixture() -> Option<&'static QdrantFixture> {
                     let url = format!("http://{}:{}", host, port);
                     Some(QdrantFixture { container, url })
                 }
-                Err(_) => None
+                Err(_) => None,
             }
         })
         .await
@@ -86,7 +86,7 @@ async fn test_qdrant_full_lifecycle() {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 1000 + i as i64,
-            updated_at: 1000 + i as i64
+            updated_at: 1000 + i as i64,
         };
         provider
             .add(ctx.clone(), entry)
@@ -163,7 +163,7 @@ async fn test_qdrant_error_conditions() {
         layer: MemoryLayer::User,
         metadata: HashMap::new(),
         created_at: 0,
-        updated_at: 0
+        updated_at: 0,
     };
     let ctx = test_ctx();
     let result = provider.add(ctx, entry_no_emb).await;
@@ -212,7 +212,7 @@ async fn test_qdrant_complex_metadata() {
         layer: MemoryLayer::Session,
         metadata,
         created_at: 123456789,
-        updated_at: 123456789
+        updated_at: 123456789,
     };
 
     let ctx = test_ctx();

@@ -1,45 +1,51 @@
+use crate::circuit_breaker::{CircuitBreakerConfig, ReasoningCircuitBreaker};
 use crate::governance::GovernanceService;
 use crate::llm::EntityExtractor;
 use crate::pruning::{CompressionManager, PruningManager};
+use crate::reasoning::ReflectiveReasoner;
+use crate::reasoning_cache::{InMemoryReasoningCacheBackend, ReasoningCache};
 use crate::telemetry::MemoryTelemetry;
 use mk_core::traits::MemoryProviderAdapter;
 use mk_core::traits::{AuthorizationService, EmbeddingService};
-use mk_core::types::{MemoryEntry, MemoryLayer};
+use mk_core::types::{MemoryEntry, MemoryLayer, ReasoningStrategy, ReasoningTrace, TenantContext};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub type ProviderMap = HashMap<
     MemoryLayer,
-    Arc<dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
+    Arc<dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
 >;
 
 pub struct MemoryManager {
     providers: Arc<RwLock<ProviderMap>>,
     embedding_service: Option<
-        Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
+        Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
     >,
     governance_service: Arc<GovernanceService>,
     auth_service: Option<
         Arc<
             dyn AuthorizationService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync
-        >
+                + Sync,
+        >,
     >,
     telemetry: Arc<MemoryTelemetry>,
     config: config::MemoryConfig,
     trajectories: Arc<RwLock<HashMap<String, Vec<mk_core::types::MemoryTrajectoryEvent>>>>,
     graph_store: Option<
-        Arc<dyn storage::graph::GraphStore<Error = storage::postgres::PostgresError> + Send + Sync>
+        Arc<dyn storage::graph::GraphStore<Error = storage::postgres::PostgresError> + Send + Sync>,
     >,
     llm_service: Option<
         Arc<
             dyn mk_core::traits::LlmService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync
-        >
-    >
+                + Sync,
+        >,
+    >,
+    reasoner: Option<Arc<dyn ReflectiveReasoner>>,
+    reasoning_cache: Option<Arc<ReasoningCache<InMemoryReasoningCacheBackend>>>,
+    circuit_breaker: Option<Arc<ReasoningCircuitBreaker>>,
 }
 
 impl MemoryManager {
@@ -53,15 +59,18 @@ impl MemoryManager {
             config: config::MemoryConfig::default(),
             trajectories: Arc::new(RwLock::new(HashMap::new())),
             graph_store: None,
-            llm_service: None
+            llm_service: None,
+            reasoner: None,
+            reasoning_cache: None,
+            circuit_breaker: None,
         }
     }
 
     pub fn with_graph_store(
         mut self,
         graph_store: Arc<
-            dyn storage::graph::GraphStore<Error = storage::postgres::PostgresError> + Send + Sync
-        >
+            dyn storage::graph::GraphStore<Error = storage::postgres::PostgresError> + Send + Sync,
+        >,
     ) -> Self {
         self.graph_store = Some(graph_store);
         self
@@ -72,23 +81,63 @@ impl MemoryManager {
         llm_service: Arc<
             dyn mk_core::traits::LlmService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync
-        >
+                + Sync,
+        >,
     ) -> Self {
         self.llm_service = Some(llm_service);
         self
     }
 
+    pub fn with_reasoner(mut self, reasoner: Arc<dyn ReflectiveReasoner>) -> Self {
+        self.reasoner = Some(reasoner);
+        self
+    }
+
     pub fn with_config(mut self, config: config::MemoryConfig) -> Self {
+        if config.reasoning.cache_enabled {
+            let backend = Arc::new(InMemoryReasoningCacheBackend::new());
+            let cache = ReasoningCache::new(
+                backend,
+                config.reasoning.cache_ttl_seconds,
+                config.reasoning.cache_enabled,
+                self.telemetry.clone(),
+            );
+            self.reasoning_cache = Some(Arc::new(cache));
+        }
+
+        if config.reasoning.enabled && config.reasoning.circuit_breaker_enabled {
+            let cb_config = CircuitBreakerConfig {
+                failure_threshold_percent: config
+                    .reasoning
+                    .circuit_breaker_failure_threshold_percent,
+                window_duration_secs: config.reasoning.circuit_breaker_window_secs,
+                min_requests_in_window: config.reasoning.circuit_breaker_min_requests,
+                recovery_timeout_secs: config.reasoning.circuit_breaker_recovery_secs,
+                half_open_max_requests: config.reasoning.circuit_breaker_half_open_requests,
+            };
+            self.circuit_breaker = Some(Arc::new(ReasoningCircuitBreaker::new(
+                cb_config,
+                self.telemetry.clone(),
+            )));
+        }
+
         self.config = config;
+        self
+    }
+
+    pub fn with_reasoning_cache(
+        mut self,
+        cache: Arc<ReasoningCache<InMemoryReasoningCacheBackend>>,
+    ) -> Self {
+        self.reasoning_cache = Some(cache);
         self
     }
 
     pub fn with_embedding_service(
         mut self,
         embedding_service: Arc<
-            dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
-        >
+            dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+        >,
     ) -> Self {
         self.embedding_service = Some(embedding_service);
         self
@@ -99,8 +148,8 @@ impl MemoryManager {
         auth_service: Arc<
             dyn AuthorizationService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync
-        >
+                + Sync,
+        >,
     ) -> Self {
         self.auth_service = Some(auth_service);
         self
@@ -121,14 +170,17 @@ impl MemoryManager {
             config: self.config.clone(),
             trajectories: self.trajectories.clone(),
             graph_store: self.graph_store.clone(),
-            llm_service: self.llm_service.clone()
+            llm_service: self.llm_service.clone(),
+            reasoner: self.reasoner.clone(),
+            reasoning_cache: self.reasoning_cache.clone(),
+            circuit_breaker: self.circuit_breaker.clone(),
         }
     }
 
     pub async fn optimize_layer(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer
+        layer: MemoryLayer,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.optimize_layer_internal(ctx, layer).await
     }
@@ -136,7 +188,7 @@ impl MemoryManager {
     async fn optimize_layer_internal(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer
+        layer: MemoryLayer,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if ctx.tenant_id.to_string().contains("TRIGGER_FAILURE") {
             return Err("Simulated optimization failure".into());
@@ -199,7 +251,7 @@ impl MemoryManager {
                         chunk.len(),
                         layer
                     )),
-                    timestamp: chrono::Utc::now().timestamp()
+                    timestamp: chrono::Utc::now().timestamp(),
                 };
                 trajectories.entry(id).or_default().push(event);
             }
@@ -222,8 +274,8 @@ impl MemoryManager {
         provider: Arc<
             dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync
-        >
+                + Sync,
+        >,
     ) {
         let mut providers = self.providers.write().await;
         providers.insert(layer, provider);
@@ -234,7 +286,7 @@ impl MemoryManager {
         ctx: mk_core::types::TenantContext,
         query_vector: Vec<f32>,
         limit: usize,
-        filters: HashMap<String, serde_json::Value>
+        filters: HashMap<String, serde_json::Value>,
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         if ctx.tenant_id.to_string().contains("TRIGGER_FAILURE") {
             return Err("Simulated search failure".into());
@@ -264,7 +316,7 @@ impl MemoryManager {
                     self.telemetry.record_operation_success(
                         "search",
                         &layer_str,
-                        start.elapsed().as_millis() as f64
+                        start.elapsed().as_millis() as f64,
                     );
                     for mut entry in results {
                         entry.layer = *layer;
@@ -279,7 +331,7 @@ impl MemoryManager {
                                 "Memory retrieved during search in layer {:?}",
                                 layer
                             )),
-                            timestamp: chrono::Utc::now().timestamp()
+                            timestamp: chrono::Utc::now().timestamp(),
                         };
                         trajectories
                             .entry(entry.id.clone())
@@ -309,7 +361,7 @@ impl MemoryManager {
         query_vector: Vec<f32>,
         limit: usize,
         threshold: f32,
-        filters: HashMap<String, serde_json::Value>
+        filters: HashMap<String, serde_json::Value>,
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
         let mut all_results = Vec::new();
@@ -341,7 +393,7 @@ impl MemoryManager {
                                     "Memory retrieved during threshold search in layer {:?}",
                                     layer
                                 )),
-                                timestamp: chrono::Utc::now().timestamp()
+                                timestamp: chrono::Utc::now().timestamp(),
                             };
                             trajectories
                                 .entry(entry.id.clone())
@@ -350,7 +402,7 @@ impl MemoryManager {
                         }
                     }
                 }
-                Err(e) => tracing::error!("Error searching layer {:?}: {}", layer, e)
+                Err(e) => tracing::error!("Error searching layer {:?}: {}", layer, e),
             }
         }
 
@@ -365,8 +417,24 @@ impl MemoryManager {
         query_text: &str,
         limit: usize,
         threshold: f32,
-        filters: HashMap<String, serde_json::Value>
+        filters: HashMap<String, serde_json::Value>,
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
+        let (results, _trace) = self
+            .search_text_with_reasoning(ctx, query_text, limit, threshold, filters, None)
+            .await?;
+        Ok(results)
+    }
+
+    pub async fn search_text_with_reasoning(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        query_text: &str,
+        limit: usize,
+        threshold: f32,
+        filters: HashMap<String, serde_json::Value>,
+        context_summary: Option<&str>,
+    ) -> Result<(Vec<MemoryEntry>, Option<ReasoningTrace>), Box<dyn std::error::Error + Send + Sync>>
+    {
         if query_text.contains("TRIGGER_FAILURE") {
             return Err("Simulated embedding failure".into());
         }
@@ -376,17 +444,177 @@ impl MemoryManager {
             .as_ref()
             .ok_or("Embedding service not configured")?;
 
-        let query_vector = embedding_service.embed(query_text).await?;
+        let reasoning_config = &self.config.reasoning;
+        let circuit_breaker_open = if let Some(cb) = &self.circuit_breaker {
+            !cb.is_allowed().await
+        } else {
+            false
+        };
 
-        self.search_with_threshold(ctx, query_vector, limit, threshold, filters)
-            .await
+        if circuit_breaker_open {
+            self.telemetry.record_reasoning_circuit_rejected();
+            tracing::debug!("Reasoning skipped: circuit breaker open");
+        }
+
+        let should_reason = reasoning_config.enabled
+            && self.reasoner.is_some()
+            && !self.is_simple_query(query_text)
+            && !circuit_breaker_open;
+
+        let (effective_query, trace, adjusted_limit) = if should_reason {
+            let cached_trace = if let Some(cache) = &self.reasoning_cache {
+                cache.get(&ctx, query_text).await.ok().flatten()
+            } else {
+                None
+            };
+
+            if let Some(cached) = cached_trace {
+                let adj_limit = self.calculate_adjusted_limit(&cached, limit);
+                (
+                    cached
+                        .refined_query
+                        .clone()
+                        .unwrap_or_else(|| query_text.to_string()),
+                    Some(cached),
+                    adj_limit,
+                )
+            } else {
+                match self
+                    .apply_reasoning(&ctx, query_text, context_summary, limit)
+                    .await
+                {
+                    Ok((refined_query, trace, adj_limit)) => {
+                        if let Some(cb) = &self.circuit_breaker {
+                            cb.record_success().await;
+                        }
+                        if let Some(cache) = &self.reasoning_cache {
+                            let _ = cache.set(&ctx, query_text, &trace).await;
+                        }
+                        (
+                            refined_query.unwrap_or_else(|| query_text.to_string()),
+                            Some(trace),
+                            adj_limit,
+                        )
+                    }
+                    Err(e) => {
+                        let error_msg = e.to_string();
+                        tracing::warn!(
+                            error = %error_msg,
+                            query = query_text,
+                            "Reasoning failed, falling back to direct search"
+                        );
+                        if let Some(cb) = &self.circuit_breaker {
+                            cb.record_failure(&error_msg).await;
+                        }
+                        (query_text.to_string(), None, limit)
+                    }
+                }
+            }
+        } else {
+            (query_text.to_string(), None, limit)
+        };
+
+        let query_vector = embedding_service.embed(&effective_query).await?;
+
+        let results = self
+            .search_with_threshold(ctx, query_vector, adjusted_limit, threshold, filters)
+            .await?;
+
+        Ok((results, trace))
+    }
+
+    fn is_simple_query(&self, query: &str) -> bool {
+        if !self.config.reasoning.bypass_simple_queries {
+            return false;
+        }
+        let word_count = query.split_whitespace().count();
+        word_count <= self.config.reasoning.simple_query_max_words
+    }
+
+    fn calculate_adjusted_limit(&self, trace: &ReasoningTrace, base_limit: usize) -> usize {
+        match trace.strategy {
+            ReasoningStrategy::Exhaustive => {
+                (base_limit as f32 * self.config.reasoning.exhaustive_limit_multiplier) as usize
+            }
+            ReasoningStrategy::Targeted => {
+                (base_limit as f32 * self.config.reasoning.targeted_limit_multiplier) as usize
+            }
+            ReasoningStrategy::SemanticOnly => base_limit,
+        }
+    }
+
+    async fn apply_reasoning(
+        &self,
+        _ctx: &TenantContext,
+        query: &str,
+        context_summary: Option<&str>,
+        base_limit: usize,
+    ) -> Result<(Option<String>, ReasoningTrace, usize), Box<dyn std::error::Error + Send + Sync>>
+    {
+        let reasoner = self.reasoner.as_ref().ok_or("Reasoner not configured")?;
+
+        let timeout_ms = self.config.reasoning.timeout_ms;
+        let start_time = chrono::Utc::now();
+        let reasoning_future = reasoner.reason(query, context_summary);
+
+        self.telemetry.record_reasoning_llm_call();
+
+        let (trace, timed_out) = match tokio::time::timeout(
+            std::time::Duration::from_millis(timeout_ms),
+            reasoning_future,
+        )
+        .await
+        {
+            Ok(Ok(mut trace)) => {
+                trace.duration_ms =
+                    (chrono::Utc::now() - start_time).num_milliseconds().max(0) as u64;
+                (trace, false)
+            }
+            Ok(Err(e)) => {
+                return Err(format!("Reasoning failed: {}", e).into());
+            }
+            Err(_) => {
+                let end_time = chrono::Utc::now();
+                let duration_ms = (end_time - start_time).num_milliseconds().max(0) as u64;
+                let timeout_trace = mk_core::types::ReasoningTrace {
+                    strategy: mk_core::types::ReasoningStrategy::SemanticOnly,
+                    thought_process: "Reasoning timed out, falling back to semantic search"
+                        .to_string(),
+                    refined_query: None,
+                    start_time,
+                    end_time,
+                    timed_out: true,
+                    duration_ms,
+                    metadata: std::collections::HashMap::new(),
+                };
+                (timeout_trace, true)
+            }
+        };
+
+        self.telemetry
+            .record_reasoning_latency(trace.duration_ms as f64, timed_out);
+
+        let p95_threshold = self.config.reasoning.p95_latency_threshold_ms;
+        if trace.duration_ms > p95_threshold {
+            self.telemetry
+                .record_reasoning_p95_exceeded(trace.duration_ms as f64, p95_threshold as f64);
+            tracing::warn!(
+                duration_ms = trace.duration_ms,
+                threshold_ms = p95_threshold,
+                "Reasoning latency exceeded p95 threshold"
+            );
+        }
+
+        let adjusted_limit = self.calculate_adjusted_limit(&trace, base_limit);
+
+        Ok((trace.refined_query.clone(), trace, adjusted_limit))
     }
 
     pub async fn add_to_layer(
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        mut entry: MemoryEntry
+        mut entry: MemoryEntry,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         if entry.content.contains("TRIGGER_FAILURE") {
             return Err("Simulated add failure".into());
@@ -424,7 +652,7 @@ impl MemoryManager {
                 self.telemetry.record_operation_success(
                     "add",
                     &layer_str,
-                    start.elapsed().as_millis() as f64
+                    start.elapsed().as_millis() as f64,
                 );
 
                 let layer_count = provider
@@ -459,7 +687,7 @@ impl MemoryManager {
                     entry_id: id.clone(),
                     reward: None,
                     reasoning: Some(format!("Memory added to layer {:?}", layer)),
-                    timestamp: chrono::Utc::now().timestamp()
+                    timestamp: chrono::Utc::now().timestamp(),
                 };
                 trajectories.entry(id.clone()).or_default().push(event);
 
@@ -473,14 +701,14 @@ impl MemoryManager {
                             if let Some(obj) = properties.as_object_mut() {
                                 obj.insert(
                                     "source_memory_id".to_string(),
-                                    serde_json::Value::String(id.clone())
+                                    serde_json::Value::String(id.clone()),
                                 );
                             }
                             let node = storage::graph::GraphNode {
                                 id: entity.name.clone(),
                                 label: entity.label,
                                 properties,
-                                tenant_id: ctx.tenant_id.to_string()
+                                tenant_id: ctx.tenant_id.to_string(),
                             };
                             let _ = graph_store.add_node(ctx.clone(), node).await;
                         }
@@ -495,7 +723,7 @@ impl MemoryManager {
                                 target_id: relation.target,
                                 relation: relation.relation,
                                 properties: relation.properties,
-                                tenant_id: ctx.tenant_id.to_string()
+                                tenant_id: ctx.tenant_id.to_string(),
                             };
                             let _ = graph_store.add_edge(ctx.clone(), edge).await;
                         }
@@ -516,7 +744,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        id: &str
+        id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let provider = {
             let providers = self.providers.read().await;
@@ -543,12 +771,12 @@ impl MemoryManager {
                     entry_id: id.to_string(),
                     reward: None,
                     reasoning: Some(format!("Memory deleted from layer {:?}", layer)),
-                    timestamp: chrono::Utc::now().timestamp()
+                    timestamp: chrono::Utc::now().timestamp(),
                 };
                 trajectories.entry(id.to_string()).or_default().push(event);
                 Ok(())
             }
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
@@ -557,7 +785,7 @@ impl MemoryManager {
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
         memory_id: &str,
-        reward: mk_core::types::RewardSignal
+        reward: mk_core::types::RewardSignal,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let entry = self
             .get_from_layer(ctx.clone(), layer, memory_id)
@@ -585,7 +813,7 @@ impl MemoryManager {
             entry_id: memory_id.to_string(),
             reward: Some(reward),
             reasoning: Some("Reward signal recorded".to_string()),
-            timestamp: chrono::Utc::now().timestamp()
+            timestamp: chrono::Utc::now().timestamp(),
         };
         trajectories
             .entry(memory_id.to_string())
@@ -599,7 +827,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        threshold: f32
+        threshold: f32,
     ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         let memories = self.list_all_from_layer(ctx.clone(), layer).await?;
         let mut pruned_ids = Vec::new();
@@ -649,7 +877,7 @@ impl MemoryManager {
                     "Memory pruned due to low utility (score: {:.2})",
                     score
                 )),
-                timestamp: chrono::Utc::now().timestamp()
+                timestamp: chrono::Utc::now().timestamp(),
             };
             trajectories_write
                 .entry(id.clone())
@@ -664,7 +892,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        id: &str
+        id: &str,
     ) -> Result<Option<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let provider = {
             let providers = self.providers.read().await;
@@ -701,7 +929,7 @@ impl MemoryManager {
                 entry_id: id.to_string(),
                 reward: None,
                 reasoning: Some(format!("Memory retrieved from layer {:?}", layer)),
-                timestamp: chrono::Utc::now().timestamp()
+                timestamp: chrono::Utc::now().timestamp(),
             };
             trajectories.entry(id.to_string()).or_default().push(event);
 
@@ -714,7 +942,7 @@ impl MemoryManager {
     pub async fn list_all_from_layer(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer
+        layer: MemoryLayer,
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let provider = {
             let providers = self.providers.read().await;
@@ -731,7 +959,7 @@ impl MemoryManager {
     pub async fn apply_reward_decay(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer
+        layer: MemoryLayer,
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         let memories = self.list_all_from_layer(ctx.clone(), layer).await?;
         let mut decayed_count = 0;
@@ -773,7 +1001,7 @@ impl MemoryManager {
                             "Importance decayed by {:.4} due to inactivity ({} intervals)",
                             reduction, intervals_passed
                         )),
-                        timestamp: now
+                        timestamp: now,
                     };
                     trajectories
                         .entry(entry.id.clone())
@@ -793,7 +1021,7 @@ impl MemoryManager {
         ctx: mk_core::types::TenantContext,
         id: &str,
         source_layer: MemoryLayer,
-        target_layer: MemoryLayer
+        target_layer: MemoryLayer,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         if id.contains("TRIGGER_FAILURE") {
             return Err("Simulated promotion failure".into());
@@ -811,7 +1039,7 @@ impl MemoryManager {
         let now = chrono::Utc::now().timestamp();
         promoted_entry.metadata.insert(
             "original_memory_id".to_string(),
-            serde_json::json!(entry.id)
+            serde_json::json!(entry.id),
         );
         promoted_entry
             .metadata
@@ -823,7 +1051,7 @@ impl MemoryManager {
     pub async fn promote_important_memories(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer
+        layer: MemoryLayer,
     ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         use crate::promotion::PromotionService;
         let promotion_service = PromotionService::new(Arc::new(MemoryManager {
@@ -835,7 +1063,10 @@ impl MemoryManager {
             config: self.config.clone(),
             trajectories: self.trajectories.clone(),
             graph_store: self.graph_store.clone(),
-            llm_service: self.llm_service.clone()
+            llm_service: self.llm_service.clone(),
+            reasoner: self.reasoner.clone(),
+            reasoning_cache: self.reasoning_cache.clone(),
+            circuit_breaker: self.circuit_breaker.clone(),
         }))
         .with_config(self.config.clone())
         .with_telemetry(self.telemetry.clone());
@@ -846,7 +1077,7 @@ impl MemoryManager {
             .map_err(|e| {
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    e.to_string()
+                    e.to_string(),
                 )) as Box<dyn std::error::Error + Send + Sync>
             })
     }
@@ -854,7 +1085,7 @@ impl MemoryManager {
     pub async fn close_session(
         &self,
         ctx: mk_core::types::TenantContext,
-        session_id: &str
+        session_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("Closing session: {}", session_id);
 
@@ -873,7 +1104,7 @@ impl MemoryManager {
     pub async fn close_agent(
         &self,
         ctx: mk_core::types::TenantContext,
-        agent_id: &str
+        agent_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("Closing agent: {}", agent_id);
 
@@ -892,7 +1123,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         query: &str,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<storage::graph::GraphNode>, Box<dyn std::error::Error + Send + Sync>> {
         let graph_store = self
             .graph_store
@@ -907,10 +1138,10 @@ impl MemoryManager {
     pub async fn get_graph_neighbors(
         &self,
         ctx: mk_core::types::TenantContext,
-        node_id: &str
+        node_id: &str,
     ) -> Result<
         Vec<(storage::graph::GraphEdge, storage::graph::GraphNode)>,
-        Box<dyn std::error::Error + Send + Sync>
+        Box<dyn std::error::Error + Send + Sync>,
     > {
         let graph_store = self
             .graph_store
@@ -927,7 +1158,7 @@ impl MemoryManager {
         ctx: mk_core::types::TenantContext,
         start_id: &str,
         end_id: &str,
-        max_depth: usize
+        max_depth: usize,
     ) -> Result<Vec<storage::graph::GraphEdge>, Box<dyn std::error::Error + Send + Sync>> {
         let graph_store = self
             .graph_store
@@ -951,7 +1182,7 @@ pub(crate) mod tests {
         TenantContext {
             tenant_id: mk_core::types::TenantId::from_str("test-tenant").unwrap(),
             user_id: mk_core::types::UserId::from_str("test-user").unwrap(),
-            agent_id: None
+            agent_id: None,
         }
     }
 
@@ -961,15 +1192,15 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let agent_provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         let session_provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
 
         manager
@@ -989,7 +1220,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::Agent,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let session_entry = MemoryEntry {
@@ -1002,7 +1233,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1030,9 +1261,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -1046,7 +1277,7 @@ pub(crate) mod tests {
             importance_score: Some(0.5),
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1076,9 +1307,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -1092,7 +1323,7 @@ pub(crate) mod tests {
             importance_score: Some(0.5),
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1112,7 +1343,7 @@ pub(crate) mod tests {
             score: 0.2,
             reasoning: Some("Very helpful".to_string()),
             agent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         manager
@@ -1159,9 +1390,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
 
         manager.register_provider(MemoryLayer::User, provider).await;
@@ -1180,7 +1411,7 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let entry_low_score = MemoryEntry {
@@ -1197,7 +1428,7 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1231,9 +1462,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
 
         manager.register_provider(MemoryLayer::User, provider).await;
@@ -1248,7 +1479,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1271,9 +1502,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -1287,7 +1518,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1313,9 +1544,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -1329,7 +1560,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1354,15 +1585,15 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let mock_session: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         let mock_project: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager
             .register_provider(MemoryLayer::Session, mock_session)
@@ -1381,7 +1612,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1393,7 +1624,7 @@ pub(crate) mod tests {
                 ctx.clone(),
                 "session_mem",
                 MemoryLayer::Session,
-                MemoryLayer::Project
+                MemoryLayer::Project,
             )
             .await
             .unwrap();
@@ -1411,15 +1642,15 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let agent_provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         let user_provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
 
         manager
@@ -1443,7 +1674,7 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let user_entry = MemoryEntry {
@@ -1460,7 +1691,7 @@ pub(crate) mod tests {
                 map
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1498,11 +1729,11 @@ pub(crate) mod tests {
             async fn analyze_drift(
                 &self,
                 _c: &str,
-                _p: &[mk_core::types::Policy]
+                _p: &[mk_core::types::Policy],
             ) -> Result<ValidationResult, Self::Error> {
                 Ok(ValidationResult {
                     is_valid: true,
-                    violations: vec![]
+                    violations: vec![],
                 })
             }
         }
@@ -1514,20 +1745,21 @@ pub(crate) mod tests {
                 decay_interval_secs: 86400,
                 decay_rate: 0.05,
                 optimization_trigger_count: 100,
-                layer_summary_configs: std::collections::HashMap::new()
+                layer_summary_configs: std::collections::HashMap::new(),
+                reasoning: config::ReasoningConfig::default(),
             });
         let ctx = test_ctx();
         let mock_session: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         let mock_project: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager
             .register_provider(MemoryLayer::Session, mock_session)
@@ -1550,7 +1782,7 @@ pub(crate) mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1572,9 +1804,9 @@ pub(crate) mod tests {
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
 
         manager.register_provider(MemoryLayer::User, provider).await;
@@ -1601,14 +1833,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<String, Self::Error> {
                 Ok("id".to_string())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -1617,21 +1849,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>
+                _f: HashMap<String, serde_json::Value>,
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("search failed".into())
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -1640,7 +1872,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>
+                _c: Option<String>,
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Ok((vec![], None))
             }
@@ -1675,11 +1907,11 @@ pub(crate) mod tests {
             async fn analyze_drift(
                 &self,
                 _c: &str,
-                _p: &[mk_core::types::Policy]
+                _p: &[mk_core::types::Policy],
             ) -> Result<ValidationResult, Self::Error> {
                 Ok(ValidationResult {
                     is_valid: true,
-                    violations: vec![]
+                    violations: vec![],
                 })
             }
         }
@@ -1691,20 +1923,21 @@ pub(crate) mod tests {
                 decay_interval_secs: 86400,
                 decay_rate: 0.05,
                 optimization_trigger_count: 100,
-                layer_summary_configs: std::collections::HashMap::new()
+                layer_summary_configs: std::collections::HashMap::new(),
+                reasoning: config::ReasoningConfig::default(),
             });
         let ctx = test_ctx();
         let mock_agent: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         let mock_user: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager
             .register_provider(MemoryLayer::Agent, mock_agent)
@@ -1727,7 +1960,7 @@ pub(crate) mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1756,9 +1989,9 @@ pub(crate) mod tests {
 
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -1776,7 +2009,7 @@ pub(crate) mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -1813,7 +2046,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = manager.add_to_layer(ctx, MemoryLayer::User, entry).await;
@@ -1833,14 +2066,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<String, Self::Error> {
                 Ok("id".into())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -1849,21 +2082,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>
+                _f: HashMap<String, serde_json::Value>,
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("search failed".into())
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -1872,7 +2105,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>
+                _c: Option<String>,
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Ok((vec![], None))
             }
@@ -1900,14 +2133,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<String, Self::Error> {
                 Ok("id".into())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -1916,21 +2149,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>
+                _f: HashMap<String, serde_json::Value>,
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Err("list failed".into())
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -1939,7 +2172,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>
+                _c: Option<String>,
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Err("list failed".into())
             }
@@ -1966,14 +2199,14 @@ pub(crate) mod tests {
             async fn add(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<String, Self::Error> {
                 Err("add failed".into())
             }
             async fn get(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<Option<MemoryEntry>, Self::Error> {
                 Ok(None)
             }
@@ -1982,21 +2215,21 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _v: Vec<f32>,
                 _l: usize,
-                _f: HashMap<String, serde_json::Value>
+                _f: HashMap<String, serde_json::Value>,
             ) -> Result<Vec<MemoryEntry>, Self::Error> {
                 Ok(vec![])
             }
             async fn update(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _e: MemoryEntry
+                _e: MemoryEntry,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
             async fn delete(
                 &self,
                 _ctx: mk_core::types::TenantContext,
-                _id: &str
+                _id: &str,
             ) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -2005,7 +2238,7 @@ pub(crate) mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _l: MemoryLayer,
                 _lim: usize,
-                _c: Option<String>
+                _c: Option<String>,
             ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
                 Ok((vec![], None))
             }
@@ -2027,7 +2260,7 @@ pub(crate) mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = manager.add_to_layer(ctx, MemoryLayer::User, entry).await;
@@ -2042,14 +2275,15 @@ pub(crate) mod tests {
             decay_interval_secs: 3600,
             decay_rate: 0.1,
             optimization_trigger_count: 100,
-            layer_summary_configs: std::collections::HashMap::new()
+            layer_summary_configs: std::collections::HashMap::new(),
+            reasoning: config::ReasoningConfig::default(),
         });
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -2066,7 +2300,7 @@ pub(crate) mod tests {
             importance_score: Some(1.0),
             metadata: HashMap::new(),
             created_at,
-            updated_at: created_at
+            updated_at: created_at,
         };
 
         manager
@@ -2118,11 +2352,11 @@ pub(crate) mod tests {
             async fn analyze_drift(
                 &self,
                 _c: &str,
-                _p: &[mk_core::types::Policy]
+                _p: &[mk_core::types::Policy],
             ) -> Result<ValidationResult, Self::Error> {
                 Ok(ValidationResult {
                     is_valid: true,
-                    violations: vec![]
+                    violations: vec![],
                 })
             }
         }
@@ -2130,19 +2364,20 @@ pub(crate) mod tests {
         let manager = MemoryManager::new()
             .with_llm_service(Arc::new(MockLlm))
             .with_config(config::MemoryConfig {
-                promotion_threshold: 0.8,
-                decay_interval_secs: 3600,
-                decay_rate: 0.1,
+                promotion_threshold: 0.5,
+                decay_interval_secs: 86400,
+                decay_rate: 0.05,
                 optimization_trigger_count: 100,
-                layer_summary_configs: std::collections::HashMap::new()
+                layer_summary_configs: std::collections::HashMap::new(),
+                reasoning: config::ReasoningConfig::default(),
             });
 
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -2156,10 +2391,10 @@ pub(crate) mod tests {
                 layer: MemoryLayer::User,
                 summaries: HashMap::new(),
                 context_vector: None,
-                importance_score: Some(0.3),
+                importance_score: Some(0.22),
                 metadata: HashMap::new(),
                 created_at: 0,
-                updated_at: 0
+                updated_at: 0,
             };
 
             if i == 0 {
@@ -2174,11 +2409,11 @@ pub(crate) mod tests {
                             score: 0.1,
                             reasoning: Some("Test reward".to_string()),
                             agent_id: None,
-                            timestamp: 0
+                            timestamp: 0,
                         }),
                         reasoning: None,
-                        timestamp: 0
-                    }]
+                        timestamp: 0,
+                    }],
                 );
             }
 
@@ -2228,11 +2463,11 @@ pub(crate) mod tests {
             async fn analyze_drift(
                 &self,
                 _c: &str,
-                _p: &[mk_core::types::Policy]
+                _p: &[mk_core::types::Policy],
             ) -> Result<ValidationResult, Self::Error> {
                 Ok(ValidationResult {
                     is_valid: true,
-                    violations: vec![]
+                    violations: vec![],
                 })
             }
         }
@@ -2244,15 +2479,16 @@ pub(crate) mod tests {
                 decay_interval_secs: 3600,
                 decay_rate: 0.1,
                 optimization_trigger_count: 10,
-                layer_summary_configs: std::collections::HashMap::new()
+                layer_summary_configs: std::collections::HashMap::new(),
+                reasoning: config::ReasoningConfig::default(),
             });
 
         let ctx = test_ctx();
         let provider: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager.register_provider(MemoryLayer::User, provider).await;
 
@@ -2267,7 +2503,7 @@ pub(crate) mod tests {
                 importance_score: Some(0.3),
                 metadata: HashMap::new(),
                 created_at: 0,
-                updated_at: 0
+                updated_at: 0,
             };
 
             manager
@@ -2398,7 +2634,7 @@ pub(crate) mod tests {
             importance_score: None,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
         let result = manager
             .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
@@ -2428,7 +2664,7 @@ pub(crate) mod tests {
                 ctx.clone(),
                 "TRIGGER_FAILURE",
                 MemoryLayer::Session,
-                MemoryLayer::Project
+                MemoryLayer::Project,
             )
             .await;
         assert!(result.is_err());
@@ -2445,5 +2681,789 @@ pub(crate) mod tests {
             result.unwrap_err().to_string(),
             "Simulated embedding failure"
         );
+    }
+
+    #[tokio::test]
+    async fn test_search_text_with_reasoning_enabled() {
+        use crate::embedding::mock::MockEmbeddingService;
+        use crate::reasoning::ReflectiveReasoner;
+        use async_trait::async_trait;
+
+        struct MockReasoner;
+        #[async_trait]
+        impl ReflectiveReasoner for MockReasoner {
+            async fn reason(
+                &self,
+                _query: &str,
+                _context_summary: Option<&str>,
+            ) -> anyhow::Result<ReasoningTrace> {
+                Ok(ReasoningTrace {
+                    strategy: ReasoningStrategy::Targeted,
+                    thought_process: "Test reasoning".to_string(),
+                    refined_query: Some("refined query for search".to_string()),
+                    start_time: chrono::Utc::now(),
+                    end_time: chrono::Utc::now(),
+                    timed_out: false,
+                    duration_ms: 0,
+                    metadata: HashMap::new(),
+                })
+            }
+        }
+
+        let reasoning_config = config::ReasoningConfig {
+            enabled: true,
+            timeout_ms: 5000,
+            bypass_simple_queries: true,
+            simple_query_max_words: 3,
+            exhaustive_limit_multiplier: 2.0,
+            targeted_limit_multiplier: 1.5,
+            p95_latency_threshold_ms: 2500,
+            cache_ttl_seconds: 3600,
+            cache_enabled: true,
+            cache_max_entries: 10000,
+            circuit_breaker_enabled: true,
+            circuit_breaker_failure_threshold_percent: 5.0,
+            circuit_breaker_window_secs: 300,
+            circuit_breaker_min_requests: 10,
+            circuit_breaker_recovery_secs: 60,
+            circuit_breaker_half_open_requests: 3,
+            max_hop_depth: 3,
+            hop_relevance_threshold: 0.3,
+            max_query_budget: 50,
+        };
+
+        let memory_config = config::MemoryConfig {
+            promotion_threshold: 0.8,
+            decay_interval_secs: 86400,
+            decay_rate: 0.05,
+            optimization_trigger_count: 100,
+            layer_summary_configs: HashMap::new(),
+            reasoning: reasoning_config,
+        };
+
+        let manager = MemoryManager::new()
+            .with_embedding_service(Arc::new(MockEmbeddingService::new(1536)))
+            .with_reasoner(Arc::new(MockReasoner))
+            .with_config(memory_config);
+
+        let ctx = test_ctx();
+        let provider: Arc<
+            dyn mk_core::traits::MemoryProviderAdapter<
+                    Error = Box<dyn std::error::Error + Send + Sync>,
+                > + Send
+                + Sync,
+        > = Arc::new(MockProvider::new());
+        manager.register_provider(MemoryLayer::User, provider).await;
+
+        let entry = MemoryEntry {
+            id: "reasoning_test_mem".to_string(),
+            content: "test content for reasoning".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            summaries: HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("score".to_string(), serde_json::json!(0.9));
+                m
+            },
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        manager
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
+            .await
+            .unwrap();
+
+        let (results, trace) = manager
+            .search_text_with_reasoning(
+                ctx,
+                "complex multi word query for testing reasoning",
+                10,
+                0.5,
+                HashMap::new(),
+                Some("test context"),
+            )
+            .await
+            .unwrap();
+
+        assert!(!results.is_empty());
+        assert!(trace.is_some());
+        let trace = trace.unwrap();
+        assert_eq!(trace.strategy, ReasoningStrategy::Targeted);
+        assert_eq!(trace.refined_query.unwrap(), "refined query for search");
+    }
+
+    #[tokio::test]
+    async fn test_search_text_with_reasoning_disabled() {
+        use crate::embedding::mock::MockEmbeddingService;
+        use crate::reasoning::ReflectiveReasoner;
+        use async_trait::async_trait;
+
+        struct MockReasoner;
+        #[async_trait]
+        impl ReflectiveReasoner for MockReasoner {
+            async fn reason(
+                &self,
+                _query: &str,
+                _context_summary: Option<&str>,
+            ) -> anyhow::Result<ReasoningTrace> {
+                panic!("Reasoner should not be called when disabled");
+            }
+        }
+
+        let reasoning_config = config::ReasoningConfig {
+            enabled: false,
+            timeout_ms: 5000,
+            bypass_simple_queries: true,
+            simple_query_max_words: 3,
+            exhaustive_limit_multiplier: 2.0,
+            targeted_limit_multiplier: 1.5,
+            p95_latency_threshold_ms: 2500,
+            cache_ttl_seconds: 3600,
+            cache_enabled: true,
+            cache_max_entries: 10000,
+            circuit_breaker_enabled: true,
+            circuit_breaker_failure_threshold_percent: 5.0,
+            circuit_breaker_window_secs: 300,
+            circuit_breaker_min_requests: 10,
+            circuit_breaker_recovery_secs: 60,
+            circuit_breaker_half_open_requests: 3,
+            max_hop_depth: 3,
+            hop_relevance_threshold: 0.3,
+            max_query_budget: 50,
+        };
+
+        let memory_config = config::MemoryConfig {
+            promotion_threshold: 0.8,
+            decay_interval_secs: 86400,
+            decay_rate: 0.05,
+            optimization_trigger_count: 100,
+            layer_summary_configs: HashMap::new(),
+            reasoning: reasoning_config,
+        };
+
+        let manager = MemoryManager::new()
+            .with_embedding_service(Arc::new(MockEmbeddingService::new(1536)))
+            .with_reasoner(Arc::new(MockReasoner))
+            .with_config(memory_config);
+
+        let ctx = test_ctx();
+        let provider: Arc<
+            dyn mk_core::traits::MemoryProviderAdapter<
+                    Error = Box<dyn std::error::Error + Send + Sync>,
+                > + Send
+                + Sync,
+        > = Arc::new(MockProvider::new());
+        manager.register_provider(MemoryLayer::User, provider).await;
+
+        let entry = MemoryEntry {
+            id: "disabled_reasoning_mem".to_string(),
+            content: "test content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            summaries: HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("score".to_string(), serde_json::json!(0.9));
+                m
+            },
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        manager
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
+            .await
+            .unwrap();
+
+        let (results, trace) = manager
+            .search_text_with_reasoning(
+                ctx,
+                "multi word query that would trigger reasoning",
+                10,
+                0.5,
+                HashMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(!results.is_empty());
+        assert!(trace.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_search_text_with_reasoning_simple_query_bypass() {
+        use crate::embedding::mock::MockEmbeddingService;
+        use crate::reasoning::ReflectiveReasoner;
+        use async_trait::async_trait;
+
+        struct MockReasoner;
+        #[async_trait]
+        impl ReflectiveReasoner for MockReasoner {
+            async fn reason(
+                &self,
+                _query: &str,
+                _context_summary: Option<&str>,
+            ) -> anyhow::Result<ReasoningTrace> {
+                panic!("Reasoner should not be called for simple queries");
+            }
+        }
+
+        let reasoning_config = config::ReasoningConfig {
+            enabled: true,
+            timeout_ms: 5000,
+            bypass_simple_queries: true,
+            simple_query_max_words: 5,
+            exhaustive_limit_multiplier: 2.0,
+            targeted_limit_multiplier: 1.5,
+            p95_latency_threshold_ms: 2500,
+            cache_ttl_seconds: 3600,
+            cache_enabled: true,
+            cache_max_entries: 10000,
+            circuit_breaker_enabled: true,
+            circuit_breaker_failure_threshold_percent: 5.0,
+            circuit_breaker_window_secs: 300,
+            circuit_breaker_min_requests: 10,
+            circuit_breaker_recovery_secs: 60,
+            circuit_breaker_half_open_requests: 3,
+            max_hop_depth: 3,
+            hop_relevance_threshold: 0.3,
+            max_query_budget: 50,
+        };
+
+        let memory_config = config::MemoryConfig {
+            promotion_threshold: 0.8,
+            decay_interval_secs: 86400,
+            decay_rate: 0.05,
+            optimization_trigger_count: 100,
+            layer_summary_configs: HashMap::new(),
+            reasoning: reasoning_config,
+        };
+
+        let manager = MemoryManager::new()
+            .with_embedding_service(Arc::new(MockEmbeddingService::new(1536)))
+            .with_reasoner(Arc::new(MockReasoner))
+            .with_config(memory_config);
+
+        let ctx = test_ctx();
+        let provider: Arc<
+            dyn mk_core::traits::MemoryProviderAdapter<
+                    Error = Box<dyn std::error::Error + Send + Sync>,
+                > + Send
+                + Sync,
+        > = Arc::new(MockProvider::new());
+        manager.register_provider(MemoryLayer::User, provider).await;
+
+        let entry = MemoryEntry {
+            id: "simple_query_mem".to_string(),
+            content: "test content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            summaries: HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("score".to_string(), serde_json::json!(0.9));
+                m
+            },
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        manager
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
+            .await
+            .unwrap();
+
+        let (results, trace) = manager
+            .search_text_with_reasoning(ctx, "short test query", 10, 0.5, HashMap::new(), None)
+            .await
+            .unwrap();
+
+        assert!(!results.is_empty());
+        assert!(trace.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_search_text_with_reasoning_timeout_fallback() {
+        use crate::embedding::mock::MockEmbeddingService;
+        use crate::reasoning::ReflectiveReasoner;
+        use async_trait::async_trait;
+
+        struct SlowReasoner;
+        #[async_trait]
+        impl ReflectiveReasoner for SlowReasoner {
+            async fn reason(
+                &self,
+                _query: &str,
+                _context_summary: Option<&str>,
+            ) -> anyhow::Result<ReasoningTrace> {
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                Ok(ReasoningTrace {
+                    strategy: ReasoningStrategy::Exhaustive,
+                    thought_process: "Should not be returned".to_string(),
+                    refined_query: Some("should not be used".to_string()),
+                    start_time: chrono::Utc::now(),
+                    end_time: chrono::Utc::now(),
+                    timed_out: false,
+                    duration_ms: 0,
+                    metadata: HashMap::new(),
+                })
+            }
+        }
+
+        let reasoning_config = config::ReasoningConfig {
+            enabled: true,
+            timeout_ms: 50,
+            bypass_simple_queries: true,
+            simple_query_max_words: 3,
+            exhaustive_limit_multiplier: 2.0,
+            targeted_limit_multiplier: 1.5,
+            p95_latency_threshold_ms: 2500,
+            cache_ttl_seconds: 3600,
+            cache_enabled: true,
+            cache_max_entries: 10000,
+            circuit_breaker_enabled: true,
+            circuit_breaker_failure_threshold_percent: 5.0,
+            circuit_breaker_window_secs: 300,
+            circuit_breaker_min_requests: 10,
+            circuit_breaker_recovery_secs: 60,
+            circuit_breaker_half_open_requests: 3,
+            max_hop_depth: 3,
+            hop_relevance_threshold: 0.3,
+            max_query_budget: 50,
+        };
+
+        let memory_config = config::MemoryConfig {
+            promotion_threshold: 0.8,
+            decay_interval_secs: 86400,
+            decay_rate: 0.05,
+            optimization_trigger_count: 100,
+            layer_summary_configs: HashMap::new(),
+            reasoning: reasoning_config,
+        };
+
+        let manager = MemoryManager::new()
+            .with_embedding_service(Arc::new(MockEmbeddingService::new(1536)))
+            .with_reasoner(Arc::new(SlowReasoner))
+            .with_config(memory_config);
+
+        let ctx = test_ctx();
+        let provider: Arc<
+            dyn mk_core::traits::MemoryProviderAdapter<
+                    Error = Box<dyn std::error::Error + Send + Sync>,
+                > + Send
+                + Sync,
+        > = Arc::new(MockProvider::new());
+        manager.register_provider(MemoryLayer::User, provider).await;
+
+        let entry = MemoryEntry {
+            id: "timeout_test_mem".to_string(),
+            content: "test content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            summaries: HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("score".to_string(), serde_json::json!(0.9));
+                m
+            },
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        manager
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
+            .await
+            .unwrap();
+
+        let (results, trace) = manager
+            .search_text_with_reasoning(
+                ctx,
+                "complex query that triggers reasoning timeout",
+                10,
+                0.5,
+                HashMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(!results.is_empty());
+        let trace = trace.expect("Timeout should return trace with timed_out=true");
+        assert!(trace.timed_out, "Trace should indicate timeout");
+        assert_eq!(trace.strategy, ReasoningStrategy::SemanticOnly);
+    }
+
+    #[tokio::test]
+    async fn test_search_text_with_reasoning_failure_fallback() {
+        use crate::embedding::mock::MockEmbeddingService;
+        use crate::reasoning::ReflectiveReasoner;
+        use async_trait::async_trait;
+
+        struct FailingReasoner;
+        #[async_trait]
+        impl ReflectiveReasoner for FailingReasoner {
+            async fn reason(
+                &self,
+                _query: &str,
+                _context_summary: Option<&str>,
+            ) -> anyhow::Result<ReasoningTrace> {
+                Err(anyhow::anyhow!("Reasoning failed"))
+            }
+        }
+
+        let reasoning_config = config::ReasoningConfig {
+            enabled: true,
+            timeout_ms: 5000,
+            bypass_simple_queries: true,
+            simple_query_max_words: 3,
+            exhaustive_limit_multiplier: 2.0,
+            targeted_limit_multiplier: 1.5,
+            p95_latency_threshold_ms: 2500,
+            cache_ttl_seconds: 3600,
+            cache_enabled: true,
+            cache_max_entries: 10000,
+            circuit_breaker_enabled: true,
+            circuit_breaker_failure_threshold_percent: 5.0,
+            circuit_breaker_window_secs: 300,
+            circuit_breaker_min_requests: 10,
+            circuit_breaker_recovery_secs: 60,
+            circuit_breaker_half_open_requests: 3,
+            max_hop_depth: 3,
+            hop_relevance_threshold: 0.3,
+            max_query_budget: 50,
+        };
+
+        let memory_config = config::MemoryConfig {
+            promotion_threshold: 0.8,
+            decay_interval_secs: 86400,
+            decay_rate: 0.05,
+            optimization_trigger_count: 100,
+            layer_summary_configs: HashMap::new(),
+            reasoning: reasoning_config,
+        };
+
+        let manager = MemoryManager::new()
+            .with_embedding_service(Arc::new(MockEmbeddingService::new(1536)))
+            .with_reasoner(Arc::new(FailingReasoner))
+            .with_config(memory_config);
+
+        let ctx = test_ctx();
+        let provider: Arc<
+            dyn mk_core::traits::MemoryProviderAdapter<
+                    Error = Box<dyn std::error::Error + Send + Sync>,
+                > + Send
+                + Sync,
+        > = Arc::new(MockProvider::new());
+        manager.register_provider(MemoryLayer::User, provider).await;
+
+        let entry = MemoryEntry {
+            id: "failure_test_mem".to_string(),
+            content: "test content".to_string(),
+            embedding: None,
+            layer: MemoryLayer::User,
+            summaries: HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("score".to_string(), serde_json::json!(0.9));
+                m
+            },
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        manager
+            .add_to_layer(ctx.clone(), MemoryLayer::User, entry)
+            .await
+            .unwrap();
+
+        let (results, trace) = manager
+            .search_text_with_reasoning(
+                ctx,
+                "complex query that triggers reasoning failure",
+                10,
+                0.5,
+                HashMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(!results.is_empty());
+        assert!(trace.is_none());
+    }
+
+    #[test]
+    fn test_is_simple_query_detection() {
+        let reasoning_config = config::ReasoningConfig {
+            enabled: true,
+            timeout_ms: 5000,
+            bypass_simple_queries: true,
+            simple_query_max_words: 5,
+            exhaustive_limit_multiplier: 2.0,
+            targeted_limit_multiplier: 1.0,
+            p95_latency_threshold_ms: 2500,
+            cache_ttl_seconds: 3600,
+            cache_enabled: true,
+            cache_max_entries: 10000,
+            circuit_breaker_enabled: true,
+            circuit_breaker_failure_threshold_percent: 5.0,
+            circuit_breaker_window_secs: 300,
+            circuit_breaker_min_requests: 10,
+            circuit_breaker_recovery_secs: 60,
+            circuit_breaker_half_open_requests: 3,
+            max_hop_depth: 3,
+            hop_relevance_threshold: 0.3,
+            max_query_budget: 50,
+        };
+
+        let memory_config = config::MemoryConfig {
+            promotion_threshold: 0.8,
+            decay_interval_secs: 86400,
+            decay_rate: 0.05,
+            optimization_trigger_count: 100,
+            layer_summary_configs: HashMap::new(),
+            reasoning: reasoning_config,
+        };
+
+        let manager = MemoryManager::new().with_config(memory_config);
+
+        assert!(manager.is_simple_query("hello"));
+        assert!(manager.is_simple_query("test query"));
+        assert!(manager.is_simple_query("one two three four five"));
+
+        assert!(!manager.is_simple_query("one two three four five six"));
+        assert!(!manager.is_simple_query("this is a complex query that should trigger reasoning"));
+    }
+
+    #[test]
+    fn test_is_simple_query_bypass_disabled() {
+        let reasoning_config = config::ReasoningConfig {
+            enabled: true,
+            timeout_ms: 5000,
+            bypass_simple_queries: false,
+            simple_query_max_words: 5,
+            exhaustive_limit_multiplier: 2.0,
+            targeted_limit_multiplier: 1.0,
+            p95_latency_threshold_ms: 2500,
+            cache_ttl_seconds: 3600,
+            cache_enabled: true,
+            cache_max_entries: 10000,
+            circuit_breaker_enabled: true,
+            circuit_breaker_failure_threshold_percent: 5.0,
+            circuit_breaker_window_secs: 300,
+            circuit_breaker_min_requests: 10,
+            circuit_breaker_recovery_secs: 60,
+            circuit_breaker_half_open_requests: 3,
+            max_hop_depth: 3,
+            hop_relevance_threshold: 0.3,
+            max_query_budget: 50,
+        };
+
+        let memory_config = config::MemoryConfig {
+            promotion_threshold: 0.8,
+            decay_interval_secs: 86400,
+            decay_rate: 0.05,
+            optimization_trigger_count: 100,
+            layer_summary_configs: HashMap::new(),
+            reasoning: reasoning_config,
+        };
+
+        let manager = MemoryManager::new().with_config(memory_config);
+
+        assert!(!manager.is_simple_query("hello"));
+        assert!(!manager.is_simple_query("test"));
+    }
+
+    #[tokio::test]
+    async fn test_reasoning_adjusts_limit_exhaustive() {
+        use crate::embedding::mock::MockEmbeddingService;
+        use crate::reasoning::ReflectiveReasoner;
+        use async_trait::async_trait;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static SEARCH_LIMIT_SEEN: AtomicUsize = AtomicUsize::new(0);
+
+        struct ExhaustiveReasoner;
+        #[async_trait]
+        impl ReflectiveReasoner for ExhaustiveReasoner {
+            async fn reason(
+                &self,
+                _query: &str,
+                _context_summary: Option<&str>,
+            ) -> anyhow::Result<ReasoningTrace> {
+                Ok(ReasoningTrace {
+                    strategy: ReasoningStrategy::Exhaustive,
+                    thought_process: "Exhaustive search needed".to_string(),
+                    refined_query: Some("refined exhaustive query".to_string()),
+                    start_time: chrono::Utc::now(),
+                    end_time: chrono::Utc::now(),
+                    timed_out: false,
+                    duration_ms: 0,
+                    metadata: HashMap::new(),
+                })
+            }
+        }
+
+        struct LimitCapturingProvider;
+        #[async_trait::async_trait]
+        impl mk_core::traits::MemoryProviderAdapter for LimitCapturingProvider {
+            type Error = Box<dyn std::error::Error + Send + Sync>;
+            async fn add(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _e: MemoryEntry,
+            ) -> Result<String, Self::Error> {
+                Ok("id".to_string())
+            }
+            async fn get(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _id: &str,
+            ) -> Result<Option<MemoryEntry>, Self::Error> {
+                Ok(None)
+            }
+            async fn search(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _v: Vec<f32>,
+                limit: usize,
+                _f: HashMap<String, serde_json::Value>,
+            ) -> Result<Vec<MemoryEntry>, Self::Error> {
+                SEARCH_LIMIT_SEEN.store(limit, Ordering::SeqCst);
+                Ok(vec![MemoryEntry {
+                    id: "test".to_string(),
+                    content: "test".to_string(),
+                    embedding: None,
+                    layer: MemoryLayer::User,
+                    summaries: HashMap::new(),
+                    context_vector: None,
+                    importance_score: None,
+                    metadata: {
+                        let mut m = HashMap::new();
+                        m.insert("score".to_string(), serde_json::json!(0.9));
+                        m
+                    },
+                    created_at: 0,
+                    updated_at: 0,
+                }])
+            }
+            async fn update(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _e: MemoryEntry,
+            ) -> Result<(), Self::Error> {
+                Ok(())
+            }
+            async fn delete(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _id: &str,
+            ) -> Result<(), Self::Error> {
+                Ok(())
+            }
+            async fn list(
+                &self,
+                _ctx: mk_core::types::TenantContext,
+                _l: MemoryLayer,
+                _lim: usize,
+                _c: Option<String>,
+            ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
+                Ok((vec![], None))
+            }
+        }
+
+        let reasoning_config = config::ReasoningConfig {
+            enabled: true,
+            timeout_ms: 5000,
+            bypass_simple_queries: true,
+            simple_query_max_words: 3,
+            exhaustive_limit_multiplier: 2.0,
+            targeted_limit_multiplier: 1.5,
+            p95_latency_threshold_ms: 2500,
+            cache_ttl_seconds: 3600,
+            cache_enabled: true,
+            cache_max_entries: 10000,
+            circuit_breaker_enabled: true,
+            circuit_breaker_failure_threshold_percent: 5.0,
+            circuit_breaker_window_secs: 300,
+            circuit_breaker_min_requests: 10,
+            circuit_breaker_recovery_secs: 60,
+            circuit_breaker_half_open_requests: 3,
+            max_hop_depth: 3,
+            hop_relevance_threshold: 0.3,
+            max_query_budget: 50,
+        };
+
+        let memory_config = config::MemoryConfig {
+            promotion_threshold: 0.8,
+            decay_interval_secs: 86400,
+            decay_rate: 0.05,
+            optimization_trigger_count: 100,
+            layer_summary_configs: HashMap::new(),
+            reasoning: reasoning_config,
+        };
+
+        let manager = MemoryManager::new()
+            .with_embedding_service(Arc::new(MockEmbeddingService::new(1536)))
+            .with_reasoner(Arc::new(ExhaustiveReasoner))
+            .with_config(memory_config);
+
+        let ctx = test_ctx();
+        manager
+            .register_provider(MemoryLayer::User, Arc::new(LimitCapturingProvider))
+            .await;
+
+        let (_results, trace) = manager
+            .search_text_with_reasoning(
+                ctx,
+                "complex query requiring exhaustive search strategy",
+                10,
+                0.5,
+                HashMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(trace.is_some());
+        assert_eq!(trace.unwrap().strategy, ReasoningStrategy::Exhaustive);
+        assert_eq!(SEARCH_LIMIT_SEEN.load(Ordering::SeqCst), 20);
+    }
+
+    #[test]
+    fn test_with_reasoner_builder() {
+        use crate::reasoning::ReflectiveReasoner;
+        use async_trait::async_trait;
+
+        struct DummyReasoner;
+        #[async_trait]
+        impl ReflectiveReasoner for DummyReasoner {
+            async fn reason(
+                &self,
+                _query: &str,
+                _context_summary: Option<&str>,
+            ) -> anyhow::Result<ReasoningTrace> {
+                unreachable!()
+            }
+        }
+
+        let manager = MemoryManager::new();
+        assert!(manager.reasoner.is_none());
+
+        let manager = manager.with_reasoner(Arc::new(DummyReasoner));
+        assert!(manager.reasoner.is_some());
     }
 }

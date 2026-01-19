@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{
-    KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, TenantContext
+    KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, TenantContext,
 };
 use tracing::info_span;
 
@@ -14,7 +14,7 @@ use crate::repository::RepositoryError;
 pub struct HindsightPromotionConfig {
     pub min_successes: u32,
     pub require_governance_check: bool,
-    pub proposal_prefix: String
+    pub proposal_prefix: String,
 }
 
 impl Default for HindsightPromotionConfig {
@@ -22,7 +22,7 @@ impl Default for HindsightPromotionConfig {
         Self {
             min_successes: 3,
             require_governance_check: true,
-            proposal_prefix: "proposals/hindsight/".to_string()
+            proposal_prefix: "proposals/hindsight/".to_string(),
         }
     }
 }
@@ -33,7 +33,7 @@ pub struct HindsightPromotionRequest {
     pub target_layer: KnowledgeLayer,
     pub success_count: u32,
     pub note_content: String,
-    pub tags: Vec<String>
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -45,24 +45,24 @@ pub enum HindsightPromotionError {
     GovernanceRejected,
 
     #[error("Repository error: {0}")]
-    Repository(#[from] RepositoryError)
+    Repository(#[from] RepositoryError),
 }
 
 pub struct HindsightPromoter {
     repository: Arc<dyn KnowledgeRepository<Error = RepositoryError>>,
     governance: Option<Arc<GovernanceEngine>>,
-    config: HindsightPromotionConfig
+    config: HindsightPromotionConfig,
 }
 
 impl HindsightPromoter {
     pub fn new(
         repository: Arc<dyn KnowledgeRepository<Error = RepositoryError>>,
-        config: HindsightPromotionConfig
+        config: HindsightPromotionConfig,
     ) -> Self {
         Self {
             repository,
             governance: None,
-            config
+            config,
         }
     }
 
@@ -74,7 +74,7 @@ impl HindsightPromoter {
     pub async fn promote(
         &self,
         ctx: TenantContext,
-        request: HindsightPromotionRequest
+        request: HindsightPromotionRequest,
     ) -> Result<String, HindsightPromotionError> {
         let _span = info_span!(
             "promote_hindsight_note",
@@ -97,7 +97,7 @@ impl HindsightPromoter {
                 metadata.insert("note_id".to_string(), serde_json::json!(request.note_id));
                 metadata.insert(
                     "success_count".to_string(),
-                    serde_json::json!(request.success_count)
+                    serde_json::json!(request.success_count),
                 );
                 metadata.insert("tags".to_string(), serde_json::json!(request.tags));
                 let result = engine.validate(request.target_layer, &metadata);
@@ -118,7 +118,7 @@ impl HindsightPromoter {
             metadata: HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         };
 
         let message = format!("Propose hindsight promotion {}", request.note_id);
@@ -134,13 +134,13 @@ mod tests {
     use std::sync::Mutex;
 
     struct MockRepository {
-        stored: Mutex<Vec<KnowledgeEntry>>
+        stored: Mutex<Vec<KnowledgeEntry>>,
     }
 
     impl MockRepository {
         fn new() -> Self {
             Self {
-                stored: Mutex::new(Vec::new())
+                stored: Mutex::new(Vec::new()),
             }
         }
     }
@@ -153,7 +153,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _layer: KnowledgeLayer,
-            _path: &str
+            _path: &str,
         ) -> Result<Option<KnowledgeEntry>, Self::Error> {
             Ok(None)
         }
@@ -162,7 +162,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             entry: KnowledgeEntry,
-            _message: &str
+            _message: &str,
         ) -> Result<String, Self::Error> {
             self.stored.lock().unwrap().push(entry);
             Ok("commit".to_string())
@@ -172,7 +172,7 @@ mod tests {
             &self,
             _ctx: TenantContext,
             _layer: KnowledgeLayer,
-            _prefix: &str
+            _prefix: &str,
         ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
             Ok(Vec::new())
         }
@@ -182,14 +182,14 @@ mod tests {
             _ctx: TenantContext,
             _layer: KnowledgeLayer,
             _path: &str,
-            _message: &str
+            _message: &str,
         ) -> Result<String, Self::Error> {
             Ok(String::new())
         }
 
         async fn get_head_commit(
             &self,
-            _ctx: TenantContext
+            _ctx: TenantContext,
         ) -> Result<Option<String>, Self::Error> {
             Ok(None)
         }
@@ -197,7 +197,7 @@ mod tests {
         async fn get_affected_items(
             &self,
             _ctx: TenantContext,
-            _since_commit: &str
+            _since_commit: &str,
         ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
             Ok(Vec::new())
         }
@@ -207,7 +207,7 @@ mod tests {
             _ctx: TenantContext,
             _query: &str,
             _layers: Vec<KnowledgeLayer>,
-            _limit: usize
+            _limit: usize,
         ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
             Ok(Vec::new())
         }
@@ -220,7 +220,7 @@ mod tests {
     fn ctx() -> TenantContext {
         TenantContext::new(
             mk_core::types::TenantId::new("t".to_string()).unwrap(),
-            mk_core::types::UserId::new("u".to_string()).unwrap()
+            mk_core::types::UserId::new("u".to_string()).unwrap(),
         )
     }
 
@@ -233,7 +233,7 @@ mod tests {
             target_layer: KnowledgeLayer::Project,
             success_count: 1,
             note_content: "content".to_string(),
-            tags: vec![]
+            tags: vec![],
         };
 
         let result = promoter.promote(ctx(), request).await;
@@ -252,7 +252,7 @@ mod tests {
             target_layer: KnowledgeLayer::Project,
             success_count: 5,
             note_content: "content".to_string(),
-            tags: vec!["tag".to_string()]
+            tags: vec!["tag".to_string()],
         };
 
         let commit = promoter.promote(ctx(), request).await.unwrap();

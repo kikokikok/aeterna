@@ -36,7 +36,7 @@ pub enum MemoryError {
     RateLimited(String),
 
     #[error("Internal error: {0}")]
-    InternalError(String)
+    InternalError(String),
 }
 
 impl MemoryError {
@@ -46,14 +46,14 @@ impl MemoryError {
             | MemoryError::TimeoutError(_)
             | MemoryError::RateLimited(_)
             | MemoryError::ProviderError(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn should_backoff(&self) -> bool {
         match self {
             MemoryError::RateLimited(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -61,7 +61,7 @@ impl MemoryError {
         match self {
             MemoryError::RateLimited(_) => Some(std::time::Duration::from_secs(5)),
             MemoryError::NetworkError(_) => Some(std::time::Duration::from_secs(1)),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -83,7 +83,7 @@ pub struct RetryConfig {
     pub initial_backoff: std::time::Duration,
     pub max_backoff: std::time::Duration,
     pub backoff_multiplier: f32,
-    pub jitter: bool
+    pub jitter: bool,
 }
 
 impl Default for RetryConfig {
@@ -93,7 +93,7 @@ impl Default for RetryConfig {
             initial_backoff: std::time::Duration::from_millis(100),
             max_backoff: std::time::Duration::from_secs(10),
             backoff_multiplier: 2.0,
-            jitter: true
+            jitter: true,
         }
     }
 }
@@ -101,7 +101,7 @@ impl Default for RetryConfig {
 pub async fn with_retry<F, Fut, T>(operation: F, config: RetryConfig) -> MemoryResult<T>
 where
     F: Fn() -> Fut,
-    Fut: std::future::Future<Output = MemoryResult<T>>
+    Fut: std::future::Future<Output = MemoryResult<T>>,
 {
     let mut last_error = None;
     let mut backoff = config.initial_backoff;
@@ -130,14 +130,14 @@ where
                     if config.jitter {
                         let jitter = rand::random::<f32>() * 0.3 + 0.85;
                         actual_backoff = std::time::Duration::from_millis(
-                            (actual_backoff.as_millis() as f32 * jitter) as u64
+                            (actual_backoff.as_millis() as f32 * jitter) as u64,
                         );
                     }
 
                     tokio::time::sleep(actual_backoff).await;
 
                     backoff = std::time::Duration::from_millis(
-                        (backoff.as_millis() as f32 * config.backoff_multiplier) as u64
+                        (backoff.as_millis() as f32 * config.backoff_multiplier) as u64,
                     )
                     .min(config.max_backoff);
                 }
@@ -152,18 +152,18 @@ where
 
 pub async fn with_exponential_backoff<F, Fut, T>(
     operation: F,
-    max_retries: usize
+    max_retries: usize,
 ) -> MemoryResult<T>
 where
     F: Fn() -> Fut,
-    Fut: std::future::Future<Output = MemoryResult<T>>
+    Fut: std::future::Future<Output = MemoryResult<T>>,
 {
     with_retry(
         operation,
         RetryConfig {
             max_retries,
             ..Default::default()
-        }
+        },
     )
     .await
 }
@@ -172,31 +172,31 @@ pub struct CircuitBreaker {
     state: std::sync::Arc<tokio::sync::RwLock<CircuitState>>,
     failure_threshold: usize,
     reset_timeout: std::time::Duration,
-    _half_open_timeout: std::time::Duration
+    _half_open_timeout: std::time::Duration,
 }
 
 enum CircuitState {
     Closed { failure_count: usize },
     Open { opened_at: std::time::Instant },
-    HalfOpen
+    HalfOpen,
 }
 
 impl CircuitBreaker {
     pub fn new(failure_threshold: usize, reset_timeout: std::time::Duration) -> Self {
         Self {
             state: std::sync::Arc::new(tokio::sync::RwLock::new(CircuitState::Closed {
-                failure_count: 0
+                failure_count: 0,
             })),
             failure_threshold,
             reset_timeout,
-            _half_open_timeout: reset_timeout / 2
+            _half_open_timeout: reset_timeout / 2,
         }
     }
 
     pub async fn execute<F, Fut, T>(&self, operation: F) -> MemoryResult<T>
     where
         F: Fn() -> Fut,
-        Fut: std::future::Future<Output = MemoryResult<T>>
+        Fut: std::future::Future<Output = MemoryResult<T>>,
     {
         let state = self.state.read().await;
 
@@ -208,7 +208,7 @@ impl CircuitBreaker {
                     *state = CircuitState::HalfOpen;
                 } else {
                     return Err(MemoryError::NetworkError(
-                        "Circuit breaker is open".to_string()
+                        "Circuit breaker is open".to_string(),
                     ));
                 }
             }
@@ -229,12 +229,12 @@ impl CircuitBreaker {
                     *state = CircuitState::Closed { failure_count: 0 };
                 } else {
                     *state = CircuitState::Open {
-                        opened_at: std::time::Instant::now()
+                        opened_at: std::time::Instant::now(),
                     };
                 }
             }
             CircuitState::Closed {
-                ref mut failure_count
+                ref mut failure_count,
             } => {
                 if result.is_ok() {
                     *failure_count = 0;
@@ -242,7 +242,7 @@ impl CircuitBreaker {
                     *failure_count += 1;
                     if *failure_count >= self.failure_threshold {
                         *state = CircuitState::Open {
-                            opened_at: std::time::Instant::now()
+                            opened_at: std::time::Instant::now(),
                         };
                     }
                 }
@@ -272,7 +272,7 @@ mod tests {
                     Ok("success")
                 }
             },
-            RetryConfig::default()
+            RetryConfig::default(),
         )
         .await;
 
@@ -288,10 +288,10 @@ mod tests {
             || async {
                 counter.fetch_add(1, Ordering::SeqCst);
                 Err(MemoryError::ValidationError(
-                    "Permanent failure".to_string()
+                    "Permanent failure".to_string(),
                 ))
             },
-            RetryConfig::default()
+            RetryConfig::default(),
         )
         .await;
 
@@ -342,7 +342,7 @@ mod tests {
                     Ok("ok")
                 }
             },
-            2
+            2,
         )
         .await;
         assert_eq!(result.unwrap(), "ok");
@@ -449,7 +449,7 @@ mod tests {
             initial_backoff: std::time::Duration::from_millis(100),
             max_backoff: std::time::Duration::from_secs(1),
             backoff_multiplier: 2.0,
-            jitter: true
+            jitter: true,
         };
 
         let result = with_retry(
@@ -461,7 +461,7 @@ mod tests {
                     Ok("success with jitter")
                 }
             },
-            config
+            config,
         )
         .await;
 
@@ -479,7 +479,7 @@ mod tests {
                 // RateLimited has its own backoff duration (5 seconds)
                 Err(MemoryError::RateLimited(format!("Attempt {}", count)))
             },
-            RetryConfig::default()
+            RetryConfig::default(),
         )
         .await;
 
@@ -498,7 +498,7 @@ mod tests {
         async fn with_retry<F, Fut>(operation: F) -> MemoryResult<Self::Output>
         where
             F: Fn() -> Fut,
-            Fut: std::future::Future<Output = MemoryResult<Self::Output>>
+            Fut: std::future::Future<Output = MemoryResult<Self::Output>>,
         {
             with_retry(operation, RetryConfig::default()).await
         }
@@ -531,7 +531,7 @@ mod tests {
             initial_backoff: std::time::Duration::from_millis(10),
             max_backoff: std::time::Duration::from_millis(100),
             backoff_multiplier: 2.0,
-            jitter: false
+            jitter: false,
         };
 
         let result = with_retry(
@@ -543,7 +543,7 @@ mod tests {
                     Ok("no jitter success")
                 }
             },
-            config
+            config,
         )
         .await;
 
@@ -560,7 +560,7 @@ mod tests {
             initial_backoff: std::time::Duration::from_millis(50),
             max_backoff: std::time::Duration::from_millis(60),
             backoff_multiplier: 10.0,
-            jitter: false
+            jitter: false,
         };
 
         let result = with_retry(
@@ -572,7 +572,7 @@ mod tests {
                     Ok("capped backoff success")
                 }
             },
-            config
+            config,
         )
         .await;
 
@@ -642,7 +642,7 @@ mod tests {
             initial_backoff: std::time::Duration::from_millis(1),
             max_backoff: std::time::Duration::from_millis(10),
             backoff_multiplier: 1.0,
-            jitter: false
+            jitter: false,
         };
 
         let result: Result<&str, _> = with_retry(
@@ -650,7 +650,7 @@ mod tests {
                 let count = counter.fetch_add(1, Ordering::SeqCst);
                 Err(MemoryError::NetworkError(format!("attempt {}", count)))
             },
-            config
+            config,
         )
         .await;
 
@@ -659,7 +659,7 @@ mod tests {
             Err(MemoryError::NetworkError(msg)) => {
                 assert!(msg.contains("attempt"));
             }
-            _ => panic!("Expected NetworkError")
+            _ => panic!("Expected NetworkError"),
         }
     }
 }

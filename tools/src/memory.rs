@@ -11,7 +11,7 @@ use storage::graph_duckdb::DuckDbGraphStore;
 use validator::Validate;
 
 pub struct MemoryAddTool {
-    memory_manager: Arc<MemoryManager>
+    memory_manager: Arc<MemoryManager>,
 }
 
 impl MemoryAddTool {
@@ -27,7 +27,7 @@ pub struct MemoryAddParams {
     #[serde(default)]
     pub metadata: serde_json::Map<String, Value>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
@@ -37,8 +37,10 @@ pub struct MemorySearchParams {
     pub threshold: Option<f32>,
     #[serde(default)]
     pub filters: serde_json::Map<String, Value>,
+    #[serde(rename = "contextSummary")]
+    pub context_summary: Option<String>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
@@ -47,14 +49,14 @@ pub struct MemoryDeleteParams {
     pub memory_id: String,
     pub layer: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum CloseTarget {
     Session,
-    Agent
+    Agent,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
@@ -62,7 +64,7 @@ pub struct MemoryCloseParams {
     pub id: String,
     pub target: CloseTarget,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 #[async_trait]
@@ -102,7 +104,7 @@ impl Tool for MemoryAddTool {
             "team" => mk_core::types::MemoryLayer::Team,
             "org" => mk_core::types::MemoryLayer::Org,
             "company" => mk_core::types::MemoryLayer::Company,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into())
+            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
         };
         let entry = mk_core::types::MemoryEntry {
             id: uuid::Uuid::new_v4().to_string(),
@@ -114,7 +116,7 @@ impl Tool for MemoryAddTool {
             importance_score: None,
             metadata: p.metadata.into_iter().collect(),
             created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         };
 
         let id = self.memory_manager.add_to_layer(ctx, layer, entry).await?;
@@ -123,7 +125,7 @@ impl Tool for MemoryAddTool {
 }
 
 pub struct MemorySearchTool {
-    memory_manager: Arc<MemoryManager>
+    memory_manager: Arc<MemoryManager>,
 }
 
 impl MemorySearchTool {
@@ -139,7 +141,7 @@ impl Tool for MemorySearchTool {
     }
 
     fn description(&self) -> &str {
-        "Search for memories across layers."
+        "Search for memories across layers with optional reflective reasoning."
     }
 
     fn input_schema(&self) -> Value {
@@ -150,6 +152,7 @@ impl Tool for MemorySearchTool {
                 "limit": { "type": "integer" },
                 "threshold": { "type": "number" },
                 "filters": { "type": "object" },
+                "contextSummary": { "type": "string", "description": "Optional context for reasoning" },
                 "tenantContext": { "$ref": "#/definitions/TenantContext" }
             },
             "required": ["query"]
@@ -166,21 +169,39 @@ impl Tool for MemorySearchTool {
         let threshold = p.threshold.unwrap_or(0.0);
         let filters: std::collections::HashMap<String, Value> = p.filters.into_iter().collect();
 
-        let results = self
+        let (results, reasoning_trace) = self
             .memory_manager
-            .search_text_with_threshold(ctx, &p.query, limit, threshold, filters)
+            .search_text_with_reasoning(
+                ctx,
+                &p.query,
+                limit,
+                threshold,
+                filters,
+                p.context_summary.as_deref(),
+            )
             .await?;
 
-        Ok(json!({
+        let mut response = json!({
             "success": true,
             "results": results,
             "totalCount": results.len()
-        }))
+        });
+
+        if let Some(trace) = reasoning_trace {
+            response["reasoning"] = json!({
+                "strategy": trace.strategy,
+                "refinedQuery": trace.refined_query,
+                "thoughtProcess": trace.thought_process,
+                "durationMs": (trace.end_time - trace.start_time).num_milliseconds()
+            });
+        }
+
+        Ok(response)
     }
 }
 
 pub struct MemoryDeleteTool {
-    memory_manager: Arc<MemoryManager>
+    memory_manager: Arc<MemoryManager>,
 }
 
 impl MemoryDeleteTool {
@@ -225,7 +246,7 @@ impl Tool for MemoryDeleteTool {
             "team" => mk_core::types::MemoryLayer::Team,
             "org" => mk_core::types::MemoryLayer::Org,
             "company" => mk_core::types::MemoryLayer::Company,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into())
+            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
         };
 
         self.memory_manager
@@ -243,11 +264,11 @@ impl Tool for MemoryDeleteTool {
 pub struct MemoryReasonParams {
     pub query: String,
     #[serde(rename = "contextSummary")]
-    pub context_summary: Option<String>
+    pub context_summary: Option<String>,
 }
 
 pub struct MemoryReasonTool {
-    reasoner: Arc<dyn memory::reasoning::ReflectiveReasoner>
+    reasoner: Arc<dyn memory::reasoning::ReflectiveReasoner>,
 }
 
 impl MemoryReasonTool {
@@ -291,7 +312,7 @@ impl Tool for MemoryReasonTool {
 }
 
 pub struct MemoryCloseTool {
-    memory_manager: Arc<MemoryManager>
+    memory_manager: Arc<MemoryManager>,
 }
 
 impl MemoryCloseTool {
@@ -330,7 +351,7 @@ impl Tool for MemoryCloseTool {
 
         match p.target {
             CloseTarget::Session => self.memory_manager.close_session(ctx, &p.id).await?,
-            CloseTarget::Agent => self.memory_manager.close_agent(ctx, &p.id).await?
+            CloseTarget::Agent => self.memory_manager.close_agent(ctx, &p.id).await?,
         }
 
         Ok(json!({
@@ -350,11 +371,11 @@ pub struct MemoryFeedbackParams {
     pub score: f32,
     pub reasoning: Option<String>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 pub struct MemoryFeedbackTool {
-    memory_manager: Arc<MemoryManager>
+    memory_manager: Arc<MemoryManager>,
 }
 
 impl MemoryFeedbackTool {
@@ -402,7 +423,7 @@ impl Tool for MemoryFeedbackTool {
             "team" => mk_core::types::MemoryLayer::Team,
             "org" => mk_core::types::MemoryLayer::Org,
             "company" => mk_core::types::MemoryLayer::Company,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into())
+            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
         };
 
         let reward_type = match p.reward_type.to_lowercase().as_str() {
@@ -411,7 +432,7 @@ impl Tool for MemoryFeedbackTool {
             "outdated" => mk_core::types::RewardType::Outdated,
             "inaccurate" => mk_core::types::RewardType::Inaccurate,
             "duplicate" => mk_core::types::RewardType::Duplicate,
-            _ => return Err(format!("Unknown reward type: {}", p.reward_type).into())
+            _ => return Err(format!("Unknown reward type: {}", p.reward_type).into()),
         };
 
         let reward = mk_core::types::RewardSignal {
@@ -419,7 +440,7 @@ impl Tool for MemoryFeedbackTool {
             score: p.score,
             reasoning: p.reasoning,
             agent_id: ctx.agent_id.clone(),
-            timestamp: chrono::Utc::now().timestamp()
+            timestamp: chrono::Utc::now().timestamp(),
         };
 
         self.memory_manager
@@ -434,11 +455,11 @@ impl Tool for MemoryFeedbackTool {
 pub struct MemoryOptimizeParams {
     pub layer: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 pub struct MemoryOptimizeTool {
-    memory_manager: Arc<MemoryManager>
+    memory_manager: Arc<MemoryManager>,
 }
 
 impl MemoryOptimizeTool {
@@ -482,7 +503,7 @@ impl Tool for MemoryOptimizeTool {
             "team" => mk_core::types::MemoryLayer::Team,
             "org" => mk_core::types::MemoryLayer::Org,
             "company" => mk_core::types::MemoryLayer::Company,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into())
+            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
         };
 
         self.memory_manager.optimize_layer(ctx, layer).await?;
@@ -497,11 +518,11 @@ pub struct GraphQueryParams {
     #[serde(default)]
     pub limit: Option<usize>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 pub struct GraphQueryTool {
-    graph_store: Arc<DuckDbGraphStore>
+    graph_store: Arc<DuckDbGraphStore>,
 }
 
 impl GraphQueryTool {
@@ -555,11 +576,11 @@ pub struct GraphNeighborsParams {
     pub node_id: String,
     pub depth: Option<usize>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 pub struct GraphNeighborsTool {
-    graph_store: Arc<DuckDbGraphStore>
+    graph_store: Arc<DuckDbGraphStore>,
 }
 
 impl GraphNeighborsTool {
@@ -627,11 +648,11 @@ pub struct GraphPathParams {
     #[serde(rename = "maxHops")]
     pub max_hops: Option<usize>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 pub struct GraphPathTool {
-    graph_store: Arc<DuckDbGraphStore>
+    graph_store: Arc<DuckDbGraphStore>,
 }
 
 impl GraphPathTool {

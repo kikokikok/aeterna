@@ -4,7 +4,7 @@ use sqlx::{AssertSqlSafe, PgPool, postgres::PgRow};
 pub struct TenantQueryBuilder<'a> {
     pool: &'a PgPool,
     tenant_id: String,
-    base_query: String
+    base_query: String,
 }
 
 impl<'a> TenantQueryBuilder<'a> {
@@ -12,7 +12,7 @@ impl<'a> TenantQueryBuilder<'a> {
         Self {
             pool,
             tenant_id: ctx.tenant_id.to_string(),
-            base_query: String::new()
+            base_query: String::new(),
         }
     }
 

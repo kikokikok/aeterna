@@ -8,7 +8,7 @@ use super::{TestCommand, TestResult, TestStatus};
 
 #[derive(Debug, Clone)]
 pub struct TestPhaseConfig {
-    pub timeout_secs: u64
+    pub timeout_secs: u64,
 }
 
 impl Default for TestPhaseConfig {
@@ -18,7 +18,7 @@ impl Default for TestPhaseConfig {
 }
 
 pub struct TestPhase {
-    config: TestPhaseConfig
+    config: TestPhaseConfig,
 }
 
 impl TestPhase {
@@ -48,7 +48,7 @@ impl TestPhase {
                         return TestResult {
                             status: TestStatus::Fail,
                             output: format!("Failed to run tests: {err}"),
-                            duration_ms: start.elapsed().as_millis() as u64
+                            duration_ms: start.elapsed().as_millis() as u64,
                         };
                     }
                 },
@@ -56,7 +56,7 @@ impl TestPhase {
                     return TestResult {
                         status: TestStatus::Timeout,
                         output: "Test run timed out".to_string(),
-                        duration_ms: start.elapsed().as_millis() as u64
+                        duration_ms: start.elapsed().as_millis() as u64,
                     };
                 }
             };
@@ -72,7 +72,7 @@ impl TestPhase {
             status,
             output: String::from_utf8_lossy(&output.stdout).to_string()
                 + &String::from_utf8_lossy(&output.stderr),
-            duration_ms
+            duration_ms,
         }
     }
 }

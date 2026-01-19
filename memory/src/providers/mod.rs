@@ -8,13 +8,13 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub struct MockProvider {
-    entries: Arc<RwLock<HashMap<String, MemoryEntry>>>
+    entries: Arc<RwLock<HashMap<String, MemoryEntry>>>,
 }
 
 impl MockProvider {
     pub fn new() -> Self {
         Self {
-            entries: Arc::new(RwLock::new(HashMap::new()))
+            entries: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -32,7 +32,7 @@ impl MemoryProviderAdapter for MockProvider {
     async fn add(
         &self,
         ctx: mk_core::types::TenantContext,
-        entry: MemoryEntry
+        entry: MemoryEntry,
     ) -> Result<String, Self::Error> {
         let mut entries = self.entries.write().await;
         let id = entry.id.clone();
@@ -49,7 +49,7 @@ impl MemoryProviderAdapter for MockProvider {
         ctx: mk_core::types::TenantContext,
         _query_vector: Vec<f32>,
         limit: usize,
-        filters: HashMap<String, serde_json::Value>
+        filters: HashMap<String, serde_json::Value>,
     ) -> Result<Vec<MemoryEntry>, Self::Error> {
         let entries = self.entries.read().await;
         let results: Vec<MemoryEntry> = entries
@@ -75,7 +75,7 @@ impl MemoryProviderAdapter for MockProvider {
     async fn get(
         &self,
         ctx: mk_core::types::TenantContext,
-        id: &str
+        id: &str,
     ) -> Result<Option<MemoryEntry>, Self::Error> {
         let entries = self.entries.read().await;
         if let Some(entry) = entries.get(id) {
@@ -89,7 +89,7 @@ impl MemoryProviderAdapter for MockProvider {
     async fn update(
         &self,
         ctx: mk_core::types::TenantContext,
-        entry: MemoryEntry
+        entry: MemoryEntry,
     ) -> Result<(), Self::Error> {
         let mut entries = self.entries.write().await;
         if let Some(existing) = entries.get(&entry.id) {
@@ -108,7 +108,7 @@ impl MemoryProviderAdapter for MockProvider {
     async fn delete(
         &self,
         ctx: mk_core::types::TenantContext,
-        id: &str
+        id: &str,
     ) -> Result<(), Self::Error> {
         let mut entries = self.entries.write().await;
         if let Some(existing) = entries.get(id) {
@@ -124,7 +124,7 @@ impl MemoryProviderAdapter for MockProvider {
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
         limit: usize,
-        cursor: Option<String>
+        cursor: Option<String>,
     ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
         let entries = self.entries.read().await;
         let mut results: Vec<MemoryEntry> = entries
@@ -176,7 +176,7 @@ mod tests {
         TenantContext {
             tenant_id: mk_core::types::TenantId::from_str("test-tenant").unwrap(),
             user_id: mk_core::types::UserId::from_str("test-user").unwrap(),
-            agent_id: None
+            agent_id: None,
         }
     }
 
@@ -194,7 +194,7 @@ mod tests {
             layer: MemoryLayer::Agent,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         provider.add(ctx.clone(), entry.clone()).await.unwrap();
@@ -239,7 +239,7 @@ mod tests {
             layer: MemoryLayer::Agent,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
         assert!(provider.update(ctx, entry).await.is_err());
     }
@@ -262,7 +262,7 @@ mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
         let entry2 = MemoryEntry {
             summaries: std::collections::HashMap::new(),
@@ -278,7 +278,7 @@ mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         provider.add(ctx.clone(), entry1).await.unwrap();
@@ -307,7 +307,7 @@ mod tests {
                 layer: MemoryLayer::Agent,
                 metadata: HashMap::new(),
                 created_at: 0,
-                updated_at: 0
+                updated_at: 0,
             };
             provider.add(ctx.clone(), entry).await.unwrap();
         }

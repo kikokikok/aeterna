@@ -14,7 +14,7 @@ pub enum NoteStatus {
     Proposed,
     Accepted,
     Rejected,
-    Deprecated
+    Deprecated,
 }
 
 impl NoteStatus {
@@ -24,7 +24,7 @@ impl NoteStatus {
             Self::Proposed => "proposed",
             Self::Accepted => "accepted",
             Self::Rejected => "rejected",
-            Self::Deprecated => "deprecated"
+            Self::Deprecated => "deprecated",
         }
     }
 
@@ -42,7 +42,7 @@ pub struct LifecycleConfig {
     pub auto_propose_usefulness_threshold: f32,
     pub auto_propose_retrieval_threshold: u32,
     pub deprecation_retrieval_threshold: u32,
-    pub deprecation_usefulness_ratio: f32
+    pub deprecation_usefulness_ratio: f32,
 }
 
 impl Default for LifecycleConfig {
@@ -51,7 +51,7 @@ impl Default for LifecycleConfig {
             auto_propose_usefulness_threshold: 0.8,
             auto_propose_retrieval_threshold: 5,
             deprecation_retrieval_threshold: 10,
-            deprecation_usefulness_ratio: 0.1
+            deprecation_usefulness_ratio: 0.1,
         }
     }
 }
@@ -64,7 +64,7 @@ pub struct NoteWithLifecycle {
     pub retrieval_count: u32,
     pub status_changed_at: u64,
     pub review_flagged: bool,
-    pub deprecation_reason: Option<String>
+    pub deprecation_reason: Option<String>,
 }
 
 impl NoteWithLifecycle {
@@ -81,7 +81,7 @@ impl NoteWithLifecycle {
             retrieval_count: 0,
             status_changed_at: now,
             review_flagged: false,
-            deprecation_reason: None
+            deprecation_reason: None,
         }
     }
 
@@ -99,14 +99,14 @@ impl NoteWithLifecycle {
     #[instrument(skip(self), fields(note_id = %self.id(), current_status = ?self.status))]
     pub fn transition_to(
         &mut self,
-        new_status: NoteStatus
+        new_status: NoteStatus,
     ) -> Result<NoteStatus, LifecycleTransitionError> {
         let old_status = self.status;
 
         if !Self::is_valid_transition(old_status, new_status) {
             return Err(LifecycleTransitionError::InvalidTransition {
                 from: old_status,
-                to: new_status
+                to: new_status,
             });
         }
 
@@ -166,7 +166,7 @@ impl NoteWithLifecycle {
     #[instrument(skip(self, config), fields(note_id = %self.id()))]
     pub fn evaluate_auto_transitions(
         &mut self,
-        config: &LifecycleConfig
+        config: &LifecycleConfig,
     ) -> Option<AutoTransitionResult> {
         if self.should_auto_propose(config) {
             match self.transition_to(NoteStatus::Proposed) {
@@ -203,17 +203,17 @@ impl NoteWithLifecycle {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AutoTransitionResult {
     Proposed { from: NoteStatus },
-    FlaggedForReview
+    FlaggedForReview,
 }
 
 #[derive(Debug, Clone, Error)]
 pub enum LifecycleTransitionError {
     #[error("Invalid transition from {from:?} to {to:?}")]
-    InvalidTransition { from: NoteStatus, to: NoteStatus }
+    InvalidTransition { from: NoteStatus, to: NoteStatus },
 }
 
 pub struct NoteLifecycleManager {
-    config: LifecycleConfig
+    config: LifecycleConfig,
 }
 
 impl NoteLifecycleManager {
@@ -257,14 +257,14 @@ impl NoteLifecycleManager {
     pub fn deprecate(
         &self,
         note: &mut NoteWithLifecycle,
-        reason: impl Into<String>
+        reason: impl Into<String>,
     ) -> Result<(), LifecycleTransitionError> {
         note.deprecate(reason)
     }
 
     pub fn evaluate_batch(
         &self,
-        notes: &mut [NoteWithLifecycle]
+        notes: &mut [NoteWithLifecycle],
     ) -> Vec<(String, AutoTransitionResult)> {
         notes
             .iter_mut()
@@ -292,7 +292,7 @@ mod tests {
             tags: vec!["test".to_string()],
             source_distillation_id: "dist-123".to_string(),
             created_at: 1000,
-            quality_score: 0.8
+            quality_score: 0.8,
         }
     }
 

@@ -12,7 +12,7 @@ pub struct SummarizationBudget {
     pub hourly_token_limit: u64,
     pub per_layer_limits: HashMap<MemoryLayer, u64>,
     pub warning_threshold_percent: u8,
-    pub critical_threshold_percent: u8
+    pub critical_threshold_percent: u8,
 }
 
 impl Default for SummarizationBudget {
@@ -31,7 +31,7 @@ impl Default for SummarizationBudget {
             hourly_token_limit: 100_000,
             per_layer_limits,
             warning_threshold_percent: 80,
-            critical_threshold_percent: 90
+            critical_threshold_percent: 90,
         }
     }
 }
@@ -68,7 +68,7 @@ pub enum BudgetStatus {
     Available,
     Warning,
     Critical,
-    Exhausted
+    Exhausted,
 }
 
 #[derive(Debug, Clone)]
@@ -80,7 +80,7 @@ pub struct BudgetCheck {
     pub hourly_remaining: u64,
     pub layer_used: Option<u64>,
     pub layer_remaining: Option<u64>,
-    pub percent_used: f32
+    pub percent_used: f32,
 }
 
 impl BudgetCheck {
@@ -99,7 +99,7 @@ impl BudgetCheck {
 pub enum BudgetExhaustedAction {
     Reject,
     Queue,
-    AllowWithWarning
+    AllowWithWarning,
 }
 
 #[derive(Debug, Clone)]
@@ -107,7 +107,7 @@ pub struct BudgetTrackerConfig {
     pub budget: SummarizationBudget,
     pub exhausted_action: BudgetExhaustedAction,
     pub enable_alerts: bool,
-    pub queue_max_size: usize
+    pub queue_max_size: usize,
 }
 
 impl Default for BudgetTrackerConfig {
@@ -116,7 +116,7 @@ impl Default for BudgetTrackerConfig {
             budget: SummarizationBudget::default(),
             exhausted_action: BudgetExhaustedAction::Reject,
             enable_alerts: true,
-            queue_max_size: 100
+            queue_max_size: 100,
         }
     }
 }
@@ -128,14 +128,14 @@ const EXHAUSTED_ALERT_COOLDOWN_SECS: u64 = 60;
 
 struct UsageWindow {
     tokens_used: AtomicU64,
-    window_start: AtomicU64
+    window_start: AtomicU64,
 }
 
 impl UsageWindow {
     fn new() -> Self {
         Self {
             tokens_used: AtomicU64::new(0),
-            window_start: AtomicU64::new(current_timestamp())
+            window_start: AtomicU64::new(current_timestamp()),
         }
     }
 
@@ -177,13 +177,13 @@ impl UsageWindow {
 }
 
 struct LayerUsage {
-    usage: RwLock<HashMap<MemoryLayer, UsageWindow>>
+    usage: RwLock<HashMap<MemoryLayer, UsageWindow>>,
 }
 
 impl LayerUsage {
     fn new() -> Self {
         Self {
-            usage: RwLock::new(HashMap::new())
+            usage: RwLock::new(HashMap::new()),
         }
     }
 
@@ -218,7 +218,7 @@ pub struct BudgetTracker {
     alert_triggered_warning: AtomicU64,
     alert_triggered_critical: AtomicU64,
     alert_triggered_exhausted: AtomicU64,
-    queued_requests: RwLock<Vec<QueuedRequest>>
+    queued_requests: RwLock<Vec<QueuedRequest>>,
 }
 
 #[derive(Debug, Clone)]
@@ -226,7 +226,7 @@ pub struct QueuedRequest {
     pub layer: MemoryLayer,
     pub estimated_tokens: u64,
     pub queued_at: u64,
-    pub request_id: String
+    pub request_id: String,
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -238,7 +238,7 @@ pub enum BudgetError {
     QueueFull { max_size: usize },
 
     #[error("Request too large: {requested} tokens exceeds available {available}")]
-    RequestTooLarge { requested: u64, available: u64 }
+    RequestTooLarge { requested: u64, available: u64 },
 }
 
 impl BudgetTracker {
@@ -251,7 +251,7 @@ impl BudgetTracker {
             alert_triggered_warning: AtomicU64::new(0),
             alert_triggered_critical: AtomicU64::new(0),
             alert_triggered_exhausted: AtomicU64::new(0),
-            queued_requests: RwLock::new(Vec::new())
+            queued_requests: RwLock::new(Vec::new()),
         }
     }
 
@@ -302,7 +302,7 @@ impl BudgetTracker {
             hourly_remaining,
             layer_used,
             layer_remaining,
-            percent_used
+            percent_used,
         }
     }
 
@@ -322,7 +322,7 @@ impl BudgetTracker {
                     self.trigger_exhausted_alert();
                     return Err(BudgetError::RequestTooLarge {
                         requested: tokens,
-                        available: check.tokens_available()
+                        available: check.tokens_available(),
                     });
                 }
                 BudgetExhaustedAction::Queue => {
@@ -357,7 +357,7 @@ impl BudgetTracker {
 
         if queue.len() >= self.config.queue_max_size {
             return Err(BudgetError::QueueFull {
-                max_size: self.config.queue_max_size
+                max_size: self.config.queue_max_size,
             });
         }
 
@@ -365,7 +365,7 @@ impl BudgetTracker {
             layer,
             estimated_tokens: tokens,
             queued_at: current_timestamp(),
-            request_id: format!("{}-{}", layer.display_name(), queue.len())
+            request_id: format!("{}-{}", layer.display_name(), queue.len()),
         };
 
         queue.push(request);
@@ -374,7 +374,7 @@ impl BudgetTracker {
         self.trigger_exhausted_alert();
 
         Err(BudgetError::Exhausted {
-            reason: "Request queued due to budget exhaustion".to_string()
+            reason: "Request queued due to budget exhaustion".to_string(),
         })
     }
 
@@ -464,7 +464,7 @@ impl BudgetTracker {
             hourly_tokens_remaining: check.hourly_remaining,
             percent_used: check.percent_used,
             status: check.status,
-            queued_requests: queue_size
+            queued_requests: queue_size,
         }
     }
 }
@@ -477,7 +477,7 @@ pub struct BudgetMetrics {
     pub hourly_tokens_remaining: u64,
     pub percent_used: f32,
     pub status: BudgetStatus,
-    pub queued_requests: usize
+    pub queued_requests: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -485,7 +485,7 @@ pub struct TieredModelConfig {
     pub expensive_model: String,
     pub cheap_model: String,
     pub expensive_layers: Vec<MemoryLayer>,
-    pub cheap_layers: Vec<MemoryLayer>
+    pub cheap_layers: Vec<MemoryLayer>,
 }
 
 impl Default for TieredModelConfig {
@@ -499,7 +499,7 @@ impl Default for TieredModelConfig {
                 MemoryLayer::Org,
                 MemoryLayer::Team,
                 MemoryLayer::Project,
-            ]
+            ],
         }
     }
 }
@@ -619,12 +619,12 @@ mod tests {
         match result {
             Err(BudgetError::RequestTooLarge {
                 requested,
-                available
+                available,
             }) => {
                 assert_eq!(requested, 200);
                 assert_eq!(available, 100);
             }
-            _ => panic!("Expected RequestTooLarge error")
+            _ => panic!("Expected RequestTooLarge error"),
         }
     }
 
@@ -636,7 +636,7 @@ mod tests {
                 .with_hourly_limit(1000),
             exhausted_action: BudgetExhaustedAction::Queue,
             enable_alerts: false,
-            queue_max_size: 10
+            queue_max_size: 10,
         };
         let tracker = BudgetTracker::new(config);
 
@@ -655,7 +655,7 @@ mod tests {
                 .with_hourly_limit(100),
             exhausted_action: BudgetExhaustedAction::Queue,
             enable_alerts: false,
-            queue_max_size: 2
+            queue_max_size: 2,
         };
         let tracker = BudgetTracker::new(config);
 
@@ -679,7 +679,7 @@ mod tests {
                 .with_hourly_limit(100),
             exhausted_action: BudgetExhaustedAction::Queue,
             enable_alerts: false,
-            queue_max_size: 10
+            queue_max_size: 10,
         };
         let tracker = BudgetTracker::new(config);
 

@@ -14,13 +14,13 @@ use tokio::sync::RwLock;
 use tools::server::{JsonRpcRequest, McpServer};
 
 struct MockStorage {
-    data: Arc<RwLock<HashMap<String, Vec<u8>>>>
+    data: Arc<RwLock<HashMap<String, Vec<u8>>>>,
 }
 
 impl MockStorage {
     fn new() -> Self {
         Self {
-            data: Arc::new(RwLock::new(HashMap::new()))
+            data: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -33,7 +33,7 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: mk_core::types::TenantContext,
         key: &str,
-        value: &[u8]
+        value: &[u8],
     ) -> Result<(), Self::Error> {
         self.data
             .write()
@@ -45,7 +45,7 @@ impl StorageBackend for MockStorage {
     async fn retrieve(
         &self,
         _ctx: mk_core::types::TenantContext,
-        key: &str
+        key: &str,
     ) -> Result<Option<Vec<u8>>, Self::Error> {
         Ok(self.data.read().await.get(key).cloned())
     }
@@ -53,7 +53,7 @@ impl StorageBackend for MockStorage {
     async fn delete(
         &self,
         _ctx: mk_core::types::TenantContext,
-        key: &str
+        key: &str,
     ) -> Result<(), Self::Error> {
         self.data.write().await.remove(key);
         Ok(())
@@ -62,7 +62,7 @@ impl StorageBackend for MockStorage {
     async fn exists(
         &self,
         _ctx: mk_core::types::TenantContext,
-        key: &str
+        key: &str,
     ) -> Result<bool, Self::Error> {
         Ok(self.data.read().await.contains_key(key))
     }
@@ -70,7 +70,7 @@ impl StorageBackend for MockStorage {
     async fn get_ancestors(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _unit_id: &str
+        _unit_id: &str,
     ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
         Ok(Vec::new())
     }
@@ -78,7 +78,7 @@ impl StorageBackend for MockStorage {
     async fn get_descendants(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _unit_id: &str
+        _unit_id: &str,
     ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
         Ok(Vec::new())
     }
@@ -86,14 +86,14 @@ impl StorageBackend for MockStorage {
     async fn get_unit_policies(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _unit_id: &str
+        _unit_id: &str,
     ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
         Ok(Vec::new())
     }
 
     async fn create_unit(
         &self,
-        _unit: &mk_core::types::OrganizationalUnit
+        _unit: &mk_core::types::OrganizationalUnit,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -102,7 +102,7 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: &mk_core::types::TenantContext,
         _unit_id: &str,
-        _policy: &mk_core::types::Policy
+        _policy: &mk_core::types::Policy,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -112,7 +112,7 @@ impl StorageBackend for MockStorage {
         _user_id: &mk_core::types::UserId,
         _tenant_id: &mk_core::types::TenantId,
         _unit_id: &str,
-        _role: mk_core::types::Role
+        _role: mk_core::types::Role,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -122,14 +122,14 @@ impl StorageBackend for MockStorage {
         _user_id: &mk_core::types::UserId,
         _tenant_id: &mk_core::types::TenantId,
         _unit_id: &str,
-        _role: mk_core::types::Role
+        _role: mk_core::types::Role,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
 
     async fn store_drift_result(
         &self,
-        _result: mk_core::types::DriftResult
+        _result: mk_core::types::DriftResult,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -137,7 +137,7 @@ impl StorageBackend for MockStorage {
     async fn get_latest_drift_result(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _project_id: &str
+        _project_id: &str,
     ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
         Ok(None)
     }
@@ -153,7 +153,7 @@ impl StorageBackend for MockStorage {
         _status: &str,
         _message: Option<&str>,
         _started_at: i64,
-        _finished_at: Option<i64>
+        _finished_at: Option<i64>,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -162,14 +162,14 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: mk_core::types::TenantContext,
         _since_timestamp: i64,
-        _limit: usize
+        _limit: usize,
     ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
         Ok(Vec::new())
     }
 
     async fn create_suppression(
         &self,
-        _suppression: mk_core::types::DriftSuppression
+        _suppression: mk_core::types::DriftSuppression,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -177,7 +177,7 @@ impl StorageBackend for MockStorage {
     async fn list_suppressions(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _project_id: &str
+        _project_id: &str,
     ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
         Ok(Vec::new())
     }
@@ -185,7 +185,7 @@ impl StorageBackend for MockStorage {
     async fn delete_suppression(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _suppression_id: &str
+        _suppression_id: &str,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -193,21 +193,21 @@ impl StorageBackend for MockStorage {
     async fn get_drift_config(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _project_id: &str
+        _project_id: &str,
     ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
         Ok(None)
     }
 
     async fn save_drift_config(
         &self,
-        _config: mk_core::types::DriftConfig
+        _config: mk_core::types::DriftConfig,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
 
     async fn persist_event(
         &self,
-        _event: mk_core::types::PersistentEvent
+        _event: mk_core::types::PersistentEvent,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -215,7 +215,7 @@ impl StorageBackend for MockStorage {
     async fn get_pending_events(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _limit: usize
+        _limit: usize,
     ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
         Ok(Vec::new())
     }
@@ -224,7 +224,7 @@ impl StorageBackend for MockStorage {
         &self,
         _event_id: &str,
         _status: mk_core::types::EventStatus,
-        _error: Option<String>
+        _error: Option<String>,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -232,7 +232,7 @@ impl StorageBackend for MockStorage {
     async fn get_dead_letter_events(
         &self,
         _ctx: mk_core::types::TenantContext,
-        _limit: usize
+        _limit: usize,
     ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
         Ok(Vec::new())
     }
@@ -240,14 +240,14 @@ impl StorageBackend for MockStorage {
     async fn check_idempotency(
         &self,
         _consumer_group: &str,
-        _idempotency_key: &str
+        _idempotency_key: &str,
     ) -> Result<bool, Self::Error> {
         Ok(false)
     }
 
     async fn record_consumer_state(
         &self,
-        _state: mk_core::types::ConsumerState
+        _state: mk_core::types::ConsumerState,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -256,14 +256,14 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: mk_core::types::TenantContext,
         _period_start: i64,
-        _period_end: i64
+        _period_end: i64,
     ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
         Ok(Vec::new())
     }
 
     async fn record_event_metrics(
         &self,
-        _metrics: mk_core::types::EventDeliveryMetrics
+        _metrics: mk_core::types::EventDeliveryMetrics,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -277,13 +277,13 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
         &self,
         _ctx: &mk_core::types::TenantContext,
         _action: &str,
-        _resource: &str
+        _resource: &str,
     ) -> anyhow::Result<bool> {
         Ok(true)
     }
     async fn get_user_roles(
         &self,
-        _ctx: &mk_core::types::TenantContext
+        _ctx: &mk_core::types::TenantContext,
     ) -> anyhow::Result<Vec<mk_core::types::Role>> {
         Ok(vec![])
     }
@@ -291,7 +291,7 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
         &self,
         _ctx: &mk_core::types::TenantContext,
         _user_id: &mk_core::types::UserId,
-        _role: mk_core::types::Role
+        _role: mk_core::types::Role,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -299,7 +299,7 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
         &self,
         _ctx: &mk_core::types::TenantContext,
         _user_id: &mk_core::types::UserId,
-        _role: mk_core::types::Role
+        _role: mk_core::types::Role,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -308,9 +308,9 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
 async fn setup_postgres_container() -> Result<
     (
         testcontainers::ContainerAsync<testcontainers_modules::postgres::Postgres>,
-        String
+        String,
     ),
-    Box<dyn std::error::Error + Send + Sync>
+    Box<dyn std::error::Error + Send + Sync>,
 > {
     let container = testcontainers_modules::postgres::Postgres::default()
         .with_db_name("testdb")
@@ -343,7 +343,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
     let memory_manager = Arc::new(MemoryManager::new());
     let mock_provider = MockProvider::new();
     let provider: Arc<
-        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
     > = Arc::new(mock_provider);
     memory_manager
         .register_provider(MemoryLayer::Project, provider)
@@ -360,10 +360,10 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
             config::config::DeploymentConfig::default(),
             None,
             persister,
-            None
+            None,
         )
         .await
-        .map_err(|e| anyhow::anyhow!(e))?
+        .map_err(|e| anyhow::anyhow!(e))?,
     );
 
     let server = McpServer::new(
@@ -373,15 +373,15 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         Arc::new(
             storage::postgres::PostgresBackend::new(&connection_url)
                 .await
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
         Arc::new(knowledge::governance::GovernanceEngine::new()),
         Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
-            memory::llm::mock::MockLlmService::new()
+            memory::llm::mock::MockLlmService::new(),
         ))),
         Arc::new(MockAuthService),
         None,
-        None
+        None,
     );
 
     // GIVEN a knowledge entry is stored in the repository
@@ -395,7 +395,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         status: KnowledgeStatus::Accepted,
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
     };
     let tenant_id = mk_core::types::TenantId::new("t1".into()).unwrap();
     let user_id = mk_core::types::UserId::new("u1".into()).unwrap();
@@ -418,7 +418,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
                 "query": "Auth",
                 "layers": ["project"]
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;
@@ -448,7 +448,7 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
                 "path": "specs/auth.md",
                 "layer": "project"
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;

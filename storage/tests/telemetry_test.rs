@@ -16,7 +16,7 @@ type SnapshotVec = Vec<(
     CompositeKey,
     Option<metrics::Unit>,
     Option<metrics::SharedString>,
-    metrics_util::debugging::DebugValue
+    metrics_util::debugging::DebugValue,
 )>;
 
 fn get_snapshot_vec() -> SnapshotVec {
@@ -177,7 +177,7 @@ fn test_graph_metrics_alert_emission_warn() {
         wait_time_warn_ms: 500,
         wait_time_critical_ms: 2000,
         timeout_rate_warn_percent: 5.0,
-        timeout_rate_critical_percent: 15.0
+        timeout_rate_critical_percent: 15.0,
     };
     let metrics = GraphMetrics::with_alert_config(alert_config);
 
@@ -213,7 +213,7 @@ fn test_graph_metrics_alert_emission_critical() {
         wait_time_warn_ms: 500,
         wait_time_critical_ms: 2000,
         timeout_rate_warn_percent: 5.0,
-        timeout_rate_critical_percent: 15.0
+        timeout_rate_critical_percent: 15.0,
     };
     let metrics = GraphMetrics::with_alert_config(alert_config);
 
@@ -249,7 +249,7 @@ fn test_graph_metrics_no_alert_below_threshold() {
         wait_time_warn_ms: 1000,
         wait_time_critical_ms: 3000,
         timeout_rate_warn_percent: 5.0,
-        timeout_rate_critical_percent: 15.0
+        timeout_rate_critical_percent: 15.0,
     };
     let metrics = GraphMetrics::with_alert_config(alert_config);
 

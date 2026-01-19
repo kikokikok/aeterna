@@ -11,7 +11,7 @@ use tokio::sync::OnceCell;
 struct RedisFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Redis>,
-    url: String
+    url: String,
 }
 
 static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
@@ -26,7 +26,7 @@ async fn get_redis_fixture() -> Option<&'static RedisFixture> {
                     let url = format!("redis://localhost:{}", port);
                     Some(RedisFixture { container, url })
                 }
-                Err(_) => None
+                Err(_) => None,
             }
         })
         .await
@@ -54,7 +54,7 @@ async fn test_redis_publisher_publish_subscribe() {
         unit_type: mk_core::types::UnitType::Project,
         tenant_id: TenantId::new("tenant-1".to_string()).unwrap(),
         parent_id: None,
-        timestamp: chrono::Utc::now().timestamp()
+        timestamp: chrono::Utc::now().timestamp(),
     };
 
     publisher.publish(event.clone()).await.unwrap();
@@ -67,11 +67,11 @@ async fn test_redis_publisher_publish_subscribe() {
     match (event, received_event) {
         (
             GovernanceEvent::UnitCreated { unit_id: id1, .. },
-            GovernanceEvent::UnitCreated { unit_id: id2, .. }
+            GovernanceEvent::UnitCreated { unit_id: id2, .. },
         ) => {
             assert_eq!(id1, id2);
         }
-        _ => panic!("Event type mismatch or incorrect data")
+        _ => panic!("Event type mismatch or incorrect data"),
     }
 }
 
@@ -93,7 +93,7 @@ async fn test_multi_publisher() {
     let event = GovernanceEvent::UnitUpdated {
         unit_id: "unit-1".to_string(),
         tenant_id: TenantId::new("tenant-1".to_string()).unwrap(),
-        timestamp: chrono::Utc::now().timestamp()
+        timestamp: chrono::Utc::now().timestamp(),
     };
 
     let result = multi.publish(event).await;

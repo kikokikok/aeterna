@@ -3,21 +3,21 @@ use mk_core::types::{ErrorSignature, HindsightNote, Resolution};
 #[derive(Debug, Clone)]
 pub struct HindsightQueryConfig {
     pub semantic_threshold: f32,
-    pub max_results: usize
+    pub max_results: usize,
 }
 
 impl Default for HindsightQueryConfig {
     fn default() -> Self {
         Self {
             semantic_threshold: 0.8,
-            max_results: 5
+            max_results: 5,
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct HindsightQuery {
-    cfg: HindsightQueryConfig
+    cfg: HindsightQueryConfig,
 }
 
 impl HindsightQuery {
@@ -28,7 +28,7 @@ impl HindsightQuery {
     pub fn query_hindsight(
         &self,
         error: &ErrorSignature,
-        notes: &[HindsightNote]
+        notes: &[HindsightNote],
     ) -> Vec<HindsightMatch> {
         let mut matches: Vec<HindsightMatch> = notes
             .iter()
@@ -54,13 +54,13 @@ impl HindsightQuery {
 
         let msg_sim = jaccard_similarity(
             &tokenize(&err.message_pattern),
-            &tokenize(&note.error_signature.message_pattern)
+            &tokenize(&note.error_signature.message_pattern),
         );
         score += msg_sim * 0.3;
 
         let ctx_sim = jaccard_similarity(
             &note.error_signature.context_patterns,
-            &err.context_patterns
+            &err.context_patterns,
         );
         score += ctx_sim * 0.1;
 
@@ -72,7 +72,7 @@ impl HindsightQuery {
             note_id: note.id.clone(),
             score,
             note: note.clone(),
-            best_resolution: select_best_resolution(&note.resolutions)
+            best_resolution: select_best_resolution(&note.resolutions),
         })
     }
 }
@@ -82,7 +82,7 @@ pub struct HindsightMatch {
     pub note_id: String,
     pub score: f32,
     pub note: HindsightNote,
-    pub best_resolution: Option<Resolution>
+    pub best_resolution: Option<Resolution>,
 }
 
 fn select_best_resolution(resolutions: &[Resolution]) -> Option<Resolution> {
@@ -131,7 +131,7 @@ mod tests {
             message_pattern: msg.to_string(),
             stack_patterns: vec![],
             context_patterns: vec!["tool:cargo_test".to_string()],
-            embedding: None
+            embedding: None,
         }
     }
 
@@ -144,7 +144,7 @@ mod tests {
             content: "content".to_string(),
             tags: vec!["tag".to_string()],
             created_at: now,
-            updated_at: now
+            updated_at: now,
         }
     }
 
@@ -156,7 +156,7 @@ mod tests {
             changes: vec![],
             success_rate: success,
             application_count: count,
-            last_success_at: 0
+            last_success_at: 0,
         }
     }
 

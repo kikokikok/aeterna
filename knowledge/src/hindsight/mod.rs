@@ -10,22 +10,22 @@ pub use capture::{CapturedError, ErrorCapture, ErrorCaptureConfig, ErrorContext,
 pub use dedup::{
     DeduplicationConfig, DeduplicationError, DeduplicationMetrics, DeduplicationResult,
     ErrorSignatureIndex, InMemorySignatureStorage, IndexedSignature, ResolutionMerger, ScanResult,
-    SignatureStorage
+    SignatureStorage,
 };
 pub use note_gen::{
     HindsightNoteGenerationMode, HindsightNoteGenerator, HindsightNoteGeneratorConfig,
     HindsightNoteRequest, HindsightNoteResult, HindsightPromptTemplate, HindsightPromptTemplates,
-    NoteGenerationError
+    NoteGenerationError,
 };
 pub use promotion::{
-    HindsightPromoter, HindsightPromotionConfig, HindsightPromotionError, HindsightPromotionRequest
+    HindsightPromoter, HindsightPromotionConfig, HindsightPromotionError, HindsightPromotionRequest,
 };
 pub use query::{HindsightMatch, HindsightQuery, HindsightQueryConfig};
 pub use resolution::{
     ApplicationContext, ApplicationRecord, FailureContext, InMemoryResolutionStorage,
     ResolutionMetrics, ResolutionOutcome, ResolutionStorage, ResolutionStorageError,
-    ResolutionTracker, ResolutionTrackerConfig
+    ResolutionTracker, ResolutionTrackerConfig,
 };
 pub use retrieval::{
-    HindsightRetrievalConfig, HindsightRetrievalFilter, HindsightRetriever, ScoredHindsightNote
+    HindsightRetrievalConfig, HindsightRetrievalFilter, HindsightRetriever, ScoredHindsightNote,
 };

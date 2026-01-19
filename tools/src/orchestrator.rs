@@ -10,21 +10,21 @@ use mk_core::types::TenantContext;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolCall {
     pub name: String,
-    pub arguments: Value
+    pub arguments: Value,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolExecution {
     pub name: String,
     pub arguments: Value,
-    pub result: Value
+    pub result: Value,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrchestratorResult {
     pub output: String,
     pub tool_calls: Vec<ToolCall>,
-    pub tool_results: Vec<ToolExecution>
+    pub tool_results: Vec<ToolExecution>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -33,20 +33,20 @@ pub enum OrchestratorError {
     Extension(#[from] ExtensionError),
 
     #[error("Tool error: {0}")]
-    Tool(String)
+    Tool(String),
 }
 
 #[derive(Debug, Clone)]
 pub struct ToolOrchestrator {
     tool_registry: Arc<ToolRegistry>,
-    extension_executor: Option<Arc<ExtensionExecutor>>
+    extension_executor: Option<Arc<ExtensionExecutor>>,
 }
 
 impl ToolOrchestrator {
     pub fn new(tool_registry: Arc<ToolRegistry>) -> Self {
         Self {
             tool_registry,
-            extension_executor: None
+            extension_executor: None,
         }
     }
 
@@ -59,7 +59,7 @@ impl ToolOrchestrator {
         &self,
         ctx: TenantContext,
         session_id: &str,
-        messages: Vec<ExtensionMessage>
+        messages: Vec<ExtensionMessage>,
     ) -> Result<Vec<ExtensionMessage>, OrchestratorError> {
         let mut current = messages;
         if let Some(executor) = &self.extension_executor {
@@ -75,7 +75,7 @@ impl ToolOrchestrator {
         &self,
         ctx: TenantContext,
         session_id: &str,
-        text: String
+        text: String,
     ) -> Result<String, OrchestratorError> {
         let mut current = text;
         if let Some(executor) = &self.extension_executor {
@@ -86,8 +86,8 @@ impl ToolOrchestrator {
                 executor,
                 vec![ExtensionMessage {
                     role: "user".to_string(),
-                    content: current
-                }]
+                    content: current,
+                }],
             )
             .into_iter()
             .map(|message| message.content)
@@ -107,7 +107,7 @@ impl ToolOrchestrator {
         &self,
         ctx: TenantContext,
         session_id: &str,
-        output: String
+        output: String,
     ) -> Result<OrchestratorResult, OrchestratorError> {
         let mut output = output;
         if let Some(executor) = &self.extension_executor {
@@ -131,7 +131,7 @@ impl ToolOrchestrator {
             return Ok(OrchestratorResult {
                 output,
                 tool_calls: routed_calls,
-                tool_results
+                tool_results,
             });
         }
 
@@ -143,7 +143,7 @@ impl ToolOrchestrator {
         Ok(OrchestratorResult {
             output,
             tool_calls,
-            tool_results
+            tool_results,
         })
     }
 
@@ -151,7 +151,7 @@ impl ToolOrchestrator {
         &self,
         ctx: TenantContext,
         session_id: &str,
-        output: &str
+        output: &str,
     ) -> Result<(String, Vec<ToolCall>), OrchestratorError> {
         let tags = parse_tags(output);
         if tags.is_empty() {
@@ -170,12 +170,12 @@ impl ToolOrchestrator {
                         session_id,
                         self.tool_registry.clone(),
                         tag.name.clone(),
-                        content.to_string()
+                        content.to_string(),
                     )
                     .await
                 {
                     Ok(result) => result,
-                    Err(_) => content.to_string()
+                    Err(_) => content.to_string(),
                 }
             } else {
                 content.to_string()
@@ -205,7 +205,7 @@ impl ToolOrchestrator {
             results.push(ToolExecution {
                 name: call.name,
                 arguments: call.arguments,
-                result
+                result,
             });
         }
         Ok(results)
@@ -214,7 +214,7 @@ impl ToolOrchestrator {
 
 fn apply_prompt_wiring(
     executor: &ExtensionExecutor,
-    messages: Vec<ExtensionMessage>
+    messages: Vec<ExtensionMessage>,
 ) -> Vec<ExtensionMessage> {
     let wiring = executor.prompt_wiring();
     if wiring.additions.is_empty() {
@@ -225,7 +225,7 @@ fn apply_prompt_wiring(
         .into_iter()
         .map(|addition| ExtensionMessage {
             role: addition.role,
-            content: addition.content
+            content: addition.content,
         })
         .collect::<Vec<_>>();
     additions.extend(messages.into_iter());
@@ -235,7 +235,7 @@ fn apply_prompt_wiring(
 fn apply_tool_config(
     mut calls: Vec<ToolCall>,
     config: &crate::extensions::ToolConfig,
-    sequencing_hints: &[crate::extensions::ToolSequenceHint]
+    sequencing_hints: &[crate::extensions::ToolSequenceHint],
 ) -> Vec<ToolCall> {
     for call in calls.iter_mut() {
         if let Some(replacement) = config.overrides.get(&call.name) {
@@ -261,7 +261,7 @@ fn apply_tool_config(
         if has_when && !has_next && !config.disabled_tools.contains(&hint.suggest_next) {
             calls.push(ToolCall {
                 name: hint.suggest_next.clone(),
-                arguments: json!({})
+                arguments: json!({}),
             });
         }
     }
@@ -274,7 +274,7 @@ impl ToolOrchestrator {
     fn new_without_extensions(tool_registry: Arc<ToolRegistry>) -> Self {
         Self {
             tool_registry,
-            extension_executor: None
+            extension_executor: None,
         }
     }
 }
@@ -286,7 +286,7 @@ struct TagSegment {
     start: usize,
     end: usize,
     content_start: usize,
-    content_end: usize
+    content_end: usize,
 }
 
 fn parse_tags(input: &str) -> Vec<TagSegment> {
@@ -302,7 +302,7 @@ fn parse_tags(input: &str) -> Vec<TagSegment> {
         }
         let close = match input[idx..].find('>') {
             Some(pos) => idx + pos,
-            None => break
+            None => break,
         };
         let tag_body = &input[idx + 1..close];
         if let Some(rest) = tag_body.strip_prefix('/') {
@@ -315,7 +315,7 @@ fn parse_tags(input: &str) -> Vec<TagSegment> {
                     start: start_idx,
                     end: close + 1,
                     content_start,
-                    content_end: idx
+                    content_end: idx,
                 });
             }
         } else {
@@ -383,7 +383,7 @@ mod tests {
 
         async fn call(
             &self,
-            params: Value
+            params: Value,
         ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
             Ok(serde_json::json!({"echo": params}))
         }
@@ -397,7 +397,7 @@ mod tests {
             &self,
             _ctx: &mut crate::extensions::ExtensionContext,
             _tag: String,
-            content: String
+            content: String,
         ) -> Result<String, ExtensionError> {
             Ok(format!("\"{}\"", content.to_uppercase()))
         }
@@ -410,7 +410,7 @@ mod tests {
         async fn on_llm_output(
             &self,
             _ctx: &mut crate::extensions::ExtensionContext,
-            output: String
+            output: String,
         ) -> Result<String, ExtensionError> {
             Ok(format!(
                 r#"{output}<tool name="echo">{{"value":"ok"}}</tool>"#
@@ -461,9 +461,9 @@ mod tests {
             .register_extension(
                 crate::extensions::ExtensionRegistration::new(
                     "ext",
-                    Arc::new(extension_test_helpers::NoopCallback::default())
+                    Arc::new(extension_test_helpers::NoopCallback::default()),
                 )
-                .with_tool_config(config)
+                .with_tool_config(config),
             )
             .unwrap();
 
@@ -488,7 +488,7 @@ mod tests {
         extension_registry
             .register_extension(crate::extensions::ExtensionRegistration::new(
                 "ext",
-                Arc::new(UpperTag)
+                Arc::new(UpperTag),
             ))
             .unwrap();
 
@@ -516,7 +516,7 @@ mod tests {
         extension_registry
             .register_extension(crate::extensions::ExtensionRegistration::new(
                 "ext",
-                Arc::new(ReplaceOutput)
+                Arc::new(ReplaceOutput),
             ))
             .unwrap();
 
@@ -549,12 +549,12 @@ mod tests {
     fn test_apply_tool_config_sequence_hint() {
         let calls = vec![ToolCall {
             name: "a".to_string(),
-            arguments: serde_json::json!({})
+            arguments: serde_json::json!({}),
         }];
         let config = crate::extensions::ToolConfig::default();
         let hints = vec![crate::extensions::ToolSequenceHint {
             when_tool: "a".to_string(),
-            suggest_next: "b".to_string()
+            suggest_next: "b".to_string(),
         }];
 
         let result = apply_tool_config(calls, &config, &hints);

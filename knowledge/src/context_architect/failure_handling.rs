@@ -14,7 +14,7 @@ use super::generator::{GenerationError, SummaryResult};
 pub enum CircuitState {
     Closed,
     Open,
-    HalfOpen
+    HalfOpen,
 }
 
 #[derive(Debug, Clone)]
@@ -22,7 +22,7 @@ pub struct CircuitBreakerConfig {
     pub failure_threshold: usize,
     pub success_threshold: usize,
     pub timeout_secs: u64,
-    pub half_open_max_calls: usize
+    pub half_open_max_calls: usize,
 }
 
 impl Default for CircuitBreakerConfig {
@@ -31,7 +31,7 @@ impl Default for CircuitBreakerConfig {
             failure_threshold: 5,
             success_threshold: 2,
             timeout_secs: 60,
-            half_open_max_calls: 3
+            half_open_max_calls: 3,
         }
     }
 }
@@ -42,7 +42,7 @@ pub struct RetryConfig {
     pub initial_delay_ms: u64,
     pub max_delay_ms: u64,
     pub multiplier: f64,
-    pub jitter_factor: f64
+    pub jitter_factor: f64,
 }
 
 impl Default for RetryConfig {
@@ -52,7 +52,7 @@ impl Default for RetryConfig {
             initial_delay_ms: 1000,
             max_delay_ms: 30000,
             multiplier: 2.0,
-            jitter_factor: 0.1
+            jitter_factor: 0.1,
         }
     }
 }
@@ -65,7 +65,7 @@ pub struct FailureMetrics {
     consecutive_failures: Arc<AtomicUsize>,
     cached_fallbacks: Arc<AtomicU64>,
     raw_content_fallbacks: Arc<AtomicU64>,
-    fallback_model_uses: Arc<AtomicU64>
+    fallback_model_uses: Arc<AtomicU64>,
 }
 
 impl FailureMetrics {
@@ -77,7 +77,7 @@ impl FailureMetrics {
             consecutive_failures: Arc::new(AtomicUsize::new(0)),
             cached_fallbacks: Arc::new(AtomicU64::new(0)),
             raw_content_fallbacks: Arc::new(AtomicU64::new(0)),
-            fallback_model_uses: Arc::new(AtomicU64::new(0))
+            fallback_model_uses: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -152,7 +152,7 @@ pub struct CircuitBreaker {
     success_count: Arc<AtomicUsize>,
     opened_at: Arc<std::sync::Mutex<Option<Instant>>>,
     metrics: Arc<FailureMetrics>,
-    half_open_calls: Arc<AtomicUsize>
+    half_open_calls: Arc<AtomicUsize>,
 }
 
 impl CircuitBreaker {
@@ -164,7 +164,7 @@ impl CircuitBreaker {
             success_count: Arc::new(AtomicUsize::new(0)),
             opened_at: Arc::new(std::sync::Mutex::new(None)),
             metrics,
-            half_open_calls: Arc::new(AtomicUsize::new(0))
+            half_open_calls: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -189,7 +189,7 @@ impl CircuitBreaker {
                 let calls = self.half_open_calls.fetch_add(1, Ordering::Relaxed);
                 calls < self.config.half_open_max_calls
             }
-            CircuitState::Closed => true
+            CircuitState::Closed => true,
         }
     }
 
@@ -239,19 +239,19 @@ impl CircuitBreaker {
 }
 
 pub struct CachedSummaryStore {
-    cache: Arc<dashmap::DashMap<String, CachedEntry>>
+    cache: Arc<dashmap::DashMap<String, CachedEntry>>,
 }
 
 #[derive(Debug, Clone)]
 struct CachedEntry {
     summary: LayerSummary,
-    timestamp: Instant
+    timestamp: Instant,
 }
 
 impl CachedSummaryStore {
     pub fn new() -> Self {
         Self {
-            cache: Arc::new(dashmap::DashMap::new())
+            cache: Arc::new(dashmap::DashMap::new()),
         }
     }
 
@@ -270,8 +270,8 @@ impl CachedSummaryStore {
             key,
             CachedEntry {
                 summary,
-                timestamp: Instant::now()
-            }
+                timestamp: Instant::now(),
+            },
         );
     }
 
@@ -297,11 +297,11 @@ impl Default for CachedSummaryStore {
 pub async fn retry_with_backoff<F, Fut, T, E>(
     retry_config: &RetryConfig,
     metrics: &Arc<FailureMetrics>,
-    operation: F
+    operation: F,
 ) -> Result<T, E>
 where
     F: Fn() -> Fut,
-    Fut: std::future::Future<Output = Result<T, E>>
+    Fut: std::future::Future<Output = Result<T, E>>,
 {
     use tokio_retry::strategy::{ExponentialBackoff, jitter};
 
@@ -420,7 +420,7 @@ mod tests {
             source_hash: "hash".to_string(),
             content_hash: None,
             personalized: false,
-            personalization_context: None
+            personalization_context: None,
         };
 
         store.put("key1".to_string(), summary.clone());
