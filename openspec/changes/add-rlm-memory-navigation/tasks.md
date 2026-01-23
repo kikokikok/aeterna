@@ -14,23 +14,23 @@
 
 - [x] 2.1 Define `DecompositionAction` enum (SearchLayer, DrillDown, Filter, RecursiveCall, Aggregate)
 - [x] 2.2 Define `AggregationStrategy` enum (Combine, Compare, Summarize)
-- [ ] 2.3 Implement `ActionExecutor` trait
-- [ ] 2.4 Implement `SearchLayerExecutor`
-- [ ] 2.5 Implement `DrillDownExecutor`
-- [ ] 2.6 Implement `FilterExecutor` (relevance, recency)
-- [ ] 2.7 Implement `RecursiveCallExecutor` with depth tracking
-- [ ] 2.8 Implement `AggregateExecutor` with strategies
-- [ ] 2.9 Add unit tests for all executors (80%+ coverage)
+- [x] 2.3 Implement `ActionExecutor` trait
+- [x] 2.4 Implement `SearchLayerExecutor`
+- [x] 2.5 Implement `DrillDownExecutor`
+- [x] 2.6 Implement `FilterExecutor` (relevance, recency)
+- [x] 2.7 Implement `RecursiveCallExecutor` with depth tracking
+- [x] 2.8 Implement `AggregateExecutor` with strategies
+- [x] 2.9 Add unit tests for all executors (80%+ coverage)
 
 ## 3. RLM Executor
 
-- [ ] 3.1 Create `RlmExecutor` struct with configuration
-- [ ] 3.2 Implement strategy selection based on query analysis
-- [ ] 3.3 Implement sub-LM calling infrastructure with model routing
-- [ ] 3.4 Implement depth limiting and circuit breaker
-- [ ] 3.5 Implement `execute()` main entry point
-- [ ] 3.6 Add trajectory recording during execution (internal)
-- [ ] 3.7 Add integration tests for RLM execution flows
+- [x] 3.1 Create `RlmExecutor` struct with configuration
+- [x] 3.2 Implement strategy selection based on query analysis
+- [x] 3.3 Implement sub-LM calling infrastructure with model routing
+- [x] 3.4 Implement depth limiting and circuit breaker
+- [x] 3.5 Implement `execute()` main entry point
+- [x] 3.6 Add trajectory recording during execution (internal)
+- [x] 3.7 Add integration tests for RLM execution flows
 
 ## 4. Decomposition Trainer
 
