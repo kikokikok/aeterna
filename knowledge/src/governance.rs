@@ -4,9 +4,26 @@ use mk_core::types::{
     ConstraintSeverity, GovernanceEvent, KnowledgeLayer, Policy, PolicyViolation, TenantContext,
     ValidationResult,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use storage::events::EventError;
+use thiserror::Error;
+
+#[derive(Error, Debug, Serialize, Deserialize)]
+pub enum GovernanceError {
+    #[error("Event publisher error: {0}")]
+    #[serde(skip)]
+    Event(#[from] EventError),
+    #[error("Embedding service error: {0}")]
+    Embedding(String),
+    #[error("LLM service error: {0}")]
+    Llm(String),
+    #[error("Storage error: {0}")]
+    Storage(String),
+    #[error("Validation failed: {0}")]
+    Validation(String),
+}
 
 pub struct GovernanceEngine {
     policies: HashMap<KnowledgeLayer, Vec<Policy>>,
@@ -175,7 +192,7 @@ impl GovernanceEngine {
         target_layer: KnowledgeLayer,
         context: &HashMap<String, serde_json::Value>,
         tenant_ctx: Option<&TenantContext>,
-    ) -> ValidationResult {
+    ) -> Result<ValidationResult, GovernanceError> {
         let mut violations = Vec::new();
 
         let active_policies = self
@@ -199,10 +216,10 @@ impl GovernanceEngine {
                 .await;
         }
 
-        ValidationResult {
+        Ok(ValidationResult {
             is_valid: violations.is_empty(),
             violations,
-        }
+        })
     }
 
     async fn resolve_active_policies(
@@ -324,7 +341,7 @@ impl GovernanceEngine {
         tenant_ctx: &TenantContext,
         _project_id: &str,
         context: &HashMap<String, serde_json::Value>,
-    ) -> Result<f32, anyhow::Error> {
+    ) -> Result<f32, GovernanceError> {
         let mut violations = Vec::new();
         let mut confidence: f32 = 1.0;
 
@@ -409,7 +426,7 @@ impl GovernanceEngine {
             let suppressions = storage
                 .list_suppressions(tenant_ctx.clone(), _project_id)
                 .await
-                .unwrap_or_default();
+                .map_err(|e| GovernanceError::Storage(e.to_string()))?;
 
             let active_suppressions: Vec<_> = suppressions
                 .into_iter()
@@ -705,13 +722,15 @@ impl GovernanceEngine {
         tenant_ctx: &TenantContext,
         content: &str,
         threshold: f32,
-    ) -> Result<Vec<PolicyViolation>, anyhow::Error> {
-        let embedding_service = self
-            .embedding_service
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Embedding service not configured"))?;
+    ) -> Result<Vec<PolicyViolation>, GovernanceError> {
+        let embedding_service = self.embedding_service.as_ref().ok_or_else(|| {
+            GovernanceError::Embedding("Embedding service not configured".to_string())
+        })?;
 
-        let content_embedding = embedding_service.embed(content).await?;
+        let content_embedding = embedding_service
+            .embed(content)
+            .await
+            .map_err(|e| GovernanceError::Embedding(e.to_string()))?;
 
         let mut violations = Vec::new();
 

@@ -6,6 +6,10 @@ pub enum SyncError {
     GovernanceBlock(String),
     #[error("Knowledge repository error: {0}")]
     Repository(#[from] knowledge::repository::RepositoryError),
+    #[error("Knowledge manager error: {0}")]
+    KnowledgeManager(#[from] knowledge::manager::KnowledgeManagerError),
+    #[error("Governance internal error: {0}")]
+    Governance(#[from] knowledge::governance::GovernanceError),
     #[error("Memory manager error: {0}")]
     Memory(#[from] memory::error::MemoryError),
     #[error("Serialization error: {0}")]

@@ -1,14 +1,12 @@
-use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 // Removed unused 'backoff' crate import to avoid conflicts with tokio_retry
-use mk_core::types::{LayerSummary, SummaryDepth};
-use tracing::{error, warn};
+use mk_core::types::LayerSummary;
+use tracing::warn;
 
 // Assuming these exist in your project structure
-use super::generator::{GenerationError, SummaryResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CircuitState {
@@ -410,6 +408,7 @@ mod tests {
 
     #[test]
     fn test_cached_summary_store() {
+        use mk_core::types::SummaryDepth;
         let store = CachedSummaryStore::new();
 
         let summary = LayerSummary {

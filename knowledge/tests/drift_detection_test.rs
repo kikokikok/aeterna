@@ -14,53 +14,24 @@ use mk_core::types::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
 use storage::postgres::PostgresBackend;
-use testcontainers::ContainerAsync;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::postgres::Postgres;
+use testing::{postgres, unique_id};
 use tokio::sync::OnceCell;
 
-struct PostgresFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<Postgres>,
-    url: String,
-}
-
-static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
-static DRIFT_TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
-    POSTGRES
-        .get_or_init(|| async {
-            match Postgres::default()
-                .with_db_name("testdb")
-                .with_user("testuser")
-                .with_password("testpass")
-                .start()
-                .await
-            {
-                Ok(container) => {
-                    let port = container.get_host_port_ipv4(5432).await.ok()?;
-                    let url = format!("postgres://testuser:testpass@localhost:{}/testdb", port);
-                    Some(PostgresFixture { container, url })
-                }
-                Err(_) => None,
-            }
-        })
-        .await
-        .as_ref()
-}
+static SCHEMA_INITIALIZED: OnceCell<bool> = OnceCell::const_new();
 
 async fn create_test_backend() -> Option<PostgresBackend> {
-    let fixture = get_postgres_fixture().await?;
-    let backend = PostgresBackend::new(&fixture.url).await.ok()?;
-    backend.initialize_schema().await.ok()?;
-    Some(backend)
-}
+    let fixture = postgres().await?;
+    let backend = PostgresBackend::new(fixture.url()).await.ok()?;
 
-fn unique_drift_test_id() -> u32 {
-    DRIFT_TEST_COUNTER.fetch_add(1, Ordering::SeqCst)
+    SCHEMA_INITIALIZED
+        .get_or_init(|| async {
+            backend.initialize_schema().await.ok();
+            true
+        })
+        .await;
+
+    Some(backend)
 }
 
 fn create_test_context() -> TenantContext {
@@ -1033,7 +1004,7 @@ async fn test_drift_auto_suppress_info_filters_info_violations() {
         return;
     };
 
-    let test_id = unique_drift_test_id();
+    let test_id = unique_id("drift");
     let tenant_id = TenantId::new(format!("tenant-auto-suppress-{}", test_id)).unwrap();
     let ctx = TenantContext::new(
         tenant_id.clone(),
@@ -1108,7 +1079,7 @@ async fn test_drift_without_auto_suppress_includes_info_violations() {
         return;
     };
 
-    let test_id = unique_drift_test_id();
+    let test_id = unique_id("drift");
     let tenant_id = TenantId::new(format!("tenant-no-suppress-{}", test_id)).unwrap();
     let ctx = TenantContext::new(
         tenant_id.clone(),
@@ -1182,7 +1153,7 @@ async fn test_drift_stores_result_with_suppressions() {
         return;
     };
 
-    let test_id = unique_drift_test_id();
+    let test_id = unique_id("drift");
     let tenant_id = TenantId::new(format!("tenant-store-result-{}", test_id)).unwrap();
     let ctx = TenantContext::new(
         tenant_id.clone(),

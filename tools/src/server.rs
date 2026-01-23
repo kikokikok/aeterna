@@ -548,70 +548,6 @@ mod tests {
     use sync::bridge::SyncManager;
     use sync::state_persister::SyncStatePersister;
 
-    struct MockRepo;
-    #[async_trait::async_trait]
-    impl KnowledgeRepository for MockRepo {
-        type Error = knowledge::repository::RepositoryError;
-        async fn store(
-            &self,
-            _ctx: mk_core::types::TenantContext,
-            _: KnowledgeEntry,
-            _: &str,
-        ) -> std::result::Result<String, Self::Error> {
-            Ok("hash".into())
-        }
-        async fn get(
-            &self,
-            _ctx: mk_core::types::TenantContext,
-            _: KnowledgeLayer,
-            _: &str,
-        ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
-            Ok(None)
-        }
-        async fn list(
-            &self,
-            _ctx: mk_core::types::TenantContext,
-            _: KnowledgeLayer,
-            _: &str,
-        ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
-            Ok(vec![])
-        }
-        async fn delete(
-            &self,
-            _ctx: mk_core::types::TenantContext,
-            _: KnowledgeLayer,
-            _: &str,
-            _: &str,
-        ) -> std::result::Result<String, Self::Error> {
-            Ok("hash".into())
-        }
-        async fn get_head_commit(
-            &self,
-            _ctx: mk_core::types::TenantContext,
-        ) -> std::result::Result<Option<String>, Self::Error> {
-            Ok(None)
-        }
-        async fn get_affected_items(
-            &self,
-            _ctx: mk_core::types::TenantContext,
-            _: &str,
-        ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
-            Ok(vec![])
-        }
-        async fn search(
-            &self,
-            _ctx: mk_core::types::TenantContext,
-            _: &str,
-            _: Vec<KnowledgeLayer>,
-            _: usize,
-        ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
-            Ok(vec![])
-        }
-        fn root_path(&self) -> Option<std::path::PathBuf> {
-            None
-        }
-    }
-
     struct MockPersister;
     #[async_trait::async_trait]
     impl SyncStatePersister for MockPersister {
@@ -882,13 +818,16 @@ mod tests {
 
     async fn setup_server() -> McpServer {
         let memory_manager = Arc::new(MemoryManager::new());
-        let repo = Arc::new(MockRepo);
+        let repo = Arc::new(knowledge::repository::GitRepository::new_mock());
         let governance = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let knowledge_manager = Arc::new(knowledge::manager::KnowledgeManager::new(
+            repo.clone(),
+            governance.clone(),
+        ));
         let sync_manager = Arc::new(
             SyncManager::new(
                 memory_manager.clone(),
-                repo.clone(),
-                governance.clone(),
+                knowledge_manager,
                 config::config::DeploymentConfig::default(),
                 None,
                 Arc::new(MockPersister),

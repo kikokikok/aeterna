@@ -9,6 +9,7 @@ pub mod federation;
 pub mod governance;
 pub mod governance_client;
 pub mod hindsight;
+pub mod manager;
 pub mod meta_agent;
 pub mod note_taking;
 pub mod repository;

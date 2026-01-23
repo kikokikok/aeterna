@@ -77,15 +77,19 @@ mod tests {
 
     async fn setup_server() -> McpServer {
         let memory_manager = Arc::new(MemoryManager::new());
-        let repo = Arc::new(MockRepo);
+        let repo = Arc::new(knowledge::repository::GitRepository::new_mock());
         let governance = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let knowledge_manager = Arc::new(knowledge::manager::KnowledgeManager::new(
+            repo.clone(),
+            governance.clone(),
+        ));
+
         let auth_service = Arc::new(MockAuthService);
         let deployment_config = config::config::DeploymentConfig::default();
         let sync_manager = Arc::new(
             SyncManager::new(
                 memory_manager.clone(),
-                repo.clone(),
-                governance.clone(),
+                knowledge_manager,
                 deployment_config,
                 None,
                 Arc::new(MockPersister),

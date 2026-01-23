@@ -4,56 +4,27 @@ use distributed_lock::{
     RedisLockProvider,
 };
 use knowledge::governance::GovernanceEngine;
+use knowledge::manager::KnowledgeManager;
 use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use mk_core::types::{TenantContext, TenantId};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 use sync::bridge::SyncManager;
 use sync::state::SyncState;
 use sync::state_persister::SyncStatePersister;
-use testcontainers::ContainerAsync;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::redis::Redis;
-use tokio::sync::OnceCell;
-
-struct RedisFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<Redis>,
-    url: String,
-}
-
-static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
-static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_redis_fixture() -> Option<&'static RedisFixture> {
-    REDIS
-        .get_or_init(|| async {
-            match Redis::default().start().await {
-                Ok(container) => {
-                    let port = container.get_host_port_ipv4(6379).await.ok()?;
-                    let url = format!("redis://localhost:{}", port);
-                    Some(RedisFixture { container, url })
-                }
-                Err(_) => None,
-            }
-        })
-        .await
-        .as_ref()
-}
+use testing::redis;
 
 async fn create_lock_provider() -> Option<Arc<RedisLockProvider>> {
-    let fixture = get_redis_fixture().await?;
-    RedisLockProvider::new(&fixture.url)
+    let fixture = redis().await?;
+    RedisLockProvider::new(fixture.url())
         .await
         .ok()
         .map(Arc::new)
 }
 
 fn unique_tenant_id() -> TenantId {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    TenantId::new(format!("lock-test-tenant-{}", id)).unwrap()
+    TenantId::new(testing::unique_tenant_id()).unwrap()
 }
 
 struct MockPersister;
@@ -86,8 +57,7 @@ async fn create_sync_manager(
 
     let sync_manager = SyncManager::new(
         memory_manager,
-        knowledge_repo,
-        governance_engine,
+        Arc::new(KnowledgeManager::new(knowledge_repo, governance_engine)),
         config::config::DeploymentConfig::default(),
         None,
         Arc::new(MockPersister),

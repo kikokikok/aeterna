@@ -7,20 +7,18 @@ use std::time::{Duration, Instant};
 use config::cca::StalenessPolicy;
 use dashmap::DashMap;
 use mk_core::types::{ContextVector, LayerSummary, MemoryLayer, SummaryDepth, compute_xxhash64};
-use serde::{Deserialize, Serialize};
-use tracing::{info_span, warn};
 
 use crate::context_architect::compressor::ViewMode;
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
-struct CacheKey {
-    query_hash: u64,
-    token_budget: u32,
-    view_mode: ViewMode,
+pub struct CacheKey {
+    pub query_hash: u64,
+    pub token_budget: u32,
+    pub view_mode: ViewMode,
 }
 
 impl CacheKey {
-    fn new(
+    pub fn new(
         query_embedding: Option<&ContextVector>,
         token_budget: u32,
         view_mode: ViewMode,
@@ -48,9 +46,9 @@ impl CacheKey {
 }
 
 #[derive(Debug, Clone)]
-struct CacheEntry {
-    context: AssembledContext,
-    created_at: Instant,
+pub struct CacheEntry {
+    pub context: AssembledContext,
+    pub created_at: Instant,
 }
 
 #[derive(Debug, Clone)]

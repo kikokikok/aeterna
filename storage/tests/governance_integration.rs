@@ -3,97 +3,26 @@
 use mk_core::traits::{AuthorizationService, EventPublisher, StorageBackend};
 use mk_core::types::{GovernanceEvent, TenantContext, TenantId, UserId};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
 use storage::events::RedisPublisher;
 use storage::postgres::PostgresBackend;
-use testcontainers::ContainerAsync;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::postgres::Postgres;
-use testcontainers_modules::redis::Redis;
-use tokio::sync::OnceCell;
-
-struct PostgresFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<Postgres>,
-    url: String,
-}
-
-struct RedisFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<Redis>,
-    url: String,
-}
-
-static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
-static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
-static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
-    POSTGRES
-        .get_or_init(|| async {
-            let container = match Postgres::default()
-                .with_db_name("govdb")
-                .with_user("govuser")
-                .with_password("govpass")
-                .start()
-                .await
-            {
-                Ok(c) => c,
-                Err(_) => return None,
-            };
-            let port = match container.get_host_port_ipv4(5432).await {
-                Ok(p) => p,
-                Err(_) => return None,
-            };
-            let url = format!("postgres://govuser:govpass@localhost:{}/govdb", port);
-            Some(PostgresFixture { container, url })
-        })
-        .await
-        .as_ref()
-}
-
-async fn get_redis_fixture() -> Option<&'static RedisFixture> {
-    REDIS
-        .get_or_init(|| async {
-            let container = match Redis::default().start().await {
-                Ok(c) => c,
-                Err(_) => return None,
-            };
-            let port = match container.get_host_port_ipv4(6379).await {
-                Ok(p) => p,
-                Err(_) => return None,
-            };
-            let url = format!("redis://localhost:{}", port);
-            Some(RedisFixture { container, url })
-        })
-        .await
-        .as_ref()
-}
-
-fn unique_id(prefix: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("{}-{}", prefix, id)
-}
+use testing::{postgres, redis, unique_id};
 
 #[tokio::test]
-#[ignore = "Flaky: Redis pub/sub timing sensitive with testcontainers"]
 async fn test_governance_event_propagation() {
-    let (Some(pg_fixture), Some(redis_fixture)) =
-        (get_postgres_fixture().await, get_redis_fixture().await)
-    else {
+    let (Some(pg_fixture), Some(redis_fixture)) = (postgres().await, redis().await) else {
         eprintln!("Skipping governance integration test: Docker not available");
         return;
     };
 
-    let pg_backend = Arc::new(PostgresBackend::new(&pg_fixture.url).await.unwrap());
+    let pg_backend = Arc::new(PostgresBackend::new(pg_fixture.url()).await.unwrap());
     pg_backend.initialize_schema().await.unwrap();
 
     let stream_name = unique_id("gov_events");
-    let redis_publisher = Arc::new(RedisPublisher::new(&redis_fixture.url, &stream_name).unwrap());
+    let redis_publisher = Arc::new(RedisPublisher::new(redis_fixture.url(), &stream_name).unwrap());
 
     let mut rx = redis_publisher.subscribe(&[&stream_name]).await.unwrap();
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
     let tenant_id = TenantId::new(unique_id("tenant")).unwrap();
     let project_id = unique_id("project");
@@ -107,7 +36,7 @@ async fn test_governance_event_propagation() {
     pg_backend.publish(event.clone()).await.unwrap();
     redis_publisher.publish(event.clone()).await.unwrap();
 
-    let received = tokio::time::timeout(tokio::time::Duration::from_secs(5), rx.recv())
+    let received = tokio::time::timeout(tokio::time::Duration::from_secs(10), rx.recv())
         .await
         .expect("Timeout waiting for event")
         .expect("Channel closed");
@@ -121,12 +50,12 @@ async fn test_governance_event_propagation() {
 
 #[tokio::test]
 async fn test_full_governance_workflow() {
-    let Some(pg_fixture) = get_postgres_fixture().await else {
+    let Some(pg_fixture) = postgres().await else {
         eprintln!("Skipping governance workflow test: Docker not available");
         return;
     };
 
-    let pg_backend = Arc::new(PostgresBackend::new(&pg_fixture.url).await.unwrap());
+    let pg_backend = Arc::new(PostgresBackend::new(pg_fixture.url()).await.unwrap());
     pg_backend.initialize_schema().await.unwrap();
 
     let tenant_id = TenantId::new(unique_id("comp")).unwrap();

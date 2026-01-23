@@ -6,6 +6,7 @@ description = "Memory system implementation"
 
 [dependencies]
 mk_core.workspace = true
+knowledge.workspace = true
 utils.workspace = true
 config.workspace = true
 errors.workspace = true
@@ -20,7 +21,7 @@ chrono.workspace = true
 qdrant-client = { version = "1.10", features = ["reqwest", "serde"] }
 async-openai = "0.27"
 aisdk = { version = "0.3", features = ["openai"] }
-uuid = { version = "1.0", features = ["v4", "serde"] }
+uuid = { version = "1.0", features = ["v4", "v5", "serde"] }
 metrics-util = "0.15"
 rand = "0.8"
 lru = "0.12"
@@ -36,6 +37,6 @@ hex = "0.4"
 redis.workspace = true
 
 [dev-dependencies]
-testcontainers = "0.26"
-testcontainers-modules = { version = "0.14", features = ["postgres", "redis"] }
+testing.workspace = true
 tokio-test = "0.4"
+tempfile = "3.10"

@@ -15,7 +15,7 @@
 
 use crate::config::{
     Config, ContentionAlertConfig, GraphConfig, MemoryConfig, ObservabilityConfig, PostgresConfig,
-    ProviderConfig, QdrantConfig, ReasoningConfig, RedisConfig, SyncConfig, ToolConfig,
+    ProviderConfig, QdrantConfig, ReasoningConfig, RedisConfig, RlmConfig, SyncConfig, ToolConfig,
 };
 use std::env;
 
@@ -192,6 +192,15 @@ fn load_memory_from_env() -> Result<MemoryConfig, Box<dyn std::error::Error>> {
         optimization_trigger_count: parse_env("MK_OPTIMIZATION_TRIGGER_COUNT").unwrap_or(100),
         layer_summary_configs: std::collections::HashMap::new(),
         reasoning: ReasoningConfig::default(),
+        rlm: load_rlm_from_env()?,
+    })
+}
+
+fn load_rlm_from_env() -> Result<RlmConfig, Box<dyn std::error::Error>> {
+    Ok(RlmConfig {
+        enabled: parse_env("MK_RLM_ENABLED").unwrap_or(true),
+        max_steps: parse_env("MK_RLM_MAX_STEPS").unwrap_or(5),
+        complexity_threshold: parse_env("MK_RLM_COMPLEXITY_THRESHOLD").unwrap_or(0.3),
     })
 }
 

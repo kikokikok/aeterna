@@ -28,8 +28,8 @@ pub use cca::{
     CcaConfig, ContextArchitectConfig, HindsightConfig, MetaAgentConfig, NoteTakingConfig,
 };
 pub use config::{
-    Config, DeploymentConfig, GraphConfig, MemoryConfig, ObservabilityConfig, ProviderConfig,
-    ReasoningConfig, SyncConfig, ToolConfig,
+    Config, DeploymentConfig, GraphConfig, JobConfig, MemoryConfig, ObservabilityConfig,
+    ProviderConfig, ReasoningConfig, RlmConfig, SyncConfig, ToolConfig,
 };
 pub use file_loader::{load_from_file, load_from_toml, load_from_yaml};
 pub use hot_reload::watch_config;
