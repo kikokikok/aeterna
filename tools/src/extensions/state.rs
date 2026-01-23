@@ -48,6 +48,7 @@ pub struct ExtensionStateStore {
     async_compactor: Option<AsyncStateCompactorHandle>,
 }
 
+#[allow(dead_code)]
 pub struct LlmStateCompactor<C: LlmClient> {
     client: Arc<C>,
     min_state_bytes: usize,
@@ -246,15 +247,11 @@ mod tests {
     use super::*;
     use mk_core::types::TenantContext;
     use std::sync::Arc;
-    use testcontainers::runners::AsyncRunner;
-    use testcontainers_modules::redis::Redis;
+    use testing::redis;
 
     async fn create_store() -> Option<ExtensionStateStore> {
-        let container = Redis::default().start().await.ok()?;
-        let host = container.get_host().await.ok()?;
-        let port = container.get_host_port_ipv4(6379).await.ok()?;
-        let url = format!("redis://{}:{}/", host, port);
-        Some(ExtensionStateStore::new(url, 60))
+        let fixture = redis().await?;
+        Some(ExtensionStateStore::new(fixture.url().to_string(), 60))
     }
 
     #[tokio::test]

@@ -1623,20 +1623,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_redis() {
-        use testcontainers::runners::AsyncRunner;
-        use testcontainers_modules::redis::Redis;
-
-        let container = match Redis::default().start().await {
-            Ok(c) => c,
-            Err(_) => {
-                eprintln!("Skipping Redis test: Docker not available");
-                return;
-            }
+        let Some(fixture) = testing::redis().await else {
+            eprintln!("Skipping Redis test: Docker not available");
+            return;
         };
 
-        let port = container.get_host_port_ipv4(6379).await.unwrap();
-        let url = format!("redis://localhost:{}", port);
-        let redis_storage = Arc::new(RedisStorage::new(&url).await.unwrap());
+        let url = fixture.url();
+        let redis_storage = Arc::new(RedisStorage::new(url).await.unwrap());
 
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
@@ -1677,20 +1670,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_job_locking_already_held() {
-        use testcontainers::runners::AsyncRunner;
-        use testcontainers_modules::redis::Redis;
-
-        let container = match Redis::default().start().await {
-            Ok(c) => c,
-            Err(_) => {
-                eprintln!("Skipping Redis test: Docker not available");
-                return;
-            }
+        let Some(fixture) = testing::redis().await else {
+            eprintln!("Skipping Redis test: Docker not available");
+            return;
         };
 
-        let port = container.get_host_port_ipv4(6379).await.unwrap();
-        let url = format!("redis://localhost:{}", port);
-        let redis_storage = Arc::new(RedisStorage::new(&url).await.unwrap());
+        let url = fixture.url();
+        let redis_storage = Arc::new(RedisStorage::new(url).await.unwrap());
 
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));
@@ -1722,20 +1708,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_job_can_run_deduplication() {
-        use testcontainers::runners::AsyncRunner;
-        use testcontainers_modules::redis::Redis;
-
-        let container = match Redis::default().start().await {
-            Ok(c) => c,
-            Err(_) => {
-                eprintln!("Skipping Redis test: Docker not available");
-                return;
-            }
+        let Some(fixture) = testing::redis().await else {
+            eprintln!("Skipping Redis test: Docker not available");
+            return;
         };
 
-        let port = container.get_host_port_ipv4(6379).await.unwrap();
-        let url = format!("redis://localhost:{}", port);
-        let redis_storage = Arc::new(RedisStorage::new(&url).await.unwrap());
+        let url = fixture.url();
+        let redis_storage = Arc::new(RedisStorage::new(url).await.unwrap());
 
         let storage = Arc::new(MockStorage::new());
         let engine = Arc::new(GovernanceEngine::new().with_storage(storage.clone()));

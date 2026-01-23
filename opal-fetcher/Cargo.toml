@@ -1,0 +1,61 @@
+[package]
+name = "opal-fetcher"
+version = "0.1.0"
+edition = "2024"
+description = "OPAL Data Fetcher for Aeterna - serves organizational data to Cedar Agent"
+license = "Apache-2.0"
+repository = "https://github.com/kikokikok/aeterna"
+
+[[bin]]
+name = "opal-fetcher"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+mk_core = { workspace = true }
+storage = { workspace = true }
+errors = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Web framework
+axum = { version = "0.8", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# HTTP client
+reqwest = { workspace = true }
+
+# Database
+sqlx = { workspace = true }
+
+# Tracing & metrics
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+metrics = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Utilities
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+# Cedar entities
+cedar-policy = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+wiremock = { workspace = true }
+tokio-test = "0.4"
+
+[lints]
+workspace = true

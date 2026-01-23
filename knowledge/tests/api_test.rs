@@ -9,52 +9,16 @@ use mk_core::types::{
     OrganizationalUnit, TenantContext, TenantId, UnitType,
 };
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
 use storage::postgres::PostgresBackend;
-use testcontainers::ContainerAsync;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::postgres::Postgres;
+use testing::{postgres, unique_id};
 use tokio::sync::OnceCell;
 
-struct PostgresFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<Postgres>,
-    url: String,
-}
-
-static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
 static SCHEMA_INITIALIZED: OnceCell<bool> = OnceCell::const_new();
-static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
-    POSTGRES
-        .get_or_init(|| async {
-            let container = match Postgres::default().start().await {
-                Ok(c) => c,
-                Err(_) => return None,
-            };
-            let host = match container.get_host().await {
-                Ok(h) => h,
-                Err(_) => return None,
-            };
-            let port = match container.get_host_port_ipv4(5432).await {
-                Ok(p) => p,
-                Err(_) => return None,
-            };
-            let url = format!(
-                "postgres://postgres:postgres@{}:{}/postgres?sslmode=disable",
-                host, port
-            );
-            Some(PostgresFixture { container, url })
-        })
-        .await
-        .as_ref()
-}
 
 /// Creates a storage backend, initializing schema only once across all tests
 async fn create_test_storage() -> Option<Arc<PostgresBackend>> {
-    let fixture = get_postgres_fixture().await?;
-    let storage = Arc::new(PostgresBackend::new(&fixture.url).await.ok()?);
+    let fixture = postgres().await?;
+    let storage = Arc::new(PostgresBackend::new(fixture.url()).await.ok()?);
 
     // Initialize schema only once
     SCHEMA_INITIALIZED
@@ -65,11 +29,6 @@ async fn create_test_storage() -> Option<Arc<PostgresBackend>> {
         .await;
 
     Some(storage)
-}
-
-fn unique_id(prefix: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("{}-{}", prefix, id)
 }
 
 #[tokio::test]

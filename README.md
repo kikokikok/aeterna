@@ -260,22 +260,17 @@ Aeterna includes Memory-R1, an autonomous memory optimization system inspired by
 
 ### Reward-Based Promotion
 
-```rust
-pub struct RewardedMemory {
-    pub memory_id: MemoryId,
-    pub reward: f32,                    // [-1.0, 1.0]
-    pub feedback_type: FeedbackType,    // Positive, Negative, Neutral
-    pub context: Option<String>,
-}
+Aeterna implements an autonomous reward propagation loop for its Recursive Language Model (RLM) search strategy. When the system decomposes complex queries:
+- **Automatic Recognition**: Memories discovered via graph traversals or recursive steps are automatically identified.
+- **Reward Propagation**: Successful search trajectories apply positive reward signals to all involved memories.
+- **Dynamic Hierarchy**: Reward scores influence the `importance_score`, which determines if a memory is promoted to broader organizational layers (e.g., from Session to Project or Team).
 
-// Memories with high reward inherit to broader layers
-async fn optimize_layer(&self, layer: MemoryLayer) -> Result<OptimizationResult> {
-    let candidates = self.get_promotion_candidates(layer).await?;
-    
-    for memory in candidates {
-        if memory.reward >= self.config.promotion_threshold {
-            // Promote to parent layer with reward inheritance
-            self.promote_with_reward(memory, parent_layer).await?;
+```rust
+// Rewards are applied automatically during RLM search
+for step in trajectory.steps {
+    if step.reward > 0.0 {
+        for memory_id in step.involved_memory_ids {
+            manager.record_reward(ctx, layer, &memory_id, reward_signal).await?;
         }
     }
 }

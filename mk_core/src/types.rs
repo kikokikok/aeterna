@@ -303,8 +303,33 @@ pub enum KnowledgeLayer {
     Project,
 }
 
+impl From<MemoryLayer> for Option<KnowledgeLayer> {
+    fn from(layer: MemoryLayer) -> Self {
+        match layer {
+            MemoryLayer::Company => Some(KnowledgeLayer::Company),
+            MemoryLayer::Org => Some(KnowledgeLayer::Org),
+            MemoryLayer::Team => Some(KnowledgeLayer::Team),
+            MemoryLayer::Project => Some(KnowledgeLayer::Project),
+            _ => None,
+        }
+    }
+}
+
 /// Constraint severity levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    ToSchema,
+    JsonSchema,
+    strum::Display,
+    strum::EnumString,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum ConstraintSeverity {
     Info,
@@ -540,6 +565,23 @@ pub struct MemoryEntry {
     pub updated_at: i64,
 }
 
+impl Default for MemoryEntry {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            content: String::new(),
+            embedding: None,
+            layer: MemoryLayer::Project,
+            summaries: std::collections::HashMap::new(),
+            context_vector: None,
+            importance_score: None,
+            metadata: std::collections::HashMap::new(),
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+}
+
 impl MemoryEntry {
     pub fn needs_summary_update(&self, config: &SummaryConfig, current_time: i64) -> bool {
         use sha2::{Digest, Sha256};
@@ -629,6 +671,38 @@ pub struct RewardSignal {
     pub reasoning: Option<String>,
     pub agent_id: Option<String>,
     pub timestamp: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchQuery {
+    pub text: String,
+    pub target_layers: Vec<MemoryLayer>,
+    pub filters: std::collections::HashMap<String, serde_json::Value>,
+    pub limit: usize,
+    pub threshold: f32,
+}
+
+impl Default for SearchQuery {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            target_layers: Vec::new(),
+            filters: std::collections::HashMap::new(),
+            limit: 10,
+            threshold: 0.5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResult {
+    pub memory_id: String,
+    pub content: String,
+    pub score: f32,
+    pub layer: MemoryLayer,
+    pub metadata: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -833,6 +907,41 @@ pub enum GovernanceEvent {
         drift_score: f32,
         timestamp: i64,
     },
+
+    /// Governance configuration updated
+    ConfigUpdated {
+        config_id: String,
+        scope: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Governance approval request created
+    RequestCreated {
+        request_id: String,
+        request_type: String,
+        title: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Governance approval request approved
+    RequestApproved {
+        request_id: String,
+        approver_id: String,
+        fully_approved: bool,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Governance approval request rejected
+    RequestRejected {
+        request_id: String,
+        rejector_id: String,
+        reason: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
 }
 
 impl GovernanceEvent {
@@ -847,6 +956,10 @@ impl GovernanceEvent {
             GovernanceEvent::PolicyUpdated { tenant_id, .. } => tenant_id,
             GovernanceEvent::PolicyDeleted { tenant_id, .. } => tenant_id,
             GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id,
+            GovernanceEvent::ConfigUpdated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RequestCreated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RequestApproved { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RequestRejected { tenant_id, .. } => tenant_id,
         }
     }
 }
@@ -1169,6 +1282,10 @@ impl PersistentEvent {
             GovernanceEvent::PolicyUpdated { .. } => "policy_updated".to_string(),
             GovernanceEvent::PolicyDeleted { .. } => "policy_deleted".to_string(),
             GovernanceEvent::DriftDetected { .. } => "drift_detected".to_string(),
+            GovernanceEvent::ConfigUpdated { .. } => "config_updated".to_string(),
+            GovernanceEvent::RequestCreated { .. } => "request_created".to_string(),
+            GovernanceEvent::RequestApproved { .. } => "request_approved".to_string(),
+            GovernanceEvent::RequestRejected { .. } => "request_rejected".to_string(),
         }
     }
 

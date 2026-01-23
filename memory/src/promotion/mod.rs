@@ -1,13 +1,14 @@
-use crate::governance::GovernanceService;
 use crate::manager::MemoryManager;
 use crate::telemetry::MemoryTelemetry;
 use anyhow::{Context, Result};
+use knowledge::manager::KnowledgeManager;
 use mk_core::types::{MemoryEntry, MemoryLayer};
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct PromotionService {
     memory_manager: Arc<MemoryManager>,
-    governance_service: Arc<GovernanceService>,
+    knowledge_manager: Arc<KnowledgeManager>,
     telemetry: Arc<MemoryTelemetry>,
     config: config::MemoryConfig,
     promote_important: bool,
@@ -15,10 +16,13 @@ pub struct PromotionService {
 }
 
 impl PromotionService {
-    pub fn new(memory_manager: Arc<MemoryManager>) -> Self {
+    pub fn new(
+        memory_manager: Arc<MemoryManager>,
+        knowledge_manager: Arc<KnowledgeManager>,
+    ) -> Self {
         Self {
             memory_manager,
-            governance_service: Arc::new(GovernanceService::new()),
+            knowledge_manager,
             telemetry: Arc::new(MemoryTelemetry::new()),
             config: config::MemoryConfig::default(),
             promote_important: true,
@@ -46,6 +50,10 @@ impl PromotionService {
         self
     }
 
+    pub async fn optimize_layer(&self, _layer: MemoryLayer) -> Result<()> {
+        Ok(())
+    }
+
     pub async fn evaluate_and_promote(
         &self,
         ctx: mk_core::types::TenantContext,
@@ -55,11 +63,24 @@ impl PromotionService {
             return Ok(None);
         }
 
-        let metadata_value = serde_json::to_value(&entry.metadata).unwrap_or(serde_json::json!({}));
-        if !self
-            .governance_service
-            .can_promote(&entry.content, &metadata_value)
-        {
+        let mut context = std::collections::HashMap::new();
+        context.insert("content".to_string(), serde_json::json!(entry.content));
+        context.insert(
+            "metadata".to_string(),
+            serde_json::to_value(&entry.metadata).unwrap_or(serde_json::json!({})),
+        );
+
+        let validation = self
+            .knowledge_manager
+            .check_constraints(
+                ctx.clone(),
+                self.map_memory_layer_to_knowledge(entry.layer),
+                context,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        if !validation.is_valid {
             tracing::info!("Memory {} promotion blocked by governance", entry.id);
             self.telemetry
                 .record_promotion_blocked(&format!("{:?}", entry.layer), "governance");
@@ -83,10 +104,10 @@ impl PromotionService {
                 );
 
                 let mut promoted_entry = entry.clone();
-                promoted_entry.id = format!("{}_promoted", entry.id);
+                promoted_entry.id = Uuid::new_v4().to_string();
                 promoted_entry.layer = target;
                 let original_content = entry.content.clone();
-                promoted_entry.content = self.governance_service.redact_pii(&entry.content);
+                promoted_entry.content = utils::redact_pii(&entry.content);
 
                 if promoted_entry.content != original_content {
                     self.telemetry
@@ -193,6 +214,16 @@ impl PromotionService {
             _ => None,
         }
     }
+
+    fn map_memory_layer_to_knowledge(&self, layer: MemoryLayer) -> mk_core::types::KnowledgeLayer {
+        match layer {
+            MemoryLayer::Project => mk_core::types::KnowledgeLayer::Project,
+            MemoryLayer::Team => mk_core::types::KnowledgeLayer::Team,
+            MemoryLayer::Org => mk_core::types::KnowledgeLayer::Org,
+            MemoryLayer::Company => mk_core::types::KnowledgeLayer::Company,
+            _ => mk_core::types::KnowledgeLayer::Project,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -205,6 +236,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_evaluate_and_promote_high_score() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let repo = Arc::new(knowledge::repository::GitRepository::new(temp_dir.path()).unwrap());
+        let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
+
         let manager = Arc::new(MemoryManager::new());
         let ctx = test_ctx();
         let mock_session: Arc<
@@ -227,14 +263,15 @@ mod tests {
             .register_provider(MemoryLayer::Project, mock_project)
             .await;
 
-        let service = PromotionService::new(manager.clone()).with_config(config::MemoryConfig {
-            promotion_threshold: 0.7,
-            decay_interval_secs: 86400,
-            decay_rate: 0.05,
-            optimization_trigger_count: 100,
-            layer_summary_configs: std::collections::HashMap::new(),
-            reasoning: config::ReasoningConfig::default(),
-        });
+        let service =
+            PromotionService::new(manager.clone(), k_manager).with_config(config::MemoryConfig {
+                promotion_threshold: 0.7,
+                decay_interval_secs: 86400,
+                decay_rate: 0.05,
+                optimization_trigger_count: 100,
+                layer_summary_configs: std::collections::HashMap::new(),
+                reasoning: config::ReasoningConfig::default(),
+            });
 
         let entry = MemoryEntry {
             summaries: std::collections::HashMap::new(),
@@ -263,10 +300,10 @@ mod tests {
             .await
             .unwrap();
         assert!(result.is_some());
-        assert!(result.unwrap().contains("mem_1_promoted"));
+        let promoted_id = result.unwrap();
 
         let promoted = manager
-            .get_from_layer(ctx.clone(), MemoryLayer::Project, "mem_1_promoted")
+            .get_from_layer(ctx.clone(), MemoryLayer::Project, &promoted_id)
             .await
             .unwrap();
         assert!(promoted.is_some());
@@ -282,9 +319,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_evaluate_and_promote_low_score() {
+        let repo = Arc::new(
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
+        );
+        let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
+
         let manager = Arc::new(MemoryManager::new());
         let ctx = test_ctx();
-        let service = PromotionService::new(manager).with_config(config::MemoryConfig {
+        let service = PromotionService::new(manager, k_manager).with_config(config::MemoryConfig {
             promotion_threshold: 0.7,
             decay_interval_secs: 86400,
             decay_rate: 0.05,
@@ -316,9 +359,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_promotion_blocked_by_governance() {
+        let repo = Arc::new(
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
+        );
+        // Mock engine that blocks "sensitive"
+        let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
+
         let manager = Arc::new(MemoryManager::new());
         let ctx = test_ctx();
-        let service = PromotionService::new(manager);
+        let service = PromotionService::new(manager, k_manager);
 
         let entry = MemoryEntry {
             summaries: std::collections::HashMap::new(),
@@ -344,6 +394,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_promotion_redacts_pii() {
+        let repo = Arc::new(
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
+        );
+        let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
+
         let manager = Arc::new(MemoryManager::new());
         let ctx = test_ctx();
         let mock_session: Arc<
@@ -365,14 +421,15 @@ mod tests {
             .register_provider(MemoryLayer::Project, mock_project)
             .await;
 
-        let service = PromotionService::new(manager.clone()).with_config(config::MemoryConfig {
-            promotion_threshold: 0.0,
-            decay_interval_secs: 86400,
-            decay_rate: 0.05,
-            optimization_trigger_count: 100,
-            layer_summary_configs: std::collections::HashMap::new(),
-            reasoning: config::ReasoningConfig::default(),
-        });
+        let service =
+            PromotionService::new(manager.clone(), k_manager).with_config(config::MemoryConfig {
+                promotion_threshold: 0.0,
+                decay_interval_secs: 86400,
+                decay_rate: 0.05,
+                optimization_trigger_count: 100,
+                layer_summary_configs: std::collections::HashMap::new(),
+                reasoning: config::ReasoningConfig::default(),
+            });
 
         let entry = MemoryEntry {
             summaries: std::collections::HashMap::new(),
@@ -403,6 +460,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_promotion_cleanup() {
+        let repo = Arc::new(
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
+        );
+        let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
+
         let manager = Arc::new(MemoryManager::new());
         let ctx = test_ctx();
         let mock_session: Arc<
@@ -424,7 +487,7 @@ mod tests {
             .register_provider(MemoryLayer::Project, mock_project)
             .await;
 
-        let service = PromotionService::new(manager.clone())
+        let service = PromotionService::new(manager.clone(), k_manager)
             .with_config(config::MemoryConfig {
                 promotion_threshold: 0.0,
                 decay_interval_secs: 86400,
@@ -474,9 +537,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_promote_important_false() {
+        let repo = Arc::new(
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
+        );
+        let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
+
         let manager = Arc::new(MemoryManager::new());
         let ctx = test_ctx();
-        let service = PromotionService::new(manager).with_promote_important(false);
+        let service = PromotionService::new(manager, k_manager).with_promote_important(false);
 
         let entry = MemoryEntry {
             summaries: std::collections::HashMap::new(),
@@ -497,9 +566,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_determine_target_layer_none() {
+        let repo = Arc::new(
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
+        );
+        let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
+        let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
+
         let manager = Arc::new(MemoryManager::new());
         let ctx = test_ctx();
-        let service = PromotionService::new(manager);
+        let service = PromotionService::new(manager, k_manager);
 
         let entry = MemoryEntry {
             summaries: std::collections::HashMap::new(),

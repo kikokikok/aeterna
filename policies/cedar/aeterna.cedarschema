@@ -1,0 +1,384 @@
+// Aeterna Cedar Schema
+// Defines the entity types, actions, and context for authorization decisions.
+// This schema is used by Cedar Agent (via OPAL) to validate policies and requests.
+
+// =============================================================================
+// NAMESPACE
+// =============================================================================
+namespace Aeterna {
+
+    // =========================================================================
+    // ENTITY TYPES - Organizational Hierarchy
+    // =========================================================================
+    
+    // Company: Root of the organizational hierarchy (tenant)
+    entity Company = {
+        // Display name
+        "name": String,
+        // URL-friendly identifier
+        "slug": String,
+        // Governance mode: "permissive", "standard", "strict"
+        "governance_mode": String,
+        // Whether approval is required by default
+        "approval_required": Bool,
+    };
+
+    // Organization: Division within a company
+    entity Organization in [Company] = {
+        "name": String,
+        "slug": String,
+        // Inherits from company if not set
+        "governance_mode"?: String,
+        "approval_required"?: Bool,
+    };
+
+    // Team: Working group within an organization
+    entity Team in [Organization] = {
+        "name": String,
+        "slug": String,
+        "governance_mode"?: String,
+        "approval_required"?: Bool,
+    };
+
+    // Project: Repository/codebase owned by a team
+    entity Project in [Team] = {
+        "name": String,
+        "slug": String,
+        // Git remote URL for detection
+        "git_remote"?: String,
+        "governance_mode"?: String,
+        "approval_required"?: Bool,
+    };
+
+    // =========================================================================
+    // ENTITY TYPES - Principals (Who can perform actions)
+    // =========================================================================
+    
+    // User: Human identity
+    entity User in [Team] = {
+        "email": String,
+        "name"?: String,
+        // Role within teams: "admin", "architect", "tech_lead", "developer", "viewer"
+        "role": String,
+        // IdP information
+        "idp_provider"?: String,
+        // Status: "active", "inactive", "suspended"
+        "status": String,
+    };
+
+    // Agent: AI agent identity with delegation
+    entity Agent = {
+        "name": String,
+        // Type: "opencode", "langchain", "autogen", "custom"
+        "agent_type": String,
+        // Who delegated authority to this agent
+        "delegated_by_user"?: User,
+        "delegated_by_agent"?: Agent,
+        // How many delegation hops from a human
+        "delegation_depth": Long,
+        // Maximum allowed delegation depth
+        "max_delegation_depth": Long,
+        // Capabilities: ["memory:read", "memory:write", "knowledge:read", ...]
+        "capabilities": Set<String>,
+        // Status: "active", "revoked", "expired"
+        "status": String,
+    };
+
+    // =========================================================================
+    // ENTITY TYPES - Resources
+    // =========================================================================
+    
+    // Memory: Stored memory entry
+    entity Memory in [Project, Team, Organization, Company] = {
+        // Layer: "agent", "user", "session", "project", "team", "org", "company"
+        "layer": String,
+        // Content type hint
+        "content_type"?: String,
+        // Creator
+        "created_by_user"?: User,
+        "created_by_agent"?: Agent,
+    };
+
+    // Knowledge: Knowledge repository item
+    entity Knowledge in [Project, Team, Organization, Company] = {
+        // Type: "adr", "pattern", "policy", "spec", "guide"
+        "knowledge_type": String,
+        // Status: "draft", "proposed", "approved", "deprecated"
+        "status": String,
+        // Tags for categorization
+        "tags": Set<String>,
+    };
+
+    // Policy: Governance policy
+    entity Policy in [Project, Team, Organization, Company] = {
+        // Mode: "mandatory", "recommended", "optional"
+        "mode": String,
+        // Status: "draft", "active", "deprecated"
+        "status": String,
+        // Whether this policy requires approval to change
+        "requires_approval": Bool,
+    };
+
+    // GovernanceRequest: Approval request
+    entity GovernanceRequest in [Project, Team, Organization, Company] = {
+        // Type: "policy_change", "knowledge_proposal", "memory_promotion", "role_assignment"
+        "request_type": String,
+        // Status: "pending", "approved", "rejected", "expired"
+        "status": String,
+        // Who submitted the request
+        "submitted_by_user"?: User,
+        "submitted_by_agent"?: Agent,
+    };
+
+    // =========================================================================
+    // ACTIONS - What can be done
+    // =========================================================================
+    
+    // Memory Actions
+    action ViewMemory appliesTo {
+        principal: [User, Agent],
+        resource: [Memory, Project, Team, Organization, Company],
+    };
+    
+    action CreateMemory appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+    
+    action UpdateMemory appliesTo {
+        principal: [User, Agent],
+        resource: [Memory],
+    };
+    
+    action DeleteMemory appliesTo {
+        principal: [User, Agent],
+        resource: [Memory],
+    };
+    
+    action PromoteMemory appliesTo {
+        principal: [User, Agent],
+        resource: [Memory],
+    };
+
+    // Knowledge Actions
+    action ViewKnowledge appliesTo {
+        principal: [User, Agent],
+        resource: [Knowledge, Project, Team, Organization, Company],
+    };
+    
+    action ProposeKnowledge appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+    
+    action EditKnowledge appliesTo {
+        principal: [User, Agent],
+        resource: [Knowledge],
+    };
+    
+    action ApproveKnowledge appliesTo {
+        principal: [User],
+        resource: [Knowledge],
+    };
+    
+    action DeprecateKnowledge appliesTo {
+        principal: [User],
+        resource: [Knowledge],
+    };
+
+    // Policy Actions
+    action ViewPolicy appliesTo {
+        principal: [User, Agent],
+        resource: [Policy, Project, Team, Organization, Company],
+    };
+    
+    action CreatePolicy appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+    
+    action EditPolicy appliesTo {
+        principal: [User],
+        resource: [Policy],
+    };
+    
+    action ApprovePolicy appliesTo {
+        principal: [User],
+        resource: [Policy],
+    };
+    
+    action SimulatePolicy appliesTo {
+        principal: [User, Agent],
+        resource: [Policy, Project, Team, Organization, Company],
+    };
+
+    // Governance Actions
+    action ViewGovernanceRequest appliesTo {
+        principal: [User, Agent],
+        resource: [GovernanceRequest, Project, Team, Organization, Company],
+    };
+    
+    action SubmitGovernanceRequest appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+    
+    action ApproveGovernanceRequest appliesTo {
+        principal: [User],
+        resource: [GovernanceRequest],
+    };
+    
+    action RejectGovernanceRequest appliesTo {
+        principal: [User],
+        resource: [GovernanceRequest],
+    };
+
+    // Organization Management Actions
+    action ViewOrganization appliesTo {
+        principal: [User, Agent],
+        resource: [Company, Organization, Team, Project],
+    };
+    
+    action CreateOrganization appliesTo {
+        principal: [User],
+        resource: [Company],
+    };
+    
+    action CreateTeam appliesTo {
+        principal: [User],
+        resource: [Organization],
+    };
+    
+    action CreateProject appliesTo {
+        principal: [User],
+        resource: [Team],
+    };
+    
+    action ManageMembers appliesTo {
+        principal: [User],
+        resource: [Team],
+    };
+    
+    action AssignRoles appliesTo {
+        principal: [User],
+        resource: [Team, Organization, Company],
+    };
+
+    // Agent Management Actions
+    action RegisterAgent appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+    
+    action RevokeAgent appliesTo {
+        principal: [User],
+        resource: [Agent],
+    };
+    
+    action DelegateToAgent appliesTo {
+        principal: [User, Agent],
+        resource: [Agent],
+    };
+
+    // Admin Actions
+    action ViewAuditLog appliesTo {
+        principal: [User],
+        resource: [Project, Team, Organization, Company],
+    };
+    
+    action ExportData appliesTo {
+        principal: [User],
+        resource: [Project, Team, Organization, Company],
+    };
+    
+    action ImportData appliesTo {
+        principal: [User],
+        resource: [Project, Team, Organization, Company],
+    };
+    
+    action ConfigureGovernance appliesTo {
+        principal: [User],
+        resource: [Team, Organization, Company],
+    };
+
+    // =========================================================================
+    // ENTITY TYPES - Code Artifacts (for policy enforcement)
+    // =========================================================================
+    
+    entity Dependency = {
+        "name": String,
+        "version"?: String,
+        "license"?: String,
+        "has_install_scripts": Bool,
+        "is_deprecated": Bool,
+        "bundle_size_kb"?: Long,
+    };
+
+    entity File = {
+        "path": String,
+        "extension"?: String,
+        "size_bytes"?: Long,
+    };
+
+    entity CodePattern = {
+        "pattern": String,
+        "file_path": String,
+        "line_number"?: Long,
+    };
+
+    entity ApiEndpoint = {
+        "path": String,
+        "method": String,
+        "requires_auth": Bool,
+    };
+
+    // =========================================================================
+    // ACTIONS - Code-Level Policy Enforcement
+    // These actions are evaluated by CI/CD pipelines and development tools
+    // =========================================================================
+    
+    action UseDependency appliesTo {
+        principal: [User, Agent],
+        resource: [Dependency],
+        context: {
+            "project": Project,
+            "environment"?: String,
+        },
+    };
+
+    action CommitCode appliesTo {
+        principal: [User, Agent],
+        resource: [File, CodePattern],
+        context: {
+            "project": Project,
+            "branch"?: String,
+        },
+    };
+
+    action DeployService appliesTo {
+        principal: [User, Agent],
+        resource: [Project, ApiEndpoint],
+        context: {
+            "environment": String,
+            "version"?: String,
+        },
+    };
+
+    action CreateFile appliesTo {
+        principal: [User, Agent],
+        resource: [File],
+        context: {
+            "project": Project,
+        },
+    };
+
+    action ModifyConfig appliesTo {
+        principal: [User, Agent],
+        resource: [File],
+        context: {
+            "project": Project,
+            "config_type"?: String,
+        },
+    };
+
+}

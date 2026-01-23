@@ -22,6 +22,8 @@ pub enum GovernanceClientError {
     RemoteUnavailable,
     #[error("Sync conflict: {0}")]
     SyncConflict(String),
+    #[error("Governance error: {0}")]
+    Governance(#[from] crate::governance::GovernanceError),
 }
 
 pub type Result<T> = std::result::Result<T, GovernanceClientError>;
@@ -267,7 +269,7 @@ impl GovernanceClient for HybridGovernanceClient {
         let local_result = self
             .local_engine
             .validate_with_context(layer, context, Some(ctx))
-            .await;
+            .await?;
 
         self.queue_local_change(PendingChange {
             id: uuid::Uuid::new_v4().to_string(),
@@ -476,7 +478,7 @@ impl GovernanceClient for LocalGovernanceClient {
         Ok(self
             .engine
             .validate_with_context(layer, context, None)
-            .await)
+            .await?)
     }
 
     async fn get_drift_status(

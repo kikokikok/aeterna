@@ -4,49 +4,10 @@ use knowledge::governance::GovernanceEngine;
 use knowledge::scheduler::GovernanceScheduler;
 use mk_core::types::{KnowledgeEntry, KnowledgeLayer, TenantContext};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 use storage::redis::RedisStorage;
-use testcontainers::ContainerAsync;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::redis::Redis;
-use tokio::sync::{OnceCell, RwLock};
-
-struct RedisFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<Redis>,
-    url: String,
-}
-
-static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
-static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_redis_fixture() -> Option<&'static RedisFixture> {
-    REDIS
-        .get_or_init(|| async {
-            let container = match Redis::default().start().await {
-                Ok(c) => c,
-                Err(_) => return None,
-            };
-            let host = match container.get_host().await {
-                Ok(h) => h,
-                Err(_) => return None,
-            };
-            let port = match container.get_host_port_ipv4(6379).await {
-                Ok(p) => p,
-                Err(_) => return None,
-            };
-            let url = format!("redis://{}:{}", host, port);
-            Some(RedisFixture { container, url })
-        })
-        .await
-        .as_ref()
-}
-
-fn unique_id(prefix: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("{}-{}", prefix, id)
-}
+use testing::{redis, unique_id};
+use tokio::sync::RwLock;
 
 struct MockRepository {
     entries: RwLock<Vec<KnowledgeEntry>>,
@@ -137,12 +98,12 @@ impl mk_core::traits::KnowledgeRepository for MockRepository {
 
 #[tokio::test]
 async fn test_scheduler_locked_job_execution() {
-    let Some(fixture) = get_redis_fixture().await else {
+    let Some(fixture) = redis().await else {
         eprintln!("Skipping Redis test: Docker not available");
         return;
     };
 
-    let redis = Arc::new(RedisStorage::new(&fixture.url).await.unwrap());
+    let redis = Arc::new(RedisStorage::new(fixture.url()).await.unwrap());
     let engine = Arc::new(GovernanceEngine::new());
     let repo: Arc<
         dyn mk_core::traits::KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
@@ -183,12 +144,12 @@ async fn test_scheduler_locked_job_execution() {
 
 #[tokio::test]
 async fn test_scheduler_deduplication() {
-    let Some(fixture) = get_redis_fixture().await else {
+    let Some(fixture) = redis().await else {
         eprintln!("Skipping Redis test: Docker not available");
         return;
     };
 
-    let redis = Arc::new(RedisStorage::new(&fixture.url).await.unwrap());
+    let redis = Arc::new(RedisStorage::new(fixture.url()).await.unwrap());
     let engine = Arc::new(GovernanceEngine::new());
     let repo: Arc<
         dyn mk_core::traits::KnowledgeRepository<Error = knowledge::repository::RepositoryError>,

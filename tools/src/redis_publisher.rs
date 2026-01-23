@@ -122,6 +122,10 @@ impl RedisPublisher {
             GovernanceEvent::RoleAssigned { tenant_id, .. } => tenant_id,
             GovernanceEvent::RoleRemoved { tenant_id, .. } => tenant_id,
             GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id,
+            GovernanceEvent::ConfigUpdated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RequestCreated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RequestApproved { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RequestRejected { tenant_id, .. } => tenant_id,
         };
 
         let stream_key = format!("{}:{}", base_stream_key, tenant_id.as_str());
@@ -441,6 +445,10 @@ mod tests {
                 GovernanceEvent::RoleAssigned { tenant_id, .. } => tenant_id,
                 GovernanceEvent::RoleRemoved { tenant_id, .. } => tenant_id,
                 GovernanceEvent::DriftDetected { tenant_id, .. } => tenant_id,
+                GovernanceEvent::ConfigUpdated { tenant_id, .. } => tenant_id,
+                GovernanceEvent::RequestCreated { tenant_id, .. } => tenant_id,
+                GovernanceEvent::RequestApproved { tenant_id, .. } => tenant_id,
+                GovernanceEvent::RequestRejected { tenant_id, .. } => tenant_id,
             };
             assert_eq!(extracted_tenant_id, &tenant_id);
         }

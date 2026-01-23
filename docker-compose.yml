@@ -1,20 +1,36 @@
-# Docker Compose configuration for Memory-Knowledge System
+# Docker Compose configuration for Aeterna Memory-Knowledge System
 #
-# Local development environment with all required services
+# Local development environment with all required services including:
+# - Core storage (PostgreSQL, Qdrant, Redis)
+# - OPAL stack (OPAL Server, Cedar Agent via OPAL Client)
+# - Custom data fetcher (opal-fetcher)
+#
+# Usage:
+#   docker compose up -d                    # Start all services
+#   docker compose up -d postgres redis     # Start only core storage
+#   docker compose --profile opal up -d     # Start with OPAL stack
+#
+# Generate OPAL keys before first run:
+#   cd scripts && ./generate-opal-keys.sh
 
 services:
+  # ==========================================================================
+  # Core Storage Services
+  # ==========================================================================
+
   # PostgreSQL with pgvector extension
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: memory-knowledge-postgres
+    container_name: aeterna-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: memory_knowledge
+      POSTGRES_DB: aeterna
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./storage/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -24,9 +40,10 @@ services:
   # Qdrant vector database
   qdrant:
     image: qdrant/qdrant:v1.12.0
-    container_name: memory-knowledge-qdrant
+    container_name: aeterna-qdrant
     ports:
       - "6333:6333"
+      - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
@@ -38,18 +55,192 @@ services:
   # Redis caching
   redis:
     image: redis:7-alpine
-    container_name: memory-knowledge-redis
+    container_name: aeterna-redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # ==========================================================================
+  # OPAL Authorization Stack (profile: opal)
+  # ==========================================================================
+
+  # OPAL Server - Central policy administration
+  # Manages policy distribution and data updates to OPAL Clients
+  opal-server:
+    image: permitio/opal-server:0.7.5
+    container_name: aeterna-opal-server
+    profiles:
+      - opal
+    environment:
+      # Server identification
+      OPAL_SERVER_URL: http://opal-server:7002
+
+      # Broadcast channel (PostgreSQL for persistence and HA)
+      OPAL_BROADCAST_URI: postgres://postgres:postgres@postgres:5432/aeterna
+
+      # Policy repository (local policies directory)
+      OPAL_POLICY_REPO_URL: ""
+      OPAL_POLICY_REPO_POLLING_INTERVAL: 30
+
+      # Data sources configuration
+      # opal-fetcher provides organizational hierarchy data
+      OPAL_DATA_CONFIG_SOURCES: |
+        {
+          "config": {
+            "entries": [
+              {
+                "url": "http://opal-fetcher:8080/v1/all",
+                "topics": ["policy_data"],
+                "dst_path": "/aeterna",
+                "config": {
+                  "fetcher": "HttpFetchProvider"
+                }
+              }
+            ]
+          }
+        }
+
+      # Authentication (using master token for dev, use JWT in production)
+      OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN:-dev-master-token}
+
+      # Logging
+      OPAL_LOG_LEVEL: INFO
+      OPAL_LOG_FORMAT: text
+
+      # Statistics
+      OPAL_STATISTICS_ENABLED: "true"
+    ports:
+      - "7002:7002"
+    volumes:
+      - ./policies/cedar:/policies:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7002/healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # OPAL Client with Cedar Agent
+  # Runs alongside applications, receives policy/data updates from OPAL Server
+  # Embeds Cedar Agent for local authorization decisions
+  opal-client:
+    image: permitio/opal-client-cedar:0.7.5
+    container_name: aeterna-opal-client
+    profiles:
+      - opal
+    environment:
+      # Connect to OPAL Server
+      OPAL_SERVER_URL: http://opal-server:7002
+
+      # Authentication
+      OPAL_CLIENT_TOKEN: ${OPAL_CLIENT_TOKEN:-dev-client-token}
+
+      # Cedar Agent configuration
+      OPAL_INLINE_CEDAR_ENABLED: "true"
+      OPAL_INLINE_CEDAR_CONFIG: |
+        {
+          "addr": "0.0.0.0:8180"
+        }
+
+      # Data update configuration
+      OPAL_DATA_TOPICS: policy_data
+      OPAL_DEFAULT_DATA_SOURCES_CONFIG_URL: http://opal-server:7002/data/config
+
+      # Policy sync
+      OPAL_POLICY_STORE_URL: http://localhost:8180
+
+      # Logging
+      OPAL_LOG_LEVEL: INFO
+    ports:
+      # Cedar Agent API (authorization endpoint)
+      - "8180:8180"
+      # OPAL Client API
+      - "7000:7000"
+    depends_on:
+      opal-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8180/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # OPAL Data Fetcher - Custom data source for organizational hierarchy
+  # Reads from PostgreSQL and serves Cedar entities to OPAL Server
+  opal-fetcher:
+    build:
+      context: .
+      dockerfile: opal-fetcher/Dockerfile
+    image: aeterna/opal-fetcher:latest
+    container_name: aeterna-opal-fetcher
+    profiles:
+      - opal
+    environment:
+      # Database connection
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/aeterna
+
+      # Server configuration
+      OPAL_FETCHER_HOST: 0.0.0.0
+      OPAL_FETCHER_PORT: 8080
+
+      # Logging
+      RUST_LOG: info,opal_fetcher=debug
+    ports:
+      - "8085:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # Development Tools (profile: dev)
+  # ==========================================================================
+
+  # pgAdmin for PostgreSQL management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: aeterna-pgadmin
+    profiles:
+      - dev
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@aeterna.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+  # Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: aeterna-redis-commander
+    profiles:
+      - dev
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+
 volumes:
   postgres_data:
   qdrant_data:
   redis_data:
+
+# Networks default to bridge mode
+# All services can communicate via container names

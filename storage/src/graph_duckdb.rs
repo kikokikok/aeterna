@@ -2736,26 +2736,30 @@ pub struct GraphStats {
 
 #[async_trait]
 impl GraphStore for DuckDbGraphStore {
-    type Error = GraphError;
+    type Error = Box<dyn std::error::Error + Send + Sync>;
 
     #[instrument(skip(self, node), fields(node_id = %node.id))]
     async fn add_node(&self, ctx: TenantContext, node: GraphNode) -> Result<(), Self::Error> {
-        let tenant_id = self.validate_tenant(&ctx)?;
+        let tenant_id = self
+            .validate_tenant(&ctx)
+            .map_err(|e| Box::new(e) as Self::Error)?;
 
         if node.tenant_id != tenant_id {
-            return Err(GraphError::TenantViolation(
+            return Err(Box::new(GraphError::TenantViolation(
                 "Node tenant_id does not match context".to_string(),
-            ));
+            )) as Self::Error);
         }
 
         let conn = self.conn.lock();
         let properties_json = if node.id == "TRIGGER_SERIALIZATION_ERROR"
             || node.label == "TRIGGER_SERIALIZATION_ERROR"
         {
-            return Err(GraphError::Serialization("Induced failure".to_string()));
+            return Err(
+                Box::new(GraphError::Serialization("Induced failure".to_string())) as Self::Error,
+            );
         } else {
             serde_json::to_string(&node.properties)
-                .map_err(|e| GraphError::Serialization(e.to_string()))?
+                .map_err(|e| Box::new(GraphError::Serialization(e.to_string())) as Self::Error)?
         };
 
         conn.execute(
@@ -2768,7 +2772,8 @@ impl GraphStore for DuckDbGraphStore {
                 updated_at = now()
             "#,
             params![node.id, node.label, properties_json, tenant_id],
-        )?;
+        )
+        .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
 
         debug!("Added/updated node {}", node.id);
         Ok(())
@@ -2776,32 +2781,40 @@ impl GraphStore for DuckDbGraphStore {
 
     #[instrument(skip(self, edge), fields(edge_id = %edge.id))]
     async fn add_edge(&self, ctx: TenantContext, edge: GraphEdge) -> Result<(), Self::Error> {
-        let tenant_id = self.validate_tenant(&ctx)?;
+        let tenant_id = self
+            .validate_tenant(&ctx)
+            .map_err(|e| Box::new(e) as Self::Error)?;
 
         if edge.tenant_id != tenant_id {
-            return Err(GraphError::TenantViolation(
+            return Err(Box::new(GraphError::TenantViolation(
                 "Edge tenant_id does not match context".to_string(),
-            ));
+            )) as Self::Error);
         }
 
         let conn = self.conn.lock();
 
-        if !self.node_exists(&conn, &edge.source_id, &tenant_id)? {
-            return Err(GraphError::ReferentialIntegrity(format!(
+        if !self
+            .node_exists(&conn, &edge.source_id, &tenant_id)
+            .map_err(|e| Box::new(e) as Self::Error)?
+        {
+            return Err(Box::new(GraphError::ReferentialIntegrity(format!(
                 "Source node {} does not exist",
                 edge.source_id
-            )));
+            ))) as Self::Error);
         }
 
-        if !self.node_exists(&conn, &edge.target_id, &tenant_id)? {
-            return Err(GraphError::ReferentialIntegrity(format!(
+        if !self
+            .node_exists(&conn, &edge.target_id, &tenant_id)
+            .map_err(|e| Box::new(e) as Self::Error)?
+        {
+            return Err(Box::new(GraphError::ReferentialIntegrity(format!(
                 "Target node {} does not exist",
                 edge.target_id
-            )));
+            ))) as Self::Error);
         }
 
         let properties_json = serde_json::to_string(&edge.properties)
-            .map_err(|e| GraphError::Serialization(e.to_string()))?;
+            .map_err(|e| Box::new(GraphError::Serialization(e.to_string())) as Self::Error)?;
 
         conn.execute(
             r#"
@@ -2819,7 +2832,8 @@ impl GraphStore for DuckDbGraphStore {
                 properties_json,
                 tenant_id
             ],
-        )?;
+        )
+        .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
 
         debug!(
             "Added/updated edge {} ({} -> {})",
@@ -2834,11 +2848,14 @@ impl GraphStore for DuckDbGraphStore {
         ctx: TenantContext,
         node_id: &str,
     ) -> Result<Vec<(GraphEdge, GraphNode)>, Self::Error> {
-        let tenant_id = self.validate_tenant(&ctx)?;
+        let tenant_id = self
+            .validate_tenant(&ctx)
+            .map_err(|e| Box::new(e) as Self::Error)?;
         let conn = self.conn.lock();
 
-        let mut stmt = conn.prepare(
-            r#"
+        let mut stmt = conn
+            .prepare(
+                r#"
             SELECT 
                 e.id as edge_id, e.source_id, e.target_id, e.relation, e.properties as edge_props,
                 n.id as node_id, n.label, n.properties as node_props
@@ -2852,38 +2869,41 @@ impl GraphStore for DuckDbGraphStore {
                 AND n.tenant_id = ?
                 AND n.deleted_at IS NULL
             "#,
-        )?;
+            )
+            .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
 
-        let rows = stmt.query_map(
-            params![node_id, node_id, node_id, tenant_id, tenant_id],
-            |row| {
-                let edge = GraphEdge {
-                    id: row.get(0)?,
-                    source_id: row.get(1)?,
-                    target_id: row.get(2)?,
-                    relation: row.get(3)?,
-                    properties: row
-                        .get::<_, Option<String>>(4)?
-                        .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
-                        .unwrap_or(serde_json::Value::Null),
-                    tenant_id: tenant_id.clone(),
-                };
-                let node = GraphNode {
-                    id: row.get(5)?,
-                    label: row.get(6)?,
-                    properties: row
-                        .get::<_, Option<String>>(7)?
-                        .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
-                        .unwrap_or(serde_json::Value::Null),
-                    tenant_id: tenant_id.clone(),
-                };
-                Ok((edge, node))
-            },
-        )?;
+        let rows = stmt
+            .query_map(
+                params![node_id, node_id, node_id, tenant_id, tenant_id],
+                |row| {
+                    let edge = GraphEdge {
+                        id: row.get(0)?,
+                        source_id: row.get(1)?,
+                        target_id: row.get(2)?,
+                        relation: row.get(3)?,
+                        properties: row
+                            .get::<_, Option<String>>(4)?
+                            .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
+                            .unwrap_or(serde_json::Value::Null),
+                        tenant_id: tenant_id.clone(),
+                    };
+                    let node = GraphNode {
+                        id: row.get(5)?,
+                        label: row.get(6)?,
+                        properties: row
+                            .get::<_, Option<String>>(7)?
+                            .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
+                            .unwrap_or(serde_json::Value::Null),
+                        tenant_id: tenant_id.clone(),
+                    };
+                    Ok((edge, node))
+                },
+            )
+            .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
 
         let mut results = Vec::new();
         for row in rows {
-            results.push(row?);
+            results.push(row.map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?);
         }
 
         debug!("Found {} neighbors for node {}", results.len(), node_id);
@@ -2898,7 +2918,9 @@ impl GraphStore for DuckDbGraphStore {
         end_id: &str,
         max_depth: usize,
     ) -> Result<Vec<GraphEdge>, Self::Error> {
-        let extended_edges = self.shortest_path(ctx, start_id, end_id, Some(max_depth))?;
+        let extended_edges = self
+            .shortest_path(ctx, start_id, end_id, Some(max_depth))
+            .map_err(|e| Box::new(e) as Self::Error)?;
 
         Ok(extended_edges
             .into_iter()
@@ -2920,13 +2942,16 @@ impl GraphStore for DuckDbGraphStore {
         query: &str,
         limit: usize,
     ) -> Result<Vec<GraphNode>, Self::Error> {
-        let tenant_id = self.validate_tenant(&ctx)?;
+        let tenant_id = self
+            .validate_tenant(&ctx)
+            .map_err(|e| Box::new(e) as Self::Error)?;
         let conn = self.conn.lock();
 
         let search_pattern = format!("%{}%", query);
 
-        let mut stmt = conn.prepare(
-            r#"
+        let mut stmt = conn
+            .prepare(
+                r#"
             SELECT id, label, properties
             FROM memory_nodes
             WHERE tenant_id = ?
@@ -2935,26 +2960,29 @@ impl GraphStore for DuckDbGraphStore {
             ORDER BY created_at DESC
             LIMIT ?
             "#,
-        )?;
+            )
+            .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
 
-        let rows = stmt.query_map(
-            params![tenant_id, search_pattern, search_pattern, limit as i64],
-            |row| {
-                Ok(GraphNode {
-                    id: row.get(0)?,
-                    label: row.get(1)?,
-                    properties: row
-                        .get::<_, Option<String>>(2)?
-                        .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
-                        .unwrap_or(serde_json::Value::Null),
-                    tenant_id: tenant_id.clone(),
-                })
-            },
-        )?;
+        let rows = stmt
+            .query_map(
+                params![tenant_id, search_pattern, search_pattern, limit as i64],
+                |row| {
+                    Ok(GraphNode {
+                        id: row.get(0)?,
+                        label: row.get(1)?,
+                        properties: row
+                            .get::<_, Option<String>>(2)?
+                            .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
+                            .unwrap_or(serde_json::Value::Null),
+                        tenant_id: tenant_id.clone(),
+                    })
+                },
+            )
+            .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
 
         let mut results = Vec::new();
         for row in rows {
-            results.push(row?);
+            results.push(row.map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?);
         }
 
         debug!("Found {} nodes matching query '{}'", results.len(), query);
@@ -2968,6 +2996,7 @@ impl GraphStore for DuckDbGraphStore {
         source_memory_id: &str,
     ) -> Result<usize, Self::Error> {
         DuckDbGraphStore::soft_delete_nodes_by_source_memory_id(self, ctx, source_memory_id)
+            .map_err(|e| Box::new(e) as Self::Error)
     }
 }
 

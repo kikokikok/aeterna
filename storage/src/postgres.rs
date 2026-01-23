@@ -221,6 +221,345 @@ impl PostgresBackend {
         .await
         .ok();
 
+        // CCA Hindsight Learning tables
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS error_signatures (
+                id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                error_type TEXT NOT NULL,
+                message_pattern TEXT NOT NULL,
+                stack_patterns JSONB DEFAULT '[]',
+                context_patterns JSONB DEFAULT '[]',
+                embedding JSONB,
+                occurrence_count INTEGER DEFAULT 1,
+                first_seen_at BIGINT NOT NULL,
+                last_seen_at BIGINT NOT NULL,
+                created_at BIGINT NOT NULL,
+                updated_at BIGINT NOT NULL
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_error_signatures_tenant ON error_signatures(tenant_id)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_error_signatures_type ON error_signatures(tenant_id, error_type)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS resolutions (
+                id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                error_signature_id TEXT NOT NULL REFERENCES error_signatures(id) ON DELETE CASCADE,
+                description TEXT NOT NULL,
+                changes JSONB DEFAULT '[]',
+                success_rate REAL DEFAULT 0.0,
+                application_count INTEGER DEFAULT 0,
+                last_success_at BIGINT,
+                created_at BIGINT NOT NULL,
+                updated_at BIGINT NOT NULL
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_resolutions_error_signature ON resolutions(error_signature_id)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS hindsight_notes (
+                id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                error_signature_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                tags JSONB DEFAULT '[]',
+                resolution_ids JSONB DEFAULT '[]',
+                quality_score REAL,
+                promoted_to_layer TEXT,
+                created_at BIGINT NOT NULL,
+                updated_at BIGINT NOT NULL
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_hindsight_notes_tenant ON hindsight_notes(tenant_id)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_hindsight_notes_error_signature ON hindsight_notes(error_signature_id)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS governance_configs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                company_id UUID,
+                org_id UUID,
+                team_id UUID,
+                project_id UUID,
+                approval_mode TEXT NOT NULL DEFAULT 'standard',
+                min_approvers INTEGER NOT NULL DEFAULT 1,
+                timeout_hours INTEGER DEFAULT 72,
+                auto_approve_low_risk BOOLEAN NOT NULL DEFAULT false,
+                escalation_enabled BOOLEAN NOT NULL DEFAULT false,
+                escalation_timeout_hours INTEGER,
+                escalation_contact TEXT,
+                policy_settings JSONB DEFAULT '{}',
+                knowledge_settings JSONB DEFAULT '{}',
+                memory_settings JSONB DEFAULT '{}',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_governance_configs_scope ON governance_configs (
+                COALESCE(company_id, '00000000-0000-0000-0000-000000000000'::UUID),
+                COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::UUID),
+                COALESCE(team_id, '00000000-0000-0000-0000-000000000000'::UUID),
+                COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::UUID)
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_governance_configs_company 
+             ON governance_configs (company_id) WHERE company_id IS NOT NULL",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query("CREATE SEQUENCE IF NOT EXISTS approval_requests_number_seq")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS approval_requests (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                request_number TEXT NOT NULL DEFAULT 'REQ-' || nextval('approval_requests_number_seq')::TEXT,
+                request_type TEXT NOT NULL,
+                target_type TEXT NOT NULL,
+                target_id TEXT,
+                company_id UUID,
+                org_id UUID,
+                team_id UUID,
+                project_id UUID,
+                title TEXT NOT NULL,
+                description TEXT,
+                payload JSONB NOT NULL DEFAULT '{}',
+                risk_level TEXT NOT NULL DEFAULT 'medium',
+                status TEXT NOT NULL DEFAULT 'pending',
+                requestor_type TEXT NOT NULL,
+                requestor_id UUID NOT NULL,
+                requestor_email TEXT,
+                required_approvals INTEGER NOT NULL DEFAULT 1,
+                current_approvals INTEGER NOT NULL DEFAULT 0,
+                expires_at TIMESTAMPTZ,
+                resolved_at TIMESTAMPTZ,
+                resolution_reason TEXT,
+                applied_at TIMESTAMPTZ,
+                applied_by UUID,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(status)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_approval_requests_requestor ON approval_requests(requestor_id)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS approval_decisions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                request_id UUID NOT NULL REFERENCES approval_requests(id) ON DELETE CASCADE,
+                approver_type TEXT NOT NULL,
+                approver_id UUID NOT NULL,
+                approver_email TEXT,
+                decision TEXT NOT NULL,
+                comment TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_approval_decisions_request ON approval_decisions(request_id)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS governance_roles (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                principal_type TEXT NOT NULL,
+                principal_id UUID NOT NULL,
+                role TEXT NOT NULL,
+                company_id UUID,
+                org_id UUID,
+                team_id UUID,
+                project_id UUID,
+                granted_by UUID NOT NULL,
+                expires_at TIMESTAMPTZ,
+                granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                revoked_at TIMESTAMPTZ,
+                revoked_by UUID
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_governance_roles_unique ON governance_roles (
+                principal_type,
+                principal_id,
+                role,
+                COALESCE(company_id, '00000000-0000-0000-0000-000000000000'::UUID),
+                COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::UUID),
+                COALESCE(team_id, '00000000-0000-0000-0000-000000000000'::UUID),
+                COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::UUID)
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_governance_roles_principal ON governance_roles(principal_type, principal_id)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS governance_audit_log (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                action TEXT NOT NULL,
+                request_id UUID,
+                target_type TEXT,
+                target_id TEXT,
+                actor_type TEXT NOT NULL,
+                actor_id UUID,
+                actor_email TEXT,
+                details JSONB DEFAULT '{}',
+                old_values JSONB,
+                new_values JSONB,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_governance_audit_log_action ON governance_audit_log(action)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_governance_audit_log_actor ON governance_audit_log(actor_id)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_governance_audit_log_target ON governance_audit_log(target_type)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE OR REPLACE FUNCTION get_effective_governance_config(
+                p_company_id UUID,
+                p_org_id UUID,
+                p_team_id UUID,
+                p_project_id UUID
+            ) RETURNS TABLE (
+                id UUID,
+                approval_mode TEXT,
+                min_approvers INTEGER,
+                timeout_hours INTEGER,
+                auto_approve_low_risk BOOLEAN,
+                escalation_enabled BOOLEAN,
+                escalation_timeout_hours INTEGER,
+                escalation_contact TEXT,
+                policy_settings JSONB,
+                knowledge_settings JSONB,
+                memory_settings JSONB
+            ) AS $$
+            BEGIN
+                RETURN QUERY
+                SELECT 
+                    gc.id,
+                    gc.approval_mode,
+                    gc.min_approvers,
+                    gc.timeout_hours,
+                    gc.auto_approve_low_risk,
+                    gc.escalation_enabled,
+                    gc.escalation_timeout_hours,
+                    gc.escalation_contact,
+                    gc.policy_settings,
+                    gc.knowledge_settings,
+                    gc.memory_settings
+                FROM governance_configs gc
+                WHERE (gc.project_id = p_project_id AND p_project_id IS NOT NULL)
+                   OR (gc.team_id = p_team_id AND gc.project_id IS NULL AND p_team_id IS NOT NULL)
+                   OR (gc.org_id = p_org_id AND gc.team_id IS NULL AND gc.project_id IS NULL AND p_org_id IS NOT NULL)
+                   OR (gc.company_id = p_company_id AND gc.org_id IS NULL AND gc.team_id IS NULL AND gc.project_id IS NULL)
+                ORDER BY 
+                    CASE WHEN gc.project_id IS NOT NULL THEN 1
+                         WHEN gc.team_id IS NOT NULL THEN 2
+                         WHEN gc.org_id IS NOT NULL THEN 3
+                         ELSE 4 END
+                LIMIT 1;
+                
+                IF NOT FOUND THEN
+                    RETURN QUERY
+                    SELECT 
+                        gen_random_uuid(),
+                        'standard'::TEXT,
+                        1::INTEGER,
+                        72::INTEGER,
+                        false::BOOLEAN,
+                        false::BOOLEAN,
+                        NULL::INTEGER,
+                        NULL::TEXT,
+                        '{}'::JSONB,
+                        '{}'::JSONB,
+                        '{}'::JSONB;
+                END IF;
+            END;
+            $$ LANGUAGE plpgsql",
+        )
+        .execute(&self.pool)
+        .await?;
+
         rls_migration::run_rls_migration(&self.pool).await?;
 
         Ok(())
@@ -769,6 +1108,33 @@ impl PostgresBackend {
                 drift_score: _,
                 timestamp,
             } => ("drift_detected", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::ConfigUpdated {
+                config_id: _,
+                scope: _,
+                tenant_id,
+                timestamp,
+            } => ("config_updated", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::RequestCreated {
+                request_id: _,
+                request_type: _,
+                title: _,
+                tenant_id,
+                timestamp,
+            } => ("request_created", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::RequestApproved {
+                request_id: _,
+                approver_id: _,
+                fully_approved: _,
+                tenant_id,
+                timestamp,
+            } => ("request_approved", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::RequestRejected {
+                request_id: _,
+                rejector_id: _,
+                reason: _,
+                tenant_id,
+                timestamp,
+            } => ("request_rejected", tenant_id, *timestamp),
         };
 
         sqlx::query(
@@ -815,7 +1181,7 @@ impl PostgresBackend {
 
 #[async_trait]
 impl crate::graph::GraphStore for PostgresBackend {
-    type Error = PostgresError;
+    type Error = Box<dyn std::error::Error + Send + Sync>;
 
     async fn add_node(
         &self,
@@ -833,7 +1199,8 @@ impl crate::graph::GraphStore for PostgresBackend {
         .bind(&node.properties)
         .bind(chrono::Utc::now().timestamp())
         .execute(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         Ok(())
     }
@@ -857,7 +1224,8 @@ impl crate::graph::GraphStore for PostgresBackend {
         .bind(&edge.properties)
         .bind(chrono::Utc::now().timestamp())
         .execute(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         Ok(())
     }
@@ -878,7 +1246,8 @@ impl crate::graph::GraphStore for PostgresBackend {
         .bind(node_id)
         .bind(ctx.tenant_id.as_str())
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -931,7 +1300,8 @@ impl crate::graph::GraphStore for PostgresBackend {
         .bind(ctx.tenant_id.as_str())
         .bind(max_depth as i32)
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         let mut path = Vec::new();
         for row in rows {
@@ -962,7 +1332,8 @@ impl crate::graph::GraphStore for PostgresBackend {
         .bind(format!("%{}%", query))
         .bind(limit as i64)
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         let mut nodes = Vec::new();
         for row in rows {
@@ -990,7 +1361,8 @@ impl crate::graph::GraphStore for PostgresBackend {
         .bind(ctx.tenant_id.as_str())
         .bind(source_memory_id)
         .execute(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         let deleted_count = result.rows_affected() as usize;
 
@@ -1009,7 +1381,8 @@ impl crate::graph::GraphStore for PostgresBackend {
         .bind(ctx.tenant_id.as_str())
         .bind(source_memory_id)
         .execute(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         Ok(deleted_count)
     }

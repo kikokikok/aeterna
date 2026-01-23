@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use sync::bridge::SyncManager;
 use sync::state_persister::DatabasePersister;
-use testcontainers::runners::AsyncRunner;
+use testing::postgres;
 use tokio::sync::RwLock;
 use tools::server::{JsonRpcRequest, McpServer};
 
@@ -305,37 +305,13 @@ impl mk_core::traits::AuthorizationService for MockAuthService {
     }
 }
 
-async fn setup_postgres_container() -> Result<
-    (
-        testcontainers::ContainerAsync<testcontainers_modules::postgres::Postgres>,
-        String,
-    ),
-    Box<dyn std::error::Error + Send + Sync>,
-> {
-    let container = testcontainers_modules::postgres::Postgres::default()
-        .with_db_name("testdb")
-        .with_user("testuser")
-        .with_password("testpass")
-        .start()
-        .await
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
-
-    let connection_url = format!(
-        "postgres://testuser:testpass@localhost:{}/testdb?sslmode=disable",
-        container
-            .get_host_port_ipv4(5432)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
-    );
-
-    Ok((container, connection_url))
-}
-
 #[tokio::test]
 async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
-    let (_container, connection_url) = setup_postgres_container()
-        .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+    let Some(pg_fixture) = postgres().await else {
+        eprintln!("Skipping test: Docker not available");
+        return Ok(());
+    };
+
     let temp_dir = tempfile::tempdir()?;
     let repo_path = temp_dir.path().join("repo");
     let repo = Arc::new(GitRepository::new(&repo_path)?);
@@ -352,11 +328,16 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
     let storage = Arc::new(MockStorage::new());
     let persister = Arc::new(DatabasePersister::new(storage, "sync_key".to_string()));
 
+    let governance_engine = Arc::new(knowledge::governance::GovernanceEngine::new());
+    let knowledge_manager = Arc::new(knowledge::manager::KnowledgeManager::new(
+        repo.clone(),
+        governance_engine.clone(),
+    ));
+
     let sync_manager = Arc::new(
         SyncManager::new(
             memory_manager.clone(),
-            repo.clone(),
-            Arc::new(knowledge::governance::GovernanceEngine::new()),
+            knowledge_manager,
             config::config::DeploymentConfig::default(),
             None,
             persister,
@@ -371,11 +352,11 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         sync_manager,
         repo.clone(),
         Arc::new(
-            storage::postgres::PostgresBackend::new(&connection_url)
+            storage::postgres::PostgresBackend::new(pg_fixture.url())
                 .await
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
-        Arc::new(knowledge::governance::GovernanceEngine::new()),
+        governance_engine,
         Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
             memory::llm::mock::MockLlmService::new(),
         ))),
@@ -384,7 +365,6 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
         None,
     );
 
-    // GIVEN a knowledge entry is stored in the repository
     let entry = KnowledgeEntry {
         path: "specs/auth.md".to_string(),
         content: "Auth spec content".to_string(),
@@ -403,7 +383,6 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
 
     repo.store(ctx.clone(), entry, "add auth spec").await?;
 
-    // WHEN we query knowledge via MCP tool
     let request = JsonRpcRequest {
         jsonrpc: "2.0".to_string(),
         id: json!(1),
@@ -423,7 +402,6 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
 
     let response = server.handle_request(request).await;
 
-    // THEN the query should return the entry
     assert!(
         response.error.is_none(),
         "Response should not have error: {:?}",
@@ -433,7 +411,6 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
     assert!(result["success"].as_bool().unwrap());
     assert_eq!(result["results"]["keyword"].as_array().unwrap().len(), 1);
 
-    // WHEN we fetch the specific entry via MCP tool
     let request = JsonRpcRequest {
         jsonrpc: "2.0".to_string(),
         id: json!(2),
@@ -453,7 +430,6 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
 
     let response = server.handle_request(request).await;
 
-    // THEN the entry content should match
     assert!(response.error.is_none());
     let result = response.result.unwrap();
     assert!(result["success"].as_bool().unwrap());

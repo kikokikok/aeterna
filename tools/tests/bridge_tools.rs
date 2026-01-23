@@ -51,8 +51,10 @@ async fn test_sync_tools() -> Result<(), Box<dyn std::error::Error + Send + Sync
     let sync_manager = Arc::new(
         SyncManager::new(
             memory_manager,
-            knowledge_repo.clone(),
-            Arc::new(knowledge::governance::GovernanceEngine::new()),
+            Arc::new(knowledge::manager::KnowledgeManager::new(
+                knowledge_repo.clone(),
+                Arc::new(knowledge::governance::GovernanceEngine::new()),
+            )),
             config::config::DeploymentConfig::default(),
             None,
             persister,
