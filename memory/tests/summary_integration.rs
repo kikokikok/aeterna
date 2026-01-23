@@ -5,43 +5,8 @@
 
 use mk_core::types::{LayerSummary, MemoryEntry, MemoryLayer, SummaryConfig, SummaryDepth};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
 use storage::redis::RedisStorage;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::redis::Redis;
-use tokio::sync::OnceCell;
-
-struct RedisFixture {
-    #[allow(dead_code)]
-    container: testcontainers::ContainerAsync<Redis>,
-    url: String,
-}
-
-static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
-static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_redis_fixture() -> Option<&'static RedisFixture> {
-    REDIS
-        .get_or_init(|| async {
-            let container = match Redis::default().start().await {
-                Ok(c) => c,
-                Err(_) => return None,
-            };
-            let port = match container.get_host_port_ipv4(6379).await {
-                Ok(p) => p,
-                Err(_) => return None,
-            };
-            let url = format!("redis://localhost:{}", port);
-            Some(RedisFixture { container, url })
-        })
-        .await
-        .as_ref()
-}
-
-fn unique_id(prefix: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("{}_{}", prefix, id)
-}
+use testing::{redis, unique_id};
 
 fn create_test_summary(depth: SummaryDepth, content: &str) -> LayerSummary {
     LayerSummary {
@@ -73,12 +38,12 @@ fn create_test_memory_entry(id: &str, content: &str, layer: MemoryLayer) -> Memo
 
 #[tokio::test]
 async fn test_summary_cache_set_and_get() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(redis_fixture) = get_redis_fixture().await else {
+    let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
     };
 
-    let redis = RedisStorage::new(&redis_fixture.url).await?;
+    let redis = RedisStorage::new(redis_fixture.url()).await?;
     let tenant_id = unique_id("tenant");
     let entry_id = unique_id("entry");
 
@@ -107,12 +72,12 @@ async fn test_summary_cache_set_and_get() -> Result<(), Box<dyn std::error::Erro
 
 #[tokio::test]
 async fn test_summary_cache_all_depths() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(redis_fixture) = get_redis_fixture().await else {
+    let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
     };
 
-    let redis = RedisStorage::new(&redis_fixture.url).await?;
+    let redis = RedisStorage::new(redis_fixture.url()).await?;
     let tenant_id = unique_id("tenant");
     let entry_id = unique_id("entry");
 
@@ -150,12 +115,12 @@ async fn test_summary_cache_all_depths() -> Result<(), Box<dyn std::error::Error
 
 #[tokio::test]
 async fn test_summary_cache_invalidation_single_depth() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(redis_fixture) = get_redis_fixture().await else {
+    let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
     };
 
-    let redis = RedisStorage::new(&redis_fixture.url).await?;
+    let redis = RedisStorage::new(redis_fixture.url()).await?;
     let tenant_id = unique_id("tenant");
     let entry_id = unique_id("entry");
 
@@ -204,12 +169,12 @@ async fn test_summary_cache_invalidation_single_depth() -> Result<(), Box<dyn st
 
 #[tokio::test]
 async fn test_summary_cache_invalidation_all_depths() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(redis_fixture) = get_redis_fixture().await else {
+    let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
     };
 
-    let redis = RedisStorage::new(&redis_fixture.url).await?;
+    let redis = RedisStorage::new(redis_fixture.url()).await?;
     let tenant_id = unique_id("tenant");
     let entry_id = unique_id("entry");
 
@@ -239,12 +204,12 @@ async fn test_summary_cache_invalidation_all_depths() -> Result<(), Box<dyn std:
 
 #[tokio::test]
 async fn test_summary_cache_with_ttl() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(redis_fixture) = get_redis_fixture().await else {
+    let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
     };
 
-    let redis = RedisStorage::new(&redis_fixture.url).await?;
+    let redis = RedisStorage::new(redis_fixture.url()).await?;
     let tenant_id = unique_id("tenant");
     let entry_id = unique_id("entry");
 
@@ -287,12 +252,12 @@ async fn test_summary_cache_with_ttl() -> Result<(), Box<dyn std::error::Error>>
 
 #[tokio::test]
 async fn test_summary_cache_tenant_isolation() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(redis_fixture) = get_redis_fixture().await else {
+    let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
     };
 
-    let redis = RedisStorage::new(&redis_fixture.url).await?;
+    let redis = RedisStorage::new(redis_fixture.url()).await?;
     let tenant_a = unique_id("tenant_a");
     let tenant_b = unique_id("tenant_b");
     let entry_id = "shared_entry_id";
@@ -332,12 +297,12 @@ async fn test_summary_cache_tenant_isolation() -> Result<(), Box<dyn std::error:
 
 #[tokio::test]
 async fn test_summary_cache_layer_isolation() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(redis_fixture) = get_redis_fixture().await else {
+    let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
     };
 
-    let redis = RedisStorage::new(&redis_fixture.url).await?;
+    let redis = RedisStorage::new(redis_fixture.url()).await?;
     let tenant_id = unique_id("tenant");
     let entry_id = unique_id("entry");
 
@@ -483,12 +448,12 @@ async fn test_memory_entry_summary_staleness() {
 
 #[tokio::test]
 async fn test_personalized_summary_storage() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(redis_fixture) = get_redis_fixture().await else {
+    let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
     };
 
-    let redis = RedisStorage::new(&redis_fixture.url).await?;
+    let redis = RedisStorage::new(redis_fixture.url()).await?;
     let tenant_id = unique_id("tenant");
     let entry_id = unique_id("entry");
 

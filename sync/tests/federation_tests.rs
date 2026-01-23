@@ -2,7 +2,8 @@ use knowledge::federation::{
     FederationConfig, FederationProvider, KnowledgeManifest, UpstreamConfig,
 };
 use knowledge::governance::GovernanceEngine;
-use knowledge::repository::RepositoryError;
+use knowledge::manager::KnowledgeManager;
+use knowledge::repository::{GitRepository, RepositoryError};
 use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{
@@ -134,7 +135,7 @@ impl SyncStatePersister for MockPersister {
 #[tokio::test]
 async fn test_sync_federation_conflict_recording() {
     let memory = Arc::new(MemoryManager::new());
-    let repo = Arc::new(MockRepo);
+    let _repo = Arc::new(MockRepo);
     let gov = Arc::new(GovernanceEngine::new());
     let fed_config = FederationConfig {
         upstreams: vec![UpstreamConfig {
@@ -153,8 +154,10 @@ async fn test_sync_federation_conflict_recording() {
 
     let sync_manager = SyncManager::new(
         memory,
-        repo,
-        gov,
+        Arc::new(KnowledgeManager::new(
+            Arc::new(GitRepository::new_mock()),
+            gov,
+        )),
         config::config::DeploymentConfig::default(),
         Some(fed.clone() as Arc<dyn FederationProvider>),
         persister,
@@ -178,7 +181,7 @@ async fn test_sync_federation_conflict_recording() {
 #[tokio::test]
 async fn test_sync_governance_telemetry() {
     let memory = Arc::new(MemoryManager::new());
-    let repo = Arc::new(MockRepo);
+    let _repo = Arc::new(MockRepo);
     let mut gov = GovernanceEngine::new();
 
     gov.add_policy(Policy {
@@ -205,8 +208,10 @@ async fn test_sync_governance_telemetry() {
 
     let sync_manager = SyncManager::new(
         memory,
-        repo,
-        gov,
+        Arc::new(KnowledgeManager::new(
+            Arc::new(GitRepository::new_mock()),
+            gov,
+        )),
         config::config::DeploymentConfig::default(),
         None,
         persister,

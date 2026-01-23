@@ -6,18 +6,26 @@ use tokio::sync::RwLock;
 
 pub struct MockLlmService {
     responses: Arc<RwLock<std::collections::HashMap<String, String>>>,
+    ordered_responses: Arc<RwLock<std::collections::VecDeque<String>>>,
 }
 
 impl MockLlmService {
     pub fn new() -> Self {
         Self {
             responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            ordered_responses: Arc::new(RwLock::new(std::collections::VecDeque::new())),
         }
     }
 
     pub async fn add_response(&self, prompt: String, response: String) {
         let mut responses = self.responses.write().await;
         responses.insert(prompt, response);
+    }
+
+    pub async fn set_responses(&self, responses_vec: Vec<String>) {
+        let mut ordered = self.ordered_responses.write().await;
+        ordered.clear();
+        ordered.extend(responses_vec);
     }
 
     pub async fn set_response(&mut self, response: &str) {
@@ -149,6 +157,11 @@ impl LlmService for MockLlmService {
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
     async fn generate(&self, prompt: &str) -> Result<String, Self::Error> {
+        let mut ordered = self.ordered_responses.write().await;
+        if let Some(response) = ordered.pop_front() {
+            return Ok(response);
+        }
+
         let responses = self.responses.read().await;
         if let Some(response) = responses.get(prompt) {
             Ok(response.clone())

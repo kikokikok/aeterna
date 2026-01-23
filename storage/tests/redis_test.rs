@@ -1,52 +1,19 @@
-//! Integration tests for Redis storage backend using testcontainers.
-
 use errors::StorageError;
 use mk_core::types::{PartialJobResult, TenantContext, TenantId, UserId};
-use std::sync::atomic::{AtomicU32, Ordering};
 use storage::redis::RedisStorage;
-use testcontainers::ContainerAsync;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::redis::Redis;
-use tokio::sync::OnceCell;
-
-struct RedisFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<Redis>,
-    url: String,
-}
-
-static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
-static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_redis_fixture() -> Option<&'static RedisFixture> {
-    REDIS
-        .get_or_init(|| async {
-            match Redis::default().start().await {
-                Ok(container) => {
-                    let port = container.get_host_port_ipv4(6379).await.ok()?;
-                    let url = format!("redis://localhost:{}", port);
-                    Some(RedisFixture { container, url })
-                }
-                Err(_) => None,
-            }
-        })
-        .await
-        .as_ref()
-}
+use testing::{redis, unique_id};
 
 async fn create_test_redis() -> Option<RedisStorage> {
-    let fixture = get_redis_fixture().await?;
-    RedisStorage::new(&fixture.url).await.ok()
+    let fixture = redis().await?;
+    RedisStorage::new(fixture.url()).await.ok()
 }
 
 fn unique_key(prefix: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("{}:{}", prefix, id)
+    unique_id(prefix)
 }
 
 fn unique_tenant_id() -> TenantId {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    TenantId::new(format!("test-tenant-{}", id)).unwrap()
+    TenantId::new(unique_id("test-tenant")).unwrap()
 }
 
 #[tokio::test]
@@ -1010,5 +977,541 @@ async fn test_redis_subscribe_receives_all_event_types() {
         received_count,
         events.len(),
         "Should receive all published event types"
+    );
+}
+
+#[tokio::test]
+async fn test_redis_set_and_get_summary_cache() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_id("tenant");
+    let entry_id = unique_id("entry");
+    let layer = mk_core::types::MemoryLayer::Project;
+
+    let summary = mk_core::types::LayerSummary {
+        depth: mk_core::types::SummaryDepth::Sentence,
+        content: "Test summary content".to_string(),
+        token_count: 42,
+        generated_at: 1704067200,
+        source_hash: "abc123".to_string(),
+        content_hash: None,
+        personalized: false,
+        personalization_context: None,
+    };
+
+    let set_result = redis
+        .set_summary_cache(&tenant_id, &layer, &entry_id, &summary, Some(3600))
+        .await;
+    assert!(set_result.is_ok(), "Set summary cache should succeed");
+
+    let get_result = redis
+        .get_summary_cache(
+            &tenant_id,
+            &layer,
+            &entry_id,
+            &mk_core::types::SummaryDepth::Sentence,
+        )
+        .await;
+    assert!(get_result.is_ok(), "Get summary cache should succeed");
+
+    let retrieved = get_result.unwrap();
+    assert!(retrieved.is_some(), "Summary should be cached");
+
+    let cached = retrieved.unwrap();
+    assert_eq!(cached.content, "Test summary content");
+    assert_eq!(cached.token_count, 42);
+    assert_eq!(cached.depth, mk_core::types::SummaryDepth::Sentence);
+}
+
+#[tokio::test]
+async fn test_redis_get_summary_cache_nonexistent() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_id("tenant");
+    let entry_id = unique_id("nonexistent");
+    let layer = mk_core::types::MemoryLayer::Team;
+
+    let get_result = redis
+        .get_summary_cache(
+            &tenant_id,
+            &layer,
+            &entry_id,
+            &mk_core::types::SummaryDepth::Paragraph,
+        )
+        .await;
+    assert!(get_result.is_ok());
+    assert!(get_result.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn test_redis_invalidate_summary_cache_specific_depth() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_id("tenant");
+    let entry_id = unique_id("entry");
+    let layer = mk_core::types::MemoryLayer::Org;
+
+    let summary = mk_core::types::LayerSummary {
+        depth: mk_core::types::SummaryDepth::Detailed,
+        content: "Detailed summary".to_string(),
+        token_count: 150,
+        generated_at: 1704067200,
+        source_hash: "def456".to_string(),
+        content_hash: None,
+        personalized: false,
+        personalization_context: None,
+    };
+
+    redis
+        .set_summary_cache(&tenant_id, &layer, &entry_id, &summary, Some(3600))
+        .await
+        .unwrap();
+
+    let exists_before = redis
+        .get_summary_cache(
+            &tenant_id,
+            &layer,
+            &entry_id,
+            &mk_core::types::SummaryDepth::Detailed,
+        )
+        .await
+        .unwrap();
+    assert!(exists_before.is_some());
+
+    let invalidate_result = redis
+        .invalidate_summary_cache(
+            &tenant_id,
+            &layer,
+            &entry_id,
+            Some(&mk_core::types::SummaryDepth::Detailed),
+        )
+        .await;
+    assert!(invalidate_result.is_ok());
+    assert_eq!(invalidate_result.unwrap(), 1, "Should delete 1 entry");
+
+    let exists_after = redis
+        .get_summary_cache(
+            &tenant_id,
+            &layer,
+            &entry_id,
+            &mk_core::types::SummaryDepth::Detailed,
+        )
+        .await
+        .unwrap();
+    assert!(exists_after.is_none());
+}
+
+#[tokio::test]
+async fn test_redis_invalidate_summary_cache_all_depths() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_id("tenant");
+    let entry_id = unique_id("entry");
+    let layer = mk_core::types::MemoryLayer::Company;
+
+    let depths = [
+        mk_core::types::SummaryDepth::Sentence,
+        mk_core::types::SummaryDepth::Paragraph,
+        mk_core::types::SummaryDepth::Detailed,
+    ];
+
+    for depth in &depths {
+        let summary = mk_core::types::LayerSummary {
+            depth: *depth,
+            content: format!("Summary for {:?}", depth),
+            token_count: 50,
+            generated_at: 1704067200,
+            source_hash: "hash".to_string(),
+            content_hash: None,
+            personalized: false,
+            personalization_context: None,
+        };
+        redis
+            .set_summary_cache(&tenant_id, &layer, &entry_id, &summary, Some(3600))
+            .await
+            .unwrap();
+    }
+
+    for depth in &depths {
+        let exists = redis
+            .get_summary_cache(&tenant_id, &layer, &entry_id, depth)
+            .await
+            .unwrap();
+        assert!(exists.is_some(), "Should have cached {:?}", depth);
+    }
+
+    let invalidate_result = redis
+        .invalidate_summary_cache(&tenant_id, &layer, &entry_id, None)
+        .await;
+    assert!(invalidate_result.is_ok());
+    assert_eq!(invalidate_result.unwrap(), 3, "Should delete all 3 depths");
+
+    for depth in &depths {
+        let exists = redis
+            .get_summary_cache(&tenant_id, &layer, &entry_id, depth)
+            .await
+            .unwrap();
+        assert!(exists.is_none(), "Should have invalidated {:?}", depth);
+    }
+}
+
+#[tokio::test]
+async fn test_redis_invalidate_summary_cache_nonexistent() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_id("tenant");
+    let entry_id = unique_id("never_existed");
+    let layer = mk_core::types::MemoryLayer::User;
+
+    let invalidate_result = redis
+        .invalidate_summary_cache(&tenant_id, &layer, &entry_id, None)
+        .await;
+    assert!(invalidate_result.is_ok());
+    assert_eq!(invalidate_result.unwrap(), 0, "Nothing to delete");
+}
+
+#[tokio::test]
+async fn test_redis_get_all_summaries_for_entry() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_id("tenant");
+    let entry_id = unique_id("entry");
+    let layer = mk_core::types::MemoryLayer::Session;
+
+    let sentence = mk_core::types::LayerSummary {
+        depth: mk_core::types::SummaryDepth::Sentence,
+        content: "One sentence.".to_string(),
+        token_count: 10,
+        generated_at: 1704067200,
+        source_hash: "s1".to_string(),
+        content_hash: None,
+        personalized: false,
+        personalization_context: None,
+    };
+
+    let paragraph = mk_core::types::LayerSummary {
+        depth: mk_core::types::SummaryDepth::Paragraph,
+        content: "A full paragraph with more details.".to_string(),
+        token_count: 50,
+        generated_at: 1704067200,
+        source_hash: "p1".to_string(),
+        content_hash: None,
+        personalized: false,
+        personalization_context: None,
+    };
+
+    redis
+        .set_summary_cache(&tenant_id, &layer, &entry_id, &sentence, Some(3600))
+        .await
+        .unwrap();
+    redis
+        .set_summary_cache(&tenant_id, &layer, &entry_id, &paragraph, Some(3600))
+        .await
+        .unwrap();
+
+    let all_summaries = redis
+        .get_all_summaries_for_entry(&tenant_id, &layer, &entry_id)
+        .await;
+    assert!(all_summaries.is_ok());
+
+    let summaries = all_summaries.unwrap();
+    assert_eq!(summaries.len(), 2);
+    assert!(summaries.contains_key(&mk_core::types::SummaryDepth::Sentence));
+    assert!(summaries.contains_key(&mk_core::types::SummaryDepth::Paragraph));
+    assert!(!summaries.contains_key(&mk_core::types::SummaryDepth::Detailed));
+
+    assert_eq!(
+        summaries[&mk_core::types::SummaryDepth::Sentence].token_count,
+        10
+    );
+    assert_eq!(
+        summaries[&mk_core::types::SummaryDepth::Paragraph].token_count,
+        50
+    );
+}
+
+#[tokio::test]
+async fn test_redis_get_all_summaries_for_entry_empty() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_id("tenant");
+    let entry_id = unique_id("no_summaries");
+    let layer = mk_core::types::MemoryLayer::Agent;
+
+    let all_summaries = redis
+        .get_all_summaries_for_entry(&tenant_id, &layer, &entry_id)
+        .await;
+    assert!(all_summaries.is_ok());
+    assert!(all_summaries.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn test_redis_summary_cache_with_personalization() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_id("tenant");
+    let entry_id = unique_id("personalized");
+    let layer = mk_core::types::MemoryLayer::User;
+
+    let summary = mk_core::types::LayerSummary {
+        depth: mk_core::types::SummaryDepth::Detailed,
+        content: "Personalized summary for user".to_string(),
+        token_count: 100,
+        generated_at: 1704067200,
+        source_hash: "hash123".to_string(),
+        content_hash: Some("content_hash_456".to_string()),
+        personalized: true,
+        personalization_context: Some("User prefers technical details".to_string()),
+    };
+
+    redis
+        .set_summary_cache(&tenant_id, &layer, &entry_id, &summary, Some(3600))
+        .await
+        .unwrap();
+
+    let retrieved = redis
+        .get_summary_cache(
+            &tenant_id,
+            &layer,
+            &entry_id,
+            &mk_core::types::SummaryDepth::Detailed,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert!(retrieved.personalized);
+    assert_eq!(
+        retrieved.personalization_context,
+        Some("User prefers technical details".to_string())
+    );
+    assert_eq!(retrieved.content_hash, Some("content_hash_456".to_string()));
+}
+
+#[tokio::test]
+async fn test_redis_summary_cache_ttl_expiration() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_id("tenant");
+    let entry_id = unique_id("expiring");
+    let layer = mk_core::types::MemoryLayer::Team;
+
+    let summary = mk_core::types::LayerSummary {
+        depth: mk_core::types::SummaryDepth::Sentence,
+        content: "Expiring summary".to_string(),
+        token_count: 20,
+        generated_at: 1704067200,
+        source_hash: "exp".to_string(),
+        content_hash: None,
+        personalized: false,
+        personalization_context: None,
+    };
+
+    redis
+        .set_summary_cache(&tenant_id, &layer, &entry_id, &summary, Some(1))
+        .await
+        .unwrap();
+
+    let exists_immediately = redis
+        .get_summary_cache(
+            &tenant_id,
+            &layer,
+            &entry_id,
+            &mk_core::types::SummaryDepth::Sentence,
+        )
+        .await
+        .unwrap();
+    assert!(exists_immediately.is_some());
+
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+    let exists_after = redis
+        .get_summary_cache(
+            &tenant_id,
+            &layer,
+            &entry_id,
+            &mk_core::types::SummaryDepth::Sentence,
+        )
+        .await
+        .unwrap();
+    assert!(exists_after.is_none(), "Summary should expire after TTL");
+}
+
+#[tokio::test]
+async fn test_redis_summary_cache_without_ttl() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_id("tenant");
+    let entry_id = unique_id("no_ttl");
+    let layer = mk_core::types::MemoryLayer::Project;
+
+    let summary = mk_core::types::LayerSummary {
+        depth: mk_core::types::SummaryDepth::Paragraph,
+        content: "Persistent summary".to_string(),
+        token_count: 30,
+        generated_at: 1704067200,
+        source_hash: "persist".to_string(),
+        content_hash: None,
+        personalized: false,
+        personalization_context: None,
+    };
+
+    redis
+        .set_summary_cache(&tenant_id, &layer, &entry_id, &summary, None)
+        .await
+        .unwrap();
+
+    let retrieved = redis
+        .get_summary_cache(
+            &tenant_id,
+            &layer,
+            &entry_id,
+            &mk_core::types::SummaryDepth::Paragraph,
+        )
+        .await
+        .unwrap();
+    assert!(retrieved.is_some());
+}
+
+#[tokio::test]
+async fn test_redis_summary_cache_tenant_isolation() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant1 = unique_id("tenant1");
+    let tenant2 = unique_id("tenant2");
+    let entry_id = "shared-entry";
+    let layer = mk_core::types::MemoryLayer::Company;
+
+    let summary1 = mk_core::types::LayerSummary {
+        depth: mk_core::types::SummaryDepth::Sentence,
+        content: "Tenant 1 summary".to_string(),
+        token_count: 10,
+        generated_at: 1704067200,
+        source_hash: "t1".to_string(),
+        content_hash: None,
+        personalized: false,
+        personalization_context: None,
+    };
+
+    redis
+        .set_summary_cache(&tenant1, &layer, entry_id, &summary1, Some(3600))
+        .await
+        .unwrap();
+
+    let tenant1_result = redis
+        .get_summary_cache(
+            &tenant1,
+            &layer,
+            entry_id,
+            &mk_core::types::SummaryDepth::Sentence,
+        )
+        .await
+        .unwrap();
+    assert!(tenant1_result.is_some());
+    assert_eq!(tenant1_result.unwrap().content, "Tenant 1 summary");
+
+    let tenant2_result = redis
+        .get_summary_cache(
+            &tenant2,
+            &layer,
+            entry_id,
+            &mk_core::types::SummaryDepth::Sentence,
+        )
+        .await
+        .unwrap();
+    assert!(
+        tenant2_result.is_none(),
+        "Tenant 2 should not see tenant 1's summary"
+    );
+}
+
+#[tokio::test]
+async fn test_redis_summary_cache_layer_isolation() {
+    let Some(redis) = create_test_redis().await else {
+        eprintln!("Skipping Redis test: Docker not available");
+        return;
+    };
+
+    let tenant_id = unique_id("tenant");
+    let entry_id = unique_id("entry");
+
+    let team_summary = mk_core::types::LayerSummary {
+        depth: mk_core::types::SummaryDepth::Sentence,
+        content: "Team layer summary".to_string(),
+        token_count: 15,
+        generated_at: 1704067200,
+        source_hash: "team".to_string(),
+        content_hash: None,
+        personalized: false,
+        personalization_context: None,
+    };
+
+    redis
+        .set_summary_cache(
+            &tenant_id,
+            &mk_core::types::MemoryLayer::Team,
+            &entry_id,
+            &team_summary,
+            Some(3600),
+        )
+        .await
+        .unwrap();
+
+    let team_result = redis
+        .get_summary_cache(
+            &tenant_id,
+            &mk_core::types::MemoryLayer::Team,
+            &entry_id,
+            &mk_core::types::SummaryDepth::Sentence,
+        )
+        .await
+        .unwrap();
+    assert!(team_result.is_some());
+
+    let project_result = redis
+        .get_summary_cache(
+            &tenant_id,
+            &mk_core::types::MemoryLayer::Project,
+            &entry_id,
+            &mk_core::types::SummaryDepth::Sentence,
+        )
+        .await
+        .unwrap();
+    assert!(
+        project_result.is_none(),
+        "Project layer should not see team layer's summary"
     );
 }

@@ -7,6 +7,7 @@
 //! - Core traits for adapters and providers
 //! - Error types with proper handling
 //! - Validation utilities
+//! - Operation hints for capability toggles
 //!
 //! # Best Practices
 //!
@@ -15,10 +16,12 @@
 //! - Comprehensive error handling with `thiserror`
 //! - M-CANONICAL-DOCS documentation format
 
+pub mod hints;
 pub mod traits;
 pub mod types;
 
 // Re-export commonly used types for convenience
+pub use hints::{HintPreset, HintsConfig, OperationHints};
 pub use types::{
     ConstraintOperator, ConstraintSeverity, ConstraintTarget, HierarchyPath, KnowledgeLayer,
     KnowledgeType, MemoryLayer, TenantContext, TenantId, UserId,

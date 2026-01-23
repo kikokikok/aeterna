@@ -1,0 +1,343 @@
+[
+  {
+    "name": "Agent with memory:read can view memory",
+    "request": {
+      "principal": "Aeterna::Agent::\"agent-1\"",
+      "action": "Aeterna::Action::\"ViewMemory\"",
+      "resource": "Aeterna::Memory::\"memory-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::Agent", "id": "agent-1" },
+        "attrs": {
+          "name": "OpenCode Agent",
+          "agent_type": "opencode",
+          "delegation_depth": 1,
+          "max_delegation_depth": 3,
+          "capabilities": ["memory:read", "memory:write", "knowledge:read"],
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Memory", "id": "memory-1" },
+        "attrs": {
+          "layer": "project"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Agent with memory:write can create memory",
+    "request": {
+      "principal": "Aeterna::Agent::\"agent-1\"",
+      "action": "Aeterna::Action::\"CreateMemory\"",
+      "resource": "Aeterna::Project::\"project-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::Agent", "id": "agent-1" },
+        "attrs": {
+          "name": "OpenCode Agent",
+          "agent_type": "opencode",
+          "delegation_depth": 1,
+          "max_delegation_depth": 3,
+          "capabilities": ["memory:read", "memory:write"],
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Project", "id": "project-1" },
+        "attrs": {
+          "name": "Payments",
+          "slug": "payments"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Agent without memory:delete cannot delete memory",
+    "request": {
+      "principal": "Aeterna::Agent::\"agent-readonly\"",
+      "action": "Aeterna::Action::\"DeleteMemory\"",
+      "resource": "Aeterna::Memory::\"memory-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::Agent", "id": "agent-readonly" },
+        "attrs": {
+          "name": "Read-Only Agent",
+          "agent_type": "custom",
+          "delegation_depth": 1,
+          "max_delegation_depth": 3,
+          "capabilities": ["memory:read", "knowledge:read"],
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Memory", "id": "memory-1" },
+        "attrs": {
+          "layer": "project"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Agent with knowledge:propose can propose knowledge",
+    "request": {
+      "principal": "Aeterna::Agent::\"agent-1\"",
+      "action": "Aeterna::Action::\"ProposeKnowledge\"",
+      "resource": "Aeterna::Project::\"project-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::Agent", "id": "agent-1" },
+        "attrs": {
+          "name": "OpenCode Agent",
+          "agent_type": "opencode",
+          "delegation_depth": 1,
+          "max_delegation_depth": 3,
+          "capabilities": ["knowledge:read", "knowledge:propose"],
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Project", "id": "project-1" },
+        "attrs": {
+          "name": "Payments",
+          "slug": "payments"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Revoked agent is denied all access",
+    "request": {
+      "principal": "Aeterna::Agent::\"agent-revoked\"",
+      "action": "Aeterna::Action::\"ViewMemory\"",
+      "resource": "Aeterna::Memory::\"memory-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::Agent", "id": "agent-revoked" },
+        "attrs": {
+          "name": "Revoked Agent",
+          "agent_type": "custom",
+          "delegation_depth": 1,
+          "max_delegation_depth": 3,
+          "capabilities": ["memory:read", "memory:write", "knowledge:read"],
+          "status": "revoked"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Memory", "id": "memory-1" },
+        "attrs": {
+          "layer": "project"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Expired agent is denied all access",
+    "request": {
+      "principal": "Aeterna::Agent::\"agent-expired\"",
+      "action": "Aeterna::Action::\"ViewKnowledge\"",
+      "resource": "Aeterna::Knowledge::\"knowledge-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::Agent", "id": "agent-expired" },
+        "attrs": {
+          "name": "Expired Agent",
+          "agent_type": "langchain",
+          "delegation_depth": 1,
+          "max_delegation_depth": 3,
+          "capabilities": ["knowledge:read"],
+          "status": "expired"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Knowledge", "id": "knowledge-1" },
+        "attrs": {
+          "knowledge_type": "pattern",
+          "status": "approved",
+          "tags": []
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Agent exceeding delegation depth is denied",
+    "request": {
+      "principal": "Aeterna::Agent::\"agent-deep\"",
+      "action": "Aeterna::Action::\"ViewMemory\"",
+      "resource": "Aeterna::Memory::\"memory-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::Agent", "id": "agent-deep" },
+        "attrs": {
+          "name": "Deep Delegation Agent",
+          "agent_type": "autogen",
+          "delegation_depth": 5,
+          "max_delegation_depth": 3,
+          "capabilities": ["memory:read"],
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Memory", "id": "memory-1" },
+        "attrs": {
+          "layer": "project"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Agent with governance:submit can submit governance request",
+    "request": {
+      "principal": "Aeterna::Agent::\"agent-1\"",
+      "action": "Aeterna::Action::\"SubmitGovernanceRequest\"",
+      "resource": "Aeterna::Project::\"project-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::Agent", "id": "agent-1" },
+        "attrs": {
+          "name": "OpenCode Agent",
+          "agent_type": "opencode",
+          "delegation_depth": 1,
+          "max_delegation_depth": 3,
+          "capabilities": ["governance:read", "governance:submit"],
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Project", "id": "project-1" },
+        "attrs": {
+          "name": "Payments",
+          "slug": "payments"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Agent with agent:delegate can delegate to sub-agent",
+    "request": {
+      "principal": "Aeterna::Agent::\"agent-parent\"",
+      "action": "Aeterna::Action::\"DelegateToAgent\"",
+      "resource": "Aeterna::Agent::\"agent-child\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::Agent", "id": "agent-parent" },
+        "attrs": {
+          "name": "Parent Agent",
+          "agent_type": "autogen",
+          "delegation_depth": 1,
+          "max_delegation_depth": 3,
+          "capabilities": ["agent:delegate", "memory:read"],
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Agent", "id": "agent-child" },
+        "attrs": {
+          "name": "Child Agent",
+          "agent_type": "custom",
+          "delegation_depth": 2,
+          "max_delegation_depth": 3,
+          "capabilities": ["memory:read"],
+          "status": "active"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Agent at max depth cannot register sub-agent",
+    "request": {
+      "principal": "Aeterna::Agent::\"agent-at-max\"",
+      "action": "Aeterna::Action::\"RegisterAgent\"",
+      "resource": "Aeterna::Project::\"project-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::Agent", "id": "agent-at-max" },
+        "attrs": {
+          "name": "Max Depth Agent",
+          "agent_type": "custom",
+          "delegation_depth": 3,
+          "max_delegation_depth": 3,
+          "capabilities": ["agent:register"],
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Project", "id": "project-1" },
+        "attrs": {
+          "name": "Payments",
+          "slug": "payments"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [],
+    "num_errors": 0
+  }
+]

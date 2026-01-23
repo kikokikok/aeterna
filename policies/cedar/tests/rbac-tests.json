@@ -1,0 +1,386 @@
+[
+  {
+    "name": "Admin can view memory",
+    "request": {
+      "principal": "Aeterna::User::\"user-admin-1\"",
+      "action": "Aeterna::Action::\"ViewMemory\"",
+      "resource": "Aeterna::Memory::\"memory-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-admin-1" },
+        "attrs": {
+          "email": "admin@acme.com",
+          "name": "Admin User",
+          "role": "admin",
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Memory", "id": "memory-1" },
+        "attrs": {
+          "layer": "project"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Admin can delete memory",
+    "request": {
+      "principal": "Aeterna::User::\"user-admin-1\"",
+      "action": "Aeterna::Action::\"DeleteMemory\"",
+      "resource": "Aeterna::Memory::\"memory-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-admin-1" },
+        "attrs": {
+          "email": "admin@acme.com",
+          "name": "Admin User",
+          "role": "admin",
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Memory", "id": "memory-1" },
+        "attrs": {
+          "layer": "project"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Admin can approve governance request",
+    "request": {
+      "principal": "Aeterna::User::\"user-admin-1\"",
+      "action": "Aeterna::Action::\"ApproveGovernanceRequest\"",
+      "resource": "Aeterna::GovernanceRequest::\"request-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-admin-1" },
+        "attrs": {
+          "email": "admin@acme.com",
+          "name": "Admin User",
+          "role": "admin",
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::GovernanceRequest", "id": "request-1" },
+        "attrs": {
+          "request_type": "policy_change",
+          "status": "pending"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Architect can approve knowledge",
+    "request": {
+      "principal": "Aeterna::User::\"user-architect-1\"",
+      "action": "Aeterna::Action::\"ApproveKnowledge\"",
+      "resource": "Aeterna::Knowledge::\"knowledge-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-architect-1" },
+        "attrs": {
+          "email": "architect@acme.com",
+          "name": "Architect User",
+          "role": "architect",
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Knowledge", "id": "knowledge-1" },
+        "attrs": {
+          "knowledge_type": "adr",
+          "status": "proposed",
+          "tags": ["architecture"]
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "TechLead can create project",
+    "request": {
+      "principal": "Aeterna::User::\"user-techlead-1\"",
+      "action": "Aeterna::Action::\"CreateProject\"",
+      "resource": "Aeterna::Team::\"team-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-techlead-1" },
+        "attrs": {
+          "email": "techlead@acme.com",
+          "name": "Tech Lead User",
+          "role": "tech_lead",
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Team", "id": "team-1" },
+        "attrs": {
+          "name": "API Team",
+          "slug": "api-team"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Developer can view knowledge",
+    "request": {
+      "principal": "Aeterna::User::\"user-dev-1\"",
+      "action": "Aeterna::Action::\"ViewKnowledge\"",
+      "resource": "Aeterna::Knowledge::\"knowledge-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-dev-1" },
+        "attrs": {
+          "email": "dev@acme.com",
+          "name": "Developer User",
+          "role": "developer",
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Knowledge", "id": "knowledge-1" },
+        "attrs": {
+          "knowledge_type": "pattern",
+          "status": "approved",
+          "tags": ["coding"]
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Developer can propose knowledge",
+    "request": {
+      "principal": "Aeterna::User::\"user-dev-1\"",
+      "action": "Aeterna::Action::\"ProposeKnowledge\"",
+      "resource": "Aeterna::Project::\"project-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-dev-1" },
+        "attrs": {
+          "email": "dev@acme.com",
+          "name": "Developer User",
+          "role": "developer",
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Project", "id": "project-1" },
+        "attrs": {
+          "name": "Payments Service",
+          "slug": "payments-service"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Developer cannot approve knowledge",
+    "request": {
+      "principal": "Aeterna::User::\"user-dev-1\"",
+      "action": "Aeterna::Action::\"ApproveKnowledge\"",
+      "resource": "Aeterna::Knowledge::\"knowledge-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-dev-1" },
+        "attrs": {
+          "email": "dev@acme.com",
+          "name": "Developer User",
+          "role": "developer",
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Knowledge", "id": "knowledge-1" },
+        "attrs": {
+          "knowledge_type": "adr",
+          "status": "proposed",
+          "tags": []
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Viewer can only view memory",
+    "request": {
+      "principal": "Aeterna::User::\"user-viewer-1\"",
+      "action": "Aeterna::Action::\"ViewMemory\"",
+      "resource": "Aeterna::Memory::\"memory-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-viewer-1" },
+        "attrs": {
+          "email": "viewer@acme.com",
+          "name": "Viewer User",
+          "role": "viewer",
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Memory", "id": "memory-1" },
+        "attrs": {
+          "layer": "team"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Viewer cannot create memory",
+    "request": {
+      "principal": "Aeterna::User::\"user-viewer-1\"",
+      "action": "Aeterna::Action::\"CreateMemory\"",
+      "resource": "Aeterna::Project::\"project-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-viewer-1" },
+        "attrs": {
+          "email": "viewer@acme.com",
+          "name": "Viewer User",
+          "role": "viewer",
+          "status": "active"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Project", "id": "project-1" },
+        "attrs": {
+          "name": "Payments Service",
+          "slug": "payments-service"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Inactive user is denied access",
+    "request": {
+      "principal": "Aeterna::User::\"user-inactive-1\"",
+      "action": "Aeterna::Action::\"ViewMemory\"",
+      "resource": "Aeterna::Memory::\"memory-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-inactive-1" },
+        "attrs": {
+          "email": "inactive@acme.com",
+          "name": "Inactive User",
+          "role": "admin",
+          "status": "inactive"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Memory", "id": "memory-1" },
+        "attrs": {
+          "layer": "project"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "Suspended user is denied access",
+    "request": {
+      "principal": "Aeterna::User::\"user-suspended-1\"",
+      "action": "Aeterna::Action::\"ViewKnowledge\"",
+      "resource": "Aeterna::Knowledge::\"knowledge-1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": { "type": "Aeterna::User", "id": "user-suspended-1" },
+        "attrs": {
+          "email": "suspended@acme.com",
+          "name": "Suspended User",
+          "role": "developer",
+          "status": "suspended"
+        },
+        "parents": []
+      },
+      {
+        "uid": { "type": "Aeterna::Knowledge", "id": "knowledge-1" },
+        "attrs": {
+          "knowledge_type": "pattern",
+          "status": "approved",
+          "tags": []
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [],
+    "num_errors": 0
+  }
+]

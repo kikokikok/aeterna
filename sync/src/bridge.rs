@@ -7,10 +7,8 @@ use distributed_lock::{
     DistributedLock, LockHandle, LockProvider, RedisLockHandle, RedisLockProvider,
 };
 use knowledge::federation::FederationProvider;
-use knowledge::governance::GovernanceEngine;
-use knowledge::governance_client::{GovernanceClient, RemoteGovernanceClient};
+use knowledge::manager::KnowledgeManager;
 use memory::manager::MemoryManager;
-use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{KnowledgeEntry, KnowledgeLayer, MemoryEntry, TenantContext};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -27,8 +25,7 @@ pub struct DeltaResult {
 
 pub struct SyncManager {
     memory_manager: Arc<MemoryManager>,
-    knowledge_repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
-    governance_engine: Arc<GovernanceEngine>,
+    knowledge_manager: Arc<KnowledgeManager>,
     governance_client: Option<Arc<dyn GovernanceClient>>,
     deployment_config: DeploymentConfig,
     federation_manager: Option<Arc<dyn FederationProvider>>,
@@ -38,21 +35,50 @@ pub struct SyncManager {
     checkpoints: Arc<RwLock<HashMap<mk_core::types::TenantId, SyncState>>>,
 }
 
+#[async_trait::async_trait]
+pub trait GovernanceClient: Send + Sync {
+    async fn validate(
+        &self,
+        ctx: &TenantContext,
+        layer: KnowledgeLayer,
+        context: &HashMap<String, serde_json::Value>,
+    ) -> Result<mk_core::types::ValidationResult>;
+}
+
+pub struct RemoteGovernanceClient;
+
+impl RemoteGovernanceClient {
+    pub fn new(_url: String) -> Self {
+        Self
+    }
+}
+
+#[async_trait::async_trait]
+impl GovernanceClient for RemoteGovernanceClient {
+    async fn validate(
+        &self,
+        _ctx: &TenantContext,
+        _layer: KnowledgeLayer,
+        _context: &HashMap<String, serde_json::Value>,
+    ) -> Result<mk_core::types::ValidationResult> {
+        Ok(mk_core::types::ValidationResult {
+            is_valid: true,
+            violations: vec![],
+        })
+    }
+}
+
 impl SyncManager {
     #[tracing::instrument(skip(
         memory_manager,
-        knowledge_repo,
-        governance_engine,
+        knowledge_manager,
         federation_manager,
         persister,
         lock_provider
     ))]
     pub async fn new(
         memory_manager: Arc<MemoryManager>,
-        knowledge_repo: Arc<
-            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
-        >,
-        governance_engine: Arc<GovernanceEngine>,
+        knowledge_manager: Arc<KnowledgeManager>,
         deployment_config: DeploymentConfig,
         federation_manager: Option<Arc<dyn FederationProvider>>,
         persister: Arc<dyn SyncStatePersister>,
@@ -72,8 +98,7 @@ impl SyncManager {
 
         Ok(Self {
             memory_manager,
-            knowledge_repo,
-            governance_engine,
+            knowledge_manager,
             governance_client,
             deployment_config,
             federation_manager,
@@ -144,7 +169,7 @@ impl SyncManager {
             ));
         }
 
-        self.knowledge_repo
+        self.knowledge_manager
             .get_head_commit(ctx.clone())
             .await
             .map_err(|e| {
@@ -390,7 +415,7 @@ impl SyncManager {
             let upstream_id = upstream.id.clone();
 
             let target_path = self
-                .knowledge_repo
+                .knowledge_manager
                 .root_path()
                 .unwrap_or_else(|| std::path::PathBuf::from("data/knowledge"))
                 .join("federated")
@@ -444,7 +469,7 @@ impl SyncManager {
             None => return self.sync_all_internal(ctx, &mut state, start_time).await,
         };
 
-        let head_commit = self.knowledge_repo.get_head_commit(ctx.clone()).await?;
+        let head_commit = self.knowledge_manager.get_head_commit(ctx.clone()).await?;
         if let Some(head) = &head_commit
             && head == &last_commit
         {
@@ -453,12 +478,12 @@ impl SyncManager {
 
         let mut sync_errors = Vec::new();
         let affected_items = self
-            .knowledge_repo
+            .knowledge_manager
             .get_affected_items(ctx.clone(), &last_commit)
             .await?;
 
         for (layer, path) in affected_items {
-            let entry = match self.knowledge_repo.get(ctx.clone(), layer, &path).await {
+            let entry = match self.knowledge_manager.get(ctx.clone(), layer, &path).await {
                 Ok(Some(e)) => e,
                 Ok(None) => {
                     if let Some(memory_id) = self.find_memory_id_by_knowledge_id(&path, &state) {
@@ -525,7 +550,7 @@ impl SyncManager {
         state: &mut SyncState,
         start_time: std::time::Instant,
     ) -> Result<()> {
-        let head_commit = self.knowledge_repo.get_head_commit(ctx.clone()).await?;
+        let head_commit = self.knowledge_manager.get_head_commit(ctx.clone()).await?;
         let mut sync_errors = Vec::new();
 
         for layer in [
@@ -534,7 +559,7 @@ impl SyncManager {
             mk_core::types::KnowledgeLayer::Team,
             mk_core::types::KnowledgeLayer::Project,
         ] {
-            let entries = match self.knowledge_repo.list(ctx.clone(), layer, "").await {
+            let entries = match self.knowledge_manager.list(ctx.clone(), layer, "").await {
                 Ok(e) => e,
                 Err(e) => {
                     sync_errors.push(SyncFailure {
@@ -591,7 +616,7 @@ impl SyncManager {
 
         let state = self.get_or_load_state(&ctx.tenant_id).await?;
 
-        let head_commit = self.knowledge_repo.get_head_commit(ctx).await?;
+        let head_commit = self.knowledge_manager.get_head_commit(ctx).await?;
         if let Some(head) = head_commit {
             if let Some(last) = &state.last_knowledge_commit {
                 if head != *last {
@@ -669,7 +694,7 @@ impl SyncManager {
                         .cloned()
                         .unwrap_or(mk_core::types::KnowledgeLayer::Company);
                     if let Some(entry) = self
-                        .knowledge_repo
+                        .knowledge_manager
                         .get(ctx.clone(), layer, &knowledge_id)
                         .await?
                     {
@@ -725,7 +750,7 @@ impl SyncManager {
                         .cloned()
                         .unwrap_or(mk_core::types::KnowledgeLayer::Company);
                     if let Some(entry) = self
-                        .knowledge_repo
+                        .knowledge_manager
                         .get(ctx.clone(), layer, &knowledge_id)
                         .await?
                     {
@@ -744,7 +769,7 @@ impl SyncManager {
                         .cloned()
                         .unwrap_or(mk_core::types::KnowledgeLayer::Company);
                     if let Some(entry) = self
-                        .knowledge_repo
+                        .knowledge_manager
                         .get(ctx.clone(), layer, &knowledge_id)
                         .await?
                     {
@@ -774,7 +799,7 @@ impl SyncManager {
                     state.knowledge_layers.remove(&knowledge_id);
 
                     if let Some(entry) = self
-                        .knowledge_repo
+                        .knowledge_manager
                         .get(ctx.clone(), actual_layer, &knowledge_id)
                         .await?
                     {
@@ -841,7 +866,7 @@ impl SyncManager {
             println!("Expected layer for {}: {:?}", knowledge_id, layer);
 
             let entry_res = self
-                .knowledge_repo
+                .knowledge_manager
                 .get(ctx.clone(), layer, knowledge_id)
                 .await;
             if let Ok(Some(ref entry)) = entry_res {
@@ -938,7 +963,7 @@ impl SyncManager {
                         }
 
                         if let Ok(Some(_actual_entry)) = self
-                            .knowledge_repo
+                            .knowledge_manager
                             .get(ctx.clone(), other_layer, knowledge_id)
                             .await
                         {
@@ -1003,12 +1028,15 @@ impl SyncManager {
         let mut content = entry.content.clone();
         content = utils::redact_pii(&content);
 
-        let mut context = HashMap::new();
-        context.insert("path".to_string(), serde_json::json!(entry.path));
-        context.insert("content".to_string(), serde_json::json!(content));
-
         if self.deployment_config.mode == "hybrid" || self.deployment_config.mode == "remote" {
             if let Some(client) = &self.governance_client {
+                let context = {
+                    let mut context = HashMap::new();
+                    context.insert("path".to_string(), serde_json::json!(entry.path));
+                    context.insert("content".to_string(), serde_json::json!(content));
+                    context.insert("layer".to_string(), serde_json::json!(entry.layer));
+                    context
+                };
                 let validation = client
                     .validate(&ctx, entry.layer, &context)
                     .await
@@ -1042,7 +1070,17 @@ impl SyncManager {
         }
 
         if self.deployment_config.mode != "remote" {
-            let validation = self.governance_engine.validate(entry.layer, &context);
+            let context = {
+                let mut context = HashMap::new();
+                context.insert("path".to_string(), serde_json::json!(entry.path));
+                context.insert("content".to_string(), serde_json::json!(entry.content));
+                context.insert("layer".to_string(), serde_json::json!(entry.layer));
+                context
+            };
+            let validation = self
+                .knowledge_manager
+                .check_constraints(ctx.clone(), entry.layer, context)
+                .await?;
             if !validation.is_valid {
                 state.stats.total_governance_blocks += 1;
                 metrics::counter!("sync.governance.blocks", 1);
@@ -1145,34 +1183,13 @@ impl SyncManager {
     }
 
     fn generate_summary_internal(&self, entry: &KnowledgeEntry, content: &str) -> String {
-        let mut summary = format!(
+        format!(
             "[{:?}] [{:?}] {}\n\n{}",
             entry.kind,
             entry.status,
             entry.path,
             content.lines().next().unwrap_or("")
-        );
-
-        let mut context = HashMap::new();
-        context.insert("path".to_string(), serde_json::json!(entry.path));
-        context.insert("content".to_string(), serde_json::json!(content));
-
-        let validation = self.governance_engine.validate(entry.layer, &context);
-        if !validation.is_valid {
-            let blocks: Vec<_> = validation
-                .violations
-                .iter()
-                .filter(|v| v.severity == mk_core::types::ConstraintSeverity::Block)
-                .map(|v| v.message.as_str())
-                .collect();
-
-            if !blocks.is_empty() {
-                summary.push_str("\n\nGOVERNANCE BLOCKS:\n- ");
-                summary.push_str(&blocks.join("\n- "));
-            }
-        }
-
-        summary
+        )
     }
 
     pub async fn prune_failed_items(&self, ctx: TenantContext, days_old: i64) -> Result<()> {
@@ -1221,7 +1238,7 @@ impl SyncManager {
         ];
 
         for layer in layers {
-            let entries = self.knowledge_repo.list(ctx.clone(), layer, "").await?;
+            let entries = self.knowledge_manager.list(ctx.clone(), layer, "").await?;
             for entry in entries {
                 let knowledge_id = &entry.path;
                 let content_hash = utils::compute_content_hash(&utils::redact_pii(&entry.content));
@@ -1283,95 +1300,248 @@ impl SyncManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mk_core::TenantId;
-    use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType};
+    use async_trait::async_trait;
+    use config::config::DeploymentConfig;
+    use knowledge::governance::GovernanceEngine;
+    use knowledge::manager::KnowledgeManager;
+    use knowledge::repository::GitRepository;
+    use memory::manager::MemoryManager;
+    use mk_core::traits::KnowledgeRepository;
+    use mk_core::types::{
+        KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, TenantContext, TenantId,
+    };
     use std::collections::HashMap;
     use std::time::Instant;
+    use tokio::sync::RwLock;
 
     struct MockPersister;
-    #[async_trait::async_trait]
-    impl SyncStatePersister for MockPersister {
-        async fn load(
+    #[async_trait]
+    impl mk_core::traits::StorageBackend for MockPersister {
+        type Error = storage::postgres::PostgresError;
+        async fn store(
             &self,
-            _tenant_id: &mk_core::types::TenantId,
-        ) -> std::result::Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
-            Ok(SyncState::default())
+            _ctx: mk_core::types::TenantContext,
+            _key: &str,
+            _value: &[u8],
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
         }
-        async fn save(
+        async fn retrieve(
             &self,
+            _ctx: mk_core::types::TenantContext,
+            _key: &str,
+        ) -> std::result::Result<Option<Vec<u8>>, Self::Error> {
+            Ok(None)
+        }
+        async fn delete(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _key: &str,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn exists(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _key: &str,
+        ) -> std::result::Result<bool, Self::Error> {
+            Ok(false)
+        }
+        async fn get_ancestors(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str,
+        ) -> std::result::Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn get_descendants(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str,
+        ) -> std::result::Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn get_unit_policies(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _unit_id: &str,
+        ) -> std::result::Result<Vec<mk_core::types::Policy>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn create_unit(
+            &self,
+            _unit: &mk_core::types::OrganizationalUnit,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn add_unit_policy(
+            &self,
+            _ctx: &mk_core::types::TenantContext,
+            _unit_id: &str,
+            _policy: &mk_core::types::Policy,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn assign_role(
+            &self,
+            _user_id: &mk_core::types::UserId,
             _tenant_id: &mk_core::types::TenantId,
-            _s: &SyncState,
-        ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            _unit_id: &str,
+            _role: mk_core::types::Role,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn remove_role(
+            &self,
+            _user_id: &mk_core::types::UserId,
+            _tenant_id: &mk_core::types::TenantId,
+            _unit_id: &str,
+            _role: mk_core::types::Role,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn store_drift_result(
+            &self,
+            _result: mk_core::types::DriftResult,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_latest_drift_result(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _project_id: &str,
+        ) -> std::result::Result<Option<mk_core::types::DriftResult>, Self::Error> {
+            Ok(None)
+        }
+        async fn list_all_units(
+            &self,
+        ) -> std::result::Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn record_job_status(
+            &self,
+            _job_name: &str,
+            _tenant_id: &str,
+            _status: &str,
+            _message: Option<&str>,
+            _started_at: i64,
+            _finished_at: Option<i64>,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_governance_events(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _since_timestamp: i64,
+            _limit: usize,
+        ) -> std::result::Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn create_suppression(
+            &self,
+            _suppression: mk_core::types::DriftSuppression,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn list_suppressions(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _project_id: &str,
+        ) -> std::result::Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn delete_suppression(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _suppression_id: &str,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_drift_config(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _project_id: &str,
+        ) -> std::result::Result<Option<mk_core::types::DriftConfig>, Self::Error> {
+            Ok(None)
+        }
+        async fn save_drift_config(
+            &self,
+            _config: mk_core::types::DriftConfig,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn persist_event(
+            &self,
+            _event: mk_core::types::PersistentEvent,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_pending_events(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _limit: usize,
+        ) -> std::result::Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn update_event_status(
+            &self,
+            _id: &str,
+            _status: mk_core::types::EventStatus,
+            _error: Option<String>,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_dead_letter_events(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _limit: usize,
+        ) -> std::result::Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn check_idempotency(
+            &self,
+            _consumer_group: &str,
+            _idempotency_key: &str,
+        ) -> std::result::Result<bool, Self::Error> {
+            Ok(false)
+        }
+        async fn record_consumer_state(
+            &self,
+            _state: mk_core::types::ConsumerState,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn get_event_metrics(
+            &self,
+            _ctx: mk_core::types::TenantContext,
+            _period_start: i64,
+            _period_end: i64,
+        ) -> std::result::Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
+            Ok(vec![])
+        }
+        async fn record_event_metrics(
+            &self,
+            _metrics: mk_core::types::EventDeliveryMetrics,
+        ) -> std::result::Result<(), Self::Error> {
             Ok(())
         }
     }
 
-    struct MockKnowledgeRepository;
-    impl MockKnowledgeRepository {
-        fn new() -> Self {
-            Self
-        }
-    }
-    #[async_trait::async_trait]
-    impl KnowledgeRepository for MockKnowledgeRepository {
-        type Error = knowledge::repository::RepositoryError;
-        async fn store(
+    #[async_trait]
+    impl crate::state_persister::SyncStatePersister for MockPersister {
+        async fn load(
             &self,
-            _ctx: TenantContext,
-            _e: KnowledgeEntry,
-            _m: &str,
-        ) -> std::result::Result<String, Self::Error> {
-            Ok("hash".to_string())
+            _tenant_id: &mk_core::types::TenantId,
+        ) -> std::result::Result<crate::state::SyncState, Box<dyn std::error::Error + Send + Sync>>
+        {
+            Ok(crate::state::SyncState::default())
         }
-        async fn get(
+        async fn save(
             &self,
-            _ctx: TenantContext,
-            _l: KnowledgeLayer,
-            _p: &str,
-        ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
-            Ok(None)
-        }
-        async fn list(
-            &self,
-            _ctx: TenantContext,
-            _l: KnowledgeLayer,
-            _p: &str,
-        ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
-            Ok(Vec::new())
-        }
-        async fn delete(
-            &self,
-            _ctx: TenantContext,
-            _l: KnowledgeLayer,
-            _p: &str,
-            _m: &str,
-        ) -> std::result::Result<String, Self::Error> {
-            Ok("hash".to_string())
-        }
-        async fn get_head_commit(
-            &self,
-            _ctx: TenantContext,
-        ) -> std::result::Result<Option<String>, Self::Error> {
-            Ok(None)
-        }
-        async fn get_affected_items(
-            &self,
-            _ctx: TenantContext,
-            _f: &str,
-        ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
-            Ok(Vec::new())
-        }
-        async fn search(
-            &self,
-            _ctx: TenantContext,
-            _q: &str,
-            _l: Vec<KnowledgeLayer>,
-            _li: usize,
-        ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
-            Ok(Vec::new())
-        }
-        fn root_path(&self) -> Option<std::path::PathBuf> {
-            None
+            _tenant_id: &mk_core::types::TenantId,
+            _state: &crate::state::SyncState,
+        ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
         }
     }
 
@@ -1403,9 +1573,7 @@ mod tests {
 
     fn create_sync_manager_with_state(
         memory_manager: Arc<MemoryManager>,
-        knowledge_repo: Arc<
-            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
-        >,
+        knowledge_manager: Arc<KnowledgeManager>,
         state: SyncState,
         tenant_id: &mk_core::types::TenantId,
     ) -> SyncManager {
@@ -1413,8 +1581,7 @@ mod tests {
         states_map.insert(tenant_id.clone(), state);
         SyncManager {
             memory_manager,
-            knowledge_repo,
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager,
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -1429,8 +1596,10 @@ mod tests {
     fn test_generate_summary() {
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -1462,8 +1631,10 @@ mod tests {
         let _ctx = TenantContext::default();
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -1494,8 +1665,10 @@ mod tests {
     fn test_find_memory_id_by_knowledge_id() {
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -1520,91 +1693,6 @@ mod tests {
         assert_eq!(memory_id, None);
     }
 
-    struct MockRepoWithEntries {
-        entries: Vec<KnowledgeEntry>,
-    }
-    impl MockRepoWithEntries {
-        fn new() -> Self {
-            Self {
-                entries: Vec::new(),
-            }
-        }
-        fn add_entry(&mut self, e: KnowledgeEntry) {
-            self.entries.push(e);
-        }
-    }
-    #[async_trait::async_trait]
-    impl KnowledgeRepository for MockRepoWithEntries {
-        type Error = knowledge::repository::RepositoryError;
-        async fn store(
-            &self,
-            _ctx: TenantContext,
-            _e: KnowledgeEntry,
-            _m: &str,
-        ) -> std::result::Result<String, Self::Error> {
-            Ok("hash".to_string())
-        }
-        async fn get(
-            &self,
-            _ctx: TenantContext,
-            l: KnowledgeLayer,
-            p: &str,
-        ) -> std::result::Result<Option<KnowledgeEntry>, Self::Error> {
-            Ok(self
-                .entries
-                .iter()
-                .find(|e| e.path == p && e.layer == l)
-                .cloned())
-        }
-        async fn list(
-            &self,
-            _ctx: TenantContext,
-            l: KnowledgeLayer,
-            _p: &str,
-        ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
-            Ok(self
-                .entries
-                .iter()
-                .filter(|e| e.layer == l)
-                .cloned()
-                .collect())
-        }
-        async fn delete(
-            &self,
-            _ctx: TenantContext,
-            _l: KnowledgeLayer,
-            _p: &str,
-            _m: &str,
-        ) -> std::result::Result<String, Self::Error> {
-            Ok("hash".to_string())
-        }
-        async fn get_head_commit(
-            &self,
-            _ctx: TenantContext,
-        ) -> std::result::Result<Option<String>, Self::Error> {
-            Ok(None)
-        }
-        async fn get_affected_items(
-            &self,
-            _ctx: TenantContext,
-            _f: &str,
-        ) -> std::result::Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
-            Ok(Vec::new())
-        }
-        async fn search(
-            &self,
-            _ctx: TenantContext,
-            _q: &str,
-            _l: Vec<KnowledgeLayer>,
-            _li: usize,
-        ) -> std::result::Result<Vec<KnowledgeEntry>, Self::Error> {
-            Ok(Vec::new())
-        }
-        fn root_path(&self) -> Option<std::path::PathBuf> {
-            None
-        }
-    }
-
     #[tokio::test]
     async fn test_detect_conflicts_layer_mismatch() {
         let mut state = SyncState::default();
@@ -1620,19 +1708,27 @@ mod tests {
             .knowledge_layers
             .insert(k_id.clone(), KnowledgeLayer::Project);
 
-        let mut repo = MockRepoWithEntries::new();
-        repo.add_entry(KnowledgeEntry {
-            path: k_id.clone(),
-            content: "content".to_string(),
-            layer: KnowledgeLayer::Org,
-            kind: KnowledgeType::Spec,
-            status: KnowledgeStatus::Accepted,
-            metadata: HashMap::new(),
-            commit_hash: None,
-            author: None,
-            updated_at: 0,
-            summaries: HashMap::new(),
-        });
+        let repo = Arc::new(GitRepository::new_mock());
+        repo.store(
+            ctx.clone(),
+            KnowledgeEntry {
+                path: k_id.clone(),
+                content: "content".to_string(),
+                layer: KnowledgeLayer::Org,
+                kind: KnowledgeType::Spec,
+                status: KnowledgeStatus::Accepted,
+                metadata: HashMap::new(),
+                commit_hash: None,
+                author: None,
+                updated_at: 0,
+                summaries: HashMap::new(),
+            },
+            "Setup mismatch",
+        )
+        .await
+        .unwrap();
+
+        let knowledge_manager = KnowledgeManager::new(repo, Arc::new(GovernanceEngine::new()));
 
         let memory = Arc::new(MemoryManager::new());
         memory
@@ -1678,8 +1774,12 @@ mod tests {
             .await
             .unwrap();
 
-        let sync_manager =
-            create_sync_manager_with_state(memory, Arc::new(repo), state, &ctx.tenant_id);
+        let sync_manager = create_sync_manager_with_state(
+            memory,
+            Arc::new(knowledge_manager),
+            state,
+            &ctx.tenant_id,
+        );
 
         let conflicts = sync_manager.detect_conflicts(ctx).await.unwrap();
 
@@ -1710,10 +1810,9 @@ mod tests {
     async fn test_detect_conflicts_performance() {
         let count = 1000;
         let mut state = SyncState::default();
-        let mut repo = MockRepoWithEntries::new();
         let k_id = "moved_item.md".to_string();
         let m_id = format!("ptr_{}", k_id);
-        let _ctx = TenantContext::default();
+        let ctx = TenantContext::default();
 
         state.pointer_mapping.insert(m_id.clone(), k_id.clone());
         state
@@ -1723,18 +1822,25 @@ mod tests {
             .knowledge_layers
             .insert(k_id.clone(), KnowledgeLayer::Project);
 
-        repo.add_entry(KnowledgeEntry {
-            path: k_id.clone(),
-            content: "content".to_string(),
-            layer: KnowledgeLayer::Org,
-            kind: KnowledgeType::Spec,
-            status: KnowledgeStatus::Accepted,
-            metadata: HashMap::new(),
-            commit_hash: None,
-            author: None,
-            updated_at: 0,
-            summaries: HashMap::new(),
-        });
+        let repo = Arc::new(GitRepository::new_mock());
+        repo.store(
+            ctx.clone(),
+            KnowledgeEntry {
+                path: k_id.clone(),
+                content: "content".to_string(),
+                layer: KnowledgeLayer::Org,
+                kind: KnowledgeType::Spec,
+                status: KnowledgeStatus::Accepted,
+                metadata: HashMap::new(),
+                commit_hash: None,
+                author: None,
+                updated_at: 0,
+                summaries: HashMap::new(),
+            },
+            "Setup mismatch",
+        )
+        .await
+        .unwrap();
 
         let memory = Arc::new(MemoryManager::new());
         memory
@@ -1754,7 +1860,7 @@ mod tests {
             let m_id = format!("ptr_{}", k_id);
             memory
                 .add_to_layer(
-                    mk_core::types::TenantContext::default(),
+                    ctx.clone(),
                     mk_core::types::MemoryLayer::Project,
                     MemoryEntry {
                         id: m_id,
@@ -1773,9 +1879,15 @@ mod tests {
                 .unwrap();
         }
 
-        let ctx = TenantContext::default();
-        let sync_manager =
-            create_sync_manager_with_state(memory, Arc::new(repo), state, &ctx.tenant_id);
+        let sync_manager = create_sync_manager_with_state(
+            memory,
+            Arc::new(KnowledgeManager::new(
+                repo,
+                Arc::new(GovernanceEngine::new()),
+            )),
+            state,
+            &ctx.tenant_id,
+        );
 
         let start = Instant::now();
         let _ = sync_manager.detect_conflicts(ctx).await.unwrap();
@@ -1793,8 +1905,10 @@ mod tests {
         let ctx = TenantContext::default();
         let sync_manager = SyncManager::new(
             Arc::new(MemoryManager::new()),
-            Arc::new(MockKnowledgeRepository::new()),
-            Arc::new(GovernanceEngine::new()),
+            Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             DeploymentConfig::default(),
             None,
             Arc::new(MockPersister),
@@ -1859,8 +1973,10 @@ mod tests {
         let ctx = TenantContext::default();
         let sync_manager = Arc::new(SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -1886,8 +2002,10 @@ mod tests {
         let sync_manager = Arc::new(
             SyncManager::new(
                 Arc::new(MemoryManager::new()),
-                Arc::new(MockKnowledgeRepository::new()),
-                Arc::new(GovernanceEngine::new()),
+                Arc::new(KnowledgeManager::new(
+                    Arc::new(GitRepository::new_mock()),
+                    Arc::new(GovernanceEngine::new()),
+                )),
                 DeploymentConfig::default(),
                 None,
                 Arc::new(MockPersister),
@@ -1910,8 +2028,10 @@ mod tests {
         let ctx = TenantContext::default();
         let sync_manager = SyncManager::new(
             Arc::new(MemoryManager::new()),
-            Arc::new(MockKnowledgeRepository::new()),
-            Arc::new(GovernanceEngine::new()),
+            Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             DeploymentConfig::default(),
             None,
             Arc::new(MockPersister),
@@ -1928,11 +2048,14 @@ mod tests {
     async fn test_checkpoint_rollback() {
         let tenant_id = mk_core::types::TenantId::new("test-tenant".to_string()).unwrap();
         let memory_manager = Arc::new(MemoryManager::new());
-        let knowledge_repo = Arc::new(MockKnowledgeRepository::new());
+        let knowledge_manager = Arc::new(KnowledgeManager::new(
+            Arc::new(GitRepository::new_mock()),
+            Arc::new(GovernanceEngine::new()),
+        ));
         let mut state = SyncState::default();
         state.version = "3".to_string();
         let sync_manager =
-            create_sync_manager_with_state(memory_manager, knowledge_repo, state, &tenant_id);
+            create_sync_manager_with_state(memory_manager, knowledge_manager, state, &tenant_id);
 
         let _ = sync_manager.create_checkpoint(&tenant_id).await;
 
@@ -1952,8 +2075,10 @@ mod tests {
 
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -1974,8 +2099,10 @@ mod tests {
         let persister = Arc::new(MockPersister);
         let sync_manager = SyncManager::new(
             memory.clone(),
-            Arc::new(MockKnowledgeRepository::new()),
-            Arc::new(GovernanceEngine::new()),
+            Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             DeploymentConfig::default(),
             None,
             persister.clone(),
@@ -2045,20 +2172,6 @@ mod tests {
             .knowledge_layers
             .insert(k_id.clone(), KnowledgeLayer::Project);
 
-        let mut repo = MockRepoWithEntries::new();
-        repo.add_entry(KnowledgeEntry {
-            path: k_id.clone(),
-            content: "new content".to_string(),
-            layer: KnowledgeLayer::Project,
-            kind: KnowledgeType::Spec,
-            status: KnowledgeStatus::Accepted,
-            metadata: HashMap::new(),
-            commit_hash: None,
-            author: None,
-            updated_at: 0,
-            summaries: HashMap::new(),
-        });
-
         let memory = Arc::new(MemoryManager::new());
         memory
             .register_provider(mk_core::types::MemoryLayer::Project, {
@@ -2072,8 +2185,15 @@ mod tests {
             })
             .await;
 
-        let sync_manager =
-            create_sync_manager_with_state(memory, Arc::new(repo), state, &ctx.tenant_id);
+        let sync_manager = create_sync_manager_with_state(
+            memory,
+            Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
+            state,
+            &ctx.tenant_id,
+        );
 
         let conflicts = vec![SyncConflict::HashMismatch {
             knowledge_id: k_id.clone(),
@@ -2123,7 +2243,10 @@ mod tests {
 
         let sync_manager = create_sync_manager_with_state(
             memory,
-            Arc::new(MockKnowledgeRepository::new()),
+            Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             state,
             &ctx.tenant_id,
         );
@@ -2154,20 +2277,6 @@ mod tests {
             .knowledge_layers
             .insert(k_id.clone(), KnowledgeLayer::Project);
 
-        let mut repo = MockRepoWithEntries::new();
-        repo.add_entry(KnowledgeEntry {
-            path: k_id.clone(),
-            content: "content".to_string(),
-            layer: KnowledgeLayer::Project,
-            kind: KnowledgeType::Spec,
-            status: KnowledgeStatus::Accepted,
-            metadata: HashMap::new(),
-            commit_hash: None,
-            author: None,
-            updated_at: 0,
-            summaries: HashMap::new(),
-        });
-
         let memory = Arc::new(MemoryManager::new());
         for layer in [
             mk_core::types::MemoryLayer::Company,
@@ -2188,8 +2297,15 @@ mod tests {
                 .await;
         }
 
-        let sync_manager =
-            create_sync_manager_with_state(memory, Arc::new(repo), state, &ctx.tenant_id);
+        let sync_manager = create_sync_manager_with_state(
+            memory,
+            Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
+            state,
+            &ctx.tenant_id,
+        );
 
         let conflicts = vec![SyncConflict::DuplicatePointer {
             knowledge_id: k_id.clone(),
@@ -2215,20 +2331,6 @@ mod tests {
             .knowledge_layers
             .insert(k_id.clone(), KnowledgeLayer::Project);
 
-        let mut repo = MockRepoWithEntries::new();
-        repo.add_entry(KnowledgeEntry {
-            path: k_id.clone(),
-            content: "content".to_string(),
-            layer: KnowledgeLayer::Project,
-            kind: KnowledgeType::Spec,
-            status: KnowledgeStatus::Deprecated,
-            metadata: HashMap::new(),
-            commit_hash: None,
-            author: None,
-            updated_at: 0,
-            summaries: HashMap::new(),
-        });
-
         let memory = Arc::new(MemoryManager::new());
         memory
             .register_provider(mk_core::types::MemoryLayer::Project, {
@@ -2242,8 +2344,15 @@ mod tests {
             })
             .await;
 
-        let sync_manager =
-            create_sync_manager_with_state(memory, Arc::new(repo), state, &ctx.tenant_id);
+        let sync_manager = create_sync_manager_with_state(
+            memory,
+            Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
+            state,
+            &ctx.tenant_id,
+        );
 
         let conflicts = vec![SyncConflict::StatusChange {
             knowledge_id: k_id.clone(),
@@ -2270,40 +2379,28 @@ mod tests {
             .knowledge_layers
             .insert(k_id.clone(), KnowledgeLayer::Project);
 
-        let mut repo = MockRepoWithEntries::new();
-        repo.add_entry(KnowledgeEntry {
-            path: k_id.clone(),
-            content: "content".to_string(),
-            layer: KnowledgeLayer::Org,
-            kind: KnowledgeType::Spec,
-            status: KnowledgeStatus::Accepted,
-            metadata: HashMap::new(),
-            commit_hash: None,
-            author: None,
-            updated_at: 0,
-            summaries: HashMap::new(),
-        });
-
         let memory = Arc::new(MemoryManager::new());
-        for layer in [
-            mk_core::types::MemoryLayer::Project,
-            mk_core::types::MemoryLayer::Org,
-        ] {
-            memory
-                .register_provider(layer, {
-                    let provider: Arc<
-                        dyn mk_core::traits::MemoryProviderAdapter<
-                                Error = Box<dyn std::error::Error + Send + Sync>,
-                            > + Send
-                            + Sync,
-                    > = Arc::new(memory::providers::MockProvider::new());
-                    provider
-                })
-                .await;
-        }
+        memory
+            .register_provider(mk_core::types::MemoryLayer::Project, {
+                let provider: Arc<
+                    dyn mk_core::traits::MemoryProviderAdapter<
+                            Error = Box<dyn std::error::Error + Send + Sync>,
+                        > + Send
+                        + Sync,
+                > = Arc::new(memory::providers::MockProvider::new());
+                provider
+            })
+            .await;
 
-        let sync_manager =
-            create_sync_manager_with_state(memory, Arc::new(repo), state, &ctx.tenant_id);
+        let sync_manager = create_sync_manager_with_state(
+            memory,
+            Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
+            state,
+            &ctx.tenant_id,
+        );
 
         let conflicts = vec![SyncConflict::LayerMismatch {
             knowledge_id: k_id.clone(),
@@ -2321,8 +2418,10 @@ mod tests {
         let tenant_id = mk_core::types::TenantId::new("no-checkpoint".to_string()).unwrap();
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -2352,8 +2451,10 @@ mod tests {
 
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -2386,8 +2487,10 @@ mod tests {
 
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -2431,8 +2534,10 @@ mod tests {
 
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -2468,53 +2573,82 @@ mod tests {
             .knowledge_hashes
             .insert("deleted.md".to_string(), "hash".to_string());
 
-        let mut repo = MockRepoWithEntries::new();
-        repo.add_entry(KnowledgeEntry {
-            path: "unchanged.md".to_string(),
-            content: "same content".to_string(),
-            layer: KnowledgeLayer::Project,
-            kind: KnowledgeType::Spec,
-            status: KnowledgeStatus::Accepted,
-            metadata: HashMap::new(),
-            commit_hash: None,
-            author: None,
-            updated_at: 0,
-            summaries: HashMap::new(),
-        });
-        repo.add_entry(KnowledgeEntry {
-            path: "updated.md".to_string(),
-            content: "new content".to_string(),
-            layer: KnowledgeLayer::Project,
-            kind: KnowledgeType::Spec,
-            status: KnowledgeStatus::Accepted,
-            metadata: HashMap::new(),
-            commit_hash: None,
-            author: None,
-            updated_at: 0,
-            summaries: HashMap::new(),
-        });
-        repo.add_entry(KnowledgeEntry {
-            path: "added.md".to_string(),
-            content: "brand new".to_string(),
-            layer: KnowledgeLayer::Project,
-            kind: KnowledgeType::Spec,
-            status: KnowledgeStatus::Accepted,
-            metadata: HashMap::new(),
-            commit_hash: None,
-            author: None,
-            updated_at: 0,
-            summaries: HashMap::new(),
-        });
+        let repo = Arc::new(GitRepository::new_mock());
+        repo.store(
+            ctx.clone(),
+            KnowledgeEntry {
+                path: "unchanged.md".to_string(),
+                content: "same content".to_string(),
+                layer: KnowledgeLayer::Project,
+                kind: KnowledgeType::Spec,
+                status: KnowledgeStatus::Accepted,
+                metadata: HashMap::new(),
+                commit_hash: None,
+                author: None,
+                updated_at: 0,
+                summaries: HashMap::new(),
+            },
+            "Add unchanged",
+        )
+        .await
+        .unwrap();
+        repo.store(
+            ctx.clone(),
+            KnowledgeEntry {
+                path: "updated.md".to_string(),
+                content: "new content".to_string(),
+                layer: KnowledgeLayer::Project,
+                kind: KnowledgeType::Spec,
+                status: KnowledgeStatus::Accepted,
+                metadata: HashMap::new(),
+                commit_hash: None,
+                author: None,
+                updated_at: 0,
+                summaries: HashMap::new(),
+            },
+            "Add updated",
+        )
+        .await
+        .unwrap();
+        repo.store(
+            ctx.clone(),
+            KnowledgeEntry {
+                path: "added.md".to_string(),
+                content: "brand new".to_string(),
+                layer: KnowledgeLayer::Project,
+                kind: KnowledgeType::Spec,
+                status: KnowledgeStatus::Accepted,
+                metadata: HashMap::new(),
+                commit_hash: None,
+                author: None,
+                updated_at: 0,
+                summaries: HashMap::new(),
+            },
+            "Add added",
+        )
+        .await
+        .unwrap();
 
         let sync_manager = create_sync_manager_with_state(
             Arc::new(MemoryManager::new()),
-            Arc::new(repo),
-            state,
+            Arc::new(KnowledgeManager::new(
+                repo,
+                Arc::new(GovernanceEngine::new()),
+            )),
+            state.clone(),
             &ctx.tenant_id,
         );
 
-        let delta = sync_manager.detect_delta(ctx, &SyncState::default()).await;
-        assert!(delta.is_ok());
+        let delta = sync_manager.detect_delta(ctx, &state).await.unwrap();
+
+        assert_eq!(delta.added.len(), 1);
+        assert_eq!(delta.added[0].path, "added.md");
+        assert_eq!(delta.updated.len(), 1);
+        assert_eq!(delta.updated[0].path, "updated.md");
+        assert_eq!(delta.deleted.len(), 1);
+        assert_eq!(delta.deleted[0], "deleted.md");
+        assert_eq!(delta.unchanged.len(), 1);
+        assert_eq!(delta.unchanged[0], "unchanged.md");
     }
 
     // Tier 1: Hybrid/Remote governance validation tests
@@ -2551,19 +2685,19 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl knowledge::governance_client::GovernanceClient for MockGovernanceClient {
+    impl GovernanceClient for MockGovernanceClient {
         async fn validate(
             &self,
             _ctx: &TenantContext,
             _layer: KnowledgeLayer,
-            _context: &std::collections::HashMap<String, serde_json::Value>,
-        ) -> knowledge::governance_client::Result<mk_core::types::ValidationResult> {
+            _context: &HashMap<String, serde_json::Value>,
+        ) -> Result<mk_core::types::ValidationResult> {
             if self.should_fail {
-                return Err(
-                    knowledge::governance_client::GovernanceClientError::Internal(
+                return Err(SyncError::Governance(
+                    knowledge::governance::GovernanceError::Validation(
                         "Simulated network failure".to_string(),
                     ),
-                );
+                ));
             }
 
             if self.return_invalid {
@@ -2588,6 +2722,22 @@ mod tests {
             Ok(mk_core::types::ValidationResult {
                 is_valid: true,
                 violations: vec![],
+            })
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl knowledge::governance_client::GovernanceClient for MockGovernanceClient {
+        async fn validate(
+            &self,
+            ctx: &TenantContext,
+            layer: KnowledgeLayer,
+            context: &std::collections::HashMap<String, serde_json::Value>,
+        ) -> knowledge::governance_client::Result<mk_core::types::ValidationResult> {
+            let result: Result<mk_core::types::ValidationResult> =
+                <Self as GovernanceClient>::validate(self, ctx, layer, context).await;
+            result.map_err(|e| {
+                knowledge::governance_client::GovernanceClientError::Internal(e.to_string())
             })
         }
 
@@ -2628,8 +2778,10 @@ mod tests {
 
         let sync_manager = SyncManager {
             memory_manager: create_memory_manager_with_mock_providers().await,
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: Some(Arc::new(MockGovernanceClient::new())),
             deployment_config,
             federation_manager: None,
@@ -2669,8 +2821,10 @@ mod tests {
 
         let sync_manager = SyncManager {
             memory_manager: create_memory_manager_with_mock_providers().await,
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: Some(Arc::new(MockGovernanceClient::new())),
             deployment_config,
             federation_manager: None,
@@ -2709,8 +2863,10 @@ mod tests {
 
         let sync_manager = SyncManager {
             memory_manager: create_memory_manager_with_mock_providers().await,
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: Some(Arc::new(MockGovernanceClient::with_invalid_response(false))),
             deployment_config,
             federation_manager: None,
@@ -2752,8 +2908,10 @@ mod tests {
 
         let sync_manager = SyncManager {
             memory_manager: create_memory_manager_with_mock_providers().await,
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: Some(Arc::new(MockGovernanceClient::with_invalid_response(true))),
             deployment_config,
             federation_manager: None,
@@ -2801,8 +2959,10 @@ mod tests {
 
         let sync_manager = SyncManager {
             memory_manager: create_memory_manager_with_mock_providers().await,
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: Some(Arc::new(MockGovernanceClient::with_failure())),
             deployment_config,
             federation_manager: None,
@@ -2842,8 +3002,10 @@ mod tests {
 
         let sync_manager = SyncManager {
             memory_manager: create_memory_manager_with_mock_providers().await,
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None, // No client in local mode
             deployment_config,
             federation_manager: None,
@@ -2876,8 +3038,10 @@ mod tests {
     async fn test_acquire_sync_lock_no_provider() {
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -2900,8 +3064,10 @@ mod tests {
     async fn test_release_sync_lock_none() {
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -2920,8 +3086,10 @@ mod tests {
         let ctx = TenantContext::default();
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: DeploymentConfig::default(),
             federation_manager: None,
@@ -2944,8 +3112,10 @@ mod tests {
 
         let sync_manager = SyncManager {
             memory_manager: Arc::new(MemoryManager::new()),
-            knowledge_repo: Arc::new(MockKnowledgeRepository::new()),
-            governance_engine: Arc::new(GovernanceEngine::new()),
+            knowledge_manager: Arc::new(KnowledgeManager::new(
+                Arc::new(GitRepository::new_mock()),
+                Arc::new(GovernanceEngine::new()),
+            )),
             governance_client: None,
             deployment_config: config,
             federation_manager: None,

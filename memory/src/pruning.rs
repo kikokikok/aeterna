@@ -53,6 +53,14 @@ impl PruningManager {
 
         false
     }
+
+    pub async fn prune(
+        &self,
+        _ctx: &TenantContext,
+        _layer: mk_core::types::MemoryLayer,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        Ok(())
+    }
 }
 
 pub struct CompressionManager {

@@ -851,6 +851,61 @@ pub struct MemoryConfig {
     /// Configuration for reflective reasoning during memory search
     #[serde(default)]
     pub reasoning: ReasoningConfig,
+
+    /// Configuration for Recursive Language Model (RLM) search
+    #[serde(default)]
+    pub rlm: RlmConfig,
+}
+
+/// Configuration for Recursive Language Model (RLM) search.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Controls the behavior of the recursive search strategy used for complex queries
+/// that require multi-hop reasoning or synthesis across multiple layers.
+///
+/// ## Fields
+/// - `enabled`: Enable/disable RLM search (default: true)
+/// - `max_steps`: Maximum number of decomposition steps (default: 5)
+/// - `complexity_threshold`: Threshold for routing queries to RLM (default: 0.3)
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
+pub struct RlmConfig {
+    /// Enable/disable RLM search
+    #[serde(default = "default_rlm_enabled")]
+    pub enabled: bool,
+
+    /// Maximum number of recursive decomposition steps
+    #[serde(default = "default_rlm_max_steps")]
+    #[validate(range(min = 1, max = 20))]
+    pub max_steps: usize,
+
+    /// Threshold [0.0, 1.0] for routing to RLM based on query complexity
+    #[serde(default = "default_rlm_complexity_threshold")]
+    #[validate(range(min = 0.0, max = 1.0))]
+    pub complexity_threshold: f32,
+}
+
+fn default_rlm_enabled() -> bool {
+    true
+}
+
+fn default_rlm_max_steps() -> usize {
+    5
+}
+
+fn default_rlm_complexity_threshold() -> f32 {
+    0.3
+}
+
+impl Default for RlmConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_rlm_enabled(),
+            max_steps: default_rlm_max_steps(),
+            complexity_threshold: default_rlm_complexity_threshold(),
+        }
+    }
 }
 
 /// Configuration for reflective reasoning during memory retrieval.
@@ -1089,43 +1144,63 @@ impl Default for MemoryConfig {
             optimization_trigger_count: default_optimization_trigger_count(),
             layer_summary_configs: std::collections::HashMap::new(),
             reasoning: ReasoningConfig::default(),
+            rlm: RlmConfig::default(),
         }
     }
 }
 
+/// Job coordination configuration.
+///
+/// # M-CANONICAL-DOCS
+///
+/// ## Purpose
+/// Manages configuration for background jobs, including locks, timeouts,
+/// and checkpointing behavior.
+///
+/// ## Fields
+/// - `lock_ttl_seconds`: Time-to-live for job locks (default: 300)
+/// - `job_timeout_seconds`: Maximum execution time for a job (default: 3600)
+/// - `deduplication_window_seconds`: Window for job deduplication (default: 60)
+/// - `checkpoint_interval`: Items processed between checkpoints (default: 100)
+/// - `graceful_shutdown_timeout_seconds`: Timeout for shutdown (default: 30)
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
 pub struct JobConfig {
+    /// Time-to-live for job locks in seconds
     #[serde(default = "default_lock_ttl_seconds")]
-    #[validate(range(min = 60, max = 7200))]
+    #[validate(range(min = 1, max = 3600))]
     pub lock_ttl_seconds: u64,
 
+    /// Maximum execution time for a job in seconds
     #[serde(default = "default_job_timeout_seconds")]
-    #[validate(range(min = 30, max = 3600))]
+    #[validate(range(min = 1, max = 86400))]
     pub job_timeout_seconds: u64,
 
+    /// Window for job deduplication in seconds
     #[serde(default = "default_deduplication_window_seconds")]
-    #[validate(range(min = 0, max = 3600))]
+    #[validate(range(min = 1, max = 3600))]
     pub deduplication_window_seconds: u64,
 
+    /// Number of items processed between checkpoints
     #[serde(default = "default_checkpoint_interval")]
-    #[validate(range(min = 10, max = 1000))]
+    #[validate(range(min = 1, max = 10000))]
     pub checkpoint_interval: usize,
 
+    /// Timeout for graceful shutdown in seconds
     #[serde(default = "default_graceful_shutdown_timeout_seconds")]
-    #[validate(range(min = 5, max = 300))]
+    #[validate(range(min = 1, max = 300))]
     pub graceful_shutdown_timeout_seconds: u64,
 }
 
 fn default_lock_ttl_seconds() -> u64 {
-    2100 // 35 minutes
+    300
 }
 
 fn default_job_timeout_seconds() -> u64 {
-    1800 // 30 minutes
+    3600
 }
 
 fn default_deduplication_window_seconds() -> u64 {
-    300 // 5 minutes
+    60
 }
 
 fn default_checkpoint_interval() -> usize {

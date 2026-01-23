@@ -1,10 +1,8 @@
 use mk_core::types::{
     CodeChange, ErrorSignature, HindsightNote, OrganizationalUnit, Resolution, TenantId, UnitType,
 };
-use std::sync::atomic::{AtomicU32, Ordering};
 use storage::postgres::PostgresBackend;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::postgres::Postgres;
+use testing::{postgres, unique_id};
 use tokio::sync::OnceCell;
 
 use knowledge::context_architect::{LlmClient, LlmError, ViewMode};
@@ -13,44 +11,11 @@ use knowledge::hindsight::{
     HindsightNoteRequest,
 };
 
-struct PostgresFixture {
-    #[allow(dead_code)]
-    container: testcontainers::ContainerAsync<Postgres>,
-    url: String,
-}
-
-static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
 static SCHEMA_INITIALIZED: OnceCell<bool> = OnceCell::const_new();
-static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
-    POSTGRES
-        .get_or_init(|| async {
-            let container = match Postgres::default().start().await {
-                Ok(c) => c,
-                Err(_) => return None,
-            };
-            let host = match container.get_host().await {
-                Ok(h) => h,
-                Err(_) => return None,
-            };
-            let port = match container.get_host_port_ipv4(5432).await {
-                Ok(p) => p,
-                Err(_) => return None,
-            };
-            let url = format!(
-                "postgres://postgres:postgres@{}:{}/postgres?sslmode=disable",
-                host, port
-            );
-            Some(PostgresFixture { container, url })
-        })
-        .await
-        .as_ref()
-}
 
 async fn create_test_storage() -> Option<std::sync::Arc<PostgresBackend>> {
-    let fixture = get_postgres_fixture().await?;
-    let storage = std::sync::Arc::new(PostgresBackend::new(&fixture.url).await.ok()?);
+    let fixture = postgres().await?;
+    let storage = std::sync::Arc::new(PostgresBackend::new(fixture.url()).await.ok()?);
 
     SCHEMA_INITIALIZED
         .get_or_init(|| async {
@@ -81,11 +46,6 @@ impl LlmClient for MockLlmClient {
             .pop()
             .ok_or_else(|| LlmError::InvalidResponse("No mock response".into()))
     }
-}
-
-fn unique_id(prefix: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("{}-{}", prefix, id)
 }
 
 async fn create_tenant(

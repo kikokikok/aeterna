@@ -1,66 +1,17 @@
-//! Integration tests for PostgreSQL storage backend
-//!
-//! These tests use testcontainers with a single shared PostgreSQL instance.
-//! Tests run in the same schema (parallel execution is safe due to tenant
-//! isolation).
-
 use mk_core::traits::StorageBackend;
 use mk_core::types::{TenantContext, TenantId, UserId};
-use std::sync::atomic::{AtomicU32, Ordering};
 use storage::postgres::{PostgresBackend, PostgresError};
-use testcontainers::ContainerAsync;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::postgres::Postgres;
-use tokio::sync::OnceCell;
-
-struct PostgresFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<Postgres>,
-    url: String,
-}
-
-static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
-static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
-    POSTGRES
-        .get_or_init(|| async {
-            let container_result = Postgres::default()
-                .with_db_name("testdb")
-                .with_user("testuser")
-                .with_password("testpass")
-                .start()
-                .await;
-
-            match container_result {
-                Ok(container) => {
-                    let port = container.get_host_port_ipv4(5432).await.ok()?;
-                    let url = format!("postgres://testuser:testpass@localhost:{}/testdb", port);
-                    Some(PostgresFixture { container, url })
-                }
-                Err(_) => None,
-            }
-        })
-        .await
-        .as_ref()
-}
+use testing::{postgres, unique_id};
 
 async fn create_test_backend() -> Option<PostgresBackend> {
-    let fixture = get_postgres_fixture().await?;
-    let backend = PostgresBackend::new(&fixture.url).await.ok()?;
+    let fixture = postgres().await?;
+    let backend = PostgresBackend::new(fixture.url()).await.ok()?;
     backend.initialize_schema().await.ok()?;
     Some(backend)
 }
 
-/// Generate a unique tenant ID for test isolation
 fn unique_tenant_id() -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("test-tenant-{}", id)
-}
-
-fn unique_id(prefix: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("{}-{}", prefix, id)
+    unique_id("test-tenant")
 }
 
 #[tokio::test]

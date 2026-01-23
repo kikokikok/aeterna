@@ -1,0 +1,16 @@
+target/
+.git/
+.gitignore
+*.md
+LICENSE
+.env*
+docker-compose*.yml
+*.dockerfile
+Dockerfile*
+!Dockerfile
+tests/
+test-project/
+docs/
+openspec/
+policies/
+specs/

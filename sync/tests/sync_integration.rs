@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use knowledge::governance::GovernanceEngine;
+use knowledge::manager::KnowledgeManager;
 use knowledge::repository::GitRepository;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
@@ -309,8 +310,10 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
 
     let sync_manager = SyncManager::new(
         memory_manager.clone(),
-        knowledge_repo.clone(),
-        governance_engine.clone(),
+        Arc::new(KnowledgeManager::new(
+            knowledge_repo.clone(),
+            governance_engine.clone(),
+        )),
         config::DeploymentConfig::default(),
         None,
         persister.clone(),
@@ -413,8 +416,10 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
     let sync_manager = Arc::new(
         SyncManager::new(
             memory_manager.clone(),
-            knowledge_repo.clone(),
-            governance_engine.clone(),
+            Arc::new(KnowledgeManager::new(
+                knowledge_repo.clone(),
+                governance_engine.clone(),
+            )),
             config::DeploymentConfig::default(),
             None,
             persister.clone(),
@@ -502,9 +507,11 @@ async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error
     });
 
     let sync_manager = SyncManager::new(
-        memory_manager.clone(),
-        knowledge_repo.clone(),
-        Arc::new(governance_engine),
+        memory_manager,
+        Arc::new(KnowledgeManager::new(
+            knowledge_repo.clone(),
+            Arc::new(governance_engine),
+        )),
         config::DeploymentConfig::default(),
         None,
         persister.clone(),

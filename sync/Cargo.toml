@@ -25,5 +25,4 @@ distributed-lock.workspace = true
 [dev-dependencies]
 tempfile = "3.10"
 proptest = "1.4"
-testcontainers.workspace = true
-testcontainers-modules = { workspace = true, features = ["redis"] }
+testing.workspace = true

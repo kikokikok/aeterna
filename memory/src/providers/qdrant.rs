@@ -69,6 +69,12 @@ impl QdrantProvider {
             ("updated_at".to_string(), entry.updated_at.into()),
         ]);
 
+        if let Some(tenant_id) = entry.metadata.get("tenant_id") {
+            if let Some(tid) = tenant_id.as_str() {
+                payload.insert("tenant_id".to_string(), tid.to_string().into());
+            }
+        }
+
         payload.insert(
             "metadata".to_string(),
             serde_json::to_string(&entry.metadata)?.into(),

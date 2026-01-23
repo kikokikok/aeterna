@@ -11,6 +11,7 @@ errors.workspace = true
 tools.workspace = true
 memory.workspace = true
 knowledge.workspace = true
+context.workspace = true
 storage.workspace = true
 sync.workspace = true
 config.workspace = true
@@ -27,3 +28,4 @@ cedar-policy.workspace = true
 
 [dev-dependencies]
 wiremock.workspace = true
+tempfile.workspace = true

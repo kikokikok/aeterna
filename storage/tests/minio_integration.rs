@@ -1,85 +1,14 @@
 use mk_core::types::{TenantContext, TenantId, UserId};
-use std::time::Duration;
 use storage::graph::{GraphEdge, GraphNode, GraphStore};
 use storage::graph_duckdb::{ColdStartConfig, DuckDbGraphConfig, DuckDbGraphStore, GraphError};
-use testcontainers::{ContainerAsync, GenericImage, ImageExt, runners::AsyncRunner};
-use tokio::sync::OnceCell;
+use testing::minio;
 
-const MINIO_ACCESS_KEY: &str = "minioadmin";
-const MINIO_SECRET_KEY: &str = "minioadmin";
 const TEST_BUCKET: &str = "aeterna-test";
-
-struct MinioFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<GenericImage>,
-    endpoint: String,
-}
-
-static MINIO: OnceCell<MinioFixture> = OnceCell::const_new();
-
-async fn get_minio() -> &'static MinioFixture {
-    MINIO
-        .get_or_init(|| async {
-            let container = GenericImage::new("minio/minio", "latest")
-                .with_exposed_port(9000.into())
-                .with_env_var("MINIO_ROOT_USER", MINIO_ACCESS_KEY)
-                .with_env_var("MINIO_ROOT_PASSWORD", MINIO_SECRET_KEY)
-                .with_cmd(vec!["server", "/data"])
-                .start()
-                .await
-                .expect("Failed to start MinIO container");
-
-            let port = container.get_host_port_ipv4(9000).await.unwrap();
-            let endpoint = format!("http://localhost:{}", port);
-
-            tokio::time::sleep(Duration::from_secs(2)).await;
-
-            setup_minio_bucket(&endpoint).await;
-
-            MinioFixture {
-                container,
-                endpoint,
-            }
-        })
-        .await
-}
 
 fn test_tenant_context() -> TenantContext {
     let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
     let user_id = UserId::new("test-user".to_string()).unwrap();
     TenantContext::new(tenant_id, user_id)
-}
-
-async fn setup_minio_bucket(endpoint: &str) {
-    use aws_config::BehaviorVersion;
-
-    unsafe {
-        std::env::set_var("AWS_ACCESS_KEY_ID", MINIO_ACCESS_KEY);
-        std::env::set_var("AWS_SECRET_ACCESS_KEY", MINIO_SECRET_KEY);
-    }
-
-    let config = aws_config::defaults(BehaviorVersion::latest())
-        .endpoint_url(endpoint)
-        .region(aws_config::Region::new("us-east-1"))
-        .load()
-        .await;
-
-    let s3_config = aws_sdk_s3::config::Builder::from(&config)
-        .force_path_style(true)
-        .build();
-    let s3_client = aws_sdk_s3::Client::from_conf(s3_config);
-
-    match s3_client.create_bucket().bucket(TEST_BUCKET).send().await {
-        Ok(_) => {}
-        Err(e) => {
-            let err_str = format!("{:?}", e);
-            if !err_str.contains("BucketAlreadyOwnedByYou")
-                && !err_str.contains("BucketAlreadyExists")
-            {
-                panic!("Failed to create bucket: {:?}", e);
-            }
-        }
-    }
 }
 
 fn make_config(endpoint: &str, prefix: &str) -> DuckDbGraphConfig {
@@ -113,8 +42,11 @@ fn make_config_with_cold_start(
 
 #[tokio::test]
 async fn test_persist_and_load_s3_roundtrip() {
-    let minio = get_minio().await;
-    let config = make_config(&minio.endpoint, "test-graphs");
+    let Some(minio_fixture) = minio().await else {
+        eprintln!("Skipping MinIO test: Docker not available");
+        return;
+    };
+    let config = make_config(minio_fixture.endpoint(), "test-graphs");
 
     let store = DuckDbGraphStore::new(config.clone()).expect("Failed to create store");
     let ctx = test_tenant_context();
@@ -163,8 +95,11 @@ async fn test_persist_and_load_s3_roundtrip() {
 
 #[tokio::test]
 async fn test_s3_checksum_verification() {
-    let minio = get_minio().await;
-    let config = make_config(&minio.endpoint, "checksum-test");
+    let Some(minio_fixture) = minio().await else {
+        eprintln!("Skipping MinIO test: Docker not available");
+        return;
+    };
+    let config = make_config(minio_fixture.endpoint(), "checksum-test");
 
     let store = DuckDbGraphStore::new(config.clone()).expect("Failed to create store");
     let ctx = test_tenant_context();
@@ -199,8 +134,11 @@ async fn test_s3_not_configured_error() {
 
 #[tokio::test]
 async fn test_multi_tenant_s3_isolation() {
-    let minio = get_minio().await;
-    let config = make_config(&minio.endpoint, "multi-tenant");
+    let Some(minio_fixture) = minio().await else {
+        eprintln!("Skipping MinIO test: Docker not available");
+        return;
+    };
+    let config = make_config(minio_fixture.endpoint(), "multi-tenant");
 
     let store = DuckDbGraphStore::new(config.clone()).expect("Failed to create store");
 
@@ -248,7 +186,10 @@ async fn test_multi_tenant_s3_isolation() {
 
 #[tokio::test]
 async fn test_s3_partition_fetch_error_trigger() {
-    let minio = get_minio().await;
+    let Some(minio_fixture) = minio().await else {
+        eprintln!("Skipping MinIO test: Docker not available");
+        return;
+    };
     let cold_start = ColdStartConfig {
         lazy_loading_enabled: true,
         budget_ms: 5000,
@@ -257,7 +198,8 @@ async fn test_s3_partition_fetch_error_trigger() {
         warm_pool_enabled: false,
         warm_pool_min_instances: 0,
     };
-    let config = make_config_with_cold_start(&minio.endpoint, "partition-error-test", cold_start);
+    let config =
+        make_config_with_cold_start(minio_fixture.endpoint(), "partition-error-test", cold_start);
 
     let store = DuckDbGraphStore::new(config).expect("Failed to create store");
 
@@ -295,7 +237,10 @@ async fn test_s3_partition_fetch_error_trigger() {
 
 #[tokio::test]
 async fn test_s3_partition_not_found_graceful_handling() {
-    let minio = get_minio().await;
+    let Some(minio_fixture) = minio().await else {
+        eprintln!("Skipping MinIO test: Docker not available");
+        return;
+    };
     let cold_start = ColdStartConfig {
         lazy_loading_enabled: true,
         budget_ms: 5000,
@@ -304,7 +249,8 @@ async fn test_s3_partition_not_found_graceful_handling() {
         warm_pool_enabled: false,
         warm_pool_min_instances: 0,
     };
-    let config = make_config_with_cold_start(&minio.endpoint, "not-found-test", cold_start);
+    let config =
+        make_config_with_cold_start(minio_fixture.endpoint(), "not-found-test", cold_start);
 
     let store = DuckDbGraphStore::new(config).expect("Failed to create store");
 
@@ -335,7 +281,10 @@ async fn test_s3_partition_not_found_graceful_handling() {
 
 #[tokio::test]
 async fn test_s3_partition_budget_exhaustion_defers_remaining() {
-    let minio = get_minio().await;
+    let Some(minio_fixture) = minio().await else {
+        eprintln!("Skipping MinIO test: Docker not available");
+        return;
+    };
     let cold_start = ColdStartConfig {
         lazy_loading_enabled: true,
         budget_ms: 1,
@@ -344,7 +293,7 @@ async fn test_s3_partition_budget_exhaustion_defers_remaining() {
         warm_pool_enabled: false,
         warm_pool_min_instances: 0,
     };
-    let config = make_config_with_cold_start(&minio.endpoint, "budget-test", cold_start);
+    let config = make_config_with_cold_start(minio_fixture.endpoint(), "budget-test", cold_start);
 
     let store = DuckDbGraphStore::new(config).expect("Failed to create store");
 
