@@ -299,6 +299,10 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
         .await;
 
     let governance_engine = Arc::new(knowledge::governance::GovernanceEngine::new());
+    let knowledge_manager = Arc::new(knowledge::manager::KnowledgeManager::new(
+        repo.clone(),
+        governance_engine.clone(),
+    ));
 
     let auth_service = Arc::new(MockAuthService);
     let storage_backend = Arc::new(MockStorage);
@@ -306,8 +310,7 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
     let sync_manager = Arc::new(
         sync::bridge::SyncManager::new(
             memory_manager.clone(),
-            repo.clone(),
-            governance_engine.clone(),
+            knowledge_manager,
             config::config::DeploymentConfig::default(),
             None,
             Arc::new(MockPersister),

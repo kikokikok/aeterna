@@ -1,51 +1,13 @@
 use mk_core::traits::StorageBackend;
 use mk_core::types::{OrganizationalUnit, TenantContext, TenantId, UnitType, UserId};
-use std::sync::atomic::{AtomicU32, Ordering};
 use storage::postgres::PostgresBackend;
-use testcontainers::ContainerAsync;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::postgres::Postgres;
-use tokio::sync::OnceCell;
-
-struct PostgresFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<Postgres>,
-    url: String,
-}
-
-static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
-static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
-    POSTGRES
-        .get_or_init(|| async {
-            match Postgres::default().start().await {
-                Ok(container) => {
-                    let host = container.get_host().await.ok()?;
-                    let port = container.get_host_port_ipv4(5432).await.ok()?;
-                    let url = format!(
-                        "postgres://postgres:postgres@{}:{}/postgres?sslmode=disable",
-                        host, port
-                    );
-                    Some(PostgresFixture { container, url })
-                }
-                Err(_) => None,
-            }
-        })
-        .await
-        .as_ref()
-}
+use testing::{postgres, unique_id};
 
 async fn create_test_backend() -> Option<PostgresBackend> {
-    let fixture = get_postgres_fixture().await?;
-    let backend = PostgresBackend::new(&fixture.url).await.ok()?;
+    let fixture = postgres().await?;
+    let backend = PostgresBackend::new(fixture.url()).await.ok()?;
     backend.initialize_schema().await.ok()?;
     Some(backend)
-}
-
-fn unique_id(prefix: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("{}-{}", prefix, id)
 }
 
 #[tokio::test]

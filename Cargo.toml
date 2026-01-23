@@ -10,8 +10,13 @@ members = [
     "storage",
     "config",
     "utils",
-    "errors"
-, "agent-a2a"]
+    "errors",
+    "agent-a2a",
+    "context",
+    "cli",
+    "opal-fetcher",
+    "testing",
+]
 
 [workspace.lints.rust]
 unused_imports = "warn"
@@ -35,6 +40,9 @@ storage = { path = "./storage" }
 config = { path = "./config" }
 utils = { path = "./utils" }
 errors = { path = "./errors" }
+context = { path = "./context" }
+opal-fetcher = { path = "./opal-fetcher" }
+testing = { path = "./testing" }
 
 # Shared dependencies across all crates
 reqwest = { version = "0.12", features = ["json"] }
@@ -72,7 +80,8 @@ distributed-lock = { version = "0.2", features = ["redis", "postgres"] }
 xxhash-rust = { version = "0.8", features = ["xxh64"] }
 dashmap = "6.1"
 tokio-retry = "0.3"
-backoff = "0.4"
+backoff = { version = "0.4", features = ["tokio"] }
+statig = { version = "0.3", features = ["async"] }
 
 [workspace.metadata.tarpaulin]
 all-features = true

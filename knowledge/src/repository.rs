@@ -97,6 +97,11 @@ impl GitRepository {
         &self.root_path
     }
 
+    pub fn new_mock() -> Self {
+        let root = tempfile::tempdir().unwrap().path().join("mock_repo");
+        Self::new(root).unwrap()
+    }
+
     pub async fn get_by_path(
         &self,
         ctx: mk_core::types::TenantContext,
@@ -450,6 +455,45 @@ mod tests {
 
         let list_a = repo.list(ctx_a, KnowledgeLayer::Project, "").await?;
         assert_eq!(list_a.len(), 1, "Tenant A should see its entry");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_git_repository_path_traversal_protection()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempdir()?;
+        let repo = GitRepository::new(dir.path())?;
+
+        let tenant_a = mk_core::types::TenantId::new("tenant_a".into()).unwrap();
+        let user_a = mk_core::types::UserId::new("user_a".into()).unwrap();
+        let ctx_a = mk_core::types::TenantContext::new(tenant_a, user_a);
+
+        // Attempt path traversal via filename
+        let entry = KnowledgeEntry {
+            path: "../../../etc/passwd".to_string(),
+            content: "evil content".to_string(),
+            layer: KnowledgeLayer::Project,
+            kind: KnowledgeType::Spec,
+            status: mk_core::types::KnowledgeStatus::Accepted,
+            summaries: std::collections::HashMap::new(),
+            metadata: std::collections::HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: chrono::Utc::now().timestamp(),
+        };
+
+        repo.store(ctx_a.clone(), entry, "malicious commit").await?;
+
+        let full_path = repo.resolve_path(&ctx_a, KnowledgeLayer::Project, "../../../etc/passwd");
+
+        // Ensure the resolved path is still within the tenant directory
+        let tenant_dir = repo.root_path.join("tenant_a");
+        assert!(
+            full_path.starts_with(&tenant_dir),
+            "Path should be constrained to tenant directory. Got: {:?}",
+            full_path
+        );
 
         Ok(())
     }

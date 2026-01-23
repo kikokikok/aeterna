@@ -3,52 +3,17 @@ use memory::manager::MemoryManager;
 use mk_core::types::{MemoryEntry, MemoryLayer, TenantContext, TenantId, UserId};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
 use storage::graph::GraphStore;
 use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore};
 use storage::postgres::PostgresBackend;
-use testcontainers::ContainerAsync;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::postgres::Postgres;
+use testing::{postgres, unique_id};
 use tokio::sync::OnceCell;
 
-struct PostgresFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<Postgres>,
-    url: String,
-}
-
-static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
 static SCHEMA_INITIALIZED: OnceCell<bool> = OnceCell::const_new();
-static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_postgres_fixture() -> Option<&'static PostgresFixture> {
-    POSTGRES
-        .get_or_init(|| async {
-            let container = match Postgres::default()
-                .with_db_name("graph_test")
-                .with_user("test")
-                .with_password("test")
-                .start()
-                .await
-            {
-                Ok(c) => c,
-                Err(_) => return None,
-            };
-            let port = match container.get_host_port_ipv4(5432).await {
-                Ok(p) => p,
-                Err(_) => return None,
-            };
-            let url = format!("postgres://test:test@localhost:{}/graph_test", port);
-            Some(PostgresFixture { container, url })
-        })
-        .await
-        .as_ref()
-}
 
 async fn create_test_backend() -> Option<Arc<PostgresBackend>> {
-    let fixture = get_postgres_fixture().await?;
-    let backend = Arc::new(PostgresBackend::new(&fixture.url).await.ok()?);
+    let fixture = postgres().await?;
+    let backend = Arc::new(PostgresBackend::new(fixture.url()).await.ok()?);
 
     SCHEMA_INITIALIZED
         .get_or_init(|| async {
@@ -58,11 +23,6 @@ async fn create_test_backend() -> Option<Arc<PostgresBackend>> {
         .await;
 
     Some(backend)
-}
-
-fn unique_id(prefix: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("{}_{}", prefix, id)
 }
 
 fn test_tenant_context() -> TenantContext {
@@ -131,7 +91,7 @@ async fn test_graph_based_reasoning() -> Result<(), Box<dyn std::error::Error + 
     let neighbors = manager.get_graph_neighbors(ctx.clone(), "Rust").await?;
     assert_eq!(neighbors.len(), 1);
     assert_eq!(neighbors[0].1.id, "Borrow Checker");
-    assert_eq!(neighbors[0].0.relation, "has");
+    assert_eq!(neighbors[0].0.relation_type, "has");
 
     Ok(())
 }
@@ -271,8 +231,8 @@ async fn test_duckdb_graph_multi_hop_reasoning()
         .find_path(ctx.clone(), "OrdersService", "StripeAPI", 5)
         .await?;
     assert_eq!(path.len(), 2);
-    assert_eq!(path[0].relation, "DEPENDS_ON");
-    assert_eq!(path[1].relation, "CALLS");
+    assert_eq!(path[0].relation.clone(), "DEPENDS_ON");
+    assert_eq!(path[1].relation.clone(), "CALLS");
 
     Ok(())
 }
@@ -603,9 +563,9 @@ async fn test_memory_add_with_valid_extraction_creates_graph_entities()
     assert_eq!(fastapi_nodes.len(), 1);
     assert_eq!(fastapi_nodes[0].id, "FastAPI");
 
-    let neighbors = graph_store.get_neighbors(ctx.clone(), "FastAPI").await?;
+    let neighbors = manager.get_graph_neighbors(ctx.clone(), "FastAPI").await?;
     assert_eq!(neighbors.len(), 1);
-    assert_eq!(neighbors[0].0.relation, "BUILT_WITH");
+    assert_eq!(neighbors[0].0.relation_type, "BUILT_WITH");
     assert_eq!(neighbors[0].1.id, "Python");
 
     Ok(())

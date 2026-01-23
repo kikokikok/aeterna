@@ -1,53 +1,23 @@
 use mk_core::types::{EventStatus, GovernanceEvent, PersistentEvent, TenantId, UnitType};
 use redis::AsyncCommands;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
-use testcontainers::ContainerAsync;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::redis::Redis;
-use tokio::sync::OnceCell;
+use testing::{redis, unique_id};
 use tools::redis_publisher::RedisPublisher;
 use uuid::Uuid;
 
-struct RedisFixture {
-    #[allow(dead_code)]
-    container: ContainerAsync<Redis>,
-    url: String,
-}
-
-static REDIS: OnceCell<Option<RedisFixture>> = OnceCell::const_new();
-static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-async fn get_redis_fixture() -> Option<&'static RedisFixture> {
-    REDIS
-        .get_or_init(|| async {
-            match Redis::default().start().await {
-                Ok(container) => {
-                    let port = container.get_host_port_ipv4(6379).await.ok()?;
-                    let url = format!("redis://localhost:{}", port);
-                    Some(RedisFixture { container, url })
-                }
-                Err(_) => None,
-            }
-        })
-        .await
-        .as_ref()
-}
-
 fn unique_tenant_id(prefix: &str) -> TenantId {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    TenantId::new(format!("{}-{}", prefix, id)).unwrap()
+    TenantId::new(unique_id(prefix)).unwrap()
 }
 
 #[tokio::test]
 async fn test_redis_publisher_start_run() {
-    let Some(fixture) = get_redis_fixture().await else {
+    let Some(fixture) = redis().await else {
         eprintln!("Skipping Redis test: Docker not available");
         return;
     };
 
     let publisher = RedisPublisher::new_with_tenant_isolation(
-        fixture.url.clone(),
+        fixture.url().to_string(),
         "governance:events".to_string(),
     );
     let (tx, _handle) = publisher.start();
@@ -65,7 +35,7 @@ async fn test_redis_publisher_start_run() {
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let client = redis::Client::open(fixture.url.clone()).unwrap();
+    let client = redis::Client::open(fixture.url()).unwrap();
     let mut conn = client.get_connection_manager().await.unwrap();
 
     let stream_key = format!("governance:events:{}", tenant_id.as_str());
@@ -87,7 +57,7 @@ async fn test_redis_publisher_start_run() {
 
 #[tokio::test]
 async fn test_publish_to_dlq_and_read() {
-    let Some(fixture) = get_redis_fixture().await else {
+    let Some(fixture) = redis().await else {
         eprintln!("Skipping Redis test: Docker not available");
         return;
     };
@@ -116,16 +86,16 @@ async fn test_publish_to_dlq_and_read() {
         dead_lettered_at: Some(1234567891),
     };
 
-    RedisPublisher::publish_to_dlq(&fixture.url, &event)
+    RedisPublisher::publish_to_dlq(fixture.url(), &event)
         .await
         .expect("Failed to publish to DLQ");
 
-    let len = RedisPublisher::get_dlq_length(&fixture.url, &tenant_id)
+    let len = RedisPublisher::get_dlq_length(fixture.url(), &tenant_id)
         .await
         .expect("Failed to get DLQ length");
     assert_eq!(len, 1);
 
-    let events = RedisPublisher::read_dlq_events(&fixture.url, &tenant_id, 10)
+    let events = RedisPublisher::read_dlq_events(fixture.url(), &tenant_id, 10)
         .await
         .expect("Failed to read DLQ events");
     assert_eq!(events.len(), 1);
@@ -138,11 +108,11 @@ async fn test_publish_to_dlq_and_read() {
 
     let message_id = &events[0].0;
 
-    RedisPublisher::ack_dlq_event(&fixture.url, &tenant_id, message_id)
+    RedisPublisher::ack_dlq_event(fixture.url(), &tenant_id, message_id)
         .await
         .expect("Failed to ack DLQ event");
 
-    let len_after = RedisPublisher::get_dlq_length(&fixture.url, &tenant_id)
+    let len_after = RedisPublisher::get_dlq_length(fixture.url(), &tenant_id)
         .await
         .expect("Failed to get DLQ length after ack");
     assert_eq!(len_after, 0);

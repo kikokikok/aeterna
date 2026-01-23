@@ -100,7 +100,10 @@ impl sync::state_persister::SyncStatePersister for MockPersister {
 }
 
 async fn setup_server() -> Arc<McpServer> {
-    let memory_manager = Arc::new(MemoryManager::new());
+    let memory_manager = Arc::new(
+        MemoryManager::new()
+            .with_embedding_service(Arc::new(memory::embedding::MockEmbeddingService::new(1536))),
+    );
     let provider: Arc<
         dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
     > = Arc::new(MockProvider::new());
@@ -108,14 +111,17 @@ async fn setup_server() -> Arc<McpServer> {
         .register_provider(MemoryLayer::User, provider)
         .await;
 
-    let repo = Arc::new(MockRepo);
+    let repo = Arc::new(knowledge::repository::GitRepository::new_mock());
     let governance = Arc::new(knowledge::governance::GovernanceEngine::new());
+    let knowledge_manager = Arc::new(knowledge::manager::KnowledgeManager::new(
+        repo.clone(),
+        governance.clone(),
+    ));
     let deployment_config = config::config::DeploymentConfig::default();
     let sync_manager = Arc::new(
         SyncManager::new(
             memory_manager.clone(),
-            repo.clone(),
-            governance.clone(),
+            knowledge_manager,
             deployment_config,
             None,
             Arc::new(MockPersister),

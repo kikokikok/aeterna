@@ -16,6 +16,7 @@ pub mod providers;
 pub mod pruning;
 pub mod reasoning;
 pub mod reasoning_cache;
+pub mod rlm;
 pub mod telemetry;
 pub mod trainer;
 pub mod working;

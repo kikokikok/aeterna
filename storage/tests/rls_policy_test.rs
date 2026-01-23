@@ -1,5 +1,6 @@
 use mk_core::types::{TenantContext, TenantId, UserId};
 use storage::postgres::PostgresBackend;
+use testing::postgres;
 
 #[cfg(test)]
 mod tests {
@@ -40,9 +41,13 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires database connection"]
     async fn test_rls_cross_tenant_access_blocked() {
-        let backend = PostgresBackend::new("postgres://test:test@localhost/test_db")
+        let Some(pg_fixture) = postgres().await else {
+            eprintln!("Skipping test: Docker not available");
+            return;
+        };
+
+        let backend = PostgresBackend::new(pg_fixture.url())
             .await
             .expect("Database connection required");
 
