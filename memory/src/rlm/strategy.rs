@@ -1,64 +1,70 @@
+//! Decomposition strategies and action execution.
+
 use knowledge::manager::KnowledgeManager;
 use mk_core::types::{MemoryLayer, TenantContext};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+/// Trait for executing decomposition actions.
 #[async_trait::async_trait]
 pub trait ActionExecutor: Send + Sync {
     async fn execute(
         &self,
         action: DecompositionAction,
-        tenant: &TenantContext,
+        tenant: &TenantContext
     ) -> anyhow::Result<(String, Vec<String>)>;
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Actions available for query decomposition.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DecompositionAction {
     SearchLayer {
         layer: MemoryLayer,
-        query: String,
+        query: String
     },
     DrillDown {
         memory_id: String,
-        query: String,
+        query: String
     },
     Filter {
         criteria: String,
-        results: Vec<String>,
+        results: Vec<String>
     },
     RecursiveCall {
-        sub_query: String,
+        sub_query: String
     },
     Aggregate {
         strategy: AggregationStrategy,
-        results: Vec<String>,
-    },
+        results: Vec<String>
+    }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Strategies for aggregating search results.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AggregationStrategy {
     Union,
     Intersection,
     Difference,
-    Summary,
+    Summary
 }
 
+/// Executes decomposition actions against knowledge and graph stores.
 pub struct StrategyExecutor {
     knowledge_manager: Arc<KnowledgeManager>,
     graph_store: Option<
         Arc<
             dyn storage::graph::GraphStore<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
-    >,
+                + Sync
+        >
+    >
 }
 
 impl StrategyExecutor {
     pub fn new(knowledge_manager: Arc<KnowledgeManager>) -> Self {
         Self {
             knowledge_manager,
-            graph_store: None,
+            graph_store: None
         }
     }
 
@@ -67,8 +73,8 @@ impl StrategyExecutor {
         graph_store: Arc<
             dyn storage::graph::GraphStore<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     ) -> Self {
         self.graph_store = Some(graph_store);
         self
@@ -80,7 +86,7 @@ impl ActionExecutor for StrategyExecutor {
     async fn execute(
         &self,
         action: DecompositionAction,
-        tenant: &TenantContext,
+        tenant: &TenantContext
     ) -> anyhow::Result<(String, Vec<String>)> {
         match action {
             DecompositionAction::SearchLayer { layer, query } => {
@@ -128,22 +134,21 @@ impl ActionExecutor for StrategyExecutor {
                     }
                 }
 
-                if let Some(graph) = &self.graph_store {
-                    if let Ok(neighbors) = graph.get_neighbors(tenant.clone(), &memory_id).await {
-                        if !neighbors.is_empty() {
-                            output.push("\nRelated Entries (Graph):".to_string());
-                            for (edge, node) in neighbors {
-                                if query.is_empty()
-                                    || node.label.to_lowercase().contains(&query.to_lowercase())
-                                    || node.id.to_lowercase().contains(&query.to_lowercase())
-                                {
-                                    output.push(format!(
-                                        "- [{}] {} (Properties: {})",
-                                        edge.relation, node.id, node.properties
-                                    ));
-                                    discovered_ids.push(node.id.clone());
-                                }
-                            }
+                if let Some(graph) = &self.graph_store
+                    && let Ok(neighbors) = graph.get_neighbors(tenant.clone(), &memory_id).await
+                    && !neighbors.is_empty()
+                {
+                    output.push("\nRelated Entries (Graph):".to_string());
+                    for (edge, node) in neighbors {
+                        if query.is_empty()
+                            || node.label.to_lowercase().contains(&query.to_lowercase())
+                            || node.id.to_lowercase().contains(&query.to_lowercase())
+                        {
+                            output.push(format!(
+                                "- [{}] {} (Properties: {})",
+                                edge.relation, node.id, node.properties
+                            ));
+                            discovered_ids.push(node.id.clone());
                         }
                     }
                 }
@@ -180,7 +185,7 @@ impl ActionExecutor for StrategyExecutor {
                 if filtered.is_empty() {
                     Ok((
                         "No results matched the filter criteria.".to_string(),
-                        vec![],
+                        vec![]
                     ))
                 } else {
                     Ok((filtered.join("\n---\n"), discovered_ids))
@@ -206,7 +211,7 @@ impl StrategyExecutor {
     async fn aggregate(
         &self,
         strategy: AggregationStrategy,
-        results: Vec<String>,
+        results: Vec<String>
     ) -> anyhow::Result<String> {
         match strategy {
             AggregationStrategy::Union => {
@@ -218,7 +223,7 @@ impl StrategyExecutor {
                 Ok(format!("Intersection of results:\n{}", combined))
             }
             AggregationStrategy::Difference => {
-                let first = results.get(0).cloned().unwrap_or_default();
+                let first = results.first().cloned().unwrap_or_default();
                 let others = results
                     .iter()
                     .skip(1)
@@ -262,7 +267,7 @@ mod tests {
                 "this is an error message".to_string(),
                 "another error occurred".to_string(),
                 "some warning".to_string(),
-            ],
+            ]
         };
 
         let result = executor.execute(action, &tenant).await.unwrap();
@@ -282,7 +287,7 @@ mod tests {
 
         let action = DecompositionAction::Filter {
             criteria: "missing".to_string(),
-            results: vec!["alpha".to_string(), "beta".to_string()],
+            results: vec!["alpha".to_string(), "beta".to_string()]
         };
 
         let result = executor.execute(action, &tenant).await.unwrap();

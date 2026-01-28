@@ -20,14 +20,14 @@ pub trait TrajectoryStorage: Send + Sync {
         &self,
         ctx: &TenantContext,
         session_id: &str,
-        events: &[TrajectoryEvent],
+        events: &[TrajectoryEvent]
     ) -> Result<(), TrajectoryStorageError>;
 
     /// Load events for a session
     async fn load_events(
         &self,
         ctx: &TenantContext,
-        session_id: &str,
+        session_id: &str
     ) -> Result<Vec<TrajectoryEvent>, TrajectoryStorageError>;
 }
 
@@ -38,7 +38,7 @@ pub enum TrajectoryStorageError {
     #[error("Serialization error: {0}")]
     Serialization(String),
     #[error("Session not found: {0}")]
-    SessionNotFound(String),
+    SessionNotFound(String)
 }
 
 impl From<PostgresError> for TrajectoryStorageError {
@@ -62,7 +62,7 @@ pub struct TrajectoryEvent {
     pub output: String,
     pub success: bool,
     pub duration_ms: u64,
-    pub metadata: Option<serde_json::Value>,
+    pub metadata: Option<serde_json::Value>
 }
 
 impl TrajectoryEvent {
@@ -71,7 +71,7 @@ impl TrajectoryEvent {
         input: impl Into<String>,
         output: impl Into<String>,
         success: bool,
-        duration_ms: u64,
+        duration_ms: u64
     ) -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -86,7 +86,7 @@ impl TrajectoryEvent {
             output: output.into(),
             success,
             duration_ms,
-            metadata: None,
+            metadata: None
         }
     }
 
@@ -102,7 +102,7 @@ pub struct AsyncCaptureMetrics {
     events_dropped: Arc<AtomicU64>,
     capture_latency_ms_sum: Arc<AtomicU64>,
     batch_flushes: Arc<AtomicU64>,
-    overflow_drops: Arc<AtomicU64>,
+    overflow_drops: Arc<AtomicU64>
 }
 
 impl AsyncCaptureMetrics {
@@ -112,7 +112,7 @@ impl AsyncCaptureMetrics {
             events_dropped: Arc::new(AtomicU64::new(0)),
             capture_latency_ms_sum: Arc::new(AtomicU64::new(0)),
             batch_flushes: Arc::new(AtomicU64::new(0)),
-            overflow_drops: Arc::new(AtomicU64::new(0)),
+            overflow_drops: Arc::new(AtomicU64::new(0))
         }
     }
 
@@ -176,7 +176,7 @@ pub struct TrajectoryConfig {
     pub max_input_chars: usize,
     pub max_output_chars: usize,
     pub filter_sensitive: bool,
-    pub excluded_tools: Vec<String>,
+    pub excluded_tools: Vec<String>
 }
 
 impl Default for TrajectoryConfig {
@@ -186,24 +186,24 @@ impl Default for TrajectoryConfig {
             max_input_chars: 5000,
             max_output_chars: 10000,
             filter_sensitive: true,
-            excluded_tools: vec![],
+            excluded_tools: vec![]
         }
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct SensitivePatterns {
-    patterns: Vec<Regex>,
+    patterns: Vec<Regex>
 }
 
 impl SensitivePatterns {
     pub fn new() -> Self {
-        let default_patterns = vec![
+        let default_patterns = [
             r#"(?i)(api[_-]?key|apikey)\s*[:=]\s*['\"]?[\w-]+"#,
             r#"(?i)(password|passwd|pwd)\s*[:=]\s*['\"]?[^\s'\""]+"#,
             r#"(?i)(secret|token)\s*[:=]\s*['\"]?[\w-]+"#,
             r#"(?i)bearer\s+[\w-]+\.[\w-]+\.[\w-]+"#,
-            r#"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"#,
+            r#"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"#
         ];
 
         let patterns = default_patterns
@@ -231,14 +231,14 @@ impl SensitivePatterns {
 
 pub struct TrajectoryFilter {
     config: TrajectoryConfig,
-    sensitive_patterns: SensitivePatterns,
+    sensitive_patterns: SensitivePatterns
 }
 
 impl TrajectoryFilter {
     pub fn new(config: TrajectoryConfig) -> Self {
         Self {
             config,
-            sensitive_patterns: SensitivePatterns::new(),
+            sensitive_patterns: SensitivePatterns::new()
         }
     }
 
@@ -277,7 +277,7 @@ impl TrajectoryFilter {
 pub struct TrajectoryCapture {
     config: TrajectoryConfig,
     filter: TrajectoryFilter,
-    events: VecDeque<TrajectoryEvent>,
+    events: VecDeque<TrajectoryEvent>
 }
 
 impl TrajectoryCapture {
@@ -286,7 +286,7 @@ impl TrajectoryCapture {
         Self {
             config,
             filter,
-            events: VecDeque::new(),
+            events: VecDeque::new()
         }
     }
 
@@ -360,14 +360,14 @@ pub struct SessionTrajectoryCapture {
     flush_threshold: usize,
     last_flush: Instant,
     flush_interval_secs: u64,
-    pending_count: usize,
+    pending_count: usize
 }
 
 impl SessionTrajectoryCapture {
     pub fn new(
         session_id: impl Into<String>,
         ctx: TenantContext,
-        config: TrajectoryConfig,
+        config: TrajectoryConfig
     ) -> Self {
         Self {
             session_id: session_id.into(),
@@ -377,7 +377,7 @@ impl SessionTrajectoryCapture {
             flush_threshold: 50,
             last_flush: Instant::now(),
             flush_interval_secs: 60,
-            pending_count: 0,
+            pending_count: 0
         }
     }
 
@@ -432,7 +432,7 @@ impl SessionTrajectoryCapture {
         crate::telemetry::KnowledgeTelemetry.record_note_distillation(
             "flush",
             self.pending_count,
-            0.0,
+            0.0
         );
 
         self.pending_count = 0;
@@ -443,7 +443,7 @@ impl SessionTrajectoryCapture {
 
     pub async fn capture_and_maybe_flush(
         &mut self,
-        event: TrajectoryEvent,
+        event: TrajectoryEvent
     ) -> Result<(), TrajectoryStorageError> {
         self.capture(event);
         if self.should_flush() {
@@ -495,14 +495,14 @@ pub struct AsyncTrajectoryCapture {
     sampling_counters: DashMap<String, AtomicU64>,
     queue: Arc<Mutex<VecDeque<TrajectoryEvent>>>,
     sender: mpsc::UnboundedSender<()>,
-    receiver: Arc<std::sync::Mutex<Option<mpsc::UnboundedReceiver<()>>>>,
+    receiver: Arc<std::sync::Mutex<Option<mpsc::UnboundedReceiver<()>>>>
 }
 
 impl AsyncTrajectoryCapture {
     pub fn new(
         session_id: impl Into<String>,
         ctx: TenantContext,
-        config: Arc<config::cca::NoteTakingConfig>,
+        config: Arc<config::cca::NoteTakingConfig>
     ) -> Self {
         let (sender, receiver) = mpsc::unbounded_channel();
         let queue = VecDeque::with_capacity(config.queue_size);
@@ -517,7 +517,7 @@ impl AsyncTrajectoryCapture {
             sampling_counters: DashMap::new(),
             queue: Arc::new(Mutex::new(queue)),
             sender,
-            receiver: Arc::new(std::sync::Mutex::new(Some(receiver))),
+            receiver: Arc::new(std::sync::Mutex::new(Some(receiver)))
         }
     }
 
@@ -558,7 +558,7 @@ impl AsyncTrajectoryCapture {
                     .entry(event.tool_name.clone())
                     .or_insert_with(|| AtomicU64::new(0));
                 let count = counter.fetch_add(1, Ordering::Relaxed);
-                if count % self.config.sampling_rate as u64 != 0 {
+                if !count.is_multiple_of(self.config.sampling_rate as u64) {
                     self.metrics.record_dropped();
                     return;
                 }
@@ -634,11 +634,10 @@ impl AsyncTrajectoryCapture {
                             }
                             drop(queue_guard);
 
-                            if !buffer.is_empty() {
-                                if let Some(storage) = &storage {
+                            if !buffer.is_empty()
+                                && let Some(storage) = &storage {
                                     Self::flush_buffer(storage, &ctx, &session_id, &mut buffer, &metrics).await;
                                 }
-                            }
                         }
                         _ = flush_interval.tick() => {
                             let mut queue_guard = queue.lock().await;
@@ -654,11 +653,10 @@ impl AsyncTrajectoryCapture {
                             }
                             drop(queue_guard);
 
-                            if !buffer.is_empty() {
-                                if let Some(storage) = &storage {
+                            if !buffer.is_empty()
+                                && let Some(storage) = &storage {
                                     Self::flush_buffer(storage, &ctx, &session_id, &mut buffer, &metrics).await;
                                 }
-                            }
                         }
                     }
                 }
@@ -671,7 +669,7 @@ impl AsyncTrajectoryCapture {
         ctx: &TenantContext,
         session_id: &str,
         buffer: &mut Vec<TrajectoryEvent>,
-        metrics: &AsyncCaptureMetrics,
+        metrics: &AsyncCaptureMetrics
     ) {
         if buffer.is_empty() {
             return;
@@ -689,7 +687,7 @@ impl AsyncTrajectoryCapture {
             crate::telemetry::KnowledgeTelemetry.record_note_distillation(
                 "async_flush",
                 count,
-                0.0,
+                0.0
             );
         }
     }
@@ -721,14 +719,14 @@ impl AsyncTrajectoryCapture {
 
 pub struct StorageBackendAdapter<S>
 where
-    S: mk_core::traits::StorageBackend<Error = PostgresError>,
+    S: mk_core::traits::StorageBackend<Error = PostgresError>
 {
-    backend: Arc<S>,
+    backend: Arc<S>
 }
 
 impl<S> StorageBackendAdapter<S>
 where
-    S: mk_core::traits::StorageBackend<Error = PostgresError>,
+    S: mk_core::traits::StorageBackend<Error = PostgresError>
 {
     pub fn new(backend: Arc<S>) -> Self {
         Self { backend }
@@ -742,13 +740,13 @@ where
 #[async_trait::async_trait]
 impl<S> TrajectoryStorage for StorageBackendAdapter<S>
 where
-    S: mk_core::traits::StorageBackend<Error = PostgresError> + 'static,
+    S: mk_core::traits::StorageBackend<Error = PostgresError> + 'static
 {
     async fn persist_events(
         &self,
         ctx: &TenantContext,
         session_id: &str,
-        events: &[TrajectoryEvent],
+        events: &[TrajectoryEvent]
     ) -> Result<(), TrajectoryStorageError> {
         let key = Self::storage_key(session_id);
         let data = serde_json::to_vec(events)?;
@@ -759,14 +757,14 @@ where
     async fn load_events(
         &self,
         ctx: &TenantContext,
-        session_id: &str,
+        session_id: &str
     ) -> Result<Vec<TrajectoryEvent>, TrajectoryStorageError> {
         let key = Self::storage_key(session_id);
         match self.backend.retrieve(ctx.clone(), &key).await? {
             Some(data) => Ok(serde_json::from_slice(&data)?),
             None => Err(TrajectoryStorageError::SessionNotFound(
-                session_id.to_string(),
-            )),
+                session_id.to_string()
+            ))
         }
     }
 }
@@ -879,7 +877,7 @@ mod tests {
             "this_is_a_very_long_input_for_testing",
             "this_is_a_very_long_output_for_testing",
             true,
-            100,
+            100
         );
 
         let filtered = filter.filter_event(&event).unwrap();
@@ -1202,7 +1200,7 @@ mod tests {
             "api_key=sk-12345 password=secret",
             "response",
             true,
-            10,
+            10
         );
 
         let start = Instant::now();

@@ -6,7 +6,7 @@ use storage::approval_workflow::{ApprovalWorkflow, WorkflowState};
 use storage::governance::{
     ApprovalDecision, ApprovalMode, ApprovalRequest, AuditFilters, CreateApprovalRequest,
     CreateDecision, CreateGovernanceRole, Decision, GovernanceAuditEntry, GovernanceConfig,
-    GovernanceRole, PrincipalType, RequestFilters, RequestStatus, RequestType, RiskLevel,
+    GovernanceRole, PrincipalType, RequestFilters, RequestStatus, RequestType, RiskLevel
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -17,7 +17,7 @@ pub struct MockGovernanceStorage {
     decisions: Arc<RwLock<HashMap<Uuid, Vec<ApprovalDecision>>>>,
     roles: Arc<RwLock<Vec<GovernanceRole>>>,
     audit_logs: Arc<RwLock<Vec<GovernanceAuditEntry>>>,
-    request_counter: Arc<RwLock<u64>>,
+    request_counter: Arc<RwLock<u64>>
 }
 
 impl MockGovernanceStorage {
@@ -28,7 +28,7 @@ impl MockGovernanceStorage {
             decisions: Arc::new(RwLock::new(HashMap::new())),
             roles: Arc::new(RwLock::new(Vec::new())),
             audit_logs: Arc::new(RwLock::new(Vec::new())),
-            request_counter: Arc::new(RwLock::new(0)),
+            request_counter: Arc::new(RwLock::new(0))
         }
     }
 
@@ -36,7 +36,7 @@ impl MockGovernanceStorage {
         company_id: Option<Uuid>,
         org_id: Option<Uuid>,
         team_id: Option<Uuid>,
-        project_id: Option<Uuid>,
+        project_id: Option<Uuid>
     ) -> String {
         format!(
             "{:?}:{:?}:{:?}:{:?}",
@@ -49,7 +49,7 @@ impl MockGovernanceStorage {
         company_id: Option<Uuid>,
         org_id: Option<Uuid>,
         team_id: Option<Uuid>,
-        project_id: Option<Uuid>,
+        project_id: Option<Uuid>
     ) -> Result<GovernanceConfig, String> {
         let configs = self.configs.read().await;
         let key = Self::scope_key(company_id, org_id, team_id, project_id);
@@ -67,7 +67,7 @@ impl MockGovernanceStorage {
             config.company_id,
             config.org_id,
             config.team_id,
-            config.project_id,
+            config.project_id
         );
         let id = config.id.unwrap_or_else(Uuid::new_v4);
         let mut stored = config.clone();
@@ -78,7 +78,7 @@ impl MockGovernanceStorage {
 
     pub async fn create_request(
         &self,
-        request: &CreateApprovalRequest,
+        request: &CreateApprovalRequest
     ) -> Result<ApprovalRequest, String> {
         let mut counter = self.request_counter.write().await;
         *counter += 1;
@@ -116,7 +116,7 @@ impl MockGovernanceStorage {
             resolved_at: None,
             resolution_reason: None,
             applied_at: None,
-            applied_by: None,
+            applied_by: None
         };
 
         let mut requests = self.requests.write().await;
@@ -131,7 +131,7 @@ impl MockGovernanceStorage {
 
     pub async fn get_request_by_number(
         &self,
-        request_number: &str,
+        request_number: &str
     ) -> Result<Option<ApprovalRequest>, String> {
         let requests = self.requests.read().await;
         Ok(requests
@@ -142,7 +142,7 @@ impl MockGovernanceStorage {
 
     pub async fn list_pending_requests(
         &self,
-        filters: &RequestFilters,
+        filters: &RequestFilters
     ) -> Result<Vec<ApprovalRequest>, String> {
         let requests = self.requests.read().await;
         let limit = filters.limit.unwrap_or(50);
@@ -173,7 +173,7 @@ impl MockGovernanceStorage {
 
     pub async fn add_decision(
         &self,
-        decision: &CreateDecision,
+        decision: &CreateDecision
     ) -> Result<ApprovalDecision, String> {
         let id = Uuid::new_v4();
         let approval_decision = ApprovalDecision {
@@ -184,7 +184,7 @@ impl MockGovernanceStorage {
             approver_email: decision.approver_email.clone(),
             decision: decision.decision,
             comment: decision.comment.clone(),
-            created_at: Utc::now(),
+            created_at: Utc::now()
         };
 
         let mut decisions = self.decisions.write().await;
@@ -212,7 +212,7 @@ impl MockGovernanceStorage {
     pub async fn reject_request(
         &self,
         request_id: Uuid,
-        reason: &str,
+        reason: &str
     ) -> Result<ApprovalRequest, String> {
         let mut requests = self.requests.write().await;
         let request = requests.get_mut(&request_id).ok_or("Request not found")?;
@@ -239,7 +239,7 @@ impl MockGovernanceStorage {
     pub async fn mark_applied(
         &self,
         request_id: Uuid,
-        applied_by: Uuid,
+        applied_by: Uuid
     ) -> Result<ApprovalRequest, String> {
         let mut requests = self.requests.write().await;
         let request = requests.get_mut(&request_id).ok_or("Request not found")?;
@@ -271,7 +271,7 @@ impl MockGovernanceStorage {
             granted_at: Utc::now(),
             expires_at: role.expires_at,
             revoked_at: None,
-            revoked_by: None,
+            revoked_by: None
         };
 
         let mut roles = self.roles.write().await;
@@ -283,7 +283,7 @@ impl MockGovernanceStorage {
         &self,
         principal_id: Uuid,
         role: &str,
-        revoked_by: Uuid,
+        revoked_by: Uuid
     ) -> Result<(), String> {
         let mut roles = self.roles.write().await;
         for r in roles.iter_mut() {
@@ -300,7 +300,7 @@ impl MockGovernanceStorage {
         &self,
         company_id: Option<Uuid>,
         org_id: Option<Uuid>,
-        team_id: Option<Uuid>,
+        team_id: Option<Uuid>
     ) -> Result<Vec<GovernanceRole>, String> {
         let roles = self.roles.read().await;
         let filtered: Vec<GovernanceRole> = roles
@@ -323,7 +323,7 @@ impl MockGovernanceStorage {
         actor_type: PrincipalType,
         actor_id: Option<Uuid>,
         actor_email: Option<&str>,
-        details: serde_json::Value,
+        details: serde_json::Value
     ) -> Result<Uuid, String> {
         let id = Uuid::new_v4();
         let entry = GovernanceAuditEntry {
@@ -338,7 +338,7 @@ impl MockGovernanceStorage {
             details,
             old_values: None,
             new_values: None,
-            created_at: Utc::now(),
+            created_at: Utc::now()
         };
 
         let mut logs = self.audit_logs.write().await;
@@ -348,7 +348,7 @@ impl MockGovernanceStorage {
 
     pub async fn list_audit_logs(
         &self,
-        filters: &AuditFilters,
+        filters: &AuditFilters
     ) -> Result<Vec<GovernanceAuditEntry>, String> {
         let logs = self.audit_logs.read().await;
         let limit = filters.limit.unwrap_or(50);
@@ -377,7 +377,7 @@ impl MockGovernanceStorage {
         role: &str,
         company_id: Option<Uuid>,
         org_id: Option<Uuid>,
-        team_id: Option<Uuid>,
+        team_id: Option<Uuid>
     ) -> Result<bool, String> {
         let roles = self.roles.read().await;
         let has_role = roles.iter().any(|r| {
@@ -426,7 +426,7 @@ mod governance_config_tests {
             escalation_contact: Some("admin@example.com".to_string()),
             policy_settings: json!({"require_approval": true}),
             knowledge_settings: json!({}),
-            memory_settings: json!({}),
+            memory_settings: json!({})
         };
 
         let id = storage.upsert_config(&config).await.unwrap();
@@ -525,7 +525,7 @@ mod approval_request_tests {
             requestor_id,
             requestor_email: Some("user@example.com".to_string()),
             required_approvals: 2,
-            timeout_hours: Some(72),
+            timeout_hours: Some(72)
         }
     }
 
@@ -602,7 +602,7 @@ mod approval_request_tests {
             team_id: None,
             project_id: None,
             requestor_id: None,
-            limit: Some(10),
+            limit: Some(10)
         };
         let results = storage.list_pending_requests(&filters).await.unwrap();
         assert_eq!(results.len(), 2);
@@ -615,7 +615,7 @@ mod approval_request_tests {
             team_id: None,
             project_id: None,
             requestor_id: Some(requestor1),
-            limit: Some(10),
+            limit: Some(10)
         };
         let results = storage.list_pending_requests(&filters).await.unwrap();
         assert_eq!(results.len(), 2);
@@ -722,7 +722,7 @@ mod approval_decision_tests {
             requestor_id,
             requestor_email: None,
             required_approvals: 1,
-            timeout_hours: None,
+            timeout_hours: None
         };
         let created = storage.create_request(&request).await.unwrap();
 
@@ -733,7 +733,7 @@ mod approval_decision_tests {
             approver_id,
             approver_email: Some("approver@example.com".to_string()),
             decision: Decision::Approve,
-            comment: Some("LGTM".to_string()),
+            comment: Some("LGTM".to_string())
         };
         let approval = storage.add_decision(&decision).await.unwrap();
 
@@ -770,7 +770,7 @@ mod approval_decision_tests {
             requestor_id,
             requestor_email: None,
             required_approvals: 2,
-            timeout_hours: None,
+            timeout_hours: None
         };
         let created = storage.create_request(&request).await.unwrap();
 
@@ -781,7 +781,7 @@ mod approval_decision_tests {
             approver_id: approver1,
             approver_email: None,
             decision: Decision::Approve,
-            comment: None,
+            comment: None
         };
         storage.add_decision(&decision1).await.unwrap();
 
@@ -797,7 +797,7 @@ mod approval_decision_tests {
             approver_id: approver2,
             approver_email: None,
             decision: Decision::Approve,
-            comment: None,
+            comment: None
         };
         storage.add_decision(&decision2).await.unwrap();
 
@@ -830,7 +830,7 @@ mod approval_decision_tests {
             requestor_id,
             requestor_email: None,
             required_approvals: 2,
-            timeout_hours: None,
+            timeout_hours: None
         };
         let created = storage.create_request(&request).await.unwrap();
 
@@ -842,7 +842,7 @@ mod approval_decision_tests {
                 approver_id: approver1,
                 approver_email: None,
                 decision: Decision::Approve,
-                comment: Some("Approved".to_string()),
+                comment: Some("Approved".to_string())
             })
             .await
             .unwrap();
@@ -854,7 +854,7 @@ mod approval_decision_tests {
                 approver_id: approver2,
                 approver_email: None,
                 decision: Decision::Abstain,
-                comment: None,
+                comment: None
             })
             .await
             .unwrap();
@@ -885,7 +885,7 @@ mod approval_decision_tests {
             requestor_id,
             requestor_email: None,
             required_approvals: 1,
-            timeout_hours: None,
+            timeout_hours: None
         };
         let created = storage.create_request(&request).await.unwrap();
 
@@ -897,7 +897,7 @@ mod approval_decision_tests {
                 approver_id: Uuid::new_v4(),
                 approver_email: None,
                 decision: Decision::Approve,
-                comment: None,
+                comment: None
             })
             .await
             .unwrap();
@@ -933,7 +933,7 @@ mod governance_role_tests {
             team_id: None,
             project_id: None,
             granted_by: granter_id,
-            expires_at: None,
+            expires_at: None
         };
 
         let role_id = storage.assign_role(&role).await.unwrap();
@@ -963,7 +963,7 @@ mod governance_role_tests {
             team_id: None,
             project_id: None,
             granted_by: granter_id,
-            expires_at: None,
+            expires_at: None
         };
 
         storage.assign_role(&role).await.unwrap();
@@ -1008,7 +1008,7 @@ mod governance_role_tests {
                 team_id: None,
                 project_id: None,
                 granted_by: granter,
-                expires_at: None,
+                expires_at: None
             })
             .await
             .unwrap();
@@ -1023,7 +1023,7 @@ mod governance_role_tests {
                 team_id: None,
                 project_id: None,
                 granted_by: granter,
-                expires_at: None,
+                expires_at: None
             })
             .await
             .unwrap();
@@ -1075,7 +1075,7 @@ mod audit_log_tests {
                 PrincipalType::User,
                 Some(actor_id),
                 Some("admin@example.com"),
-                json!({"changes": {"min_approvers": [2, 3]}}),
+                json!({"changes": {"min_approvers": [2, 3]}})
             )
             .await
             .unwrap();
@@ -1099,7 +1099,7 @@ mod audit_log_tests {
                 PrincipalType::User,
                 Some(actor1),
                 None,
-                json!({}),
+                json!({})
             )
             .await
             .unwrap();
@@ -1113,7 +1113,7 @@ mod audit_log_tests {
                 PrincipalType::User,
                 Some(actor2),
                 None,
-                json!({}),
+                json!({})
             )
             .await
             .unwrap();
@@ -1127,7 +1127,7 @@ mod audit_log_tests {
                 PrincipalType::User,
                 Some(actor1),
                 None,
-                json!({}),
+                json!({})
             )
             .await
             .unwrap();
@@ -1138,7 +1138,7 @@ mod audit_log_tests {
             actor_id: None,
             target_type: None,
             since: Utc::now() - Duration::hours(1),
-            limit: Some(50),
+            limit: Some(50)
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 1);
@@ -1150,7 +1150,7 @@ mod audit_log_tests {
             actor_id: Some(actor1),
             target_type: None,
             since: Utc::now() - Duration::hours(1),
-            limit: Some(50),
+            limit: Some(50)
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 2);
@@ -1161,7 +1161,7 @@ mod audit_log_tests {
             actor_id: None,
             target_type: Some("role".to_string()),
             since: Utc::now() - Duration::hours(1),
-            limit: Some(50),
+            limit: Some(50)
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 1);
@@ -1182,7 +1182,7 @@ mod audit_log_tests {
                     PrincipalType::System,
                     None,
                     None,
-                    json!({}),
+                    json!({})
                 )
                 .await
                 .unwrap();
@@ -1194,7 +1194,7 @@ mod audit_log_tests {
             actor_id: None,
             target_type: None,
             since: Utc::now() - Duration::hours(1),
-            limit: Some(3),
+            limit: Some(3)
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 3);
@@ -1209,14 +1209,14 @@ mod audit_log_tests {
 mod workflow_integration_tests {
     use super::*;
     use storage::approval_workflow::{
-        ApprovalEvent, ApprovalModeKind, ApprovalWorkflowContext, RiskLevelKind,
+        ApprovalEvent, ApprovalModeKind, ApprovalWorkflowContext, RiskLevelKind
     };
 
     #[test]
     fn test_workflow_state_matches_request_status() {
         // Verify our workflow states map to storage RequestStatus
         let pending = WorkflowState::Pending {
-            submitted_at: Utc::now(),
+            submitted_at: Utc::now()
         };
         assert!(matches!(pending, WorkflowState::Pending { .. }));
 
@@ -1243,7 +1243,7 @@ mod workflow_integration_tests {
             approval_mode: ApprovalModeKind::Quorum,
             timeout_hours: config.timeout_hours,
             auto_approve_low_risk: config.auto_approve_low_risk,
-            risk_level: RiskLevelKind::Medium,
+            risk_level: RiskLevelKind::Medium
         };
 
         let workflow = ApprovalWorkflow::new(context);
@@ -1275,7 +1275,7 @@ mod workflow_integration_tests {
             requestor_id,
             requestor_email: None,
             required_approvals: 1,
-            timeout_hours: None,
+            timeout_hours: None
         };
         let created = storage.create_request(&request).await.unwrap();
 
@@ -1288,7 +1288,7 @@ mod workflow_integration_tests {
             approval_mode: ApprovalModeKind::Quorum,
             timeout_hours: 72,
             auto_approve_low_risk: false,
-            risk_level: RiskLevelKind::Low,
+            risk_level: RiskLevelKind::Low
         };
         let mut workflow = ApprovalWorkflow::new(context);
 
@@ -1296,7 +1296,7 @@ mod workflow_integration_tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id,
-                submitted_at: Utc::now(),
+                submitted_at: Utc::now()
             })
             .unwrap();
 
@@ -1305,7 +1305,7 @@ mod workflow_integration_tests {
             .handle(ApprovalEvent::Approve {
                 approver_id,
                 approved_at: Utc::now(),
-                comment: Some("LGTM".to_string()),
+                comment: Some("LGTM".to_string())
             })
             .unwrap();
 
@@ -1320,7 +1320,7 @@ mod workflow_integration_tests {
                 approver_id,
                 approver_email: None,
                 decision: Decision::Approve,
-                comment: Some("LGTM".to_string()),
+                comment: Some("LGTM".to_string())
             })
             .await
             .unwrap();
@@ -1340,7 +1340,7 @@ mod workflow_integration_tests {
             approval_mode: ApprovalModeKind::Quorum,
             timeout_hours: 48,
             auto_approve_low_risk: true,
-            risk_level: RiskLevelKind::Low,
+            risk_level: RiskLevelKind::Low
         };
 
         let mut workflow = ApprovalWorkflow::new(context);
@@ -1349,7 +1349,7 @@ mod workflow_integration_tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now(),
+                submitted_at: Utc::now()
             })
             .unwrap();
 
@@ -1366,7 +1366,7 @@ mod workflow_integration_tests {
             approval_mode: ApprovalModeKind::Quorum,
             timeout_hours: 48,
             auto_approve_low_risk: false,
-            risk_level: RiskLevelKind::High,
+            risk_level: RiskLevelKind::High
         };
 
         let mut workflow = ApprovalWorkflow::new(context);
@@ -1374,7 +1374,7 @@ mod workflow_integration_tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now(),
+                submitted_at: Utc::now()
             })
             .unwrap();
 
@@ -1382,7 +1382,7 @@ mod workflow_integration_tests {
             .handle(ApprovalEvent::Reject {
                 rejector_id: Uuid::new_v4(),
                 rejected_at: Utc::now(),
-                reason: "Does not meet security standards".to_string(),
+                reason: "Does not meet security standards".to_string()
             })
             .unwrap();
 
@@ -1448,7 +1448,7 @@ mod edge_case_tests {
             team_id: None,
             project_id: None,
             requestor_id: None,
-            limit: Some(10),
+            limit: Some(10)
         };
         let results = storage.list_pending_requests(&filters).await.unwrap();
         assert!(results.is_empty());
@@ -1469,7 +1469,7 @@ mod edge_case_tests {
             actor_id: None,
             target_type: None,
             since: Utc::now() - Duration::hours(1),
-            limit: Some(50),
+            limit: Some(50)
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert!(results.is_empty());
@@ -1503,7 +1503,7 @@ mod edge_case_tests {
             requestor_id,
             requestor_email: None,
             required_approvals: 1,
-            timeout_hours: None,
+            timeout_hours: None
         };
 
         let created1 = storage.create_request(&req1).await.unwrap();

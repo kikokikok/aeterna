@@ -9,7 +9,7 @@ use super::Cli;
 #[derive(Args)]
 pub struct CompletionArgs {
     #[arg(help = "Shell to generate completions for")]
-    pub shell: ShellChoice,
+    pub shell: ShellChoice
 }
 
 #[derive(Clone, ValueEnum)]
@@ -17,7 +17,7 @@ pub enum ShellChoice {
     Bash,
     Zsh,
     Fish,
-    PowerShell,
+    PowerShell
 }
 
 pub fn run(args: CompletionArgs) -> Result<()> {
@@ -26,7 +26,7 @@ pub fn run(args: CompletionArgs) -> Result<()> {
         ShellChoice::Bash => Shell::Bash,
         ShellChoice::Zsh => Shell::Zsh,
         ShellChoice::Fish => Shell::Fish,
-        ShellChoice::PowerShell => Shell::PowerShell,
+        ShellChoice::PowerShell => Shell::PowerShell
     };
 
     generate(shell, &mut cmd, "aeterna", &mut io::stdout());

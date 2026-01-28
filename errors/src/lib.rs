@@ -50,7 +50,7 @@ pub enum MemoryError {
 
     // FIX: Use named field {message} instead of positional {0}
     #[error("Configuration error: {message}")]
-    ConfigurationError { message: String },
+    ConfigurationError { message: String }
 }
 
 /// Knowledge repository errors
@@ -82,7 +82,7 @@ pub enum KnowledgeError {
 
     // FIX: Use named field {constraint_id} instead of positional {0}
     #[error("Constraint violation: {constraint_id}")]
-    ConstraintViolation { constraint_id: String },
+    ConstraintViolation { constraint_id: String }
 }
 
 /// Sync bridge errors
@@ -108,7 +108,7 @@ pub enum SyncError {
     #[error("Rollback of {checkpoint_id} failed: {reason}")]
     RollbackFailed {
         checkpoint_id: String,
-        reason: String,
+        reason: String
     },
 
     // FIX: Use named field {conflict_id} instead of positional {0}
@@ -117,7 +117,7 @@ pub enum SyncError {
 
     // FIX: Use named field {failed_items} instead of positional {0}
     #[error("Partial failure: {failed_items:?} items failed")]
-    PartialFailure { failed_items: Vec<String> },
+    PartialFailure { failed_items: Vec<String> }
 }
 
 /// Tool interface errors
@@ -151,8 +151,8 @@ pub enum ToolError {
     #[error("Conflict: {conflict_id}: {details}")]
     Conflict {
         conflict_id: String,
-        details: String,
-    },
+        details: String
+    }
 }
 
 /// Storage layer errors
@@ -176,5 +176,5 @@ pub enum StorageError {
 
     // FIX: Use named fields {backend} and {reason} instead of positional {0} and {1}
     #[error("Transaction on {backend} failed: {reason}")]
-    TransactionError { backend: String, reason: String },
+    TransactionError { backend: String, reason: String }
 }

@@ -12,13 +12,13 @@ pub enum HintsCommand {
     Explain(ExplainArgs),
 
     #[command(about = "Parse a hints string and show resolved hints")]
-    Parse(ParseArgs),
+    Parse(ParseArgs)
 }
 
 #[derive(Args)]
 pub struct ListArgs {
     #[arg(long, help = "Output as JSON")]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -27,7 +27,7 @@ pub struct ExplainArgs {
     pub preset: String,
 
     #[arg(long, help = "Output as JSON")]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -36,14 +36,14 @@ pub struct ParseArgs {
     pub hints: String,
 
     #[arg(long, help = "Output as JSON")]
-    pub json: bool,
+    pub json: bool
 }
 
 pub fn run(cmd: HintsCommand) -> Result<()> {
     match cmd {
         HintsCommand::List(args) => list(args),
         HintsCommand::Explain(args) => explain(args),
-        HintsCommand::Parse(args) => parse(args),
+        HintsCommand::Parse(args) => parse(args)
     }
 }
 
@@ -51,25 +51,25 @@ fn list(args: ListArgs) -> Result<()> {
     let presets = [
         (
             "minimal",
-            "No LLM, no reasoning - fastest, cheapest. For CI/CD, batch jobs.",
+            "No LLM, no reasoning - fastest, cheapest. For CI/CD, batch jobs."
         ),
         (
             "fast",
-            "LLM enabled, no reasoning - quick responses. For interactive use.",
+            "LLM enabled, no reasoning - quick responses. For interactive use."
         ),
         (
             "standard",
-            "Full features enabled - balanced. Default for humans.",
+            "Full features enabled - balanced. Default for humans."
         ),
         (
             "full",
-            "Everything on including auto-promote - deep analysis, debugging.",
+            "Everything on including auto-promote - deep analysis, debugging."
         ),
         ("offline", "No LLM, no external calls - disconnected work."),
         (
             "agent",
-            "Optimized for AI agents - full reasoning, no verbose.",
-        ),
+            "Optimized for AI agents - full reasoning, no verbose."
+        )
     ];
 
     if args.json {
@@ -132,13 +132,13 @@ fn explain(args: ExplainArgs) -> Result<()> {
     print_hint(
         "reasoning",
         hints.reasoning,
-        "Enable reflective reasoning (MemR3)",
+        "Enable reflective reasoning (MemR3)"
     );
     print_hint("multi_hop", hints.multi_hop, "Enable multi-hop retrieval");
     print_hint(
         "summarization",
         hints.summarization,
-        "Enable memory summarization",
+        "Enable memory summarization"
     );
     print_hint("caching", hints.caching, "Enable query result caching");
     print_hint("governance", hints.governance, "Enable policy enforcement");
@@ -147,12 +147,12 @@ fn explain(args: ExplainArgs) -> Result<()> {
     print_hint(
         "auto_promote",
         hints.auto_promote,
-        "Auto-promote high-reward memories",
+        "Auto-promote high-reward memories"
     );
     print_hint(
         "drift_check",
         hints.drift_check,
-        "Check for knowledge drift",
+        "Check for knowledge drift"
     );
     print_hint("graph", hints.graph, "Enable graph queries");
     print_hint("cca", hints.cca, "Enable CCA agents");

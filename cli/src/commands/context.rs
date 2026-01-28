@@ -12,13 +12,13 @@ pub enum ContextCommand {
     Set(SetArgs),
 
     #[command(about = "Clear context file")]
-    Clear(ClearArgs),
+    Clear(ClearArgs)
 }
 
 #[derive(Args)]
 pub struct ShowArgs {
     #[arg(long, help = "Output as JSON")]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -27,20 +27,20 @@ pub struct SetArgs {
     pub key: String,
 
     #[arg(help = "Value to set")]
-    pub value: String,
+    pub value: String
 }
 
 #[derive(Args)]
 pub struct ClearArgs {
     #[arg(long, help = "Also remove .aeterna directory")]
-    pub all: bool,
+    pub all: bool
 }
 
 pub fn run(cmd: ContextCommand) -> Result<()> {
     match cmd {
         ContextCommand::Show(args) => show(args),
         ContextCommand::Set(args) => set(args),
-        ContextCommand::Clear(args) => clear(args),
+        ContextCommand::Clear(args) => clear(args)
     }
 }
 

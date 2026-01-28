@@ -27,7 +27,7 @@ pub enum MemoryCommand {
     Feedback(MemoryFeedbackArgs),
 
     #[command(about = "Promote a memory to a broader layer")]
-    Promote(MemoryPromoteArgs),
+    Promote(MemoryPromoteArgs)
 }
 
 #[derive(Args)]
@@ -65,7 +65,7 @@ pub struct MemorySearchArgs {
 
     /// Dry run - don't actually search, just show what would happen
     #[arg(long)]
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 #[derive(Args)]
@@ -95,7 +95,7 @@ pub struct MemoryAddArgs {
 
     /// Dry run - don't actually store, just show what would happen
     #[arg(long)]
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 #[derive(Args)]
@@ -113,7 +113,7 @@ pub struct MemoryDeleteArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -128,7 +128,7 @@ pub struct MemoryListArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -138,7 +138,7 @@ pub struct MemoryShowArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -164,7 +164,7 @@ pub struct MemoryFeedbackArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -198,7 +198,7 @@ pub struct MemoryPromoteArgs {
 
     /// Dry run - don't actually promote, just show what would happen
     #[arg(long)]
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 pub async fn run(cmd: MemoryCommand) -> anyhow::Result<()> {
@@ -209,7 +209,7 @@ pub async fn run(cmd: MemoryCommand) -> anyhow::Result<()> {
         MemoryCommand::List(args) => run_list(args).await,
         MemoryCommand::Show(args) => run_show(args).await,
         MemoryCommand::Feedback(args) => run_feedback(args).await,
-        MemoryCommand::Promote(args) => run_promote(args).await,
+        MemoryCommand::Promote(args) => run_promote(args).await
     }
 }
 
@@ -268,7 +268,7 @@ async fn run_search(args: MemorySearchArgs) -> anyhow::Result<()> {
             println!("  Limit:     {}", args.limit);
             println!("  Threshold: {}", args.threshold);
             if let Some(layer) = &args.layer {
-                println!("  Layer:     {}", layer);
+                println!("  Layer:     {layer}");
             }
             println!();
             output::header("Context");
@@ -336,7 +336,7 @@ async fn run_add(args: MemoryAddArgs) -> anyhow::Result<()> {
     // Validate layer
     let layer = args.layer.to_lowercase();
     let valid_layers = [
-        "agent", "user", "session", "project", "team", "org", "company",
+        "agent", "user", "session", "project", "team", "org", "company"
     ];
     if !valid_layers.contains(&layer.as_str()) {
         let err = ux_error::invalid_layer(&layer, &valid_layers);
@@ -399,12 +399,12 @@ async fn run_add(args: MemoryAddArgs) -> anyhow::Result<()> {
             output::header("Memory Add (Dry Run)");
             println!();
             println!("  Content: {}", truncate(&args.content, 60));
-            println!("  Layer:   {}", layer);
+            println!("  Layer:   {layer}");
             if !tags.is_empty() {
                 println!("  Tags:    {}", tags.join(", "));
             }
             if metadata != json!({}) {
-                println!("  Metadata: {}", metadata);
+                println!("  Metadata: {metadata}");
             }
             println!();
             output::header("Context");
@@ -449,7 +449,7 @@ async fn run_delete(args: MemoryDeleteArgs) -> anyhow::Result<()> {
     // Validate layer
     let layer = args.layer.to_lowercase();
     let valid_layers = [
-        "agent", "user", "session", "project", "team", "org", "company",
+        "agent", "user", "session", "project", "team", "org", "company"
     ];
     if !valid_layers.contains(&layer.as_str()) {
         let err = ux_error::invalid_layer(&layer, &valid_layers);
@@ -490,7 +490,7 @@ async fn run_list(args: MemoryListArgs) -> anyhow::Result<()> {
     // Validate layer
     let layer = args.layer.to_lowercase();
     let valid_layers = [
-        "agent", "user", "session", "project", "team", "org", "company",
+        "agent", "user", "session", "project", "team", "org", "company"
     ];
     if !valid_layers.contains(&layer.as_str()) {
         let err = ux_error::invalid_layer(&layer, &valid_layers);
@@ -513,7 +513,7 @@ async fn run_list(args: MemoryListArgs) -> anyhow::Result<()> {
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        output::header(&format!("Memories in '{}' layer", layer));
+        output::header(&format!("Memories in '{layer}' layer"));
         println!();
         let err = ux_error::server_not_connected();
         err.display();
@@ -545,7 +545,7 @@ async fn run_feedback(args: MemoryFeedbackArgs) -> anyhow::Result<()> {
     // Validate layer
     let layer = args.layer.to_lowercase();
     let valid_layers = [
-        "agent", "user", "session", "project", "team", "org", "company",
+        "agent", "user", "session", "project", "team", "org", "company"
     ];
     if !valid_layers.contains(&layer.as_str()) {
         let err = ux_error::invalid_layer(&layer, &valid_layers);
@@ -560,7 +560,7 @@ async fn run_feedback(args: MemoryFeedbackArgs) -> anyhow::Result<()> {
         "irrelevant",
         "outdated",
         "inaccurate",
-        "duplicate",
+        "duplicate"
     ];
     if !valid_types.contains(&feedback_type.as_str()) {
         let err = ux_error::invalid_feedback_type(&feedback_type);
@@ -591,11 +591,11 @@ async fn run_feedback(args: MemoryFeedbackArgs) -> anyhow::Result<()> {
         output::header("Memory Feedback");
         println!();
         println!("  Memory ID: {}", args.memory_id);
-        println!("  Layer:     {}", layer);
-        println!("  Type:      {}", feedback_type);
+        println!("  Layer:     {layer}");
+        println!("  Type:      {feedback_type}");
         println!("  Score:     {}", args.score);
         if let Some(reasoning) = &args.reasoning {
-            println!("  Reasoning: {}", reasoning);
+            println!("  Reasoning: {reasoning}");
         }
         println!();
         let err = ux_error::server_not_connected();
@@ -607,7 +607,7 @@ async fn run_feedback(args: MemoryFeedbackArgs) -> anyhow::Result<()> {
 
 fn hint_effect(enabled: bool, effect: &str) -> String {
     if enabled {
-        format!("({})", effect)
+        format!("({effect})")
     } else {
         String::new()
     }
@@ -630,7 +630,7 @@ fn layer_order(l: &str) -> usize {
         "team" => 4,
         "org" => 5,
         "company" => 6,
-        _ => 0,
+        _ => 0
     }
 }
 
@@ -641,7 +641,7 @@ async fn run_promote(args: MemoryPromoteArgs) -> anyhow::Result<()> {
     let from_layer = args.from_layer.to_lowercase();
     let to_layer = args.to_layer.to_lowercase();
     let valid_layers = [
-        "agent", "user", "session", "project", "team", "org", "company",
+        "agent", "user", "session", "project", "team", "org", "company"
     ];
 
     if !valid_layers.contains(&from_layer.as_str()) {
@@ -684,10 +684,10 @@ async fn run_promote(args: MemoryPromoteArgs) -> anyhow::Result<()> {
             output::header("Memory Promote (Dry Run)");
             println!();
             println!("  Memory ID:   {}", args.memory_id);
-            println!("  From Layer:  {}", from_layer);
-            println!("  To Layer:    {}", to_layer);
+            println!("  From Layer:  {from_layer}");
+            println!("  To Layer:    {to_layer}");
             if let Some(reason) = &args.reason {
-                println!("  Reason:      {}", reason);
+                println!("  Reason:      {reason}");
             }
             println!();
             output::header("Context");
@@ -738,10 +738,10 @@ async fn run_promote(args: MemoryPromoteArgs) -> anyhow::Result<()> {
         output::header("Memory Promote");
         println!();
         println!("  Memory ID:   {}", args.memory_id);
-        println!("  From Layer:  {}", from_layer);
-        println!("  To Layer:    {}", to_layer);
+        println!("  From Layer:  {from_layer}");
+        println!("  To Layer:    {to_layer}");
         if let Some(reason) = &args.reason {
-            println!("  Reason:      {}", reason);
+            println!("  Reason:      {reason}");
         }
         println!();
         let err = ux_error::server_not_connected();

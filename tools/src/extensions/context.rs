@@ -10,13 +10,13 @@ use super::ExtensionError;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionMessage {
     pub role: String,
-    pub content: String,
+    pub content: String
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionContextState {
     pub state: HashMap<String, Value>,
-    pub version: u32,
+    pub version: u32
 }
 
 pub struct ExtensionContext {
@@ -25,7 +25,7 @@ pub struct ExtensionContext {
     pub extension_id: String,
     pub tool_registry: Arc<crate::tools::ToolRegistry>,
     state: HashMap<String, Value>,
-    max_state_bytes: usize,
+    max_state_bytes: usize
 }
 
 impl ExtensionContext {
@@ -34,7 +34,7 @@ impl ExtensionContext {
         session_id: String,
         extension_id: String,
         tool_registry: Arc<crate::tools::ToolRegistry>,
-        max_state_bytes: usize,
+        max_state_bytes: usize
     ) -> Self {
         Self {
             tenant_ctx,
@@ -42,19 +42,19 @@ impl ExtensionContext {
             extension_id,
             tool_registry,
             state: HashMap::new(),
-            max_state_bytes,
+            max_state_bytes
         }
     }
 
     pub fn get_state<T: serde::de::DeserializeOwned>(
         &self,
-        key: &str,
+        key: &str
     ) -> Result<Option<T>, ExtensionError> {
         match self.state.get(key) {
             Some(value) => serde_json::from_value(value.clone())
                 .map(Some)
                 .map_err(|err| ExtensionError::Serialization(err.to_string())),
-            None => Ok(None),
+            None => Ok(None)
         }
     }
 
@@ -81,7 +81,7 @@ impl ExtensionContext {
     pub fn to_state_payload(&self) -> Result<ExtensionContextState, ExtensionError> {
         Ok(ExtensionContextState {
             state: self.state.clone(),
-            version: 1,
+            version: 1
         })
     }
 

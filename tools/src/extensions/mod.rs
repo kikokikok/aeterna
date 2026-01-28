@@ -40,7 +40,7 @@ pub enum ExtensionError {
     Serialization(String),
 
     #[error("State store error: {0}")]
-    StateStore(String),
+    StateStore(String)
 }
 
 #[async_trait]
@@ -48,7 +48,7 @@ pub trait ExtensionCallback: Send + Sync {
     async fn on_input_messages(
         &self,
         _ctx: &mut ExtensionContext,
-        messages: Vec<ExtensionMessage>,
+        messages: Vec<ExtensionMessage>
     ) -> Result<Vec<ExtensionMessage>, ExtensionError> {
         Ok(messages)
     }
@@ -56,7 +56,7 @@ pub trait ExtensionCallback: Send + Sync {
     async fn on_plain_text(
         &self,
         _ctx: &mut ExtensionContext,
-        text: String,
+        text: String
     ) -> Result<String, ExtensionError> {
         Ok(text)
     }
@@ -65,7 +65,7 @@ pub trait ExtensionCallback: Send + Sync {
         &self,
         _ctx: &mut ExtensionContext,
         _tag: String,
-        content: String,
+        content: String
     ) -> Result<String, ExtensionError> {
         Ok(content)
     }
@@ -73,7 +73,7 @@ pub trait ExtensionCallback: Send + Sync {
     async fn on_llm_output(
         &self,
         _ctx: &mut ExtensionContext,
-        output: String,
+        output: String
     ) -> Result<String, ExtensionError> {
         Ok(output)
     }
@@ -83,7 +83,7 @@ pub struct ExtensionExecutor {
     registry: Arc<ExtensionRegistry>,
     state_store: Option<Arc<ExtensionStateStore>>,
     callback_timeout: Duration,
-    max_state_bytes: usize,
+    max_state_bytes: usize
 }
 
 impl std::fmt::Debug for ExtensionExecutor {
@@ -101,7 +101,7 @@ impl ExtensionExecutor {
             registry,
             state_store: None,
             callback_timeout: Duration::from_secs(5),
-            max_state_bytes: 64 * 1024,
+            max_state_bytes: 64 * 1024
         }
     }
 
@@ -129,7 +129,7 @@ impl ExtensionExecutor {
         ctx: TenantContext,
         session_id: &str,
         tool_registry: Arc<crate::tools::ToolRegistry>,
-        messages: Vec<ExtensionMessage>,
+        messages: Vec<ExtensionMessage>
     ) -> Result<Vec<ExtensionMessage>, ExtensionError> {
         let mut current = messages;
         for extension in self.registry.list_ordered() {
@@ -141,12 +141,12 @@ impl ExtensionExecutor {
                 session_id.to_string(),
                 extension.id.clone(),
                 tool_registry.clone(),
-                self.max_state_bytes,
+                self.max_state_bytes
             );
             self.load_state(&mut ext_ctx).await?;
             let result = run_with_timeout(
                 self.callback_timeout,
-                extension.callbacks.on_input_messages(&mut ext_ctx, current),
+                extension.callbacks.on_input_messages(&mut ext_ctx, current)
             )
             .await?;
             self.save_state(&ext_ctx).await?;
@@ -160,7 +160,7 @@ impl ExtensionExecutor {
         ctx: TenantContext,
         session_id: &str,
         tool_registry: Arc<crate::tools::ToolRegistry>,
-        text: String,
+        text: String
     ) -> Result<String, ExtensionError> {
         let mut current = text;
         for extension in self.registry.list_ordered() {
@@ -172,12 +172,12 @@ impl ExtensionExecutor {
                 session_id.to_string(),
                 extension.id.clone(),
                 tool_registry.clone(),
-                self.max_state_bytes,
+                self.max_state_bytes
             );
             self.load_state(&mut ext_ctx).await?;
             let result = run_with_timeout(
                 self.callback_timeout,
-                extension.callbacks.on_plain_text(&mut ext_ctx, current),
+                extension.callbacks.on_plain_text(&mut ext_ctx, current)
             )
             .await?;
             self.save_state(&ext_ctx).await?;
@@ -192,7 +192,7 @@ impl ExtensionExecutor {
         session_id: &str,
         tool_registry: Arc<crate::tools::ToolRegistry>,
         tag: String,
-        content: String,
+        content: String
     ) -> Result<String, ExtensionError> {
         let mut current = content;
         for extension in self.registry.list_ordered() {
@@ -204,14 +204,14 @@ impl ExtensionExecutor {
                 session_id.to_string(),
                 extension.id.clone(),
                 tool_registry.clone(),
-                self.max_state_bytes,
+                self.max_state_bytes
             );
             self.load_state(&mut ext_ctx).await?;
             let result = run_with_timeout(
                 self.callback_timeout,
                 extension
                     .callbacks
-                    .on_tag(&mut ext_ctx, tag.clone(), current),
+                    .on_tag(&mut ext_ctx, tag.clone(), current)
             )
             .await?;
             self.save_state(&ext_ctx).await?;
@@ -225,7 +225,7 @@ impl ExtensionExecutor {
         ctx: TenantContext,
         session_id: &str,
         tool_registry: Arc<crate::tools::ToolRegistry>,
-        output: String,
+        output: String
     ) -> Result<String, ExtensionError> {
         let mut current = output;
         for extension in self.registry.list_ordered() {
@@ -237,12 +237,12 @@ impl ExtensionExecutor {
                 session_id.to_string(),
                 extension.id.clone(),
                 tool_registry.clone(),
-                self.max_state_bytes,
+                self.max_state_bytes
             );
             self.load_state(&mut ext_ctx).await?;
             let result = run_with_timeout(
                 self.callback_timeout,
-                extension.callbacks.on_llm_output(&mut ext_ctx, current),
+                extension.callbacks.on_llm_output(&mut ext_ctx, current)
             )
             .await?;
             self.save_state(&ext_ctx).await?;
@@ -274,11 +274,11 @@ impl ExtensionExecutor {
 
 async fn run_with_timeout<F, T>(timeout_duration: Duration, fut: F) -> Result<T, ExtensionError>
 where
-    F: std::future::Future<Output = Result<T, ExtensionError>>,
+    F: std::future::Future<Output = Result<T, ExtensionError>>
 {
     match tokio::time::timeout(timeout_duration, fut).await {
         Ok(result) => result,
-        Err(_) => Err(ExtensionError::Timeout),
+        Err(_) => Err(ExtensionError::Timeout)
     }
 }
 
@@ -289,7 +289,7 @@ mod tests {
 
     struct TestCallback {
         label: String,
-        calls: Arc<Mutex<Vec<String>>>,
+        calls: Arc<Mutex<Vec<String>>>
     }
 
     #[async_trait]
@@ -297,7 +297,7 @@ mod tests {
         async fn on_plain_text(
             &self,
             _ctx: &mut ExtensionContext,
-            text: String,
+            text: String
         ) -> Result<String, ExtensionError> {
             self.calls.lock().unwrap().push(self.label.clone());
             Ok(format!("{text}-{}", self.label))
@@ -312,16 +312,16 @@ mod tests {
             "a",
             Arc::new(TestCallback {
                 label: "a".to_string(),
-                calls: calls.clone(),
-            }),
+                calls: calls.clone()
+            })
         )
         .with_priority(1);
         let reg2 = ExtensionRegistration::new(
             "b",
             Arc::new(TestCallback {
                 label: "b".to_string(),
-                calls: calls.clone(),
-            }),
+                calls: calls.clone()
+            })
         )
         .with_priority(2);
 
@@ -335,7 +335,7 @@ mod tests {
                 TenantContext::default(),
                 "session",
                 tool_registry,
-                "start".to_string(),
+                "start".to_string()
             )
             .await
             .unwrap();

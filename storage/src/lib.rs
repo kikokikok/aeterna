@@ -8,6 +8,7 @@ pub mod meta_governance;
 pub mod postgres;
 pub mod query_builder;
 pub mod redis;
+pub mod rlm_weights;
 pub mod rls_migration;
 
 // Re-export Redis lock types for job coordination
@@ -21,13 +22,13 @@ pub use governance::{
     ApprovalDecision, ApprovalMode, ApprovalRequest, AuditFilters, CreateApprovalRequest,
     CreateDecision, CreateGovernanceRole, Decision, GovernanceAuditEntry, GovernanceConfig,
     GovernanceRole, GovernanceStorage, PrincipalType, RequestFilters, RequestStatus, RequestType,
-    RiskLevel,
+    RiskLevel
 };
 
 // Re-export approval workflow state machine
 pub use approval_workflow::{
     ApprovalDecisionRecord, ApprovalEvent, ApprovalModeKind, ApprovalWorkflow,
-    ApprovalWorkflowContext, RiskLevelKind, WorkflowError, WorkflowState, create_workflow,
+    ApprovalWorkflowContext, RiskLevelKind, WorkflowError, WorkflowState, create_workflow
 };
 
 // Re-export meta-governance types
@@ -36,5 +37,10 @@ pub use meta_governance::{
     ConfirmationReason, ConfirmationStatus, EscalationConfig, EscalationFallback, EscalationTarget,
     EscalationTier, GovernanceActionType, GovernanceLayer, HumanConfirmationRequest,
     MetaGovernancePolicy, MetaGovernanceStorage, NotificationChannel, RoleLevel,
-    create_default_policies,
+    create_default_policies
+};
+
+// Re-export RLM weight storage types
+pub use rlm_weights::{
+    PostgresRlmWeightStorage, RlmWeightStorage, RlmWeightStorageError, StoredPolicyState
 };

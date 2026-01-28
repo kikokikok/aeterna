@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use distributed_lock::{
     DistributedLock, LockHandle, LockProvider, RedisDistributedLock, RedisLockHandle,
-    RedisLockProvider,
+    RedisLockProvider
 };
 use knowledge::governance::GovernanceEngine;
 use knowledge::manager::KnowledgeManager;
@@ -33,7 +33,7 @@ struct MockPersister;
 impl SyncStatePersister for MockPersister {
     async fn load(
         &self,
-        _tenant_id: &TenantId,
+        _tenant_id: &TenantId
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         Ok(SyncState::default())
     }
@@ -41,14 +41,14 @@ impl SyncStatePersister for MockPersister {
     async fn save(
         &self,
         _tenant_id: &TenantId,
-        _s: &SyncState,
+        _s: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
 }
 
 async fn create_sync_manager(
-    lock_provider: Option<Arc<RedisLockProvider>>,
+    lock_provider: Option<Arc<RedisLockProvider>>
 ) -> Result<(SyncManager, tempfile::TempDir), Box<dyn std::error::Error + Send + Sync>> {
     let repo_dir = tempfile::tempdir()?;
     let knowledge_repo = Arc::new(GitRepository::new(repo_dir.path())?);
@@ -61,7 +61,7 @@ async fn create_sync_manager(
         config::config::DeploymentConfig::default(),
         None,
         Arc::new(MockPersister),
-        lock_provider,
+        lock_provider
     )
     .await?;
 
@@ -239,7 +239,7 @@ async fn test_concurrent_sync_cycles_one_skipped() {
     let ctx = TenantContext {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new("test-user".to_string()).unwrap(),
-        agent_id: None,
+        agent_id: None
     };
 
     let result = sync_manager.run_sync_cycle(ctx, 60).await;

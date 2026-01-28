@@ -10,12 +10,12 @@ use std::sync::Arc;
 use validator::Validate;
 
 pub struct KnowledgeGetTool {
-    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
 }
 
 impl KnowledgeGetTool {
     pub fn new(
-        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
     ) -> Self {
         Self { repo }
     }
@@ -26,7 +26,7 @@ pub struct KnowledgeGetParams {
     pub path: String,
     pub layer: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
@@ -35,7 +35,7 @@ pub struct KnowledgeListParams {
     #[serde(default)]
     pub prefix: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
@@ -45,7 +45,7 @@ pub struct KnowledgeQueryParams {
     pub layers: Vec<String>,
     pub limit: Option<usize>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[async_trait]
@@ -81,7 +81,7 @@ impl Tool for KnowledgeGetTool {
             "org" => mk_core::types::KnowledgeLayer::Org,
             "team" => mk_core::types::KnowledgeLayer::Team,
             "project" => mk_core::types::KnowledgeLayer::Project,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
+            _ => return Err(format!("Unknown layer: {}", p.layer).into())
         };
 
         let entry = self.repo.get(ctx, layer, &p.path).await?;
@@ -90,12 +90,12 @@ impl Tool for KnowledgeGetTool {
 }
 
 pub struct KnowledgeListTool {
-    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
 }
 
 impl KnowledgeListTool {
     pub fn new(
-        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
     ) -> Self {
         Self { repo }
     }
@@ -134,7 +134,7 @@ impl Tool for KnowledgeListTool {
             "org" => mk_core::types::KnowledgeLayer::Org,
             "team" => mk_core::types::KnowledgeLayer::Team,
             "project" => mk_core::types::KnowledgeLayer::Project,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
+            _ => return Err(format!("Unknown layer: {}", p.layer).into())
         };
 
         let entries = self.repo.list(ctx, layer, &p.prefix).await?;
@@ -144,17 +144,17 @@ impl Tool for KnowledgeListTool {
 
 pub struct KnowledgeQueryTool {
     memory_manager: Arc<MemoryManager>,
-    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+    repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
 }
 
 impl KnowledgeQueryTool {
     pub fn new(
         memory_manager: Arc<MemoryManager>,
-        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
+        repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>
     ) -> Self {
         Self {
             memory_manager,
-            repo,
+            repo
         }
     }
 }
@@ -203,7 +203,7 @@ impl Tool for KnowledgeQueryTool {
                     "org" => mk_core::types::KnowledgeLayer::Org,
                     "team" => mk_core::types::KnowledgeLayer::Team,
                     "project" => mk_core::types::KnowledgeLayer::Project,
-                    _ => continue,
+                    _ => continue
                 };
                 layers.push(layer);
             }
@@ -217,7 +217,7 @@ impl Tool for KnowledgeQueryTool {
                 p.limit.unwrap_or(10),
                 0.7,
                 std::collections::HashMap::new(),
-                None,
+                None
             )
             .await
             .unwrap_or((Vec::new(), None));
@@ -250,7 +250,7 @@ pub struct KnowledgeProposal {
     pub proposed_at: chrono::DateTime<chrono::Utc>,
     pub status: KnowledgeProposalStatus,
     pub approvers: Vec<String>,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+    pub metadata: std::collections::HashMap<String, serde_json::Value>
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -259,7 +259,7 @@ pub enum KnowledgeProposalStatus {
     Draft,
     Pending,
     Approved,
-    Rejected,
+    Rejected
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -273,7 +273,7 @@ pub struct KnowledgeDraft {
     pub layer: mk_core::types::KnowledgeLayer,
     pub status: KnowledgeDraftStatus,
     pub created_by: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: chrono::DateTime<chrono::Utc>
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -281,7 +281,7 @@ pub struct KnowledgeDraft {
 pub enum KnowledgeDraftStatus {
     Draft,
     Validated,
-    Submitted,
+    Submitted
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -292,7 +292,7 @@ pub struct InterpretedKnowledge {
     pub summary: String,
     pub structure: KnowledgeStructure,
     pub suggested_layer: mk_core::types::KnowledgeLayer,
-    pub confidence: f32,
+    pub confidence: f32
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -303,38 +303,38 @@ pub struct KnowledgeStructure {
     pub consequences: Option<String>,
     pub alternatives: Option<String>,
     pub pattern_description: Option<String>,
-    pub applicability: Option<String>,
+    pub applicability: Option<String>
 }
 
 pub trait KnowledgeProposalStorage: Send + Sync {
     fn store_draft(
         &self,
-        draft: KnowledgeDraft,
+        draft: KnowledgeDraft
     ) -> impl std::future::Future<Output = Result<(), KnowledgeToolError>> + Send;
 
     fn get_draft(
         &self,
-        draft_id: &str,
+        draft_id: &str
     ) -> impl std::future::Future<Output = Result<Option<KnowledgeDraft>, KnowledgeToolError>> + Send;
 
     fn update_draft(
         &self,
-        draft: KnowledgeDraft,
+        draft: KnowledgeDraft
     ) -> impl std::future::Future<Output = Result<(), KnowledgeToolError>> + Send;
 
     fn store_proposal(
         &self,
-        proposal: KnowledgeProposal,
+        proposal: KnowledgeProposal
     ) -> impl std::future::Future<Output = Result<(), KnowledgeToolError>> + Send;
 
     fn get_proposal(
         &self,
-        proposal_id: &str,
+        proposal_id: &str
     ) -> impl std::future::Future<Output = Result<Option<KnowledgeProposal>, KnowledgeToolError>> + Send;
 
     fn list_pending(
         &self,
-        layer: Option<mk_core::types::KnowledgeLayer>,
+        layer: Option<mk_core::types::KnowledgeLayer>
     ) -> impl std::future::Future<Output = Result<Vec<KnowledgeProposal>, KnowledgeToolError>> + Send;
 }
 
@@ -359,14 +359,14 @@ pub enum KnowledgeToolError {
     StorageError(String),
 
     #[error("Interpretation error: {0}")]
-    InterpretationError(String),
+    InterpretationError(String)
 }
 
 pub trait KnowledgeInterpreter: Send + Sync {
     fn interpret(
         &self,
         description: &str,
-        context: Option<&str>,
+        context: Option<&str>
     ) -> impl std::future::Future<Output = Result<InterpretedKnowledge, KnowledgeToolError>> + Send;
 }
 
@@ -388,7 +388,7 @@ impl KnowledgeInterpreter for SimpleKnowledgeInterpreter {
     async fn interpret(
         &self,
         description: &str,
-        _context: Option<&str>,
+        _context: Option<&str>
     ) -> Result<InterpretedKnowledge, KnowledgeToolError> {
         let lower = description.to_lowercase();
 
@@ -449,7 +449,7 @@ impl KnowledgeInterpreter for SimpleKnowledgeInterpreter {
                 consequences: Some("Consequences to be determined".to_string()),
                 alternatives: Some("Alternatives to be documented".to_string()),
                 pattern_description: None,
-                applicability: None,
+                applicability: None
             },
             mk_core::types::KnowledgeType::Pattern => KnowledgeStructure {
                 context: None,
@@ -457,7 +457,7 @@ impl KnowledgeInterpreter for SimpleKnowledgeInterpreter {
                 consequences: None,
                 alternatives: None,
                 pattern_description: Some(description.to_string()),
-                applicability: Some("Applicability to be defined".to_string()),
+                applicability: Some("Applicability to be defined".to_string())
             },
             _ => KnowledgeStructure {
                 context: Some(description.to_string()),
@@ -465,8 +465,8 @@ impl KnowledgeInterpreter for SimpleKnowledgeInterpreter {
                 consequences: None,
                 alternatives: None,
                 pattern_description: None,
-                applicability: None,
-            },
+                applicability: None
+            }
         };
 
         Ok(InterpretedKnowledge {
@@ -475,7 +475,7 @@ impl KnowledgeInterpreter for SimpleKnowledgeInterpreter {
             summary,
             structure,
             suggested_layer,
-            confidence,
+            confidence
         })
     }
 }
@@ -504,27 +504,27 @@ pub struct KnowledgeProposeParams {
     #[serde(rename = "proposedBy")]
     pub proposed_by: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 pub struct KnowledgeProposeTool<S, I>
 where
     S: KnowledgeProposalStorage,
-    I: KnowledgeInterpreter,
+    I: KnowledgeInterpreter
 {
     storage: Arc<S>,
-    interpreter: Arc<I>,
+    interpreter: Arc<I>
 }
 
 impl<S, I> KnowledgeProposeTool<S, I>
 where
     S: KnowledgeProposalStorage,
-    I: KnowledgeInterpreter,
+    I: KnowledgeInterpreter
 {
     pub fn new(storage: Arc<S>, interpreter: Arc<I>) -> Self {
         Self {
             storage,
-            interpreter,
+            interpreter
         }
     }
 
@@ -534,7 +534,7 @@ where
         knowledge_type: Option<&str>,
         layer: Option<&str>,
         title: Option<&str>,
-        proposed_by: &str,
+        proposed_by: &str
     ) -> Result<KnowledgeDraft, KnowledgeToolError> {
         let interpreted = self.interpreter.interpret(description, None).await?;
 
@@ -563,7 +563,7 @@ where
             layer,
             status: KnowledgeDraftStatus::Draft,
             created_by: proposed_by.to_string(),
-            created_at: chrono::Utc::now(),
+            created_at: chrono::Utc::now()
         };
 
         self.storage.store_draft(draft.clone()).await?;
@@ -579,7 +579,7 @@ fn parse_knowledge_type(s: &str) -> Result<mk_core::types::KnowledgeType, Knowle
         "pattern" => Ok(mk_core::types::KnowledgeType::Pattern),
         "spec" => Ok(mk_core::types::KnowledgeType::Spec),
         "hindsight" => Ok(mk_core::types::KnowledgeType::Hindsight),
-        _ => Err(KnowledgeToolError::InvalidKnowledgeType(s.to_string())),
+        _ => Err(KnowledgeToolError::InvalidKnowledgeType(s.to_string()))
     }
 }
 
@@ -589,19 +589,20 @@ fn parse_knowledge_layer(s: &str) -> Result<mk_core::types::KnowledgeLayer, Know
         "org" => Ok(mk_core::types::KnowledgeLayer::Org),
         "team" => Ok(mk_core::types::KnowledgeLayer::Team),
         "project" => Ok(mk_core::types::KnowledgeLayer::Project),
-        _ => Err(KnowledgeToolError::InvalidLayer(s.to_string())),
+        _ => Err(KnowledgeToolError::InvalidLayer(s.to_string()))
     }
 }
 
 fn generate_draft_content(
     kind: &mk_core::types::KnowledgeType,
     title: &str,
-    structure: &KnowledgeStructure,
+    structure: &KnowledgeStructure
 ) -> String {
     match kind {
         mk_core::types::KnowledgeType::Adr => {
             format!(
-                "# {}\n\n## Status\n\nProposed\n\n## Context\n\n{}\n\n## Decision\n\n{}\n\n## Consequences\n\n{}\n\n## Alternatives Considered\n\n{}",
+                "# {}\n\n## Status\n\nProposed\n\n## Context\n\n{}\n\n## Decision\n\n{}\n\n## \
+                 Consequences\n\n{}\n\n## Alternatives Considered\n\n{}",
                 title,
                 structure.context.as_deref().unwrap_or("_To be filled_"),
                 structure.decision.as_deref().unwrap_or("_To be filled_"),
@@ -617,7 +618,8 @@ fn generate_draft_content(
         }
         mk_core::types::KnowledgeType::Pattern => {
             format!(
-                "# Pattern: {}\n\n## Description\n\n{}\n\n## Applicability\n\n{}\n\n## Implementation\n\n_To be detailed_\n\n## Examples\n\n_To be provided_",
+                "# Pattern: {}\n\n## Description\n\n{}\n\n## Applicability\n\n{}\n\n## \
+                 Implementation\n\n_To be detailed_\n\n## Examples\n\n_To be provided_",
                 title,
                 structure
                     .pattern_description
@@ -631,21 +633,24 @@ fn generate_draft_content(
         }
         mk_core::types::KnowledgeType::Policy => {
             format!(
-                "# Policy: {}\n\n## Scope\n\n_To be defined_\n\n## Rules\n\n{}\n\n## Enforcement\n\n_To be specified_\n\n## Exceptions\n\n_None documented_",
+                "# Policy: {}\n\n## Scope\n\n_To be defined_\n\n## Rules\n\n{}\n\n## \
+                 Enforcement\n\n_To be specified_\n\n## Exceptions\n\n_None documented_",
                 title,
                 structure.context.as_deref().unwrap_or("_To be defined_")
             )
         }
         mk_core::types::KnowledgeType::Spec => {
             format!(
-                "# Specification: {}\n\n## Overview\n\n{}\n\n## Requirements\n\n_To be detailed_\n\n## Acceptance Criteria\n\n_To be defined_",
+                "# Specification: {}\n\n## Overview\n\n{}\n\n## Requirements\n\n_To be \
+                 detailed_\n\n## Acceptance Criteria\n\n_To be defined_",
                 title,
                 structure.context.as_deref().unwrap_or("_To be described_")
             )
         }
         mk_core::types::KnowledgeType::Hindsight => {
             format!(
-                "# Hindsight: {}\n\n## What Happened\n\n{}\n\n## Lessons Learned\n\n_To be documented_\n\n## Recommendations\n\n_To be provided_",
+                "# Hindsight: {}\n\n## What Happened\n\n{}\n\n## Lessons Learned\n\n_To be \
+                 documented_\n\n## Recommendations\n\n_To be provided_",
                 title,
                 structure.context.as_deref().unwrap_or("_To be described_")
             )
@@ -657,7 +662,7 @@ fn generate_draft_content(
 impl<S, I> Tool for KnowledgeProposeTool<S, I>
 where
     S: KnowledgeProposalStorage + 'static,
-    I: KnowledgeInterpreter + 'static,
+    I: KnowledgeInterpreter + 'static
 {
     fn name(&self) -> &str {
         "aeterna_knowledge_propose"
@@ -708,7 +713,7 @@ where
                 p.knowledge_type.as_deref(),
                 p.layer.as_deref(),
                 p.title.as_deref(),
-                &p.proposed_by,
+                &p.proposed_by
             )
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
@@ -734,14 +739,14 @@ where
 
 pub struct InMemoryKnowledgeProposalStorage {
     drafts: tokio::sync::RwLock<std::collections::HashMap<String, KnowledgeDraft>>,
-    proposals: tokio::sync::RwLock<std::collections::HashMap<String, KnowledgeProposal>>,
+    proposals: tokio::sync::RwLock<std::collections::HashMap<String, KnowledgeProposal>>
 }
 
 impl InMemoryKnowledgeProposalStorage {
     pub fn new() -> Self {
         Self {
             drafts: tokio::sync::RwLock::new(std::collections::HashMap::new()),
-            proposals: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            proposals: tokio::sync::RwLock::new(std::collections::HashMap::new())
         }
     }
 }
@@ -761,7 +766,7 @@ impl KnowledgeProposalStorage for InMemoryKnowledgeProposalStorage {
 
     async fn get_draft(
         &self,
-        draft_id: &str,
+        draft_id: &str
     ) -> Result<Option<KnowledgeDraft>, KnowledgeToolError> {
         let drafts = self.drafts.read().await;
         Ok(drafts.get(draft_id).cloned())
@@ -781,7 +786,7 @@ impl KnowledgeProposalStorage for InMemoryKnowledgeProposalStorage {
 
     async fn get_proposal(
         &self,
-        proposal_id: &str,
+        proposal_id: &str
     ) -> Result<Option<KnowledgeProposal>, KnowledgeToolError> {
         let proposals = self.proposals.read().await;
         Ok(proposals.get(proposal_id).cloned())
@@ -789,13 +794,13 @@ impl KnowledgeProposalStorage for InMemoryKnowledgeProposalStorage {
 
     async fn list_pending(
         &self,
-        layer: Option<mk_core::types::KnowledgeLayer>,
+        layer: Option<mk_core::types::KnowledgeLayer>
     ) -> Result<Vec<KnowledgeProposal>, KnowledgeToolError> {
         let proposals = self.proposals.read().await;
         let pending: Vec<_> = proposals
             .values()
             .filter(|p| {
-                p.status == KnowledgeProposalStatus::Pending && layer.map_or(true, |l| p.layer == l)
+                p.status == KnowledgeProposalStatus::Pending && layer.is_none_or(|l| p.layer == l)
             })
             .cloned()
             .collect();
@@ -808,33 +813,33 @@ pub trait GovernanceIntegration: Send + Sync {
         &self,
         draft: &KnowledgeDraft,
         justification: Option<&str>,
-        notify: &[String],
+        notify: &[String]
     ) -> impl std::future::Future<Output = Result<String, KnowledgeToolError>> + Send;
 
     fn get_approval_status(
         &self,
-        proposal_id: &str,
+        proposal_id: &str
     ) -> impl std::future::Future<Output = Result<KnowledgeProposalStatus, KnowledgeToolError>> + Send;
 }
 
 #[allow(dead_code)]
 pub struct SimpleGovernanceIntegration {
     required_approvals: u32,
-    auto_approve_project_level: bool,
+    auto_approve_project_level: bool
 }
 
 impl SimpleGovernanceIntegration {
     pub fn new() -> Self {
         Self {
             required_approvals: 1,
-            auto_approve_project_level: true,
+            auto_approve_project_level: true
         }
     }
 
     pub fn with_config(required_approvals: u32, auto_approve_project_level: bool) -> Self {
         Self {
             required_approvals,
-            auto_approve_project_level,
+            auto_approve_project_level
         }
     }
 }
@@ -850,7 +855,7 @@ impl GovernanceIntegration for SimpleGovernanceIntegration {
         &self,
         draft: &KnowledgeDraft,
         _justification: Option<&str>,
-        _notify: &[String],
+        _notify: &[String]
     ) -> Result<String, KnowledgeToolError> {
         let proposal_id = uuid::Uuid::new_v4().to_string();
 
@@ -864,7 +869,7 @@ impl GovernanceIntegration for SimpleGovernanceIntegration {
 
     async fn get_approval_status(
         &self,
-        _proposal_id: &str,
+        _proposal_id: &str
     ) -> Result<KnowledgeProposalStatus, KnowledgeToolError> {
         Ok(KnowledgeProposalStatus::Pending)
     }
@@ -880,27 +885,27 @@ pub struct KnowledgeSubmitParams {
     #[serde(rename = "proposedBy")]
     pub proposed_by: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 pub struct KnowledgeProposalSubmitTool<S, G>
 where
     S: KnowledgeProposalStorage,
-    G: GovernanceIntegration,
+    G: GovernanceIntegration
 {
     storage: Arc<S>,
-    governance: Arc<G>,
+    governance: Arc<G>
 }
 
 impl<S, G> KnowledgeProposalSubmitTool<S, G>
 where
     S: KnowledgeProposalStorage,
-    G: GovernanceIntegration,
+    G: GovernanceIntegration
 {
     pub fn new(storage: Arc<S>, governance: Arc<G>) -> Self {
         Self {
             storage,
-            governance,
+            governance
         }
     }
 
@@ -909,7 +914,7 @@ where
         draft_id: &str,
         justification: Option<&str>,
         notify: &[String],
-        proposed_by: &str,
+        proposed_by: &str
     ) -> Result<KnowledgeProposal, KnowledgeToolError> {
         let draft = self
             .storage
@@ -919,7 +924,7 @@ where
 
         if draft.status == KnowledgeDraftStatus::Submitted {
             return Err(KnowledgeToolError::DraftAlreadySubmitted(
-                draft_id.to_string(),
+                draft_id.to_string()
             ));
         }
 
@@ -941,7 +946,7 @@ where
             proposed_at: chrono::Utc::now(),
             status,
             approvers: notify.to_vec(),
-            metadata: std::collections::HashMap::new(),
+            metadata: std::collections::HashMap::new()
         };
 
         self.storage.store_proposal(proposal.clone()).await?;
@@ -958,7 +963,7 @@ where
 impl<S, G> Tool for KnowledgeProposalSubmitTool<S, G>
 where
     S: KnowledgeProposalStorage + 'static,
-    G: GovernanceIntegration + 'static,
+    G: GovernanceIntegration + 'static
 {
     fn name(&self) -> &str {
         "aeterna_knowledge_submit"
@@ -1003,7 +1008,7 @@ where
                 &p.draft_id,
                 p.justification.as_deref(),
                 &p.notify,
-                &p.proposed_by,
+                &p.proposed_by
             )
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
@@ -1012,7 +1017,7 @@ where
             KnowledgeProposalStatus::Draft => "draft",
             KnowledgeProposalStatus::Pending => "pending",
             KnowledgeProposalStatus::Approved => "approved",
-            KnowledgeProposalStatus::Rejected => "rejected",
+            KnowledgeProposalStatus::Rejected => "rejected"
         };
 
         Ok(json!({
@@ -1038,9 +1043,9 @@ where
 
 pub struct KnowledgePendingListTool<S>
 where
-    S: KnowledgeProposalStorage,
+    S: KnowledgeProposalStorage
 {
-    storage: Arc<S>,
+    storage: Arc<S>
 }
 
 impl<S: KnowledgeProposalStorage> KnowledgePendingListTool<S> {
@@ -1053,7 +1058,7 @@ impl<S: KnowledgeProposalStorage> KnowledgePendingListTool<S> {
 pub struct KnowledgePendingListParams {
     pub layer: Option<String>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[async_trait]
@@ -1123,11 +1128,11 @@ mod tests {
     use mk_core::types::{TenantId, UserId};
     use std::str::FromStr;
 
-    fn test_ctx() -> TenantContext {
+    fn _test_ctx() -> TenantContext {
         TenantContext {
             tenant_id: TenantId::from_str("test-tenant").unwrap(),
             user_id: UserId::from_str("test-user").unwrap(),
-            agent_id: None,
+            agent_id: None
         }
     }
 
@@ -1186,14 +1191,15 @@ mod tests {
     #[tokio::test]
     async fn test_extract_title() {
         let title = extract_title_from_description(
-            "Use PostgreSQL for databases. This is the recommended approach.",
+            "Use PostgreSQL for databases. This is the recommended approach."
         );
         assert_eq!(title, "Use PostgreSQL for databases");
     }
 
     #[tokio::test]
     async fn test_extract_title_truncates_long() {
-        let long_desc = "This is a very long description that should be truncated because it exceeds the maximum allowed length for a title in our system";
+        let long_desc = "This is a very long description that should be truncated because it \
+                         exceeds the maximum allowed length for a title in our system";
         let title = extract_title_from_description(long_desc);
         assert!(title.len() <= 80);
         assert!(title.ends_with("..."));
@@ -1211,7 +1217,7 @@ mod tests {
                 None,
                 None,
                 None,
-                "user@test.com",
+                "user@test.com"
             )
             .await
             .unwrap();
@@ -1234,7 +1240,7 @@ mod tests {
                 Some("pattern"),
                 None,
                 None,
-                "user@test.com",
+                "user@test.com"
             )
             .await
             .unwrap();
@@ -1254,7 +1260,7 @@ mod tests {
                 None,
                 Some("team"),
                 None,
-                "user@test.com",
+                "user@test.com"
             )
             .await
             .unwrap();
@@ -1274,7 +1280,7 @@ mod tests {
                 None,
                 None,
                 Some("ADR-042: GraphQL for APIs"),
-                "user@test.com",
+                "user@test.com"
             )
             .await
             .unwrap();
@@ -1294,7 +1300,7 @@ mod tests {
                 None,
                 None,
                 None,
-                "user@test.com",
+                "user@test.com"
             )
             .await
             .unwrap();
@@ -1324,13 +1330,13 @@ mod tests {
             consequences: Some("Good performance".to_string()),
             alternatives: Some("MySQL, MongoDB".to_string()),
             pattern_description: None,
-            applicability: None,
+            applicability: None
         };
 
         let content = generate_draft_content(
             &mk_core::types::KnowledgeType::Adr,
             "Database Selection",
-            &structure,
+            &structure
         );
 
         assert!(content.contains("# Database Selection"));
@@ -1347,13 +1353,13 @@ mod tests {
             consequences: None,
             alternatives: None,
             pattern_description: Some("Circuit breaker for resilience".to_string()),
-            applicability: Some("External service calls".to_string()),
+            applicability: Some("External service calls".to_string())
         };
 
         let content = generate_draft_content(
             &mk_core::types::KnowledgeType::Pattern,
             "Circuit Breaker",
-            &structure,
+            &structure
         );
 
         assert!(content.contains("# Pattern: Circuit Breaker"));
@@ -1413,7 +1419,7 @@ mod tests {
             layer: mk_core::types::KnowledgeLayer::Project,
             status: KnowledgeDraftStatus::Draft,
             created_by: "user".to_string(),
-            created_at: chrono::Utc::now(),
+            created_at: chrono::Utc::now()
         };
 
         storage.store_draft(draft.clone()).await.unwrap();
@@ -1443,7 +1449,7 @@ mod tests {
             proposed_at: chrono::Utc::now(),
             status: KnowledgeProposalStatus::Pending,
             approvers: vec!["approver@test.com".to_string()],
-            metadata: std::collections::HashMap::new(),
+            metadata: std::collections::HashMap::new()
         };
 
         storage.store_proposal(proposal).await.unwrap();
@@ -1493,7 +1499,7 @@ mod tests {
             layer: mk_core::types::KnowledgeLayer::Project,
             status: KnowledgeDraftStatus::Draft,
             created_by: "user@test.com".to_string(),
-            created_at: chrono::Utc::now(),
+            created_at: chrono::Utc::now()
         };
         storage.store_draft(draft).await.unwrap();
 
@@ -1502,7 +1508,7 @@ mod tests {
                 "draft-submit",
                 Some("Important decision"),
                 &[],
-                "user@test.com",
+                "user@test.com"
             )
             .await
             .unwrap();
@@ -1527,7 +1533,7 @@ mod tests {
             layer: mk_core::types::KnowledgeLayer::Team,
             status: KnowledgeDraftStatus::Draft,
             created_by: "user".to_string(),
-            created_at: chrono::Utc::now(),
+            created_at: chrono::Utc::now()
         };
         storage.store_draft(draft).await.unwrap();
 
@@ -1566,7 +1572,7 @@ mod tests {
             layer: mk_core::types::KnowledgeLayer::Project,
             status: KnowledgeDraftStatus::Submitted,
             created_by: "user".to_string(),
-            created_at: chrono::Utc::now(),
+            created_at: chrono::Utc::now()
         };
         storage.store_draft(draft).await.unwrap();
 
@@ -1598,7 +1604,7 @@ mod tests {
             layer: mk_core::types::KnowledgeLayer::Project,
             status: KnowledgeDraftStatus::Draft,
             created_by: "user".to_string(),
-            created_at: chrono::Utc::now(),
+            created_at: chrono::Utc::now()
         };
         storage.store_draft(draft).await.unwrap();
 
@@ -1639,7 +1645,7 @@ mod tests {
             proposed_at: chrono::Utc::now(),
             status: KnowledgeProposalStatus::Pending,
             approvers: vec![],
-            metadata: std::collections::HashMap::new(),
+            metadata: std::collections::HashMap::new()
         };
         storage.store_proposal(proposal).await.unwrap();
 
@@ -1668,7 +1674,7 @@ mod tests {
             proposed_at: chrono::Utc::now(),
             status: KnowledgeProposalStatus::Pending,
             approvers: vec![],
-            metadata: std::collections::HashMap::new(),
+            metadata: std::collections::HashMap::new()
         };
 
         let project_proposal = KnowledgeProposal {
@@ -1682,7 +1688,7 @@ mod tests {
             proposed_at: chrono::Utc::now(),
             status: KnowledgeProposalStatus::Pending,
             approvers: vec![],
-            metadata: std::collections::HashMap::new(),
+            metadata: std::collections::HashMap::new()
         };
 
         storage.store_proposal(team_proposal).await.unwrap();
@@ -1710,14 +1716,14 @@ mod tests {
             layer: mk_core::types::KnowledgeLayer::Project,
             status: KnowledgeDraftStatus::Draft,
             created_by: "user".to_string(),
-            created_at: chrono::Utc::now(),
+            created_at: chrono::Utc::now()
         };
 
         let proposal_id = governance
             .submit_for_approval(
                 &draft,
                 Some("Test justification"),
-                &["approver@test.com".to_string()],
+                &["approver@test.com".to_string()]
             )
             .await
             .unwrap();
@@ -1738,7 +1744,7 @@ mod tests {
             layer: mk_core::types::KnowledgeLayer::Project,
             status: KnowledgeDraftStatus::Draft,
             created_by: "user".to_string(),
-            created_at: chrono::Utc::now(),
+            created_at: chrono::Utc::now()
         };
 
         let proposal_id = governance

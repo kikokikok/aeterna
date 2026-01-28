@@ -24,5 +24,5 @@ pub mod types;
 pub use hints::{HintPreset, HintsConfig, OperationHints};
 pub use types::{
     ConstraintOperator, ConstraintSeverity, ConstraintTarget, HierarchyPath, KnowledgeLayer,
-    KnowledgeType, MemoryLayer, TenantContext, TenantId, UserId,
+    KnowledgeType, MemoryLayer, TenantContext, TenantId, UserId
 };

@@ -6,7 +6,7 @@ use mk_core::types::{LayerSummary, MemoryLayer, SummaryDepth};
 pub enum ViewMode {
     Ax,
     Ux,
-    Dx,
+    Dx
 }
 
 impl ViewMode {
@@ -14,7 +14,7 @@ impl ViewMode {
         match self {
             ViewMode::Ax => 0.3,
             ViewMode::Ux => 0.6,
-            ViewMode::Dx => 1.0,
+            ViewMode::Dx => 1.0
         }
     }
 
@@ -26,7 +26,7 @@ impl ViewMode {
                 SummaryDepth::Detailed,
                 SummaryDepth::Paragraph,
                 SummaryDepth::Sentence,
-            ],
+            ]
         }
     }
 }
@@ -37,7 +37,7 @@ pub struct CompressorConfig {
     pub layer_order: Vec<MemoryLayer>,
     pub enable_inheritance: bool,
     pub inheritance_compression_ratio: f32,
-    pub min_tokens_per_layer: u32,
+    pub min_tokens_per_layer: u32
 }
 
 impl Default for CompressorConfig {
@@ -53,7 +53,7 @@ impl Default for CompressorConfig {
             ],
             enable_inheritance: true,
             inheritance_compression_ratio: 0.5,
-            min_tokens_per_layer: 50,
+            min_tokens_per_layer: 50
         }
     }
 }
@@ -61,7 +61,7 @@ impl Default for CompressorConfig {
 #[derive(Debug, Clone)]
 pub struct LayerContent {
     pub layer: MemoryLayer,
-    pub entries: Vec<LayerEntry>,
+    pub entries: Vec<LayerEntry>
 }
 
 #[derive(Debug, Clone)]
@@ -69,7 +69,7 @@ pub struct LayerEntry {
     pub entry_id: String,
     pub summaries: HashMap<SummaryDepth, LayerSummary>,
     pub full_content: Option<String>,
-    pub full_content_tokens: Option<u32>,
+    pub full_content_tokens: Option<u32>
 }
 
 #[derive(Debug, Clone)]
@@ -78,7 +78,7 @@ pub struct CompressedLayer {
     pub entries: Vec<CompressedEntry>,
     pub inherited_context: Option<String>,
     pub inherited_tokens: u32,
-    pub total_tokens: u32,
+    pub total_tokens: u32
 }
 
 #[derive(Debug, Clone)]
@@ -87,7 +87,7 @@ pub struct CompressedEntry {
     pub content: String,
     pub depth: SummaryDepth,
     pub token_count: u32,
-    pub is_fallback: bool,
+    pub is_fallback: bool
 }
 
 #[derive(Debug, Clone)]
@@ -95,7 +95,7 @@ pub struct CompressionResult {
     pub layers: Vec<CompressedLayer>,
     pub total_tokens: u32,
     pub token_budget: u32,
-    pub view_mode: ViewMode,
+    pub view_mode: ViewMode
 }
 
 impl CompressionResult {
@@ -120,7 +120,7 @@ impl CompressionResult {
 }
 
 pub struct HierarchicalCompressor {
-    config: CompressorConfig,
+    config: CompressorConfig
 }
 
 impl HierarchicalCompressor {
@@ -132,7 +132,7 @@ impl HierarchicalCompressor {
         &self,
         layers: &[LayerContent],
         view_mode: ViewMode,
-        token_budget: Option<u32>,
+        token_budget: Option<u32>
     ) -> CompressionResult {
         let base_budget = token_budget.unwrap_or(self.config.base_token_budget);
         let adjusted_budget = (base_budget as f32 * view_mode.token_budget_multiplier()) as u32;
@@ -161,7 +161,7 @@ impl HierarchicalCompressor {
                 available_budget,
                 &preferred_depths,
                 inherited_context.clone(),
-                inherited_tokens,
+                inherited_tokens
             );
 
             if self.config.enable_inheritance && !compressed.entries.is_empty() {
@@ -181,14 +181,14 @@ impl HierarchicalCompressor {
             layers: compressed_layers,
             total_tokens,
             token_budget: adjusted_budget,
-            view_mode,
+            view_mode
         }
     }
 
     fn distribute_budget_to_layers(
         &self,
         layers: &[LayerContent],
-        total_budget: u32,
+        total_budget: u32
     ) -> HashMap<MemoryLayer, u32> {
         let mut budgets = HashMap::new();
 
@@ -250,7 +250,7 @@ impl HierarchicalCompressor {
         budget: u32,
         preferred_depths: &[SummaryDepth],
         inherited_context: Option<String>,
-        inherited_tokens: u32,
+        inherited_tokens: u32
     ) -> CompressedLayer {
         let mut entries = Vec::new();
         let mut remaining_budget = budget;
@@ -282,7 +282,7 @@ impl HierarchicalCompressor {
             entries,
             inherited_context,
             inherited_tokens,
-            total_tokens,
+            total_tokens
         }
     }
 
@@ -290,38 +290,38 @@ impl HierarchicalCompressor {
         &self,
         entry: &LayerEntry,
         budget: u32,
-        preferred_depths: &[SummaryDepth],
+        preferred_depths: &[SummaryDepth]
     ) -> Option<CompressedEntry> {
         for &depth in preferred_depths {
-            if let Some(summary) = entry.summaries.get(&depth) {
-                if summary.token_count <= budget {
-                    return Some(CompressedEntry {
-                        entry_id: entry.entry_id.clone(),
-                        content: summary.content.clone(),
-                        depth,
-                        token_count: summary.token_count,
-                        is_fallback: false,
-                    });
-                }
+            if let Some(summary) = entry.summaries.get(&depth)
+                && summary.token_count <= budget
+            {
+                return Some(CompressedEntry {
+                    entry_id: entry.entry_id.clone(),
+                    content: summary.content.clone(),
+                    depth,
+                    token_count: summary.token_count,
+                    is_fallback: false
+                });
             }
         }
 
         let all_depths = [
             SummaryDepth::Sentence,
             SummaryDepth::Paragraph,
-            SummaryDepth::Detailed,
+            SummaryDepth::Detailed
         ];
         for depth in all_depths {
-            if let Some(summary) = entry.summaries.get(&depth) {
-                if summary.token_count <= budget {
-                    return Some(CompressedEntry {
-                        entry_id: entry.entry_id.clone(),
-                        content: summary.content.clone(),
-                        depth,
-                        token_count: summary.token_count,
-                        is_fallback: false,
-                    });
-                }
+            if let Some(summary) = entry.summaries.get(&depth)
+                && summary.token_count <= budget
+            {
+                return Some(CompressedEntry {
+                    entry_id: entry.entry_id.clone(),
+                    content: summary.content.clone(),
+                    depth,
+                    token_count: summary.token_count,
+                    is_fallback: false
+                });
             }
         }
 
@@ -332,7 +332,7 @@ impl HierarchicalCompressor {
                     content: summary.content.clone(),
                     depth,
                     token_count: summary.token_count,
-                    is_fallback: false,
+                    is_fallback: false
                 });
             }
         }
@@ -344,14 +344,14 @@ impl HierarchicalCompressor {
             token_count: entry
                 .full_content_tokens
                 .unwrap_or_else(|| self.estimate_tokens(content)),
-            is_fallback: true,
+            is_fallback: true
         })
     }
 
     fn create_inherited_context(
         &self,
         layer: &CompressedLayer,
-        preferred_depths: &[SummaryDepth],
+        preferred_depths: &[SummaryDepth]
     ) -> String {
         let shortest_depth = preferred_depths
             .last()
@@ -386,7 +386,7 @@ mod tests {
             source_hash: "test".to_string(),
             content_hash: None,
             personalized: false,
-            personalization_context: None,
+            personalization_context: None
         }
     }
 
@@ -394,37 +394,37 @@ mod tests {
         let mut summaries = HashMap::new();
         summaries.insert(
             SummaryDepth::Sentence,
-            sample_summary(SummaryDepth::Sentence, &format!("Sentence: {id}"), 20),
+            sample_summary(SummaryDepth::Sentence, &format!("Sentence: {id}"), 20)
         );
         summaries.insert(
             SummaryDepth::Paragraph,
             sample_summary(
                 SummaryDepth::Paragraph,
                 &format!("Paragraph about {id}"),
-                80,
-            ),
+                80
+            )
         );
         summaries.insert(
             SummaryDepth::Detailed,
             sample_summary(
                 SummaryDepth::Detailed,
                 &format!("Detailed content for {id}"),
-                200,
-            ),
+                200
+            )
         );
 
         LayerEntry {
             entry_id: id.to_string(),
             summaries,
             full_content: None,
-            full_content_tokens: None,
+            full_content_tokens: None
         }
     }
 
     fn sample_layer(layer: MemoryLayer, entry_ids: &[&str]) -> LayerContent {
         LayerContent {
             layer,
-            entries: entry_ids.iter().map(|id| sample_entry(id)).collect(),
+            entries: entry_ids.iter().map(|id| sample_entry(id)).collect()
         }
     }
 
@@ -547,12 +547,12 @@ mod tests {
             entry_id: "fallback".to_string(),
             summaries: HashMap::new(),
             full_content: Some("Full content here".to_string()),
-            full_content_tokens: Some(50),
+            full_content_tokens: Some(50)
         };
 
         let layers = vec![LayerContent {
             layer: MemoryLayer::Session,
-            entries: vec![entry],
+            entries: vec![entry]
         }];
 
         let result = compressor.compress(&layers, ViewMode::Dx, None);
@@ -566,7 +566,7 @@ mod tests {
         let compressor = HierarchicalCompressor::new(CompressorConfig::default());
         let layers = vec![LayerContent {
             layer: MemoryLayer::Session,
-            entries: vec![],
+            entries: vec![]
         }];
 
         let result = compressor.compress(&layers, ViewMode::Dx, None);
@@ -620,12 +620,12 @@ mod tests {
             entry_id: "empty".to_string(),
             summaries: HashMap::new(),
             full_content: None,
-            full_content_tokens: None,
+            full_content_tokens: None
         };
 
         let layers = vec![LayerContent {
             layer: MemoryLayer::Session,
-            entries: vec![entry],
+            entries: vec![entry]
         }];
 
         let result = compressor.compress(&layers, ViewMode::Dx, None);

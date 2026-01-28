@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 pub struct MultiHopConfig {
     pub max_hop_depth: u32,
     pub hop_relevance_threshold: f32,
-    pub max_query_budget: u32,
+    pub max_query_budget: u32
 }
 
 impl Default for MultiHopConfig {
@@ -13,7 +13,7 @@ impl Default for MultiHopConfig {
         Self {
             max_hop_depth: 3,
             hop_relevance_threshold: 0.3,
-            max_query_budget: 50,
+            max_query_budget: 50
         }
     }
 }
@@ -23,7 +23,7 @@ impl From<&config::ReasoningConfig> for MultiHopConfig {
         Self {
             max_hop_depth: config.max_hop_depth,
             hop_relevance_threshold: config.hop_relevance_threshold,
-            max_query_budget: config.max_query_budget,
+            max_query_budget: config.max_query_budget
         }
     }
 }
@@ -34,7 +34,7 @@ pub enum TerminationReason {
     LowRelevance,
     QueryBudgetExhausted,
     NoMoreResults,
-    Completed,
+    Completed
 }
 
 pub struct MultiHopContext {
@@ -44,7 +44,7 @@ pub struct MultiHopContext {
     paths_terminated_depth: AtomicU32,
     paths_terminated_relevance: AtomicU32,
     paths_terminated_budget: AtomicU32,
-    telemetry: Arc<crate::telemetry::MemoryTelemetry>,
+    telemetry: Arc<crate::telemetry::MemoryTelemetry>
 }
 
 impl MultiHopContext {
@@ -56,7 +56,7 @@ impl MultiHopContext {
             paths_terminated_depth: AtomicU32::new(0),
             paths_terminated_relevance: AtomicU32::new(0),
             paths_terminated_budget: AtomicU32::new(0),
-            telemetry,
+            telemetry
         }
     }
 
@@ -117,7 +117,7 @@ impl MultiHopContext {
             total_queries: self.queries_executed.load(Ordering::SeqCst),
             paths_terminated_depth: self.paths_terminated_depth.load(Ordering::SeqCst),
             paths_terminated_relevance: self.paths_terminated_relevance.load(Ordering::SeqCst),
-            paths_terminated_budget: self.paths_terminated_budget.load(Ordering::SeqCst),
+            paths_terminated_budget: self.paths_terminated_budget.load(Ordering::SeqCst)
         };
 
         self.telemetry.record_multi_hop_metrics(&metrics);
@@ -131,7 +131,7 @@ pub struct MultiHopMetrics {
     pub total_queries: u32,
     pub paths_terminated_depth: u32,
     pub paths_terminated_relevance: u32,
-    pub paths_terminated_budget: u32,
+    pub paths_terminated_budget: u32
 }
 
 impl MultiHopMetrics {
@@ -210,7 +210,7 @@ mod tests {
         let config = MultiHopConfig {
             max_hop_depth: 2,
             hop_relevance_threshold: 0.5,
-            max_query_budget: 10,
+            max_query_budget: 10
         };
         let ctx = MultiHopContext::new(config, test_telemetry());
 
@@ -236,7 +236,7 @@ mod tests {
         let config = MultiHopConfig {
             max_hop_depth: 5,
             hop_relevance_threshold: 0.25,
-            max_query_budget: 100,
+            max_query_budget: 100
         };
         let ctx = MultiHopContext::new(config, test_telemetry());
 
@@ -260,7 +260,7 @@ mod tests {
             total_queries: 10,
             paths_terminated_depth: 2,
             paths_terminated_relevance: 5,
-            paths_terminated_budget: 1,
+            paths_terminated_budget: 1
         };
         assert_eq!(metrics.total_paths_terminated(), 8);
     }

@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 pub enum CircuitState {
     Closed,
     Open,
-    HalfOpen,
+    HalfOpen
 }
 
 pub struct CircuitBreakerConfig {
@@ -14,7 +14,7 @@ pub struct CircuitBreakerConfig {
     pub window_duration_secs: u64,
     pub min_requests_in_window: u64,
     pub recovery_timeout_secs: u64,
-    pub half_open_max_requests: u64,
+    pub half_open_max_requests: u64
 }
 
 impl Default for CircuitBreakerConfig {
@@ -24,7 +24,7 @@ impl Default for CircuitBreakerConfig {
             window_duration_secs: 300,
             min_requests_in_window: 10,
             recovery_timeout_secs: 60,
-            half_open_max_requests: 3,
+            half_open_max_requests: 3
         }
     }
 }
@@ -32,7 +32,7 @@ impl Default for CircuitBreakerConfig {
 struct WindowMetrics {
     successes: u64,
     failures: u64,
-    window_start: i64,
+    window_start: i64
 }
 
 impl WindowMetrics {
@@ -40,7 +40,7 @@ impl WindowMetrics {
         Self {
             successes: 0,
             failures: 0,
-            window_start: chrono::Utc::now().timestamp(),
+            window_start: chrono::Utc::now().timestamp()
         }
     }
 
@@ -69,13 +69,13 @@ pub struct ReasoningCircuitBreaker {
     opened_at: AtomicU64,
     half_open_requests: AtomicU64,
     is_open: AtomicBool,
-    telemetry: Arc<crate::telemetry::MemoryTelemetry>,
+    telemetry: Arc<crate::telemetry::MemoryTelemetry>
 }
 
 impl ReasoningCircuitBreaker {
     pub fn new(
         config: CircuitBreakerConfig,
-        telemetry: Arc<crate::telemetry::MemoryTelemetry>,
+        telemetry: Arc<crate::telemetry::MemoryTelemetry>
     ) -> Self {
         Self {
             config,
@@ -84,7 +84,7 @@ impl ReasoningCircuitBreaker {
             opened_at: AtomicU64::new(0),
             half_open_requests: AtomicU64::new(0),
             is_open: AtomicBool::new(false),
-            telemetry,
+            telemetry
         }
     }
 
@@ -231,7 +231,7 @@ mod tests {
             min_requests_in_window: 4,
             window_duration_secs: 300,
             recovery_timeout_secs: 60,
-            half_open_max_requests: 3,
+            half_open_max_requests: 3
         };
         let cb = ReasoningCircuitBreaker::new(config, test_telemetry());
 
@@ -252,7 +252,7 @@ mod tests {
             min_requests_in_window: 2,
             window_duration_secs: 300,
             recovery_timeout_secs: 0,
-            half_open_max_requests: 3,
+            half_open_max_requests: 3
         };
         let cb = ReasoningCircuitBreaker::new(config, test_telemetry());
 
@@ -273,7 +273,7 @@ mod tests {
             min_requests_in_window: 2,
             window_duration_secs: 300,
             recovery_timeout_secs: 0,
-            half_open_max_requests: 3,
+            half_open_max_requests: 3
         };
         let cb = ReasoningCircuitBreaker::new(config, test_telemetry());
 
@@ -294,7 +294,7 @@ mod tests {
             min_requests_in_window: 2,
             window_duration_secs: 300,
             recovery_timeout_secs: 0,
-            half_open_max_requests: 3,
+            half_open_max_requests: 3
         };
         let cb = ReasoningCircuitBreaker::new(config, test_telemetry());
 
@@ -315,7 +315,7 @@ mod tests {
             min_requests_in_window: 2,
             window_duration_secs: 300,
             recovery_timeout_secs: 0,
-            half_open_max_requests: 2,
+            half_open_max_requests: 2
         };
         let cb = ReasoningCircuitBreaker::new(config, test_telemetry());
 

@@ -1,4 +1,4 @@
-use metrics::{gauge, histogram, increment_counter};
+use metrics::{counter, gauge, histogram};
 
 pub struct KnowledgeTelemetry;
 
@@ -8,7 +8,7 @@ impl KnowledgeTelemetry {
         // WHEN recording metrics
         // THEN increment the operation counter with status label
 
-        increment_counter!("knowledge_operations_total", "operation" => operation.to_string(), "status" => status.to_string());
+        counter!("knowledge_operations_total", "operation" => operation.to_string(), "status" => status.to_string()).increment(1);
     }
 
     pub fn record_violation(&self, layer: &str, severity: &str) {
@@ -16,7 +16,7 @@ impl KnowledgeTelemetry {
         // WHEN recording metrics
         // THEN increment the violation counter with layer and severity labels
 
-        increment_counter!("knowledge_violations_total", "layer" => layer.to_string(), "severity" => severity.to_string());
+        counter!("knowledge_violations_total", "layer" => layer.to_string(), "severity" => severity.to_string()).increment(1);
     }
 
     pub fn record_summary_generation(
@@ -24,23 +24,25 @@ impl KnowledgeTelemetry {
         depth: &str,
         status: &str,
         tokens_used: u32,
-        latency_ms: f64,
+        latency_ms: f64
     ) {
-        increment_counter!("cca_summary_generation_total", "depth" => depth.to_string(), "status" => status.to_string());
-        histogram!("cca_summary_generation_tokens", tokens_used as f64, "depth" => depth.to_string());
-        histogram!("cca_summary_generation_latency_ms", latency_ms, "depth" => depth.to_string());
+        counter!("cca_summary_generation_total", "depth" => depth.to_string(), "status" => status.to_string()).increment(1);
+        histogram!("cca_summary_generation_tokens", "depth" => depth.to_string())
+            .record(tokens_used as f64);
+        histogram!("cca_summary_generation_latency_ms", "depth" => depth.to_string())
+            .record(latency_ms);
     }
 
     pub fn record_note_distillation(&self, status: &str, events_count: usize, latency_ms: f64) {
-        increment_counter!("cca_note_distillation_total", "status" => status.to_string());
-        histogram!("cca_note_distillation_events", events_count as f64);
-        histogram!("cca_note_distillation_latency_ms", latency_ms);
+        counter!("cca_note_distillation_total", "status" => status.to_string()).increment(1);
+        histogram!("cca_note_distillation_events").record(events_count as f64);
+        histogram!("cca_note_distillation_latency_ms").record(latency_ms);
     }
 
     pub fn record_hindsight_query(&self, status: &str, patterns_found: usize, latency_ms: f64) {
-        increment_counter!("cca_hindsight_query_total", "status" => status.to_string());
-        histogram!("cca_hindsight_query_patterns_found", patterns_found as f64);
-        histogram!("cca_hindsight_query_latency_ms", latency_ms);
+        counter!("cca_hindsight_query_total", "status" => status.to_string()).increment(1);
+        histogram!("cca_hindsight_query_patterns_found").record(patterns_found as f64);
+        histogram!("cca_hindsight_query_latency_ms").record(latency_ms);
     }
 
     pub fn record_meta_agent_loop(
@@ -48,11 +50,12 @@ impl KnowledgeTelemetry {
         phase: &str,
         status: &str,
         iteration: u32,
-        latency_ms: f64,
+        latency_ms: f64
     ) {
-        increment_counter!("cca_meta_agent_loop_total", "phase" => phase.to_string(), "status" => status.to_string());
-        gauge!("cca_meta_agent_loop_iteration", iteration as f64, "phase" => phase.to_string());
-        histogram!("cca_meta_agent_loop_latency_ms", latency_ms, "phase" => phase.to_string());
+        counter!("cca_meta_agent_loop_total", "phase" => phase.to_string(), "status" => status.to_string()).increment(1);
+        gauge!("cca_meta_agent_loop_iteration", "phase" => phase.to_string()).set(iteration as f64);
+        histogram!("cca_meta_agent_loop_latency_ms", "phase" => phase.to_string())
+            .record(latency_ms);
     }
 
     pub fn record_context_assembly(
@@ -60,12 +63,12 @@ impl KnowledgeTelemetry {
         status: &str,
         layers_included: usize,
         tokens_used: u32,
-        latency_ms: f64,
+        latency_ms: f64
     ) {
-        increment_counter!("cca_context_assembly_total", "status" => status.to_string());
-        histogram!("cca_context_assembly_layers", layers_included as f64);
-        histogram!("cca_context_assembly_tokens", tokens_used as f64);
-        histogram!("cca_context_assembly_latency_ms", latency_ms);
+        counter!("cca_context_assembly_total", "status" => status.to_string()).increment(1);
+        histogram!("cca_context_assembly_layers").record(layers_included as f64);
+        histogram!("cca_context_assembly_tokens").record(tokens_used as f64);
+        histogram!("cca_context_assembly_latency_ms").record(latency_ms);
     }
 }
 

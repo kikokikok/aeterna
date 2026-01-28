@@ -13,7 +13,7 @@ pub enum PermitError {
     #[error("Configuration error: {0}")]
     Config(String),
     #[error("HTTP error: {0}")]
-    Http(#[from] reqwest::Error),
+    Http(#[from] reqwest::Error)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,18 +21,18 @@ struct PermitCheckRequest {
     user: String,
     action: String,
     resource: String,
-    tenant: Option<String>,
+    tenant: Option<String>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PermitCheckResponse {
-    allow: bool,
+    allow: bool
 }
 
 pub struct PermitAuthorizationService {
     pdp_url: String,
     api_key: String,
-    client: reqwest::Client,
+    client: reqwest::Client
 }
 
 impl PermitAuthorizationService {
@@ -40,7 +40,7 @@ impl PermitAuthorizationService {
         Self {
             pdp_url: pdp_url.trim_end_matches('/').to_string(),
             api_key: api_key.to_string(),
-            client: reqwest::Client::new(),
+            client: reqwest::Client::new()
         }
     }
 }
@@ -53,7 +53,7 @@ impl AuthorizationService for PermitAuthorizationService {
         &self,
         ctx: &TenantContext,
         action: &str,
-        resource: &str,
+        resource: &str
     ) -> Result<bool, Self::Error> {
         let user_id = if let Some(agent_id) = &ctx.agent_id {
             agent_id.as_str()
@@ -67,7 +67,7 @@ impl AuthorizationService for PermitAuthorizationService {
             user: user_id.to_string(),
             action: action.to_string(),
             resource: resource.to_string(),
-            tenant: Some(tenant_id.to_string()),
+            tenant: Some(tenant_id.to_string())
         };
 
         let response = self
@@ -122,7 +122,7 @@ impl AuthorizationService for PermitAuthorizationService {
         &self,
         ctx: &TenantContext,
         user_id: &UserId,
-        role: Role,
+        role: Role
     ) -> Result<(), Self::Error> {
         let tenant_id = ctx.tenant_id.as_str();
 
@@ -155,7 +155,7 @@ impl AuthorizationService for PermitAuthorizationService {
         &self,
         ctx: &TenantContext,
         user_id: &UserId,
-        role: Role,
+        role: Role
     ) -> Result<(), Self::Error> {
         let tenant_id = ctx.tenant_id.as_str();
 

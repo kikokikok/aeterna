@@ -15,7 +15,7 @@ async fn test_permit_authorization_allow() {
     let ctx = TenantContext {
         tenant_id: TenantId::from_str("tenant-1").unwrap(),
         user_id: UserId::from_str("user-1").unwrap(),
-        agent_id: None,
+        agent_id: None
     };
 
     Mock::given(method("POST"))
@@ -41,7 +41,7 @@ async fn test_permit_authorization_deny() {
     let ctx = TenantContext {
         tenant_id: TenantId::from_str("tenant-1").unwrap(),
         user_id: UserId::from_str("user-1").unwrap(),
-        agent_id: None,
+        agent_id: None
     };
 
     Mock::given(method("POST"))
@@ -66,7 +66,7 @@ async fn test_permit_api_error() {
     let ctx = TenantContext {
         tenant_id: TenantId::from_str("tenant-1").unwrap(),
         user_id: UserId::from_str("user-1").unwrap(),
-        agent_id: None,
+        agent_id: None
     };
 
     Mock::given(method("POST"))

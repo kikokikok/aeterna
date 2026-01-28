@@ -8,18 +8,18 @@ use crate::error::{FetcherError, Result};
 /// Configuration for the OPAL Data Fetcher server.
 #[derive(Debug, Clone)]
 pub struct FetcherConfig {
-    /// PostgreSQL connection URL.
+    /// `PostgreSQL` connection URL.
     pub database_url: String,
     /// Host to bind the server to.
     pub host: String,
     /// Port to bind the server to.
     pub port: u16,
-    /// Enable PostgreSQL LISTEN/NOTIFY for real-time updates.
+    /// Enable `PostgreSQL` LISTEN/NOTIFY for real-time updates.
     pub enable_listener: bool,
     /// OPAL server URL for publishing updates (optional).
     pub opal_server_url: Option<String>,
     /// Maximum database pool connections.
-    pub max_connections: u32,
+    pub max_connections: u32
 }
 
 impl Default for FetcherConfig {
@@ -30,7 +30,7 @@ impl Default for FetcherConfig {
             port: 8080,
             enable_listener: true,
             opal_server_url: None,
-            max_connections: 10,
+            max_connections: 10
         }
     }
 }
@@ -55,7 +55,7 @@ impl FetcherConfig {
             max_connections: std::env::var("MAX_CONNECTIONS")
                 .ok()
                 .and_then(|c| c.parse().ok())
-                .unwrap_or(10),
+                .unwrap_or(10)
         })
     }
 
@@ -74,7 +74,7 @@ pub struct FetcherConfigBuilder {
     port: Option<u16>,
     enable_listener: Option<bool>,
     opal_server_url: Option<String>,
-    max_connections: Option<u32>,
+    max_connections: Option<u32>
 }
 
 impl FetcherConfigBuilder {
@@ -99,7 +99,7 @@ impl FetcherConfigBuilder {
         self
     }
 
-    /// Enables or disables the PostgreSQL listener.
+    /// Enables or disables the `PostgreSQL` listener.
     #[must_use]
     pub fn enable_listener(mut self, enable: bool) -> Self {
         self.enable_listener = Some(enable);
@@ -132,7 +132,7 @@ impl FetcherConfigBuilder {
             port: self.port.unwrap_or(8080),
             enable_listener: self.enable_listener.unwrap_or(true),
             opal_server_url: self.opal_server_url,
-            max_connections: self.max_connections.unwrap_or(10),
+            max_connections: self.max_connections.unwrap_or(10)
         })
     }
 }
@@ -140,10 +140,10 @@ impl FetcherConfigBuilder {
 /// Shared application state for Axum handlers.
 #[derive(Clone)]
 pub struct AppState {
-    /// PostgreSQL connection pool.
+    /// `PostgreSQL` connection pool.
     pub pool: PgPool,
     /// Server configuration.
-    pub config: Arc<FetcherConfig>,
+    pub config: Arc<FetcherConfig>
 }
 
 impl AppState {
@@ -156,7 +156,7 @@ impl AppState {
 
         Ok(Self {
             pool,
-            config: Arc::new(config),
+            config: Arc::new(config)
         })
     }
 
@@ -165,7 +165,7 @@ impl AppState {
     pub fn with_pool(pool: PgPool, config: FetcherConfig) -> Self {
         Self {
             pool,
-            config: Arc::new(config),
+            config: Arc::new(config)
         }
     }
 }

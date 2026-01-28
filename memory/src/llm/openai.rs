@@ -1,7 +1,8 @@
-use async_openai::types::{
+use async_openai::types::chat::{
     ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-    CreateChatCompletionRequestArgs,
+    CreateChatCompletionRequestArgs
 };
+use async_openai::types::responses::ResponseFormat;
 use async_trait::async_trait;
 use mk_core::traits::LlmService;
 use mk_core::types::{Policy, ValidationResult};
@@ -12,7 +13,7 @@ use tokio::sync::RwLock;
 pub struct OpenAILlmService {
     client: async_openai::Client<async_openai::config::OpenAIConfig>,
     model: String,
-    cache: Arc<RwLock<lru::LruCache<String, String>>>,
+    cache: Arc<RwLock<lru::LruCache<String, String>>>
 }
 
 impl OpenAILlmService {
@@ -24,7 +25,7 @@ impl OpenAILlmService {
         Self {
             client,
             model,
-            cache: Arc::new(RwLock::new(cache)),
+            cache: Arc::new(RwLock::new(cache))
         }
     }
 }
@@ -67,7 +68,7 @@ impl LlmService for OpenAILlmService {
     async fn analyze_drift(
         &self,
         content: &str,
-        policies: &[Policy],
+        policies: &[Policy]
     ) -> Result<ValidationResult, Self::Error> {
         let policies_json = serde_json::to_string_pretty(policies)?;
         let prompt = format!(
@@ -92,9 +93,9 @@ impl LlmService for OpenAILlmService {
                 ChatCompletionRequestUserMessageArgs::default()
                     .content(&*prompt)
                     .build()?
-                    .into(),
+                    .into()
             ])
-            .response_format(async_openai::types::ResponseFormat::JsonObject)
+            .response_format(ResponseFormat::JsonObject)
             .build()?;
 
         let response = self.client.chat().create(request).await?;

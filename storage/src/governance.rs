@@ -19,21 +19,17 @@ pub struct GovernanceConfig {
     pub escalation_contact: Option<String>,
     pub policy_settings: serde_json::Value,
     pub knowledge_settings: serde_json::Value,
-    pub memory_settings: serde_json::Value,
+    pub memory_settings: serde_json::Value
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ApprovalMode {
     Single,
+    #[default]
     Quorum,
-    Unanimous,
-}
-
-impl Default for ApprovalMode {
-    fn default() -> Self {
-        Self::Quorum
-    }
+    Unanimous
 }
 
 impl std::fmt::Display for ApprovalMode {
@@ -41,7 +37,7 @@ impl std::fmt::Display for ApprovalMode {
         match self {
             ApprovalMode::Single => write!(f, "single"),
             ApprovalMode::Quorum => write!(f, "quorum"),
-            ApprovalMode::Unanimous => write!(f, "unanimous"),
+            ApprovalMode::Unanimous => write!(f, "unanimous")
         }
     }
 }
@@ -54,23 +50,19 @@ impl std::str::FromStr for ApprovalMode {
             "single" => Ok(ApprovalMode::Single),
             "quorum" => Ok(ApprovalMode::Quorum),
             "unanimous" => Ok(ApprovalMode::Unanimous),
-            _ => Err(format!("Invalid approval mode: {}", s)),
+            _ => Err(format!("Invalid approval mode: {}", s))
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum GovernanceTemplate {
+    #[default]
     Standard,
     Strict,
-    Permissive,
-}
-
-impl Default for GovernanceTemplate {
-    fn default() -> Self {
-        Self::Standard
-    }
+    Permissive
 }
 
 impl std::fmt::Display for GovernanceTemplate {
@@ -78,7 +70,7 @@ impl std::fmt::Display for GovernanceTemplate {
         match self {
             GovernanceTemplate::Standard => write!(f, "standard"),
             GovernanceTemplate::Strict => write!(f, "strict"),
-            GovernanceTemplate::Permissive => write!(f, "permissive"),
+            GovernanceTemplate::Permissive => write!(f, "permissive")
         }
     }
 }
@@ -94,7 +86,7 @@ impl std::str::FromStr for GovernanceTemplate {
             _ => Err(format!(
                 "Invalid governance template: {}. Use: standard, strict, permissive",
                 s
-            )),
+            ))
         }
     }
 }
@@ -106,7 +98,8 @@ impl GovernanceTemplate {
                 "Balanced governance with quorum-based approvals (2 approvers, 72h timeout)"
             }
             GovernanceTemplate::Strict => {
-                "Maximum control with unanimous approvals (3+ approvers, 24h timeout, no auto-approve)"
+                "Maximum control with unanimous approvals (3+ approvers, 24h timeout, no \
+                 auto-approve)"
             }
             GovernanceTemplate::Permissive => {
                 "Minimal friction with single approvals (1 approver, auto-approve low-risk)"
@@ -145,7 +138,7 @@ impl GovernanceTemplate {
                     "require_approval": true,
                     "min_approvers": 1,
                     "auto_approve_threshold": 0.0
-                }),
+                })
             },
             GovernanceTemplate::Permissive => GovernanceConfig {
                 id: None,
@@ -172,8 +165,8 @@ impl GovernanceTemplate {
                 memory_settings: serde_json::json!({
                     "require_approval": false,
                     "auto_approve_threshold": 0.5
-                }),
-            },
+                })
+            }
         }
     }
 
@@ -181,7 +174,7 @@ impl GovernanceTemplate {
         &[
             GovernanceTemplate::Standard,
             GovernanceTemplate::Strict,
-            GovernanceTemplate::Permissive,
+            GovernanceTemplate::Permissive
         ]
     }
 }
@@ -203,7 +196,7 @@ impl Default for GovernanceConfig {
             escalation_contact: None,
             policy_settings: serde_json::json!({"require_approval": true, "min_approvers": 2}),
             knowledge_settings: serde_json::json!({"require_approval": true, "min_approvers": 1}),
-            memory_settings: serde_json::json!({"require_approval": false, "auto_approve_threshold": 0.8}),
+            memory_settings: serde_json::json!({"require_approval": false, "auto_approve_threshold": 0.8})
         }
     }
 }
@@ -235,7 +228,7 @@ pub struct ApprovalRequest {
     pub resolved_at: Option<DateTime<Utc>>,
     pub resolution_reason: Option<String>,
     pub applied_at: Option<DateTime<Utc>>,
-    pub applied_by: Option<Uuid>,
+    pub applied_by: Option<Uuid>
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -245,7 +238,7 @@ pub enum RequestType {
     Knowledge,
     Memory,
     Role,
-    Config,
+    Config
 }
 
 impl std::fmt::Display for RequestType {
@@ -255,7 +248,7 @@ impl std::fmt::Display for RequestType {
             RequestType::Knowledge => write!(f, "knowledge"),
             RequestType::Memory => write!(f, "memory"),
             RequestType::Role => write!(f, "role"),
-            RequestType::Config => write!(f, "config"),
+            RequestType::Config => write!(f, "config")
         }
     }
 }
@@ -270,24 +263,20 @@ impl std::str::FromStr for RequestType {
             "memory" => Ok(RequestType::Memory),
             "role" => Ok(RequestType::Role),
             "config" => Ok(RequestType::Config),
-            _ => Err(format!("Invalid request type: {}", s)),
+            _ => Err(format!("Invalid request type: {}", s))
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum RiskLevel {
     Low,
+    #[default]
     Medium,
     High,
-    Critical,
-}
-
-impl Default for RiskLevel {
-    fn default() -> Self {
-        Self::Medium
-    }
+    Critical
 }
 
 impl std::fmt::Display for RiskLevel {
@@ -296,7 +285,7 @@ impl std::fmt::Display for RiskLevel {
             RiskLevel::Low => write!(f, "low"),
             RiskLevel::Medium => write!(f, "medium"),
             RiskLevel::High => write!(f, "high"),
-            RiskLevel::Critical => write!(f, "critical"),
+            RiskLevel::Critical => write!(f, "critical")
         }
     }
 }
@@ -310,7 +299,7 @@ impl std::str::FromStr for RiskLevel {
             "medium" => Ok(RiskLevel::Medium),
             "high" => Ok(RiskLevel::High),
             "critical" => Ok(RiskLevel::Critical),
-            _ => Err(format!("Invalid risk level: {}", s)),
+            _ => Err(format!("Invalid risk level: {}", s))
         }
     }
 }
@@ -320,7 +309,7 @@ impl std::str::FromStr for RiskLevel {
 pub enum PrincipalType {
     User,
     Agent,
-    System,
+    System
 }
 
 impl std::fmt::Display for PrincipalType {
@@ -328,7 +317,7 @@ impl std::fmt::Display for PrincipalType {
         match self {
             PrincipalType::User => write!(f, "user"),
             PrincipalType::Agent => write!(f, "agent"),
-            PrincipalType::System => write!(f, "system"),
+            PrincipalType::System => write!(f, "system")
         }
     }
 }
@@ -341,7 +330,7 @@ impl std::str::FromStr for PrincipalType {
             "user" => Ok(PrincipalType::User),
             "agent" => Ok(PrincipalType::Agent),
             "system" => Ok(PrincipalType::System),
-            _ => Err(format!("Invalid principal type: {}", s)),
+            _ => Err(format!("Invalid principal type: {}", s))
         }
     }
 }
@@ -353,7 +342,7 @@ pub enum RequestStatus {
     Approved,
     Rejected,
     Expired,
-    Cancelled,
+    Cancelled
 }
 
 impl std::fmt::Display for RequestStatus {
@@ -363,7 +352,7 @@ impl std::fmt::Display for RequestStatus {
             RequestStatus::Approved => write!(f, "approved"),
             RequestStatus::Rejected => write!(f, "rejected"),
             RequestStatus::Expired => write!(f, "expired"),
-            RequestStatus::Cancelled => write!(f, "cancelled"),
+            RequestStatus::Cancelled => write!(f, "cancelled")
         }
     }
 }
@@ -378,7 +367,7 @@ impl std::str::FromStr for RequestStatus {
             "rejected" => Ok(RequestStatus::Rejected),
             "expired" => Ok(RequestStatus::Expired),
             "cancelled" => Ok(RequestStatus::Cancelled),
-            _ => Err(format!("Invalid request status: {}", s)),
+            _ => Err(format!("Invalid request status: {}", s))
         }
     }
 }
@@ -392,7 +381,7 @@ pub struct ApprovalDecision {
     pub approver_email: Option<String>,
     pub decision: Decision,
     pub comment: Option<String>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -400,7 +389,7 @@ pub struct ApprovalDecision {
 pub enum Decision {
     Approve,
     Reject,
-    Abstain,
+    Abstain
 }
 
 impl std::fmt::Display for Decision {
@@ -408,7 +397,7 @@ impl std::fmt::Display for Decision {
         match self {
             Decision::Approve => write!(f, "approve"),
             Decision::Reject => write!(f, "reject"),
-            Decision::Abstain => write!(f, "abstain"),
+            Decision::Abstain => write!(f, "abstain")
         }
     }
 }
@@ -427,7 +416,7 @@ pub struct GovernanceRole {
     pub granted_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
-    pub revoked_by: Option<Uuid>,
+    pub revoked_by: Option<Uuid>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -443,7 +432,7 @@ pub struct GovernanceAuditEntry {
     pub details: serde_json::Value,
     pub old_values: Option<serde_json::Value>,
     pub new_values: Option<serde_json::Value>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -459,7 +448,7 @@ pub struct ConfigRow {
     pub escalation_contact: Option<String>,
     pub policy_settings: serde_json::Value,
     pub knowledge_settings: serde_json::Value,
-    pub memory_settings: serde_json::Value,
+    pub memory_settings: serde_json::Value
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -489,7 +478,7 @@ struct RequestRow {
     resolved_at: Option<DateTime<Utc>>,
     resolution_reason: Option<String>,
     applied_at: Option<DateTime<Utc>>,
-    applied_by: Option<Uuid>,
+    applied_by: Option<Uuid>
 }
 
 impl From<RequestRow> for ApprovalRequest {
@@ -520,7 +509,7 @@ impl From<RequestRow> for ApprovalRequest {
             resolved_at: row.resolved_at,
             resolution_reason: row.resolution_reason,
             applied_at: row.applied_at,
-            applied_by: row.applied_by,
+            applied_by: row.applied_by
         }
     }
 }
@@ -534,7 +523,7 @@ struct DecisionRow {
     approver_email: Option<String>,
     decision: String,
     comment: Option<String>,
-    created_at: DateTime<Utc>,
+    created_at: DateTime<Utc>
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -550,11 +539,11 @@ struct AuditRow {
     details: serde_json::Value,
     old_values: Option<serde_json::Value>,
     new_values: Option<serde_json::Value>,
-    created_at: DateTime<Utc>,
+    created_at: DateTime<Utc>
 }
 
 pub struct GovernanceStorage {
-    pool: PgPool,
+    pool: PgPool
 }
 
 impl GovernanceStorage {
@@ -567,7 +556,7 @@ impl GovernanceStorage {
         company_id: Option<Uuid>,
         org_id: Option<Uuid>,
         team_id: Option<Uuid>,
-        project_id: Option<Uuid>,
+        project_id: Option<Uuid>
     ) -> Result<GovernanceConfig, sqlx::Error> {
         let row: ConfigRow =
             sqlx::query_as("SELECT * FROM get_effective_governance_config($1, $2, $3, $4)")
@@ -593,7 +582,7 @@ impl GovernanceStorage {
             escalation_contact: row.escalation_contact,
             policy_settings: row.policy_settings,
             knowledge_settings: row.knowledge_settings,
-            memory_settings: row.memory_settings,
+            memory_settings: row.memory_settings
         })
     }
 
@@ -621,7 +610,7 @@ impl GovernanceStorage {
                 memory_settings = EXCLUDED.memory_settings,
                 updated_at = NOW()
             RETURNING id
-            "#,
+            "#
         )
         .bind(config.company_id)
         .bind(config.org_id)
@@ -645,7 +634,7 @@ impl GovernanceStorage {
 
     pub async fn create_request(
         &self,
-        request: &CreateApprovalRequest,
+        request: &CreateApprovalRequest
     ) -> Result<ApprovalRequest, sqlx::Error> {
         let expires_at = request
             .timeout_hours
@@ -661,7 +650,7 @@ impl GovernanceStorage {
                 required_approvals, expires_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             RETURNING *
-            "#,
+            "#
         )
         .bind(request.request_type.to_string())
         .bind(&request.target_type)
@@ -687,7 +676,7 @@ impl GovernanceStorage {
 
     pub async fn get_request(
         &self,
-        request_id: Uuid,
+        request_id: Uuid
     ) -> Result<Option<ApprovalRequest>, sqlx::Error> {
         let row: Option<RequestRow> =
             sqlx::query_as("SELECT * FROM approval_requests WHERE id = $1")
@@ -700,7 +689,7 @@ impl GovernanceStorage {
 
     pub async fn get_request_by_number(
         &self,
-        request_number: &str,
+        request_number: &str
     ) -> Result<Option<ApprovalRequest>, sqlx::Error> {
         let row: Option<RequestRow> =
             sqlx::query_as("SELECT * FROM approval_requests WHERE request_number = $1")
@@ -713,7 +702,7 @@ impl GovernanceStorage {
 
     pub async fn list_pending_requests(
         &self,
-        filters: &RequestFilters,
+        filters: &RequestFilters
     ) -> Result<Vec<ApprovalRequest>, sqlx::Error> {
         let request_type_str = filters.request_type.map(|rt| rt.to_string());
         let limit = filters.limit.unwrap_or(100) as i64;
@@ -730,7 +719,7 @@ impl GovernanceStorage {
               AND ($6::uuid IS NULL OR requestor_id = $6)
             ORDER BY created_at DESC
             LIMIT $7
-            "#,
+            "#
         )
         .bind(&request_type_str)
         .bind(filters.company_id)
@@ -747,7 +736,7 @@ impl GovernanceStorage {
 
     pub async fn add_decision(
         &self,
-        decision: &CreateDecision,
+        decision: &CreateDecision
     ) -> Result<ApprovalDecision, sqlx::Error> {
         let row: DecisionRow = sqlx::query_as(
             r#"
@@ -756,7 +745,7 @@ impl GovernanceStorage {
                 approver_email, decision, comment
             ) VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *
-            "#,
+            "#
         )
         .bind(decision.request_id)
         .bind(decision.approver_type.to_string())
@@ -776,17 +765,17 @@ impl GovernanceStorage {
             decision: match row.decision.as_str() {
                 "approve" => Decision::Approve,
                 "reject" => Decision::Reject,
-                _ => Decision::Abstain,
+                _ => Decision::Abstain
             },
             comment: row.comment,
-            created_at: row.created_at,
+            created_at: row.created_at
         })
     }
 
     pub async fn reject_request(
         &self,
         request_id: Uuid,
-        reason: &str,
+        reason: &str
     ) -> Result<ApprovalRequest, sqlx::Error> {
         let row: RequestRow = sqlx::query_as(
             r#"
@@ -797,7 +786,7 @@ impl GovernanceStorage {
                 updated_at = NOW()
             WHERE id = $1
             RETURNING *
-            "#,
+            "#
         )
         .bind(request_id)
         .bind(reason)
@@ -816,7 +805,7 @@ impl GovernanceStorage {
                 updated_at = NOW()
             WHERE id = $1
             RETURNING *
-            "#,
+            "#
         )
         .bind(request_id)
         .fetch_one(&self.pool)
@@ -828,7 +817,7 @@ impl GovernanceStorage {
     pub async fn mark_applied(
         &self,
         request_id: Uuid,
-        applied_by: Uuid,
+        applied_by: Uuid
     ) -> Result<ApprovalRequest, sqlx::Error> {
         let row: RequestRow = sqlx::query_as(
             r#"
@@ -838,7 +827,7 @@ impl GovernanceStorage {
                 updated_at = NOW()
             WHERE id = $1
             RETURNING *
-            "#,
+            "#
         )
         .bind(request_id)
         .bind(applied_by)
@@ -850,10 +839,10 @@ impl GovernanceStorage {
 
     pub async fn get_decisions(
         &self,
-        request_id: Uuid,
+        request_id: Uuid
     ) -> Result<Vec<ApprovalDecision>, sqlx::Error> {
         let rows: Vec<DecisionRow> = sqlx::query_as(
-            "SELECT * FROM approval_decisions WHERE request_id = $1 ORDER BY created_at",
+            "SELECT * FROM approval_decisions WHERE request_id = $1 ORDER BY created_at"
         )
         .bind(request_id)
         .fetch_all(&self.pool)
@@ -870,14 +859,15 @@ impl GovernanceStorage {
                 decision: match row.decision.as_str() {
                     "approve" => Decision::Approve,
                     "reject" => Decision::Reject,
-                    _ => Decision::Abstain,
+                    _ => Decision::Abstain
                 },
                 comment: row.comment,
-                created_at: row.created_at,
+                created_at: row.created_at
             })
             .collect())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn log_audit(
         &self,
         action: &str,
@@ -887,7 +877,7 @@ impl GovernanceStorage {
         actor_type: PrincipalType,
         actor_id: Option<Uuid>,
         actor_email: Option<&str>,
-        details: serde_json::Value,
+        details: serde_json::Value
     ) -> Result<Uuid, sqlx::Error> {
         let row: (Uuid,) = sqlx::query_as(
             r#"
@@ -896,7 +886,7 @@ impl GovernanceStorage {
                 actor_type, actor_id, actor_email, details
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
-            "#,
+            "#
         )
         .bind(action)
         .bind(request_id)
@@ -914,7 +904,7 @@ impl GovernanceStorage {
 
     pub async fn list_audit_logs(
         &self,
-        filters: &AuditFilters,
+        filters: &AuditFilters
     ) -> Result<Vec<GovernanceAuditEntry>, sqlx::Error> {
         let rows: Vec<AuditRow> = sqlx::query_as(
             r#"
@@ -925,7 +915,7 @@ impl GovernanceStorage {
               AND created_at >= $4
             ORDER BY created_at DESC
             LIMIT $5
-            "#,
+            "#
         )
         .bind(&filters.action)
         .bind(filters.actor_id)
@@ -949,7 +939,7 @@ impl GovernanceStorage {
                 details: row.details,
                 old_values: row.old_values,
                 new_values: row.new_values,
-                created_at: row.created_at,
+                created_at: row.created_at
             })
             .collect())
     }
@@ -963,7 +953,7 @@ impl GovernanceStorage {
                 granted_by, expires_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id
-            "#,
+            "#
         )
         .bind(role.principal_type.to_string())
         .bind(role.principal_id)
@@ -984,14 +974,14 @@ impl GovernanceStorage {
         &self,
         principal_id: Uuid,
         role: &str,
-        revoked_by: Uuid,
+        revoked_by: Uuid
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             UPDATE governance_roles
             SET revoked_at = NOW(), revoked_by = $3
             WHERE principal_id = $1 AND role = $2 AND revoked_at IS NULL
-            "#,
+            "#
         )
         .bind(principal_id)
         .bind(role)
@@ -1006,7 +996,7 @@ impl GovernanceStorage {
         &self,
         company_id: Option<Uuid>,
         org_id: Option<Uuid>,
-        team_id: Option<Uuid>,
+        team_id: Option<Uuid>
     ) -> Result<Vec<GovernanceRole>, sqlx::Error> {
         #[derive(FromRow)]
         struct RoleRow {
@@ -1022,7 +1012,7 @@ impl GovernanceStorage {
             granted_at: DateTime<Utc>,
             expires_at: Option<DateTime<Utc>>,
             revoked_at: Option<DateTime<Utc>>,
-            revoked_by: Option<Uuid>,
+            revoked_by: Option<Uuid>
         }
 
         let rows: Vec<RoleRow> = sqlx::query_as(
@@ -1033,7 +1023,7 @@ impl GovernanceStorage {
               AND ($2::uuid IS NULL OR org_id = $2)
               AND ($3::uuid IS NULL OR team_id = $3)
             ORDER BY granted_at DESC
-            "#,
+            "#
         )
         .bind(company_id)
         .bind(org_id)
@@ -1056,7 +1046,7 @@ impl GovernanceStorage {
                 granted_at: row.granted_at,
                 expires_at: row.expires_at,
                 revoked_at: row.revoked_at,
-                revoked_by: row.revoked_by,
+                revoked_by: row.revoked_by
             })
             .collect())
     }
@@ -1079,7 +1069,7 @@ pub struct CreateApprovalRequest {
     pub requestor_id: Uuid,
     pub requestor_email: Option<String>,
     pub required_approvals: i32,
-    pub timeout_hours: Option<i32>,
+    pub timeout_hours: Option<i32>
 }
 
 #[derive(Debug, Clone)]
@@ -1089,7 +1079,7 @@ pub struct CreateDecision {
     pub approver_id: Uuid,
     pub approver_email: Option<String>,
     pub decision: Decision,
-    pub comment: Option<String>,
+    pub comment: Option<String>
 }
 
 #[derive(Debug, Clone)]
@@ -1102,7 +1092,7 @@ pub struct CreateGovernanceRole {
     pub team_id: Option<Uuid>,
     pub project_id: Option<Uuid>,
     pub granted_by: Uuid,
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1113,7 +1103,7 @@ pub struct RequestFilters {
     pub team_id: Option<Uuid>,
     pub project_id: Option<Uuid>,
     pub requestor_id: Option<Uuid>,
-    pub limit: Option<i32>,
+    pub limit: Option<i32>
 }
 
 #[derive(Debug, Clone)]
@@ -1122,7 +1112,7 @@ pub struct AuditFilters {
     pub actor_id: Option<Uuid>,
     pub target_type: Option<String>,
     pub since: DateTime<Utc>,
-    pub limit: Option<i32>,
+    pub limit: Option<i32>
 }
 
 #[cfg(test)]
@@ -1156,7 +1146,7 @@ mod tests {
             RequestType::Knowledge,
             RequestType::Memory,
             RequestType::Role,
-            RequestType::Config,
+            RequestType::Config
         ] {
             let s = rt.to_string();
             assert_eq!(s.parse::<RequestType>().unwrap(), rt);
