@@ -104,6 +104,42 @@ RLM is infrastructure. Users interact with `aeterna_memory_search`. The system d
 └────────────────────────────────────────────────────────────────────┘
 ```
 
+### Component Detail: RLM Module Structure
+
+```
+memory/src/rlm/
+├── mod.rs              ← Public exports
+├── router.rs           ← ComplexityRouter, ComplexitySignals
+│   └── should_route_to_rlm(query) → bool
+│   └── compute_complexity(query) → f32
+├── executor.rs         ← RlmExecutor, RlmTrajectory, TrajectoryStep
+│   └── execute(query, tenant) → (Vec<SearchResult>, RlmTrajectory)
+├── strategy.rs         ← DecompositionAction, AggregationStrategy, StrategyExecutor
+│   └── ActionExecutor trait
+├── trainer.rs          ← DecompositionTrainer, PolicyState, RewardConfig
+│   └── train(trajectory) → updates policy
+│   └── select_action(actions) → best action
+├── combined_trainer.rs ← CombinedMemoryTrainer
+│   └── Integrates MemoryR1 + DecompositionTrainer
+│   └── save_policy_state() / load_policy_state()
+└── bootstrap.rs        ← BootstrapTrainer, BootstrapTaskTemplate
+    └── generate_bootstrap_tasks(templates, tenant, multiplier)
+    └── bootstrap(tenant, iterations) → BootstrapResult
+
+knowledge/src/context_architect/assembler.rs
+└── ContextAssembler
+    └── with_rlm_handler(handler) → Self
+    └── assemble_with_rlm(query, sources, tenant) → AssembledContext
+    └── should_use_rlm(query) → bool
+    └── compute_query_complexity(query) → f32
+
+mk_core/src/traits.rs
+└── RlmAssemblyService trait
+    └── should_use_rlm(query) → bool
+    └── compute_complexity(query) → f32
+    └── execute_assembly(query, tenant) → RlmAssemblyResult
+```
+
 ---
 
 ## Decisions
@@ -196,6 +232,25 @@ impl ComplexityRouter {
 }
 ```
 
+#### Complexity Scoring Algorithm (Implemented)
+
+The actual implementation in `memory/src/rlm/router.rs` uses:
+
+| Signal Category | Weight | Detection Method |
+|----------------|--------|------------------|
+| Query length | 0.20 max | `(length / 200).min(1.0) * 0.2` |
+| Keyword density | 0.40 max | Regex matches for: compare, difference, trends, evolution, history, summarize, aggregate, impact, relationship, sequence, analyze, trace |
+| Multi-hop indicators | 0.20 max | Detects: then, after, followed by, caused, leading to |
+| Temporal constraints | 0.10 | Detects: last week/month/quarter/year, yesterday, since, before, period, over time |
+| Aggregate operators | 0.10 | Detects: all, every, total, average, count |
+
+**Threshold**: Default 0.3 (configurable via `RlmConfig.complexity_threshold`)
+
+**Example scores**:
+- "what is the login endpoint" → ~0.12 (Standard Search)
+- "compare patterns across teams" → ~0.55 (RLM)
+- "trace evolution of auth since last quarter" → ~0.72 (RLM)
+
 ### Decision 3: Implicit Training from Search Outcomes
 
 **Original proposal:** Explicit trajectory recording tool parameter
@@ -231,6 +286,27 @@ pub enum TrainingOutcome {
     NoSignal,
 }
 ```
+
+#### Training Signal Sources (Implemented)
+
+| Signal Source | Outcome Type | When Triggered |
+|---------------|--------------|----------------|
+| Context assembly success | `ResultUsed { quality_score }` | Search result included in assembled context |
+| Memory feedback API | `ResultUsed { quality_score }` | User provides explicit feedback via `memory_feedback` tool |
+| Query refinement | `QueryRefined { new_query }` | User re-queries with modified text within session |
+| Session abandonment | `ResultIgnored` | Search result retrieved but never referenced |
+| Bootstrap training | Pre-configured | Synthetic trajectories with expected outcomes |
+| No interaction | `NoSignal` | Result returned but no downstream signal available |
+
+**Reward Computation (from `RewardConfig`):**
+```
+reward = success_weight * success_score + efficiency_weight * efficiency_score
+where:
+  success_score = quality_score (ResultUsed) | 0.3 (QueryRefined) | -0.5 (ResultIgnored) | 0.0 (NoSignal)
+  efficiency_score = 1.0 - min(tokens_used / 100_000, 1.0)
+```
+
+**Default weights:** `success_weight=1.0`, `efficiency_weight=0.3`
 
 ### Decision 4: Simplified Reward Function
 
