@@ -20,7 +20,7 @@ pub enum AgentCommand {
     Permissions(AgentPermissionsArgs),
 
     #[command(about = "Revoke an agent's access")]
-    Revoke(AgentRevokeArgs),
+    Revoke(AgentRevokeArgs)
 }
 
 #[derive(Args)]
@@ -46,7 +46,7 @@ pub struct AgentRegisterArgs {
 
     /// Dry run - show what would be created
     #[arg(long)]
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 #[derive(Args)]
@@ -65,7 +65,7 @@ pub struct AgentListArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -79,7 +79,7 @@ pub struct AgentShowArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -99,13 +99,14 @@ pub struct AgentPermissionsArgs {
     #[arg(short, long)]
     pub list: bool,
 
-    /// Scope for permission (memory-read, memory-write, knowledge-read, policy-read)
+    /// Scope for permission (memory-read, memory-write, knowledge-read,
+    /// policy-read)
     #[arg(long)]
     pub scope: Option<String>,
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -119,7 +120,7 @@ pub struct AgentRevokeArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 pub async fn run(cmd: AgentCommand) -> anyhow::Result<()> {
@@ -128,7 +129,7 @@ pub async fn run(cmd: AgentCommand) -> anyhow::Result<()> {
         AgentCommand::List(args) => run_list(args).await,
         AgentCommand::Show(args) => run_show(args).await,
         AgentCommand::Permissions(args) => run_permissions(args).await,
-        AgentCommand::Revoke(args) => run_revoke(args).await,
+        AgentCommand::Revoke(args) => run_revoke(args).await
     }
 }
 
@@ -146,7 +147,7 @@ async fn run_register(args: AgentRegisterArgs) -> anyhow::Result<()> {
         let err = ux_error::UxError::new(format!("Invalid agent type: '{}'", args.agent_type))
             .why("Agent type helps categorize and apply appropriate defaults")
             .fix("Use one of: opencode, langchain, autogen, crewai, custom")
-            .suggest(&format!(
+            .suggest(format!(
                 "aeterna agent register {} --agent-type opencode",
                 args.name
             ));
@@ -186,18 +187,18 @@ async fn run_register(args: AgentRegisterArgs) -> anyhow::Result<()> {
         } else {
             output::header("Agent Registration (Dry Run)");
             println!();
-            println!("  Agent ID:     {}", agent_id);
+            println!("  Agent ID:     {agent_id}");
             println!("  Name:         {}", args.name);
             println!("  Type:         {}", args.agent_type);
-            println!("  Delegated By: {}", delegated_by);
+            println!("  Delegated By: {delegated_by}");
             if let Some(ref desc) = args.description {
-                println!("  Description:  {}", desc);
+                println!("  Description:  {desc}");
             }
             println!();
 
             output::header("What Would Happen");
-            println!("  1. Create agent identity '{}'", agent_id);
-            println!("  2. Delegate permissions from '{}' to agent", delegated_by);
+            println!("  1. Create agent identity '{agent_id}'");
+            println!("  2. Delegate permissions from '{delegated_by}' to agent");
             println!("  3. Generate Cedar policies for agent authorization");
             println!("  4. Agent inherits user's permissions (scoped down)");
             println!();
@@ -212,13 +213,9 @@ async fn run_register(args: AgentRegisterArgs) -> anyhow::Result<()> {
             output::header("Next Steps");
             println!("  1. Run without --dry-run to register the agent");
             println!(
-                "  2. Customize permissions: aeterna agent permissions {} --grant <perm>",
-                agent_id
+                "  2. Customize permissions: aeterna agent permissions {agent_id} --grant <perm>"
             );
-            println!(
-                "  3. Use in your application with agent_id=\"{}\"",
-                agent_id
-            );
+            println!("  3. Use in your application with agent_id=\"{agent_id}\"");
             println!();
 
             output::info("Dry run mode - agent not registered.");
@@ -261,10 +258,10 @@ async fn run_list(args: AgentListArgs) -> anyhow::Result<()> {
         }
 
         if let Some(ref user) = args.delegated_by {
-            println!("  Filter: delegated_by = {}", user);
+            println!("  Filter: delegated_by = {user}");
         }
         if let Some(ref t) = args.agent_type {
-            println!("  Filter: type = {}", t);
+            println!("  Filter: type = {t}");
         }
         println!();
 
@@ -341,15 +338,15 @@ async fn run_permissions(args: AgentPermissionsArgs) -> anyhow::Result<()> {
         "policy:read",
         "policy:propose",
         "graph:read",
-        "graph:write",
+        "graph:write"
     ];
 
     if let Some(ref perm_to_grant) = args.grant {
         if !valid_permissions.contains(&perm_to_grant.as_str()) {
-            let err = ux_error::UxError::new(format!("Invalid permission: '{}'", perm_to_grant))
+            let err = ux_error::UxError::new(format!("Invalid permission: '{perm_to_grant}'"))
                 .why("Permission must be a valid agent capability")
-                .fix(&format!("Use one of: {}", valid_permissions.join(", ")))
-                .suggest(&format!(
+                .fix(format!("Use one of: {}", valid_permissions.join(", ")))
+                .suggest(format!(
                     "aeterna agent permissions {} --grant memory:read",
                     args.agent_id
                 ));
@@ -370,9 +367,9 @@ async fn run_permissions(args: AgentPermissionsArgs) -> anyhow::Result<()> {
             output::header("Grant Agent Permission");
             println!();
             println!("  Agent:      {}", args.agent_id);
-            println!("  Permission: {}", perm_to_grant);
+            println!("  Permission: {perm_to_grant}");
             if let Some(ref scope) = args.scope {
-                println!("  Scope:      {}", scope);
+                println!("  Scope:      {scope}");
             }
             println!();
 
@@ -401,7 +398,7 @@ async fn run_permissions(args: AgentPermissionsArgs) -> anyhow::Result<()> {
             output::header("Revoke Agent Permission");
             println!();
             println!("  Agent:      {}", args.agent_id);
-            println!("  Permission: {}", perm_to_revoke);
+            println!("  Permission: {perm_to_revoke}");
             println!();
 
             output::header("Would Do");

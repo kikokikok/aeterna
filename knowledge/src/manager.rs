@@ -15,19 +15,19 @@ pub enum KnowledgeManagerError {
     #[error("Governance error: {0}")]
     GovernanceInternal(#[from] crate::governance::GovernanceError),
     #[error("Configuration error: {0}")]
-    Config(String),
+    Config(String)
 }
 
 pub struct KnowledgeManager {
     repository: Arc<GitRepository>,
-    governance: Arc<GovernanceEngine>,
+    governance: Arc<GovernanceEngine>
 }
 
 impl KnowledgeManager {
     pub fn new(repository: Arc<GitRepository>, governance: Arc<GovernanceEngine>) -> Self {
         Self {
             repository,
-            governance,
+            governance
         }
     }
 
@@ -35,7 +35,7 @@ impl KnowledgeManager {
         &self,
         ctx: TenantContext,
         entry: KnowledgeEntry,
-        message: &str,
+        message: &str
     ) -> Result<String, KnowledgeManagerError> {
         let mut context = HashMap::new();
         context.insert("path".to_string(), serde_json::json!(entry.path));
@@ -65,7 +65,7 @@ impl KnowledgeManager {
         ctx: TenantContext,
         query: &str,
         layers: Vec<KnowledgeLayer>,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<KnowledgeEntry>, KnowledgeManagerError> {
         let results = self.repository.search(ctx, query, layers, limit).await?;
         Ok(results)
@@ -75,7 +75,7 @@ impl KnowledgeManager {
         &self,
         ctx: TenantContext,
         layer: KnowledgeLayer,
-        context: HashMap<String, serde_json::Value>,
+        context: HashMap<String, serde_json::Value>
     ) -> Result<ValidationResult, KnowledgeManagerError> {
         let result = self
             .governance
@@ -88,7 +88,7 @@ impl KnowledgeManager {
         &self,
         ctx: TenantContext,
         layer: KnowledgeLayer,
-        prefix: &str,
+        prefix: &str
     ) -> Result<Vec<KnowledgeEntry>, KnowledgeManagerError> {
         let entries = self.repository.list(ctx, layer, prefix).await?;
         Ok(entries)
@@ -98,7 +98,7 @@ impl KnowledgeManager {
         &self,
         ctx: TenantContext,
         layer: KnowledgeLayer,
-        path: &str,
+        path: &str
     ) -> Result<Option<KnowledgeEntry>, KnowledgeManagerError> {
         let entry = self.repository.get(ctx, layer, path).await?;
         Ok(entry)
@@ -106,7 +106,7 @@ impl KnowledgeManager {
 
     pub async fn get_head_commit(
         &self,
-        ctx: TenantContext,
+        ctx: TenantContext
     ) -> Result<Option<String>, KnowledgeManagerError> {
         Ok(self.repository.get_head_commit(ctx).await?)
     }
@@ -114,7 +114,7 @@ impl KnowledgeManager {
     pub async fn get_affected_items(
         &self,
         ctx: TenantContext,
-        since_commit: &str,
+        since_commit: &str
     ) -> Result<Vec<(KnowledgeLayer, String)>, KnowledgeManagerError> {
         Ok(self
             .repository

@@ -17,7 +17,7 @@ fn create_test_summary(depth: SummaryDepth, content: &str) -> LayerSummary {
         source_hash: format!("hash_{}", content.len()),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     }
 }
 
@@ -32,7 +32,7 @@ fn create_test_memory_entry(id: &str, content: &str, layer: MemoryLayer) -> Memo
         importance_score: None,
         metadata: HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     }
 }
 
@@ -58,7 +58,7 @@ async fn test_summary_cache_set_and_get() -> Result<(), Box<dyn std::error::Erro
             &tenant_id,
             &MemoryLayer::Project,
             &entry_id,
-            &SummaryDepth::Sentence,
+            &SummaryDepth::Sentence
         )
         .await?;
 
@@ -84,11 +84,11 @@ async fn test_summary_cache_all_depths() -> Result<(), Box<dyn std::error::Error
     let sentence = create_test_summary(SummaryDepth::Sentence, "Short summary");
     let paragraph = create_test_summary(
         SummaryDepth::Paragraph,
-        "Medium length paragraph summary with more detail",
+        "Medium length paragraph summary with more detail"
     );
     let detailed = create_test_summary(
         SummaryDepth::Detailed,
-        "Comprehensive detailed summary with extensive context and background information",
+        "Comprehensive detailed summary with extensive context and background information"
     );
 
     redis
@@ -139,7 +139,7 @@ async fn test_summary_cache_invalidation_single_depth() -> Result<(), Box<dyn st
             &tenant_id,
             &MemoryLayer::Org,
             &entry_id,
-            Some(&SummaryDepth::Sentence),
+            Some(&SummaryDepth::Sentence)
         )
         .await?;
     assert_eq!(deleted, 1);
@@ -149,7 +149,7 @@ async fn test_summary_cache_invalidation_single_depth() -> Result<(), Box<dyn st
             &tenant_id,
             &MemoryLayer::Org,
             &entry_id,
-            &SummaryDepth::Sentence,
+            &SummaryDepth::Sentence
         )
         .await?;
     assert!(sentence_result.is_none());
@@ -159,7 +159,7 @@ async fn test_summary_cache_invalidation_single_depth() -> Result<(), Box<dyn st
             &tenant_id,
             &MemoryLayer::Org,
             &entry_id,
-            &SummaryDepth::Paragraph,
+            &SummaryDepth::Paragraph
         )
         .await?;
     assert!(paragraph_result.is_some());
@@ -181,7 +181,7 @@ async fn test_summary_cache_invalidation_all_depths() -> Result<(), Box<dyn std:
     for depth in [
         SummaryDepth::Sentence,
         SummaryDepth::Paragraph,
-        SummaryDepth::Detailed,
+        SummaryDepth::Detailed
     ] {
         let summary = create_test_summary(depth, &format!("{:?} summary", depth));
         redis
@@ -221,7 +221,7 @@ async fn test_summary_cache_with_ttl() -> Result<(), Box<dyn std::error::Error>>
             &MemoryLayer::Session,
             &entry_id,
             &summary,
-            Some(1),
+            Some(1)
         )
         .await?;
 
@@ -230,7 +230,7 @@ async fn test_summary_cache_with_ttl() -> Result<(), Box<dyn std::error::Error>>
             &tenant_id,
             &MemoryLayer::Session,
             &entry_id,
-            &SummaryDepth::Sentence,
+            &SummaryDepth::Sentence
         )
         .await?;
     assert!(immediate.is_some());
@@ -242,7 +242,7 @@ async fn test_summary_cache_with_ttl() -> Result<(), Box<dyn std::error::Error>>
             &tenant_id,
             &MemoryLayer::Session,
             &entry_id,
-            &SummaryDepth::Sentence,
+            &SummaryDepth::Sentence
         )
         .await?;
     assert!(after_expiry.is_none());
@@ -277,7 +277,7 @@ async fn test_summary_cache_tenant_isolation() -> Result<(), Box<dyn std::error:
             &tenant_a,
             &MemoryLayer::Project,
             entry_id,
-            &SummaryDepth::Sentence,
+            &SummaryDepth::Sentence
         )
         .await?;
     let retrieved_b = redis
@@ -285,7 +285,7 @@ async fn test_summary_cache_tenant_isolation() -> Result<(), Box<dyn std::error:
             &tenant_b,
             &MemoryLayer::Project,
             entry_id,
-            &SummaryDepth::Sentence,
+            &SummaryDepth::Sentence
         )
         .await?;
 
@@ -315,7 +315,7 @@ async fn test_summary_cache_layer_isolation() -> Result<(), Box<dyn std::error::
             &MemoryLayer::Project,
             &entry_id,
             &project_summary,
-            None,
+            None
         )
         .await?;
     redis
@@ -324,7 +324,7 @@ async fn test_summary_cache_layer_isolation() -> Result<(), Box<dyn std::error::
             &MemoryLayer::Team,
             &entry_id,
             &team_summary,
-            None,
+            None
         )
         .await?;
 
@@ -333,7 +333,7 @@ async fn test_summary_cache_layer_isolation() -> Result<(), Box<dyn std::error::
             &tenant_id,
             &MemoryLayer::Project,
             &entry_id,
-            &SummaryDepth::Sentence,
+            &SummaryDepth::Sentence
         )
         .await?;
     let team_result = redis
@@ -341,7 +341,7 @@ async fn test_summary_cache_layer_isolation() -> Result<(), Box<dyn std::error::
             &tenant_id,
             &MemoryLayer::Team,
             &entry_id,
-            &SummaryDepth::Sentence,
+            &SummaryDepth::Sentence
         )
         .await?;
 
@@ -359,7 +359,7 @@ async fn test_memory_entry_needs_summary_update() {
         update_on_changes: None,
         skip_if_unchanged: false,
         personalized: false,
-        depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph],
+        depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph]
     };
 
     let mut entry = create_test_memory_entry("test-1", "Original content", MemoryLayer::Project);
@@ -378,7 +378,7 @@ async fn test_memory_entry_needs_summary_update() {
         source_hash: entry.compute_content_hash(),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     };
     entry.summaries.insert(SummaryDepth::Sentence, summary);
 
@@ -395,7 +395,7 @@ async fn test_memory_entry_needs_summary_update() {
         source_hash: entry.compute_content_hash(),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     };
     entry
         .summaries
@@ -421,7 +421,7 @@ async fn test_memory_entry_summary_staleness() {
         update_on_changes: None,
         skip_if_unchanged: false,
         personalized: false,
-        depths: vec![SummaryDepth::Detailed],
+        depths: vec![SummaryDepth::Detailed]
     };
 
     let mut entry = create_test_memory_entry("test-2", "Some content", MemoryLayer::Team);
@@ -436,7 +436,7 @@ async fn test_memory_entry_summary_staleness() {
         source_hash: entry.compute_content_hash(),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     };
     entry.summaries.insert(SummaryDepth::Detailed, old_summary);
 
@@ -466,8 +466,8 @@ async fn test_personalized_summary_storage() -> Result<(), Box<dyn std::error::E
         content_hash: None,
         personalized: true,
         personalization_context: Some(
-            "Senior Rust developer, prefers concise explanations".to_string(),
-        ),
+            "Senior Rust developer, prefers concise explanations".to_string()
+        )
     };
 
     redis
@@ -476,7 +476,7 @@ async fn test_personalized_summary_storage() -> Result<(), Box<dyn std::error::E
             &MemoryLayer::User,
             &entry_id,
             &personalized_summary,
-            None,
+            None
         )
         .await?;
 
@@ -485,7 +485,7 @@ async fn test_personalized_summary_storage() -> Result<(), Box<dyn std::error::E
             &tenant_id,
             &MemoryLayer::User,
             &entry_id,
-            &SummaryDepth::Paragraph,
+            &SummaryDepth::Paragraph
         )
         .await?
         .expect("Summary should exist");

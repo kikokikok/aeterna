@@ -1,5 +1,5 @@
 use mk_core::types::{
-    CodeChange, ErrorSignature, HindsightNote, OrganizationalUnit, Resolution, TenantId, UnitType,
+    CodeChange, ErrorSignature, HindsightNote, OrganizationalUnit, Resolution, TenantId, UnitType
 };
 use storage::postgres::PostgresBackend;
 use testing::{postgres, unique_id};
@@ -8,7 +8,7 @@ use tokio::sync::OnceCell;
 use knowledge::context_architect::{LlmClient, LlmError, ViewMode};
 use knowledge::hindsight::{
     HindsightNoteGenerationMode, HindsightNoteGenerator, HindsightNoteGeneratorConfig,
-    HindsightNoteRequest,
+    HindsightNoteRequest
 };
 
 static SCHEMA_INITIALIZED: OnceCell<bool> = OnceCell::const_new();
@@ -28,7 +28,7 @@ async fn create_test_storage() -> Option<std::sync::Arc<PostgresBackend>> {
 }
 
 struct MockLlmClient {
-    responses: tokio::sync::Mutex<Vec<String>>,
+    responses: tokio::sync::Mutex<Vec<String>>
 }
 
 #[async_trait::async_trait]
@@ -50,7 +50,7 @@ impl LlmClient for MockLlmClient {
 
 async fn create_tenant(
     storage: &PostgresBackend,
-    tenant_id: &str,
+    tenant_id: &str
 ) -> Result<(), Box<dyn std::error::Error>> {
     let unit = OrganizationalUnit {
         id: tenant_id.to_string(),
@@ -60,7 +60,7 @@ async fn create_tenant(
         tenant_id: TenantId::new(tenant_id.to_string()).unwrap(),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     storage.create_unit(&unit).await?;
     Ok(())
@@ -72,7 +72,7 @@ fn create_test_error_signature() -> ErrorSignature {
         message_pattern: "Cannot read property '.*' of undefined".to_string(),
         stack_patterns: vec!["at processData".to_string(), "at handleRequest".to_string()],
         context_patterns: vec!["user-service".to_string()],
-        embedding: Some(vec![0.1, 0.2, 0.3, 0.4, 0.5]),
+        embedding: Some(vec![0.1, 0.2, 0.3, 0.4, 0.5])
     }
 }
 
@@ -84,17 +84,17 @@ fn create_test_resolution(error_signature_id: &str) -> Resolution {
         changes: vec![CodeChange {
             file_path: "src/service.ts".to_string(),
             diff: "+ if (data) { data.value }".to_string(),
-            description: Some("Added null guard".to_string()),
+            description: Some("Added null guard".to_string())
         }],
         success_rate: 0.95,
         application_count: 10,
-        last_success_at: chrono::Utc::now().timestamp(),
+        last_success_at: chrono::Utc::now().timestamp()
     }
 }
 
 fn create_test_hindsight_note(
     error_signature: ErrorSignature,
-    resolutions: Vec<Resolution>,
+    resolutions: Vec<Resolution>
 ) -> HindsightNote {
     let now = chrono::Utc::now().timestamp();
     HindsightNote {
@@ -106,7 +106,7 @@ fn create_test_hindsight_note(
             .to_string(),
         tags: vec!["null-safety".to_string(), "typescript".to_string()],
         created_at: now,
-        updated_at: now,
+        updated_at: now
     }
 }
 
@@ -124,14 +124,14 @@ async fn test_hindsight_note_generation_storage() -> Result<(), Box<dyn std::err
     let resolution = create_test_resolution("sig");
 
     let client = MockLlmClient {
-        responses: tokio::sync::Mutex::new(vec!["## Summary\nUse null checks.".to_string()]),
+        responses: tokio::sync::Mutex::new(vec!["## Summary\nUse null checks.".to_string()])
     };
     let generator = HindsightNoteGenerator::new(
         std::sync::Arc::new(client),
         HindsightNoteGeneratorConfig {
             mode: HindsightNoteGenerationMode::Single,
             ..Default::default()
-        },
+        }
     )
     .with_storage(storage.clone());
 
@@ -140,7 +140,7 @@ async fn test_hindsight_note_generation_storage() -> Result<(), Box<dyn std::err
         vec![resolution],
         Some("running tests".to_string()),
         vec!["manual".to_string()],
-        ViewMode::Dx,
+        ViewMode::Dx
     );
 
     let result = generator.generate_and_store(&tenant_id, &request).await?;
@@ -203,7 +203,7 @@ async fn test_error_signature_with_embedding() -> Result<(), Box<dyn std::error:
         message_pattern: "Expected string got number".to_string(),
         stack_patterns: vec![],
         context_patterns: vec![],
-        embedding: Some(vec![0.1, 0.2, 0.3, 0.4, 0.5]),
+        embedding: Some(vec![0.1, 0.2, 0.3, 0.4, 0.5])
     };
 
     let id = storage
@@ -275,7 +275,7 @@ async fn test_resolutions_for_error() -> Result<(), Box<dyn std::error::Error>> 
         changes: vec![],
         success_rate: 0.8,
         application_count: 5,
-        last_success_at: 0,
+        last_success_at: 0
     };
 
     let res2 = Resolution {
@@ -285,7 +285,7 @@ async fn test_resolutions_for_error() -> Result<(), Box<dyn std::error::Error>> 
         changes: vec![],
         success_rate: 0.95,
         application_count: 15,
-        last_success_at: 0,
+        last_success_at: 0
     };
 
     storage.create_resolution(&tenant_id, &res1).await?;
@@ -378,7 +378,7 @@ async fn test_hindsight_note_list() -> Result<(), Box<dyn std::error::Error>> {
             message_pattern: format!("Pattern {}", i),
             stack_patterns: vec![],
             context_patterns: vec![],
-            embedding: None,
+            embedding: None
         };
         let note = create_test_hindsight_note(signature, vec![]);
         storage.create_hindsight_note(&tenant_id, &note).await?;
@@ -442,7 +442,7 @@ async fn test_hindsight_note_with_resolutions() -> Result<(), Box<dyn std::error
         content: "Note with resolution".to_string(),
         tags: vec![],
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
 
     storage.create_hindsight_note(&tenant_id, &note).await?;
@@ -480,17 +480,17 @@ async fn test_code_change_serialization() -> Result<(), Box<dyn std::error::Erro
             CodeChange {
                 file_path: "src/a.ts".to_string(),
                 diff: "+ line1".to_string(),
-                description: Some("Fix A".to_string()),
+                description: Some("Fix A".to_string())
             },
             CodeChange {
                 file_path: "src/b.ts".to_string(),
                 diff: "+ line2".to_string(),
-                description: None,
+                description: None
             },
         ],
         success_rate: 1.0,
         application_count: 1,
-        last_success_at: 0,
+        last_success_at: 0
     };
 
     storage.create_resolution(&tenant_id, &resolution).await?;

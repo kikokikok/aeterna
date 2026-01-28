@@ -105,7 +105,7 @@ pub fn get_layer_precedence(layer: &str) -> u8 {
         "team" => 5,
         "org" => 6,
         "company" => 7,
-        _ => 7, // Default to lowest precedence
+        _ => 7 // Default to lowest precedence
     }
 }
 

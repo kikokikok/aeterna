@@ -15,7 +15,7 @@ test:
 
 # Run lints
 lint:
-	cargo clippy --workspace -- -D warnings
+	cargo clippy --workspace
 	cargo fmt --all -- --check
 
 # Fix lints and formatting

@@ -14,7 +14,7 @@ struct ConfigurableMockReasoner {
     refined_query: Option<String>,
     delay_ms: u64,
     should_fail: bool,
-    call_count: Arc<AtomicU32>,
+    call_count: Arc<AtomicU32>
 }
 
 impl ConfigurableMockReasoner {
@@ -24,7 +24,7 @@ impl ConfigurableMockReasoner {
             refined_query: None,
             delay_ms: 0,
             should_fail: false,
-            call_count: Arc::new(AtomicU32::new(0)),
+            call_count: Arc::new(AtomicU32::new(0))
         }
     }
 
@@ -49,7 +49,7 @@ impl ReflectiveReasoner for ConfigurableMockReasoner {
     async fn reason(
         &self,
         query: &str,
-        context_summary: Option<&str>,
+        context_summary: Option<&str>
     ) -> anyhow::Result<ReasoningTrace> {
         self.call_count.fetch_add(1, Ordering::SeqCst);
 
@@ -85,10 +85,10 @@ impl ReflectiveReasoner for ConfigurableMockReasoner {
                 let mut m = HashMap::new();
                 m.insert(
                     "original_query".to_string(),
-                    serde_json::json!(query.to_string()),
+                    serde_json::json!(query.to_string())
                 );
                 m
-            },
+            }
         })
     }
 }
@@ -100,7 +100,7 @@ impl ReflectiveReasoner for ExhaustiveReasoner {
     async fn reason(
         &self,
         query: &str,
-        _context_summary: Option<&str>,
+        _context_summary: Option<&str>
     ) -> anyhow::Result<ReasoningTrace> {
         Ok(ReasoningTrace {
             strategy: ReasoningStrategy::Exhaustive,
@@ -113,7 +113,7 @@ impl ReflectiveReasoner for ExhaustiveReasoner {
             end_time: Utc::now(),
             timed_out: false,
             duration_ms: 0,
-            metadata: HashMap::new(),
+            metadata: HashMap::new()
         })
     }
 }
@@ -125,7 +125,7 @@ impl ReflectiveReasoner for SemanticOnlyReasoner {
     async fn reason(
         &self,
         query: &str,
-        _context_summary: Option<&str>,
+        _context_summary: Option<&str>
     ) -> anyhow::Result<ReasoningTrace> {
         Ok(ReasoningTrace {
             strategy: ReasoningStrategy::SemanticOnly,
@@ -135,7 +135,7 @@ impl ReflectiveReasoner for SemanticOnlyReasoner {
             end_time: Utc::now(),
             timed_out: false,
             duration_ms: 0,
-            metadata: HashMap::new(),
+            metadata: HashMap::new()
         })
     }
 }
@@ -164,7 +164,7 @@ fn create_reasoning_config(enabled: bool) -> config::ReasoningConfig {
         circuit_breaker_half_open_requests: 3,
         max_hop_depth: 3,
         hop_relevance_threshold: 0.3,
-        max_query_budget: 50,
+        max_query_budget: 50
     }
 }
 
@@ -176,12 +176,13 @@ fn create_memory_config(reasoning: config::ReasoningConfig) -> config::MemoryCon
         optimization_trigger_count: 100,
         layer_summary_configs: HashMap::new(),
         reasoning,
+        rlm: config::RlmConfig::default()
     }
 }
 
 async fn setup_manager_with_reasoner(
     reasoner: Arc<dyn ReflectiveReasoner>,
-    reasoning_enabled: bool,
+    reasoning_enabled: bool
 ) -> MemoryManager {
     let reasoning_config = create_reasoning_config(reasoning_enabled);
     let memory_config = create_memory_config(reasoning_config);
@@ -217,27 +218,27 @@ async fn add_test_memories(manager: &MemoryManager, ctx: TenantContext) {
         (
             "mem_1",
             "Rust programming best practices for async code",
-            MemoryLayer::User,
+            MemoryLayer::User
         ),
         (
             "mem_2",
             "Database schema design patterns for PostgreSQL",
-            MemoryLayer::User,
+            MemoryLayer::User
         ),
         (
             "mem_3",
             "Memory optimization techniques in Aeterna",
-            MemoryLayer::Session,
+            MemoryLayer::Session
         ),
         (
             "mem_4",
             "API design guidelines for REST services",
-            MemoryLayer::Project,
+            MemoryLayer::Project
         ),
         (
             "mem_5",
             "Error handling patterns with anyhow and thiserror",
-            MemoryLayer::User,
+            MemoryLayer::User
         ),
     ];
 
@@ -256,7 +257,7 @@ async fn add_test_memories(manager: &MemoryManager, ctx: TenantContext) {
                 m
             },
             created_at: Utc::now().timestamp(),
-            updated_at: Utc::now().timestamp(),
+            updated_at: Utc::now().timestamp()
         };
 
         manager
@@ -270,7 +271,7 @@ async fn add_test_memories(manager: &MemoryManager, ctx: TenantContext) {
 async fn test_reflective_retrieval_with_targeted_strategy() {
     let reasoner = Arc::new(
         ConfigurableMockReasoner::new(ReasoningStrategy::Targeted)
-            .with_refined_query("Rust async programming patterns"),
+            .with_refined_query("Rust async programming patterns")
     );
     let call_count = reasoner.call_count.clone();
 
@@ -286,7 +287,7 @@ async fn test_reflective_retrieval_with_targeted_strategy() {
             10,
             0.0,
             HashMap::new(),
-            Some("Working on a high-performance service"),
+            Some("Working on a high-performance service")
         )
         .await
         .unwrap();
@@ -334,7 +335,7 @@ async fn test_reflective_retrieval_with_exhaustive_strategy() {
             5,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -360,7 +361,7 @@ async fn test_reflective_retrieval_with_semantic_only_strategy() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -412,7 +413,7 @@ async fn test_reflective_retrieval_disabled_returns_no_trace() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -452,7 +453,7 @@ async fn test_reflective_retrieval_timeout_fallback() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -491,7 +492,7 @@ async fn test_reflective_retrieval_failure_fallback() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -523,7 +524,7 @@ async fn test_reflective_retrieval_with_context_summary() {
             10,
             0.0,
             HashMap::new(),
-            Some(context),
+            Some(context)
         )
         .await
         .unwrap();
@@ -552,7 +553,7 @@ async fn test_reflective_retrieval_preserves_metadata() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -584,7 +585,7 @@ async fn test_reflective_retrieval_multiple_searches() {
                 10,
                 0.0,
                 HashMap::new(),
-                None,
+                None
             )
             .await
             .unwrap();
@@ -618,7 +619,7 @@ async fn test_reflective_retrieval_with_filters() {
             10,
             0.0,
             filters,
-            None,
+            None
         )
         .await
         .unwrap();
@@ -652,7 +653,7 @@ async fn test_reflective_retrieval_limit_adjustment_targeted() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -684,7 +685,7 @@ async fn test_reflective_retrieval_without_reasoner_configured() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -706,7 +707,7 @@ async fn test_reflective_retrieval_empty_results() {
             10,
             0.5,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -731,7 +732,7 @@ async fn test_reflective_retrieval_timing_recorded() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -810,7 +811,7 @@ async fn test_reasoning_cache_different_queries_miss() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -826,7 +827,7 @@ async fn test_reasoning_cache_different_queries_miss() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -849,7 +850,7 @@ async fn test_reasoning_cache_normalized_queries_hit() {
 
     add_test_memories(&manager, ctx.clone()).await;
 
-    // First call with normal query
+    // First call with a normal query
     let (_, trace1) = manager
         .search_text_with_reasoning(
             ctx.clone(),
@@ -857,7 +858,7 @@ async fn test_reasoning_cache_normalized_queries_hit() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -865,7 +866,7 @@ async fn test_reasoning_cache_normalized_queries_hit() {
     assert!(trace1.is_some());
     assert_eq!(call_count.load(Ordering::SeqCst), 1);
 
-    // Same query with different casing and whitespace - should hit cache
+    // The same query with different casing and whitespace - should hit cache
     let (_, trace2) = manager
         .search_text_with_reasoning(
             ctx.clone(),
@@ -873,7 +874,7 @@ async fn test_reasoning_cache_normalized_queries_hit() {
             10,
             0.0,
             HashMap::new(),
-            None,
+            None
         )
         .await
         .unwrap();
@@ -941,11 +942,11 @@ async fn test_reasoning_cache_different_tenants_separate_cache() {
     // Create two different tenant contexts
     let ctx1 = TenantContext::new(
         mk_core::types::TenantId::new("tenant-1".to_string()).unwrap(),
-        mk_core::types::UserId::new("user-1".to_string()).unwrap(),
+        mk_core::types::UserId::new("user-1".to_string()).unwrap()
     );
     let ctx2 = TenantContext::new(
         mk_core::types::TenantId::new("tenant-2".to_string()).unwrap(),
-        mk_core::types::UserId::new("user-2".to_string()).unwrap(),
+        mk_core::types::UserId::new("user-2".to_string()).unwrap()
     );
 
     add_test_memories(&manager, ctx1.clone()).await;

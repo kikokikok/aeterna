@@ -3,14 +3,14 @@ use mk_core::types::SummaryDepth;
 #[derive(Debug, Clone)]
 pub struct PromptTemplate {
     pub system: String,
-    pub user: String,
+    pub user: String
 }
 
 #[derive(Debug, Clone)]
 pub struct PromptTemplates {
     pub sentence: PromptTemplate,
     pub paragraph: PromptTemplate,
-    pub detailed: PromptTemplate,
+    pub detailed: PromptTemplate
 }
 
 impl Default for PromptTemplates {
@@ -18,16 +18,16 @@ impl Default for PromptTemplates {
         Self {
             sentence: PromptTemplate {
                 system: SENTENCE_SYSTEM.to_string(),
-                user: SENTENCE_USER.to_string(),
+                user: SENTENCE_USER.to_string()
             },
             paragraph: PromptTemplate {
                 system: PARAGRAPH_SYSTEM.to_string(),
-                user: PARAGRAPH_USER.to_string(),
+                user: PARAGRAPH_USER.to_string()
             },
             detailed: PromptTemplate {
                 system: DETAILED_SYSTEM.to_string(),
-                user: DETAILED_USER.to_string(),
-            },
+                user: DETAILED_USER.to_string()
+            }
         }
     }
 }
@@ -37,7 +37,7 @@ impl PromptTemplates {
         match depth {
             SummaryDepth::Sentence => &self.sentence,
             SummaryDepth::Paragraph => &self.paragraph,
-            SummaryDepth::Detailed => &self.detailed,
+            SummaryDepth::Detailed => &self.detailed
         }
     }
 
@@ -47,7 +47,7 @@ impl PromptTemplates {
         depth: SummaryDepth,
         context: Option<&str>,
         personalization: Option<&str>,
-        max_tokens: u32,
+        max_tokens: u32
     ) -> (String, String) {
         let template = self.get_template(depth);
 
@@ -60,7 +60,7 @@ impl PromptTemplates {
     fn build_system_prompt(&self, base: &str, personalization: Option<&str>) -> String {
         match personalization {
             Some(ctx) => format!("{base}\n\nPersonalization context: {ctx}"),
-            None => base.to_string(),
+            None => base.to_string()
         }
     }
 
@@ -69,7 +69,7 @@ impl PromptTemplates {
         base: &str,
         content: &str,
         context: Option<&str>,
-        max_tokens: u32,
+        max_tokens: u32
     ) -> String {
         let context_section = context
             .map(|c| format!("Context: {c}\n\n"))
@@ -182,7 +182,7 @@ mod tests {
             SummaryDepth::Detailed,
             None,
             Some(personalization),
-            500,
+            500
         );
 
         assert!(system.contains("Personalization context: developer audience"));
@@ -200,7 +200,7 @@ mod tests {
             SummaryDepth::Detailed,
             Some(context),
             Some(personalization),
-            500,
+            500
         );
 
         assert!(system.contains("senior engineers"));
@@ -243,16 +243,16 @@ mod tests {
         let custom = PromptTemplates {
             sentence: PromptTemplate {
                 system: "Custom system".to_string(),
-                user: "Custom user: {content}".to_string(),
+                user: "Custom user: {content}".to_string()
             },
             paragraph: PromptTemplate {
                 system: "Para system".to_string(),
-                user: "Para user: {content}".to_string(),
+                user: "Para user: {content}".to_string()
             },
             detailed: PromptTemplate {
                 system: "Detail system".to_string(),
-                user: "Detail user: {content}".to_string(),
-            },
+                user: "Detail user: {content}".to_string()
+            }
         };
 
         let (system, user) = custom.build_prompt("Test", SummaryDepth::Sentence, None, None, 50);

@@ -1,7 +1,8 @@
-//! Cedar entity transformation from PostgreSQL rows.
+//! Cedar entity transformation from `PostgreSQL` rows.
 //!
-//! This module transforms organizational data from PostgreSQL into Cedar entity format
-//! that can be consumed by OPAL and Cedar Agent for authorization decisions.
+//! This module transforms organizational data from `PostgreSQL` into Cedar
+//! entity format that can be consumed by OPAL and Cedar Agent for authorization
+//! decisions.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,7 @@ use crate::error::Result;
 // Database Row Types
 // ============================================================================
 
-/// Row from the v_hierarchy view.
+/// Row from the `v_hierarchy` view.
 #[derive(Debug, Clone, FromRow)]
 pub struct HierarchyRow {
     pub company_id: Option<Uuid>,
@@ -29,10 +30,10 @@ pub struct HierarchyRow {
     pub project_id: Option<Uuid>,
     pub project_slug: Option<String>,
     pub project_name: Option<String>,
-    pub git_remote: Option<String>,
+    pub git_remote: Option<String>
 }
 
-/// Row from the v_user_permissions view.
+/// Row from the `v_user_permissions` view.
 #[derive(Debug, Clone, FromRow)]
 pub struct UserPermissionRow {
     pub user_id: Uuid,
@@ -46,10 +47,10 @@ pub struct UserPermissionRow {
     pub company_id: Uuid,
     pub company_slug: String,
     pub org_slug: String,
-    pub team_slug: String,
+    pub team_slug: String
 }
 
-/// Row from the v_agent_permissions view.
+/// Row from the `v_agent_permissions` view.
 #[derive(Debug, Clone, FromRow)]
 pub struct AgentPermissionRow {
     pub agent_id: Uuid,
@@ -65,7 +66,7 @@ pub struct AgentPermissionRow {
     pub allowed_project_ids: Option<Vec<Uuid>>,
     pub agent_status: String,
     pub delegating_user_email: Option<String>,
-    pub delegating_user_name: Option<String>,
+    pub delegating_user_name: Option<String>
 }
 
 // ============================================================================
@@ -75,12 +76,12 @@ pub struct AgentPermissionRow {
 /// A Cedar entity with type, ID, attributes, and parent relationships.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CedarEntity {
-    /// Entity UID in format "Type::\"id\"".
+    /// Entity UID in format "`Type::`\"id\"".
     pub uid: CedarEntityUid,
     /// Entity attributes.
     pub attrs: serde_json::Value,
     /// Parent entity UIDs (for hierarchy).
-    pub parents: Vec<CedarEntityUid>,
+    pub parents: Vec<CedarEntityUid>
 }
 
 /// Cedar entity UID structure.
@@ -88,7 +89,7 @@ pub struct CedarEntity {
 pub struct CedarEntityUid {
     #[serde(rename = "type")]
     pub entity_type: String,
-    pub id: String,
+    pub id: String
 }
 
 impl CedarEntityUid {
@@ -97,7 +98,7 @@ impl CedarEntityUid {
     pub fn new(entity_type: impl Into<String>, id: impl Into<String>) -> Self {
         Self {
             entity_type: entity_type.into(),
-            id: id.into(),
+            id: id.into()
         }
     }
 }
@@ -110,7 +111,7 @@ pub struct CedarEntitiesResponse {
     /// Timestamp of the response.
     pub timestamp: DateTime<Utc>,
     /// Number of entities.
-    pub count: usize,
+    pub count: usize
 }
 
 impl CedarEntitiesResponse {
@@ -121,7 +122,7 @@ impl CedarEntitiesResponse {
         Self {
             entities,
             timestamp: Utc::now(),
-            count,
+            count
         }
     }
 }
@@ -145,55 +146,52 @@ pub fn transform_hierarchy(rows: Vec<HierarchyRow>) -> Result<Vec<CedarEntity>> 
         // Company entity
         if let (Some(id), Some(slug), Some(name)) =
             (&row.company_id, &row.company_slug, &row.company_name)
+            && seen_companies.insert(*id)
         {
-            if seen_companies.insert(*id) {
-                entities.push(CedarEntity {
-                    uid: CedarEntityUid::new("Aeterna::Company", id.to_string()),
-                    attrs: serde_json::json!({
-                        "slug": slug,
-                        "name": name,
-                    }),
-                    parents: vec![],
-                });
-            }
+            entities.push(CedarEntity {
+                uid: CedarEntityUid::new("Aeterna::Company", id.to_string()),
+                attrs: serde_json::json!({
+                    "slug": slug,
+                    "name": name,
+                }),
+                parents: vec![]
+            });
         }
 
         // Organization entity
         if let (Some(id), Some(slug), Some(name), Some(company_id)) =
             (&row.org_id, &row.org_slug, &row.org_name, &row.company_id)
+            && seen_orgs.insert(*id)
         {
-            if seen_orgs.insert(*id) {
-                entities.push(CedarEntity {
-                    uid: CedarEntityUid::new("Aeterna::Organization", id.to_string()),
-                    attrs: serde_json::json!({
-                        "slug": slug,
-                        "name": name,
-                    }),
-                    parents: vec![CedarEntityUid::new(
-                        "Aeterna::Company",
-                        company_id.to_string(),
-                    )],
-                });
-            }
+            entities.push(CedarEntity {
+                uid: CedarEntityUid::new("Aeterna::Organization", id.to_string()),
+                attrs: serde_json::json!({
+                    "slug": slug,
+                    "name": name,
+                }),
+                parents: vec![CedarEntityUid::new(
+                    "Aeterna::Company",
+                    company_id.to_string()
+                )]
+            });
         }
 
         // Team entity
         if let (Some(id), Some(slug), Some(name), Some(org_id)) =
             (&row.team_id, &row.team_slug, &row.team_name, &row.org_id)
+            && seen_teams.insert(*id)
         {
-            if seen_teams.insert(*id) {
-                entities.push(CedarEntity {
-                    uid: CedarEntityUid::new("Aeterna::Team", id.to_string()),
-                    attrs: serde_json::json!({
-                        "slug": slug,
-                        "name": name,
-                    }),
-                    parents: vec![CedarEntityUid::new(
-                        "Aeterna::Organization",
-                        org_id.to_string(),
-                    )],
-                });
-            }
+            entities.push(CedarEntity {
+                uid: CedarEntityUid::new("Aeterna::Team", id.to_string()),
+                attrs: serde_json::json!({
+                    "slug": slug,
+                    "name": name,
+                }),
+                parents: vec![CedarEntityUid::new(
+                    "Aeterna::Organization",
+                    org_id.to_string()
+                )]
+            });
         }
 
         // Project entity
@@ -201,22 +199,21 @@ pub fn transform_hierarchy(rows: Vec<HierarchyRow>) -> Result<Vec<CedarEntity>> 
             &row.project_id,
             &row.project_slug,
             &row.project_name,
-            &row.team_id,
-        ) {
-            if seen_projects.insert(*id) {
-                let mut attrs = serde_json::json!({
-                    "slug": slug,
-                    "name": name,
-                });
-                if let Some(git_remote) = &row.git_remote {
-                    attrs["git_remote"] = serde_json::json!(git_remote);
-                }
-                entities.push(CedarEntity {
-                    uid: CedarEntityUid::new("Aeterna::Project", id.to_string()),
-                    attrs,
-                    parents: vec![CedarEntityUid::new("Aeterna::Team", team_id.to_string())],
-                });
+            &row.team_id
+        ) && seen_projects.insert(*id)
+        {
+            let mut attrs = serde_json::json!({
+                "slug": slug,
+                "name": name,
+            });
+            if let Some(git_remote) = &row.git_remote {
+                attrs["git_remote"] = serde_json::json!(git_remote);
             }
+            entities.push(CedarEntity {
+                uid: CedarEntityUid::new("Aeterna::Project", id.to_string()),
+                attrs,
+                parents: vec![CedarEntityUid::new("Aeterna::Team", team_id.to_string())]
+            });
         }
     }
 
@@ -240,7 +237,7 @@ pub fn transform_users(rows: Vec<UserPermissionRow>) -> Result<Vec<CedarEntity>>
         user_info.entry(row.user_id).or_insert((
             row.email.clone(),
             row.user_name.clone(),
-            row.user_status.clone(),
+            row.user_status.clone()
         ));
     }
 
@@ -267,7 +264,7 @@ pub fn transform_users(rows: Vec<UserPermissionRow>) -> Result<Vec<CedarEntity>>
         entities.push(CedarEntity {
             uid: CedarEntityUid::new("Aeterna::User", user_id.to_string()),
             attrs,
-            parents,
+            parents
         });
     }
 
@@ -319,31 +316,31 @@ pub fn transform_agents(rows: Vec<AgentPermissionRow>) -> Result<Vec<CedarEntity
         }
 
         // Add scope arrays
-        if let Some(ids) = &row.allowed_company_ids {
-            if !ids.is_empty() {
-                attrs["allowed_company_ids"] = serde_json::json!(ids);
-            }
+        if let Some(ids) = &row.allowed_company_ids
+            && !ids.is_empty()
+        {
+            attrs["allowed_company_ids"] = serde_json::json!(ids);
         }
-        if let Some(ids) = &row.allowed_org_ids {
-            if !ids.is_empty() {
-                attrs["allowed_org_ids"] = serde_json::json!(ids);
-            }
+        if let Some(ids) = &row.allowed_org_ids
+            && !ids.is_empty()
+        {
+            attrs["allowed_org_ids"] = serde_json::json!(ids);
         }
-        if let Some(ids) = &row.allowed_team_ids {
-            if !ids.is_empty() {
-                attrs["allowed_team_ids"] = serde_json::json!(ids);
-            }
+        if let Some(ids) = &row.allowed_team_ids
+            && !ids.is_empty()
+        {
+            attrs["allowed_team_ids"] = serde_json::json!(ids);
         }
-        if let Some(ids) = &row.allowed_project_ids {
-            if !ids.is_empty() {
-                attrs["allowed_project_ids"] = serde_json::json!(ids);
-            }
+        if let Some(ids) = &row.allowed_project_ids
+            && !ids.is_empty()
+        {
+            attrs["allowed_project_ids"] = serde_json::json!(ids);
         }
 
         entities.push(CedarEntity {
             uid: CedarEntityUid::new("Aeterna::Agent", row.agent_id.to_string()),
             attrs,
-            parents,
+            parents
         });
     }
 
@@ -368,7 +365,7 @@ mod tests {
             project_id: Some(Uuid::new_v4()),
             project_slug: Some("payments-service".to_string()),
             project_name: Some("Payments Service".to_string()),
-            git_remote: Some("git@github.com:acme/payments.git".to_string()),
+            git_remote: Some("git@github.com:acme/payments.git".to_string())
         }
     }
 
@@ -451,7 +448,7 @@ mod tests {
             company_id: Uuid::new_v4(),
             company_slug: "acme-corp".to_string(),
             org_slug: "platform-engineering".to_string(),
-            team_slug: "api-team".to_string(),
+            team_slug: "api-team".to_string()
         };
 
         let entities = transform_users(vec![row]).unwrap();
@@ -484,7 +481,7 @@ mod tests {
             company_id: Uuid::new_v4(),
             company_slug: "acme-corp".to_string(),
             org_slug: "platform-engineering".to_string(),
-            team_slug: "api-team".to_string(),
+            team_slug: "api-team".to_string()
         };
 
         let row2 = UserPermissionRow {
@@ -526,7 +523,7 @@ mod tests {
             allowed_project_ids: None,
             agent_status: "active".to_string(),
             delegating_user_email: Some("alice@acme.com".to_string()),
-            delegating_user_name: Some("Alice".to_string()),
+            delegating_user_name: Some("Alice".to_string())
         };
 
         let entities = transform_agents(vec![row]).unwrap();
@@ -569,7 +566,7 @@ mod tests {
             allowed_project_ids: None,
             agent_status: "active".to_string(),
             delegating_user_email: None,
-            delegating_user_name: None,
+            delegating_user_name: None
         };
 
         let entities = transform_agents(vec![row]).unwrap();
@@ -586,7 +583,7 @@ mod tests {
         let entities = vec![CedarEntity {
             uid: CedarEntityUid::new("Aeterna::User", "123"),
             attrs: serde_json::json!({"email": "test@test.com"}),
-            parents: vec![],
+            parents: vec![]
         }];
 
         let response = CedarEntitiesResponse::new(entities);

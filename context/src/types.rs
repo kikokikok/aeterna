@@ -12,7 +12,7 @@ pub enum ContextSource {
     GitRemote,
     CedarAgent,
     OrgDefault,
-    SystemDefault,
+    SystemDefault
 }
 
 impl std::fmt::Display for ContextSource {
@@ -25,7 +25,7 @@ impl std::fmt::Display for ContextSource {
             ContextSource::GitRemote => write!(f, "git-remote"),
             ContextSource::CedarAgent => write!(f, "cedar-agent"),
             ContextSource::OrgDefault => write!(f, "org-default"),
-            ContextSource::SystemDefault => write!(f, "system-default"),
+            ContextSource::SystemDefault => write!(f, "system-default")
         }
     }
 }
@@ -33,7 +33,7 @@ impl std::fmt::Display for ContextSource {
 #[derive(Debug, Clone)]
 pub struct ResolvedValue<T> {
     pub value: T,
-    pub source: ContextSource,
+    pub source: ContextSource
 }
 
 impl<T> ResolvedValue<T> {
@@ -61,7 +61,7 @@ pub struct ResolvedContext {
     pub session_id: Option<ResolvedValue<String>>,
     pub hints: ResolvedValue<OperationHints>,
     pub context_root: Option<PathBuf>,
-    pub git_root: Option<PathBuf>,
+    pub git_root: Option<PathBuf>
 }
 
 impl Default for ResolvedContext {
@@ -76,7 +76,7 @@ impl Default for ResolvedContext {
             session_id: None,
             hints: ResolvedValue::default(OperationHints::default()),
             context_root: None,
-            git_root: None,
+            git_root: None
         }
     }
 }
@@ -92,7 +92,7 @@ impl ResolvedContext {
             Some(agent) => {
                 mk_core::TenantContext::with_agent(tenant_id, user_id, agent.value.clone())
             }
-            None => mk_core::TenantContext::new(tenant_id, user_id),
+            None => mk_core::TenantContext::new(tenant_id, user_id)
         }
     }
 
@@ -106,12 +106,12 @@ impl ResolvedContext {
             (
                 "tenant_id".to_string(),
                 self.tenant_id.value.clone(),
-                self.tenant_id.source.to_string(),
+                self.tenant_id.source.to_string()
             ),
             (
                 "user_id".to_string(),
                 self.user_id.value.clone(),
-                self.user_id.source.to_string(),
+                self.user_id.source.to_string()
             ),
         ];
 
@@ -119,7 +119,7 @@ impl ResolvedContext {
             explanations.push((
                 "org_id".to_string(),
                 org.value.clone(),
-                org.source.to_string(),
+                org.source.to_string()
             ));
         }
 
@@ -127,7 +127,7 @@ impl ResolvedContext {
             explanations.push((
                 "team_id".to_string(),
                 team.value.clone(),
-                team.source.to_string(),
+                team.source.to_string()
             ));
         }
 
@@ -135,7 +135,7 @@ impl ResolvedContext {
             explanations.push((
                 "project_id".to_string(),
                 project.value.clone(),
-                project.source.to_string(),
+                project.source.to_string()
             ));
         }
 
@@ -143,14 +143,14 @@ impl ResolvedContext {
             explanations.push((
                 "agent_id".to_string(),
                 agent.value.clone(),
-                agent.source.to_string(),
+                agent.source.to_string()
             ));
         }
 
         explanations.push((
             "hints".to_string(),
             format!("{:?}", self.hints.value.preset),
-            self.hints.source.to_string(),
+            self.hints.source.to_string()
         ));
 
         explanations
@@ -188,7 +188,7 @@ pub struct ContextConfig {
     pub storage: Option<StorageConfig>,
 
     #[serde(default)]
-    pub extra: HashMap<String, toml::Value>,
+    pub extra: HashMap<String, toml::Value>
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -198,7 +198,7 @@ pub struct ServerConfig {
 
     pub api_key: Option<String>,
 
-    pub timeout_seconds: Option<u64>,
+    pub timeout_seconds: Option<u64>
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -208,7 +208,7 @@ pub struct StorageConfig {
 
     pub cache_dir: Option<PathBuf>,
 
-    pub logs_dir: Option<PathBuf>,
+    pub logs_dir: Option<PathBuf>
 }
 
 impl ContextConfig {
@@ -223,7 +223,7 @@ impl ContextConfig {
     pub fn to_hints(&self) -> OperationHints {
         match &self.hints {
             Some(hints_config) => hints_config.to_operation_hints(),
-            None => OperationHints::default(),
+            None => OperationHints::default()
         }
     }
 }

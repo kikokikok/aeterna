@@ -35,7 +35,7 @@ pub struct InitArgs {
     pub force: bool,
 
     #[arg(long, help = "Skip interactive prompts")]
-    pub yes: bool,
+    pub yes: bool
 }
 
 pub fn run(args: InitArgs) -> Result<()> {
@@ -59,10 +59,10 @@ pub fn run(args: InitArgs) -> Result<()> {
     let tenant_id = args
         .tenant_id
         .or_else(|| {
-            if ctx.tenant_id.value != "default" {
-                Some(ctx.tenant_id.value.clone())
-            } else {
+            if ctx.tenant_id.value == "default" {
                 None
+            } else {
+                Some(ctx.tenant_id.value.clone())
             }
         })
         .unwrap_or_else(|| "default".to_string());

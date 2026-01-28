@@ -7,7 +7,7 @@ use std::sync::Arc;
 pub struct ExtractedEntity {
     pub name: String,
     pub label: String,
-    pub properties: serde_json::Value,
+    pub properties: serde_json::Value
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,29 +15,29 @@ pub struct ExtractedRelation {
     pub source: String,
     pub target: String,
     pub relation: String,
-    pub properties: serde_json::Value,
+    pub properties: serde_json::Value
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractionResult {
     pub entities: Vec<ExtractedEntity>,
-    pub relations: Vec<ExtractedRelation>,
+    pub relations: Vec<ExtractedRelation>
 }
 
 pub struct EntityExtractor {
-    llm: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
+    llm: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
 }
 
 impl EntityExtractor {
     pub fn new(
-        llm: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
+        llm: Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
     ) -> Self {
         Self { llm }
     }
 
     pub async fn extract(
         &self,
-        entry: &MemoryEntry,
+        entry: &MemoryEntry
     ) -> Result<ExtractionResult, Box<dyn std::error::Error + Send + Sync>> {
         let prompt = format!(
             "Extract entities and relationships from the following memory content in JSON \

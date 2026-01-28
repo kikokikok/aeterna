@@ -13,7 +13,7 @@ pub struct ResolutionTrackerConfig {
     pub min_success_rate: f32,
     pub max_success_rate: f32,
     pub promotion_threshold_applications: u32,
-    pub promotion_threshold_success_rate: f32,
+    pub promotion_threshold_success_rate: f32
 }
 
 impl Default for ResolutionTrackerConfig {
@@ -23,7 +23,7 @@ impl Default for ResolutionTrackerConfig {
             min_success_rate: 0.0,
             max_success_rate: 1.0,
             promotion_threshold_applications: 5,
-            promotion_threshold_success_rate: 0.8,
+            promotion_threshold_success_rate: 0.8
         }
     }
 }
@@ -31,7 +31,7 @@ impl Default for ResolutionTrackerConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResolutionOutcome {
     Success,
-    Failure,
+    Failure
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,7 +43,7 @@ pub struct ResolutionMetrics {
     pub last_success_at: Option<i64>,
     pub last_failure_at: Option<i64>,
     pub failure_contexts: Vec<FailureContext>,
-    pub created_at: i64,
+    pub created_at: i64
 }
 
 impl ResolutionMetrics {
@@ -57,7 +57,7 @@ impl ResolutionMetrics {
             last_success_at: None,
             last_failure_at: None,
             failure_contexts: Vec::new(),
-            created_at: now,
+            created_at: now
         }
     }
 
@@ -81,10 +81,10 @@ impl ResolutionMetrics {
     pub fn record_failure(&mut self, context: Option<FailureContext>) {
         self.failure_count = self.failure_count.saturating_add(1);
         self.last_failure_at = Some(current_timestamp());
-        if let Some(ctx) = context {
-            if self.failure_contexts.len() < 10 {
-                self.failure_contexts.push(ctx);
-            }
+        if let Some(ctx) = context
+            && self.failure_contexts.len() < 10
+        {
+            self.failure_contexts.push(ctx);
         }
     }
 
@@ -99,7 +99,7 @@ pub struct FailureContext {
     pub timestamp: i64,
     pub error_message: Option<String>,
     pub stack_trace: Option<String>,
-    pub session_id: Option<String>,
+    pub session_id: Option<String>
 }
 
 impl FailureContext {
@@ -108,7 +108,7 @@ impl FailureContext {
             timestamp: current_timestamp(),
             error_message: None,
             stack_trace: None,
-            session_id: None,
+            session_id: None
         }
     }
 
@@ -139,14 +139,14 @@ pub struct ApplicationRecord {
     pub resolution_id: String,
     pub outcome: ResolutionOutcome,
     pub timestamp: i64,
-    pub context: Option<ApplicationContext>,
+    pub context: Option<ApplicationContext>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApplicationContext {
     pub session_id: Option<String>,
     pub error_id: Option<String>,
-    pub notes: Option<String>,
+    pub notes: Option<String>
 }
 
 #[derive(Debug, Error)]
@@ -156,14 +156,14 @@ pub enum ResolutionStorageError {
     #[error("Storage error: {0}")]
     Storage(String),
     #[error("Serialization error: {0}")]
-    Serialization(String),
+    Serialization(String)
 }
 
 #[async_trait]
 pub trait ResolutionStorage: Send + Sync {
     async fn get_metrics(
         &self,
-        resolution_id: &str,
+        resolution_id: &str
     ) -> Result<Option<ResolutionMetrics>, ResolutionStorageError>;
 
     async fn save_metrics(&self, metrics: &ResolutionMetrics)
@@ -171,31 +171,31 @@ pub trait ResolutionStorage: Send + Sync {
 
     async fn get_metrics_by_error(
         &self,
-        error_signature_id: &str,
+        error_signature_id: &str
     ) -> Result<Vec<ResolutionMetrics>, ResolutionStorageError>;
 
     async fn record_application(
         &self,
-        record: &ApplicationRecord,
+        record: &ApplicationRecord
     ) -> Result<(), ResolutionStorageError>;
 
     async fn get_applications(
         &self,
         resolution_id: &str,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<ApplicationRecord>, ResolutionStorageError>;
 }
 
 pub struct InMemoryResolutionStorage {
     metrics: std::sync::RwLock<HashMap<String, ResolutionMetrics>>,
-    applications: std::sync::RwLock<Vec<ApplicationRecord>>,
+    applications: std::sync::RwLock<Vec<ApplicationRecord>>
 }
 
 impl InMemoryResolutionStorage {
     pub fn new() -> Self {
         Self {
             metrics: std::sync::RwLock::new(HashMap::new()),
-            applications: std::sync::RwLock::new(Vec::new()),
+            applications: std::sync::RwLock::new(Vec::new())
         }
     }
 }
@@ -210,7 +210,7 @@ impl Default for InMemoryResolutionStorage {
 impl ResolutionStorage for InMemoryResolutionStorage {
     async fn get_metrics(
         &self,
-        resolution_id: &str,
+        resolution_id: &str
     ) -> Result<Option<ResolutionMetrics>, ResolutionStorageError> {
         let metrics = self
             .metrics
@@ -221,7 +221,7 @@ impl ResolutionStorage for InMemoryResolutionStorage {
 
     async fn save_metrics(
         &self,
-        metrics: &ResolutionMetrics,
+        metrics: &ResolutionMetrics
     ) -> Result<(), ResolutionStorageError> {
         let mut store = self
             .metrics
@@ -233,7 +233,7 @@ impl ResolutionStorage for InMemoryResolutionStorage {
 
     async fn get_metrics_by_error(
         &self,
-        error_signature_id: &str,
+        error_signature_id: &str
     ) -> Result<Vec<ResolutionMetrics>, ResolutionStorageError> {
         let metrics = self
             .metrics
@@ -248,7 +248,7 @@ impl ResolutionStorage for InMemoryResolutionStorage {
 
     async fn record_application(
         &self,
-        record: &ApplicationRecord,
+        record: &ApplicationRecord
     ) -> Result<(), ResolutionStorageError> {
         let mut apps = self
             .applications
@@ -261,7 +261,7 @@ impl ResolutionStorage for InMemoryResolutionStorage {
     async fn get_applications(
         &self,
         resolution_id: &str,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<ApplicationRecord>, ResolutionStorageError> {
         let apps = self
             .applications
@@ -279,7 +279,7 @@ impl ResolutionStorage for InMemoryResolutionStorage {
 pub struct ResolutionTracker<S: ResolutionStorage> {
     cfg: ResolutionTrackerConfig,
     storage: S,
-    local_stats: std::sync::RwLock<HashMap<String, (u32, u32)>>,
+    local_stats: std::sync::RwLock<HashMap<String, (u32, u32)>>
 }
 
 impl<S: ResolutionStorage> ResolutionTracker<S> {
@@ -287,7 +287,7 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
         Self {
             cfg,
             storage,
-            local_stats: std::sync::RwLock::new(HashMap::new()),
+            local_stats: std::sync::RwLock::new(HashMap::new())
         }
     }
 
@@ -300,7 +300,7 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
         &self,
         resolution_id: &str,
         outcome: ResolutionOutcome,
-        context: Option<ApplicationContext>,
+        context: Option<ApplicationContext>
     ) -> Result<ResolutionMetrics, ResolutionStorageError> {
         let mut metrics = self
             .storage
@@ -340,7 +340,7 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
             resolution_id: resolution_id.to_string(),
             outcome,
             timestamp: current_timestamp(),
-            context,
+            context
         };
         self.storage.record_application(&record).await?;
 
@@ -348,7 +348,7 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
             let entry = stats.entry(resolution_id.to_string()).or_insert((0, 0));
             match outcome {
                 ResolutionOutcome::Success => entry.0 += 1,
-                ResolutionOutcome::Failure => entry.1 += 1,
+                ResolutionOutcome::Failure => entry.1 += 1
             }
         }
 
@@ -360,7 +360,7 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
             let entry = stats.entry(resolution_id.to_string()).or_insert((0, 0));
             match outcome {
                 ResolutionOutcome::Success => entry.0 += 1,
-                ResolutionOutcome::Failure => entry.1 += 1,
+                ResolutionOutcome::Failure => entry.1 += 1
             }
         }
     }
@@ -368,7 +368,7 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
     pub fn compute_success_rate(&self, resolution_id: &str) -> f32 {
         let stats = match self.local_stats.read() {
             Ok(s) => s,
-            Err(_) => return self.cfg.default_success_rate,
+            Err(_) => return self.cfg.default_success_rate
         };
 
         let Some((successes, failures)) = stats.get(resolution_id) else {
@@ -401,7 +401,7 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
         resolution_id: impl Into<String>,
         error_signature_id: impl Into<String>,
         description: impl Into<String>,
-        changes: Vec<CodeChange>,
+        changes: Vec<CodeChange>
     ) -> Result<Resolution, ResolutionStorageError> {
         let resolution_id = resolution_id.into();
         let error_signature_id = error_signature_id.into();
@@ -416,7 +416,7 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
             resolution_id: resolution_id.clone(),
             outcome: ResolutionOutcome::Success,
             timestamp: now,
-            context: None,
+            context: None
         };
         self.storage.record_application(&record).await?;
 
@@ -432,12 +432,12 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
 
         Ok(Resolution {
             id: resolution_id,
-            error_signature_id: error_signature_id.into(),
+            error_signature_id,
             description: description.into(),
             changes,
             success_rate: 1.0,
             application_count: 1,
-            last_success_at: now,
+            last_success_at: now
         })
     }
 
@@ -447,7 +447,7 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
         error_signature_id: impl Into<String>,
         description: impl Into<String>,
         changes: Vec<CodeChange>,
-        last_success_at: i64,
+        last_success_at: i64
     ) -> Resolution {
         Resolution {
             id: id.into(),
@@ -456,27 +456,27 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
             changes,
             success_rate: self.cfg.default_success_rate,
             application_count: 0,
-            last_success_at,
+            last_success_at
         }
     }
 
     pub async fn get_metrics(
         &self,
-        resolution_id: &str,
+        resolution_id: &str
     ) -> Result<Option<ResolutionMetrics>, ResolutionStorageError> {
         self.storage.get_metrics(resolution_id).await
     }
 
     pub async fn get_resolutions_for_error(
         &self,
-        error_signature_id: &str,
+        error_signature_id: &str
     ) -> Result<Vec<ResolutionMetrics>, ResolutionStorageError> {
         self.storage.get_metrics_by_error(error_signature_id).await
     }
 
     pub async fn check_promotion_candidates(
         &self,
-        error_signature_id: &str,
+        error_signature_id: &str
     ) -> Result<Vec<ResolutionMetrics>, ResolutionStorageError> {
         let metrics = self
             .storage
@@ -495,14 +495,14 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
 
         for line in diff.lines() {
             if let Some(path) = parse_diff_header(line) {
-                if let Some(existing_path) = current_path.take() {
-                    if !current_diff.trim().is_empty() {
-                        changes.push(CodeChange {
-                            file_path: existing_path,
-                            diff: current_diff.trim_end().to_string(),
-                            description: None,
-                        });
-                    }
+                if let Some(existing_path) = current_path.take()
+                    && !current_diff.trim().is_empty()
+                {
+                    changes.push(CodeChange {
+                        file_path: existing_path,
+                        diff: current_diff.trim_end().to_string(),
+                        description: None
+                    });
                 }
                 current_path = Some(path);
                 current_diff.clear();
@@ -515,14 +515,14 @@ impl<S: ResolutionStorage> ResolutionTracker<S> {
             }
         }
 
-        if let Some(path) = current_path {
-            if !current_diff.trim().is_empty() {
-                changes.push(CodeChange {
-                    file_path: path,
-                    diff: current_diff.trim_end().to_string(),
-                    description: None,
-                });
-            }
+        if let Some(path) = current_path
+            && !current_diff.trim().is_empty()
+        {
+            changes.push(CodeChange {
+                file_path: path,
+                diff: current_diff.trim_end().to_string(),
+                description: None
+            });
         }
 
         changes
@@ -557,7 +557,7 @@ mod tests {
     fn create_tracker() -> ResolutionTracker<InMemoryResolutionStorage> {
         ResolutionTracker::new(
             ResolutionTrackerConfig::default(),
-            InMemoryResolutionStorage::new(),
+            InMemoryResolutionStorage::new()
         )
     }
 
@@ -734,7 +734,7 @@ mod tests {
         let context = ApplicationContext {
             session_id: Some("sess-1".to_string()),
             error_id: None,
-            notes: Some("Did not work".to_string()),
+            notes: Some("Did not work".to_string())
         };
 
         let metrics = tracker
@@ -800,7 +800,7 @@ mod tests {
             changes: vec![],
             success_rate: 0.0,
             application_count: 0,
-            last_success_at: 0,
+            last_success_at: 0
         };
 
         let updated = tracker.apply_stats(res);

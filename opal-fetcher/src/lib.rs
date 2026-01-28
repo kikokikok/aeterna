@@ -1,7 +1,8 @@
 //! # OPAL Data Fetcher
 //!
-//! This crate provides an HTTP server that exposes organizational data from PostgreSQL
-//! to OPAL (Open Policy Administration Layer) and Cedar Agent for policy decisions.
+//! This crate provides an HTTP server that exposes organizational data from
+//! `PostgreSQL` to OPAL (Open Policy Administration Layer) and Cedar Agent for
+//! policy decisions.
 //!
 //! ## Architecture
 //!
@@ -25,8 +26,9 @@
 //!
 //! ## Real-time Updates
 //!
-//! The fetcher listens to PostgreSQL NOTIFY events via the `referential_changes` channel
-//! and publishes updates to OPAL via its PubSub mechanism.
+//! The fetcher listens to `PostgreSQL` NOTIFY events via the
+//! `referential_changes` channel and publishes updates to OPAL via its `PubSub`
+//! mechanism.
 
 pub mod entities;
 pub mod error;

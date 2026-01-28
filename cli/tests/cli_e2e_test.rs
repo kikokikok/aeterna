@@ -1,12 +1,13 @@
-use assert_cmd::Command;
-use predicates::prelude::*;
+use assert_cmd::{Command, cargo_bin_cmd};
 
 fn aeterna() -> Command {
-    Command::cargo_bin("aeterna").unwrap()
+    cargo_bin_cmd!("aeterna")
 }
 
 mod help_and_version {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_help_flag() {
@@ -56,6 +57,8 @@ mod help_and_version {
 
 mod memory_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_memory_help() {
@@ -96,7 +99,7 @@ mod memory_subcommand {
                 "add",
                 "Test memory content",
                 "--dry-run",
-                "--json",
+                "--json"
             ])
             .assert()
             .success()
@@ -113,7 +116,7 @@ mod memory_subcommand {
                 "Project specific memory",
                 "--layer",
                 "project",
-                "--dry-run",
+                "--dry-run"
             ])
             .assert()
             .success()
@@ -187,6 +190,8 @@ mod memory_subcommand {
 
 mod knowledge_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_knowledge_help() {
@@ -247,6 +252,8 @@ mod knowledge_subcommand {
 
 mod user_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_user_help() {
@@ -332,12 +339,12 @@ mod user_subcommand {
                 "not-an-email",
                 "--org",
                 "test-org",
-                "--yes",
+                "--yes"
             ])
             .assert()
             .failure()
             .stderr(
-                predicate::str::contains("Invalid email").or(predicate::str::contains("invalid")),
+                predicate::str::contains("Invalid email").or(predicate::str::contains("invalid"))
             );
     }
 
@@ -352,18 +359,20 @@ mod user_subcommand {
                 "test-org",
                 "--role",
                 "superuser",
-                "--yes",
+                "--yes"
             ])
             .assert()
             .failure()
             .stderr(
-                predicate::str::contains("Invalid role").or(predicate::str::contains("invalid")),
+                predicate::str::contains("Invalid role").or(predicate::str::contains("invalid"))
             );
     }
 }
 
 mod admin_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_admin_help() {
@@ -449,6 +458,8 @@ mod admin_subcommand {
 
 mod policy_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_policy_help() {
@@ -481,7 +492,7 @@ mod policy_subcommand {
                 "create",
                 "--description",
                 "Block critical CVEs",
-                "--dry-run",
+                "--dry-run"
             ])
             .assert()
             .success()
@@ -496,7 +507,7 @@ mod policy_subcommand {
                 "create",
                 "--template",
                 "security-baseline",
-                "--dry-run",
+                "--dry-run"
             ])
             .assert()
             .success()
@@ -511,7 +522,7 @@ mod policy_subcommand {
             .assert()
             .failure()
             .stderr(
-                predicate::str::contains("description").or(predicate::str::contains("template")),
+                predicate::str::contains("description").or(predicate::str::contains("template"))
             );
     }
 
@@ -524,7 +535,7 @@ mod policy_subcommand {
                 "--description",
                 "Test",
                 "--layer",
-                "invalid",
+                "invalid"
             ])
             .assert()
             .failure()
@@ -540,7 +551,7 @@ mod policy_subcommand {
                 "--description",
                 "Test",
                 "--mode",
-                "required",
+                "required"
             ])
             .assert()
             .failure()
@@ -556,7 +567,7 @@ mod policy_subcommand {
                 "--description",
                 "Test",
                 "--severity",
-                "critical",
+                "critical"
             ])
             .assert()
             .failure()
@@ -616,6 +627,8 @@ mod policy_subcommand {
 
 mod govern_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_govern_help() {
@@ -814,7 +827,7 @@ mod govern_subcommand {
                 "req_test123",
                 "--yes",
                 "--comment",
-                "LGTM",
+                "LGTM"
             ])
             .assert()
             .success()
@@ -831,7 +844,7 @@ mod govern_subcommand {
                 "req_test123",
                 "--reason",
                 "Needs security review",
-                "--yes",
+                "--yes"
             ])
             .assert()
             .success()
@@ -849,7 +862,7 @@ mod govern_subcommand {
                 "--reason",
                 "Needs review",
                 "--yes",
-                "--json",
+                "--json"
             ])
             .assert()
             .success()
@@ -977,7 +990,7 @@ mod govern_subcommand {
                 "govern",
                 "configure",
                 "--escalation-contact",
-                "security-team@example.com",
+                "security-team@example.com"
             ])
             .assert()
             .success()
@@ -1031,7 +1044,7 @@ mod govern_subcommand {
                 "--role",
                 "approver",
                 "--scope",
-                "org",
+                "org"
             ])
             .assert()
             .success()
@@ -1050,7 +1063,7 @@ mod govern_subcommand {
                 "--role",
                 "approver",
                 "--scope",
-                "org",
+                "org"
             ])
             .assert()
             .success()
@@ -1070,7 +1083,7 @@ mod govern_subcommand {
                 "admin",
                 "--scope",
                 "company",
-                "--json",
+                "--json"
             ])
             .assert()
             .success()
@@ -1169,6 +1182,7 @@ mod govern_subcommand {
 
 mod agent_subcommand {
     use super::*;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_agent_help() {
@@ -1224,7 +1238,7 @@ mod agent_subcommand {
                 "test-agent",
                 "--dry-run",
                 "--description",
-                "Test agent for CI",
+                "Test agent for CI"
             ])
             .assert()
             .success()
@@ -1241,7 +1255,7 @@ mod agent_subcommand {
                 "opencode-agent",
                 "--dry-run",
                 "--agent-type",
-                "opencode",
+                "opencode"
             ])
             .assert()
             .success()
@@ -1256,7 +1270,7 @@ mod agent_subcommand {
                 "register",
                 "test-agent",
                 "--agent-type",
-                "invalid-type",
+                "invalid-type"
             ])
             .assert()
             .failure();
@@ -1271,7 +1285,7 @@ mod agent_subcommand {
                 "my-agent",
                 "--dry-run",
                 "--delegated-by",
-                "alice@acme.com",
+                "alice@acme.com"
             ])
             .assert()
             .success()
@@ -1422,7 +1436,7 @@ mod agent_subcommand {
                 "permissions",
                 "agent-test-123",
                 "--grant",
-                "memory:read",
+                "memory:read"
             ])
             .assert()
             .success()
@@ -1438,7 +1452,7 @@ mod agent_subcommand {
                 "agent-test-123",
                 "--grant",
                 "memory:write",
-                "--json",
+                "--json"
             ])
             .assert()
             .success()
@@ -1462,7 +1476,7 @@ mod agent_subcommand {
                 "--grant",
                 "knowledge:read",
                 "--scope",
-                "org",
+                "org"
             ])
             .assert()
             .success()
@@ -1477,7 +1491,7 @@ mod agent_subcommand {
                 "permissions",
                 "agent-test-123",
                 "--grant",
-                "invalid:permission",
+                "invalid:permission"
             ])
             .assert()
             .failure();
@@ -1491,7 +1505,7 @@ mod agent_subcommand {
                 "permissions",
                 "agent-test-123",
                 "--revoke",
-                "memory:write",
+                "memory:write"
             ])
             .assert()
             .success()
@@ -1507,7 +1521,7 @@ mod agent_subcommand {
                 "agent-test-123",
                 "--revoke",
                 "memory:write",
-                "--json",
+                "--json"
             ])
             .assert()
             .success()
@@ -1568,6 +1582,7 @@ mod agent_subcommand {
 
 mod org_subcommand {
     use super::*;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_org_help() {
@@ -1623,7 +1638,7 @@ mod org_subcommand {
                 "product-eng",
                 "--dry-run",
                 "--description",
-                "Product Engineering team",
+                "Product Engineering team"
             ])
             .assert()
             .success()
@@ -1640,7 +1655,7 @@ mod org_subcommand {
                 "security",
                 "--dry-run",
                 "--company",
-                "acme-corp",
+                "acme-corp"
             ])
             .assert()
             .success()
@@ -1817,7 +1832,7 @@ mod org_subcommand {
                 "--add",
                 "carol@acme.com",
                 "--role",
-                "techlead",
+                "techlead"
             ])
             .assert()
             .success()
@@ -1833,7 +1848,7 @@ mod org_subcommand {
                 "--add",
                 "dave@acme.com",
                 "--role",
-                "invalid-role",
+                "invalid-role"
             ])
             .assert()
             .failure();
@@ -1848,7 +1863,7 @@ mod org_subcommand {
                 "--org",
                 "platform-eng",
                 "--add",
-                "eve@acme.com",
+                "eve@acme.com"
             ])
             .assert()
             .success()
@@ -1889,7 +1904,7 @@ mod org_subcommand {
                 "--set-role",
                 "alice@acme.com",
                 "--role",
-                "architect",
+                "architect"
             ])
             .assert()
             .success()
@@ -1906,7 +1921,7 @@ mod org_subcommand {
                 "bob@acme.com",
                 "--role",
                 "admin",
-                "--json",
+                "--json"
             ])
             .assert()
             .success()
@@ -1950,6 +1965,7 @@ mod org_subcommand {
 
 mod team_subcommand {
     use super::*;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_team_help() {
@@ -2009,7 +2025,7 @@ mod team_subcommand {
                 "api-team",
                 "--description",
                 "API development team",
-                "--dry-run",
+                "--dry-run"
             ])
             .assert()
             .success()
@@ -2026,7 +2042,7 @@ mod team_subcommand {
                 "api-team",
                 "--org",
                 "platform-eng",
-                "--dry-run",
+                "--dry-run"
             ])
             .assert()
             .success()
@@ -2044,7 +2060,7 @@ mod team_subcommand {
                 "--org",
                 "platform-eng",
                 "--dry-run",
-                "--json",
+                "--json"
             ])
             .assert()
             .success()
@@ -2260,7 +2276,7 @@ mod team_subcommand {
                 "--add",
                 "alice@example.com",
                 "--role",
-                "techlead",
+                "techlead"
             ])
             .assert()
             .success()
@@ -2276,7 +2292,7 @@ mod team_subcommand {
                 "--team",
                 "api-team",
                 "--add",
-                "alice@example.com",
+                "alice@example.com"
             ])
             .assert()
             .success()
@@ -2293,7 +2309,7 @@ mod team_subcommand {
                 "--add",
                 "alice@example.com",
                 "--role",
-                "superuser",
+                "superuser"
             ])
             .assert()
             .failure()
@@ -2335,7 +2351,7 @@ mod team_subcommand {
                 "--set-role",
                 "alice@example.com",
                 "--role",
-                "architect",
+                "architect"
             ])
             .assert()
             .success()
@@ -2354,7 +2370,7 @@ mod team_subcommand {
                 "alice@example.com",
                 "--role",
                 "techlead",
-                "--json",
+                "--json"
             ])
             .assert()
             .success()
@@ -2399,6 +2415,8 @@ mod team_subcommand {
 
 mod context_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_context_help() {
@@ -2420,7 +2438,7 @@ mod context_subcommand {
             .stdout(
                 predicate::str::contains("tenant")
                     .or(predicate::str::contains("Tenant"))
-                    .or(predicate::str::contains("Context")),
+                    .or(predicate::str::contains("Context"))
             );
     }
 
@@ -2454,6 +2472,7 @@ mod context_subcommand {
 
 mod error_handling {
     use super::*;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_unknown_command() {
@@ -2550,7 +2569,7 @@ mod layer_validation {
     #[test]
     fn test_memory_add_valid_layers() {
         let valid_layers = [
-            "agent", "user", "session", "project", "team", "org", "company",
+            "agent", "user", "session", "project", "team", "org", "company"
         ];
         for layer in valid_layers {
             aeterna()
@@ -2572,7 +2591,7 @@ mod layer_validation {
                     "Test",
                     "--layer",
                     layer,
-                    "--dry-run",
+                    "--dry-run"
                 ])
                 .assert()
                 .success();
@@ -2582,6 +2601,7 @@ mod layer_validation {
 
 mod check_subcommand {
     use super::*;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_check_help() {
@@ -2714,6 +2734,8 @@ mod check_subcommand {
 
 mod sync_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_sync_help() {
@@ -2744,7 +2766,7 @@ mod sync_subcommand {
             .stdout(
                 predicate::str::contains("Sync")
                     .or(predicate::str::contains("sync"))
-                    .or(predicate::str::contains("Analyzing")),
+                    .or(predicate::str::contains("Analyzing"))
             );
     }
 
@@ -2811,6 +2833,8 @@ mod sync_subcommand {
 
 mod status_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_status_help() {
@@ -2826,7 +2850,7 @@ mod status_subcommand {
         aeterna().args(["status"]).assert().success().stdout(
             predicate::str::contains("Status")
                 .or(predicate::str::contains("status"))
-                .or(predicate::str::contains("Connection")),
+                .or(predicate::str::contains("Connection"))
         );
     }
 
@@ -2852,6 +2876,7 @@ mod status_subcommand {
 
 mod init_subcommand {
     use super::*;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_init_help() {
@@ -2885,6 +2910,8 @@ mod init_subcommand {
 
 mod hints_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_hints_help() {
@@ -2903,7 +2930,7 @@ mod hints_subcommand {
         aeterna().args(["hints", "list"]).assert().success().stdout(
             predicate::str::contains("Available Presets")
                 .or(predicate::str::contains("minimal"))
-                .or(predicate::str::contains("standard")),
+                .or(predicate::str::contains("standard"))
         );
     }
 
@@ -2930,7 +2957,7 @@ mod hints_subcommand {
             .stdout(
                 predicate::str::contains("Preset")
                     .or(predicate::str::contains("minimal"))
-                    .or(predicate::str::contains("Hints")),
+                    .or(predicate::str::contains("Hints"))
             );
     }
 
@@ -2957,7 +2984,7 @@ mod hints_subcommand {
             .stdout(
                 predicate::str::contains("Parsed")
                     .or(predicate::str::contains("fast"))
-                    .or(predicate::str::contains("Hints")),
+                    .or(predicate::str::contains("Hints"))
             );
     }
 
@@ -2978,6 +3005,8 @@ mod hints_subcommand {
 
 mod completion_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
 
     #[test]
     fn test_completion_help() {

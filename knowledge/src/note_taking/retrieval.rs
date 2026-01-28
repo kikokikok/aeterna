@@ -8,7 +8,7 @@ pub struct RetrievalConfig {
     pub relevance_threshold: f32,
     pub recency_weight: f32,
     pub success_weight: f32,
-    pub enable_tag_filtering: bool,
+    pub enable_tag_filtering: bool
 }
 
 impl Default for RetrievalConfig {
@@ -18,28 +18,17 @@ impl Default for RetrievalConfig {
             relevance_threshold: 0.5,
             recency_weight: 0.2,
             success_weight: 0.1,
-            enable_tag_filtering: true,
+            enable_tag_filtering: true
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RetrievalFilter {
     pub tags: Option<Vec<String>>,
     pub min_quality_score: Option<f32>,
     pub created_after: Option<u64>,
-    pub created_before: Option<u64>,
-}
-
-impl Default for RetrievalFilter {
-    fn default() -> Self {
-        Self {
-            tags: None,
-            min_quality_score: None,
-            created_after: None,
-            created_before: None,
-        }
-    }
+    pub created_before: Option<u64>
 }
 
 impl RetrievalFilter {
@@ -70,7 +59,7 @@ pub struct ScoredNote {
     pub note: GeneratedNote,
     pub relevance_score: f32,
     pub recency_score: f32,
-    pub combined_score: f32,
+    pub combined_score: f32
 }
 
 impl ScoredNote {
@@ -78,20 +67,20 @@ impl ScoredNote {
         note: GeneratedNote,
         relevance_score: f32,
         recency_score: f32,
-        config: &RetrievalConfig,
+        config: &RetrievalConfig
     ) -> Self {
         let combined_score = Self::compute_combined_score(
             relevance_score,
             recency_score,
             note.quality_score,
-            config,
+            config
         );
 
         Self {
             note,
             relevance_score,
             recency_score,
-            combined_score,
+            combined_score
         }
     }
 
@@ -99,7 +88,7 @@ impl ScoredNote {
         relevance: f32,
         recency: f32,
         quality: f32,
-        config: &RetrievalConfig,
+        config: &RetrievalConfig
     ) -> f32 {
         let relevance_weight = 1.0 - config.recency_weight - config.success_weight;
         relevance * relevance_weight
@@ -110,14 +99,14 @@ impl ScoredNote {
 
 pub struct NoteIndex {
     notes: HashMap<String, (GeneratedNote, Vec<f32>)>,
-    config: RetrievalConfig,
+    config: RetrievalConfig
 }
 
 impl NoteIndex {
     pub fn new(config: RetrievalConfig) -> Self {
         Self {
             notes: HashMap::new(),
-            config,
+            config
         }
     }
 
@@ -141,7 +130,7 @@ impl NoteIndex {
         &self,
         query_embedding: &[f32],
         limit: usize,
-        filter: Option<&RetrievalFilter>,
+        filter: Option<&RetrievalFilter>
     ) -> Vec<ScoredNote> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -173,35 +162,34 @@ impl NoteIndex {
     fn matches_filter(&self, note: &GeneratedNote, filter: Option<&RetrievalFilter>) -> bool {
         let filter = match filter {
             Some(f) => f,
-            None => return true,
+            None => return true
         };
 
-        if let Some(min_quality) = filter.min_quality_score {
-            if note.quality_score < min_quality {
-                return false;
-            }
+        if let Some(min_quality) = filter.min_quality_score
+            && note.quality_score < min_quality
+        {
+            return false;
         }
 
-        if let Some(after) = filter.created_after {
-            if note.created_at < after {
-                return false;
-            }
+        if let Some(after) = filter.created_after
+            && note.created_at < after
+        {
+            return false;
         }
 
-        if let Some(before) = filter.created_before {
-            if note.created_at > before {
-                return false;
-            }
+        if let Some(before) = filter.created_before
+            && note.created_at > before
+        {
+            return false;
         }
 
-        if self.config.enable_tag_filtering {
-            if let Some(ref required_tags) = filter.tags {
-                if !required_tags.is_empty() {
-                    let has_matching_tag = required_tags.iter().any(|t| note.tags.contains(t));
-                    if !has_matching_tag {
-                        return false;
-                    }
-                }
+        if self.config.enable_tag_filtering
+            && let Some(ref required_tags) = filter.tags
+            && !required_tags.is_empty()
+        {
+            let has_matching_tag = required_tags.iter().any(|t| note.tags.contains(t));
+            if !has_matching_tag {
+                return false;
             }
         }
 
@@ -239,14 +227,14 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 
 pub struct NoteRetriever<E> {
     index: NoteIndex,
-    embedder: E,
+    embedder: E
 }
 
 impl<E: NoteEmbedder> NoteRetriever<E> {
     pub fn new(config: RetrievalConfig, embedder: E) -> Self {
         Self {
             index: NoteIndex::new(config),
-            embedder,
+            embedder
         }
     }
 
@@ -260,7 +248,7 @@ impl<E: NoteEmbedder> NoteRetriever<E> {
     pub async fn retrieve_relevant(
         &self,
         query: &str,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<ScoredNote>, E::Error> {
         let query_embedding = self.embedder.embed(query).await?;
         Ok(self.index.retrieve_relevant(&query_embedding, limit, None))
@@ -270,7 +258,7 @@ impl<E: NoteEmbedder> NoteRetriever<E> {
         &self,
         query: &str,
         limit: usize,
-        filter: &RetrievalFilter,
+        filter: &RetrievalFilter
     ) -> Result<Vec<ScoredNote>, E::Error> {
         let query_embedding = self.embedder.embed(query).await?;
         Ok(self
@@ -310,7 +298,7 @@ mod tests {
             tags: vec!["rust".to_string(), "async".to_string()],
             source_distillation_id: format!("dist-{id}"),
             created_at,
-            quality_score: quality,
+            quality_score: quality
         }
     }
 
@@ -412,11 +400,11 @@ mod tests {
 
         index.add_note(
             sample_note("1", "Low quality", 0.3, 1000),
-            sample_embedding(),
+            sample_embedding()
         );
         index.add_note(
             sample_note("2", "High quality", 0.9, 1000),
-            sample_embedding(),
+            sample_embedding()
         );
 
         let filter = RetrievalFilter::default().with_min_quality(0.5);
@@ -505,7 +493,7 @@ mod tests {
 
         index.add_note(
             sample_note("1", "Old note", 0.8, now - 604800),
-            sample_embedding(),
+            sample_embedding()
         );
         index.add_note(sample_note("2", "New note", 0.8, now), sample_embedding());
 
@@ -533,11 +521,11 @@ mod tests {
 
         index.add_note(
             sample_note("1", "Low quality", 0.3, now),
-            sample_embedding(),
+            sample_embedding()
         );
         index.add_note(
             sample_note("2", "High quality", 0.9, now),
-            sample_embedding(),
+            sample_embedding()
         );
 
         let results = index.retrieve_relevant(&query_embedding_similar(), 10, None);

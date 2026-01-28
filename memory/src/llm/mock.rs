@@ -6,14 +6,14 @@ use tokio::sync::RwLock;
 
 pub struct MockLlmService {
     responses: Arc<RwLock<std::collections::HashMap<String, String>>>,
-    ordered_responses: Arc<RwLock<std::collections::VecDeque<String>>>,
+    ordered_responses: Arc<RwLock<std::collections::VecDeque<String>>>
 }
 
 impl MockLlmService {
     pub fn new() -> Self {
         Self {
             responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
-            ordered_responses: Arc::new(RwLock::new(std::collections::VecDeque::new())),
+            ordered_responses: Arc::new(RwLock::new(std::collections::VecDeque::new()))
         }
     }
 
@@ -45,7 +45,7 @@ mod tests {
     use super::*;
     use mk_core::types::{
         ConstraintOperator, ConstraintSeverity, ConstraintTarget, Policy, PolicyMode, PolicyRule,
-        RuleMergeStrategy,
+        RuleMergeStrategy
     };
 
     #[tokio::test]
@@ -100,8 +100,8 @@ mod tests {
                 operator: ConstraintOperator::MustNotUse,
                 value: serde_json::json!("test"),
                 severity: ConstraintSeverity::Warn,
-                message: "Test rule".to_string(),
-            }],
+                message: "Test rule".to_string()
+            }]
         }];
 
         let result = service
@@ -130,8 +130,8 @@ mod tests {
                 operator: ConstraintOperator::MustNotUse,
                 value: serde_json::json!("test"),
                 severity: ConstraintSeverity::Warn,
-                message: "Test rule".to_string(),
-            }],
+                message: "Test rule".to_string()
+            }]
         }];
 
         let result = service
@@ -175,7 +175,7 @@ impl LlmService for MockLlmService {
     async fn analyze_drift(
         &self,
         content: &str,
-        policies: &[Policy],
+        policies: &[Policy]
     ) -> Result<ValidationResult, Self::Error> {
         let mut is_valid = true;
         let mut violations = Vec::new();
@@ -192,7 +192,7 @@ impl LlmService for MockLlmService {
                             "Semantic violation of rule {}: {}",
                             rule.id, rule.message
                         ),
-                        context: std::collections::HashMap::new(),
+                        context: std::collections::HashMap::new()
                     });
                 }
             }
@@ -200,7 +200,7 @@ impl LlmService for MockLlmService {
 
         Ok(ValidationResult {
             is_valid,
-            violations,
+            violations
         })
     }
 }

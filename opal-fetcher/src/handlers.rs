@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::entities::{
     AgentPermissionRow, CedarEntitiesResponse, HierarchyRow, UserPermissionRow, transform_agents,
-    transform_hierarchy, transform_users,
+    transform_hierarchy, transform_users
 };
 use crate::error::Result;
 use crate::state::AppState;
@@ -15,7 +15,7 @@ use crate::state::AppState;
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub status: String,
-    pub database: String,
+    pub database: String
 }
 
 /// Health check endpoint.
@@ -31,8 +31,8 @@ pub async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(HealthResponse {
                     status: "unhealthy".to_string(),
-                    database: "disconnected".to_string(),
-                }),
+                    database: "disconnected".to_string()
+                })
             );
         }
     };
@@ -41,8 +41,8 @@ pub async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         StatusCode::OK,
         Json(HealthResponse {
             status: "healthy".to_string(),
-            database: db_status.to_string(),
-        }),
+            database: db_status.to_string()
+        })
     )
 }
 
@@ -67,15 +67,15 @@ opal_fetcher_up 1
 
 /// GET /v1/hierarchy
 ///
-/// Returns the organizational hierarchy (Company → Organization → Team → Project)
-/// as Cedar entities for OPAL consumption.
+/// Returns the organizational hierarchy (Company → Organization → Team →
+/// Project) as Cedar entities for OPAL consumption.
 pub async fn get_hierarchy(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>
 ) -> Result<Json<CedarEntitiesResponse>> {
     tracing::debug!("Fetching organizational hierarchy");
 
     let rows: Vec<HierarchyRow> = sqlx::query_as(
-        r#"
+        r"
         SELECT
             company_id,
             company_slug,
@@ -91,7 +91,7 @@ pub async fn get_hierarchy(
             project_name,
             git_remote
         FROM v_hierarchy
-        "#,
+        "
     )
     .fetch_all(&state.pool)
     .await?;
@@ -117,7 +117,7 @@ pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<Json<CedarE
     tracing::debug!("Fetching user permissions");
 
     let rows: Vec<UserPermissionRow> = sqlx::query_as(
-        r#"
+        r"
         SELECT
             user_id,
             email,
@@ -132,7 +132,7 @@ pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<Json<CedarE
             org_slug,
             team_slug
         FROM v_user_permissions
-        "#,
+        "
     )
     .fetch_all(&state.pool)
     .await?;
@@ -150,12 +150,13 @@ pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<Json<CedarE
 
 /// GET /v1/agents
 ///
-/// Returns agents with their delegation chains and capabilities as Cedar entities.
+/// Returns agents with their delegation chains and capabilities as Cedar
+/// entities.
 pub async fn get_agents(State(state): State<Arc<AppState>>) -> Result<Json<CedarEntitiesResponse>> {
     tracing::debug!("Fetching agent permissions");
 
     let rows: Vec<AgentPermissionRow> = sqlx::query_as(
-        r#"
+        r"
         SELECT
             agent_id,
             agent_name,
@@ -172,7 +173,7 @@ pub async fn get_agents(State(state): State<Arc<AppState>>) -> Result<Json<Cedar
             delegating_user_email,
             delegating_user_name
         FROM v_agent_permissions
-        "#,
+        "
     )
     .fetch_all(&state.pool)
     .await?;
@@ -193,14 +194,14 @@ pub async fn get_agents(State(state): State<Arc<AppState>>) -> Result<Json<Cedar
 /// Returns all entities (hierarchy, users, agents) in a single response.
 /// Useful for initial full sync.
 pub async fn get_all_entities(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>
 ) -> Result<Json<CedarEntitiesResponse>> {
     tracing::debug!("Fetching all entities");
 
     // Fetch all entity types in parallel
     let (hierarchy_rows, user_rows, agent_rows) = tokio::try_join!(
         sqlx::query_as::<_, HierarchyRow>(
-            r#"
+            r"
             SELECT
                 company_id, company_slug, company_name,
                 org_id, org_slug, org_name,
@@ -208,21 +209,21 @@ pub async fn get_all_entities(
                 project_id, project_slug, project_name,
                 git_remote
             FROM v_hierarchy
-            "#
+            "
         )
         .fetch_all(&state.pool),
         sqlx::query_as::<_, UserPermissionRow>(
-            r#"
+            r"
             SELECT
                 user_id, email, user_name, user_status,
                 team_id, role, permissions,
                 org_id, company_id, company_slug, org_slug, team_slug
             FROM v_user_permissions
-            "#
+            "
         )
         .fetch_all(&state.pool),
         sqlx::query_as::<_, AgentPermissionRow>(
-            r#"
+            r"
             SELECT
                 agent_id, agent_name, agent_type,
                 delegated_by_user_id, delegated_by_agent_id, delegation_depth,
@@ -230,7 +231,7 @@ pub async fn get_all_entities(
                 allowed_team_ids, allowed_project_ids, agent_status,
                 delegating_user_email, delegating_user_name
             FROM v_agent_permissions
-            "#
+            "
         )
         .fetch_all(&state.pool),
     )?;
@@ -255,7 +256,7 @@ mod tests {
     fn test_health_response_serialization() {
         let response = HealthResponse {
             status: "healthy".to_string(),
-            database: "connected".to_string(),
+            database: "connected".to_string()
         };
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("healthy"));

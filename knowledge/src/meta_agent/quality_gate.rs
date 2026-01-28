@@ -8,7 +8,7 @@ use tracing::{info_span, warn};
 pub enum QualityGateType {
     Tests,
     Linter,
-    Coverage,
+    Coverage
 }
 
 impl std::fmt::Display for QualityGateType {
@@ -16,7 +16,7 @@ impl std::fmt::Display for QualityGateType {
         match self {
             QualityGateType::Tests => write!(f, "tests"),
             QualityGateType::Linter => write!(f, "linter"),
-            QualityGateType::Coverage => write!(f, "coverage"),
+            QualityGateType::Coverage => write!(f, "coverage")
         }
     }
 }
@@ -26,7 +26,7 @@ pub struct QualityGateResult {
     pub gate_type: QualityGateType,
     pub passed: bool,
     pub message: String,
-    pub duration_ms: u64,
+    pub duration_ms: u64
 }
 
 impl QualityGateResult {
@@ -35,7 +35,7 @@ impl QualityGateResult {
             gate_type,
             passed: true,
             message: message.into(),
-            duration_ms,
+            duration_ms
         }
     }
 
@@ -44,7 +44,7 @@ impl QualityGateResult {
             gate_type,
             passed: false,
             message: message.into(),
-            duration_ms,
+            duration_ms
         }
     }
 }
@@ -53,7 +53,7 @@ impl QualityGateResult {
 pub struct LinterConfig {
     pub program: String,
     pub args: Vec<String>,
-    pub timeout_secs: u64,
+    pub timeout_secs: u64
 }
 
 impl Default for LinterConfig {
@@ -66,7 +66,7 @@ impl Default for LinterConfig {
                 "-D".to_string(),
                 "warnings".to_string(),
             ],
-            timeout_secs: 120,
+            timeout_secs: 120
         }
     }
 }
@@ -76,7 +76,7 @@ pub struct CoverageConfig {
     pub program: String,
     pub args: Vec<String>,
     pub threshold_percent: f64,
-    pub timeout_secs: u64,
+    pub timeout_secs: u64
 }
 
 impl Default for CoverageConfig {
@@ -89,7 +89,7 @@ impl Default for CoverageConfig {
                 "Json".to_string(),
             ],
             threshold_percent: 80.0,
-            timeout_secs: 300,
+            timeout_secs: 300
         }
     }
 }
@@ -98,7 +98,7 @@ impl Default for CoverageConfig {
 pub struct QualityGateConfig {
     pub linter: Option<LinterConfig>,
     pub coverage: Option<CoverageConfig>,
-    pub require_all_gates: bool,
+    pub require_all_gates: bool
 }
 
 impl QualityGateConfig {
@@ -122,7 +122,7 @@ impl QualityGateConfig {
 pub struct QualityGateSummary {
     pub gates: Vec<QualityGateResult>,
     pub all_passed: bool,
-    pub total_duration_ms: u64,
+    pub total_duration_ms: u64
 }
 
 impl QualityGateSummary {
@@ -132,7 +132,7 @@ impl QualityGateSummary {
         Self {
             gates,
             all_passed,
-            total_duration_ms,
+            total_duration_ms
         }
     }
 
@@ -181,7 +181,7 @@ impl QualityGateSummary {
 }
 
 pub struct QualityGateEvaluator {
-    config: QualityGateConfig,
+    config: QualityGateConfig
 }
 
 impl QualityGateEvaluator {
@@ -213,7 +213,7 @@ impl QualityGateEvaluator {
 
         let result = timeout(
             Duration::from_secs(linter_config.timeout_secs),
-            cmd.output(),
+            cmd.output()
         )
         .await;
 
@@ -225,7 +225,7 @@ impl QualityGateEvaluator {
                     Some(QualityGateResult::pass(
                         QualityGateType::Linter,
                         "Linter passed with no warnings",
-                        duration_ms,
+                        duration_ms
                     ))
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -237,7 +237,7 @@ impl QualityGateEvaluator {
                     Some(QualityGateResult::fail(
                         QualityGateType::Linter,
                         message,
-                        duration_ms,
+                        duration_ms
                     ))
                 }
             }
@@ -246,14 +246,14 @@ impl QualityGateEvaluator {
                 Some(QualityGateResult::fail(
                     QualityGateType::Linter,
                     format!("Failed to run linter: {e}"),
-                    duration_ms,
+                    duration_ms
                 ))
             }
             Err(_) => Some(QualityGateResult::fail(
                 QualityGateType::Linter,
                 "Linter timed out",
-                duration_ms,
-            )),
+                duration_ms
+            ))
         }
     }
 
@@ -274,7 +274,7 @@ impl QualityGateEvaluator {
 
         let result = timeout(
             Duration::from_secs(coverage_config.timeout_secs),
-            cmd.output(),
+            cmd.output()
         )
         .await;
 
@@ -293,7 +293,7 @@ impl QualityGateEvaluator {
                                 "Coverage {:.1}% >= {:.1}% threshold",
                                 pct, coverage_config.threshold_percent
                             ),
-                            duration_ms,
+                            duration_ms
                         ))
                     }
                     Some(pct) => Some(QualityGateResult::fail(
@@ -302,20 +302,20 @@ impl QualityGateEvaluator {
                             "Coverage {:.1}% < {:.1}% threshold",
                             pct, coverage_config.threshold_percent
                         ),
-                        duration_ms,
+                        duration_ms
                     )),
                     None => {
                         if output.status.success() {
                             Some(QualityGateResult::pass(
                                 QualityGateType::Coverage,
                                 "Coverage check passed (no percentage parsed)",
-                                duration_ms,
+                                duration_ms
                             ))
                         } else {
                             Some(QualityGateResult::fail(
                                 QualityGateType::Coverage,
                                 "Coverage check failed",
-                                duration_ms,
+                                duration_ms
                             ))
                         }
                     }
@@ -326,14 +326,14 @@ impl QualityGateEvaluator {
                 Some(QualityGateResult::fail(
                     QualityGateType::Coverage,
                     format!("Failed to run coverage: {e}"),
-                    duration_ms,
+                    duration_ms
                 ))
             }
             Err(_) => Some(QualityGateResult::fail(
                 QualityGateType::Coverage,
                 "Coverage check timed out",
-                duration_ms,
-            )),
+                duration_ms
+            ))
         }
     }
 
@@ -346,14 +346,14 @@ impl QualityGateEvaluator {
             let line = line.trim();
 
             // JSON format: "coverage": 85.5
-            if line.contains("\"coverage\"") || line.contains("\"line_coverage\"") {
-                if let Some(idx) = line.find(':') {
-                    let value_part = line[idx + 1..]
-                        .trim()
-                        .trim_matches(|c| c == ',' || c == '"');
-                    if let Ok(pct) = value_part.parse::<f64>() {
-                        return Some(pct);
-                    }
+            if (line.contains("\"coverage\"") || line.contains("\"line_coverage\""))
+                && let Some(idx) = line.find(':')
+            {
+                let value_part = line[idx + 1..]
+                    .trim()
+                    .trim_matches(|c| c == ',' || c == '"');
+                if let Ok(pct) = value_part.parse::<f64>() {
+                    return Some(pct);
                 }
             }
 
@@ -472,7 +472,7 @@ mod tests {
         let all_pass = QualityGateSummary::from_results(vec![QualityGateResult::pass(
             QualityGateType::Tests,
             "pass",
-            0,
+            0
         )]);
         assert!(evaluator.can_commit(&all_pass));
 
@@ -557,7 +557,7 @@ mod tests {
         let config = QualityGateConfig::default().with_linter(LinterConfig {
             program: "sh".to_string(),
             args: vec!["-c".to_string(), "exit 0".to_string()],
-            timeout_secs: 2,
+            timeout_secs: 2
         });
         let evaluator = QualityGateEvaluator::new(config);
         let result = evaluator.run_linter().await.unwrap();
@@ -570,7 +570,7 @@ mod tests {
         let config = QualityGateConfig::default().with_linter(LinterConfig {
             program: "sh".to_string(),
             args: vec!["-c".to_string(), "echo 'warning' >&2 && exit 1".to_string()],
-            timeout_secs: 2,
+            timeout_secs: 2
         });
         let evaluator = QualityGateEvaluator::new(config);
         let result = evaluator.run_linter().await.unwrap();
@@ -594,7 +594,7 @@ mod tests {
         let config = QualityGateConfig::default().with_linter(LinterConfig {
             program: "sh".to_string(),
             args: vec!["-c".to_string(), "exit 0".to_string()],
-            timeout_secs: 2,
+            timeout_secs: 2
         });
         let evaluator = QualityGateEvaluator::new(config);
 

@@ -6,8 +6,8 @@
 //! 1. Explicit overrides (CLI flags, API params)
 //! 2. Environment variables (`AETERNA_*`)
 //! 3. Context file (`.aeterna/context.toml`)
-//! 4. Git remote URL -> project_id
-//! 5. Git config user.email -> user_id
+//! 4. Git remote URL -> `project_id`
+//! 5. Git config user.email -> `user_id`
 //! 6. Organization defaults (future: from server)
 //! 7. System defaults ("default"/"default")
 //!
@@ -33,9 +33,9 @@ mod types;
 
 pub use cedar::{
     AccessibleLayers, AuthorizationDecision, AuthorizationDiagnostics, AuthorizationRequest,
-    AuthorizationResponse, CedarClient, CedarConfig, CedarError, Entity, EntityUid,
+    AuthorizationResponse, CedarClient, CedarConfig, CedarError, Entity, EntityUid
 };
 pub use resolver::{CedarContextResolver, ContextError, ContextResolver};
 pub use types::{
-    ContextConfig, ContextSource, ResolvedContext, ResolvedValue, ServerConfig, StorageConfig,
+    ContextConfig, ContextSource, ResolvedContext, ResolvedValue, ServerConfig, StorageConfig
 };

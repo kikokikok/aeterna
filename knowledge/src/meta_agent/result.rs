@@ -3,13 +3,13 @@ use storage::postgres::{PostgresBackend, PostgresError};
 
 use super::{
     BuildResult, MetaAgentFailureReport, MetaAgentLoopResult, MetaAgentSuccessReport,
-    MetaAgentTelemetry, TestResult,
+    MetaAgentTelemetry, TestResult
 };
 
 #[derive(Debug, Clone)]
 pub struct ResultHandlingConfig {
     pub commit_message_template: String,
-    pub pr_hint_template: String,
+    pub pr_hint_template: String
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -18,14 +18,14 @@ pub enum ResultHandlingError {
     Storage(#[from] PostgresError),
 
     #[error("Missing failure details")]
-    MissingFailureDetails,
+    MissingFailureDetails
 }
 
 impl Default for ResultHandlingConfig {
     fn default() -> Self {
         Self {
             commit_message_template: "chore: apply changes for {summary}".to_string(),
-            pr_hint_template: "Create PR for {summary}".to_string(),
+            pr_hint_template: "Create PR for {summary}".to_string()
         }
     }
 }
@@ -33,14 +33,14 @@ impl Default for ResultHandlingConfig {
 pub struct ResultHandler {
     config: ResultHandlingConfig,
     telemetry: crate::meta_agent::MetaAgentTelemetrySink,
-    storage: Option<std::sync::Arc<PostgresBackend>>,
+    storage: Option<std::sync::Arc<PostgresBackend>>
 }
 
 #[derive(Debug, Clone)]
 pub struct FailureContext {
     pub tenant_id: String,
     pub signature: ErrorSignature,
-    pub resolutions: Vec<Resolution>,
+    pub resolutions: Vec<Resolution>
 }
 
 #[derive(Debug, Clone)]
@@ -48,8 +48,8 @@ pub enum ResultHandlingOutcome {
     Success(MetaAgentSuccessReport),
     Failure {
         report: MetaAgentFailureReport,
-        hindsight: Option<HindsightNote>,
-    },
+        hindsight: Option<HindsightNote>
+    }
 }
 
 impl ResultHandler {
@@ -57,7 +57,7 @@ impl ResultHandler {
         Self {
             config,
             telemetry: crate::meta_agent::MetaAgentTelemetrySink,
-            storage: None,
+            storage: None
         }
     }
 
@@ -74,7 +74,7 @@ impl ResultHandler {
         &self,
         build: &BuildResult,
         test: &TestResult,
-        iterations: u32,
+        iterations: u32
     ) -> MetaAgentSuccessReport {
         let summary = summarize(build, test, iterations);
         let commit_message_hint = self
@@ -86,7 +86,7 @@ impl ResultHandler {
         MetaAgentSuccessReport {
             summary,
             commit_message_hint,
-            pr_hint,
+            pr_hint
         }
     }
 
@@ -117,12 +117,12 @@ impl ResultHandler {
                 }
                 report
             }
-            _ => String::new(),
+            _ => String::new()
         };
 
         MetaAgentFailureReport {
             summary,
-            detailed_report,
+            detailed_report
         }
     }
 
@@ -135,7 +135,7 @@ impl ResultHandler {
         tenant_id: &str,
         signature: ErrorSignature,
         resolutions: Vec<Resolution>,
-        report: &MetaAgentFailureReport,
+        report: &MetaAgentFailureReport
     ) -> Result<HindsightNote, ResultHandlingError> {
         let note = self.build_failure_hindsight(signature, resolutions, report);
         let storage = self
@@ -151,13 +151,13 @@ impl ResultHandler {
             MetaAgentLoopResult::Success { iterations, .. } => {
                 self.telemetry.record(&MetaAgentTelemetry {
                     iterations: *iterations,
-                    success: true,
+                    success: true
                 });
             }
             MetaAgentLoopResult::Failure { state } => {
                 self.telemetry.record(&MetaAgentTelemetry {
                     iterations: state.iterations,
-                    success: false,
+                    success: false
                 });
             }
         }
@@ -166,14 +166,14 @@ impl ResultHandler {
     pub async fn handle_result(
         &self,
         result: &MetaAgentLoopResult,
-        failure: Option<FailureContext>,
+        failure: Option<FailureContext>
     ) -> Result<ResultHandlingOutcome, ResultHandlingError> {
         self.emit_telemetry(result);
         match result {
             MetaAgentLoopResult::Success {
                 build,
                 test,
-                iterations,
+                iterations
             } => {
                 let report = self.handle_success_with_iterations(build, test, *iterations);
                 Ok(ResultHandlingOutcome::Success(report))
@@ -186,9 +186,9 @@ impl ResultHandler {
                             &failure.tenant_id,
                             failure.signature,
                             failure.resolutions,
-                            &report,
+                            &report
                         )
-                        .await?,
+                        .await?
                     )
                 } else {
                     None
@@ -202,7 +202,7 @@ impl ResultHandler {
         &self,
         signature: ErrorSignature,
         resolutions: Vec<mk_core::types::Resolution>,
-        report: &MetaAgentFailureReport,
+        report: &MetaAgentFailureReport
     ) -> HindsightNote {
         let now = chrono::Utc::now().timestamp();
         HindsightNote {
@@ -212,7 +212,7 @@ impl ResultHandler {
             content: report.detailed_report.clone(),
             tags: vec!["meta-agent".to_string(), "failure".to_string()],
             created_at: now,
-            updated_at: now,
+            updated_at: now
         }
     }
 }
@@ -225,7 +225,7 @@ fn summarize(build: &BuildResult, test: &TestResult, iterations: u32) -> String 
     summary.push_str(match test.status {
         super::TestStatus::Pass => "pass",
         super::TestStatus::Fail => "fail",
-        super::TestStatus::Timeout => "timeout",
+        super::TestStatus::Timeout => "timeout"
     });
     if !build.notes.is_empty() {
         summary.push_str(", notes");
@@ -238,7 +238,7 @@ fn failure_summary(result: &MetaAgentLoopResult) -> String {
         MetaAgentLoopResult::Failure { state } => {
             format!("iterations: {}, failed", state.iterations)
         }
-        _ => "".to_string(),
+        _ => "".to_string()
     }
 }
 
@@ -254,12 +254,12 @@ mod tests {
             output: "done".to_string(),
             notes: vec!["note".to_string()],
             hindsight: vec![],
-            tokens_used: 10,
+            tokens_used: 10
         };
         let test = TestResult {
             status: super::super::TestStatus::Pass,
             output: "ok".to_string(),
-            duration_ms: 1,
+            duration_ms: 1
         };
         let report = handler.handle_success_with_iterations(&build, &test, 2);
         assert!(report.commit_message_hint.contains("iterations: 2"));
@@ -275,12 +275,12 @@ mod tests {
             output: "build".to_string(),
             notes: vec![],
             hindsight: vec![],
-            tokens_used: 1,
+            tokens_used: 1
         });
         state.last_test = Some(TestResult {
             status: super::super::TestStatus::Fail,
             output: "fail".to_string(),
-            duration_ms: 1,
+            duration_ms: 1
         });
         let result = MetaAgentLoopResult::Failure { state };
         let report = handler.handle_failure(&result);
@@ -295,11 +295,11 @@ mod tests {
             message_pattern: "fail".to_string(),
             stack_patterns: vec![],
             context_patterns: vec![],
-            embedding: None,
+            embedding: None
         };
         let report = MetaAgentFailureReport {
             summary: "failed".to_string(),
-            detailed_report: "details".to_string(),
+            detailed_report: "details".to_string()
         };
         let note = handler.build_failure_hindsight(
             signature,
@@ -310,9 +310,9 @@ mod tests {
                 changes: vec![],
                 success_rate: 0.0,
                 application_count: 0,
-                last_success_at: 0,
+                last_success_at: 0
             }],
-            &report,
+            &report
         );
         assert!(note.content.contains("details"));
     }
@@ -328,7 +328,7 @@ mod tests {
                 assert!(report.summary.contains("failed"));
                 assert!(hindsight.is_none());
             }
-            _ => panic!("Expected failure outcome"),
+            _ => panic!("Expected failure outcome")
         }
     }
 
@@ -339,17 +339,17 @@ mod tests {
             output: "done".to_string(),
             notes: vec![],
             hindsight: vec![],
-            tokens_used: 1,
+            tokens_used: 1
         };
         let test = TestResult {
             status: super::super::TestStatus::Pass,
             output: "ok".to_string(),
-            duration_ms: 1,
+            duration_ms: 1
         };
         let result = MetaAgentLoopResult::Success {
             build,
             test,
-            iterations: 1,
+            iterations: 1
         };
         handler.emit_telemetry(&result);
     }

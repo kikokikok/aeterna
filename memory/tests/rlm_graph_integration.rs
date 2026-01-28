@@ -1,6 +1,7 @@
 use knowledge::governance::GovernanceEngine;
 use knowledge::manager::KnowledgeManager;
 use knowledge::repository::GitRepository;
+#[cfg(feature = "llm-integration")]
 use memory::llm::mock::MockLlmService;
 use memory::manager::MemoryManager;
 use mk_core::traits::MemoryProviderAdapter;
@@ -14,7 +15,7 @@ pub fn test_ctx() -> TenantContext {
     use std::str::FromStr;
     TenantContext::new(
         TenantId::from_str("test-tenant").unwrap(),
-        UserId::from_str("test-user").unwrap(),
+        UserId::from_str("test-user").unwrap()
     )
 }
 
@@ -23,14 +24,14 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
 {
     let graph_store = Arc::new(
         DuckDbGraphStore::new(DuckDbGraphConfig::default())
-            .expect("Failed to create DuckDB graph store"),
+            .expect("Failed to create DuckDB graph store")
     );
 
     let repo = Arc::new(GitRepository::new_mock());
     let governance = Arc::new(GovernanceEngine::new());
     let km = Arc::new(KnowledgeManager::new(repo, governance));
 
-    let llm_service = MockLlmService::new();
+    let llm_service = memory::llm::mock::MockLlmService::new();
 
     let action1 = r#"{"SearchLayer": {"layer": "project", "query": "bridge"}}"#;
     let action2 = r#"{"DrillDown": {"memory_id": "mem1", "query": "target"}}"#;
@@ -48,13 +49,13 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
 
     let manager = MemoryManager::new()
         .with_embedding_service(Arc::new(
-            memory::embedding::mock::MockEmbeddingService::new(1536),
+            memory::embedding::mock::MockEmbeddingService::new(1536)
         ))
         .with_config(config::MemoryConfig {
             rlm: config::RlmConfig {
                 enabled: true,
                 max_steps: 5,
-                complexity_threshold: 0.1,
+                complexity_threshold: 0.1
             },
             ..Default::default()
         })
@@ -78,9 +79,9 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
             metadata: std::collections::HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0,
+            updated_at: 0
         },
-        "add mem1",
+        "add mem1"
     )
     .await?;
 
@@ -91,8 +92,8 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
                 id: "mem1".to_string(),
                 label: "Memory".to_string(),
                 properties: serde_json::json!({}),
-                tenant_id: ctx.tenant_id.to_string(),
-            },
+                tenant_id: ctx.tenant_id.to_string()
+            }
         )
         .await?;
 
@@ -103,8 +104,8 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
                 id: "mem2".to_string(),
                 label: "target".to_string(),
                 properties: serde_json::json!({}),
-                tenant_id: ctx.tenant_id.to_string(),
-            },
+                tenant_id: ctx.tenant_id.to_string()
+            }
         )
         .await?;
 
@@ -117,8 +118,8 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
                 target_id: "mem2".to_string(),
                 relation: "RELATES_TO".to_string(),
                 properties: serde_json::json!({}),
-                tenant_id: ctx.tenant_id.to_string(),
-            },
+                tenant_id: ctx.tenant_id.to_string()
+            }
         )
         .await?;
 
@@ -136,7 +137,7 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
                 layer: MemoryLayer::Project,
                 importance_score: Some(0.5),
                 ..Default::default()
-            },
+            }
         )
         .await?;
 
@@ -149,7 +150,7 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
                 layer: MemoryLayer::Project,
                 importance_score: Some(0.5),
                 ..Default::default()
-            },
+            }
         )
         .await?;
 
@@ -159,7 +160,7 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
             "compare the bridge and target relationships summarize",
             1,
             0.0,
-            HashMap::new(),
+            HashMap::new()
         )
         .await?;
 

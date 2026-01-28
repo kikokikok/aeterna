@@ -23,7 +23,7 @@ pub enum UserCommand {
     Whoami(UserWhoamiArgs),
 
     #[command(about = "Invite a user to join organization/team")]
-    Invite(UserInviteArgs),
+    Invite(UserInviteArgs)
 }
 
 #[derive(Args)]
@@ -44,7 +44,7 @@ pub struct UserRegisterArgs {
     pub json: bool,
 
     #[arg(long)]
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 #[derive(Args)]
@@ -62,7 +62,7 @@ pub struct UserListArgs {
     pub all: bool,
 
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -73,7 +73,7 @@ pub struct UserShowArgs {
     pub verbose: bool,
 
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -94,13 +94,13 @@ pub struct UserRolesArgs {
     pub scope: Option<String>,
 
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
 pub struct UserWhoamiArgs {
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -126,7 +126,7 @@ pub struct UserInviteArgs {
     pub json: bool,
 
     #[arg(long)]
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 pub async fn run(cmd: UserCommand) -> anyhow::Result<()> {
@@ -136,7 +136,7 @@ pub async fn run(cmd: UserCommand) -> anyhow::Result<()> {
         UserCommand::Show(args) => run_show(args).await,
         UserCommand::Roles(args) => run_roles(args).await,
         UserCommand::Whoami(args) => run_whoami(args).await,
-        UserCommand::Invite(args) => run_invite(args).await,
+        UserCommand::Invite(args) => run_invite(args).await
     }
 }
 
@@ -160,7 +160,7 @@ async fn run_register(args: UserRegisterArgs) -> anyhow::Result<()> {
                 let mut chars = w.chars();
                 match chars.next() {
                     None => String::new(),
-                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str()
                 }
             })
             .collect::<Vec<_>>()
@@ -191,19 +191,19 @@ async fn run_register(args: UserRegisterArgs) -> anyhow::Result<()> {
         } else {
             output::header("User Registration (Dry Run)");
             println!();
-            println!("  Email: {}", email);
-            println!("  Name:  {}", display_name);
+            println!("  Email: {email}");
+            println!("  Name:  {display_name}");
             if let Some(ref org) = args.org {
-                println!("  Org:   {}", org);
+                println!("  Org:   {org}");
             }
             if let Some(ref team) = args.team {
-                println!("  Team:  {}", team);
+                println!("  Team:  {team}");
             }
             println!();
 
             output::header("What Would Happen");
-            println!("  1. Create user account for '{}'", email);
-            println!("  2. Set display name to '{}'", display_name);
+            println!("  1. Create user account for '{email}'");
+            println!("  2. Set display name to '{display_name}'");
             if args.org.is_some() || args.team.is_some() {
                 println!("  3. Request membership in specified org/team");
                 println!("  4. Wait for admin approval (if required)");
@@ -259,13 +259,13 @@ async fn run_list(args: UserListArgs) -> anyhow::Result<()> {
         }
 
         if let Some(ref org) = args.org {
-            println!("  Filter: org = {}", org);
+            println!("  Filter: org = {org}");
         }
         if let Some(ref team) = args.team {
-            println!("  Filter: team = {}", team);
+            println!("  Filter: team = {team}");
         }
         if let Some(ref role) = args.role {
-            println!("  Filter: role = {}", role);
+            println!("  Filter: role = {role}");
         }
         println!();
 
@@ -305,7 +305,7 @@ async fn run_show(args: UserShowArgs) -> anyhow::Result<()> {
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        output::header(&format!("User: {}", user_id));
+        output::header(&format!("User: {user_id}"));
         println!();
 
         output::header("Would Show");
@@ -344,12 +344,11 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
     if let Some(ref role_to_grant) = args.grant {
         let valid_roles = ["developer", "techlead", "architect", "admin"];
         if !valid_roles.contains(&role_to_grant.to_lowercase().as_str()) {
-            let err = ux_error::UxError::new(format!("Invalid role: '{}'", role_to_grant))
+            let err = ux_error::UxError::new(format!("Invalid role: '{role_to_grant}'"))
                 .why("Role must be one of the predefined governance roles")
                 .fix("Use one of: developer, techlead, architect, admin")
-                .suggest(&format!(
-                    "aeterna user roles --user {} --grant developer",
-                    user_id
+                .suggest(format!(
+                    "aeterna user roles --user {user_id} --grant developer"
                 ));
             err.display();
             return Err(anyhow::anyhow!("Invalid role"));
@@ -369,17 +368,14 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
         } else {
             output::header("Grant Role");
             println!();
-            println!("  User:  {}", user_id);
-            println!("  Role:  {}", role_to_grant);
-            println!("  Scope: {}", scope);
+            println!("  User:  {user_id}");
+            println!("  Role:  {role_to_grant}");
+            println!("  Scope: {scope}");
             println!();
 
             output::header("Would Do");
             println!("  1. Verify your admin permissions");
-            println!(
-                "  2. Grant '{}' role to '{}' at {} level",
-                role_to_grant, user_id, scope
-            );
+            println!("  2. Grant '{role_to_grant}' role to '{user_id}' at {scope} level");
             println!("  3. Update Cedar policies");
             println!("  4. Log audit event");
             println!();
@@ -405,17 +401,14 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
         } else {
             output::header("Revoke Role");
             println!();
-            println!("  User:  {}", user_id);
-            println!("  Role:  {}", role_to_revoke);
-            println!("  Scope: {}", scope);
+            println!("  User:  {user_id}");
+            println!("  Role:  {role_to_revoke}");
+            println!("  Scope: {scope}");
             println!();
 
             output::header("Would Do");
             println!("  1. Verify your admin permissions");
-            println!(
-                "  2. Revoke '{}' role from '{}' at {} level",
-                role_to_revoke, user_id, scope
-            );
+            println!("  2. Revoke '{role_to_revoke}' role from '{user_id}' at {scope} level");
             println!("  3. Update Cedar policies");
             println!("  4. Log audit event");
             println!();
@@ -437,7 +430,7 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        output::header(&format!("Roles for: {}", user_id));
+        output::header(&format!("Roles for: {user_id}"));
         println!();
 
         output::header("Example Output (would show)");
@@ -456,12 +449,10 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
 
         output::header("Actions");
         println!(
-            "  Grant role:  aeterna user roles --user {} --grant <role> --scope <scope>",
-            user_id
+            "  Grant role:  aeterna user roles --user {user_id} --grant <role> --scope <scope>"
         );
         println!(
-            "  Revoke role: aeterna user roles --user {} --revoke <role> --scope <scope>",
-            user_id
+            "  Revoke role: aeterna user roles --user {user_id} --revoke <role> --scope <scope>"
         );
         println!();
 
@@ -547,7 +538,7 @@ async fn run_invite(args: UserInviteArgs) -> anyhow::Result<()> {
         let err = ux_error::UxError::new(format!("Invalid role: '{}'", args.role))
             .why("Role must be one of the predefined governance roles")
             .fix("Use one of: developer, techlead, architect, admin")
-            .suggest(&format!(
+            .suggest(format!(
                 "aeterna user invite {} --role developer",
                 args.email
             ));
@@ -602,13 +593,13 @@ async fn run_invite(args: UserInviteArgs) -> anyhow::Result<()> {
             output::header("User Invitation (Dry Run)");
             println!();
             println!("  Inviting: {}", args.email);
-            println!("  To Org:   {}", org_name);
+            println!("  To Org:   {org_name}");
             if let Some(ref team) = target_team {
-                println!("  To Team:  {}", team);
+                println!("  To Team:  {team}");
             }
-            println!("  Role:     {}", role_lower);
+            println!("  Role:     {role_lower}");
             if let Some(ref msg) = args.message {
-                println!("  Message:  \"{}\"", msg);
+                println!("  Message:  \"{msg}\"");
             }
             println!();
 
@@ -620,10 +611,7 @@ async fn run_invite(args: UserInviteArgs) -> anyhow::Result<()> {
             println!();
 
             output::header("Invitation Email Preview");
-            println!(
-                "  Subject: You've been invited to join {} on Aeterna",
-                org_name
-            );
+            println!("  Subject: You've been invited to join {org_name} on Aeterna");
             println!();
             println!("  Body:");
             println!("  ----");
@@ -632,13 +620,13 @@ async fn run_invite(args: UserInviteArgs) -> anyhow::Result<()> {
                 resolved.user_id.value, org_name
             );
             if let Some(ref team) = target_team {
-                println!("  You will be added to the '{}' team.", team);
+                println!("  You will be added to the '{team}' team.");
             }
-            println!("  Your initial role will be: {}", role_lower);
+            println!("  Your initial role will be: {role_lower}");
             if let Some(ref msg) = args.message {
                 println!();
                 println!("  Personal message:");
-                println!("  \"{}\"", msg);
+                println!("  \"{msg}\"");
             }
             println!();
             println!("  Click here to accept: https://aeterna.example.com/invite/abc123...");
@@ -647,11 +635,11 @@ async fn run_invite(args: UserInviteArgs) -> anyhow::Result<()> {
 
             output::header("After Acceptance");
             println!("  - User account created for '{}'", args.email);
-            println!("  - Membership granted to '{}'", org_name);
+            println!("  - Membership granted to '{org_name}'");
             if let Some(ref team) = target_team {
-                println!("  - Added to team '{}'", team);
+                println!("  - Added to team '{team}'");
             }
-            println!("  - Role '{}' assigned at appropriate scope", role_lower);
+            println!("  - Role '{role_lower}' assigned at appropriate scope");
             println!();
 
             output::info("Dry run mode - invitation not sent.");
@@ -664,11 +652,11 @@ async fn run_invite(args: UserInviteArgs) -> anyhow::Result<()> {
         output::header("Confirm Invitation");
         println!();
         println!("  Email:    {}", args.email);
-        println!("  Org:      {}", org_name);
+        println!("  Org:      {org_name}");
         if let Some(ref team) = target_team {
-            println!("  Team:     {}", team);
+            println!("  Team:     {team}");
         }
-        println!("  Role:     {}", role_lower);
+        println!("  Role:     {role_lower}");
         println!();
 
         output::warn("This will send an invitation email to the user.");
@@ -701,11 +689,11 @@ async fn run_invite(args: UserInviteArgs) -> anyhow::Result<()> {
         output::header("Send Invitation");
         println!();
         println!("  Email:    {}", args.email);
-        println!("  Org:      {}", org_name);
+        println!("  Org:      {org_name}");
         if let Some(ref team) = target_team {
-            println!("  Team:     {}", team);
+            println!("  Team:     {team}");
         }
-        println!("  Role:     {}", role_lower);
+        println!("  Role:     {role_lower}");
         println!();
 
         output::header("Would Do");
@@ -740,7 +728,7 @@ fn generate_invitation_id() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis();
-    format!("{:x}", now)
+    format!("{now:x}")
 }
 
 #[cfg(test)]
@@ -755,7 +743,7 @@ mod tests {
             org: None,
             team: None,
             json: false,
-            dry_run: false,
+            dry_run: false
         };
         assert!(args.email.is_none());
         assert!(args.name.is_none());
@@ -773,7 +761,7 @@ mod tests {
             org: Some("platform-eng".to_string()),
             team: Some("api-team".to_string()),
             json: true,
-            dry_run: true,
+            dry_run: true
         };
         assert_eq!(args.email, Some("alice@example.com".to_string()));
         assert_eq!(args.name, Some("Alice Smith".to_string()));
@@ -790,7 +778,7 @@ mod tests {
             team: None,
             role: None,
             all: false,
-            json: false,
+            json: false
         };
         assert!(args.org.is_none());
         assert!(args.team.is_none());
@@ -806,7 +794,7 @@ mod tests {
             team: Some("backend".to_string()),
             role: Some("developer".to_string()),
             all: true,
-            json: true,
+            json: true
         };
         assert_eq!(args.org, Some("engineering".to_string()));
         assert_eq!(args.team, Some("backend".to_string()));
@@ -819,7 +807,7 @@ mod tests {
         let args = UserShowArgs {
             user_id: None,
             verbose: false,
-            json: false,
+            json: false
         };
         assert!(args.user_id.is_none());
         assert!(!args.verbose);
@@ -831,7 +819,7 @@ mod tests {
         let args = UserShowArgs {
             user_id: Some("alice@example.com".to_string()),
             verbose: true,
-            json: true,
+            json: true
         };
         assert_eq!(args.user_id, Some("alice@example.com".to_string()));
         assert!(args.verbose);
@@ -845,7 +833,7 @@ mod tests {
             grant: None,
             revoke: None,
             scope: None,
-            json: false,
+            json: false
         };
         assert!(args.list);
         assert!(args.grant.is_none());
@@ -860,7 +848,7 @@ mod tests {
             grant: Some("techlead".to_string()),
             revoke: None,
             scope: Some("api-team".to_string()),
-            json: true,
+            json: true
         };
         assert_eq!(args.user, Some("bob@example.com".to_string()));
         assert_eq!(args.grant, Some("techlead".to_string()));
@@ -875,7 +863,7 @@ mod tests {
             grant: None,
             revoke: Some("admin".to_string()),
             scope: Some("company".to_string()),
-            json: false,
+            json: false
         };
         assert_eq!(args.revoke, Some("admin".to_string()));
     }
@@ -899,7 +887,7 @@ mod tests {
             message: None,
             yes: false,
             json: false,
-            dry_run: false,
+            dry_run: false
         };
         assert_eq!(args.email, "newuser@example.com");
         assert_eq!(args.role, "developer");
@@ -917,7 +905,7 @@ mod tests {
             message: Some("Welcome to the team!".to_string()),
             yes: true,
             json: true,
-            dry_run: true,
+            dry_run: true
         };
         assert_eq!(args.email, "carol@example.com");
         assert_eq!(args.org, Some("product-eng".to_string()));
@@ -949,7 +937,7 @@ mod tests {
         let valid_emails = [
             "user@example.com",
             "alice.smith@company.org",
-            "bob+tag@domain.co.uk",
+            "bob+tag@domain.co.uk"
         ];
         for email in valid_emails {
             assert!(
@@ -1009,7 +997,7 @@ mod tests {
             org: None,
             team: None,
             json: false,
-            dry_run: false,
+            dry_run: false
         };
         assert!(args.email.is_some());
         assert!(args.name.is_none());
@@ -1022,7 +1010,7 @@ mod tests {
             team: None,
             role: None,
             all: true,
-            json: false,
+            json: false
         };
         assert!(args.all);
     }
@@ -1035,7 +1023,7 @@ mod tests {
             grant: None,
             revoke: None,
             scope: None,
-            json: false,
+            json: false
         };
         assert!(!args.list);
         assert!(args.grant.is_none());
@@ -1052,7 +1040,7 @@ mod tests {
                 grant: Some("developer".to_string()),
                 revoke: None,
                 scope: Some(scope.to_string()),
-                json: false,
+                json: false
             };
             assert_eq!(args.scope, Some(scope.to_string()));
         }
@@ -1070,7 +1058,7 @@ mod tests {
                 message: None,
                 yes: true,
                 json: false,
-                dry_run: false,
+                dry_run: false
             };
             assert_eq!(args.role, role);
         }
@@ -1086,7 +1074,7 @@ mod tests {
             message: Some("Please join our team for the Q1 project".to_string()),
             yes: false,
             json: false,
-            dry_run: false,
+            dry_run: false
         };
         assert!(args.message.is_some());
         assert!(args.message.unwrap().len() > 10);
@@ -1097,7 +1085,7 @@ mod tests {
         let args = UserShowArgs {
             user_id: Some("detailed-user@example.com".to_string()),
             verbose: true,
-            json: false,
+            json: false
         };
         assert!(args.verbose);
         assert!(!args.json);
@@ -1110,7 +1098,7 @@ mod tests {
             team: None,
             role: None,
             all: false,
-            json: false,
+            json: false
         };
         assert!(args.org.is_some());
         assert!(args.team.is_none());
@@ -1124,7 +1112,7 @@ mod tests {
             team: Some("frontend".to_string()),
             role: None,
             all: false,
-            json: false,
+            json: false
         };
         assert!(args.team.is_some());
         assert!(args.org.is_none());
@@ -1137,7 +1125,7 @@ mod tests {
             team: None,
             role: Some("admin".to_string()),
             all: false,
-            json: true,
+            json: true
         };
         assert!(args.role.is_some());
         assert!(args.json);
