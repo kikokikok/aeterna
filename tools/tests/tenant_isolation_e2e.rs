@@ -18,7 +18,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         ctx: &TenantContext,
         _action: &str,
-        _resource: &str,
+        _resource: &str
     ) -> anyhow::Result<bool> {
         let tenant_id = ctx.tenant_id.as_str();
         let user_id = ctx.user_id.as_str();
@@ -38,7 +38,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: Role
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -46,7 +46,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: Role
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -62,14 +62,14 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: TenantContext,
         _key: &str,
-        _value: &[u8],
+        _value: &[u8]
     ) -> Result<(), Self::Error> {
         Ok(())
     }
     async fn retrieve(
         &self,
         _ctx: TenantContext,
-        _key: &str,
+        _key: &str
     ) -> Result<Option<Vec<u8>>, Self::Error> {
         Ok(None)
     }
@@ -82,21 +82,21 @@ impl StorageBackend for MockStorage {
     async fn get_ancestors(
         &self,
         _ctx: TenantContext,
-        _unit_id: &str,
+        _unit_id: &str
     ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
         Ok(vec![])
     }
     async fn get_descendants(
         &self,
         _ctx: TenantContext,
-        _unit_id: &str,
+        _unit_id: &str
     ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
         Ok(vec![])
     }
     async fn get_unit_policies(
         &self,
         _ctx: TenantContext,
-        _unit_id: &str,
+        _unit_id: &str
     ) -> Result<Vec<Policy>, Self::Error> {
         Ok(vec![])
     }
@@ -107,7 +107,7 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: &TenantContext,
         _unit_id: &str,
-        _policy: &Policy,
+        _policy: &Policy
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -116,7 +116,7 @@ impl StorageBackend for MockStorage {
         _user_id: &UserId,
         _tenant_id: &TenantId,
         _unit_id: &str,
-        _role: Role,
+        _role: Role
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -125,20 +125,20 @@ impl StorageBackend for MockStorage {
         _user_id: &UserId,
         _tenant_id: &TenantId,
         _unit_id: &str,
-        _role: Role,
+        _role: Role
     ) -> Result<(), Self::Error> {
         Ok(())
     }
     async fn store_drift_result(
         &self,
-        _result: mk_core::types::DriftResult,
+        _result: mk_core::types::DriftResult
     ) -> Result<(), Self::Error> {
         Ok(())
     }
     async fn get_latest_drift_result(
         &self,
         _ctx: TenantContext,
-        _project_id: &str,
+        _project_id: &str
     ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
         Ok(None)
     }
@@ -152,7 +152,7 @@ impl StorageBackend for MockStorage {
         _status: &str,
         _message: Option<&str>,
         _started_at: i64,
-        _finished_at: Option<i64>,
+        _finished_at: Option<i64>
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -160,14 +160,14 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: TenantContext,
         _since_timestamp: i64,
-        _limit: usize,
+        _limit: usize
     ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
         Ok(vec![])
     }
 
     async fn create_suppression(
         &self,
-        _suppression: mk_core::types::DriftSuppression,
+        _suppression: mk_core::types::DriftSuppression
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -175,7 +175,7 @@ impl StorageBackend for MockStorage {
     async fn list_suppressions(
         &self,
         _ctx: TenantContext,
-        _project_id: &str,
+        _project_id: &str
     ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
         Ok(vec![])
     }
@@ -183,7 +183,7 @@ impl StorageBackend for MockStorage {
     async fn delete_suppression(
         &self,
         _ctx: TenantContext,
-        _suppression_id: &str,
+        _suppression_id: &str
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -191,21 +191,21 @@ impl StorageBackend for MockStorage {
     async fn get_drift_config(
         &self,
         _ctx: TenantContext,
-        _project_id: &str,
+        _project_id: &str
     ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
         Ok(None)
     }
 
     async fn save_drift_config(
         &self,
-        _config: mk_core::types::DriftConfig,
+        _config: mk_core::types::DriftConfig
     ) -> Result<(), Self::Error> {
         Ok(())
     }
 
     async fn persist_event(
         &self,
-        _event: mk_core::types::PersistentEvent,
+        _event: mk_core::types::PersistentEvent
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -213,7 +213,7 @@ impl StorageBackend for MockStorage {
     async fn get_pending_events(
         &self,
         _ctx: TenantContext,
-        _limit: usize,
+        _limit: usize
     ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
         Ok(vec![])
     }
@@ -222,7 +222,7 @@ impl StorageBackend for MockStorage {
         &self,
         _event_id: &str,
         _status: mk_core::types::EventStatus,
-        _error: Option<String>,
+        _error: Option<String>
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -230,7 +230,7 @@ impl StorageBackend for MockStorage {
     async fn get_dead_letter_events(
         &self,
         _ctx: TenantContext,
-        _limit: usize,
+        _limit: usize
     ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
         Ok(vec![])
     }
@@ -238,14 +238,14 @@ impl StorageBackend for MockStorage {
     async fn check_idempotency(
         &self,
         _consumer_group: &str,
-        _idempotency_key: &str,
+        _idempotency_key: &str
     ) -> Result<bool, Self::Error> {
         Ok(false)
     }
 
     async fn record_consumer_state(
         &self,
-        _state: mk_core::types::ConsumerState,
+        _state: mk_core::types::ConsumerState
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -254,14 +254,14 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: TenantContext,
         _period_start: i64,
-        _period_end: i64,
+        _period_end: i64
     ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
         Ok(vec![])
     }
 
     async fn record_event_metrics(
         &self,
-        _metrics: mk_core::types::EventDeliveryMetrics,
+        _metrics: mk_core::types::EventDeliveryMetrics
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -272,27 +272,31 @@ struct MockPersister;
 impl sync::state_persister::SyncStatePersister for MockPersister {
     async fn load(
         &self,
-        _tenant_id: &TenantId,
+        _tenant_id: &TenantId
     ) -> Result<sync::state::SyncState, Box<dyn std::error::Error + Send + Sync>> {
         Ok(sync::state::SyncState::default())
     }
     async fn save(
         &self,
         _tenant_id: &TenantId,
-        _state: &sync::state::SyncState,
+        _state: &sync::state::SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
 }
 
 #[tokio::test]
+#[cfg_attr(
+    not(feature = "embedding-integration"),
+    ignore = "requires embedding service configuration"
+)]
 async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
     // 1. Setup Environment
     let dir = tempdir()?;
     let repo = Arc::new(GitRepository::new(dir.path())?);
     let memory_manager = Arc::new(memory::manager::MemoryManager::new());
     let provider: Arc<
-        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
     > = Arc::new(MockProvider::new());
     memory_manager
         .register_provider(mk_core::types::MemoryLayer::User, provider)
@@ -301,7 +305,7 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
     let governance_engine = Arc::new(knowledge::governance::GovernanceEngine::new());
     let knowledge_manager = Arc::new(knowledge::manager::KnowledgeManager::new(
         repo.clone(),
-        governance_engine.clone(),
+        governance_engine.clone()
     ));
 
     let auth_service = Arc::new(MockAuthService);
@@ -314,10 +318,10 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
             config::config::DeploymentConfig::default(),
             None,
             Arc::new(MockPersister),
-            None,
+            None
         )
         .await
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?,
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
     );
 
     let server = McpServer::new(
@@ -327,11 +331,11 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
         storage_backend,
         governance_engine,
         Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
-            memory::llm::mock::MockLlmService::new(),
+            memory::llm::mock::MockLlmService::new()
         ))),
         auth_service,
         None,
-        None,
+        None
     );
 
     // 2. Test Success: User u1 calling tool with Tenant t1
@@ -349,7 +353,7 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
                 "content": "Secret for t1",
                 "layer": "user"
             }
-        })),
+        }))
     };
 
     let response = server.handle_request(success_request).await;
@@ -374,7 +378,7 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
                 "content": "Attempted breach",
                 "layer": "user"
             }
-        })),
+        }))
     };
 
     let response = server.handle_request(failure_request).await;

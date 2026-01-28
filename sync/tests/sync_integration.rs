@@ -7,7 +7,7 @@ use memory::providers::MockProvider;
 use mk_core::traits::{KnowledgeRepository, MemoryProviderAdapter, StorageBackend};
 use mk_core::types::{
     KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, MemoryLayer, TenantContext,
-    TenantId,
+    TenantId
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,13 +17,13 @@ use sync::state_persister::SyncStatePersister;
 use tokio::sync::RwLock;
 
 struct MockStorage {
-    data: Arc<RwLock<HashMap<String, Vec<u8>>>>,
+    data: Arc<RwLock<HashMap<String, Vec<u8>>>>
 }
 
 impl MockStorage {
     fn new() -> Self {
         Self {
-            data: Arc::new(RwLock::new(HashMap::new())),
+            data: Arc::new(RwLock::new(HashMap::new()))
         }
     }
 }
@@ -43,7 +43,7 @@ impl StorageBackend for MockStorage {
     async fn retrieve(
         &self,
         _ctx: TenantContext,
-        key: &str,
+        key: &str
     ) -> Result<Option<Vec<u8>>, Self::Error> {
         Ok(self.data.read().await.get(key).cloned())
     }
@@ -60,7 +60,7 @@ impl StorageBackend for MockStorage {
     async fn get_ancestors(
         &self,
         _ctx: TenantContext,
-        _unit_id: &str,
+        _unit_id: &str
     ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
         Ok(Vec::new())
     }
@@ -68,7 +68,7 @@ impl StorageBackend for MockStorage {
     async fn get_descendants(
         &self,
         _ctx: TenantContext,
-        _unit_id: &str,
+        _unit_id: &str
     ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
         Ok(Vec::new())
     }
@@ -76,14 +76,14 @@ impl StorageBackend for MockStorage {
     async fn get_unit_policies(
         &self,
         _ctx: TenantContext,
-        _unit_id: &str,
+        _unit_id: &str
     ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
         Ok(Vec::new())
     }
 
     async fn create_unit(
         &self,
-        _unit: &mk_core::types::OrganizationalUnit,
+        _unit: &mk_core::types::OrganizationalUnit
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -92,7 +92,7 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: &TenantContext,
         _unit_id: &str,
-        _policy: &mk_core::types::Policy,
+        _policy: &mk_core::types::Policy
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -102,7 +102,7 @@ impl StorageBackend for MockStorage {
         _user_id: &mk_core::types::UserId,
         _tenant_id: &mk_core::types::TenantId,
         _unit_id: &str,
-        _role: mk_core::types::Role,
+        _role: mk_core::types::Role
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -112,14 +112,14 @@ impl StorageBackend for MockStorage {
         _user_id: &mk_core::types::UserId,
         _tenant_id: &mk_core::types::TenantId,
         _unit_id: &str,
-        _role: mk_core::types::Role,
+        _role: mk_core::types::Role
     ) -> Result<(), Self::Error> {
         Ok(())
     }
 
     async fn store_drift_result(
         &self,
-        _result: mk_core::types::DriftResult,
+        _result: mk_core::types::DriftResult
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -127,7 +127,7 @@ impl StorageBackend for MockStorage {
     async fn get_latest_drift_result(
         &self,
         _ctx: TenantContext,
-        _project_id: &str,
+        _project_id: &str
     ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
         Ok(None)
     }
@@ -143,7 +143,7 @@ impl StorageBackend for MockStorage {
         _status: &str,
         _message: Option<&str>,
         _started_at: i64,
-        _finished_at: Option<i64>,
+        _finished_at: Option<i64>
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -152,14 +152,14 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: TenantContext,
         _since_timestamp: i64,
-        _limit: usize,
+        _limit: usize
     ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
         Ok(Vec::new())
     }
 
     async fn create_suppression(
         &self,
-        _suppression: mk_core::types::DriftSuppression,
+        _suppression: mk_core::types::DriftSuppression
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -167,7 +167,7 @@ impl StorageBackend for MockStorage {
     async fn list_suppressions(
         &self,
         _ctx: TenantContext,
-        _project_id: &str,
+        _project_id: &str
     ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
         Ok(Vec::new())
     }
@@ -175,7 +175,7 @@ impl StorageBackend for MockStorage {
     async fn delete_suppression(
         &self,
         _ctx: TenantContext,
-        _suppression_id: &str,
+        _suppression_id: &str
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -183,21 +183,21 @@ impl StorageBackend for MockStorage {
     async fn get_drift_config(
         &self,
         _ctx: TenantContext,
-        _project_id: &str,
+        _project_id: &str
     ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
         Ok(None)
     }
 
     async fn save_drift_config(
         &self,
-        _config: mk_core::types::DriftConfig,
+        _config: mk_core::types::DriftConfig
     ) -> Result<(), Self::Error> {
         Ok(())
     }
 
     async fn persist_event(
         &self,
-        _event: mk_core::types::PersistentEvent,
+        _event: mk_core::types::PersistentEvent
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -205,7 +205,7 @@ impl StorageBackend for MockStorage {
     async fn get_pending_events(
         &self,
         _ctx: TenantContext,
-        _limit: usize,
+        _limit: usize
     ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
         Ok(Vec::new())
     }
@@ -214,7 +214,7 @@ impl StorageBackend for MockStorage {
         &self,
         _event_id: &str,
         _status: mk_core::types::EventStatus,
-        _error: Option<String>,
+        _error: Option<String>
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -222,7 +222,7 @@ impl StorageBackend for MockStorage {
     async fn get_dead_letter_events(
         &self,
         _ctx: TenantContext,
-        _limit: usize,
+        _limit: usize
     ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
         Ok(Vec::new())
     }
@@ -230,14 +230,14 @@ impl StorageBackend for MockStorage {
     async fn check_idempotency(
         &self,
         _consumer_group: &str,
-        _idempotency_key: &str,
+        _idempotency_key: &str
     ) -> Result<bool, Self::Error> {
         Ok(false)
     }
 
     async fn record_consumer_state(
         &self,
-        _state: mk_core::types::ConsumerState,
+        _state: mk_core::types::ConsumerState
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -246,40 +246,40 @@ impl StorageBackend for MockStorage {
         &self,
         _ctx: TenantContext,
         _period_start: i64,
-        _period_end: i64,
+        _period_end: i64
     ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
         Ok(Vec::new())
     }
 
     async fn record_event_metrics(
         &self,
-        _metrics: mk_core::types::EventDeliveryMetrics,
+        _metrics: mk_core::types::EventDeliveryMetrics
     ) -> Result<(), Self::Error> {
         Ok(())
     }
 }
 
 pub struct SimplePersister {
-    storage: Arc<MockStorage>,
+    storage: Arc<MockStorage>
 }
 
 #[async_trait]
 impl SyncStatePersister for SimplePersister {
     async fn load(
         &self,
-        tenant_id: &TenantId,
+        tenant_id: &TenantId
     ) -> Result<SyncState, Box<dyn std::error::Error + Send + Sync>> {
         let ctx = TenantContext::new(tenant_id.clone(), mk_core::types::UserId::default());
         match self.storage.retrieve(ctx, "sync_state").await? {
             Some(data) => Ok(serde_json::from_slice(&data)?),
-            None => Ok(SyncState::default()),
+            None => Ok(SyncState::default())
         }
     }
 
     async fn save(
         &self,
         tenant_id: &TenantId,
-        state: &SyncState,
+        state: &SyncState
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let ctx = TenantContext::new(tenant_id.clone(), mk_core::types::UserId::default());
         let data = serde_json::to_vec(state)?;
@@ -297,7 +297,7 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
     let memory_manager = Arc::new(MemoryManager::new());
     let mock_provider = MockProvider::new();
     let provider: Arc<
-        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
     > = Arc::new(mock_provider);
     memory_manager
         .register_provider(MemoryLayer::Project, provider)
@@ -305,19 +305,19 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
 
     let storage = Arc::new(MockStorage::new());
     let persister = Arc::new(SimplePersister {
-        storage: storage.clone(),
+        storage: storage.clone()
     });
 
     let sync_manager = SyncManager::new(
         memory_manager.clone(),
         Arc::new(KnowledgeManager::new(
             knowledge_repo.clone(),
-            governance_engine.clone(),
+            governance_engine.clone()
         )),
         config::DeploymentConfig::default(),
         None,
         persister.clone(),
-        None,
+        None
     )
     .await?;
 
@@ -331,7 +331,7 @@ async fn test_sync_persistence_and_delta() -> Result<(), Box<dyn std::error::Err
         summaries: HashMap::new(),
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     knowledge_repo
         .store(TenantContext::default(), entry.clone(), "first commit")
@@ -402,7 +402,7 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
     let memory_manager = Arc::new(MemoryManager::new());
     let mock_provider = MockProvider::new();
     let provider: Arc<
-        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
     > = Arc::new(mock_provider);
     memory_manager
         .register_provider(MemoryLayer::Project, provider)
@@ -410,7 +410,7 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
 
     let storage = Arc::new(MockStorage::new());
     let persister = Arc::new(SimplePersister {
-        storage: storage.clone(),
+        storage: storage.clone()
     });
 
     let sync_manager = Arc::new(
@@ -418,14 +418,14 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
             memory_manager.clone(),
             Arc::new(KnowledgeManager::new(
                 knowledge_repo.clone(),
-                governance_engine.clone(),
+                governance_engine.clone()
             )),
             config::DeploymentConfig::default(),
             None,
             persister.clone(),
-            None,
+            None
         )
-        .await?,
+        .await?
     );
 
     let entry = KnowledgeEntry {
@@ -438,7 +438,7 @@ async fn test_background_sync_trigger() -> Result<(), Box<dyn std::error::Error 
         summaries: HashMap::new(),
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     knowledge_repo
         .store(TenantContext::default(), entry.clone(), "first commit")
@@ -487,15 +487,15 @@ async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error
             operator: mk_core::types::ConstraintOperator::MustNotMatch,
             value: serde_json::json!("SECRET"),
             severity: mk_core::types::ConstraintSeverity::Block,
-            message: "No secrets allowed".to_string(),
+            message: "No secrets allowed".to_string()
         }],
-        metadata: HashMap::new(),
+        metadata: HashMap::new()
     });
 
     let memory_manager = Arc::new(MemoryManager::new());
     let mock_provider = MockProvider::new();
     let provider: Arc<
-        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
     > = Arc::new(mock_provider);
     memory_manager
         .register_provider(MemoryLayer::Project, provider)
@@ -503,19 +503,19 @@ async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error
 
     let storage = Arc::new(MockStorage::new());
     let persister = Arc::new(SimplePersister {
-        storage: storage.clone(),
+        storage: storage.clone()
     });
 
     let sync_manager = SyncManager::new(
         memory_manager,
         Arc::new(KnowledgeManager::new(
             knowledge_repo.clone(),
-            Arc::new(governance_engine),
+            Arc::new(governance_engine)
         )),
         config::DeploymentConfig::default(),
         None,
         persister.clone(),
-        None,
+        None
     )
     .await?;
 
@@ -529,7 +529,7 @@ async fn test_governance_blocking_sync() -> Result<(), Box<dyn std::error::Error
         summaries: HashMap::new(),
         commit_hash: None,
         author: None,
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     knowledge_repo
         .store(TenantContext::default(), entry, "secret commit")

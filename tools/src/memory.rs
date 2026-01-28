@@ -11,7 +11,7 @@ use storage::graph_duckdb::DuckDbGraphStore;
 use validator::Validate;
 
 pub struct MemoryAddTool {
-    memory_manager: Arc<MemoryManager>,
+    memory_manager: Arc<MemoryManager>
 }
 
 impl MemoryAddTool {
@@ -27,7 +27,7 @@ pub struct MemoryAddParams {
     #[serde(default)]
     pub metadata: serde_json::Map<String, Value>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
@@ -40,7 +40,7 @@ pub struct MemorySearchParams {
     #[serde(rename = "contextSummary")]
     pub context_summary: Option<String>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
@@ -49,14 +49,14 @@ pub struct MemoryDeleteParams {
     pub memory_id: String,
     pub layer: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum CloseTarget {
     Session,
-    Agent,
+    Agent
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
@@ -64,7 +64,7 @@ pub struct MemoryCloseParams {
     pub id: String,
     pub target: CloseTarget,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[async_trait]
@@ -104,7 +104,7 @@ impl Tool for MemoryAddTool {
             "team" => mk_core::types::MemoryLayer::Team,
             "org" => mk_core::types::MemoryLayer::Org,
             "company" => mk_core::types::MemoryLayer::Company,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
+            _ => return Err(format!("Unknown layer: {}", p.layer).into())
         };
 
         let id = self.memory_manager.add(ctx, &p.content, layer).await?;
@@ -113,7 +113,7 @@ impl Tool for MemoryAddTool {
 }
 
 pub struct MemorySearchTool {
-    memory_manager: Arc<MemoryManager>,
+    memory_manager: Arc<MemoryManager>
 }
 
 impl MemorySearchTool {
@@ -165,7 +165,7 @@ impl Tool for MemorySearchTool {
                 limit,
                 threshold,
                 filters,
-                p.context_summary.as_deref(),
+                p.context_summary.as_deref()
             )
             .await?;
 
@@ -190,7 +190,7 @@ impl Tool for MemorySearchTool {
 }
 
 pub struct MemoryDeleteTool {
-    memory_manager: Arc<MemoryManager>,
+    memory_manager: Arc<MemoryManager>
 }
 
 impl MemoryDeleteTool {
@@ -235,7 +235,7 @@ impl Tool for MemoryDeleteTool {
             "team" => mk_core::types::MemoryLayer::Team,
             "org" => mk_core::types::MemoryLayer::Org,
             "company" => mk_core::types::MemoryLayer::Company,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
+            _ => return Err(format!("Unknown layer: {}", p.layer).into())
         };
 
         self.memory_manager
@@ -253,11 +253,11 @@ impl Tool for MemoryDeleteTool {
 pub struct MemoryReasonParams {
     pub query: String,
     #[serde(rename = "contextSummary")]
-    pub context_summary: Option<String>,
+    pub context_summary: Option<String>
 }
 
 pub struct MemoryReasonTool {
-    reasoner: Arc<dyn memory::reasoning::ReflectiveReasoner>,
+    reasoner: Arc<dyn memory::reasoning::ReflectiveReasoner>
 }
 
 impl MemoryReasonTool {
@@ -301,7 +301,7 @@ impl Tool for MemoryReasonTool {
 }
 
 pub struct MemoryCloseTool {
-    memory_manager: Arc<MemoryManager>,
+    memory_manager: Arc<MemoryManager>
 }
 
 impl MemoryCloseTool {
@@ -340,7 +340,7 @@ impl Tool for MemoryCloseTool {
 
         match p.target {
             CloseTarget::Session => self.memory_manager.close_session(ctx, &p.id).await?,
-            CloseTarget::Agent => self.memory_manager.close_agent(ctx, &p.id).await?,
+            CloseTarget::Agent => self.memory_manager.close_agent(ctx, &p.id).await?
         }
 
         Ok(json!({
@@ -360,11 +360,11 @@ pub struct MemoryFeedbackParams {
     pub score: f32,
     pub reasoning: Option<String>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 pub struct MemoryFeedbackTool {
-    memory_manager: Arc<MemoryManager>,
+    memory_manager: Arc<MemoryManager>
 }
 
 impl MemoryFeedbackTool {
@@ -412,7 +412,7 @@ impl Tool for MemoryFeedbackTool {
             "team" => mk_core::types::MemoryLayer::Team,
             "org" => mk_core::types::MemoryLayer::Org,
             "company" => mk_core::types::MemoryLayer::Company,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
+            _ => return Err(format!("Unknown layer: {}", p.layer).into())
         };
 
         let reward_type = match p.reward_type.to_lowercase().as_str() {
@@ -421,7 +421,7 @@ impl Tool for MemoryFeedbackTool {
             "outdated" => mk_core::types::RewardType::Outdated,
             "inaccurate" => mk_core::types::RewardType::Inaccurate,
             "duplicate" => mk_core::types::RewardType::Duplicate,
-            _ => return Err(format!("Unknown reward type: {}", p.reward_type).into()),
+            _ => return Err(format!("Unknown reward type: {}", p.reward_type).into())
         };
 
         let reward = mk_core::types::RewardSignal {
@@ -429,7 +429,7 @@ impl Tool for MemoryFeedbackTool {
             score: p.score,
             reasoning: p.reasoning,
             agent_id: ctx.agent_id.clone(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         };
 
         self.memory_manager
@@ -444,11 +444,11 @@ impl Tool for MemoryFeedbackTool {
 pub struct MemoryOptimizeParams {
     pub layer: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 pub struct MemoryOptimizeTool {
-    memory_manager: Arc<MemoryManager>,
+    memory_manager: Arc<MemoryManager>
 }
 
 impl MemoryOptimizeTool {
@@ -492,7 +492,7 @@ impl Tool for MemoryOptimizeTool {
             "team" => mk_core::types::MemoryLayer::Team,
             "org" => mk_core::types::MemoryLayer::Org,
             "company" => mk_core::types::MemoryLayer::Company,
-            _ => return Err(format!("Unknown layer: {}", p.layer).into()),
+            _ => return Err(format!("Unknown layer: {}", p.layer).into())
         };
 
         self.memory_manager.optimize_layer(ctx, layer).await?;
@@ -511,7 +511,7 @@ pub struct MemoryPromoteParams {
     #[serde(default)]
     pub notify: Vec<String>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -525,7 +525,7 @@ pub struct PromotionResult {
     pub approval_required: bool,
     pub approvers_notified: Vec<String>,
     pub reason: Option<String>,
-    pub proposal_id: Option<String>,
+    pub proposal_id: Option<String>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -534,22 +534,22 @@ pub enum PromotionStatus {
     Promoted,
     PendingApproval,
     Blocked,
-    Failed,
+    Failed
 }
 
 pub trait PromotionGovernance: Send + Sync {
     fn requires_approval(
         &self,
         from_layer: mk_core::types::MemoryLayer,
-        to_layer: mk_core::types::MemoryLayer,
+        to_layer: mk_core::types::MemoryLayer
     ) -> impl std::future::Future<Output = bool> + Send;
 
     fn get_approvers(
         &self,
         to_layer: mk_core::types::MemoryLayer,
-        ctx: &TenantContext,
+        ctx: &TenantContext
     ) -> impl std::future::Future<
-        Output = Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>,
+        Output = Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>
     > + Send;
 
     fn create_promotion_request(
@@ -559,7 +559,7 @@ pub trait PromotionGovernance: Send + Sync {
         to_layer: mk_core::types::MemoryLayer,
         reason: Option<String>,
         requestor: &str,
-        approvers: Vec<String>,
+        approvers: Vec<String>
     ) -> impl std::future::Future<Output = Result<String, Box<dyn std::error::Error + Send + Sync>>> + Send;
 }
 
@@ -581,11 +581,12 @@ impl PromotionGovernance for DefaultPromotionGovernance {
     async fn requires_approval(
         &self,
         from_layer: mk_core::types::MemoryLayer,
-        to_layer: mk_core::types::MemoryLayer,
+        to_layer: mk_core::types::MemoryLayer
     ) -> bool {
         use mk_core::types::MemoryLayer;
         // GOVERNANCE RULE: Cross-scope promotions (project→team, team→org, org→company)
-        // require approval; same-scope promotions (session→project, agent→user) auto-approve
+        // require approval; same-scope promotions (session→project, agent→user)
+        // auto-approve
         matches!(
             (from_layer, to_layer),
             (MemoryLayer::Project, MemoryLayer::Team)
@@ -598,7 +599,7 @@ impl PromotionGovernance for DefaultPromotionGovernance {
     async fn get_approvers(
         &self,
         to_layer: mk_core::types::MemoryLayer,
-        ctx: &TenantContext,
+        ctx: &TenantContext
     ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         use mk_core::types::MemoryLayer;
         let tenant = ctx.tenant_id.as_str();
@@ -612,7 +613,7 @@ impl PromotionGovernance for DefaultPromotionGovernance {
             MemoryLayer::Company => {
                 vec![format!("admin@{}.company", tenant)]
             }
-            _ => vec![],
+            _ => vec![]
         };
         Ok(approvers)
     }
@@ -624,7 +625,7 @@ impl PromotionGovernance for DefaultPromotionGovernance {
         _to_layer: mk_core::types::MemoryLayer,
         _reason: Option<String>,
         _requestor: &str,
-        _approvers: Vec<String>,
+        _approvers: Vec<String>
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         Ok(format!("promo-req-{}-{}", memory_id, uuid::Uuid::new_v4()))
     }
@@ -632,14 +633,14 @@ impl PromotionGovernance for DefaultPromotionGovernance {
 
 pub struct MemoryPromoteTool<G: PromotionGovernance> {
     memory_manager: Arc<MemoryManager>,
-    governance: Arc<G>,
+    governance: Arc<G>
 }
 
 impl<G: PromotionGovernance> MemoryPromoteTool<G> {
     pub fn new(memory_manager: Arc<MemoryManager>, governance: Arc<G>) -> Self {
         Self {
             memory_manager,
-            governance,
+            governance
         }
     }
 
@@ -652,7 +653,7 @@ impl<G: PromotionGovernance> MemoryPromoteTool<G> {
             "team" => Ok(mk_core::types::MemoryLayer::Team),
             "org" => Ok(mk_core::types::MemoryLayer::Org),
             "company" => Ok(mk_core::types::MemoryLayer::Company),
-            _ => Err(format!("Unknown layer: {}", layer)),
+            _ => Err(format!("Unknown layer: {}", layer))
         }
     }
 
@@ -664,7 +665,7 @@ impl<G: PromotionGovernance> MemoryPromoteTool<G> {
             mk_core::types::MemoryLayer::Project => "project".to_string(),
             mk_core::types::MemoryLayer::Team => "team".to_string(),
             mk_core::types::MemoryLayer::Org => "org".to_string(),
-            mk_core::types::MemoryLayer::Company => "company".to_string(),
+            mk_core::types::MemoryLayer::Company => "company".to_string()
         }
     }
 
@@ -676,7 +677,7 @@ impl<G: PromotionGovernance> MemoryPromoteTool<G> {
             mk_core::types::MemoryLayer::Project => 3,
             mk_core::types::MemoryLayer::Team => 4,
             mk_core::types::MemoryLayer::Org => 5,
-            mk_core::types::MemoryLayer::Company => 6,
+            mk_core::types::MemoryLayer::Company => 6
         }
     }
 
@@ -686,7 +687,7 @@ impl<G: PromotionGovernance> MemoryPromoteTool<G> {
         memory_id: &str,
         to_layer: mk_core::types::MemoryLayer,
         reason: Option<String>,
-        notify: Vec<String>,
+        notify: Vec<String>
     ) -> Result<PromotionResult, Box<dyn std::error::Error + Send + Sync>> {
         // Find the memory in any layer
         let (entry, from_layer) = self.find_memory(&ctx, memory_id).await?;
@@ -709,7 +710,7 @@ impl<G: PromotionGovernance> MemoryPromoteTool<G> {
                     Self::layer_to_string(from_layer),
                     Self::layer_to_string(to_layer)
                 )),
-                proposal_id: None,
+                proposal_id: None
             });
         }
 
@@ -739,7 +740,7 @@ impl<G: PromotionGovernance> MemoryPromoteTool<G> {
                     to_layer,
                     reason.clone(),
                     requestor,
-                    approvers.clone(),
+                    approvers.clone()
                 )
                 .await?;
 
@@ -752,7 +753,7 @@ impl<G: PromotionGovernance> MemoryPromoteTool<G> {
                 approval_required: true,
                 approvers_notified: approvers,
                 reason,
-                proposal_id: Some(proposal_id),
+                proposal_id: Some(proposal_id)
             });
         }
 
@@ -770,17 +771,17 @@ impl<G: PromotionGovernance> MemoryPromoteTool<G> {
             approval_required: false,
             approvers_notified: vec![],
             reason,
-            proposal_id: None,
+            proposal_id: None
         })
     }
 
     async fn find_memory(
         &self,
         ctx: &TenantContext,
-        memory_id: &str,
+        memory_id: &str
     ) -> Result<
         (mk_core::types::MemoryEntry, mk_core::types::MemoryLayer),
-        Box<dyn std::error::Error + Send + Sync>,
+        Box<dyn std::error::Error + Send + Sync>
     > {
         use mk_core::types::MemoryLayer;
 
@@ -792,7 +793,7 @@ impl<G: PromotionGovernance> MemoryPromoteTool<G> {
             MemoryLayer::Project,
             MemoryLayer::Team,
             MemoryLayer::Org,
-            MemoryLayer::Company,
+            MemoryLayer::Company
         ];
 
         for layer in layers {
@@ -814,7 +815,7 @@ impl<G: PromotionGovernance> MemoryPromoteTool<G> {
         entry: &mk_core::types::MemoryEntry,
         from_layer: mk_core::types::MemoryLayer,
         to_layer: mk_core::types::MemoryLayer,
-        reason: Option<String>,
+        reason: Option<String>
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let mut promoted_entry = entry.clone();
         promoted_entry.id = format!("{}_promoted_{}", entry.id, uuid::Uuid::new_v4());
@@ -823,15 +824,15 @@ impl<G: PromotionGovernance> MemoryPromoteTool<G> {
         // Add promotion metadata
         promoted_entry.metadata.insert(
             "original_memory_id".to_string(),
-            serde_json::json!(entry.id),
+            serde_json::json!(entry.id)
         );
         promoted_entry.metadata.insert(
             "promoted_from_layer".to_string(),
-            serde_json::json!(Self::layer_to_string(from_layer)),
+            serde_json::json!(Self::layer_to_string(from_layer))
         );
         promoted_entry.metadata.insert(
             "promoted_at".to_string(),
-            serde_json::json!(chrono::Utc::now().timestamp()),
+            serde_json::json!(chrono::Utc::now().timestamp())
         );
         if let Some(r) = reason {
             promoted_entry
@@ -855,8 +856,8 @@ impl<G: PromotionGovernance + 'static> Tool for MemoryPromoteTool<G> {
     }
 
     fn description(&self) -> &str {
-        "Promote a memory to a broader scope with governance approval if required. \
-         Cross-scope promotions (e.g., project→team, team→org) require approval from layer leads."
+        "Promote a memory to a broader scope with governance approval if required. Cross-scope \
+         promotions (e.g., project→team, team→org) require approval from layer leads."
     }
 
     fn input_schema(&self) -> Value {
@@ -911,7 +912,7 @@ pub struct MemoryAutoPromoteParams {
     #[serde(default)]
     pub dry_run: bool,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -922,7 +923,7 @@ pub struct AutoPromoteResult {
     pub promoted_count: usize,
     pub promoted_memories: Vec<AutoPromotedMemory>,
     pub threshold_used: f32,
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -932,19 +933,19 @@ pub struct AutoPromotedMemory {
     pub promoted_id: Option<String>,
     pub score: f32,
     pub from_layer: String,
-    pub to_layer: String,
+    pub to_layer: String
 }
 
 pub struct MemoryAutoPromoteTool {
     memory_manager: Arc<MemoryManager>,
-    default_threshold: f32,
+    default_threshold: f32
 }
 
 impl MemoryAutoPromoteTool {
     pub fn new(memory_manager: Arc<MemoryManager>) -> Self {
         Self {
             memory_manager,
-            default_threshold: 0.7,
+            default_threshold: 0.7
         }
     }
 
@@ -962,7 +963,7 @@ impl MemoryAutoPromoteTool {
             "team" => Ok(mk_core::types::MemoryLayer::Team),
             "org" => Ok(mk_core::types::MemoryLayer::Org),
             "company" => Ok(mk_core::types::MemoryLayer::Company),
-            _ => Err(format!("Unknown layer: {}", layer)),
+            _ => Err(format!("Unknown layer: {}", layer))
         }
     }
 
@@ -974,12 +975,12 @@ impl MemoryAutoPromoteTool {
             mk_core::types::MemoryLayer::Project => "project".to_string(),
             mk_core::types::MemoryLayer::Team => "team".to_string(),
             mk_core::types::MemoryLayer::Org => "org".to_string(),
-            mk_core::types::MemoryLayer::Company => "company".to_string(),
+            mk_core::types::MemoryLayer::Company => "company".to_string()
         }
     }
 
     fn determine_target_layer(
-        current_layer: mk_core::types::MemoryLayer,
+        current_layer: mk_core::types::MemoryLayer
     ) -> Option<mk_core::types::MemoryLayer> {
         use mk_core::types::MemoryLayer;
         match current_layer {
@@ -989,7 +990,7 @@ impl MemoryAutoPromoteTool {
             MemoryLayer::Project => Some(MemoryLayer::Team),
             MemoryLayer::Team => Some(MemoryLayer::Org),
             MemoryLayer::Org => Some(MemoryLayer::Company),
-            MemoryLayer::Company => None,
+            MemoryLayer::Company => None
         }
     }
 
@@ -1038,7 +1039,7 @@ impl MemoryAutoPromoteTool {
         ctx: TenantContext,
         layer: mk_core::types::MemoryLayer,
         threshold: f32,
-        dry_run: bool,
+        dry_run: bool
     ) -> Result<AutoPromoteResult, Box<dyn std::error::Error + Send + Sync>> {
         let entries = self
             .memory_manager
@@ -1051,46 +1052,46 @@ impl MemoryAutoPromoteTool {
         for entry in &entries {
             let score = Self::calculate_importance_score(entry);
 
-            if score >= threshold {
-                if let Some(target) = target_layer {
-                    let promoted_id = if dry_run {
-                        None
-                    } else {
-                        let mut promoted_entry = entry.clone();
-                        promoted_entry.id =
-                            format!("{}_auto_promoted_{}", entry.id, uuid::Uuid::new_v4());
-                        promoted_entry.layer = target;
-                        promoted_entry.metadata.insert(
-                            "original_memory_id".to_string(),
-                            serde_json::json!(entry.id),
-                        );
-                        promoted_entry.metadata.insert(
-                            "auto_promoted_at".to_string(),
-                            serde_json::json!(chrono::Utc::now().timestamp()),
-                        );
-                        promoted_entry
-                            .metadata
-                            .insert("promotion_score".to_string(), serde_json::json!(score));
-                        promoted_entry.metadata.insert(
-                            "promoted_from_layer".to_string(),
-                            serde_json::json!(Self::layer_to_string(layer)),
-                        );
+            if score >= threshold
+                && let Some(target) = target_layer
+            {
+                let promoted_id = if dry_run {
+                    None
+                } else {
+                    let mut promoted_entry = entry.clone();
+                    promoted_entry.id =
+                        format!("{}_auto_promoted_{}", entry.id, uuid::Uuid::new_v4());
+                    promoted_entry.layer = target;
+                    promoted_entry.metadata.insert(
+                        "original_memory_id".to_string(),
+                        serde_json::json!(entry.id)
+                    );
+                    promoted_entry.metadata.insert(
+                        "auto_promoted_at".to_string(),
+                        serde_json::json!(chrono::Utc::now().timestamp())
+                    );
+                    promoted_entry
+                        .metadata
+                        .insert("promotion_score".to_string(), serde_json::json!(score));
+                    promoted_entry.metadata.insert(
+                        "promoted_from_layer".to_string(),
+                        serde_json::json!(Self::layer_to_string(layer))
+                    );
 
-                        let new_id = self
-                            .memory_manager
-                            .add_to_layer(ctx.clone(), target, promoted_entry)
-                            .await?;
-                        Some(new_id)
-                    };
+                    let new_id = self
+                        .memory_manager
+                        .add_to_layer(ctx.clone(), target, promoted_entry)
+                        .await?;
+                    Some(new_id)
+                };
 
-                    promoted_memories.push(AutoPromotedMemory {
-                        original_id: entry.id.clone(),
-                        promoted_id,
-                        score,
-                        from_layer: Self::layer_to_string(layer),
-                        to_layer: Self::layer_to_string(target),
-                    });
-                }
+                promoted_memories.push(AutoPromotedMemory {
+                    original_id: entry.id.clone(),
+                    promoted_id,
+                    score,
+                    from_layer: Self::layer_to_string(layer),
+                    to_layer: Self::layer_to_string(target)
+                });
             }
         }
 
@@ -1100,7 +1101,7 @@ impl MemoryAutoPromoteTool {
             promoted_count: promoted_memories.len(),
             promoted_memories,
             threshold_used: threshold,
-            dry_run,
+            dry_run
         })
     }
 }
@@ -1112,9 +1113,9 @@ impl Tool for MemoryAutoPromoteTool {
     }
 
     fn description(&self) -> &str {
-        "Automatically evaluate and promote memories based on reward threshold. \
-         Memories with high scores (based on reward, access frequency, recency) are promoted \
-         to the next broader layer. Use dry_run=true to preview without making changes."
+        "Automatically evaluate and promote memories based on reward threshold. Memories with high \
+         scores (based on reward, access frequency, recency) are promoted to the next broader \
+         layer. Use dry_run=true to preview without making changes."
     }
 
     fn input_schema(&self) -> Value {
@@ -1164,11 +1165,11 @@ pub struct GraphQueryParams {
     #[serde(default)]
     pub limit: Option<usize>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 pub struct GraphQueryTool {
-    graph_store: Arc<DuckDbGraphStore>,
+    graph_store: Arc<DuckDbGraphStore>
 }
 
 impl GraphQueryTool {
@@ -1222,11 +1223,11 @@ pub struct GraphNeighborsParams {
     pub node_id: String,
     pub depth: Option<usize>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 pub struct GraphNeighborsTool {
-    graph_store: Arc<DuckDbGraphStore>,
+    graph_store: Arc<DuckDbGraphStore>
 }
 
 impl GraphNeighborsTool {
@@ -1294,11 +1295,11 @@ pub struct GraphPathParams {
     #[serde(rename = "maxHops")]
     pub max_hops: Option<usize>,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>,
+    pub tenant_context: Option<TenantContext>
 }
 
 pub struct GraphPathTool {
-    graph_store: Arc<DuckDbGraphStore>,
+    graph_store: Arc<DuckDbGraphStore>
 }
 
 impl GraphPathTool {
@@ -1368,7 +1369,7 @@ mod tests {
         TenantContext {
             tenant_id: TenantId::from_str("test-tenant").unwrap(),
             user_id: UserId::from_str("test-user").unwrap(),
-            agent_id: None,
+            agent_id: None
         }
     }
 
@@ -1383,7 +1384,7 @@ mod tests {
             updated_at: chrono::Utc::now().timestamp(),
             summaries: HashMap::new(),
             context_vector: None,
-            importance_score: None,
+            importance_score: None
         }
     }
 
@@ -1392,9 +1393,9 @@ mod tests {
         for &layer in layers {
             let provider: Arc<
                 dyn mk_core::traits::MemoryProviderAdapter<
-                        Error = Box<dyn std::error::Error + Send + Sync>,
+                        Error = Box<dyn std::error::Error + Send + Sync>
                     > + Send
-                    + Sync,
+                    + Sync
             > = Arc::new(MockProvider::new());
             manager.register_provider(layer, provider).await;
         }
@@ -1402,13 +1403,13 @@ mod tests {
     }
 
     struct TestGovernance {
-        requires_approval_for_cross_scope: bool,
+        requires_approval_for_cross_scope: bool
     }
 
     impl TestGovernance {
         fn new(requires_approval: bool) -> Self {
             Self {
-                requires_approval_for_cross_scope: requires_approval,
+                requires_approval_for_cross_scope: requires_approval
             }
         }
     }
@@ -1430,13 +1431,13 @@ mod tests {
         async fn get_approvers(
             &self,
             to_layer: MemoryLayer,
-            _ctx: &TenantContext,
+            _ctx: &TenantContext
         ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
             let approvers = match to_layer {
                 MemoryLayer::Team => vec!["tech-lead@test.team".to_string()],
                 MemoryLayer::Org => vec!["architect@test.org".to_string()],
                 MemoryLayer::Company => vec!["admin@test.company".to_string()],
-                _ => vec![],
+                _ => vec![]
             };
             Ok(approvers)
         }
@@ -1448,7 +1449,7 @@ mod tests {
             _to_layer: MemoryLayer,
             _reason: Option<String>,
             _requestor: &str,
-            _approvers: Vec<String>,
+            _approvers: Vec<String>
         ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
             Ok(format!("test-proposal-{}", memory_id))
         }
@@ -1475,7 +1476,7 @@ mod tests {
                 "mem_session_1",
                 MemoryLayer::Project,
                 Some("Test promotion".to_string()),
-                vec![],
+                vec![]
             )
             .await
             .unwrap();
@@ -1508,7 +1509,7 @@ mod tests {
                 "mem_project_1",
                 MemoryLayer::Team,
                 Some("Important for team".to_string()),
-                vec!["extra-reviewer@test.com".to_string()],
+                vec!["extra-reviewer@test.com".to_string()]
             )
             .await
             .unwrap();
@@ -1552,7 +1553,7 @@ mod tests {
                 "mem_team_1",
                 MemoryLayer::Project,
                 None,
-                vec![],
+                vec![]
             )
             .await
             .unwrap();
@@ -1588,7 +1589,7 @@ mod tests {
                 "mem_project_2",
                 MemoryLayer::Project,
                 None,
-                vec![],
+                vec![]
             )
             .await
             .unwrap();
@@ -1611,7 +1612,7 @@ mod tests {
                 "nonexistent_memory",
                 MemoryLayer::Project,
                 None,
-                vec![],
+                vec![]
             )
             .await;
 
@@ -1772,7 +1773,7 @@ mod tests {
                 "mem_with_meta",
                 MemoryLayer::Project,
                 Some("Important memory".to_string()),
-                vec![],
+                vec![]
             )
             .await
             .unwrap();
@@ -1887,7 +1888,7 @@ mod tests {
             approval_required: false,
             approvers_notified: vec![],
             reason: Some("Test reason".to_string()),
-            proposal_id: None,
+            proposal_id: None
         };
 
         let json = serde_json::to_value(&result).unwrap();
@@ -1926,6 +1927,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(
+        not(feature = "llm-integration"),
+        ignore = "requires LLM/embedding services"
+    )]
     async fn test_memory_add_tool_call() {
         let manager = setup_manager_with_providers(&[MemoryLayer::User]).await;
         let tool = MemoryAddTool::new(manager);
@@ -2022,6 +2027,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(
+        not(feature = "llm-integration"),
+        ignore = "requires LLM service configuration"
+    )]
     async fn test_memory_close_session() {
         let manager = setup_manager_with_providers(&[MemoryLayer::Session]).await;
         let tool = MemoryCloseTool::new(manager);
@@ -2047,6 +2056,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(
+        not(feature = "llm-integration"),
+        ignore = "requires LLM service configuration"
+    )]
     async fn test_memory_close_agent() {
         let manager = setup_manager_with_providers(&[MemoryLayer::Agent]).await;
         let tool = MemoryCloseTool::new(manager);
@@ -2179,6 +2192,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(
+        not(feature = "llm-integration"),
+        ignore = "requires LLM service configuration"
+    )]
     async fn test_memory_optimize_tool_call() {
         let manager = setup_manager_with_providers(&[MemoryLayer::Session]).await;
         let tool = MemoryOptimizeTool::new(manager);
@@ -2239,7 +2256,7 @@ mod tests {
         entry.metadata.insert("access_count".to_string(), json!(5));
         entry.metadata.insert(
             "last_accessed_at".to_string(),
-            json!(chrono::Utc::now().timestamp()),
+            json!(chrono::Utc::now().timestamp())
         );
         entry
     }
@@ -2493,7 +2510,7 @@ mod tests {
         entry.metadata.insert("access_count".to_string(), json!(10));
         entry.metadata.insert(
             "last_accessed_at".to_string(),
-            json!(chrono::Utc::now().timestamp()),
+            json!(chrono::Utc::now().timestamp())
         );
 
         let score = MemoryAutoPromoteTool::calculate_importance_score(&entry);
@@ -2544,10 +2561,10 @@ mod tests {
                 promoted_id: Some("mem_1_promoted".to_string()),
                 score: 0.85,
                 from_layer: "session".to_string(),
-                to_layer: "project".to_string(),
+                to_layer: "project".to_string()
             }],
             threshold_used: 0.7,
-            dry_run: false,
+            dry_run: false
         };
 
         let json = serde_json::to_value(&result).unwrap();

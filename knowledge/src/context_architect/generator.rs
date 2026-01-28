@@ -15,7 +15,7 @@ pub struct SummaryGeneratorConfig {
     pub retry_delay_ms: u64,
     pub sentence_max_tokens: u32,
     pub paragraph_max_tokens: u32,
-    pub detailed_max_tokens: u32,
+    pub detailed_max_tokens: u32
 }
 
 impl Default for SummaryGeneratorConfig {
@@ -25,7 +25,7 @@ impl Default for SummaryGeneratorConfig {
             retry_delay_ms: 1000,
             sentence_max_tokens: 50,
             paragraph_max_tokens: 200,
-            detailed_max_tokens: 500,
+            detailed_max_tokens: 500
         }
     }
 }
@@ -33,7 +33,7 @@ impl Default for SummaryGeneratorConfig {
 pub struct SummaryGenerator<C: LlmClient> {
     client: Arc<C>,
     config: SummaryGeneratorConfig,
-    prompts: PromptTemplates,
+    prompts: PromptTemplates
 }
 
 #[derive(Debug, Clone)]
@@ -41,24 +41,24 @@ pub struct SummaryRequest {
     pub content: String,
     pub depth: SummaryDepth,
     pub context: Option<String>,
-    pub personalization_context: Option<String>,
+    pub personalization_context: Option<String>
 }
 
 #[derive(Debug, Clone)]
 pub struct SummaryResult {
     pub summary: LayerSummary,
-    pub tokens_used: u32,
+    pub tokens_used: u32
 }
 
 #[derive(Debug, Clone)]
 pub struct BatchSummaryRequest {
-    pub requests: Vec<SummaryRequest>,
+    pub requests: Vec<SummaryRequest>
 }
 
 #[derive(Debug, Clone)]
 pub struct BatchSummaryResult {
     pub results: Vec<Result<SummaryResult, GenerationError>>,
-    pub total_tokens_used: u32,
+    pub total_tokens_used: u32
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -76,7 +76,7 @@ pub enum GenerationError {
     TokenLimitExceeded { actual: u32, limit: u32 },
 
     #[error("Budget exhausted: {0}")]
-    BudgetExhausted(#[from] BudgetError),
+    BudgetExhausted(#[from] BudgetError)
 }
 
 impl<C: LlmClient> SummaryGenerator<C> {
@@ -84,7 +84,7 @@ impl<C: LlmClient> SummaryGenerator<C> {
         Self {
             client,
             config,
-            prompts: PromptTemplates::default(),
+            prompts: PromptTemplates::default()
         }
     }
 
@@ -97,7 +97,7 @@ impl<C: LlmClient> SummaryGenerator<C> {
         &self,
         content: &str,
         depth: SummaryDepth,
-        context: Option<&str>,
+        context: Option<&str>
     ) -> Result<LayerSummary, GenerationError> {
         self.generate_summary_with_personalization(content, depth, context, None)
             .await
@@ -108,7 +108,7 @@ impl<C: LlmClient> SummaryGenerator<C> {
         content: &str,
         depth: SummaryDepth,
         context: Option<&str>,
-        personalization_context: Option<&str>,
+        personalization_context: Option<&str>
     ) -> Result<LayerSummary, GenerationError> {
         let span = info_span!(
             "context_architect.generate_summary",
@@ -126,13 +126,13 @@ impl<C: LlmClient> SummaryGenerator<C> {
             let min_length = match depth {
                 SummaryDepth::Sentence => 20,
                 SummaryDepth::Paragraph => 50,
-                SummaryDepth::Detailed => 100,
+                SummaryDepth::Detailed => 100
             };
 
             if content.len() < min_length {
                 return Err(GenerationError::ContentTooShort {
                     length: content.len(),
-                    minimum: min_length,
+                    minimum: min_length
                 });
             }
 
@@ -141,7 +141,7 @@ impl<C: LlmClient> SummaryGenerator<C> {
                 depth,
                 context,
                 personalization_context,
-                self.token_limit_for_depth(depth),
+                self.token_limit_for_depth(depth)
             );
 
             let response = self
@@ -167,7 +167,7 @@ impl<C: LlmClient> SummaryGenerator<C> {
                 source_hash,
                 content_hash,
                 personalized: personalization_context.is_some(),
-                personalization_context: personalization_context.map(String::from),
+                personalization_context: personalization_context.map(String::from)
             })
         }
         .instrument(span)
@@ -191,7 +191,7 @@ impl<C: LlmClient> SummaryGenerator<C> {
                     &request.content,
                     request.depth,
                     request.context.as_deref(),
-                    request.personalization_context.as_deref(),
+                    request.personalization_context.as_deref()
                 )
                 .await;
 
@@ -200,7 +200,7 @@ impl<C: LlmClient> SummaryGenerator<C> {
                     total_tokens = total_tokens.saturating_add(summary.token_count);
                     results.push(Ok(SummaryResult {
                         summary: summary.clone(),
-                        tokens_used: summary.token_count,
+                        tokens_used: summary.token_count
                     }));
                 }
                 Err(e) => {
@@ -211,7 +211,7 @@ impl<C: LlmClient> SummaryGenerator<C> {
 
         BatchSummaryResult {
             results,
-            total_tokens_used: total_tokens,
+            total_tokens_used: total_tokens
         }
     }
 
@@ -219,7 +219,7 @@ impl<C: LlmClient> SummaryGenerator<C> {
         match depth {
             SummaryDepth::Sentence => self.config.sentence_max_tokens,
             SummaryDepth::Paragraph => self.config.paragraph_max_tokens,
-            SummaryDepth::Detailed => self.config.detailed_max_tokens,
+            SummaryDepth::Detailed => self.config.detailed_max_tokens
         }
     }
 }
@@ -246,7 +246,7 @@ fn compute_content_hash(content: &str) -> String {
 pub struct BudgetAwareSummaryGenerator<C: LlmClient> {
     generator: SummaryGenerator<C>,
     budget_tracker: Arc<BudgetTracker>,
-    model_config: TieredModelConfig,
+    model_config: TieredModelConfig
 }
 
 #[derive(Debug, Clone)]
@@ -255,7 +255,7 @@ pub struct BudgetAwareSummaryRequest {
     pub depth: SummaryDepth,
     pub layer: MemoryLayer,
     pub context: Option<String>,
-    pub personalization_context: Option<String>,
+    pub personalization_context: Option<String>
 }
 
 #[derive(Debug, Clone)]
@@ -263,19 +263,19 @@ pub struct BudgetAwareSummaryResult {
     pub summary: LayerSummary,
     pub tokens_used: u32,
     pub budget_check: BudgetCheck,
-    pub model_used: String,
+    pub model_used: String
 }
 
 impl<C: LlmClient> BudgetAwareSummaryGenerator<C> {
     pub fn new(
         generator: SummaryGenerator<C>,
         budget_tracker: Arc<BudgetTracker>,
-        model_config: TieredModelConfig,
+        model_config: TieredModelConfig
     ) -> Self {
         Self {
             generator,
             budget_tracker,
-            model_config,
+            model_config
         }
     }
 
@@ -289,7 +289,7 @@ impl<C: LlmClient> BudgetAwareSummaryGenerator<C> {
 
     pub async fn generate_with_budget(
         &self,
-        request: BudgetAwareSummaryRequest,
+        request: BudgetAwareSummaryRequest
     ) -> Result<BudgetAwareSummaryResult, GenerationError> {
         let span = info_span!(
             "context_architect.generate_with_budget",
@@ -316,7 +316,7 @@ impl<C: LlmClient> BudgetAwareSummaryGenerator<C> {
                     reason: format!(
                         "Budget exhausted for layer {:?}: {}% used",
                         request.layer, budget_check.percent_used
-                    ),
+                    )
                 }));
             }
 
@@ -326,7 +326,7 @@ impl<C: LlmClient> BudgetAwareSummaryGenerator<C> {
                     &request.content,
                     request.depth,
                     request.context.as_deref(),
-                    request.personalization_context.as_deref(),
+                    request.personalization_context.as_deref()
                 )
                 .await?;
 
@@ -343,7 +343,7 @@ impl<C: LlmClient> BudgetAwareSummaryGenerator<C> {
                 summary,
                 tokens_used: actual_tokens,
                 budget_check: final_check,
-                model_used: model,
+                model_used: model
             })
         }
         .instrument(span)
@@ -352,7 +352,7 @@ impl<C: LlmClient> BudgetAwareSummaryGenerator<C> {
 
     pub async fn generate_batch_with_budget(
         &self,
-        requests: Vec<BudgetAwareSummaryRequest>,
+        requests: Vec<BudgetAwareSummaryRequest>
     ) -> Vec<Result<BudgetAwareSummaryResult, GenerationError>> {
         let span = info_span!(
             "context_architect.generate_batch_with_budget",
@@ -370,8 +370,8 @@ impl<C: LlmClient> BudgetAwareSummaryGenerator<C> {
                         reason: format!(
                             "Budget exhausted before processing: {}% used",
                             budget_check.percent_used
-                        ),
-                    },
+                        )
+                    }
                 )));
                 continue;
             }
@@ -401,7 +401,7 @@ impl<C: LlmClient> BudgetAwareSummaryGenerator<C> {
 
 pub struct BatchedSummarizer<C: LlmClient> {
     generator: Arc<BudgetAwareSummaryGenerator<C>>,
-    max_concurrent: usize,
+    max_concurrent: usize
 }
 
 #[derive(Debug, Clone)]
@@ -409,7 +409,7 @@ pub struct LayerBatchResult {
     pub layer: MemoryLayer,
     pub results: Vec<Result<BudgetAwareSummaryResult, GenerationError>>,
     pub total_tokens: u64,
-    pub model_used: String,
+    pub model_used: String
 }
 
 #[derive(Debug, Clone)]
@@ -417,14 +417,14 @@ pub struct BatchedSummaryResult {
     pub layer_results: Vec<LayerBatchResult>,
     pub total_tokens: u64,
     pub successful_count: usize,
-    pub failed_count: usize,
+    pub failed_count: usize
 }
 
 impl<C: LlmClient> BatchedSummarizer<C> {
     pub fn new(generator: Arc<BudgetAwareSummaryGenerator<C>>) -> Self {
         Self {
             generator,
-            max_concurrent: 4,
+            max_concurrent: 4
         }
     }
 
@@ -435,7 +435,7 @@ impl<C: LlmClient> BatchedSummarizer<C> {
 
     pub async fn process_batch(
         &self,
-        requests: Vec<BudgetAwareSummaryRequest>,
+        requests: Vec<BudgetAwareSummaryRequest>
     ) -> BatchedSummaryResult {
         let span = info_span!(
             "context_architect.batched_summarizer.process_batch",
@@ -460,7 +460,7 @@ impl<C: LlmClient> BatchedSummarizer<C> {
                         .iter()
                         .map(|_| {
                             Err(GenerationError::BudgetExhausted(BudgetError::Exhausted {
-                                reason: format!("Budget exhausted for layer {:?}", layer),
+                                reason: format!("Budget exhausted for layer {:?}", layer)
                             }))
                         })
                         .collect();
@@ -470,7 +470,7 @@ impl<C: LlmClient> BatchedSummarizer<C> {
                         layer,
                         results: failed_results,
                         total_tokens: 0,
-                        model_used: self.generator.model_for_layer(layer).to_string(),
+                        model_used: self.generator.model_for_layer(layer).to_string()
                     });
                     continue;
                 }
@@ -490,7 +490,7 @@ impl<C: LlmClient> BatchedSummarizer<C> {
                     layer,
                     results,
                     total_tokens: layer_tokens,
-                    model_used: self.generator.model_for_layer(layer).to_string(),
+                    model_used: self.generator.model_for_layer(layer).to_string()
                 });
             }
         }
@@ -499,13 +499,13 @@ impl<C: LlmClient> BatchedSummarizer<C> {
             layer_results,
             total_tokens,
             successful_count,
-            failed_count,
+            failed_count
         }
     }
 
     fn group_by_layer(
         &self,
-        requests: Vec<BudgetAwareSummaryRequest>,
+        requests: Vec<BudgetAwareSummaryRequest>
     ) -> std::collections::HashMap<MemoryLayer, Vec<BudgetAwareSummaryRequest>> {
         let mut grouped: std::collections::HashMap<MemoryLayer, Vec<BudgetAwareSummaryRequest>> =
             std::collections::HashMap::new();
@@ -519,7 +519,7 @@ impl<C: LlmClient> BatchedSummarizer<C> {
 
     fn prioritize_layers(
         &self,
-        grouped: &std::collections::HashMap<MemoryLayer, Vec<BudgetAwareSummaryRequest>>,
+        grouped: &std::collections::HashMap<MemoryLayer, Vec<BudgetAwareSummaryRequest>>
     ) -> Vec<MemoryLayer> {
         let layer_priority: std::collections::HashMap<MemoryLayer, u8> = [
             (MemoryLayer::Company, 0),
@@ -528,7 +528,7 @@ impl<C: LlmClient> BatchedSummarizer<C> {
             (MemoryLayer::Project, 3),
             (MemoryLayer::Session, 4),
             (MemoryLayer::User, 5),
-            (MemoryLayer::Agent, 6),
+            (MemoryLayer::Agent, 6)
         ]
         .into_iter()
         .collect();
@@ -540,7 +540,7 @@ impl<C: LlmClient> BatchedSummarizer<C> {
 
     async fn process_layer_batch(
         &self,
-        requests: &[BudgetAwareSummaryRequest],
+        requests: &[BudgetAwareSummaryRequest]
     ) -> Vec<Result<BudgetAwareSummaryResult, GenerationError>> {
         let mut results = Vec::with_capacity(requests.len());
 
@@ -558,13 +558,13 @@ mod tests {
     use std::sync::Mutex;
 
     struct MockLlmClient {
-        responses: Mutex<Vec<String>>,
+        responses: Mutex<Vec<String>>
     }
 
     impl MockLlmClient {
         fn new(responses: Vec<String>) -> Self {
             Self {
-                responses: Mutex::new(responses),
+                responses: Mutex::new(responses)
             }
         }
     }
@@ -581,7 +581,7 @@ mod tests {
         async fn complete_with_system(
             &self,
             _system: &str,
-            _user: &str,
+            _user: &str
         ) -> Result<String, LlmError> {
             let mut responses = self.responses.lock().unwrap();
             responses
@@ -690,7 +690,7 @@ mod tests {
                 content,
                 SummaryDepth::Sentence,
                 None,
-                Some(personalization),
+                Some(personalization)
             )
             .await
             .unwrap();
@@ -746,19 +746,19 @@ mod tests {
                 content: content.to_string(),
                 depth: SummaryDepth::Sentence,
                 context: None,
-                personalization_context: None,
+                personalization_context: None
             },
             SummaryRequest {
                 content: content.to_string(),
                 depth: SummaryDepth::Paragraph,
                 context: None,
-                personalization_context: None,
+                personalization_context: None
             },
             SummaryRequest {
                 content: content.to_string(),
                 depth: SummaryDepth::Detailed,
                 context: None,
-                personalization_context: None,
+                personalization_context: None
             },
         ];
 
@@ -784,13 +784,13 @@ mod tests {
                 content: "Short".to_string(),
                 depth: SummaryDepth::Sentence,
                 context: None,
-                personalization_context: None,
+                personalization_context: None
             },
             SummaryRequest {
                 content: valid_content.to_string(),
                 depth: SummaryDepth::Paragraph,
                 context: None,
-                personalization_context: None,
+                personalization_context: None
             },
         ];
 
@@ -853,7 +853,7 @@ mod tests {
     mod budget_aware_tests {
         use super::*;
         use crate::context_architect::budget::{
-            BudgetExhaustedAction, BudgetStatus, BudgetTrackerConfig, SummarizationBudget,
+            BudgetExhaustedAction, BudgetStatus, BudgetTrackerConfig, SummarizationBudget
         };
 
         fn create_budget_tracker(daily_limit: u64, hourly_limit: u64) -> Arc<BudgetTracker> {
@@ -863,21 +863,21 @@ mod tests {
                     .with_hourly_limit(hourly_limit),
                 exhausted_action: BudgetExhaustedAction::Reject,
                 enable_alerts: false,
-                queue_max_size: 10,
+                queue_max_size: 10
             };
             Arc::new(BudgetTracker::new(config))
         }
 
         fn create_budget_aware_generator(
             responses: Vec<String>,
-            budget_tracker: Arc<BudgetTracker>,
+            budget_tracker: Arc<BudgetTracker>
         ) -> BudgetAwareSummaryGenerator<MockLlmClient> {
             let mock = Arc::new(MockLlmClient::new(responses));
             let generator = SummaryGenerator::new(mock, SummaryGeneratorConfig::default());
             BudgetAwareSummaryGenerator::new(
                 generator,
                 budget_tracker,
-                TieredModelConfig::default(),
+                TieredModelConfig::default()
             )
         }
 
@@ -894,7 +894,7 @@ mod tests {
                 depth: SummaryDepth::Sentence,
                 layer: MemoryLayer::Session,
                 context: None,
-                personalization_context: None,
+                personalization_context: None
             };
 
             let result = generator.generate_with_budget(request).await;
@@ -920,7 +920,7 @@ mod tests {
                 depth: SummaryDepth::Sentence,
                 layer: MemoryLayer::Session,
                 context: None,
-                personalization_context: None,
+                personalization_context: None
             };
 
             let result = generator.generate_with_budget(request).await;
@@ -936,7 +936,7 @@ mod tests {
                     "Company layer summary.".to_string(),
                     "User layer summary.".to_string(),
                 ],
-                tracker,
+                tracker
             );
 
             assert_eq!(generator.model_for_layer(MemoryLayer::User), "gpt-4");
@@ -973,7 +973,7 @@ mod tests {
 
             let generator = create_budget_aware_generator(
                 vec!["Summary 2.".to_string(), "Summary 1.".to_string()],
-                tracker.clone(),
+                tracker.clone()
             );
 
             let content = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do \
@@ -986,14 +986,14 @@ mod tests {
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::Session,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 },
                 BudgetAwareSummaryRequest {
                     content: content.clone(),
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::Project,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 },
             ];
 
@@ -1013,7 +1013,7 @@ mod tests {
                     "Second summary.".to_string(),
                     "First summary.".to_string(),
                 ],
-                tracker.clone(),
+                tracker.clone()
             );
 
             let content = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do \
@@ -1026,7 +1026,7 @@ mod tests {
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::Session,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 };
                 let _ = generator.generate_with_budget(request).await;
             }
@@ -1046,7 +1046,7 @@ mod tests {
                     "Session summary 2.".to_string(),
                     "Session summary 1.".to_string(),
                 ],
-                tracker,
+                tracker
             ));
             let batched = BatchedSummarizer::new(budget_aware_generator);
 
@@ -1060,28 +1060,28 @@ mod tests {
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::Session,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 },
                 BudgetAwareSummaryRequest {
                     content: content.clone(),
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::Company,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 },
                 BudgetAwareSummaryRequest {
                     content: content.clone(),
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::Session,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 },
                 BudgetAwareSummaryRequest {
                     content: content.clone(),
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::Org,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 },
             ];
 
@@ -1104,7 +1104,7 @@ mod tests {
 
             let budget_aware_generator = Arc::new(create_budget_aware_generator(
                 vec!["Company summary.".to_string()],
-                tracker,
+                tracker
             ));
             let batched = BatchedSummarizer::new(budget_aware_generator);
 
@@ -1118,14 +1118,14 @@ mod tests {
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::Session,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 },
                 BudgetAwareSummaryRequest {
                     content: content.clone(),
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::Company,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 },
             ];
 
@@ -1143,7 +1143,7 @@ mod tests {
                     "User summary.".to_string(),
                     "Company summary.".to_string(),
                 ],
-                tracker,
+                tracker
             ));
             let batched = BatchedSummarizer::new(budget_aware_generator);
 
@@ -1157,21 +1157,21 @@ mod tests {
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::Agent,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 },
                 BudgetAwareSummaryRequest {
                     content: content.clone(),
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::Company,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 },
                 BudgetAwareSummaryRequest {
                     content: content.clone(),
                     depth: SummaryDepth::Sentence,
                     layer: MemoryLayer::User,
                     context: None,
-                    personalization_context: None,
+                    personalization_context: None
                 },
             ];
 

@@ -7,7 +7,7 @@ pub enum SummarySyncEvent {
     Created(SummaryCreated),
     Updated(SummaryUpdated),
     Invalidated(SummaryInvalidated),
-    Deleted(SummaryDeleted),
+    Deleted(SummaryDeleted)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -18,7 +18,7 @@ pub struct SummaryCreated {
     pub depth: SummaryDepth,
     pub content_hash: String,
     pub token_count: u32,
-    pub created_at: i64,
+    pub created_at: i64
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -31,7 +31,7 @@ pub struct SummaryUpdated {
     pub new_hash: String,
     pub token_count: u32,
     pub updated_at: i64,
-    pub reason: SummaryUpdateReason,
+    pub reason: SummaryUpdateReason
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -41,7 +41,7 @@ pub enum SummaryUpdateReason {
     ConfigurationChanged,
     ManualRefresh,
     ScheduledUpdate,
-    PersonalizationContextChanged,
+    PersonalizationContextChanged
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -52,7 +52,7 @@ pub struct SummaryInvalidated {
     pub depths: Vec<SummaryDepth>,
     pub reason: InvalidationReason,
     pub invalidated_at: i64,
-    pub source_content_hash: Option<String>,
+    pub source_content_hash: Option<String>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -60,17 +60,17 @@ pub struct SummaryInvalidated {
 pub enum InvalidationReason {
     SourceContentChanged {
         previous_hash: String,
-        new_hash: String,
+        new_hash: String
     },
     SourceDeleted,
     ConfigurationChanged,
     ManualInvalidation,
     StaleThresholdExceeded {
-        age_seconds: u64,
+        age_seconds: u64
     },
     ParentLayerChanged {
-        parent_layer: MemoryLayer,
-    },
+        parent_layer: MemoryLayer
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -80,7 +80,7 @@ pub struct SummaryDeleted {
     pub layer: MemoryLayer,
     pub depths: Vec<SummaryDepth>,
     pub deleted_at: i64,
-    pub reason: DeletionReason,
+    pub reason: DeletionReason
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -89,7 +89,7 @@ pub enum DeletionReason {
     SourceDeleted,
     LayerPruned,
     ManualDeletion,
-    TenantCleanup,
+    TenantCleanup
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -97,7 +97,7 @@ pub enum DeletionReason {
 pub struct HindsightSyncEvent {
     pub event_type: HindsightEventType,
     pub tenant_id: String,
-    pub timestamp: i64,
+    pub timestamp: i64
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -105,27 +105,27 @@ pub struct HindsightSyncEvent {
 pub enum HindsightEventType {
     ErrorSignatureCreated {
         signature_id: String,
-        error_type: String,
+        error_type: String
     },
     ResolutionRecorded {
         resolution_id: String,
         error_signature_id: String,
-        success: bool,
+        success: bool
     },
     HindsightNoteCreated {
         note_id: String,
-        error_signature_id: String,
+        error_signature_id: String
     },
     HindsightNoteUpdated {
         note_id: String,
         previous_hash: String,
-        new_hash: String,
+        new_hash: String
     },
     ResolutionPromoted {
         resolution_id: String,
         from_layer: MemoryLayer,
-        to_layer: MemoryLayer,
-    },
+        to_layer: MemoryLayer
+    }
 }
 
 #[cfg(test)]
@@ -140,7 +140,7 @@ mod tests {
             depth: SummaryDepth::Sentence,
             content_hash: "abc123".to_string(),
             token_count: 50,
-            created_at: 1704067200,
+            created_at: 1704067200
         });
 
         let json = serde_json::to_string(&event).unwrap();
@@ -158,7 +158,7 @@ mod tests {
             new_hash: "new456".to_string(),
             token_count: 200,
             updated_at: 1704067200,
-            reason: SummaryUpdateReason::SourceContentChanged,
+            reason: SummaryUpdateReason::SourceContentChanged
         });
 
         let json = serde_json::to_string(&event).unwrap();
@@ -174,10 +174,10 @@ mod tests {
             depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph],
             reason: InvalidationReason::SourceContentChanged {
                 previous_hash: "old".to_string(),
-                new_hash: "new".to_string(),
+                new_hash: "new".to_string()
             },
             invalidated_at: 1704067200,
-            source_content_hash: Some("content-hash".to_string()),
+            source_content_hash: Some("content-hash".to_string())
         });
 
         let json = serde_json::to_string(&event).unwrap();
@@ -192,7 +192,7 @@ mod tests {
             layer: MemoryLayer::User,
             depths: vec![SummaryDepth::Detailed],
             deleted_at: 1704067200,
-            reason: DeletionReason::SourceDeleted,
+            reason: DeletionReason::SourceDeleted
         });
 
         let json = serde_json::to_string(&event).unwrap();
@@ -205,14 +205,14 @@ mod tests {
         let reasons = vec![
             InvalidationReason::SourceContentChanged {
                 previous_hash: "old".to_string(),
-                new_hash: "new".to_string(),
+                new_hash: "new".to_string()
             },
             InvalidationReason::SourceDeleted,
             InvalidationReason::ConfigurationChanged,
             InvalidationReason::ManualInvalidation,
             InvalidationReason::StaleThresholdExceeded { age_seconds: 3600 },
             InvalidationReason::ParentLayerChanged {
-                parent_layer: MemoryLayer::Org,
+                parent_layer: MemoryLayer::Org
             },
         ];
 
@@ -261,10 +261,10 @@ mod tests {
         let event = HindsightSyncEvent {
             event_type: HindsightEventType::ErrorSignatureCreated {
                 signature_id: "sig-123".to_string(),
-                error_type: "NullPointerException".to_string(),
+                error_type: "NullPointerException".to_string()
             },
             tenant_id: "tenant-1".to_string(),
-            timestamp: 1704067200,
+            timestamp: 1704067200
         };
 
         let json = serde_json::to_string(&event).unwrap();
@@ -278,10 +278,10 @@ mod tests {
             event_type: HindsightEventType::ResolutionRecorded {
                 resolution_id: "res-456".to_string(),
                 error_signature_id: "sig-123".to_string(),
-                success: true,
+                success: true
             },
             tenant_id: "tenant-1".to_string(),
-            timestamp: 1704067200,
+            timestamp: 1704067200
         };
 
         let json = serde_json::to_string(&event).unwrap();
@@ -294,10 +294,10 @@ mod tests {
         let event = HindsightSyncEvent {
             event_type: HindsightEventType::HindsightNoteCreated {
                 note_id: "note-789".to_string(),
-                error_signature_id: "sig-123".to_string(),
+                error_signature_id: "sig-123".to_string()
             },
             tenant_id: "tenant-1".to_string(),
-            timestamp: 1704067200,
+            timestamp: 1704067200
         };
 
         let json = serde_json::to_string(&event).unwrap();
@@ -311,10 +311,10 @@ mod tests {
             event_type: HindsightEventType::ResolutionPromoted {
                 resolution_id: "res-456".to_string(),
                 from_layer: MemoryLayer::User,
-                to_layer: MemoryLayer::Team,
+                to_layer: MemoryLayer::Team
             },
             tenant_id: "tenant-1".to_string(),
-            timestamp: 1704067200,
+            timestamp: 1704067200
         };
 
         let json = serde_json::to_string(&event).unwrap();

@@ -23,7 +23,7 @@
 //!
 //! ## Usage
 //! ```rust
-//! use mk_core::hints::{OperationHints, HintPreset};
+//! use mk_core::hints::{HintPreset, OperationHints};
 //!
 //! // Use a preset
 //! let hints = OperationHints::from_preset(HintPreset::Fast);
@@ -91,7 +91,7 @@ pub enum HintPreset {
     Agent,
 
     /// Custom: User-defined hints (no preset applied)
-    Custom,
+    Custom
 }
 
 impl HintPreset {
@@ -105,7 +105,7 @@ impl HintPreset {
             HintPreset::Full => "Deep analysis, debugging. More thorough processing.",
             HintPreset::Offline => "Disconnected work. No external API calls.",
             HintPreset::Agent => "AI agent workflows. Optimized for automation.",
-            HintPreset::Custom => "User-defined hints. No preset applied.",
+            HintPreset::Custom => "User-defined hints. No preset applied."
         }
     }
 
@@ -119,7 +119,7 @@ impl HintPreset {
             HintPreset::Full => &["Debugging", "Deep analysis", "Compliance audits"],
             HintPreset::Offline => &["Air-gapped environments", "Network issues", "Local dev"],
             HintPreset::Agent => &["AI agents", "Automation", "Background tasks"],
-            HintPreset::Custom => &["Advanced users", "Specific requirements"],
+            HintPreset::Custom => &["Advanced users", "Specific requirements"]
         }
     }
 }
@@ -189,7 +189,7 @@ pub struct OperationHints {
 
     /// Custom hint overrides (for extensibility)
     #[serde(default)]
-    pub custom: HashMap<String, bool>,
+    pub custom: HashMap<String, bool>
 }
 
 fn default_true() -> bool {
@@ -226,7 +226,7 @@ impl OperationHints {
                 cca: false,
                 a2a: false,
                 verbose: false,
-                custom: HashMap::new(),
+                custom: HashMap::new()
             },
             HintPreset::Fast => Self {
                 preset,
@@ -243,7 +243,7 @@ impl OperationHints {
                 cca: false,
                 a2a: true,
                 verbose: false,
-                custom: HashMap::new(),
+                custom: HashMap::new()
             },
             HintPreset::Standard => Self {
                 preset,
@@ -260,7 +260,7 @@ impl OperationHints {
                 cca: true,
                 a2a: true,
                 verbose: false,
-                custom: HashMap::new(),
+                custom: HashMap::new()
             },
             HintPreset::Full => Self {
                 preset,
@@ -277,7 +277,7 @@ impl OperationHints {
                 cca: true,
                 a2a: true,
                 verbose: true,
-                custom: HashMap::new(),
+                custom: HashMap::new()
             },
             HintPreset::Offline => Self {
                 preset,
@@ -294,7 +294,7 @@ impl OperationHints {
                 cca: false,
                 a2a: false,
                 verbose: false,
-                custom: HashMap::new(),
+                custom: HashMap::new()
             },
             HintPreset::Agent => Self {
                 preset,
@@ -311,7 +311,7 @@ impl OperationHints {
                 cca: true,
                 a2a: true,
                 verbose: false,
-                custom: HashMap::new(),
+                custom: HashMap::new()
             },
             HintPreset::Custom => Self {
                 preset,
@@ -328,8 +328,8 @@ impl OperationHints {
                 cca: true,
                 a2a: true,
                 verbose: false,
-                custom: HashMap::new(),
-            },
+                custom: HashMap::new()
+            }
         }
     }
 
@@ -413,7 +413,7 @@ impl OperationHints {
             "cca" => Some(self.cca),
             "a2a" => Some(self.a2a),
             "verbose" => Some(self.verbose),
-            _ => self.custom.get(name).copied(),
+            _ => self.custom.get(name).copied()
         }
     }
 
@@ -670,7 +670,7 @@ pub struct HintsConfig {
 
     /// Individual hint overrides
     #[serde(flatten)]
-    pub overrides: HashMap<String, bool>,
+    pub overrides: HashMap<String, bool>
 }
 
 impl HintsConfig {
@@ -679,7 +679,7 @@ impl HintsConfig {
     pub fn to_operation_hints(&self) -> OperationHints {
         let mut hints = match self.preset {
             Some(preset) => OperationHints::from_preset(preset),
-            None => OperationHints::default(),
+            None => OperationHints::default()
         };
 
         for (name, value) in &self.overrides {
@@ -705,10 +705,10 @@ impl OperationHints {
         let mut hints = Self::default();
 
         // Check for preset first
-        if let Ok(preset_str) = std::env::var("AETERNA_HINTS_PRESET") {
-            if let Ok(preset) = preset_str.parse::<HintPreset>() {
-                hints = Self::from_preset(preset);
-            }
+        if let Ok(preset_str) = std::env::var("AETERNA_HINTS_PRESET")
+            && let Ok(preset) = preset_str.parse::<HintPreset>()
+        {
+            hints = Self::from_preset(preset);
         }
 
         // Check for hint string
@@ -730,7 +730,7 @@ impl OperationHints {
             ("AETERNA_HINTS_GRAPH", "graph"),
             ("AETERNA_HINTS_CCA", "cca"),
             ("AETERNA_HINTS_A2A", "a2a"),
-            ("AETERNA_HINTS_VERBOSE", "verbose"),
+            ("AETERNA_HINTS_VERBOSE", "verbose")
         ];
 
         for (env_var, hint_name) in env_hints {
@@ -890,7 +890,7 @@ mod tests {
                 let mut m = HashMap::new();
                 m.insert("verbose".to_string(), true);
                 m
-            },
+            }
         };
 
         let hints = config.to_operation_hints();

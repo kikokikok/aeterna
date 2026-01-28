@@ -15,7 +15,7 @@
 
 use crate::config::{
     Config, ContentionAlertConfig, GraphConfig, MemoryConfig, ObservabilityConfig, PostgresConfig,
-    ProviderConfig, QdrantConfig, ReasoningConfig, RedisConfig, RlmConfig, SyncConfig, ToolConfig,
+    ProviderConfig, QdrantConfig, ReasoningConfig, RedisConfig, RlmConfig, SyncConfig, ToolConfig
 };
 use std::env;
 
@@ -95,7 +95,7 @@ pub fn load_from_env() -> Result<Config, Box<dyn std::error::Error>> {
         observability: load_observability_from_env()?,
         deployment: load_deployment_from_env()?,
         job: load_job_from_env()?,
-        cca: crate::cca::CcaConfig::default(),
+        cca: crate::cca::CcaConfig::default()
     };
 
     Ok(config)
@@ -106,7 +106,7 @@ fn load_deployment_from_env() -> Result<crate::config::DeploymentConfig, Box<dyn
     Ok(crate::config::DeploymentConfig {
         mode: env::var("AETERNA_DEPLOYMENT_MODE").unwrap_or_else(|_| "local".to_string()),
         remote_url: env::var("AETERNA_REMOTE_GOVERNANCE_URL").ok(),
-        sync_enabled: parse_env("AETERNA_SYNC_ENABLED").unwrap_or(true),
+        sync_enabled: parse_env("AETERNA_SYNC_ENABLED").unwrap_or(true)
     })
 }
 
@@ -117,7 +117,7 @@ fn load_job_from_env() -> Result<crate::config::JobConfig, Box<dyn std::error::E
         deduplication_window_seconds: parse_env("AETERNA_JOB_DEDUP_WINDOW_SECONDS").unwrap_or(300),
         checkpoint_interval: parse_env("AETERNA_JOB_CHECKPOINT_INTERVAL").unwrap_or(100),
         graceful_shutdown_timeout_seconds: parse_env("AETERNA_JOB_SHUTDOWN_TIMEOUT_SECONDS")
-            .unwrap_or(30),
+            .unwrap_or(30)
     })
 }
 
@@ -126,7 +126,7 @@ fn load_provider_from_env() -> Result<ProviderConfig, Box<dyn std::error::Error>
         postgres: load_postgres_from_env()?,
         qdrant: load_qdrant_from_env()?,
         redis: load_redis_from_env()?,
-        graph: load_graph_from_env()?,
+        graph: load_graph_from_env()?
     })
 }
 
@@ -138,7 +138,7 @@ fn load_postgres_from_env() -> Result<PostgresConfig, Box<dyn std::error::Error>
         username: env::var("PG_USERNAME").unwrap_or_else(|_| "postgres".to_string()),
         password: env::var("PG_PASSWORD").unwrap_or_default(),
         pool_size: parse_env("PG_POOL_SIZE").unwrap_or(10),
-        timeout_seconds: parse_env("PG_TIMEOUT_SECONDS").unwrap_or(30),
+        timeout_seconds: parse_env("PG_TIMEOUT_SECONDS").unwrap_or(30)
     })
 }
 
@@ -147,7 +147,7 @@ fn load_qdrant_from_env() -> Result<QdrantConfig, Box<dyn std::error::Error>> {
         host: env::var("QD_HOST").unwrap_or_else(|_| "localhost".to_string()),
         port: parse_env("QD_PORT").unwrap_or(6333),
         collection: env::var("QD_COLLECTION").unwrap_or_else(|_| "memory_embeddings".to_string()),
-        timeout_seconds: parse_env("QD_TIMEOUT_SECONDS").unwrap_or(30),
+        timeout_seconds: parse_env("QD_TIMEOUT_SECONDS").unwrap_or(30)
     })
 }
 
@@ -157,7 +157,7 @@ fn load_redis_from_env() -> Result<RedisConfig, Box<dyn std::error::Error>> {
         port: parse_env("RD_PORT").unwrap_or(6379),
         db: parse_env("RD_DB").unwrap_or(0),
         pool_size: parse_env("RD_POOL_SIZE").unwrap_or(10),
-        timeout_seconds: parse_env("RD_TIMEOUT_SECONDS").unwrap_or(30),
+        timeout_seconds: parse_env("RD_TIMEOUT_SECONDS").unwrap_or(30)
     })
 }
 
@@ -169,7 +169,7 @@ fn load_graph_from_env() -> Result<GraphConfig, Box<dyn std::error::Error>> {
         s3_prefix: env::var("GR_S3_PREFIX").ok(),
         s3_endpoint: env::var("GR_S3_ENDPOINT").ok(),
         s3_region: env::var("GR_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
-        contention_alerts: ContentionAlertConfig::default(),
+        contention_alerts: ContentionAlertConfig::default()
     })
 }
 
@@ -180,7 +180,7 @@ fn load_sync_from_env() -> Result<SyncConfig, Box<dyn std::error::Error>> {
         batch_size: parse_env("SY_BATCH_SIZE").unwrap_or(100),
         checkpoint_enabled: parse_env("SY_CHECKPOINT_ENABLED").unwrap_or(true),
         conflict_resolution: env::var("SY_CONFLICT_RESOLUTION")
-            .unwrap_or_else(|_| "prefer_knowledge".to_string()),
+            .unwrap_or_else(|_| "prefer_knowledge".to_string())
     })
 }
 
@@ -192,7 +192,7 @@ fn load_memory_from_env() -> Result<MemoryConfig, Box<dyn std::error::Error>> {
         optimization_trigger_count: parse_env("MK_OPTIMIZATION_TRIGGER_COUNT").unwrap_or(100),
         layer_summary_configs: std::collections::HashMap::new(),
         reasoning: ReasoningConfig::default(),
-        rlm: load_rlm_from_env()?,
+        rlm: load_rlm_from_env()?
     })
 }
 
@@ -200,7 +200,7 @@ fn load_rlm_from_env() -> Result<RlmConfig, Box<dyn std::error::Error>> {
     Ok(RlmConfig {
         enabled: parse_env("MK_RLM_ENABLED").unwrap_or(true),
         max_steps: parse_env("MK_RLM_MAX_STEPS").unwrap_or(5),
-        complexity_threshold: parse_env("MK_RLM_COMPLEXITY_THRESHOLD").unwrap_or(0.3),
+        complexity_threshold: parse_env("MK_RLM_COMPLEXITY_THRESHOLD").unwrap_or(0.3)
     })
 }
 
@@ -211,7 +211,7 @@ fn load_tools_from_env() -> Result<ToolConfig, Box<dyn std::error::Error>> {
         port: parse_env("TL_PORT").unwrap_or(8080),
         api_key: env::var("TL_API_KEY").ok(),
         rate_limit_requests_per_minute: parse_env("TL_RATE_LIMIT_REQUESTS_PER_MINUTE")
-            .unwrap_or(60),
+            .unwrap_or(60)
     })
 }
 
@@ -220,20 +220,20 @@ fn load_observability_from_env() -> Result<ObservabilityConfig, Box<dyn std::err
         metrics_enabled: parse_env("OB_METRICS_ENABLED").unwrap_or(true),
         tracing_enabled: parse_env("OB_TRACING_ENABLED").unwrap_or(true),
         logging_level: env::var("OB_LOGGING_LEVEL").unwrap_or_else(|_| "info".to_string()),
-        metrics_port: parse_env("OB_METRICS_PORT").unwrap_or(9090),
+        metrics_port: parse_env("OB_METRICS_PORT").unwrap_or(9090)
     })
 }
 
 fn parse_env<T>(key: &str) -> Result<T, Box<dyn std::error::Error>>
 where
     T: std::str::FromStr,
-    T::Err: std::error::Error + Send + Sync + 'static,
+    T::Err: std::error::Error + Send + Sync + 'static
 {
     match env::var(key) {
         Ok(s) => s
             .parse::<T>()
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
-        Err(e) => Err(Box::new(e) as Box<dyn std::error::Error>),
+        Err(e) => Err(Box::new(e) as Box<dyn std::error::Error>)
     }
 }
 

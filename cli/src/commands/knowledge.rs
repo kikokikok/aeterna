@@ -21,7 +21,7 @@ pub enum KnowledgeCommand {
     Check(KnowledgeCheckArgs),
 
     #[command(about = "Propose new knowledge (ADR, Pattern, Policy, Spec)")]
-    Propose(KnowledgeProposeArgs),
+    Propose(KnowledgeProposeArgs)
 }
 
 #[derive(Args)]
@@ -51,7 +51,7 @@ pub struct KnowledgeSearchArgs {
 
     /// Dry run - don't actually search, just show what would happen
     #[arg(long)]
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 #[derive(Args)]
@@ -65,7 +65,7 @@ pub struct KnowledgeGetArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -84,7 +84,7 @@ pub struct KnowledgeListArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -111,7 +111,7 @@ pub struct KnowledgeCheckArgs {
 
     /// Dry run
     #[arg(long)]
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 #[derive(Args)]
@@ -119,11 +119,13 @@ pub struct KnowledgeProposeArgs {
     /// Natural language description of what you want to propose
     pub description: String,
 
-    /// Knowledge type (adr, pattern, policy, spec) - auto-detected if not specified
+    /// Knowledge type (adr, pattern, policy, spec) - auto-detected if not
+    /// specified
     #[arg(short = 't', long)]
     pub knowledge_type: Option<String>,
 
-    /// Target layer (company, org, team, project) - inferred from description if not specified
+    /// Target layer (company, org, team, project) - inferred from description
+    /// if not specified
     #[arg(short, long)]
     pub layer: Option<String>,
 
@@ -145,7 +147,7 @@ pub struct KnowledgeProposeArgs {
 
     /// Dry run - show what would be proposed without creating draft
     #[arg(long)]
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 pub async fn run(cmd: KnowledgeCommand) -> anyhow::Result<()> {
@@ -154,7 +156,7 @@ pub async fn run(cmd: KnowledgeCommand) -> anyhow::Result<()> {
         KnowledgeCommand::Get(args) => run_get(args).await,
         KnowledgeCommand::List(args) => run_list(args).await,
         KnowledgeCommand::Check(args) => run_check(args).await,
-        KnowledgeCommand::Propose(args) => run_propose(args).await,
+        KnowledgeCommand::Propose(args) => run_propose(args).await
     }
 }
 
@@ -173,17 +175,17 @@ async fn run_search(args: KnowledgeSearchArgs) -> anyhow::Result<()> {
         resolved.to_hints()
     };
 
-    let layers: Vec<String> = args
-        .layers
-        .map(|l| l.split(',').map(|s| s.trim().to_lowercase()).collect())
-        .unwrap_or_else(|| {
+    let layers: Vec<String> = args.layers.map_or_else(
+        || {
             vec![
                 "project".to_string(),
                 "team".to_string(),
                 "org".to_string(),
                 "company".to_string(),
             ]
-        });
+        },
+        |l| l.split(',').map(|s| s.trim().to_lowercase()).collect()
+    );
 
     let valid_layers = ["company", "org", "team", "project"];
     for layer in &layers {
@@ -256,7 +258,7 @@ async fn run_search(args: KnowledgeSearchArgs) -> anyhow::Result<()> {
                     "team" => "Team standards and conventions",
                     "org" => "Organization-wide policies",
                     "company" => "Company global standards",
-                    _ => "",
+                    _ => ""
                 };
                 println!("    {}. {} - {}", i + 1, layer, desc);
             }
@@ -341,9 +343,9 @@ async fn run_list(args: KnowledgeListArgs) -> anyhow::Result<()> {
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        output::header(&format!("Knowledge in '{}' layer", layer));
+        output::header(&format!("Knowledge in '{layer}' layer"));
         if let Some(prefix) = &args.prefix {
-            println!("  Prefix: {}", prefix);
+            println!("  Prefix: {prefix}");
         }
         println!();
         let err = ux_error::server_not_connected();
@@ -391,13 +393,13 @@ async fn run_check(args: KnowledgeCheckArgs) -> anyhow::Result<()> {
             output::header("Knowledge Check (Dry Run)");
             println!();
             if let Some(ctx) = &args.context {
-                println!("  Context:    {}", ctx);
+                println!("  Context:    {ctx}");
             }
             if let Some(policy) = &args.policy {
-                println!("  Policy:     {}", policy);
+                println!("  Policy:     {policy}");
             }
             if let Some(dep) = &args.dependency {
-                println!("  Dependency: {}", dep);
+                println!("  Dependency: {dep}");
             }
             println!();
             output::header("What Would Be Checked");
@@ -439,7 +441,7 @@ async fn run_check(args: KnowledgeCheckArgs) -> anyhow::Result<()> {
 
 fn hint_effect(enabled: bool, effect: &str) -> String {
     if enabled {
-        format!("({})", effect)
+        format!("({effect})")
     } else {
         String::new()
     }
@@ -475,13 +477,11 @@ async fn run_propose(args: KnowledgeProposeArgs) -> anyhow::Result<()> {
     let knowledge_type = args
         .knowledge_type
         .as_ref()
-        .map(|s| s.to_lowercase())
-        .unwrap_or_else(|| detected_type.clone());
+        .map_or_else(|| detected_type.clone(), |s| s.to_lowercase());
     let layer = args
         .layer
         .as_ref()
-        .map(|s| s.to_lowercase())
-        .unwrap_or_else(|| detected_layer.clone());
+        .map_or_else(|| detected_layer.clone(), |s| s.to_lowercase());
     let title = args
         .title
         .clone()
@@ -517,7 +517,7 @@ async fn run_propose(args: KnowledgeProposeArgs) -> anyhow::Result<()> {
                 "  Type:  {} {}",
                 detected_type,
                 if args.knowledge_type.is_some() {
-                    format!("(overridden to {})", knowledge_type)
+                    format!("(overridden to {knowledge_type})")
                 } else {
                     "(auto-detected)".to_string()
                 }
@@ -526,12 +526,12 @@ async fn run_propose(args: KnowledgeProposeArgs) -> anyhow::Result<()> {
                 "  Layer: {} {}",
                 detected_layer,
                 if args.layer.is_some() {
-                    format!("(overridden to {})", layer)
+                    format!("(overridden to {layer})")
                 } else {
                     "(auto-detected)".to_string()
                 }
             );
-            println!("  Title: {}", title);
+            println!("  Title: {title}");
             println!();
             output::header("Context");
             println!("  tenant_id:  {}", resolved.tenant_id.value);
@@ -541,7 +541,7 @@ async fn run_propose(args: KnowledgeProposeArgs) -> anyhow::Result<()> {
             }
             println!();
             output::header("What Would Happen");
-            println!("  1. Create a {} draft in {} layer", knowledge_type, layer);
+            println!("  1. Create a {knowledge_type} draft in {layer} layer");
             println!("  2. Generate structured content from description");
             if args.submit {
                 println!("  3. Submit directly for governance approval");
@@ -557,12 +557,11 @@ async fn run_propose(args: KnowledgeProposeArgs) -> anyhow::Result<()> {
 
     if !args.yes && !args.dry_run {
         output::warn(&format!(
-            "This will create a {} proposal in {} layer:",
-            knowledge_type, layer
+            "This will create a {knowledge_type} proposal in {layer} layer:"
         ));
-        println!("  Title: {}", title);
-        println!("  Type:  {}", knowledge_type);
-        println!("  Layer: {}", layer);
+        println!("  Title: {title}");
+        println!("  Type:  {knowledge_type}");
+        println!("  Layer: {layer}");
         if args.submit {
             output::info("The proposal will be submitted directly for approval.");
         } else {
@@ -587,9 +586,9 @@ async fn run_propose(args: KnowledgeProposeArgs) -> anyhow::Result<()> {
     } else {
         output::header("Knowledge Propose");
         println!();
-        println!("  Title: {}", title);
-        println!("  Type:  {}", knowledge_type);
-        println!("  Layer: {}", layer);
+        println!("  Title: {title}");
+        println!("  Type:  {knowledge_type}");
+        println!("  Layer: {layer}");
         println!();
         let err = ux_error::server_not_connected();
         err.display();
@@ -739,7 +738,8 @@ mod tests {
 
     #[test]
     fn test_extract_title_long() {
-        let long_text = "This is a very long description that should be truncated to fit within the title limit";
+        let long_text = "This is a very long description that should be truncated to fit within \
+                         the title limit";
         let result = extract_title(long_text);
         assert!(result.len() <= 60);
         assert!(result.ends_with("..."));

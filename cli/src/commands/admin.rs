@@ -24,7 +24,7 @@ pub enum AdminCommand {
     Export(AdminExportArgs),
 
     #[command(about = "Import data from backup or another instance")]
-    Import(AdminImportArgs),
+    Import(AdminImportArgs)
 }
 
 #[derive(Args)]
@@ -43,7 +43,7 @@ pub struct AdminHealthArgs {
 
     /// Timeout in seconds for health checks
     #[arg(long, default_value = "30")]
-    pub timeout: u64,
+    pub timeout: u64
 }
 
 #[derive(Args)]
@@ -62,7 +62,7 @@ pub struct AdminValidateArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -85,7 +85,7 @@ pub struct AdminMigrateArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -108,7 +108,7 @@ pub struct AdminDriftArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -139,7 +139,7 @@ pub struct AdminExportArgs {
 
     /// Output result as JSON (for scripting)
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -161,21 +161,21 @@ pub struct AdminImportArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum ExportFormat {
     Json,
     Yaml,
-    Tar,
+    Tar
 }
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum ImportMode {
     Merge,
     Replace,
-    SkipExisting,
+    SkipExisting
 }
 
 pub async fn run(cmd: AdminCommand) -> anyhow::Result<()> {
@@ -185,7 +185,7 @@ pub async fn run(cmd: AdminCommand) -> anyhow::Result<()> {
         AdminCommand::Migrate(args) => run_migrate(args).await,
         AdminCommand::Drift(args) => run_drift(args).await,
         AdminCommand::Export(args) => run_export(args).await,
-        AdminCommand::Import(args) => run_import(args).await,
+        AdminCommand::Import(args) => run_import(args).await
     }
 }
 
@@ -250,8 +250,7 @@ async fn run_health(args: AdminHealthArgs) -> anyhow::Result<()> {
             "  Project: {}",
             ctx.project_id
                 .as_ref()
-                .map(|v| v.value.as_str())
-                .unwrap_or("(auto-detect)")
+                .map_or("(auto-detect)", |v| v.value.as_str())
         );
         println!();
 
@@ -273,8 +272,7 @@ async fn run_health(args: AdminHealthArgs) -> anyhow::Result<()> {
             "  Project: {}",
             ctx.project_id
                 .as_ref()
-                .map(|v| v.value.as_str())
-                .unwrap_or("(auto-detect)")
+                .map_or("(auto-detect)", |v| v.value.as_str())
         );
         println!();
 
@@ -285,13 +283,13 @@ async fn run_health(args: AdminHealthArgs) -> anyhow::Result<()> {
                 "healthy" => "✓",
                 "degraded" => "!",
                 "unhealthy" => "✗",
-                _ => "?",
+                _ => "?"
             };
             let color = match check.status.as_str() {
                 "healthy" => "green",
                 "degraded" => "yellow",
                 "unhealthy" => "red",
-                _ => "white",
+                _ => "white"
             };
 
             println!(
@@ -304,7 +302,7 @@ async fn run_health(args: AdminHealthArgs) -> anyhow::Result<()> {
 
             if args.verbose {
                 for (key, value) in &check.details {
-                    println!("      {}: {}", key, value);
+                    println!("      {key}: {value}");
                 }
             }
         }
@@ -374,15 +372,15 @@ async fn run_validate(args: AdminValidateArgs) -> anyhow::Result<()> {
             }
 
             for error in &result.errors {
-                println!("  ✗ ERROR: {}", error);
+                println!("  ✗ ERROR: {error}");
             }
 
             for warning in &result.warnings {
-                println!("  ! WARNING: {}", warning);
+                println!("  ! WARNING: {warning}");
             }
 
             for info in &result.info {
-                println!("  ℹ {}", info);
+                println!("  ℹ {info}");
             }
             println!();
         }
@@ -412,19 +410,19 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
             version: "2024.1.1".to_string(),
             name: "Add agent delegation table".to_string(),
             status: "pending".to_string(),
-            reversible: true,
+            reversible: true
         },
         Migration {
             version: "2024.1.2".to_string(),
             name: "Add policy audit columns".to_string(),
             status: "pending".to_string(),
-            reversible: true,
+            reversible: true
         },
         Migration {
             version: "2024.2.0".to_string(),
             name: "Cedar schema v2 upgrade".to_string(),
             status: "pending".to_string(),
-            reversible: false,
+            reversible: false
         },
     ];
 
@@ -449,8 +447,8 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
         output::header("Database Migration");
         println!();
 
-        println!("  Current Version: {}", current_version);
-        println!("  Target Version:  {}", target_version);
+        println!("  Current Version: {current_version}");
+        println!("  Target Version:  {target_version}");
         println!("  Direction:       {}", args.direction);
         if args.dry_run {
             println!("  Mode:            DRY RUN (no changes will be made)");
@@ -465,7 +463,7 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
                         "applied" => "✓",
                         "pending" => "○",
                         "failed" => "✗",
-                        _ => "?",
+                        _ => "?"
                     };
                     let reversible = if migration.reversible {
                         ""
@@ -478,7 +476,7 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
                     );
                 }
                 println!();
-                println!("  {} pending migration(s)", pending_count);
+                println!("  {pending_count} pending migration(s)");
             }
             "up" => {
                 output::subheader("Migrations to Apply");
@@ -527,7 +525,7 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
                 }
 
                 output::subheader("Migrations to Rollback");
-                println!("  ← Rolling back to {}", target_version);
+                println!("  ← Rolling back to {target_version}");
                 if args.dry_run {
                     output::hint("Remove --dry-run to execute rollback");
                 }
@@ -558,7 +556,7 @@ async fn run_drift(args: AdminDriftArgs) -> anyhow::Result<()> {
             drift_type: "modified".to_string(),
             expected: "timeout = 30".to_string(),
             actual: "timeout = 60".to_string(),
-            fixable: true,
+            fixable: true
         },
         DriftItem {
             target: "policies".to_string(),
@@ -566,7 +564,7 @@ async fn run_drift(args: AdminDriftArgs) -> anyhow::Result<()> {
             drift_type: "missing".to_string(),
             expected: "(file should exist)".to_string(),
             actual: "(file not found)".to_string(),
-            fixable: true,
+            fixable: true
         },
     ];
 
@@ -607,7 +605,7 @@ async fn run_drift(args: AdminDriftArgs) -> anyhow::Result<()> {
                     "modified" => "~",
                     "missing" => "-",
                     "extra" => "+",
-                    _ => "?",
+                    _ => "?"
                 };
                 let fixable = if drift.fixable { " [fixable]" } else { "" };
 
@@ -632,8 +630,7 @@ async fn run_drift(args: AdminDriftArgs) -> anyhow::Result<()> {
                 println!();
             } else {
                 output::hint(&format!(
-                    "Run with --fix to auto-correct {} fixable items",
-                    fixable_count
+                    "Run with --fix to auto-correct {fixable_count} fixable items"
                 ));
             }
         }
@@ -651,10 +648,10 @@ async fn run_export(args: AdminExportArgs) -> anyhow::Result<()> {
         let ext = match args.format {
             ExportFormat::Json => "json",
             ExportFormat::Yaml => "yaml",
-            ExportFormat::Tar => "tar",
+            ExportFormat::Tar => "tar"
         };
         let suffix = if args.compress { ".gz" } else { "" };
-        PathBuf::from(format!("aeterna_export_{}.{}{}", timestamp, ext, suffix))
+        PathBuf::from(format!("aeterna_export_{timestamp}.{ext}{suffix}"))
     });
 
     // Simulated export statistics
@@ -663,7 +660,7 @@ async fn run_export(args: AdminExportArgs) -> anyhow::Result<()> {
         knowledge_items: 89,
         policies: 23,
         config_files: 4,
-        audit_entries: if args.include_audit { 15420 } else { 0 },
+        audit_entries: if args.include_audit { 15420 } else { 0 }
     };
 
     if args.json {
@@ -694,7 +691,7 @@ async fn run_export(args: AdminExportArgs) -> anyhow::Result<()> {
             println!("  Compression: gzip");
         }
         if let Some(layer) = &args.layer {
-            println!("  Layer:       {}", layer);
+            println!("  Layer:       {layer}");
         }
         println!();
 
@@ -751,14 +748,14 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
             ImportConflict {
                 item_type: "memory".to_string(),
                 id: "mem_abc123".to_string(),
-                reason: "Already exists with different content".to_string(),
+                reason: "Already exists with different content".to_string()
             },
             ImportConflict {
                 item_type: "policy".to_string(),
                 id: "security-baseline".to_string(),
-                reason: "Version mismatch".to_string(),
+                reason: "Version mismatch".to_string()
             },
-        ],
+        ]
     };
 
     if args.json {
@@ -858,7 +855,7 @@ struct HealthCheck {
     status: String,
     latency_ms: u64,
     message: String,
-    details: std::collections::HashMap<String, String>,
+    details: std::collections::HashMap<String, String>
 }
 
 async fn check_component_health(component: &str, _timeout: u64) -> HealthCheck {
@@ -875,7 +872,7 @@ async fn check_component_health(component: &str, _timeout: u64) -> HealthCheck {
                 status: "healthy".to_string(),
                 latency_ms: 12,
                 message: "Vector store responding".to_string(),
-                details,
+                details
             }
         }
         "knowledge" => {
@@ -886,7 +883,7 @@ async fn check_component_health(component: &str, _timeout: u64) -> HealthCheck {
                 status: "healthy".to_string(),
                 latency_ms: 5,
                 message: "Repository accessible".to_string(),
-                details,
+                details
             }
         }
         "policy" => {
@@ -897,7 +894,7 @@ async fn check_component_health(component: &str, _timeout: u64) -> HealthCheck {
                 status: "healthy".to_string(),
                 latency_ms: 8,
                 message: "Cedar agent responding".to_string(),
-                details,
+                details
             }
         }
         "context" => {
@@ -907,7 +904,7 @@ async fn check_component_health(component: &str, _timeout: u64) -> HealthCheck {
                 status: "healthy".to_string(),
                 latency_ms: 1,
                 message: "Context resolution working".to_string(),
-                details,
+                details
             }
         }
         _ => HealthCheck {
@@ -915,8 +912,8 @@ async fn check_component_health(component: &str, _timeout: u64) -> HealthCheck {
             status: "unknown".to_string(),
             latency_ms: 0,
             message: "Unknown component".to_string(),
-            details,
-        },
+            details
+        }
     }
 }
 
@@ -924,13 +921,13 @@ struct ValidationResult {
     target: String,
     errors: Vec<String>,
     warnings: Vec<String>,
-    info: Vec<String>,
+    info: Vec<String>
 }
 
 async fn validate_target(
     target: &str,
     _config_path: Option<&PathBuf>,
-    _strict: bool,
+    _strict: bool
 ) -> ValidationResult {
     // Simulated validation - in real implementation, this would
     // actually validate the various components
@@ -939,26 +936,26 @@ async fn validate_target(
             target: "config".to_string(),
             errors: vec![],
             warnings: vec![],
-            info: vec!["Configuration file valid".to_string()],
+            info: vec!["Configuration file valid".to_string()]
         },
         "schema" => ValidationResult {
             target: "schema".to_string(),
             errors: vec![],
             warnings: vec![],
-            info: vec!["Database schema matches expected version".to_string()],
+            info: vec!["Database schema matches expected version".to_string()]
         },
         "policies" => ValidationResult {
             target: "policies".to_string(),
             errors: vec![],
             warnings: vec!["Policy 'legacy-compat' uses deprecated syntax".to_string()],
-            info: vec!["23 policies validated".to_string()],
+            info: vec!["23 policies validated".to_string()]
         },
         _ => ValidationResult {
             target: target.to_string(),
             errors: vec![format!("Unknown validation target: {}", target)],
             warnings: vec![],
-            info: vec![],
-        },
+            info: vec![]
+        }
     }
 }
 
@@ -966,7 +963,7 @@ struct Migration {
     version: String,
     name: String,
     status: String,
-    reversible: bool,
+    reversible: bool
 }
 
 struct DriftItem {
@@ -975,7 +972,7 @@ struct DriftItem {
     drift_type: String,
     expected: String,
     actual: String,
-    fixable: bool,
+    fixable: bool
 }
 
 struct ExportStats {
@@ -983,7 +980,7 @@ struct ExportStats {
     knowledge_items: u64,
     policies: u64,
     config_files: u64,
-    audit_entries: u64,
+    audit_entries: u64
 }
 
 struct ImportAnalysis {
@@ -992,13 +989,13 @@ struct ImportAnalysis {
     memories: u64,
     knowledge_items: u64,
     policies: u64,
-    conflicts: Vec<ImportConflict>,
+    conflicts: Vec<ImportConflict>
 }
 
 struct ImportConflict {
     item_type: String,
     id: String,
-    reason: String,
+    reason: String
 }
 
 fn colored_status(icon: &str, color: &str) -> String {
@@ -1007,7 +1004,7 @@ fn colored_status(icon: &str, color: &str) -> String {
         "green" => icon.green().to_string(),
         "yellow" => icon.yellow().to_string(),
         "red" => icon.red().to_string(),
-        _ => icon.white().to_string(),
+        _ => icon.white().to_string()
     }
 }
 
@@ -1075,7 +1072,7 @@ mod tests {
             component: "all".to_string(),
             json: false,
             verbose: false,
-            timeout: 30,
+            timeout: 30
         };
         assert_eq!(args.component, "all");
         assert!(!args.json);
@@ -1089,7 +1086,7 @@ mod tests {
             component: "memory".to_string(),
             json: true,
             verbose: true,
-            timeout: 60,
+            timeout: 60
         };
         assert_eq!(args.component, "memory");
         assert!(args.json);
@@ -1103,7 +1100,7 @@ mod tests {
             target: "all".to_string(),
             config: None,
             strict: false,
-            json: false,
+            json: false
         };
         assert_eq!(args.target, "all");
         assert!(args.config.is_none());
@@ -1117,7 +1114,7 @@ mod tests {
             target: "config".to_string(),
             config: Some(PathBuf::from("/path/to/config.toml")),
             strict: true,
-            json: true,
+            json: true
         };
         assert_eq!(args.target, "config");
         assert!(args.config.is_some());
@@ -1132,7 +1129,7 @@ mod tests {
             target: None,
             dry_run: false,
             force: false,
-            json: false,
+            json: false
         };
         assert_eq!(args.direction, "up");
         assert!(args.target.is_none());
@@ -1147,7 +1144,7 @@ mod tests {
             target: Some("2024.1.0".to_string()),
             dry_run: false,
             force: true,
-            json: true,
+            json: true
         };
         assert_eq!(args.direction, "down");
         assert_eq!(args.target, Some("2024.1.0".to_string()));
@@ -1161,7 +1158,7 @@ mod tests {
             target: None,
             dry_run: false,
             force: false,
-            json: false,
+            json: false
         };
         assert_eq!(args.direction, "status");
     }
@@ -1173,7 +1170,7 @@ mod tests {
             expected: None,
             target: "all".to_string(),
             fix: false,
-            json: false,
+            json: false
         };
         assert_eq!(args.source, "git");
         assert!(args.expected.is_none());
@@ -1188,7 +1185,7 @@ mod tests {
             expected: Some(PathBuf::from("/path/to/expected.json")),
             target: "config".to_string(),
             fix: true,
-            json: true,
+            json: true
         };
         assert_eq!(args.source, "file");
         assert!(args.expected.is_some());
@@ -1204,7 +1201,7 @@ mod tests {
             include_audit: false,
             layer: None,
             compress: false,
-            json: false,
+            json: false
         };
         assert_eq!(args.target, "all");
         assert!(args.output.is_none());
@@ -1221,7 +1218,7 @@ mod tests {
             include_audit: true,
             layer: Some("company".to_string()),
             compress: true,
-            json: true,
+            json: true
         };
         assert_eq!(args.target, "memories");
         assert!(args.output.is_some());
@@ -1237,7 +1234,7 @@ mod tests {
             mode: ImportMode::Merge,
             dry_run: false,
             skip_validation: false,
-            json: false,
+            json: false
         };
         assert_eq!(args.input, PathBuf::from("/backup/export.json"));
         assert!(!args.dry_run);
@@ -1251,7 +1248,7 @@ mod tests {
             mode: ImportMode::Replace,
             dry_run: true,
             skip_validation: false,
-            json: true,
+            json: true
         };
         assert!(args.dry_run);
     }
@@ -1263,7 +1260,7 @@ mod tests {
             mode: ImportMode::SkipExisting,
             dry_run: false,
             skip_validation: true,
-            json: false,
+            json: false
         };
         assert!(args.skip_validation);
     }
@@ -1278,7 +1275,7 @@ mod tests {
             status: "healthy".to_string(),
             latency_ms: 15,
             message: "Vector store responding".to_string(),
-            details,
+            details
         };
         assert_eq!(check.component, "memory");
         assert_eq!(check.status, "healthy");
@@ -1292,7 +1289,7 @@ mod tests {
             target: "config".to_string(),
             errors: vec![],
             warnings: vec![],
-            info: vec!["All good".to_string()],
+            info: vec!["All good".to_string()]
         };
         assert!(result.errors.is_empty());
         assert!(result.warnings.is_empty());
@@ -1305,7 +1302,7 @@ mod tests {
             target: "schema".to_string(),
             errors: vec!["Missing required field".to_string()],
             warnings: vec!["Deprecated syntax".to_string()],
-            info: vec![],
+            info: vec![]
         };
         assert!(!result.errors.is_empty());
         assert!(!result.warnings.is_empty());
@@ -1318,7 +1315,7 @@ mod tests {
             version: "2024.1.1".to_string(),
             name: "Add agent delegation table".to_string(),
             status: "pending".to_string(),
-            reversible: true,
+            reversible: true
         };
         assert_eq!(migration.version, "2024.1.1");
         assert_eq!(migration.status, "pending");
@@ -1331,7 +1328,7 @@ mod tests {
             version: "2024.2.0".to_string(),
             name: "Cedar schema v2 upgrade".to_string(),
             status: "applied".to_string(),
-            reversible: false,
+            reversible: false
         };
         assert!(!migration.reversible);
         assert_eq!(migration.status, "applied");
@@ -1345,7 +1342,7 @@ mod tests {
             drift_type: "modified".to_string(),
             expected: "timeout = 30".to_string(),
             actual: "timeout = 60".to_string(),
-            fixable: true,
+            fixable: true
         };
         assert_eq!(drift.drift_type, "modified");
         assert!(drift.fixable);
@@ -1359,7 +1356,7 @@ mod tests {
             drift_type: "missing".to_string(),
             expected: "(file should exist)".to_string(),
             actual: "(file not found)".to_string(),
-            fixable: true,
+            fixable: true
         };
         assert_eq!(drift.drift_type, "missing");
     }
@@ -1372,7 +1369,7 @@ mod tests {
             drift_type: "extra".to_string(),
             expected: "(should not exist)".to_string(),
             actual: "(file found)".to_string(),
-            fixable: false,
+            fixable: false
         };
         assert_eq!(drift.drift_type, "extra");
         assert!(!drift.fixable);
@@ -1385,7 +1382,7 @@ mod tests {
             knowledge_items: 50,
             policies: 25,
             config_files: 5,
-            audit_entries: 10000,
+            audit_entries: 10000
         };
         assert_eq!(stats.memories, 1000);
         assert_eq!(stats.knowledge_items, 50);
@@ -1401,7 +1398,7 @@ mod tests {
             knowledge_items: 20,
             policies: 10,
             config_files: 3,
-            audit_entries: 0,
+            audit_entries: 0
         };
         assert_eq!(stats.audit_entries, 0);
     }
@@ -1414,7 +1411,7 @@ mod tests {
             memories: 100,
             knowledge_items: 10,
             policies: 5,
-            conflicts: vec![],
+            conflicts: vec![]
         };
         assert_eq!(analysis.format, "json");
         assert!(analysis.conflicts.is_empty());
@@ -1426,12 +1423,12 @@ mod tests {
             ImportConflict {
                 item_type: "memory".to_string(),
                 id: "mem_123".to_string(),
-                reason: "Already exists".to_string(),
+                reason: "Already exists".to_string()
             },
             ImportConflict {
                 item_type: "policy".to_string(),
                 id: "security-baseline".to_string(),
-                reason: "Version mismatch".to_string(),
+                reason: "Version mismatch".to_string()
             },
         ];
         let analysis = ImportAnalysis {
@@ -1440,7 +1437,7 @@ mod tests {
             memories: 50,
             knowledge_items: 5,
             policies: 3,
-            conflicts,
+            conflicts
         };
         assert_eq!(analysis.conflicts.len(), 2);
     }
@@ -1450,7 +1447,7 @@ mod tests {
         let conflict = ImportConflict {
             item_type: "memory".to_string(),
             id: "mem_abc123".to_string(),
-            reason: "Already exists with different content".to_string(),
+            reason: "Already exists with different content".to_string()
         };
         assert_eq!(conflict.item_type, "memory");
         assert_eq!(conflict.id, "mem_abc123");

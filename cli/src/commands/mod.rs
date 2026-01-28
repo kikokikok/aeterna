@@ -23,13 +23,13 @@ use clap::{Parser, Subcommand};
     author,
     version,
     about = "Aeterna - Universal Memory & Knowledge Framework",
-    long_about = "A breeze to setup. Sensible defaults for everything.\n\n\
-        Commands work without configuration - just run them.\n\
-        Context is auto-detected from git, env vars, or .aeterna/context.toml"
+    long_about = "A breeze to setup. Sensible defaults for everything.\n\nCommands work without \
+                  configuration - just run them.\nContext is auto-detected from git, env vars, or \
+                  .aeterna/context.toml"
 )]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Commands
 }
 
 #[derive(Subcommand)]
@@ -80,5 +80,5 @@ pub enum Commands {
     Admin(admin::AdminCommand),
 
     #[command(about = "Generate shell completions")]
-    Completion(completion::CompletionArgs),
+    Completion(completion::CompletionArgs)
 }

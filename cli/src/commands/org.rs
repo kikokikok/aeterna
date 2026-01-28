@@ -20,7 +20,7 @@ pub enum OrgCommand {
     Members(OrgMembersArgs),
 
     #[command(about = "Set default organization for current context")]
-    Use(OrgUseArgs),
+    Use(OrgUseArgs)
 }
 
 #[derive(Args)]
@@ -42,7 +42,7 @@ pub struct OrgCreateArgs {
 
     /// Dry run - show what would be created
     #[arg(long)]
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 #[derive(Args)]
@@ -57,7 +57,7 @@ pub struct OrgListArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -71,7 +71,7 @@ pub struct OrgShowArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -98,13 +98,13 @@ pub struct OrgMembersArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
 pub struct OrgUseArgs {
     /// Organization ID to set as default
-    pub org_id: String,
+    pub org_id: String
 }
 
 pub async fn run(cmd: OrgCommand) -> anyhow::Result<()> {
@@ -113,7 +113,7 @@ pub async fn run(cmd: OrgCommand) -> anyhow::Result<()> {
         OrgCommand::List(args) => run_list(args).await,
         OrgCommand::Show(args) => run_show(args).await,
         OrgCommand::Members(args) => run_members(args).await,
-        OrgCommand::Use(args) => run_use(args).await,
+        OrgCommand::Use(args) => run_use(args).await
     }
 }
 
@@ -153,9 +153,9 @@ async fn run_create(args: OrgCreateArgs) -> anyhow::Result<()> {
             println!();
             println!("  Name:        {}", args.name);
             if let Some(ref desc) = args.description {
-                println!("  Description: {}", desc);
+                println!("  Description: {desc}");
             }
-            println!("  Company:     {}", company_id);
+            println!("  Company:     {company_id}");
             println!();
 
             output::header("What Would Happen");
@@ -215,7 +215,7 @@ async fn run_list(args: OrgListArgs) -> anyhow::Result<()> {
         }
 
         if let Some(ref company) = args.company {
-            println!("  Filter: company = {}", company);
+            println!("  Filter: company = {company}");
         }
         println!();
 
@@ -241,8 +241,7 @@ async fn run_show(args: OrgShowArgs) -> anyhow::Result<()> {
         resolved
             .org_id
             .as_ref()
-            .map(|o| o.value.clone())
-            .unwrap_or_else(|| "current".to_string())
+            .map_or_else(|| "current".to_string(), |o| o.value.clone())
     });
 
     if args.json {
@@ -258,7 +257,7 @@ async fn run_show(args: OrgShowArgs) -> anyhow::Result<()> {
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        output::header(&format!("Organization: {}", org_id));
+        output::header(&format!("Organization: {org_id}"));
         println!();
 
         output::header("Would Show");
@@ -293,8 +292,7 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
         resolved
             .org_id
             .as_ref()
-            .map(|o| o.value.clone())
-            .unwrap_or_else(|| "current".to_string())
+            .map_or_else(|| "current".to_string(), |o| o.value.clone())
     });
 
     if let Some(ref user_to_add) = args.add {
@@ -302,12 +300,11 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
 
         let valid_roles = ["developer", "techlead", "architect", "admin"];
         if !valid_roles.contains(&role.to_lowercase().as_str()) {
-            let err = ux_error::UxError::new(format!("Invalid role: '{}'", role))
+            let err = ux_error::UxError::new(format!("Invalid role: '{role}'"))
                 .why("Role determines user permissions within the organization")
                 .fix("Use one of: developer, techlead, architect, admin")
-                .suggest(&format!(
-                    "aeterna org members --add {} --role developer",
-                    user_to_add
+                .suggest(format!(
+                    "aeterna org members --add {user_to_add} --role developer"
                 ));
             err.display();
             return Err(anyhow::anyhow!("Invalid role"));
@@ -325,15 +322,15 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
         } else {
             output::header("Add Organization Member");
             println!();
-            println!("  Organization: {}", org_id);
-            println!("  User:         {}", user_to_add);
-            println!("  Role:         {}", role);
+            println!("  Organization: {org_id}");
+            println!("  User:         {user_to_add}");
+            println!("  Role:         {role}");
             println!();
 
             output::header("Would Do");
-            println!("  1. Verify user '{}' exists", user_to_add);
+            println!("  1. Verify user '{user_to_add}' exists");
             println!("  2. Check your permission to add members");
-            println!("  3. Add user with role '{}'", role);
+            println!("  3. Add user with role '{role}'");
             println!("  4. Grant access to org resources");
             println!();
 
@@ -355,8 +352,8 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
         } else {
             output::header("Remove Organization Member");
             println!();
-            println!("  Organization: {}", org_id);
-            println!("  User:         {}", user_to_remove);
+            println!("  Organization: {org_id}");
+            println!("  User:         {user_to_remove}");
             println!();
 
             output::header("Would Do");
@@ -377,9 +374,8 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
             let err = ux_error::UxError::new("Missing --role for --set-role")
                 .why("Must specify which role to assign")
                 .fix("Add --role with the desired role")
-                .suggest(&format!(
-                    "aeterna org members --set-role {} --role techlead",
-                    user_id
+                .suggest(format!(
+                    "aeterna org members --set-role {user_id} --role techlead"
                 ));
             err.display();
             anyhow::anyhow!("Missing role")
@@ -397,9 +393,9 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
         } else {
             output::header("Set Member Role");
             println!();
-            println!("  Organization: {}", org_id);
-            println!("  User:         {}", user_id);
-            println!("  New Role:     {}", role);
+            println!("  Organization: {org_id}");
+            println!("  User:         {user_id}");
+            println!("  New Role:     {role}");
             println!();
 
             let err = ux_error::server_not_connected();
@@ -420,7 +416,7 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        output::header(&format!("Members of: {}", org_id));
+        output::header(&format!("Members of: {org_id}"));
         println!();
 
         output::header("Example Output (would show)");

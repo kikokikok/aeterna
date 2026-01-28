@@ -1,7 +1,9 @@
-//! Scenario-based integration tests based on the Acme Corp use case from documentation.
+//! Scenario-based integration tests based on the Acme Corp use case from
+//! documentation.
 //!
 //! This test suite validates the complete organizational hierarchy, governance,
-//! RBAC, and approval workflow based on a realistic 300-engineer SaaS platform scenario.
+//! RBAC, and approval workflow based on a realistic 300-engineer SaaS platform
+//! scenario.
 //!
 //! Organizational Structure:
 //! ```text
@@ -33,7 +35,7 @@ use std::collections::HashMap;
 use storage::governance::{
     ApprovalMode, AuditFilters, CreateApprovalRequest, CreateDecision, CreateGovernanceRole,
     Decision, GovernanceConfig, GovernanceStorage, GovernanceTemplate, PrincipalType,
-    RequestFilters, RequestStatus, RequestType, RiskLevel,
+    RequestFilters, RequestStatus, RequestType, RiskLevel
 };
 use storage::postgres::PostgresBackend;
 use testing::{postgres, unique_id};
@@ -59,7 +61,7 @@ struct AcmeCorpHierarchy {
     admin_portal_id: Uuid,
     ios_app_id: Uuid,
     android_app_id: Uuid,
-    security_scanner_id: Uuid,
+    security_scanner_id: Uuid
 }
 
 impl AcmeCorpHierarchy {
@@ -84,7 +86,7 @@ impl AcmeCorpHierarchy {
             admin_portal_id: Uuid::new_v4(),
             ios_app_id: Uuid::new_v4(),
             android_app_id: Uuid::new_v4(),
-            security_scanner_id: Uuid::new_v4(),
+            security_scanner_id: Uuid::new_v4()
         }
     }
 
@@ -99,7 +101,7 @@ impl AcmeCorpHierarchy {
             parent_id: None,
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&company).await?;
 
@@ -111,7 +113,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.company_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&platform_eng).await?;
 
@@ -123,7 +125,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.company_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&product_eng).await?;
 
@@ -135,7 +137,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.company_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&security).await?;
 
@@ -147,7 +149,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.platform_eng_org_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&api_team).await?;
 
@@ -159,7 +161,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.platform_eng_org_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&data_platform_team).await?;
 
@@ -171,7 +173,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.product_eng_org_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&web_team).await?;
 
@@ -183,7 +185,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.product_eng_org_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&mobile_team).await?;
 
@@ -195,7 +197,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.security_org_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&secops_team).await?;
 
@@ -207,7 +209,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.api_team_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&payments_service).await?;
 
@@ -219,7 +221,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.api_team_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&auth_service).await?;
 
@@ -231,7 +233,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.api_team_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&gateway_service).await?;
 
@@ -243,7 +245,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.data_platform_team_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&analytics_pipeline).await?;
 
@@ -255,7 +257,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.data_platform_team_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&ml_inference).await?;
 
@@ -267,7 +269,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.web_team_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&dashboard_ui).await?;
 
@@ -279,7 +281,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.web_team_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&admin_portal).await?;
 
@@ -291,7 +293,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.mobile_team_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&ios_app).await?;
 
@@ -303,7 +305,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.mobile_team_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&android_app).await?;
 
@@ -315,7 +317,7 @@ impl AcmeCorpHierarchy {
             parent_id: Some(self.secops_team_id.to_string()),
             metadata: HashMap::new(),
             created_at: now,
-            updated_at: now,
+            updated_at: now
         };
         storage.create_unit(&security_scanner).await?;
 
@@ -348,7 +350,7 @@ async fn test_acme_corp_full_hierarchy_setup() {
     let ctx = TenantContext {
         tenant_id: tenant_id.clone(),
         user_id: UserId::new("admin".to_string()).unwrap(),
-        agent_id: None,
+        agent_id: None
     };
 
     let descendants = storage
@@ -394,7 +396,7 @@ async fn test_acme_corp_hierarchy_ancestors_from_project() {
     let ctx = TenantContext {
         tenant_id: tenant_id.clone(),
         user_id: UserId::new("developer".to_string()).unwrap(),
-        agent_id: None,
+        agent_id: None
     };
 
     let ancestors = storage
@@ -427,7 +429,7 @@ async fn test_acme_corp_platform_engineering_descendants() {
     let ctx = TenantContext {
         tenant_id: tenant_id.clone(),
         user_id: UserId::new("architect".to_string()).unwrap(),
-        agent_id: None,
+        agent_id: None
     };
 
     let descendants = storage
@@ -481,7 +483,7 @@ async fn test_tenant_isolation_different_tenants_cannot_see_each_other() {
     let ctx2 = TenantContext {
         tenant_id: tenant2_id.clone(),
         user_id: UserId::new("user".to_string()).unwrap(),
-        agent_id: None,
+        agent_id: None
     };
 
     let ancestors = storage
@@ -592,7 +594,7 @@ async fn test_governance_config_upsert_and_retrieve() {
         escalation_contact: Some("security@acme.corp".to_string()),
         policy_settings: serde_json::json!({"require_approval": true, "min_approvers": 2}),
         knowledge_settings: serde_json::json!({"require_approval": true, "min_approvers": 1}),
-        memory_settings: serde_json::json!({"require_approval": false}),
+        memory_settings: serde_json::json!({"require_approval": false})
     };
 
     let config_id = governance.upsert_config(&company_config).await.unwrap();
@@ -627,7 +629,7 @@ async fn test_role_assignment_admin_at_company_level() {
         team_id: None,
         project_id: None,
         granted_by: granter_id,
-        expires_at: None,
+        expires_at: None
     };
 
     let role_id = governance.assign_role(&role).await.unwrap();
@@ -671,7 +673,7 @@ async fn test_role_assignment_architect_at_org_level() {
         team_id: None,
         project_id: None,
         granted_by: granter_id,
-        expires_at: None,
+        expires_at: None
     };
 
     let role_id = governance.assign_role(&role).await.unwrap();
@@ -714,7 +716,7 @@ async fn test_role_assignment_techlead_at_team_level() {
         team_id: Some(hierarchy.api_team_id),
         project_id: None,
         granted_by: granter_id,
-        expires_at: None,
+        expires_at: None
     };
 
     let role_id = governance.assign_role(&role).await.unwrap();
@@ -757,7 +759,7 @@ async fn test_role_assignment_developer_at_project_level() {
         team_id: Some(hierarchy.api_team_id),
         project_id: Some(hierarchy.payments_service_id),
         granted_by: granter_id,
-        expires_at: None,
+        expires_at: None
     };
 
     let role_id = governance.assign_role(&role).await.unwrap();
@@ -792,7 +794,7 @@ async fn test_role_assignment_agent_principal_type() {
         team_id: Some(hierarchy.api_team_id),
         project_id: Some(hierarchy.payments_service_id),
         granted_by: granter_id,
-        expires_at: None,
+        expires_at: None
     };
 
     let role_id = governance.assign_role(&role).await.unwrap();
@@ -828,7 +830,7 @@ async fn test_role_revocation() {
         team_id: None,
         project_id: None,
         granted_by: granter_id,
-        expires_at: None,
+        expires_at: None
     };
 
     governance.assign_role(&role).await.unwrap();
@@ -879,7 +881,7 @@ async fn test_multiple_roles_same_user_different_scopes() {
         team_id: None,
         project_id: None,
         granted_by: granter_id,
-        expires_at: None,
+        expires_at: None
     };
     governance.assign_role(&company_role).await.unwrap();
 
@@ -892,7 +894,7 @@ async fn test_multiple_roles_same_user_different_scopes() {
         team_id: Some(hierarchy.api_team_id),
         project_id: None,
         granted_by: granter_id,
-        expires_at: None,
+        expires_at: None
     };
     governance.assign_role(&team_role).await.unwrap();
 
@@ -950,7 +952,7 @@ async fn test_approval_request_creation_policy_change() {
         requestor_id,
         requestor_email: Some("security@acme.corp".to_string()),
         required_approvals: 2,
-        timeout_hours: Some(72),
+        timeout_hours: Some(72)
     };
 
     let created = governance.create_request(&request).await.unwrap();
@@ -999,7 +1001,7 @@ async fn test_approval_request_for_knowledge_change() {
         requestor_id,
         requestor_email: Some("architect@acme.corp".to_string()),
         required_approvals: 1,
-        timeout_hours: Some(168),
+        timeout_hours: Some(168)
     };
 
     let created = governance.create_request(&request).await.unwrap();
@@ -1043,7 +1045,7 @@ async fn test_approval_decision_approve() {
         requestor_id,
         requestor_email: None,
         required_approvals: 1,
-        timeout_hours: Some(24),
+        timeout_hours: Some(24)
     };
 
     let created = governance.create_request(&request).await.unwrap();
@@ -1054,7 +1056,7 @@ async fn test_approval_decision_approve() {
         approver_id,
         approver_email: Some("approver@acme.corp".to_string()),
         decision: Decision::Approve,
-        comment: Some("LGTM".to_string()),
+        comment: Some("LGTM".to_string())
     };
 
     let saved_decision = governance.add_decision(&decision).await.unwrap();
@@ -1101,7 +1103,7 @@ async fn test_approval_decision_reject() {
         requestor_id,
         requestor_email: None,
         required_approvals: 3,
-        timeout_hours: Some(24),
+        timeout_hours: Some(24)
     };
 
     let created = governance.create_request(&request).await.unwrap();
@@ -1112,7 +1114,7 @@ async fn test_approval_decision_reject() {
         approver_id,
         approver_email: None,
         decision: Decision::Reject,
-        comment: Some("Too risky without security review".to_string()),
+        comment: Some("Too risky without security review".to_string())
     };
 
     governance.add_decision(&decision).await.unwrap();
@@ -1161,7 +1163,7 @@ async fn test_approval_decision_abstain() {
         requestor_id,
         requestor_email: None,
         required_approvals: 2,
-        timeout_hours: Some(72),
+        timeout_hours: Some(72)
     };
 
     let created = governance.create_request(&request).await.unwrap();
@@ -1172,7 +1174,7 @@ async fn test_approval_decision_abstain() {
         approver_id,
         approver_email: None,
         decision: Decision::Abstain,
-        comment: Some("Not familiar with this area".to_string()),
+        comment: Some("Not familiar with this area".to_string())
     };
 
     let saved = governance.add_decision(&decision).await.unwrap();
@@ -1213,7 +1215,7 @@ async fn test_approval_request_cancellation() {
         requestor_id,
         requestor_email: None,
         required_approvals: 1,
-        timeout_hours: Some(24),
+        timeout_hours: Some(24)
     };
 
     let created = governance.create_request(&request).await.unwrap();
@@ -1259,7 +1261,7 @@ async fn test_approval_request_mark_applied() {
         requestor_id,
         requestor_email: None,
         required_approvals: 1,
-        timeout_hours: Some(24),
+        timeout_hours: Some(24)
     };
 
     let created = governance.create_request(&request).await.unwrap();
@@ -1308,7 +1310,7 @@ async fn test_list_pending_requests_with_filters() {
             requestor_id,
             requestor_email: None,
             required_approvals: 1,
-            timeout_hours: Some(24),
+            timeout_hours: Some(24)
         };
         governance.create_request(&request).await.unwrap();
     }
@@ -1329,7 +1331,7 @@ async fn test_list_pending_requests_with_filters() {
         requestor_id,
         requestor_email: None,
         required_approvals: 1,
-        timeout_hours: Some(24),
+        timeout_hours: Some(24)
     };
     governance.create_request(&knowledge_request).await.unwrap();
 
@@ -1397,7 +1399,7 @@ async fn test_get_request_by_id_and_number() {
         requestor_id,
         requestor_email: None,
         required_approvals: 2,
-        timeout_hours: Some(48),
+        timeout_hours: Some(48)
     };
 
     let created = governance.create_request(&request).await.unwrap();
@@ -1448,7 +1450,7 @@ async fn test_audit_log_governance_action() {
             serde_json::json!({
                 "decision": "approve",
                 "comment": "Looks good"
-            }),
+            })
         )
         .await
         .unwrap();
@@ -1484,7 +1486,7 @@ async fn test_audit_log_list_with_filters() {
             PrincipalType::User,
             Some(actor1_id),
             None,
-            serde_json::json!({"role": "Admin"}),
+            serde_json::json!({"role": "Admin"})
         )
         .await
         .unwrap();
@@ -1498,7 +1500,7 @@ async fn test_audit_log_list_with_filters() {
             PrincipalType::User,
             Some(actor2_id),
             None,
-            serde_json::json!({"policy": "new-policy"}),
+            serde_json::json!({"policy": "new-policy"})
         )
         .await
         .unwrap();
@@ -1512,7 +1514,7 @@ async fn test_audit_log_list_with_filters() {
             PrincipalType::System,
             None,
             None,
-            serde_json::json!({"role": "Developer", "auto": true}),
+            serde_json::json!({"role": "Developer", "auto": true})
         )
         .await
         .unwrap();
@@ -1523,7 +1525,7 @@ async fn test_audit_log_list_with_filters() {
             actor_id: None,
             target_type: None,
             since: Utc::now() - chrono::Duration::hours(1),
-            limit: Some(100),
+            limit: Some(100)
         })
         .await
         .unwrap();
@@ -1535,7 +1537,7 @@ async fn test_audit_log_list_with_filters() {
             actor_id: None,
             target_type: None,
             since: Utc::now() - chrono::Duration::hours(1),
-            limit: Some(100),
+            limit: Some(100)
         })
         .await
         .unwrap();
@@ -1547,7 +1549,7 @@ async fn test_audit_log_list_with_filters() {
             actor_id: Some(actor1_id),
             target_type: None,
             since: Utc::now() - chrono::Duration::hours(1),
-            limit: Some(100),
+            limit: Some(100)
         })
         .await
         .unwrap();
@@ -1702,8 +1704,9 @@ async fn test_memory_promotion_request_workflow() {
         project_id: Some(hierarchy.payments_service_id),
         title: "Promote memory: PostgreSQL timeout configuration".to_string(),
         description: Some(
-            "This memory about optimal PostgreSQL timeout settings has high reward and should be promoted to team level"
-                .to_string(),
+            "This memory about optimal PostgreSQL timeout settings has high reward and should be \
+             promoted to team level"
+                .to_string()
         ),
         payload: serde_json::json!({
             "memory_id": "mem-12345",
@@ -1717,7 +1720,7 @@ async fn test_memory_promotion_request_workflow() {
         requestor_id: developer_id,
         requestor_email: Some("developer@acme.corp".to_string()),
         required_approvals: 1,
-        timeout_hours: Some(48),
+        timeout_hours: Some(48)
     };
 
     let created = governance.create_request(&request).await.unwrap();
@@ -1729,7 +1732,7 @@ async fn test_memory_promotion_request_workflow() {
         approver_id: techlead_id,
         approver_email: Some("techlead@acme.corp".to_string()),
         decision: Decision::Approve,
-        comment: Some("Good insight, promoting to team level".to_string()),
+        comment: Some("Good insight, promoting to team level".to_string())
     };
 
     governance.add_decision(&decision).await.unwrap();
@@ -1747,7 +1750,7 @@ async fn test_memory_promotion_request_workflow() {
                 "from_layer": "project",
                 "to_layer": "team",
                 "approved_by": techlead_id
-            }),
+            })
         )
         .await
         .unwrap();
@@ -1781,8 +1784,9 @@ async fn test_cross_org_policy_request() {
         project_id: None,
         title: "Company-wide security policy affecting all orgs".to_string(),
         description: Some(
-            "This policy will be enforced across Platform Engineering, Product Engineering, and Security orgs"
-                .to_string(),
+            "This policy will be enforced across Platform Engineering, Product Engineering, and \
+             Security orgs"
+                .to_string()
         ),
         payload: serde_json::json!({
             "affected_orgs": [
@@ -1800,7 +1804,7 @@ async fn test_cross_org_policy_request() {
         requestor_id: security_architect_id,
         requestor_email: Some("security-architect@acme.corp".to_string()),
         required_approvals: 3,
-        timeout_hours: Some(72),
+        timeout_hours: Some(72)
     };
 
     let created = governance.create_request(&request).await.unwrap();
@@ -1844,7 +1848,7 @@ async fn test_filter_requests_by_org_scope() {
         requestor_id,
         requestor_email: None,
         required_approvals: 2,
-        timeout_hours: Some(48),
+        timeout_hours: Some(48)
     };
     governance.create_request(&platform_request).await.unwrap();
 
@@ -1864,7 +1868,7 @@ async fn test_filter_requests_by_org_scope() {
         requestor_id,
         requestor_email: None,
         required_approvals: 2,
-        timeout_hours: Some(48),
+        timeout_hours: Some(48)
     };
     governance.create_request(&product_request).await.unwrap();
 
@@ -1929,7 +1933,7 @@ async fn test_filter_requests_by_team_scope() {
         requestor_id,
         requestor_email: None,
         required_approvals: 1,
-        timeout_hours: Some(72),
+        timeout_hours: Some(72)
     };
     governance.create_request(&api_team_request).await.unwrap();
 
@@ -1949,7 +1953,7 @@ async fn test_filter_requests_by_team_scope() {
         requestor_id,
         requestor_email: None,
         required_approvals: 1,
-        timeout_hours: Some(72),
+        timeout_hours: Some(72)
     };
     governance.create_request(&web_team_request).await.unwrap();
 
@@ -2006,7 +2010,7 @@ async fn test_filter_requests_by_project_scope() {
         requestor_id,
         requestor_email: None,
         required_approvals: 1,
-        timeout_hours: Some(24),
+        timeout_hours: Some(24)
     };
     governance.create_request(&payments_request).await.unwrap();
 
@@ -2026,7 +2030,7 @@ async fn test_filter_requests_by_project_scope() {
         requestor_id,
         requestor_email: None,
         required_approvals: 2,
-        timeout_hours: Some(24),
+        timeout_hours: Some(24)
     };
     governance.create_request(&auth_request).await.unwrap();
 
@@ -2087,7 +2091,7 @@ async fn test_filter_requests_by_requestor() {
             requestor_id: alice_id,
             requestor_email: Some("alice@acme.corp".to_string()),
             required_approvals: 1,
-            timeout_hours: Some(24),
+            timeout_hours: Some(24)
         };
         governance.create_request(&request).await.unwrap();
     }
@@ -2108,7 +2112,7 @@ async fn test_filter_requests_by_requestor() {
         requestor_id: bob_id,
         requestor_email: Some("bob@acme.corp".to_string()),
         required_approvals: 1,
-        timeout_hours: Some(24),
+        timeout_hours: Some(24)
     };
     governance.create_request(&bob_request).await.unwrap();
 

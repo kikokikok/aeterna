@@ -14,15 +14,15 @@ use tokio::sync::RwLock;
 
 pub type ProviderMap = HashMap<
     MemoryLayer,
-    Arc<dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
+    Arc<dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
 >;
 
 struct AnyhowLlmWrapper {
     inner: Arc<
         dyn mk_core::traits::LlmService<Error = Box<dyn std::error::Error + Send + Sync>>
             + Send
-            + Sync,
-    >,
+            + Sync
+    >
 }
 
 #[async_trait::async_trait]
@@ -39,7 +39,7 @@ impl mk_core::traits::LlmService for AnyhowLlmWrapper {
     async fn analyze_drift(
         &self,
         content: &str,
-        policies: &[mk_core::types::Policy],
+        policies: &[mk_core::types::Policy]
     ) -> Result<mk_core::types::ValidationResult, Self::Error> {
         self.inner
             .analyze_drift(content, policies)
@@ -56,14 +56,14 @@ pub mod tests {
         use std::str::FromStr;
         TenantContext::new(
             TenantId::from_str("test-tenant").unwrap(),
-            UserId::from_str("test-user").unwrap(),
+            UserId::from_str("test-user").unwrap()
         )
     }
 }
 pub struct MemoryManager {
     providers: Arc<RwLock<ProviderMap>>,
     embedding_service: Option<
-        Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
+        Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>
     >,
     _governance_service: Arc<GovernanceService>,
     knowledge_manager: Option<Arc<knowledge::manager::KnowledgeManager>>,
@@ -71,8 +71,8 @@ pub struct MemoryManager {
         Arc<
             dyn AuthorizationService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     >,
     telemetry: Arc<MemoryTelemetry>,
     config: config::MemoryConfig,
@@ -81,21 +81,27 @@ pub struct MemoryManager {
         Arc<
             dyn storage::graph::GraphStore<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     >,
     llm_service: Option<
         Arc<
             dyn mk_core::traits::LlmService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     >,
     reasoner: Option<Arc<dyn ReflectiveReasoner>>,
     reasoning_cache: Option<Arc<ReasoningCache<InMemoryReasoningCacheBackend>>>,
     circuit_breaker: Option<Arc<ReasoningCircuitBreaker>>,
     rlm_router: Arc<ComplexityRouter>,
-    rlm_executor: Option<Arc<RlmExecutor>>,
+    rlm_executor: Option<Arc<RlmExecutor>>
+}
+
+impl Default for MemoryManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MemoryManager {
@@ -115,7 +121,7 @@ impl MemoryManager {
             reasoning_cache: None,
             circuit_breaker: None,
             rlm_router: Arc::new(ComplexityRouter::new(config::RlmConfig::default())),
-            rlm_executor: None,
+            rlm_executor: None
         }
     }
 
@@ -124,8 +130,8 @@ impl MemoryManager {
         graph_store: Arc<
             dyn storage::graph::GraphStore<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     ) -> Self {
         self.graph_store = Some(graph_store);
         self
@@ -136,15 +142,15 @@ impl MemoryManager {
         llm_service: Arc<
             dyn mk_core::traits::LlmService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     ) -> Self {
         self.llm_service = Some(llm_service.clone());
         if let Some(km) = self.knowledge_manager.clone() {
             self.rlm_executor = Some(Arc::new(RlmExecutor::new(
                 Arc::new(AnyhowLlmWrapper { inner: llm_service }),
                 Arc::new(crate::rlm::strategy::StrategyExecutor::new(km)),
-                self.config.rlm.clone(),
+                self.config.rlm.clone()
             )));
         }
         self
@@ -172,20 +178,20 @@ impl MemoryManager {
                         half_open_max_requests: self
                             .config
                             .reasoning
-                            .circuit_breaker_half_open_requests,
+                            .circuit_breaker_half_open_requests
                     },
-                    self.telemetry.clone(),
-                ),
+                    self.telemetry.clone()
+                )
             ));
         }
         if self.config.reasoning.cache_enabled {
             self.reasoning_cache = Some(Arc::new(ReasoningCache::new(
                 Arc::new(InMemoryReasoningCacheBackend::with_max_entries(
-                    self.config.reasoning.cache_max_entries,
+                    self.config.reasoning.cache_max_entries
                 )),
                 self.config.reasoning.cache_ttl_seconds,
                 true,
-                self.telemetry.clone(),
+                self.telemetry.clone()
             )));
         }
         self
@@ -194,8 +200,8 @@ impl MemoryManager {
     pub fn with_embedding_service(
         mut self,
         embedding_service: Arc<
-            dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
-        >,
+            dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
+        >
     ) -> Self {
         self.embedding_service = Some(embedding_service);
         self
@@ -206,8 +212,8 @@ impl MemoryManager {
         auth_service: Arc<
             dyn AuthorizationService<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     ) -> Self {
         self.auth_service = Some(auth_service);
         self
@@ -215,7 +221,7 @@ impl MemoryManager {
 
     pub fn with_knowledge_manager(
         mut self,
-        knowledge_manager: Arc<knowledge::manager::KnowledgeManager>,
+        knowledge_manager: Arc<knowledge::manager::KnowledgeManager>
     ) -> Self {
         self.knowledge_manager = Some(knowledge_manager.clone());
         if let Some(llm) = self.llm_service.clone() {
@@ -227,7 +233,7 @@ impl MemoryManager {
             self.rlm_executor = Some(Arc::new(RlmExecutor::new(
                 Arc::new(AnyhowLlmWrapper { inner: llm }),
                 Arc::new(strategy_executor),
-                self.config.rlm.clone(),
+                self.config.rlm.clone()
             )));
         }
         self
@@ -239,8 +245,8 @@ impl MemoryManager {
         provider: Arc<
             dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync,
-        >,
+                + Sync
+        >
     ) {
         let mut providers = self.providers.write().await;
         providers.insert(layer, provider);
@@ -250,16 +256,15 @@ impl MemoryManager {
         &self,
         ctx: TenantContext,
         content: &str,
-        layer: MemoryLayer,
+        layer: MemoryLayer
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        if let Some(auth) = &self.auth_service {
-            if !auth
+        if let Some(auth) = &self.auth_service
+            && !auth
                 .check_permission(&ctx, "memory:add", layer.to_string().as_str())
                 .await
                 .map_err(|e| anyhow::anyhow!("{}", e))?
-            {
-                return Err("Permission denied".into());
-            }
+        {
+            return Err("Permission denied".into());
         }
 
         let embedding_service = self
@@ -290,13 +295,13 @@ impl MemoryManager {
             mk_core::types::MemoryOperation::Add,
             entry.id.clone(),
             None,
-            None,
+            None
         )
         .await;
 
         if self.config.optimization_trigger_count > 0 {
             let count = self.get_operation_count(&ctx).await;
-            if count % self.config.optimization_trigger_count as usize == 0 {
+            if count % self.config.optimization_trigger_count == 0 {
                 self.trigger_autonomous_optimization(ctx.clone(), layer)
                     .await?;
             }
@@ -311,7 +316,7 @@ impl MemoryManager {
         query_text: &str,
         limit: usize,
         threshold: f32,
-        filters: HashMap<String, serde_json::Value>,
+        filters: HashMap<String, serde_json::Value>
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let (results, _trace) = self
             .search_text_with_reasoning(ctx, query_text, limit, threshold, filters, None)
@@ -326,7 +331,7 @@ impl MemoryManager {
         limit: usize,
         _threshold: f32,
         filters: HashMap<String, serde_json::Value>,
-        context_summary: Option<&str>,
+        context_summary: Option<&str>
     ) -> Result<(Vec<MemoryEntry>, Option<ReasoningTrace>), Box<dyn std::error::Error + Send + Sync>>
     {
         let search_query = mk_core::types::SearchQuery {
@@ -340,75 +345,84 @@ impl MemoryManager {
             ..Default::default()
         };
 
-        if self.rlm_router.should_route_to_rlm(&search_query) {
-            if let Some(executor) = &self.rlm_executor {
-                let (rlm_results, trajectory) =
-                    executor.execute(search_query, &ctx).await.map_err(|e| {
-                        Box::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            e.to_string(),
-                        )) as Box<dyn std::error::Error + Send + Sync>
-                    })?;
+        if self.rlm_router.should_route_to_rlm(&search_query)
+            && let Some(executor) = &self.rlm_executor
+        {
+            metrics::counter!("rlm_routing_decision", "decision" => "rlm").increment(1);
 
-                for step in trajectory.steps {
-                    if step.reward > 0.0 {
-                        for memory_id in step.involved_memory_ids {
-                            let layers = vec![
-                                MemoryLayer::Agent,
-                                MemoryLayer::Session,
-                                MemoryLayer::Project,
-                                MemoryLayer::Team,
-                                MemoryLayer::Org,
-                                MemoryLayer::Company,
-                            ];
+            match executor.execute(search_query, &ctx).await {
+                Ok((rlm_results, trajectory)) => {
+                    for step in trajectory.steps {
+                        if step.reward > 0.0 {
+                            for memory_id in step.involved_memory_ids {
+                                let layers = vec![
+                                    MemoryLayer::Agent,
+                                    MemoryLayer::Session,
+                                    MemoryLayer::Project,
+                                    MemoryLayer::Team,
+                                    MemoryLayer::Org,
+                                    MemoryLayer::Company,
+                                ];
 
-                            for layer in layers {
-                                if let Ok(Some(_)) =
-                                    self.get_from_layer(ctx.clone(), layer, &memory_id).await
-                                {
-                                    let _ = self
-                                        .record_reward(
-                                            ctx.clone(),
-                                            layer,
-                                            &memory_id,
-                                            mk_core::types::RewardSignal {
-                                                reward_type: mk_core::types::RewardType::Helpful,
-                                                score: 1.0,
-                                                reasoning: Some(format!(
-                                                    "Discovered during RLM trajectory step: {:?}",
-                                                    step.action
-                                                )),
-                                                agent_id: None,
-                                                timestamp: chrono::Utc::now().timestamp(),
-                                            },
-                                        )
-                                        .await;
-                                    break;
+                                for layer in layers {
+                                    if let Ok(Some(_)) =
+                                        self.get_from_layer(ctx.clone(), layer, &memory_id).await
+                                    {
+                                        let _ = self
+                                            .record_reward(
+                                                ctx.clone(),
+                                                layer,
+                                                &memory_id,
+                                                mk_core::types::RewardSignal {
+                                                    reward_type:
+                                                        mk_core::types::RewardType::Helpful,
+                                                    score: 1.0,
+                                                    reasoning: Some(format!(
+                                                        "Discovered during RLM trajectory step: \
+                                                         {:?}",
+                                                        step.action
+                                                    )),
+                                                    agent_id: None,
+                                                    timestamp: chrono::Utc::now().timestamp()
+                                                }
+                                            )
+                                            .await;
+                                        break;
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                let mut entries = Vec::new();
-                for res in rlm_results {
-                    entries.push(MemoryEntry {
-                        id: res.memory_id,
-                        content: res.content,
-                        importance_score: Some(res.score),
-                        layer: res.layer,
-                        metadata: res
-                            .metadata
-                            .as_object()
-                            .unwrap_or(&serde_json::Map::new())
-                            .iter()
-                            .map(|(k, v)| (k.clone(), v.clone()))
-                            .collect(),
-                        ..Default::default()
-                    });
+                    let mut entries = Vec::new();
+                    for res in rlm_results {
+                        entries.push(MemoryEntry {
+                            id: res.memory_id,
+                            content: res.content,
+                            importance_score: Some(res.score),
+                            layer: res.layer,
+                            metadata: res
+                                .metadata
+                                .as_object()
+                                .unwrap_or(&serde_json::Map::new())
+                                .iter()
+                                .map(|(k, v)| (k.clone(), v.clone()))
+                                .collect(),
+                            ..Default::default()
+                        });
+                    }
+                    return Ok((entries, None));
                 }
-                return Ok((entries, None));
+                Err(e) => {
+                    metrics::counter!("rlm_fallback_total").increment(1);
+                    tracing::warn!(
+                        "RLM execution failed, falling back to standard search: {}",
+                        e
+                    );
+                }
             }
+        } else {
+            metrics::counter!("rlm_routing_decision", "decision" => "standard").increment(1);
         }
 
         if query_text.contains("TRIGGER_FAILURE") {
@@ -452,7 +466,7 @@ impl MemoryManager {
                         .clone()
                         .unwrap_or_else(|| query_text.to_string()),
                     Some(cached),
-                    adj_limit,
+                    adj_limit
                 )
             } else {
                 match self
@@ -469,7 +483,7 @@ impl MemoryManager {
                         (
                             refined_query.unwrap_or_else(|| query_text.to_string()),
                             Some(trace),
-                            adj_limit,
+                            adj_limit
                         )
                     }
                     Err(e) => {
@@ -490,15 +504,14 @@ impl MemoryManager {
         let mut all_results = Vec::new();
 
         for (layer, provider) in providers.iter() {
-            if let Some(auth) = &self.auth_service {
-                if !auth
+            if let Some(auth) = &self.auth_service
+                && !auth
                     .check_permission(&ctx, "memory:search", layer.to_string().as_str())
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
                     .unwrap_or(false)
-                {
-                    continue;
-                }
+            {
+                continue;
             }
 
             let results = provider
@@ -524,7 +537,7 @@ impl MemoryManager {
         operation: mk_core::types::MemoryOperation,
         entry_id: String,
         reward: Option<mk_core::types::RewardSignal>,
-        reasoning: Option<String>,
+        reasoning: Option<String>
     ) {
         let mut trajectories = self.trajectories.write().await;
         let user_id = ctx.user_id.to_string();
@@ -533,7 +546,7 @@ impl MemoryManager {
             entry_id,
             reward,
             reasoning,
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         };
         trajectories.entry(user_id).or_default().push(event);
     }
@@ -549,7 +562,7 @@ impl MemoryManager {
     pub async fn trigger_autonomous_optimization(
         &self,
         ctx: TenantContext,
-        layer: MemoryLayer,
+        layer: MemoryLayer
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use crate::promotion::PromotionService;
         use crate::pruning::{CompressionManager, PruningManager};
@@ -570,11 +583,11 @@ impl MemoryManager {
                 reasoning_cache: self.reasoning_cache.clone(),
                 circuit_breaker: self.circuit_breaker.clone(),
                 rlm_router: self.rlm_router.clone(),
-                rlm_executor: self.rlm_executor.clone(),
+                rlm_executor: self.rlm_executor.clone()
             }),
             self.knowledge_manager
                 .clone()
-                .ok_or("Knowledge manager not configured")?,
+                .ok_or("Knowledge manager not configured")?
         );
 
         promotion_service.optimize_layer(layer).await?;
@@ -600,7 +613,7 @@ impl MemoryManager {
         match trace.strategy {
             ReasoningStrategy::Exhaustive => base_limit * 2,
             ReasoningStrategy::Targeted => base_limit,
-            ReasoningStrategy::SemanticOnly => base_limit / 2,
+            ReasoningStrategy::SemanticOnly => base_limit / 2
         }
     }
 
@@ -609,7 +622,7 @@ impl MemoryManager {
         _ctx: &TenantContext,
         query: &str,
         context_summary: Option<&str>,
-        limit: usize,
+        limit: usize
     ) -> Result<(Option<String>, ReasoningTrace, usize), Box<dyn std::error::Error + Send + Sync>>
     {
         let reasoner = self.reasoner.as_ref().ok_or("Reasoner not configured")?;
@@ -621,10 +634,7 @@ impl MemoryManager {
         let mut trace = match reasoning_result {
             Ok(Ok(t)) => t,
             Ok(Err(e)) => {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e.to_string(),
-                ))
+                return Err(Box::new(std::io::Error::other(e.to_string()))
                     as Box<dyn std::error::Error + Send + Sync>);
             }
             Err(_) => {
@@ -638,7 +648,7 @@ impl MemoryManager {
                     end_time: chrono::Utc::now(),
                     timed_out: true,
                     duration_ms: self.config.reasoning.timeout_ms,
-                    metadata: HashMap::new(),
+                    metadata: HashMap::new()
                 }
             }
         };
@@ -657,7 +667,7 @@ impl MemoryManager {
 
     pub async fn get_trajectories(
         &self,
-        ctx: &TenantContext,
+        ctx: &TenantContext
     ) -> Vec<mk_core::types::MemoryTrajectoryEvent> {
         let trajectories = self.trajectories.read().await;
         trajectories
@@ -669,7 +679,7 @@ impl MemoryManager {
     pub async fn close_agent(
         &self,
         ctx: TenantContext,
-        _id: &str,
+        _id: &str
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.trigger_autonomous_optimization(ctx, MemoryLayer::Agent)
             .await
@@ -678,7 +688,7 @@ impl MemoryManager {
     pub async fn close_session(
         &self,
         ctx: TenantContext,
-        _id: &str,
+        _id: &str
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.trigger_autonomous_optimization(ctx, MemoryLayer::Session)
             .await
@@ -689,7 +699,7 @@ impl MemoryManager {
         ctx: TenantContext,
         layer: MemoryLayer,
         memory_id: &str,
-        reward: mk_core::types::RewardSignal,
+        reward: mk_core::types::RewardSignal
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut entry = self
             .get_from_layer(ctx.clone(), layer, memory_id)
@@ -717,7 +727,7 @@ impl MemoryManager {
             mk_core::types::MemoryOperation::Retrieve,
             memory_id.to_string(),
             Some(reward),
-            None,
+            None
         )
         .await;
 
@@ -727,7 +737,7 @@ impl MemoryManager {
     pub async fn optimize_layer(
         &self,
         ctx: TenantContext,
-        layer: MemoryLayer,
+        layer: MemoryLayer
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.trigger_autonomous_optimization(ctx, layer).await
     }
@@ -735,7 +745,7 @@ impl MemoryManager {
     pub async fn promote_important_memories(
         &self,
         _ctx: TenantContext,
-        layer: MemoryLayer,
+        layer: MemoryLayer
     ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         use crate::promotion::PromotionService;
 
@@ -755,11 +765,11 @@ impl MemoryManager {
                 reasoning_cache: self.reasoning_cache.clone(),
                 circuit_breaker: self.circuit_breaker.clone(),
                 rlm_router: self.rlm_router.clone(),
-                rlm_executor: self.rlm_executor.clone(),
+                rlm_executor: self.rlm_executor.clone()
             }),
             self.knowledge_manager
                 .clone()
-                .ok_or("Knowledge manager not configured")?,
+                .ok_or("Knowledge manager not configured")?
         );
 
         promotion_service.optimize_layer(layer).await?;
@@ -772,7 +782,7 @@ impl MemoryManager {
         ctx: TenantContext,
         vector: Vec<f32>,
         limit: usize,
-        filters: HashMap<String, serde_json::Value>,
+        filters: HashMap<String, serde_json::Value>
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
         let mut all_results = Vec::new();
@@ -799,14 +809,12 @@ impl MemoryManager {
         &self,
         ctx: TenantContext,
         query: &str,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<mk_core::types::Entity>, Box<dyn std::error::Error + Send + Sync>> {
         if let Some(store) = &self.graph_store {
             let nodes = store.search_nodes(ctx, query, limit).await.map_err(|e| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e.to_string(),
-                )) as Box<dyn std::error::Error + Send + Sync>
+                Box::new(std::io::Error::other(e.to_string()))
+                    as Box<dyn std::error::Error + Send + Sync>
             })?;
 
             let entities = nodes
@@ -827,8 +835,7 @@ impl MemoryManager {
                         .cloned()
                         .unwrap_or_default()
                         .into_iter()
-                        .map(|(k, v)| (k, v))
-                        .collect(),
+                        .collect()
                 })
                 .collect();
 
@@ -841,17 +848,15 @@ impl MemoryManager {
     pub async fn get_graph_neighbors(
         &self,
         ctx: TenantContext,
-        node_id: &str,
+        node_id: &str
     ) -> Result<
         Vec<(mk_core::types::Relationship, mk_core::types::Entity)>,
-        Box<dyn std::error::Error + Send + Sync>,
+        Box<dyn std::error::Error + Send + Sync>
     > {
         if let Some(store) = &self.graph_store {
             let neighbors = store.get_neighbors(ctx, node_id).await.map_err(|e| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e.to_string(),
-                )) as Box<dyn std::error::Error + Send + Sync>
+                Box::new(std::io::Error::other(e.to_string()))
+                    as Box<dyn std::error::Error + Send + Sync>
             })?;
 
             let results = neighbors
@@ -879,8 +884,7 @@ impl MemoryManager {
                             .cloned()
                             .unwrap_or_default()
                             .into_iter()
-                            .map(|(k, v)| (k, v))
-                            .collect(),
+                            .collect()
                     };
 
                     let entity = mk_core::types::Entity {
@@ -899,8 +903,7 @@ impl MemoryManager {
                             .cloned()
                             .unwrap_or_default()
                             .into_iter()
-                            .map(|(k, v)| (k, v))
-                            .collect(),
+                            .collect()
                     };
 
                     (rel, entity)
@@ -917,7 +920,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        entry: MemoryEntry,
+        entry: MemoryEntry
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
         let provider = providers
@@ -931,7 +934,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        id: &str,
+        id: &str
     ) -> Result<Option<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
         let provider = providers
@@ -945,7 +948,7 @@ impl MemoryManager {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        id: &str,
+        id: &str
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
         let provider = providers
@@ -958,7 +961,7 @@ impl MemoryManager {
     pub async fn list_all_from_layer(
         &self,
         ctx: mk_core::types::TenantContext,
-        layer: MemoryLayer,
+        layer: MemoryLayer
     ) -> Result<Vec<MemoryEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let providers = self.providers.read().await;
         let provider = providers

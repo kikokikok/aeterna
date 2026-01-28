@@ -1,9 +1,11 @@
 //! Meta-Governance: Policies about policies
 //!
-//! This module defines who can govern at each level of the organizational hierarchy.
-//! Meta-governance policies control:
-//! - Who can create/approve policies at each layer (company, org, team, project)
-//! - Delegation rules for AI agents (what they can do autonomously vs needing human approval)
+//! This module defines who can govern at each level of the organizational
+//! hierarchy. Meta-governance policies control:
+//! - Who can create/approve policies at each layer (company, org, team,
+//!   project)
+//! - Delegation rules for AI agents (what they can do autonomously vs needing
+//!   human approval)
 //! - Escalation paths when approvers are unavailable
 //! - Human confirmation gates for sensitive agent actions
 
@@ -21,7 +23,7 @@ pub enum GovernanceLayer {
     Company,
     Org,
     Team,
-    Project,
+    Project
 }
 
 impl std::fmt::Display for GovernanceLayer {
@@ -30,7 +32,7 @@ impl std::fmt::Display for GovernanceLayer {
             GovernanceLayer::Company => write!(f, "company"),
             GovernanceLayer::Org => write!(f, "org"),
             GovernanceLayer::Team => write!(f, "team"),
-            GovernanceLayer::Project => write!(f, "project"),
+            GovernanceLayer::Project => write!(f, "project")
         }
     }
 }
@@ -47,7 +49,7 @@ impl std::str::FromStr for GovernanceLayer {
             _ => Err(format!(
                 "Invalid governance layer: {}. Use: company, org, team, project",
                 s
-            )),
+            ))
         }
     }
 }
@@ -75,7 +77,7 @@ pub enum GovernanceActionType {
     // Governance config actions
     ModifyGovernanceConfig,
     // Meta-governance actions (most privileged)
-    ModifyMetaGovernance,
+    ModifyMetaGovernance
 }
 
 impl std::fmt::Display for GovernanceActionType {
@@ -94,7 +96,7 @@ impl std::fmt::Display for GovernanceActionType {
             GovernanceActionType::AssignRole => "assign_role",
             GovernanceActionType::RevokeRole => "revoke_role",
             GovernanceActionType::ModifyGovernanceConfig => "modify_governance_config",
-            GovernanceActionType::ModifyMetaGovernance => "modify_meta_governance",
+            GovernanceActionType::ModifyMetaGovernance => "modify_meta_governance"
         };
         write!(f, "{}", s)
     }
@@ -119,7 +121,7 @@ impl std::str::FromStr for GovernanceActionType {
             "revoke_role" => Ok(GovernanceActionType::RevokeRole),
             "modify_governance_config" => Ok(GovernanceActionType::ModifyGovernanceConfig),
             "modify_meta_governance" => Ok(GovernanceActionType::ModifyMetaGovernance),
-            _ => Err(format!("Invalid governance action type: {}", s)),
+            _ => Err(format!("Invalid governance action type: {}", s))
         }
     }
 }
@@ -144,23 +146,19 @@ pub struct MetaGovernancePolicy {
     /// Updated timestamp
     pub updated_at: DateTime<Utc>,
     /// Who created this policy
-    pub created_by: Uuid,
+    pub created_by: Uuid
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum RoleLevel {
     Viewer = 0,
+    #[default]
     Developer = 1,
     TechLead = 2,
     Architect = 3,
-    Admin = 4,
-}
-
-impl Default for RoleLevel {
-    fn default() -> Self {
-        Self::Developer
-    }
+    Admin = 4
 }
 
 impl std::fmt::Display for RoleLevel {
@@ -170,7 +168,7 @@ impl std::fmt::Display for RoleLevel {
             RoleLevel::Developer => write!(f, "developer"),
             RoleLevel::TechLead => write!(f, "techlead"),
             RoleLevel::Architect => write!(f, "architect"),
-            RoleLevel::Admin => write!(f, "admin"),
+            RoleLevel::Admin => write!(f, "admin")
         }
     }
 }
@@ -188,7 +186,7 @@ impl std::str::FromStr for RoleLevel {
             _ => Err(format!(
                 "Invalid role level: {}. Use: viewer, developer, techlead, architect, admin",
                 s
-            )),
+            ))
         }
     }
 }
@@ -200,10 +198,11 @@ pub struct ActionPermission {
     pub min_role: Option<RoleLevel>,
     /// Whether agents can perform this action autonomously
     pub agent_autonomous: bool,
-    /// Whether this action requires human confirmation even when agent is authorized
+    /// Whether this action requires human confirmation even when agent is
+    /// authorized
     pub requires_human_confirmation: bool,
     /// Risk levels where this action is restricted
-    pub restricted_risk_levels: Vec<RiskLevel>,
+    pub restricted_risk_levels: Vec<RiskLevel>
 }
 
 /// Configuration for AI agent delegation at a governance layer.
@@ -220,7 +219,7 @@ pub struct AgentDelegationConfig {
     /// Time limit for agent sessions (hours)
     pub session_timeout_hours: i32,
     /// Rate limits for agent actions
-    pub rate_limits: Option<AgentRateLimits>,
+    pub rate_limits: Option<AgentRateLimits>
 }
 
 impl Default for AgentDelegationConfig {
@@ -248,7 +247,7 @@ impl Default for AgentDelegationConfig {
                 GovernanceActionType::RevokeRole,
             ],
             session_timeout_hours: 24,
-            rate_limits: Some(AgentRateLimits::default()),
+            rate_limits: Some(AgentRateLimits::default())
         }
     }
 }
@@ -278,7 +277,7 @@ pub enum AgentCapability {
     OrgRead,
     // Agent-to-agent capabilities
     AgentRegister,
-    AgentDelegate,
+    AgentDelegate
 }
 
 impl std::fmt::Display for AgentCapability {
@@ -299,7 +298,7 @@ impl std::fmt::Display for AgentCapability {
             AgentCapability::GovernanceApprove => "governance:approve",
             AgentCapability::OrgRead => "org:read",
             AgentCapability::AgentRegister => "agent:register",
-            AgentCapability::AgentDelegate => "agent:delegate",
+            AgentCapability::AgentDelegate => "agent:delegate"
         };
         write!(f, "{}", s)
     }
@@ -326,7 +325,7 @@ impl std::str::FromStr for AgentCapability {
             "org:read" => Ok(AgentCapability::OrgRead),
             "agent:register" => Ok(AgentCapability::AgentRegister),
             "agent:delegate" => Ok(AgentCapability::AgentDelegate),
-            _ => Err(format!("Invalid agent capability: {}", s)),
+            _ => Err(format!("Invalid agent capability: {}", s))
         }
     }
 }
@@ -341,7 +340,7 @@ pub struct AgentRateLimits {
     /// Maximum governance submissions per day
     pub governance_submissions_per_day: i32,
     /// Maximum memory writes per hour
-    pub memory_writes_per_hour: i32,
+    pub memory_writes_per_hour: i32
 }
 
 impl Default for AgentRateLimits {
@@ -350,7 +349,7 @@ impl Default for AgentRateLimits {
             actions_per_minute: 30,
             actions_per_hour: 500,
             governance_submissions_per_day: 10,
-            memory_writes_per_hour: 100,
+            memory_writes_per_hour: 100
         }
     }
 }
@@ -367,7 +366,7 @@ pub struct EscalationConfig {
     /// What happens if all escalation tiers fail
     pub fallback_action: EscalationFallback,
     /// Send reminders before escalation
-    pub reminder_intervals_hours: Vec<i32>,
+    pub reminder_intervals_hours: Vec<i32>
 }
 
 impl Default for EscalationConfig {
@@ -380,7 +379,7 @@ impl Default for EscalationConfig {
                     name: "Team Lead Escalation".to_string(),
                     timeout_hours: 12,
                     escalate_to: EscalationTarget::RoleInScope(RoleLevel::TechLead),
-                    notification_channels: vec![NotificationChannel::Email],
+                    notification_channels: vec![NotificationChannel::Email]
                 },
                 EscalationTier {
                     name: "Architect Escalation".to_string(),
@@ -389,7 +388,7 @@ impl Default for EscalationConfig {
                     notification_channels: vec![
                         NotificationChannel::Email,
                         NotificationChannel::Slack,
-                    ],
+                    ]
                 },
                 EscalationTier {
                     name: "Admin Escalation".to_string(),
@@ -399,11 +398,11 @@ impl Default for EscalationConfig {
                         NotificationChannel::Email,
                         NotificationChannel::Slack,
                         NotificationChannel::PagerDuty,
-                    ],
+                    ]
                 },
             ],
             fallback_action: EscalationFallback::ExpireRequest,
-            reminder_intervals_hours: vec![12, 18, 23],
+            reminder_intervals_hours: vec![12, 18, 23]
         }
     }
 }
@@ -418,7 +417,7 @@ pub struct EscalationTier {
     /// Who to escalate to
     pub escalate_to: EscalationTarget,
     /// How to notify escalation targets
-    pub notification_channels: Vec<NotificationChannel>,
+    pub notification_channels: Vec<NotificationChannel>
 }
 
 /// Target for escalation.
@@ -428,7 +427,7 @@ pub enum EscalationTarget {
     RoleInScope(RoleLevel),
     SpecificUser(Uuid),
     ParentScope,
-    CustomGroup(String),
+    CustomGroup(String)
 }
 
 /// What happens when all escalation tiers fail.
@@ -442,7 +441,7 @@ pub enum EscalationFallback {
     /// Keep waiting indefinitely
     WaitIndefinitely,
     /// Notify emergency contacts
-    NotifyEmergency,
+    NotifyEmergency
 }
 
 /// Notification channels for escalation.
@@ -453,7 +452,7 @@ pub enum NotificationChannel {
     Slack,
     MsTeams,
     PagerDuty,
-    Webhook,
+    Webhook
 }
 
 /// A request for human confirmation of an agent action.
@@ -488,7 +487,7 @@ pub struct HumanConfirmationRequest {
     /// Who resolved (if human)
     pub resolved_by: Option<Uuid>,
     /// Resolution comment
-    pub resolution_comment: Option<String>,
+    pub resolution_comment: Option<String>
 }
 
 /// Why human confirmation is required.
@@ -508,7 +507,7 @@ pub enum ConfirmationReason {
     /// First time agent performs this action type
     FirstTimeAction,
     /// Manual request by agent
-    AgentRequested,
+    AgentRequested
 }
 
 impl std::fmt::Display for ConfirmationReason {
@@ -524,7 +523,7 @@ impl std::fmt::Display for ConfirmationReason {
             ConfirmationReason::FirstTimeAction => {
                 write!(f, "First time agent performs this action")
             }
-            ConfirmationReason::AgentRequested => write!(f, "Agent requested human oversight"),
+            ConfirmationReason::AgentRequested => write!(f, "Agent requested human oversight")
         }
     }
 }
@@ -537,7 +536,7 @@ pub enum ConfirmationStatus {
     Approved,
     Denied,
     Expired,
-    Cancelled,
+    Cancelled
 }
 
 impl std::fmt::Display for ConfirmationStatus {
@@ -547,7 +546,7 @@ impl std::fmt::Display for ConfirmationStatus {
             ConfirmationStatus::Approved => write!(f, "approved"),
             ConfirmationStatus::Denied => write!(f, "denied"),
             ConfirmationStatus::Expired => write!(f, "expired"),
-            ConfirmationStatus::Cancelled => write!(f, "cancelled"),
+            ConfirmationStatus::Cancelled => write!(f, "cancelled")
         }
     }
 }
@@ -562,7 +561,7 @@ impl std::str::FromStr for ConfirmationStatus {
             "denied" => Ok(ConfirmationStatus::Denied),
             "expired" => Ok(ConfirmationStatus::Expired),
             "cancelled" => Ok(ConfirmationStatus::Cancelled),
-            _ => Err(format!("Invalid confirmation status: {}", s)),
+            _ => Err(format!("Invalid confirmation status: {}", s))
         }
     }
 }
@@ -583,21 +582,21 @@ pub fn create_default_policies() -> Vec<MetaGovernancePolicy> {
                     min_role: Some(RoleLevel::Architect),
                     agent_autonomous: false,
                     requires_human_confirmation: true,
-                    restricted_risk_levels: vec![],
+                    restricted_risk_levels: vec![]
                 },
                 ActionPermission {
                     action: GovernanceActionType::ApprovePolicy,
                     min_role: Some(RoleLevel::Admin),
                     agent_autonomous: false,
                     requires_human_confirmation: true,
-                    restricted_risk_levels: vec![],
+                    restricted_risk_levels: vec![]
                 },
                 ActionPermission {
                     action: GovernanceActionType::ModifyMetaGovernance,
                     min_role: Some(RoleLevel::Admin),
                     agent_autonomous: false,
                     requires_human_confirmation: true,
-                    restricted_risk_levels: vec![],
+                    restricted_risk_levels: vec![]
                 },
             ],
             agent_delegation: AgentDelegationConfig {
@@ -628,8 +627,8 @@ pub fn create_default_policies() -> Vec<MetaGovernancePolicy> {
                     actions_per_minute: 10,
                     actions_per_hour: 100,
                     governance_submissions_per_day: 2,
-                    memory_writes_per_hour: 20,
-                }),
+                    memory_writes_per_hour: 20
+                })
             },
             escalation_config: EscalationConfig {
                 enabled: true,
@@ -642,15 +641,15 @@ pub fn create_default_policies() -> Vec<MetaGovernancePolicy> {
                         NotificationChannel::Email,
                         NotificationChannel::Slack,
                         NotificationChannel::PagerDuty,
-                    ],
+                    ]
                 }],
                 fallback_action: EscalationFallback::NotifyEmergency,
-                reminder_intervals_hours: vec![6, 10],
+                reminder_intervals_hours: vec![6, 10]
             },
             active: true,
             created_at: now,
             updated_at: now,
-            created_by: system_user,
+            created_by: system_user
         },
         MetaGovernancePolicy {
             id: Uuid::new_v4(),
@@ -663,21 +662,21 @@ pub fn create_default_policies() -> Vec<MetaGovernancePolicy> {
                     min_role: Some(RoleLevel::TechLead),
                     agent_autonomous: false,
                     requires_human_confirmation: true,
-                    restricted_risk_levels: vec![RiskLevel::Critical],
+                    restricted_risk_levels: vec![RiskLevel::Critical]
                 },
                 ActionPermission {
                     action: GovernanceActionType::ApprovePolicy,
                     min_role: Some(RoleLevel::Architect),
                     agent_autonomous: false,
                     requires_human_confirmation: true,
-                    restricted_risk_levels: vec![],
+                    restricted_risk_levels: vec![]
                 },
                 ActionPermission {
                     action: GovernanceActionType::ProposeKnowledge,
                     min_role: Some(RoleLevel::Developer),
                     agent_autonomous: true,
                     requires_human_confirmation: false,
-                    restricted_risk_levels: vec![RiskLevel::High, RiskLevel::Critical],
+                    restricted_risk_levels: vec![RiskLevel::High, RiskLevel::Critical]
                 },
             ],
             agent_delegation: AgentDelegationConfig {
@@ -706,14 +705,14 @@ pub fn create_default_policies() -> Vec<MetaGovernancePolicy> {
                     actions_per_minute: 20,
                     actions_per_hour: 300,
                     governance_submissions_per_day: 5,
-                    memory_writes_per_hour: 50,
-                }),
+                    memory_writes_per_hour: 50
+                })
             },
             escalation_config: EscalationConfig::default(),
             active: true,
             created_at: now,
             updated_at: now,
-            created_by: system_user,
+            created_by: system_user
         },
         MetaGovernancePolicy {
             id: Uuid::new_v4(),
@@ -726,28 +725,28 @@ pub fn create_default_policies() -> Vec<MetaGovernancePolicy> {
                     min_role: Some(RoleLevel::Developer),
                     agent_autonomous: true,
                     requires_human_confirmation: false,
-                    restricted_risk_levels: vec![RiskLevel::High, RiskLevel::Critical],
+                    restricted_risk_levels: vec![RiskLevel::High, RiskLevel::Critical]
                 },
                 ActionPermission {
                     action: GovernanceActionType::ApprovePolicy,
                     min_role: Some(RoleLevel::TechLead),
                     agent_autonomous: false,
                     requires_human_confirmation: true,
-                    restricted_risk_levels: vec![],
+                    restricted_risk_levels: vec![]
                 },
                 ActionPermission {
                     action: GovernanceActionType::ProposeKnowledge,
                     min_role: Some(RoleLevel::Developer),
                     agent_autonomous: true,
                     requires_human_confirmation: false,
-                    restricted_risk_levels: vec![RiskLevel::Critical],
+                    restricted_risk_levels: vec![RiskLevel::Critical]
                 },
                 ActionPermission {
                     action: GovernanceActionType::PromoteMemory,
                     min_role: Some(RoleLevel::Developer),
                     agent_autonomous: true,
                     requires_human_confirmation: false,
-                    restricted_risk_levels: vec![],
+                    restricted_risk_levels: vec![]
                 },
             ],
             agent_delegation: AgentDelegationConfig {
@@ -773,13 +772,13 @@ pub fn create_default_policies() -> Vec<MetaGovernancePolicy> {
                     GovernanceActionType::ModifyGovernanceConfig,
                 ],
                 session_timeout_hours: 24,
-                rate_limits: Some(AgentRateLimits::default()),
+                rate_limits: Some(AgentRateLimits::default())
             },
             escalation_config: EscalationConfig::default(),
             active: true,
             created_at: now,
             updated_at: now,
-            created_by: system_user,
+            created_by: system_user
         },
         MetaGovernancePolicy {
             id: Uuid::new_v4(),
@@ -792,35 +791,35 @@ pub fn create_default_policies() -> Vec<MetaGovernancePolicy> {
                     min_role: Some(RoleLevel::Developer),
                     agent_autonomous: true,
                     requires_human_confirmation: false,
-                    restricted_risk_levels: vec![RiskLevel::Critical],
+                    restricted_risk_levels: vec![RiskLevel::Critical]
                 },
                 ActionPermission {
                     action: GovernanceActionType::ApprovePolicy,
                     min_role: Some(RoleLevel::Developer),
                     agent_autonomous: false,
                     requires_human_confirmation: true,
-                    restricted_risk_levels: vec![RiskLevel::High, RiskLevel::Critical],
+                    restricted_risk_levels: vec![RiskLevel::High, RiskLevel::Critical]
                 },
                 ActionPermission {
                     action: GovernanceActionType::ProposeKnowledge,
                     min_role: Some(RoleLevel::Developer),
                     agent_autonomous: true,
                     requires_human_confirmation: false,
-                    restricted_risk_levels: vec![],
+                    restricted_risk_levels: vec![]
                 },
                 ActionPermission {
                     action: GovernanceActionType::ApproveKnowledge,
                     min_role: Some(RoleLevel::Developer),
                     agent_autonomous: true,
                     requires_human_confirmation: false,
-                    restricted_risk_levels: vec![RiskLevel::High, RiskLevel::Critical],
+                    restricted_risk_levels: vec![RiskLevel::High, RiskLevel::Critical]
                 },
                 ActionPermission {
                     action: GovernanceActionType::PromoteMemory,
                     min_role: Some(RoleLevel::Developer),
                     agent_autonomous: true,
                     requires_human_confirmation: false,
-                    restricted_risk_levels: vec![],
+                    restricted_risk_levels: vec![]
                 },
             ],
             agent_delegation: AgentDelegationConfig {
@@ -852,8 +851,8 @@ pub fn create_default_policies() -> Vec<MetaGovernancePolicy> {
                     actions_per_minute: 60,
                     actions_per_hour: 1000,
                     governance_submissions_per_day: 20,
-                    memory_writes_per_hour: 200,
-                }),
+                    memory_writes_per_hour: 200
+                })
             },
             escalation_config: EscalationConfig {
                 enabled: true,
@@ -862,15 +861,15 @@ pub fn create_default_policies() -> Vec<MetaGovernancePolicy> {
                     name: "Team Escalation".to_string(),
                     timeout_hours: 24,
                     escalate_to: EscalationTarget::ParentScope,
-                    notification_channels: vec![NotificationChannel::Email],
+                    notification_channels: vec![NotificationChannel::Email]
                 }],
                 fallback_action: EscalationFallback::ExpireRequest,
-                reminder_intervals_hours: vec![24, 36],
+                reminder_intervals_hours: vec![24, 36]
             },
             active: true,
             created_at: now,
             updated_at: now,
-            created_by: system_user,
+            created_by: system_user
         },
     ]
 }
@@ -882,7 +881,7 @@ pub struct AuthorizationResult {
     pub reason: String,
     pub requires_human_confirmation: bool,
     pub escalation_required: bool,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<String>
 }
 
 impl MetaGovernancePolicy {
@@ -892,7 +891,7 @@ impl MetaGovernancePolicy {
         principal_role: RoleLevel,
         action: GovernanceActionType,
         risk_level: RiskLevel,
-        delegation_depth: Option<i32>,
+        delegation_depth: Option<i32>
     ) -> AuthorizationResult {
         let mut warnings = Vec::new();
         let mut requires_human_confirmation = false;
@@ -912,7 +911,7 @@ impl MetaGovernancePolicy {
                 ),
                 requires_human_confirmation: false,
                 escalation_required: false,
-                warnings: vec![],
+                warnings: vec![]
             };
         }
 
@@ -926,7 +925,7 @@ impl MetaGovernancePolicy {
                     ),
                     requires_human_confirmation: false,
                     escalation_required: false,
-                    warnings: vec![],
+                    warnings: vec![]
                 };
             }
 
@@ -944,7 +943,7 @@ impl MetaGovernancePolicy {
                     reason: format!("Agents cannot act autonomously at {} layer", self.layer),
                     requires_human_confirmation: true,
                     escalation_required: false,
-                    warnings: vec![],
+                    warnings: vec![]
                 };
             }
 
@@ -958,7 +957,7 @@ impl MetaGovernancePolicy {
                         ),
                         requires_human_confirmation: true,
                         escalation_required: false,
-                        warnings: vec![],
+                        warnings: vec![]
                     };
                 }
 
@@ -974,14 +973,15 @@ impl MetaGovernancePolicy {
                 requires_human_confirmation = true;
             }
 
-            if let Some(permission) = action_permission {
-                if !permission.agent_autonomous && !requires_human_confirmation {
-                    requires_human_confirmation = true;
-                    warnings.push(format!(
-                        "Action {} requires human confirmation when performed by agents",
-                        action
-                    ));
-                }
+            if let Some(permission) = action_permission
+                && !permission.agent_autonomous
+                && !requires_human_confirmation
+            {
+                requires_human_confirmation = true;
+                warnings.push(format!(
+                    "Action {} requires human confirmation when performed by agents",
+                    action
+                ));
             }
         }
 
@@ -990,7 +990,7 @@ impl MetaGovernancePolicy {
             reason: "Authorized".to_string(),
             requires_human_confirmation,
             escalation_required: false,
-            warnings,
+            warnings
         }
     }
 }
@@ -1007,7 +1007,7 @@ struct MetaGovernancePolicyRow {
     active: bool,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    created_by: Uuid,
+    created_by: Uuid
 }
 
 impl From<MetaGovernancePolicyRow> for MetaGovernancePolicy {
@@ -1028,7 +1028,7 @@ impl From<MetaGovernancePolicyRow> for MetaGovernancePolicy {
             active: row.active,
             created_at: row.created_at,
             updated_at: row.updated_at,
-            created_by: row.created_by,
+            created_by: row.created_by
         }
     }
 }
@@ -1050,12 +1050,12 @@ struct ConfirmationRequestRow {
     created_at: DateTime<Utc>,
     resolved_at: Option<DateTime<Utc>>,
     resolved_by: Option<Uuid>,
-    resolution_comment: Option<String>,
+    resolution_comment: Option<String>
 }
 
 /// Storage for meta-governance policies and human confirmation requests.
 pub struct MetaGovernanceStorage {
-    pool: PgPool,
+    pool: PgPool
 }
 
 impl MetaGovernanceStorage {
@@ -1066,7 +1066,7 @@ impl MetaGovernanceStorage {
     pub async fn get_effective_policy(
         &self,
         layer: GovernanceLayer,
-        scope_id: Option<Uuid>,
+        scope_id: Option<Uuid>
     ) -> Result<Option<MetaGovernancePolicy>, sqlx::Error> {
         if let Some(sid) = scope_id {
             let row: Option<MetaGovernancePolicyRow> = sqlx::query_as(
@@ -1075,7 +1075,7 @@ impl MetaGovernanceStorage {
                 WHERE layer = $1 AND scope_id = $2 AND active = true
                 ORDER BY updated_at DESC
                 LIMIT 1
-                "#,
+                "#
             )
             .bind(layer.to_string())
             .bind(sid)
@@ -1093,7 +1093,7 @@ impl MetaGovernanceStorage {
             WHERE layer = $1 AND scope_id IS NULL AND active = true
             ORDER BY updated_at DESC
             LIMIT 1
-            "#,
+            "#
         )
         .bind(layer.to_string())
         .fetch_optional(&self.pool)
@@ -1120,7 +1120,7 @@ impl MetaGovernanceStorage {
                 active = EXCLUDED.active,
                 updated_at = NOW()
             RETURNING id
-            "#,
+            "#
         )
         .bind(policy.id)
         .bind(policy.layer.to_string())
@@ -1142,7 +1142,7 @@ impl MetaGovernanceStorage {
     /// Create a human confirmation request.
     pub async fn create_confirmation_request(
         &self,
-        request: &HumanConfirmationRequest,
+        request: &HumanConfirmationRequest
     ) -> Result<Uuid, sqlx::Error> {
         let row: (Uuid,) = sqlx::query_as(
             r#"
@@ -1153,7 +1153,7 @@ impl MetaGovernanceStorage {
                 expires_at, created_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING id
-            "#,
+            "#
         )
         .bind(request.id)
         .bind(request.agent_id)
@@ -1177,7 +1177,7 @@ impl MetaGovernanceStorage {
     /// Get a pending confirmation request.
     pub async fn get_confirmation_request(
         &self,
-        request_id: Uuid,
+        request_id: Uuid
     ) -> Result<Option<HumanConfirmationRequest>, sqlx::Error> {
         let row: Option<ConfirmationRequestRow> =
             sqlx::query_as("SELECT * FROM human_confirmation_requests WHERE id = $1")
@@ -1203,7 +1203,7 @@ impl MetaGovernanceStorage {
                 "RateLimitWarning" => ConfirmationReason::RateLimitWarning,
                 "CrossScopeAction" => ConfirmationReason::CrossScopeAction,
                 "FirstTimeAction" => ConfirmationReason::FirstTimeAction,
-                _ => ConfirmationReason::AgentRequested,
+                _ => ConfirmationReason::AgentRequested
             },
             agent_context: r.agent_context,
             authorized_approvers: serde_json::from_value(r.authorized_approvers)
@@ -1213,7 +1213,7 @@ impl MetaGovernanceStorage {
             created_at: r.created_at,
             resolved_at: r.resolved_at,
             resolved_by: r.resolved_by,
-            resolution_comment: r.resolution_comment,
+            resolution_comment: r.resolution_comment
         }))
     }
 
@@ -1221,7 +1221,7 @@ impl MetaGovernanceStorage {
     pub async fn list_pending_confirmations(
         &self,
         approver_id: Uuid,
-        limit: i32,
+        limit: i32
     ) -> Result<Vec<HumanConfirmationRequest>, sqlx::Error> {
         let rows: Vec<ConfirmationRequestRow> = sqlx::query_as(
             r#"
@@ -1231,7 +1231,7 @@ impl MetaGovernanceStorage {
               AND authorized_approvers @> $1::jsonb
             ORDER BY created_at DESC
             LIMIT $2
-            "#,
+            "#
         )
         .bind(serde_json::json!([approver_id]))
         .bind(limit as i64)
@@ -1258,7 +1258,7 @@ impl MetaGovernanceStorage {
                     "RateLimitWarning" => ConfirmationReason::RateLimitWarning,
                     "CrossScopeAction" => ConfirmationReason::CrossScopeAction,
                     "FirstTimeAction" => ConfirmationReason::FirstTimeAction,
-                    _ => ConfirmationReason::AgentRequested,
+                    _ => ConfirmationReason::AgentRequested
                 },
                 agent_context: r.agent_context,
                 authorized_approvers: serde_json::from_value(r.authorized_approvers)
@@ -1268,7 +1268,7 @@ impl MetaGovernanceStorage {
                 created_at: r.created_at,
                 resolved_at: r.resolved_at,
                 resolved_by: r.resolved_by,
-                resolution_comment: r.resolution_comment,
+                resolution_comment: r.resolution_comment
             })
             .collect())
     }
@@ -1279,7 +1279,7 @@ impl MetaGovernanceStorage {
         request_id: Uuid,
         approved: bool,
         resolved_by: Uuid,
-        comment: Option<String>,
+        comment: Option<String>
     ) -> Result<(), sqlx::Error> {
         let status = if approved {
             ConfirmationStatus::Approved
@@ -1295,7 +1295,7 @@ impl MetaGovernanceStorage {
                 resolved_by = $3,
                 resolution_comment = $4
             WHERE id = $1 AND status = 'pending'
-            "#,
+            "#
         )
         .bind(request_id)
         .bind(status.to_string())
@@ -1314,7 +1314,7 @@ impl MetaGovernanceStorage {
             UPDATE human_confirmation_requests
             SET status = 'expired'
             WHERE status = 'pending' AND expires_at < NOW()
-            "#,
+            "#
         )
         .execute(&self.pool)
         .await?;
@@ -1437,7 +1437,7 @@ mod tests {
             RoleLevel::Developer,
             GovernanceActionType::ApprovePolicy,
             RiskLevel::Medium,
-            None,
+            None
         );
 
         assert!(!result.allowed);
@@ -1457,7 +1457,7 @@ mod tests {
             RoleLevel::Developer,
             GovernanceActionType::ProposeKnowledge,
             RiskLevel::Low,
-            None,
+            None
         );
 
         assert!(result.allowed);
@@ -1476,7 +1476,7 @@ mod tests {
             RoleLevel::Admin, // Even admin agent can't act autonomously
             GovernanceActionType::CreatePolicy,
             RiskLevel::Low,
-            Some(1),
+            Some(1)
         );
 
         assert!(!result.allowed);
@@ -1496,7 +1496,7 @@ mod tests {
             RoleLevel::Developer,
             GovernanceActionType::ProposeKnowledge,
             RiskLevel::Low,
-            Some(5), // Exceeds max of 3
+            Some(5) // Exceeds max of 3
         );
 
         assert!(!result.allowed);
@@ -1516,7 +1516,7 @@ mod tests {
             RoleLevel::TechLead,
             GovernanceActionType::DeletePolicy,
             RiskLevel::Low,
-            Some(1),
+            Some(1)
         );
 
         assert!(result.allowed);
@@ -1536,7 +1536,7 @@ mod tests {
             RoleLevel::TechLead,
             GovernanceActionType::CreatePolicy,
             RiskLevel::Critical, // Restricted at org level
-            None,
+            None
         );
 
         assert!(!result.allowed);
@@ -1566,7 +1566,7 @@ mod tests {
             ConfirmationStatus::Approved,
             ConfirmationStatus::Denied,
             ConfirmationStatus::Expired,
-            ConfirmationStatus::Cancelled,
+            ConfirmationStatus::Cancelled
         ] {
             let s = status.to_string();
             assert_eq!(s.parse::<ConfirmationStatus>().unwrap(), status);
@@ -1592,7 +1592,7 @@ mod tests {
             GovernanceActionType::ApprovePolicy,
             GovernanceActionType::ProposeKnowledge,
             GovernanceActionType::PromoteMemory,
-            GovernanceActionType::ModifyMetaGovernance,
+            GovernanceActionType::ModifyMetaGovernance
         ] {
             let s = action.to_string();
             assert_eq!(s.parse::<GovernanceActionType>().unwrap(), action);

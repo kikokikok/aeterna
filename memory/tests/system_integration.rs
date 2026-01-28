@@ -60,7 +60,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
         layer: MemoryLayer::User,
         metadata: HashMap::new(),
         created_at: 1736400000,
-        updated_at: 1736400000,
+        updated_at: 1736400000
     };
 
     let ctx = test_ctx();
@@ -125,12 +125,12 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
             m.insert("access_count".to_string(), serde_json::json!(10));
             m.insert(
                 "last_accessed_at".to_string(),
-                serde_json::json!(chrono::Utc::now().timestamp()),
+                serde_json::json!(chrono::Utc::now().timestamp())
             );
             m
         },
         created_at: 1736400000,
-        updated_at: 1736400000,
+        updated_at: 1736400000
     };
 
     manager

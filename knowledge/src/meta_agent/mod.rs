@@ -10,30 +10,30 @@ mod types;
 
 pub use build::{BuildPhase, BuildPhaseConfig, BuildPromptTemplate, BuildPromptTemplates};
 pub use improve::{
-    ImprovePhase, ImprovePhaseConfig, ImprovePromptTemplate, ImprovePromptTemplates,
+    ImprovePhase, ImprovePhaseConfig, ImprovePromptTemplate, ImprovePromptTemplates
 };
 pub use r#loop::{
     MetaAgentLoop, MetaAgentLoopResult, MetaAgentLoopResultExtended, MetaAgentLoopState,
-    MetaAgentLoopStateExtended, MetaAgentLoopWithBudget,
+    MetaAgentLoopStateExtended, MetaAgentLoopWithBudget
 };
 pub use quality_gate::{
     CoverageConfig, LinterConfig, QualityGateConfig, QualityGateEvaluator, QualityGateResult,
-    QualityGateSummary, QualityGateType,
+    QualityGateSummary, QualityGateType
 };
 pub use result::{FailureContext, ResultHandler, ResultHandlingConfig, ResultHandlingOutcome};
 pub use telemetry::MetaAgentTelemetrySink;
 pub use test::{TestPhase, TestPhaseConfig};
 pub use time_budget::{
-    BudgetCheck, BudgetStatus, TimeBudget, TimeBudgetConfig, TimeBudgetExhaustedResult,
+    BudgetCheck, BudgetStatus, TimeBudget, TimeBudgetConfig, TimeBudgetExhaustedResult
 };
 pub use types::{
     BuildResult, ImproveAction, ImproveResult, MetaAgentConfig, MetaAgentFailureReport,
-    MetaAgentSuccessReport, MetaAgentTelemetry, TestCommand, TestResult, TestStatus,
+    MetaAgentSuccessReport, MetaAgentTelemetry, TestCommand, TestResult, TestStatus
 };
 
 pub use crate::hindsight::{HindsightRetrievalConfig, HindsightRetriever};
 pub use crate::note_taking::{
-    GeneratedNote, NoteEmbedder, NoteGenerator, NoteGeneratorConfig, NoteRetriever, RetrievalConfig,
+    GeneratedNote, NoteEmbedder, NoteGenerator, NoteGeneratorConfig, NoteRetriever, RetrievalConfig
 };
 
 use crate::context_architect::ViewMode;
@@ -69,14 +69,14 @@ pub trait HindsightStore: Send + Sync {
 
 pub struct InMemoryNoteStore<E: NoteEmbedder> {
     retriever: tokio::sync::Mutex<NoteRetriever<E>>,
-    view_mode: ViewMode,
+    view_mode: ViewMode
 }
 
 impl<E: NoteEmbedder> InMemoryNoteStore<E> {
     pub fn new(retriever: NoteRetriever<E>, view_mode: ViewMode) -> Self {
         Self {
             retriever: tokio::sync::Mutex::new(retriever),
-            view_mode,
+            view_mode
         }
     }
 }
@@ -93,7 +93,7 @@ impl<E: NoteEmbedder> NoteStore for InMemoryNoteStore<E> {
         let results = retriever.retrieve_relevant(query, limit).await;
         match results {
             Ok(scored) => format_notes_for_view(&scored, self.view_mode),
-            Err(_) => Vec::new(),
+            Err(_) => Vec::new()
         }
     }
 }
@@ -102,7 +102,7 @@ pub struct PostgresHindsightStore {
     storage: Arc<PostgresBackend>,
     config: HindsightRetrievalConfig,
     view_mode: ViewMode,
-    tenant_id: String,
+    tenant_id: String
 }
 
 impl PostgresHindsightStore {
@@ -110,13 +110,13 @@ impl PostgresHindsightStore {
         storage: Arc<PostgresBackend>,
         config: HindsightRetrievalConfig,
         view_mode: ViewMode,
-        tenant_id: impl Into<String>,
+        tenant_id: impl Into<String>
     ) -> Self {
         Self {
             storage,
             config,
             view_mode,
-            tenant_id: tenant_id.into(),
+            tenant_id: tenant_id.into()
         }
     }
 }
@@ -129,7 +129,7 @@ impl HindsightStore for PostgresHindsightStore {
             message_pattern: query.to_string(),
             stack_patterns: vec![],
             context_patterns: vec![],
-            embedding: None,
+            embedding: None
         };
         let retriever = HindsightRetriever::new(self.storage.clone(), self.config.clone());
         let filter = HindsightRetrievalFilter::default();
@@ -141,7 +141,7 @@ impl HindsightStore for PostgresHindsightStore {
                 let limited = scored.into_iter().take(limit).collect::<Vec<_>>();
                 format_hindsight_for_view(&limited, self.view_mode)
             }
-            Err(_) => Vec::new(),
+            Err(_) => Vec::new()
         }
     }
 }
@@ -156,7 +156,7 @@ pub fn format_notes_for_view(scored: &[ScoredNote], view_mode: ViewMode) -> Vec<
 
 pub fn format_hindsight_for_view(
     scored: &[ScoredHindsightNote],
-    view_mode: ViewMode,
+    view_mode: ViewMode
 ) -> Vec<String> {
     let _ = view_mode;
     scored

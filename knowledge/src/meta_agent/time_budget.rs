@@ -5,14 +5,14 @@ use tracing::{info_span, warn};
 #[derive(Debug, Clone)]
 pub struct TimeBudgetConfig {
     pub total_duration: Duration,
-    pub warning_threshold_percent: f64,
+    pub warning_threshold_percent: f64
 }
 
 impl Default for TimeBudgetConfig {
     fn default() -> Self {
         Self {
             total_duration: Duration::from_secs(300),
-            warning_threshold_percent: 75.0,
+            warning_threshold_percent: 75.0
         }
     }
 }
@@ -33,7 +33,7 @@ impl TimeBudgetConfig {
 pub enum BudgetStatus {
     Available,
     Warning,
-    Exhausted,
+    Exhausted
 }
 
 #[derive(Debug, Clone)]
@@ -41,7 +41,7 @@ pub struct BudgetCheck {
     pub status: BudgetStatus,
     pub elapsed: Duration,
     pub remaining: Duration,
-    pub percent_used: f64,
+    pub percent_used: f64
 }
 
 impl BudgetCheck {
@@ -61,7 +61,7 @@ impl BudgetCheck {
 pub struct TimeBudget {
     config: TimeBudgetConfig,
     start: Instant,
-    warning_logged: bool,
+    warning_logged: bool
 }
 
 impl TimeBudget {
@@ -76,7 +76,7 @@ impl TimeBudget {
         Self {
             config,
             start: Instant::now(),
-            warning_logged: false,
+            warning_logged: false
         }
     }
 
@@ -93,7 +93,7 @@ impl TimeBudget {
                 status: BudgetStatus::Exhausted,
                 elapsed,
                 remaining: Duration::ZERO,
-                percent_used: 100.0,
+                percent_used: 100.0
             };
         }
 
@@ -119,7 +119,7 @@ impl TimeBudget {
             status,
             elapsed,
             remaining,
-            percent_used,
+            percent_used
         }
     }
 
@@ -150,7 +150,7 @@ impl TimeBudget {
 pub struct TimeBudgetExhaustedResult {
     pub elapsed: Duration,
     pub iterations_completed: u32,
-    pub partial_results: Option<String>,
+    pub partial_results: Option<String>
 }
 
 impl TimeBudgetExhaustedResult {
@@ -158,7 +158,7 @@ impl TimeBudgetExhaustedResult {
         Self {
             elapsed,
             iterations_completed,
-            partial_results: None,
+            partial_results: None
         }
     }
 
@@ -240,7 +240,7 @@ mod tests {
             status: BudgetStatus::Available,
             elapsed: Duration::from_secs(10),
             remaining: Duration::from_secs(50),
-            percent_used: 16.67,
+            percent_used: 16.67
         };
         assert!(available.is_available());
         assert!(!available.is_warning());
@@ -250,7 +250,7 @@ mod tests {
             status: BudgetStatus::Warning,
             elapsed: Duration::from_secs(45),
             remaining: Duration::from_secs(15),
-            percent_used: 75.0,
+            percent_used: 75.0
         };
         assert!(warning.is_available());
         assert!(warning.is_warning());
@@ -260,7 +260,7 @@ mod tests {
             status: BudgetStatus::Exhausted,
             elapsed: Duration::from_secs(60),
             remaining: Duration::ZERO,
-            percent_used: 100.0,
+            percent_used: 100.0
         };
         assert!(!exhausted.is_available());
         assert!(!exhausted.is_warning());

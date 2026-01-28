@@ -10,7 +10,7 @@ pub trait ReasoningCacheBackend: Send + Sync {
         &self,
         key: &str,
         value: &CachedReasoning,
-        ttl_seconds: u64,
+        ttl_seconds: u64
     ) -> Result<(), CacheError>;
     async fn delete(&self, key: &str) -> Result<(), CacheError>;
 }
@@ -18,7 +18,7 @@ pub trait ReasoningCacheBackend: Send + Sync {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CachedReasoning {
     pub trace: ReasoningTrace,
-    pub cached_at: i64,
+    pub cached_at: i64
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -28,14 +28,14 @@ pub enum CacheError {
     #[error("Cache serialization error: {0}")]
     SerializationError(String),
     #[error("Cache operation error: {0}")]
-    OperationError(String),
+    OperationError(String)
 }
 
 pub struct ReasoningCache<B: ReasoningCacheBackend> {
     backend: Arc<B>,
     ttl_seconds: u64,
     enabled: bool,
-    telemetry: Arc<crate::telemetry::MemoryTelemetry>,
+    telemetry: Arc<crate::telemetry::MemoryTelemetry>
 }
 
 impl<B: ReasoningCacheBackend> ReasoningCache<B> {
@@ -43,13 +43,13 @@ impl<B: ReasoningCacheBackend> ReasoningCache<B> {
         backend: Arc<B>,
         ttl_seconds: u64,
         enabled: bool,
-        telemetry: Arc<crate::telemetry::MemoryTelemetry>,
+        telemetry: Arc<crate::telemetry::MemoryTelemetry>
     ) -> Self {
         Self {
             backend,
             ttl_seconds,
             enabled,
-            telemetry,
+            telemetry
         }
     }
 
@@ -66,7 +66,6 @@ impl<B: ReasoningCacheBackend> ReasoningCache<B> {
     fn normalize_query(query: &str) -> String {
         query
             .to_lowercase()
-            .trim()
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ")
@@ -75,7 +74,7 @@ impl<B: ReasoningCacheBackend> ReasoningCache<B> {
     pub async fn get(
         &self,
         ctx: &TenantContext,
-        query: &str,
+        query: &str
     ) -> Result<Option<ReasoningTrace>, CacheError> {
         if !self.enabled {
             return Ok(None);
@@ -103,7 +102,7 @@ impl<B: ReasoningCacheBackend> ReasoningCache<B> {
         &self,
         ctx: &TenantContext,
         query: &str,
-        trace: &ReasoningTrace,
+        trace: &ReasoningTrace
     ) -> Result<(), CacheError> {
         if !self.enabled {
             return Ok(());
@@ -112,7 +111,7 @@ impl<B: ReasoningCacheBackend> ReasoningCache<B> {
         let key = Self::generate_cache_key(ctx, query);
         let cached = CachedReasoning {
             trace: trace.clone(),
-            cached_at: chrono::Utc::now().timestamp(),
+            cached_at: chrono::Utc::now().timestamp()
         };
 
         match self.backend.set(&key, &cached, self.ttl_seconds).await {
@@ -135,7 +134,7 @@ impl<B: ReasoningCacheBackend> ReasoningCache<B> {
 }
 
 pub struct RedisReasoningCacheBackend {
-    connection_manager: redis::aio::ConnectionManager,
+    connection_manager: redis::aio::ConnectionManager
 }
 
 impl RedisReasoningCacheBackend {
@@ -169,7 +168,7 @@ impl ReasoningCacheBackend for RedisReasoningCacheBackend {
                     .map_err(|e| CacheError::SerializationError(e.to_string()))?;
                 Ok(Some(cached))
             }
-            None => Ok(None),
+            None => Ok(None)
         }
     }
 
@@ -177,7 +176,7 @@ impl ReasoningCacheBackend for RedisReasoningCacheBackend {
         &self,
         key: &str,
         value: &CachedReasoning,
-        ttl_seconds: u64,
+        ttl_seconds: u64
     ) -> Result<(), CacheError> {
         use redis::AsyncCommands;
         let mut conn = self.connection_manager.clone();
@@ -209,7 +208,7 @@ impl ReasoningCacheBackend for RedisReasoningCacheBackend {
 pub struct InMemoryReasoningCacheBackend {
     cache: tokio::sync::RwLock<std::collections::HashMap<String, (CachedReasoning, i64)>>,
     access_order: tokio::sync::RwLock<std::collections::VecDeque<String>>,
-    max_entries: usize,
+    max_entries: usize
 }
 
 impl InMemoryReasoningCacheBackend {
@@ -221,7 +220,7 @@ impl InMemoryReasoningCacheBackend {
         Self {
             cache: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             access_order: tokio::sync::RwLock::new(std::collections::VecDeque::new()),
-            max_entries,
+            max_entries
         }
     }
 
@@ -279,7 +278,7 @@ impl ReasoningCacheBackend for InMemoryReasoningCacheBackend {
         &self,
         key: &str,
         value: &CachedReasoning,
-        ttl_seconds: u64,
+        ttl_seconds: u64
     ) -> Result<(), CacheError> {
         self.evict_lru_if_needed().await;
 
@@ -311,7 +310,7 @@ mod tests {
     fn test_ctx() -> TenantContext {
         TenantContext::new(
             TenantId::new("test-tenant".to_string()).unwrap(),
-            UserId::new("test-user".to_string()).unwrap(),
+            UserId::new("test-user".to_string()).unwrap()
         )
     }
 
@@ -324,7 +323,7 @@ mod tests {
             end_time: chrono::Utc::now(),
             timed_out: false,
             duration_ms: 100,
-            metadata: std::collections::HashMap::new(),
+            metadata: std::collections::HashMap::new()
         }
     }
 
@@ -337,7 +336,7 @@ mod tests {
             ReasoningCache::<InMemoryReasoningCacheBackend>::generate_cache_key(&ctx, "TEST QUERY");
         let key3 = ReasoningCache::<InMemoryReasoningCacheBackend>::generate_cache_key(
             &ctx,
-            "  test   query  ",
+            "  test   query  "
         );
 
         assert_eq!(key1, key2, "Keys should be case-insensitive");
@@ -349,20 +348,20 @@ mod tests {
     fn test_different_tenants_different_keys() {
         let ctx1 = TenantContext::new(
             TenantId::new("tenant-1".to_string()).unwrap(),
-            UserId::new("user".to_string()).unwrap(),
+            UserId::new("user".to_string()).unwrap()
         );
         let ctx2 = TenantContext::new(
             TenantId::new("tenant-2".to_string()).unwrap(),
-            UserId::new("user".to_string()).unwrap(),
+            UserId::new("user".to_string()).unwrap()
         );
 
         let key1 = ReasoningCache::<InMemoryReasoningCacheBackend>::generate_cache_key(
             &ctx1,
-            "same query",
+            "same query"
         );
         let key2 = ReasoningCache::<InMemoryReasoningCacheBackend>::generate_cache_key(
             &ctx2,
-            "same query",
+            "same query"
         );
 
         assert_ne!(key1, key2, "Different tenants should have different keys");
@@ -451,7 +450,7 @@ mod tests {
     fn test_cached_reasoning_serialization() {
         let cached = CachedReasoning {
             trace: test_trace(),
-            cached_at: 1704067200,
+            cached_at: 1704067200
         };
 
         let json = serde_json::to_string(&cached).unwrap();

@@ -1,6 +1,6 @@
 use storage::graph_duckdb::{
     BackupConfig, BackupResult, DuckDbGraphConfig, DuckDbGraphStore, GraphError, RecoveryResult,
-    SnapshotMetadata,
+    SnapshotMetadata
 };
 
 #[test]
@@ -20,7 +20,7 @@ fn test_backup_config_custom() {
         retention_count: 48,
         retention_max_age_secs: 86400 * 14,
         auto_backup_enabled: true,
-        backup_prefix: "custom-backups".to_string(),
+        backup_prefix: "custom-backups".to_string()
     };
     assert_eq!(config.snapshot_interval_secs, 1800);
     assert_eq!(config.retention_count, 48);
@@ -38,7 +38,7 @@ fn test_snapshot_metadata_serialization() {
         checksum: "abc123".to_string(),
         node_count: 100,
         edge_count: 50,
-        schema_version: 1,
+        schema_version: 1
     };
 
     let json = serde_json::to_string(&metadata).unwrap();
@@ -57,7 +57,7 @@ fn test_backup_result_fields() {
         s3_key: "backups/tenant/snapshot.parquet".to_string(),
         size_bytes: 2048,
         duration_ms: 150,
-        checksum: "def456".to_string(),
+        checksum: "def456".to_string()
     };
 
     assert_eq!(result.snapshot_id, "snap-456");
@@ -71,7 +71,7 @@ fn test_recovery_result_fields() {
         snapshot_id: "snap-789".to_string(),
         nodes_restored: 100,
         edges_restored: 50,
-        duration_ms: 200,
+        duration_ms: 200
     };
 
     assert_eq!(result.snapshot_id, "snap-789");
@@ -86,9 +86,22 @@ async fn test_create_backup_requires_s3_config() {
 
     let result = store.create_backup("tenant-1", &backup_config).await;
 
-    assert!(matches!(result, Err(GraphError::S3(_))));
-    if let Err(GraphError::S3(msg)) = result {
-        assert!(msg.contains("S3 bucket not configured"));
+    assert!(result.is_err(), "Expected S3 error");
+    let err = result.unwrap_err();
+
+    // Handle both boxed errors and direct GraphError
+    let graph_err: &GraphError =
+        if let Some(e) = (&err as &dyn std::any::Any).downcast_ref::<GraphError>() {
+            e
+        } else {
+            panic!("Expected GraphError, got error of type: {:?}", err);
+        };
+
+    match graph_err {
+        GraphError::S3(msg) => {
+            assert!(msg.contains("S3 bucket not configured"));
+        }
+        _ => panic!("Expected S3 error, got {:?}", graph_err)
     }
 }
 
@@ -99,7 +112,24 @@ async fn test_list_snapshots_requires_s3_config() {
 
     let result = store.list_snapshots("tenant-1", &backup_config).await;
 
-    assert!(matches!(result, Err(GraphError::S3(_))));
+    assert!(result.is_err(), "Expected S3 error");
+    let err = result.unwrap_err();
+
+    // Convert to Any to check type
+    let any_err = &err as &dyn std::any::Any;
+
+    if let Some(graph_err) = any_err.downcast_ref::<GraphError>() {
+        // err is GraphError
+        match graph_err {
+            GraphError::S3(msg) => {
+                assert!(msg.contains("S3 bucket not configured"));
+            }
+            _ => panic!("Expected S3 error, got {:?}", graph_err)
+        }
+    } else {
+        // err might be Box<dyn Error>, try to downcast
+        panic!("Expected GraphError, got error of type: {:?}", err);
+    }
 }
 
 #[tokio::test]
@@ -179,7 +209,7 @@ fn test_backup_config_retention_calculations() {
         retention_count: 24,
         retention_max_age_secs: 86400,
         auto_backup_enabled: true,
-        backup_prefix: "backups".to_string(),
+        backup_prefix: "backups".to_string()
     };
 
     let expected_daily_snapshots = 86400 / config.snapshot_interval_secs;

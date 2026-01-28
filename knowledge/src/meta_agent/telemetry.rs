@@ -1,4 +1,4 @@
-use metrics::increment_counter;
+use metrics::counter;
 
 use super::MetaAgentTelemetry;
 
@@ -11,8 +11,9 @@ impl MetaAgentTelemetrySink {
         } else {
             "failure"
         };
-        increment_counter!("meta_agent_loops_total", "status" => status.to_string());
-        increment_counter!("meta_agent_iterations_total", "count" => telemetry.iterations.to_string());
+        counter!("meta_agent_loops_total", "status" => status.to_string()).increment(1);
+        counter!("meta_agent_iterations_total", "count" => telemetry.iterations.to_string())
+            .increment(1);
     }
 }
 
@@ -25,7 +26,7 @@ mod tests {
         let sink = MetaAgentTelemetrySink;
         sink.record(&MetaAgentTelemetry {
             iterations: 2,
-            success: true,
+            success: true
         });
     }
 }

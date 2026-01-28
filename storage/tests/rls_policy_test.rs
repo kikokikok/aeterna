@@ -9,7 +9,7 @@ mod tests {
     fn make_tenant_context(tenant: &str, user: &str) -> TenantContext {
         TenantContext::new(
             TenantId::new(tenant.to_string()).unwrap(),
-            UserId::new(user.to_string()).unwrap(),
+            UserId::new(user.to_string()).unwrap()
         )
     }
 

@@ -107,7 +107,7 @@ async fn test_redis_connection_error() {
         Err(StorageError::ConnectionError { backend, .. }) => {
             assert_eq!(backend, "Redis");
         }
-        _ => panic!("Expected ConnectionError"),
+        _ => panic!("Expected ConnectionError")
     }
 }
 
@@ -120,7 +120,7 @@ async fn test_redis_scoped_key() {
 
     let ctx = TenantContext::new(
         TenantId::new("tenant-123".to_string()).unwrap(),
-        UserId::default(),
+        UserId::default()
     );
     let scoped = redis.scoped_key(&ctx, "my_key");
     assert_eq!(scoped, "tenant-123:my_key");
@@ -369,7 +369,7 @@ async fn test_redis_publish_governance_event() {
         project_id: "proj-1".to_string(),
         tenant_id: tenant_id.clone(),
         drift_score: 0.75,
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: chrono::Utc::now().timestamp()
     };
 
     use mk_core::traits::EventPublisher;
@@ -390,7 +390,7 @@ async fn test_redis_publish_unit_created_event() {
         unit_type: mk_core::types::UnitType::Team,
         tenant_id: tenant_id.clone(),
         parent_id: Some("parent-456".to_string()),
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: chrono::Utc::now().timestamp()
     };
 
     use mk_core::traits::EventPublisher;
@@ -411,7 +411,7 @@ async fn test_redis_publish_role_assigned_event() {
         unit_id: "unit-1".to_string(),
         role: mk_core::types::Role::Developer,
         tenant_id: tenant_id.clone(),
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: chrono::Utc::now().timestamp()
     };
 
     use mk_core::traits::EventPublisher;
@@ -431,7 +431,7 @@ async fn test_redis_publish_policy_updated_event() {
         policy_id: "policy-1".to_string(),
         layer: mk_core::types::KnowledgeLayer::Org,
         tenant_id: tenant_id.clone(),
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: chrono::Utc::now().timestamp()
     };
 
     use mk_core::traits::EventPublisher;
@@ -758,7 +758,7 @@ async fn test_redis_subscribe_receives_governance_events() {
         project_id: "proj-subscribe-test".to_string(),
         tenant_id: tenant_id.clone(),
         drift_score: 0.85,
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: chrono::Utc::now().timestamp()
     };
 
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -810,7 +810,7 @@ async fn test_redis_subscribe_multiple_channels() {
             policy_id: format!("policy-{}", attempt),
             layer: mk_core::types::KnowledgeLayer::Company,
             tenant_id: tenant_id1.clone(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         };
         redis.publish(event1).await.unwrap();
 
@@ -821,7 +821,7 @@ async fn test_redis_subscribe_multiple_channels() {
             unit_type: mk_core::types::UnitType::Team,
             tenant_id: tenant_id2.clone(),
             parent_id: None,
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         };
         redis.publish(event2).await.unwrap();
 
@@ -862,7 +862,7 @@ async fn test_redis_subscribe_multiple_events_in_sequence() {
             project_id: format!("proj-seq-{}", i),
             tenant_id: tenant_id.clone(),
             drift_score: 0.1 * (i as f32 + 1.0),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         };
         redis.publish(event).await.unwrap();
     }
@@ -906,7 +906,7 @@ async fn test_redis_subscribe_channel_closed_on_drop() {
         project_id: "proj-drop-test".to_string(),
         tenant_id: tenant_id.clone(),
         drift_score: 0.3,
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: chrono::Utc::now().timestamp()
     };
 
     let result = redis.publish(event).await;
@@ -937,27 +937,27 @@ async fn test_redis_subscribe_receives_all_event_types() {
             project_id: "proj-1".to_string(),
             tenant_id: tenant_id.clone(),
             drift_score: 0.5,
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         },
         mk_core::types::GovernanceEvent::UnitCreated {
             unit_id: "unit-1".to_string(),
             unit_type: mk_core::types::UnitType::Team,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         },
         mk_core::types::GovernanceEvent::RoleAssigned {
             user_id: user_id.clone(),
             unit_id: "unit-1".to_string(),
             role: mk_core::types::Role::Developer,
             tenant_id: tenant_id.clone(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         },
         mk_core::types::GovernanceEvent::PolicyUpdated {
             policy_id: "policy-1".to_string(),
             layer: mk_core::types::KnowledgeLayer::Team,
             tenant_id: tenant_id.clone(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         },
     ];
 
@@ -999,7 +999,7 @@ async fn test_redis_set_and_get_summary_cache() {
         source_hash: "abc123".to_string(),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     };
 
     let set_result = redis
@@ -1012,7 +1012,7 @@ async fn test_redis_set_and_get_summary_cache() {
             &tenant_id,
             &layer,
             &entry_id,
-            &mk_core::types::SummaryDepth::Sentence,
+            &mk_core::types::SummaryDepth::Sentence
         )
         .await;
     assert!(get_result.is_ok(), "Get summary cache should succeed");
@@ -1042,7 +1042,7 @@ async fn test_redis_get_summary_cache_nonexistent() {
             &tenant_id,
             &layer,
             &entry_id,
-            &mk_core::types::SummaryDepth::Paragraph,
+            &mk_core::types::SummaryDepth::Paragraph
         )
         .await;
     assert!(get_result.is_ok());
@@ -1068,7 +1068,7 @@ async fn test_redis_invalidate_summary_cache_specific_depth() {
         source_hash: "def456".to_string(),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     };
 
     redis
@@ -1081,7 +1081,7 @@ async fn test_redis_invalidate_summary_cache_specific_depth() {
             &tenant_id,
             &layer,
             &entry_id,
-            &mk_core::types::SummaryDepth::Detailed,
+            &mk_core::types::SummaryDepth::Detailed
         )
         .await
         .unwrap();
@@ -1092,7 +1092,7 @@ async fn test_redis_invalidate_summary_cache_specific_depth() {
             &tenant_id,
             &layer,
             &entry_id,
-            Some(&mk_core::types::SummaryDepth::Detailed),
+            Some(&mk_core::types::SummaryDepth::Detailed)
         )
         .await;
     assert!(invalidate_result.is_ok());
@@ -1103,7 +1103,7 @@ async fn test_redis_invalidate_summary_cache_specific_depth() {
             &tenant_id,
             &layer,
             &entry_id,
-            &mk_core::types::SummaryDepth::Detailed,
+            &mk_core::types::SummaryDepth::Detailed
         )
         .await
         .unwrap();
@@ -1124,7 +1124,7 @@ async fn test_redis_invalidate_summary_cache_all_depths() {
     let depths = [
         mk_core::types::SummaryDepth::Sentence,
         mk_core::types::SummaryDepth::Paragraph,
-        mk_core::types::SummaryDepth::Detailed,
+        mk_core::types::SummaryDepth::Detailed
     ];
 
     for depth in &depths {
@@ -1136,7 +1136,7 @@ async fn test_redis_invalidate_summary_cache_all_depths() {
             source_hash: "hash".to_string(),
             content_hash: None,
             personalized: false,
-            personalization_context: None,
+            personalization_context: None
         };
         redis
             .set_summary_cache(&tenant_id, &layer, &entry_id, &summary, Some(3600))
@@ -1204,7 +1204,7 @@ async fn test_redis_get_all_summaries_for_entry() {
         source_hash: "s1".to_string(),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     };
 
     let paragraph = mk_core::types::LayerSummary {
@@ -1215,7 +1215,7 @@ async fn test_redis_get_all_summaries_for_entry() {
         source_hash: "p1".to_string(),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     };
 
     redis
@@ -1285,7 +1285,7 @@ async fn test_redis_summary_cache_with_personalization() {
         source_hash: "hash123".to_string(),
         content_hash: Some("content_hash_456".to_string()),
         personalized: true,
-        personalization_context: Some("User prefers technical details".to_string()),
+        personalization_context: Some("User prefers technical details".to_string())
     };
 
     redis
@@ -1298,7 +1298,7 @@ async fn test_redis_summary_cache_with_personalization() {
             &tenant_id,
             &layer,
             &entry_id,
-            &mk_core::types::SummaryDepth::Detailed,
+            &mk_core::types::SummaryDepth::Detailed
         )
         .await
         .unwrap()
@@ -1331,7 +1331,7 @@ async fn test_redis_summary_cache_ttl_expiration() {
         source_hash: "exp".to_string(),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     };
 
     redis
@@ -1344,7 +1344,7 @@ async fn test_redis_summary_cache_ttl_expiration() {
             &tenant_id,
             &layer,
             &entry_id,
-            &mk_core::types::SummaryDepth::Sentence,
+            &mk_core::types::SummaryDepth::Sentence
         )
         .await
         .unwrap();
@@ -1357,7 +1357,7 @@ async fn test_redis_summary_cache_ttl_expiration() {
             &tenant_id,
             &layer,
             &entry_id,
-            &mk_core::types::SummaryDepth::Sentence,
+            &mk_core::types::SummaryDepth::Sentence
         )
         .await
         .unwrap();
@@ -1383,7 +1383,7 @@ async fn test_redis_summary_cache_without_ttl() {
         source_hash: "persist".to_string(),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     };
 
     redis
@@ -1396,7 +1396,7 @@ async fn test_redis_summary_cache_without_ttl() {
             &tenant_id,
             &layer,
             &entry_id,
-            &mk_core::types::SummaryDepth::Paragraph,
+            &mk_core::types::SummaryDepth::Paragraph
         )
         .await
         .unwrap();
@@ -1423,7 +1423,7 @@ async fn test_redis_summary_cache_tenant_isolation() {
         source_hash: "t1".to_string(),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     };
 
     redis
@@ -1436,7 +1436,7 @@ async fn test_redis_summary_cache_tenant_isolation() {
             &tenant1,
             &layer,
             entry_id,
-            &mk_core::types::SummaryDepth::Sentence,
+            &mk_core::types::SummaryDepth::Sentence
         )
         .await
         .unwrap();
@@ -1448,7 +1448,7 @@ async fn test_redis_summary_cache_tenant_isolation() {
             &tenant2,
             &layer,
             entry_id,
-            &mk_core::types::SummaryDepth::Sentence,
+            &mk_core::types::SummaryDepth::Sentence
         )
         .await
         .unwrap();
@@ -1476,7 +1476,7 @@ async fn test_redis_summary_cache_layer_isolation() {
         source_hash: "team".to_string(),
         content_hash: None,
         personalized: false,
-        personalization_context: None,
+        personalization_context: None
     };
 
     redis
@@ -1485,7 +1485,7 @@ async fn test_redis_summary_cache_layer_isolation() {
             &mk_core::types::MemoryLayer::Team,
             &entry_id,
             &team_summary,
-            Some(3600),
+            Some(3600)
         )
         .await
         .unwrap();
@@ -1495,7 +1495,7 @@ async fn test_redis_summary_cache_layer_isolation() {
             &tenant_id,
             &mk_core::types::MemoryLayer::Team,
             &entry_id,
-            &mk_core::types::SummaryDepth::Sentence,
+            &mk_core::types::SummaryDepth::Sentence
         )
         .await
         .unwrap();
@@ -1506,7 +1506,7 @@ async fn test_redis_summary_cache_layer_isolation() {
             &tenant_id,
             &mk_core::types::MemoryLayer::Project,
             &entry_id,
-            &mk_core::types::SummaryDepth::Sentence,
+            &mk_core::types::SummaryDepth::Sentence
         )
         .await
         .unwrap();
