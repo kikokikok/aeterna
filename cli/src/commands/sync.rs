@@ -32,7 +32,7 @@ pub struct SyncArgs {
 
     /// Show verbose sync details
     #[arg(long, short)]
-    pub verbose: bool,
+    pub verbose: bool
 }
 
 pub async fn run(args: SyncArgs) -> Result<()> {
@@ -54,8 +54,7 @@ pub async fn run(args: SyncArgs) -> Result<()> {
     let project = ctx
         .project_id
         .as_ref()
-        .map(|p| p.value.as_str())
-        .unwrap_or("(none)");
+        .map_or("(none)", |p| p.value.as_str());
 
     println!("  {} {}", "Tenant:".dimmed(), tenant.cyan());
     println!("  {} {}", "Project:".dimmed(), project.cyan());
@@ -193,7 +192,7 @@ async fn run_json(args: SyncArgs, ctx: &context::ResolvedContext) -> Result<()> 
 struct SyncState {
     memories_pending: u32,
     stale_pointers: u32,
-    cache_expired: u32,
+    cache_expired: u32
 }
 
 impl SyncState {
@@ -206,7 +205,7 @@ struct SyncResults {
     memories_promoted: u32,
     pointers_refreshed: u32,
     cache_updated: u32,
-    errors: u32,
+    errors: u32
 }
 
 fn analyze_sync_state(_args: &SyncArgs) -> SyncState {
@@ -215,7 +214,7 @@ fn analyze_sync_state(_args: &SyncArgs) -> SyncState {
     SyncState {
         memories_pending: 0,
         stale_pointers: 0,
-        cache_expired: 0,
+        cache_expired: 0
     }
 }
 
@@ -225,7 +224,7 @@ fn execute_sync(_args: &SyncArgs, state: &SyncState) -> SyncResults {
         memories_promoted: state.memories_pending,
         pointers_refreshed: state.stale_pointers,
         cache_updated: state.cache_expired,
-        errors: 0,
+        errors: 0
     }
 }
 
@@ -265,14 +264,14 @@ mod tests {
         let state = SyncState {
             memories_pending: 0,
             stale_pointers: 0,
-            cache_expired: 0,
+            cache_expired: 0
         };
         assert!(state.is_synced());
 
         let state = SyncState {
             memories_pending: 1,
             stale_pointers: 0,
-            cache_expired: 0,
+            cache_expired: 0
         };
         assert!(!state.is_synced());
     }
@@ -284,7 +283,7 @@ mod tests {
             dry_run: false,
             force: false,
             direction: "all".to_string(),
-            verbose: false,
+            verbose: false
         };
         let state = analyze_sync_state(&args);
         // Currently returns empty state
@@ -298,12 +297,12 @@ mod tests {
             dry_run: false,
             force: false,
             direction: "all".to_string(),
-            verbose: false,
+            verbose: false
         };
         let state = SyncState {
             memories_pending: 5,
             stale_pointers: 3,
-            cache_expired: 2,
+            cache_expired: 2
         };
         let results = execute_sync(&args, &state);
         assert_eq!(results.memories_promoted, 5);

@@ -7,7 +7,7 @@ use super::{BuildResult, HindsightLookup, HindsightStore, MetaAgentConfig, NoteL
 
 #[derive(Debug, Clone)]
 pub struct BuildPhaseConfig {
-    pub max_tokens: u32,
+    pub max_tokens: u32
 }
 
 impl Default for BuildPhaseConfig {
@@ -19,12 +19,12 @@ impl Default for BuildPhaseConfig {
 #[derive(Debug, Clone)]
 pub struct BuildPromptTemplate {
     pub system: String,
-    pub user: String,
+    pub user: String
 }
 
 #[derive(Debug, Clone)]
 pub struct BuildPromptTemplates {
-    pub default: BuildPromptTemplate,
+    pub default: BuildPromptTemplate
 }
 
 impl Default for BuildPromptTemplates {
@@ -32,8 +32,8 @@ impl Default for BuildPromptTemplates {
         Self {
             default: BuildPromptTemplate {
                 system: DEFAULT_SYSTEM.to_string(),
-                user: DEFAULT_USER.to_string(),
-            },
+                user: DEFAULT_USER.to_string()
+            }
         }
     }
 }
@@ -46,7 +46,7 @@ pub struct BuildPhase<C: LlmClient> {
     hindsight_lookup: Option<Arc<dyn HindsightLookup>>,
     note_store: Option<Arc<dyn NoteStore>>,
     hindsight_store: Option<Arc<dyn HindsightStore>>,
-    meta_config: MetaAgentConfig,
+    meta_config: MetaAgentConfig
 }
 
 impl<C: LlmClient> BuildPhase<C> {
@@ -59,7 +59,7 @@ impl<C: LlmClient> BuildPhase<C> {
             hindsight_lookup: None,
             note_store: None,
             hindsight_store: None,
-            meta_config: MetaAgentConfig::default(),
+            meta_config: MetaAgentConfig::default()
         }
     }
 
@@ -96,7 +96,7 @@ impl<C: LlmClient> BuildPhase<C> {
     pub async fn execute(
         &self,
         requirements: &str,
-        context: Option<&str>,
+        context: Option<&str>
     ) -> Result<BuildResult, crate::context_architect::LlmError> {
         let span = info_span!(
             "build_phase",
@@ -120,7 +120,7 @@ impl<C: LlmClient> BuildPhase<C> {
                         .retrieve(requirements, self.meta_config.note_limit)
                         .await
                 }
-                _ => Vec::new(),
+                _ => Vec::new()
             };
             let hindsight = match (&self.hindsight_store, &self.hindsight_lookup) {
                 (Some(store), _) => {
@@ -133,7 +133,7 @@ impl<C: LlmClient> BuildPhase<C> {
                         .retrieve(requirements, self.meta_config.hindsight_limit)
                         .await
                 }
-                _ => Vec::new(),
+                _ => Vec::new()
             };
 
             let (system, user) = self.build_prompt(requirements, context, &notes, &hindsight);
@@ -143,7 +143,7 @@ impl<C: LlmClient> BuildPhase<C> {
                 output: response.clone(),
                 notes,
                 hindsight,
-                tokens_used: estimate_tokens(&response),
+                tokens_used: estimate_tokens(&response)
             })
         }
         .instrument(span)
@@ -155,7 +155,7 @@ impl<C: LlmClient> BuildPhase<C> {
         requirements: &str,
         context: Option<&str>,
         notes: &[String],
-        hindsight: &[String],
+        hindsight: &[String]
     ) -> (String, String) {
         let notes_block = format_list(notes);
         let hindsight_block = format_list(hindsight);
@@ -216,13 +216,13 @@ mod tests {
     use std::sync::Mutex;
 
     struct MockLlmClient {
-        responses: Mutex<Vec<String>>,
+        responses: Mutex<Vec<String>>
     }
 
     impl MockLlmClient {
         fn new(responses: Vec<String>) -> Self {
             Self {
-                responses: Mutex::new(responses),
+                responses: Mutex::new(responses)
             }
         }
     }
@@ -239,7 +239,7 @@ mod tests {
         async fn complete_with_system(
             &self,
             _system: &str,
-            _user: &str,
+            _user: &str
         ) -> Result<String, LlmError> {
             let mut responses = self.responses.lock().unwrap();
             responses

@@ -477,3 +477,5 @@ openspec archive <change-id> [--yes|-y]  # Mark complete (add --yes for automati
 ```
 
 Remember: Specs are truth. Changes are proposals. Keep them in sync.
+IMPORTANT: When applicable, prefer using rustrover-index MCP tools for code navigation and refactoring.
+IMPORTANT: When debugging, prefer using rustrover-debugger MCP tools to interact with the IDE debugger.

@@ -47,7 +47,7 @@ async fn test_qdrant_full_lifecycle() {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 1000 + i as i64,
-            updated_at: 1000 + i as i64,
+            updated_at: 1000 + i as i64
         };
         provider
             .add(ctx.clone(), entry)
@@ -132,7 +132,7 @@ async fn test_qdrant_error_conditions() {
         layer: MemoryLayer::User,
         metadata: HashMap::new(),
         created_at: 0,
-        updated_at: 0,
+        updated_at: 0
     };
     let ctx = test_ctx();
     let result = provider.add(ctx, entry_no_emb).await;
@@ -181,7 +181,7 @@ async fn test_qdrant_complex_metadata() {
         layer: MemoryLayer::Session,
         metadata,
         created_at: 123456789,
-        updated_at: 123456789,
+        updated_at: 123456789
     };
 
     let ctx = test_ctx();

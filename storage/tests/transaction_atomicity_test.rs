@@ -5,7 +5,7 @@ use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore, Entity, EntityE
 fn create_test_context(tenant_id: &str) -> TenantContext {
     TenantContext::new(
         TenantId::new(tenant_id.to_string()).unwrap(),
-        UserId::new("test-user".to_string()).unwrap(),
+        UserId::new("test-user".to_string()).unwrap()
     )
 }
 
@@ -20,13 +20,13 @@ fn test_atomic_nodes_and_edges_success() {
             id: "node-1".to_string(),
             label: "test".to_string(),
             properties: serde_json::json!({"key": "value1"}),
-            tenant_id: tenant_id.to_string(),
+            tenant_id: tenant_id.to_string()
         },
         GraphNode {
             id: "node-2".to_string(),
             label: "test".to_string(),
             properties: serde_json::json!({"key": "value2"}),
-            tenant_id: tenant_id.to_string(),
+            tenant_id: tenant_id.to_string()
         },
     ];
 
@@ -36,7 +36,7 @@ fn test_atomic_nodes_and_edges_success() {
         target_id: "node-2".to_string(),
         relation: "connects".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: tenant_id.to_string(),
+        tenant_id: tenant_id.to_string()
     }];
 
     let result = store.add_nodes_and_edges_atomic(&ctx, tenant_id, nodes, edges);
@@ -58,18 +58,33 @@ fn test_atomic_rollback_on_tenant_mismatch() {
             id: "node-a".to_string(),
             label: "test".to_string(),
             properties: serde_json::json!({}),
-            tenant_id: tenant_id.to_string(),
+            tenant_id: tenant_id.to_string()
         },
         GraphNode {
             id: "node-b".to_string(),
             label: "test".to_string(),
             properties: serde_json::json!({}),
-            tenant_id: "wrong-tenant".to_string(),
+            tenant_id: "wrong-tenant".to_string()
         },
     ];
 
     let result = store.add_nodes_and_edges_atomic(&ctx, tenant_id, nodes, vec![]);
-    assert!(matches!(result, Err(GraphError::TenantViolation(_))));
+    assert!(result.is_err(), "Expected error for tenant violation");
+    match result {
+        Err(err) => {
+            let any_err = &err as &dyn std::any::Any;
+            if let Some(graph_err) = any_err.downcast_ref::<GraphError>() {
+                assert!(
+                    matches!(graph_err, GraphError::TenantViolation(_)),
+                    "Expected TenantViolation, got {:?}",
+                    graph_err
+                );
+            } else {
+                panic!("Expected GraphError, got {:?}", err);
+            }
+        }
+        Ok(_) => panic!("Expected error, got Ok")
+    }
 
     let stats = store.get_stats(ctx).unwrap();
     assert_eq!(
@@ -88,7 +103,7 @@ fn test_atomic_rollback_on_referential_integrity() {
         id: "node-only".to_string(),
         label: "test".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: tenant_id.to_string(),
+        tenant_id: tenant_id.to_string()
     }];
 
     let edges = vec![GraphEdge {
@@ -97,15 +112,30 @@ fn test_atomic_rollback_on_referential_integrity() {
         target_id: "nonexistent-node".to_string(),
         relation: "broken".to_string(),
         properties: serde_json::json!({}),
-        tenant_id: tenant_id.to_string(),
+        tenant_id: tenant_id.to_string()
     }];
 
     let result = store.add_nodes_and_edges_atomic(&ctx, tenant_id, nodes, edges);
     assert!(
-        matches!(result, Err(GraphError::ReferentialIntegrity(_))),
+        result.is_err(),
         "Should fail on missing target node: {:?}",
         result
     );
+    match result {
+        Err(err) => {
+            let any_err = &err as &dyn std::any::Any;
+            if let Some(graph_err) = any_err.downcast_ref::<GraphError>() {
+                assert!(
+                    matches!(graph_err, GraphError::ReferentialIntegrity(_)),
+                    "Expected ReferentialIntegrity, got {:?}",
+                    graph_err
+                );
+            } else {
+                panic!("Expected GraphError, got {:?}", err);
+            }
+        }
+        Ok(_) => panic!("Expected error, got Ok")
+    }
 
     let stats = store.get_stats(ctx).unwrap();
     assert_eq!(stats.node_count, 0, "Rollback should have removed the node");
@@ -126,7 +156,7 @@ fn test_atomic_entities_success() {
             properties: serde_json::json!({}),
             tenant_id: tenant_id.to_string(),
             created_at: chrono::Utc::now(),
-            deleted_at: None,
+            deleted_at: None
         },
         Entity {
             id: "entity-2".to_string(),
@@ -135,7 +165,7 @@ fn test_atomic_entities_success() {
             properties: serde_json::json!({}),
             tenant_id: tenant_id.to_string(),
             created_at: chrono::Utc::now(),
-            deleted_at: None,
+            deleted_at: None
         },
     ];
 
@@ -147,7 +177,7 @@ fn test_atomic_entities_success() {
         properties: serde_json::json!({}),
         tenant_id: tenant_id.to_string(),
         created_at: chrono::Utc::now(),
-        deleted_at: None,
+        deleted_at: None
     }];
 
     let result = store.add_entities_atomic(&ctx, tenant_id, entities, entity_edges);
@@ -176,7 +206,7 @@ fn test_atomic_entities_rollback_on_tenant_mismatch() {
             properties: serde_json::json!({}),
             tenant_id: tenant_id.to_string(),
             created_at: chrono::Utc::now(),
-            deleted_at: None,
+            deleted_at: None
         },
         Entity {
             id: "entity-b".to_string(),
@@ -185,12 +215,27 @@ fn test_atomic_entities_rollback_on_tenant_mismatch() {
             properties: serde_json::json!({}),
             tenant_id: "wrong-tenant".to_string(),
             created_at: chrono::Utc::now(),
-            deleted_at: None,
+            deleted_at: None
         },
     ];
 
     let result = store.add_entities_atomic(&ctx, tenant_id, entities, vec![]);
-    assert!(matches!(result, Err(GraphError::TenantViolation(_))));
+    assert!(result.is_err(), "Expected error for tenant violation");
+    match result {
+        Err(err) => {
+            let any_err = &err as &dyn std::any::Any;
+            if let Some(graph_err) = any_err.downcast_ref::<GraphError>() {
+                assert!(
+                    matches!(graph_err, GraphError::TenantViolation(_)),
+                    "Expected TenantViolation, got {:?}",
+                    graph_err
+                );
+            } else {
+                panic!("Expected GraphError, got {:?}", err);
+            }
+        }
+        Ok(_) => panic!("Expected error, got Ok")
+    }
 
     let stats = store.get_stats(ctx).unwrap();
     assert_eq!(
@@ -206,7 +251,7 @@ fn test_with_transaction_commit() {
     let result = store.with_transaction(|conn| {
         conn.execute(
             "INSERT INTO memory_nodes (id, label, properties, tenant_id) VALUES (?, ?, ?, ?)",
-            duckdb::params!["tx-node-1", "test", "{}", "tx-tenant"],
+            duckdb::params!["tx-node-1", "test", "{}", "tx-tenant"]
         )?;
         Ok(42)
     });
@@ -221,7 +266,7 @@ fn test_with_transaction_rollback() {
     let result: Result<i32, GraphError> = store.with_transaction(|conn| {
         conn.execute(
             "INSERT INTO memory_nodes (id, label, properties, tenant_id) VALUES (?, ?, ?, ?)",
-            duckdb::params!["tx-node-fail", "test", "{}", "tx-tenant"],
+            duckdb::params!["tx-node-fail", "test", "{}", "tx-tenant"]
         )?;
         Err(GraphError::Serialization("Forced failure".to_string()))
     });
@@ -239,10 +284,45 @@ fn test_atomic_validates_tenant_id() {
     let ctx = create_test_context("tenant-1");
 
     let result = store.add_nodes_and_edges_atomic(&ctx, "", vec![], vec![]);
-    assert!(matches!(result, Err(GraphError::InvalidTenantIdFormat(_))));
+    assert!(result.is_err(), "Expected error for empty tenant ID");
+    match result {
+        Err(err) => {
+            // Try to handle as GraphError directly
+            let any_err = &err as &dyn std::any::Any;
+            if let Some(graph_err) = any_err.downcast_ref::<GraphError>() {
+                assert!(
+                    matches!(graph_err, GraphError::InvalidTenantIdFormat(_)),
+                    "Expected InvalidTenantIdFormat, got {:?}",
+                    graph_err
+                );
+            } else {
+                panic!("Expected GraphError, got {:?}", err);
+            }
+        }
+        Ok(_) => panic!("Expected error, got Ok")
+    }
 
     let result = store.add_nodes_and_edges_atomic(&ctx, "tenant'; DROP TABLE", vec![], vec![]);
-    assert!(matches!(result, Err(GraphError::InvalidTenantIdFormat(_))));
+    assert!(
+        result.is_err(),
+        "Expected error for SQL injection tenant ID"
+    );
+    match result {
+        Err(err) => {
+            // Try to handle as GraphError directly
+            let any_err = &err as &dyn std::any::Any;
+            if let Some(graph_err) = any_err.downcast_ref::<GraphError>() {
+                assert!(
+                    matches!(graph_err, GraphError::InvalidTenantIdFormat(_)),
+                    "Expected InvalidTenantIdFormat, got {:?}",
+                    graph_err
+                );
+            } else {
+                panic!("Expected GraphError, got {:?}", err);
+            }
+        }
+        Ok(_) => panic!("Expected error, got Ok")
+    }
 }
 
 #[test]

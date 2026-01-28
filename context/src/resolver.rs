@@ -33,7 +33,7 @@ pub enum ContextError {
     GitError(#[from] git2::Error),
 
     #[error("Invalid context configuration: {0}")]
-    InvalidConfig(String),
+    InvalidConfig(String)
 }
 
 /// Environment variable prefix for Aeterna configuration.
@@ -84,7 +84,7 @@ pub struct ContextResolver {
     skip_env: bool,
 
     /// Maximum depth to search for context.toml.
-    max_search_depth: usize,
+    max_search_depth: usize
 }
 
 impl Default for ContextResolver {
@@ -102,7 +102,7 @@ impl ContextResolver {
             explicit_overrides: HashMap::new(),
             skip_git: false,
             skip_env: false,
-            max_search_depth: 10,
+            max_search_depth: 10
         }
     }
 
@@ -253,7 +253,7 @@ impl ContextResolver {
                 Some(parent) if parent != current => {
                     current = parent.to_path_buf();
                 }
-                _ => break,
+                _ => break
             }
         }
 
@@ -309,7 +309,7 @@ impl ContextResolver {
         &self,
         ctx: &mut ResolvedContext,
         config: &ContextConfig,
-        toml_path: &Path,
+        toml_path: &Path
     ) {
         let source = ContextSource::ContextToml(toml_path.to_path_buf());
 
@@ -350,7 +350,7 @@ impl ContextResolver {
         if let Ok(value) = env::var(format!("{ENV_PREFIX}TENANT_ID")) {
             ctx.tenant_id = ResolvedValue::new(
                 value,
-                ContextSource::EnvVar(format!("{ENV_PREFIX}TENANT_ID")),
+                ContextSource::EnvVar(format!("{ENV_PREFIX}TENANT_ID"))
             );
         }
 
@@ -364,7 +364,7 @@ impl ContextResolver {
         if let Ok(value) = env::var(format!("{ENV_PREFIX}ORG_ID")) {
             ctx.org_id = Some(ResolvedValue::new(
                 value,
-                ContextSource::EnvVar(format!("{ENV_PREFIX}ORG_ID")),
+                ContextSource::EnvVar(format!("{ENV_PREFIX}ORG_ID"))
             ));
         }
 
@@ -372,7 +372,7 @@ impl ContextResolver {
         if let Ok(value) = env::var(format!("{ENV_PREFIX}TEAM_ID")) {
             ctx.team_id = Some(ResolvedValue::new(
                 value,
-                ContextSource::EnvVar(format!("{ENV_PREFIX}TEAM_ID")),
+                ContextSource::EnvVar(format!("{ENV_PREFIX}TEAM_ID"))
             ));
         }
 
@@ -380,7 +380,7 @@ impl ContextResolver {
         if let Ok(value) = env::var(format!("{ENV_PREFIX}PROJECT_ID")) {
             ctx.project_id = Some(ResolvedValue::new(
                 value,
-                ContextSource::EnvVar(format!("{ENV_PREFIX}PROJECT_ID")),
+                ContextSource::EnvVar(format!("{ENV_PREFIX}PROJECT_ID"))
             ));
         }
 
@@ -388,7 +388,7 @@ impl ContextResolver {
         if let Ok(value) = env::var(format!("{ENV_PREFIX}AGENT_ID")) {
             ctx.agent_id = Some(ResolvedValue::new(
                 value,
-                ContextSource::EnvVar(format!("{ENV_PREFIX}AGENT_ID")),
+                ContextSource::EnvVar(format!("{ENV_PREFIX}AGENT_ID"))
             ));
         }
 
@@ -399,7 +399,7 @@ impl ContextResolver {
             let merged = ctx.hints.value.clone().merge(&env_hints);
             ctx.hints = ResolvedValue::new(
                 merged,
-                ContextSource::EnvVar(format!("{ENV_PREFIX}HINTS_*")),
+                ContextSource::EnvVar(format!("{ENV_PREFIX}HINTS_*"))
             );
         }
     }
@@ -471,21 +471,21 @@ impl ContextResolver {
 /// let enriched = cedar.enrich(local_ctx).await?;
 /// ```
 pub struct CedarContextResolver {
-    client: crate::cedar::CedarClient,
+    client: crate::cedar::CedarClient
 }
 
 impl CedarContextResolver {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            client: crate::cedar::CedarClient::from_env(),
+            client: crate::cedar::CedarClient::from_env()
         }
     }
 
     #[must_use]
     pub fn with_config(config: crate::cedar::CedarConfig) -> Self {
         Self {
-            client: crate::cedar::CedarClient::new(config),
+            client: crate::cedar::CedarClient::new(config)
         }
     }
 
@@ -497,7 +497,8 @@ impl CedarContextResolver {
     ///
     /// Attempts to resolve user and project from Cedar Agent based on:
     /// - user_id (if it looks like an email, resolve to Cedar User entity)
-    /// - project_id (if resolved from git remote, resolve to Cedar Project entity)
+    /// - project_id (if resolved from git remote, resolve to Cedar Project
+    ///   entity)
     ///
     /// If Cedar Agent is unavailable, returns the original context unchanged.
     pub async fn enrich(&self, mut ctx: ResolvedContext) -> Result<ResolvedContext, ContextError> {
@@ -519,7 +520,7 @@ impl CedarContextResolver {
                     );
                     ctx.project_id = Some(ResolvedValue::new(
                         cedar_project.uid.id.clone(),
-                        ContextSource::CedarAgent,
+                        ContextSource::CedarAgent
                     ));
 
                     if let Some(team_parent) = cedar_project
@@ -529,7 +530,7 @@ impl CedarContextResolver {
                     {
                         ctx.team_id = Some(ResolvedValue::new(
                             team_parent.id.clone(),
-                            ContextSource::CedarAgent,
+                            ContextSource::CedarAgent
                         ));
                     }
                 }
@@ -557,7 +558,7 @@ impl CedarContextResolver {
     /// Get accessible layers for the current user.
     pub async fn get_accessible_layers(
         &self,
-        user_id: &str,
+        user_id: &str
     ) -> Result<crate::cedar::AccessibleLayers, crate::cedar::CedarError> {
         self.client.get_accessible_layers(user_id).await
     }
@@ -567,7 +568,7 @@ impl CedarContextResolver {
         &self,
         principal: &crate::cedar::EntityUid,
         action: &str,
-        resource: &crate::cedar::EntityUid,
+        resource: &crate::cedar::EntityUid
     ) -> Result<bool, crate::cedar::CedarError> {
         self.client
             .check_authorization(principal, action, resource, None)
@@ -775,7 +776,7 @@ user-id = "direct-user"
         fs::create_dir(&aeterna_dir).unwrap();
         fs::write(
             aeterna_dir.join("context.toml"),
-            "tenant-id = \"root-tenant\"",
+            "tenant-id = \"root-tenant\""
         )
         .unwrap();
 
@@ -796,7 +797,7 @@ user-id = "direct-user"
         // Context.toml sets tenant_id = "from-file"
         fs::write(
             aeterna_dir.join("context.toml"),
-            "tenant-id = \"from-file\"",
+            "tenant-id = \"from-file\""
         )
         .unwrap();
 
@@ -876,7 +877,7 @@ user-id = "direct-user"
         fs::create_dir(&aeterna_dir).unwrap();
         fs::write(
             aeterna_dir.join("context.toml"),
-            "tenant-id = \"root-tenant\"",
+            "tenant-id = \"root-tenant\""
         )
         .unwrap();
 

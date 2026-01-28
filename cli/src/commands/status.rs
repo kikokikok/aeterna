@@ -9,7 +9,7 @@ pub struct StatusArgs {
     pub json: bool,
 
     #[arg(long, help = "Show verbose details")]
-    pub verbose: bool,
+    pub verbose: bool
 }
 
 pub fn run(args: StatusArgs) -> Result<()> {
@@ -61,13 +61,13 @@ pub fn run(args: StatusArgs) -> Result<()> {
         "tenant_id",
         &ctx.tenant_id.value,
         &ctx.tenant_id.source.to_string(),
-        args.verbose,
+        args.verbose
     );
     print_value(
         "user_id",
         &ctx.user_id.value,
         &ctx.user_id.source.to_string(),
-        args.verbose,
+        args.verbose
     );
 
     if let Some(org) = &ctx.org_id {
@@ -79,7 +79,7 @@ pub fn run(args: StatusArgs) -> Result<()> {
             "team_id",
             &team.value,
             &team.source.to_string(),
-            args.verbose,
+            args.verbose
         );
     }
 
@@ -88,7 +88,7 @@ pub fn run(args: StatusArgs) -> Result<()> {
             "project_id",
             &project.value,
             &project.source.to_string(),
-            args.verbose,
+            args.verbose
         );
     }
 
@@ -97,7 +97,7 @@ pub fn run(args: StatusArgs) -> Result<()> {
             "agent_id",
             &agent.value,
             &agent.source.to_string(),
-            args.verbose,
+            args.verbose
         );
     }
 
@@ -107,7 +107,7 @@ pub fn run(args: StatusArgs) -> Result<()> {
         "preset",
         &format!("{:?}", ctx.hints.value.preset),
         &ctx.hints.source.to_string(),
-        args.verbose,
+        args.verbose
     );
 
     if args.verbose {

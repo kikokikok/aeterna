@@ -24,7 +24,7 @@ pub enum PolicyCommand {
     Validate(PolicyValidateArgs),
 
     #[command(about = "Show policy draft details")]
-    Draft(PolicyDraftArgs),
+    Draft(PolicyDraftArgs)
 }
 
 #[derive(Args)]
@@ -69,7 +69,7 @@ pub struct PolicyCreateArgs {
 
     /// Hints preset
     #[arg(long)]
-    pub preset: Option<String>,
+    pub preset: Option<String>
 }
 
 #[derive(Args)]
@@ -88,7 +88,7 @@ pub struct PolicyListArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -102,7 +102,7 @@ pub struct PolicyExplainArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -124,7 +124,7 @@ pub struct PolicySimulateArgs {
 
     /// Dry run - show simulation setup without executing
     #[arg(long)]
-    pub dry_run: bool,
+    pub dry_run: bool
 }
 
 #[derive(Args)]
@@ -138,7 +138,7 @@ pub struct PolicyValidateArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 #[derive(Args)]
@@ -156,7 +156,7 @@ pub struct PolicyDraftArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool,
+    pub json: bool
 }
 
 pub async fn run(cmd: PolicyCommand) -> anyhow::Result<()> {
@@ -166,7 +166,7 @@ pub async fn run(cmd: PolicyCommand) -> anyhow::Result<()> {
         PolicyCommand::Explain(args) => run_explain(args).await,
         PolicyCommand::Simulate(args) => run_simulate(args).await,
         PolicyCommand::Validate(args) => run_validate(args).await,
-        PolicyCommand::Draft(args) => run_draft(args).await,
+        PolicyCommand::Draft(args) => run_draft(args).await
     }
 }
 
@@ -187,7 +187,7 @@ async fn run_create(args: PolicyCreateArgs) -> anyhow::Result<()> {
     let mode = args.mode.to_lowercase();
     let valid_modes = ["mandatory", "optional"];
     if !valid_modes.contains(&mode.as_str()) {
-        let err = ux_error::UxError::new(format!("Invalid policy mode: '{}'", mode))
+        let err = ux_error::UxError::new(format!("Invalid policy mode: '{mode}'"))
             .why("Policy mode determines if violations block operations")
             .fix("Use 'mandatory' (blocks on violation) or 'optional' (warns only)")
             .suggest("aeterna policy create --mode mandatory --description \"...\"");
@@ -199,7 +199,7 @@ async fn run_create(args: PolicyCreateArgs) -> anyhow::Result<()> {
     let severity = args.severity.to_lowercase();
     let valid_severities = ["info", "warn", "error", "block"];
     if !valid_severities.contains(&severity.as_str()) {
-        let err = ux_error::UxError::new(format!("Invalid severity: '{}'", severity))
+        let err = ux_error::UxError::new(format!("Invalid severity: '{severity}'"))
             .why("Severity determines how violations are reported")
             .fix("Use one of: info, warn, error, block")
             .suggest("aeterna policy create --severity warn --description \"...\"");
@@ -229,7 +229,7 @@ async fn run_create(args: PolicyCreateArgs) -> anyhow::Result<()> {
             .fix("Provide --description with a natural language policy description")
             .fix("Or use --template to start from a predefined template")
             .suggest(
-                "aeterna policy create --description \"Block dependencies with critical CVEs\"",
+                "aeterna policy create --description \"Block dependencies with critical CVEs\""
             );
         err.display();
         return Err(anyhow::anyhow!("Missing description or template"));
@@ -240,9 +240,9 @@ async fn run_create(args: PolicyCreateArgs) -> anyhow::Result<()> {
         if let Some(ref desc) = args.description {
             // Generate from description (first 3-4 words, kebab-case)
             let words: Vec<&str> = desc.split_whitespace().take(4).collect();
-            words.join("-").to_lowercase().replace("\"", "")
+            words.join("-").to_lowercase().replace('"', "")
         } else if let Some(ref tmpl) = args.template {
-            format!("{}-policy", tmpl)
+            format!("{tmpl}-policy")
         } else {
             "new-policy".to_string()
         }
@@ -251,7 +251,7 @@ async fn run_create(args: PolicyCreateArgs) -> anyhow::Result<()> {
     // Build the draft policy
     let draft_id = format!(
         "draft-{}-{}",
-        policy_name.replace(" ", "-").to_lowercase(),
+        policy_name.replace(' ', "-").to_lowercase(),
         chrono::Utc::now().timestamp()
     );
 
@@ -289,16 +289,16 @@ async fn run_create(args: PolicyCreateArgs) -> anyhow::Result<()> {
         } else {
             output::header("Policy Create (Dry Run)");
             println!();
-            println!("  Draft ID:    {}", draft_id);
-            println!("  Name:        {}", policy_name);
-            println!("  Layer:       {}", layer);
-            println!("  Mode:        {}", mode);
-            println!("  Severity:    {}", severity);
+            println!("  Draft ID:    {draft_id}");
+            println!("  Name:        {policy_name}");
+            println!("  Layer:       {layer}");
+            println!("  Mode:        {mode}");
+            println!("  Severity:    {severity}");
             println!();
 
             if let Some(ref desc) = args.description {
                 output::header("Natural Language Input");
-                println!("  \"{}\"", desc);
+                println!("  \"{desc}\"");
                 println!();
                 output::header("Translation Pipeline");
                 println!(
@@ -313,14 +313,14 @@ async fn run_create(args: PolicyCreateArgs) -> anyhow::Result<()> {
 
             if let Some(ref tmpl) = args.template {
                 output::header("Template");
-                println!("  Using template: {}", tmpl);
+                println!("  Using template: {tmpl}");
                 let tmpl_desc = match tmpl.as_str() {
                     "security-baseline" => "Blocks critical CVEs, requires SECURITY.md",
                     "code-style" => "Enforces code style and formatting rules",
                     "dependency-audit" => "Audits dependencies for licenses and vulnerabilities",
-                    _ => "Custom template",
+                    _ => "Custom template"
                 };
-                println!("  Description: {}", tmpl_desc);
+                println!("  Description: {tmpl_desc}");
                 println!();
             }
 
@@ -335,10 +335,7 @@ async fn run_create(args: PolicyCreateArgs) -> anyhow::Result<()> {
             output::header("Next Steps");
             println!("  1. Review the generated policy draft");
             println!("  2. Run without --dry-run to create the draft");
-            println!(
-                "  3. Use 'aeterna policy draft --submit {}' to submit for approval",
-                draft_id
-            );
+            println!("  3. Use 'aeterna policy draft --submit {draft_id}' to submit for approval");
             println!();
 
             output::info("Dry run mode - policy draft not created.");
@@ -396,10 +393,10 @@ async fn run_list(args: PolicyListArgs) -> anyhow::Result<()> {
         }
 
         if let Some(ref layer) = args.layer {
-            println!("  Filter: layer = {}", layer);
+            println!("  Filter: layer = {layer}");
         }
         if let Some(ref mode) = args.mode {
-            println!("  Filter: mode = {}", mode);
+            println!("  Filter: mode = {mode}");
         }
         println!();
 
@@ -474,10 +471,10 @@ async fn run_simulate(args: PolicySimulateArgs) -> anyhow::Result<()> {
         "dependency-add",
         "file-create",
         "code-change",
-        "config-update",
+        "config-update"
     ];
     if !valid_scenarios.contains(&scenario.as_str()) {
-        let err = ux_error::UxError::new(format!("Invalid scenario type: '{}'", scenario))
+        let err = ux_error::UxError::new(format!("Invalid scenario type: '{scenario}'"))
             .why("Scenario type determines what kind of operation to simulate")
             .fix("Use one of: dependency-add, file-create, code-change, config-update")
             .suggest("aeterna policy simulate policy-1 --scenario dependency-add --input lodash");
@@ -511,11 +508,11 @@ async fn run_simulate(args: PolicySimulateArgs) -> anyhow::Result<()> {
             output::header("Policy Simulate (Dry Run)");
             println!();
             println!("  Policy:   {}", args.policy_id);
-            println!("  Scenario: {}", scenario);
+            println!("  Scenario: {scenario}");
             println!("  Input:    {}", args.input);
             println!();
             output::header("Would Check");
-            println!("  1. Policy rules matching scenario type '{}'", scenario);
+            println!("  1. Policy rules matching scenario type '{scenario}'");
             println!("  2. Input '{}' against rule patterns", args.input);
             println!("  3. Inherited policies from parent layers");
             println!();
@@ -546,7 +543,7 @@ async fn run_simulate(args: PolicySimulateArgs) -> anyhow::Result<()> {
         output::header("Policy Simulate");
         println!();
         println!("  Policy:   {}", args.policy_id);
-        println!("  Scenario: {}", scenario);
+        println!("  Scenario: {scenario}");
         println!("  Input:    {}", args.input);
         println!();
         let err = ux_error::server_not_connected();
@@ -641,7 +638,7 @@ async fn run_draft(args: PolicyDraftArgs) -> anyhow::Result<()> {
             });
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
-            output::header(&format!("Submit Draft: {}", submit_id));
+            output::header(&format!("Submit Draft: {submit_id}"));
             println!();
             output::header("Submission Workflow");
             println!("  1. Validate draft policy");
@@ -670,7 +667,7 @@ async fn run_draft(args: PolicyDraftArgs) -> anyhow::Result<()> {
             });
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
-            output::header(&format!("Policy Draft: {}", draft_id));
+            output::header(&format!("Policy Draft: {draft_id}"));
             println!();
             output::info("Would show draft details including:");
             println!("  - Original natural language description");
@@ -698,7 +695,7 @@ async fn run_draft(args: PolicyDraftArgs) -> anyhow::Result<()> {
 
 fn hint_effect(enabled: bool, effect: &str) -> String {
     if enabled {
-        format!("({})", effect)
+        format!("({effect})")
     } else {
         String::new()
     }
@@ -720,7 +717,7 @@ mod tests {
             severity: "warn".to_string(),
             json: false,
             dry_run: false,
-            preset: None,
+            preset: None
         };
         assert!(args.description.is_none());
         assert!(args.name.is_none());
@@ -743,7 +740,7 @@ mod tests {
             severity: "block".to_string(),
             json: true,
             dry_run: true,
-            preset: Some("strict".to_string()),
+            preset: Some("strict".to_string())
         };
         assert!(args.description.is_some());
         assert_eq!(args.name, Some("cve-blocker".to_string()));
@@ -763,7 +760,7 @@ mod tests {
             severity: "error".to_string(),
             json: false,
             dry_run: false,
-            preset: None,
+            preset: None
         };
         assert!(args.template.is_some());
         assert_eq!(args.mode, "optional");
@@ -775,7 +772,7 @@ mod tests {
             layer: None,
             mode: None,
             all: false,
-            json: false,
+            json: false
         };
         assert!(args.layer.is_none());
         assert!(args.mode.is_none());
@@ -789,7 +786,7 @@ mod tests {
             layer: Some("team".to_string()),
             mode: Some("mandatory".to_string()),
             all: true,
-            json: true,
+            json: true
         };
         assert_eq!(args.layer, Some("team".to_string()));
         assert_eq!(args.mode, Some("mandatory".to_string()));
@@ -801,7 +798,7 @@ mod tests {
         let args = PolicyExplainArgs {
             policy_id: "security-baseline".to_string(),
             verbose: false,
-            json: false,
+            json: false
         };
         assert_eq!(args.policy_id, "security-baseline");
         assert!(!args.verbose);
@@ -812,7 +809,7 @@ mod tests {
         let args = PolicyExplainArgs {
             policy_id: "cve-blocker".to_string(),
             verbose: true,
-            json: true,
+            json: true
         };
         assert!(args.verbose);
         assert!(args.json);
@@ -825,7 +822,7 @@ mod tests {
             scenario: "dependency-add".to_string(),
             input: "lodash@4.17.20".to_string(),
             json: false,
-            dry_run: false,
+            dry_run: false
         };
         assert_eq!(args.policy_id, "dependency-audit");
         assert_eq!(args.scenario, "dependency-add");
@@ -839,7 +836,7 @@ mod tests {
             scenario: "code-change".to_string(),
             input: "src/main.rs".to_string(),
             json: true,
-            dry_run: true,
+            dry_run: true
         };
         assert!(args.dry_run);
         assert!(args.json);
@@ -850,7 +847,7 @@ mod tests {
         let args = PolicyValidateArgs {
             policy: "security-baseline".to_string(),
             strict: false,
-            json: false,
+            json: false
         };
         assert_eq!(args.policy, "security-baseline");
         assert!(!args.strict);
@@ -861,7 +858,7 @@ mod tests {
         let args = PolicyValidateArgs {
             policy: "/path/to/policy.cedar".to_string(),
             strict: true,
-            json: true,
+            json: true
         };
         assert!(args.strict);
         assert!(args.policy.contains(".cedar"));
@@ -873,7 +870,7 @@ mod tests {
             draft_id: Some("draft-cve-blocker-12345".to_string()),
             list: false,
             submit: None,
-            json: false,
+            json: false
         };
         assert_eq!(args.draft_id, Some("draft-cve-blocker-12345".to_string()));
         assert!(!args.list);
@@ -885,7 +882,7 @@ mod tests {
             draft_id: None,
             list: true,
             submit: None,
-            json: true,
+            json: true
         };
         assert!(args.draft_id.is_none());
         assert!(args.list);
@@ -897,7 +894,7 @@ mod tests {
             draft_id: None,
             list: false,
             submit: Some("draft-my-policy-67890".to_string()),
-            json: false,
+            json: false
         };
         assert_eq!(args.submit, Some("draft-my-policy-67890".to_string()));
     }
@@ -978,7 +975,7 @@ mod tests {
             "dependency-add",
             "file-create",
             "code-change",
-            "config-update",
+            "config-update"
         ];
         for scenario in valid_scenarios {
             assert!(valid_scenarios.contains(&scenario.to_lowercase().as_str()));
@@ -991,7 +988,7 @@ mod tests {
             "dependency-add",
             "file-create",
             "code-change",
-            "config-update",
+            "config-update"
         ];
         let invalid_scenarios = ["build-run", "test-execute", "deploy-app"];
         for scenario in invalid_scenarios {
@@ -1013,7 +1010,7 @@ mod tests {
                 severity: "warn".to_string(),
                 json: false,
                 dry_run: false,
-                preset: None,
+                preset: None
             };
             assert_eq!(args.layer, layer);
         }
@@ -1033,7 +1030,7 @@ mod tests {
                 severity: severity.to_string(),
                 json: false,
                 dry_run: false,
-                preset: None,
+                preset: None
             };
             assert_eq!(args.severity, severity);
         }
@@ -1053,7 +1050,7 @@ mod tests {
                 severity: "warn".to_string(),
                 json: false,
                 dry_run: false,
-                preset: None,
+                preset: None
             };
             assert_eq!(args.target, Some(target.to_string()));
         }
@@ -1065,7 +1062,7 @@ mod tests {
             "dependency-add",
             "file-create",
             "code-change",
-            "config-update",
+            "config-update"
         ];
         for scenario in scenarios {
             let args = PolicySimulateArgs {
@@ -1073,7 +1070,7 @@ mod tests {
                 scenario: scenario.to_string(),
                 input: "test-input".to_string(),
                 json: false,
-                dry_run: false,
+                dry_run: false
             };
             assert_eq!(args.scenario, scenario);
         }
@@ -1087,7 +1084,7 @@ mod tests {
                 layer: None,
                 mode: Some(mode.to_string()),
                 all: false,
-                json: false,
+                json: false
             };
             assert_eq!(args.mode, Some(mode.to_string()));
         }
@@ -1107,7 +1104,7 @@ mod tests {
                 severity: "warn".to_string(),
                 json: false,
                 dry_run: false,
-                preset: None,
+                preset: None
             };
             assert_eq!(args.template, Some(template.to_string()));
         }
@@ -1119,7 +1116,7 @@ mod tests {
             draft_id: None,
             list: false,
             submit: None,
-            json: false,
+            json: false
         };
         assert!(args.draft_id.is_none());
         assert!(!args.list);
@@ -1140,7 +1137,7 @@ mod tests {
                 severity: "warn".to_string(),
                 json: false,
                 dry_run: false,
-                preset: Some(preset.to_string()),
+                preset: Some(preset.to_string())
             };
             assert_eq!(args.preset, Some(preset.to_string()));
         }
@@ -1152,13 +1149,13 @@ mod tests {
             "security-baseline",
             "company-wide-policy",
             "team-api-conventions",
-            "project-local-rules",
+            "project-local-rules"
         ];
         for id in policy_ids {
             let args = PolicyExplainArgs {
                 policy_id: id.to_string(),
                 verbose: false,
-                json: false,
+                json: false
             };
             assert_eq!(args.policy_id, id);
         }
@@ -1169,7 +1166,7 @@ mod tests {
         let args = PolicyValidateArgs {
             policy: "policies/my-policy.cedar".to_string(),
             strict: false,
-            json: false,
+            json: false
         };
         assert!(args.policy.contains("/"));
         assert!(args.policy.ends_with(".cedar"));
@@ -1180,7 +1177,7 @@ mod tests {
         let args = PolicyValidateArgs {
             policy: "security-baseline".to_string(),
             strict: false,
-            json: false,
+            json: false
         };
         assert!(!args.policy.contains("/"));
         assert!(!args.policy.ends_with(".cedar"));

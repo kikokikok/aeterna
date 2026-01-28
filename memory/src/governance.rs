@@ -13,19 +13,17 @@ impl GovernanceService {
 
     pub fn is_sensitive(&self, metadata: &Value) -> bool {
         if let Some(obj) = metadata.as_object() {
-            if let Some(sensitive) = obj.get("sensitive") {
-                if let Some(b) = sensitive.as_bool() {
-                    if b {
-                        return true;
-                    }
-                }
+            if let Some(sensitive) = obj.get("sensitive")
+                && let Some(b) = sensitive.as_bool()
+                && b
+            {
+                return true;
             }
-            if let Some(private) = obj.get("private") {
-                if let Some(b) = private.as_bool() {
-                    if b {
-                        return true;
-                    }
-                }
+            if let Some(private) = obj.get("private")
+                && let Some(b) = private.as_bool()
+                && b
+            {
+                return true;
             }
         }
         false

@@ -42,7 +42,7 @@ async fn test_postgres_backend_store_and_retrieve() {
 
     let ctx = TenantContext::new(
         TenantId::new(unique_tenant_id()).unwrap(),
-        UserId::default(),
+        UserId::default()
     );
     let key = "test_key";
     let value = b"{\"test\": \"data\"}";
@@ -67,7 +67,7 @@ async fn test_postgres_backend_store_update() {
 
     let ctx = TenantContext::new(
         TenantId::new(unique_tenant_id()).unwrap(),
-        UserId::default(),
+        UserId::default()
     );
     let key = "update_key";
     let value1 = b"{\"version\": 1}";
@@ -91,7 +91,7 @@ async fn test_postgres_backend_delete() {
 
     let ctx = TenantContext::new(
         TenantId::new(unique_tenant_id()).unwrap(),
-        UserId::default(),
+        UserId::default()
     );
     let key = "delete_key";
     let value = b"{\"to_delete\": true}";
@@ -119,7 +119,7 @@ async fn test_postgres_backend_exists() {
 
     let ctx = TenantContext::new(
         TenantId::new(unique_tenant_id()).unwrap(),
-        UserId::default(),
+        UserId::default()
     );
     let exists = backend.exists(ctx.clone(), "nonexistent").await.unwrap();
     assert!(!exists, "Nonexistent key should not exist");
@@ -141,7 +141,7 @@ async fn test_postgres_backend_retrieve_nonexistent() {
 
     let ctx = TenantContext::new(
         TenantId::new(unique_tenant_id()).unwrap(),
-        UserId::default(),
+        UserId::default()
     );
     let result = backend.retrieve(ctx, "nonexistent_key").await;
     assert!(result.is_ok(), "Should handle nonexistent key");
@@ -160,7 +160,7 @@ async fn test_postgres_backend_invalid_json() {
 
     let ctx = TenantContext::new(
         TenantId::new(unique_tenant_id()).unwrap(),
-        UserId::default(),
+        UserId::default()
     );
     let key = "invalid_json_key";
     let invalid_json = b"not valid json";
@@ -180,11 +180,11 @@ async fn test_postgres_backend_tenant_isolation() {
 
     let ctx1 = TenantContext::new(
         TenantId::new("tenant-1".to_string()).unwrap(),
-        UserId::default(),
+        UserId::default()
     );
     let ctx2 = TenantContext::new(
         TenantId::new("tenant-2".to_string()).unwrap(),
-        UserId::default(),
+        UserId::default()
     );
     let key = "shared-key";
     let val1 = b"{\"tenant\": 1}";
@@ -219,7 +219,7 @@ async fn test_postgres_backend_connection_error() {
 
     match result {
         Err(PostgresError::Database(_)) => {}
-        _ => panic!("Expected PostgresError::Database"),
+        _ => panic!("Expected PostgresError::Database")
     }
 }
 
@@ -241,7 +241,7 @@ async fn test_postgres_backend_drift_result() {
         violations: vec![],
         suppressed_violations: vec![],
         requires_manual_review: false,
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: chrono::Utc::now().timestamp()
     };
 
     backend.store_drift_result(drift).await.unwrap();
@@ -279,7 +279,7 @@ async fn test_postgres_backend_role_management() {
         parent_id: None,
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     backend.create_unit(&company).await.unwrap();
 
@@ -321,7 +321,7 @@ async fn test_postgres_backend_unit_policy() {
         parent_id: None,
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     backend.create_unit(&company).await.unwrap();
 
@@ -333,7 +333,7 @@ async fn test_postgres_backend_unit_policy() {
         rules: vec![],
         metadata: std::collections::HashMap::new(),
         mode: mk_core::types::PolicyMode::Optional,
-        merge_strategy: mk_core::types::RuleMergeStrategy::Merge,
+        merge_strategy: mk_core::types::RuleMergeStrategy::Merge
     };
 
     backend
@@ -366,7 +366,7 @@ async fn test_postgres_backend_governance_events() {
         project_id: "proj-1".to_string(),
         tenant_id: tenant_id.clone(),
         drift_score: 0.5,
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: chrono::Utc::now().timestamp()
     };
 
     backend.log_event(&event).await.unwrap();
@@ -397,42 +397,42 @@ async fn test_postgres_backend_governance_event_types() {
             unit_type: mk_core::types::UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         },
         mk_core::types::GovernanceEvent::UnitUpdated {
             unit_id: "unit-1".to_string(),
             tenant_id: tenant_id.clone(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         },
         mk_core::types::GovernanceEvent::UnitDeleted {
             unit_id: "unit-1".to_string(),
             tenant_id: tenant_id.clone(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         },
         mk_core::types::GovernanceEvent::RoleAssigned {
             user_id: mk_core::types::UserId::new("user-1".to_string()).unwrap(),
             unit_id: "unit-1".to_string(),
             role: mk_core::types::Role::Admin,
             tenant_id: tenant_id.clone(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         },
         mk_core::types::GovernanceEvent::RoleRemoved {
             user_id: mk_core::types::UserId::new("user-1".to_string()).unwrap(),
             unit_id: "unit-1".to_string(),
             role: mk_core::types::Role::Admin,
             tenant_id: tenant_id.clone(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         },
         mk_core::types::GovernanceEvent::PolicyUpdated {
             policy_id: "policy-1".to_string(),
             layer: mk_core::types::KnowledgeLayer::Company,
             tenant_id: tenant_id.clone(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         },
         mk_core::types::GovernanceEvent::PolicyDeleted {
             policy_id: "policy-1".to_string(),
             tenant_id: tenant_id.clone(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: chrono::Utc::now().timestamp()
         },
     ];
 
@@ -463,7 +463,7 @@ async fn test_postgres_backend_unit_operations() {
         parent_id: None,
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     backend.create_unit(&company).await.unwrap();
 
@@ -505,7 +505,7 @@ async fn test_postgres_backend_list_children() {
         parent_id: None,
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     backend.create_unit(&company).await.unwrap();
 
@@ -517,7 +517,7 @@ async fn test_postgres_backend_list_children() {
         parent_id: Some(comp_id.clone()),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     backend.create_unit(&org1).await.unwrap();
 
@@ -529,7 +529,7 @@ async fn test_postgres_backend_list_children() {
         parent_id: Some(comp_id.clone()),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     backend.create_unit(&org2).await.unwrap();
 
@@ -556,7 +556,7 @@ async fn test_postgres_backend_list_all_units() {
         parent_id: None,
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     backend.create_unit(&company).await.unwrap();
 
@@ -568,7 +568,7 @@ async fn test_postgres_backend_list_all_units() {
         parent_id: Some(comp_id),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     backend.create_unit(&org).await.unwrap();
 
@@ -601,7 +601,7 @@ async fn test_postgres_backend_hierarchy_validation() {
         parent_id: None,
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     backend.create_unit(&company).await.unwrap();
 
@@ -613,7 +613,7 @@ async fn test_postgres_backend_hierarchy_validation() {
         parent_id: Some(comp_id.clone()),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     backend.create_unit(&org).await.unwrap();
 
@@ -625,7 +625,7 @@ async fn test_postgres_backend_hierarchy_validation() {
         parent_id: Some(org_id.clone()),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        updated_at: chrono::Utc::now().timestamp()
     };
     backend.create_unit(&team).await.unwrap();
 
@@ -656,7 +656,7 @@ async fn test_postgres_backend_job_status() {
             "completed",
             Some("Job finished successfully"),
             now,
-            Some(now + 10),
+            Some(now + 10)
         )
         .await
         .unwrap();
@@ -675,7 +675,7 @@ async fn test_postgres_backend_event_publisher_subscribe() {
         project_id: "proj-pub".to_string(),
         tenant_id: tenant_id.clone(),
         drift_score: 0.75,
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: chrono::Utc::now().timestamp()
     };
 
     backend.log_event(&event).await.unwrap();

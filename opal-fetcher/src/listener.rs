@@ -1,7 +1,8 @@
-//! PostgreSQL LISTEN/NOTIFY listener for real-time updates.
+//! `PostgreSQL` LISTEN/NOTIFY listener for real-time updates.
 //!
-//! This module listens to the `referential_changes` channel for database changes
-//! and can optionally publish updates to OPAL via its PubSub mechanism.
+//! This module listens to the `referential_changes` channel for database
+//! changes and can optionally publish updates to OPAL via its `PubSub`
+//! mechanism.
 
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgListener;
@@ -11,7 +12,7 @@ use uuid::Uuid;
 use crate::error::{FetcherError, Result};
 use crate::state::AppState;
 
-/// A notification payload from PostgreSQL NOTIFY.
+/// A notification payload from `PostgreSQL` NOTIFY.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReferentialChangeNotification {
     /// The table that changed.
@@ -21,13 +22,13 @@ pub struct ReferentialChangeNotification {
     /// The ID of the changed entity.
     pub id: String,
     /// Unix timestamp of the change.
-    pub timestamp: f64,
+    pub timestamp: f64
 }
 
-/// PostgreSQL LISTEN/NOTIFY listener for referential changes.
+/// `PostgreSQL` LISTEN/NOTIFY listener for referential changes.
 pub struct ReferentialListener {
     state: Arc<AppState>,
-    pg_listener: PgListener,
+    pg_listener: PgListener
 }
 
 impl ReferentialListener {
@@ -92,7 +93,7 @@ impl ReferentialListener {
             "users" => Some("users"),
             "memberships" => Some("users"),
             "agents" => Some("agents"),
-            _ => None,
+            _ => None
         };
 
         if let Some(entity_type) = entity_type {
@@ -116,7 +117,7 @@ impl ReferentialListener {
         &self,
         opal_url: &str,
         entity_type: &str,
-        notification: &ReferentialChangeNotification,
+        notification: &ReferentialChangeNotification
     ) -> Result<()> {
         let update_url = format!("{opal_url}/data/config");
 
@@ -185,7 +186,7 @@ mod tests {
             table: "agents".to_string(),
             operation: "UPDATE".to_string(),
             id: "test-id".to_string(),
-            timestamp: 1234567890.0,
+            timestamp: 1234567890.0
         };
 
         let json = serde_json::to_string(&notification).unwrap();
@@ -213,7 +214,7 @@ mod tests {
                 "companies" | "organizations" | "teams" | "projects" => Some("hierarchy"),
                 "users" | "memberships" => Some("users"),
                 "agents" => Some("agents"),
-                _ => None,
+                _ => None
             };
             assert_eq!(
                 result, expected,

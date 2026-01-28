@@ -55,7 +55,7 @@ async fn test_write_coordinator_lock_blocks_second_acquirer() {
         max_retries: 2,
         base_backoff_ms: 50,
         max_backoff_ms: 100,
-        alert_config: ContentionAlertConfig::default(),
+        alert_config: ContentionAlertConfig::default()
     };
     let coordinator = Arc::new(WriteCoordinator::new(fixture.url().to_string(), config));
 
@@ -167,7 +167,7 @@ async fn test_write_coordinator_concurrent_contention() {
         max_retries: 10,
         base_backoff_ms: 10,
         max_backoff_ms: 50,
-        alert_config: ContentionAlertConfig::default(),
+        alert_config: ContentionAlertConfig::default()
     };
     let coordinator = Arc::new(WriteCoordinator::new(fixture.url().to_string(), config));
 
@@ -202,7 +202,7 @@ async fn test_write_coordinator_concurrent_contention() {
                         (task_id, false)
                     }
                 }
-                Err(_) => (task_id, false),
+                Err(_) => (task_id, false)
             }
         });
 
@@ -245,7 +245,7 @@ async fn test_write_coordinator_lock_ttl_expiry() {
         max_retries: 3,
         base_backoff_ms: 50,
         max_backoff_ms: 100,
-        alert_config: ContentionAlertConfig::default(),
+        alert_config: ContentionAlertConfig::default()
     };
     let coordinator = Arc::new(WriteCoordinator::new(fixture.url().to_string(), config));
 
@@ -273,7 +273,7 @@ async fn test_write_coordinator_exponential_backoff() {
         max_retries: 4,
         base_backoff_ms: 50,
         max_backoff_ms: 500,
-        alert_config: ContentionAlertConfig::default(),
+        alert_config: ContentionAlertConfig::default()
     };
     let coordinator = Arc::new(WriteCoordinator::new(fixture.url().to_string(), config));
 
@@ -315,7 +315,7 @@ async fn test_write_coordinator_wrong_lock_value_release() {
         max_retries: 2,
         base_backoff_ms: 50,
         max_backoff_ms: 100,
-        alert_config: ContentionAlertConfig::default(),
+        alert_config: ContentionAlertConfig::default()
     };
     let coordinator = WriteCoordinator::new(fixture.url().to_string(), config);
 
@@ -358,6 +358,6 @@ async fn test_write_coordinator_induced_redis_failure() {
         Err(storage::graph_duckdb::GraphError::S3(msg)) => {
             assert!(msg.contains("Induced Redis failure"));
         }
-        _ => panic!("Expected induced Redis failure, got {:?}", result),
+        _ => panic!("Expected induced Redis failure, got {:?}", result)
     }
 }

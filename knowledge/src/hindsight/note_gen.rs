@@ -10,7 +10,7 @@ use crate::context_architect::{LlmClient, LlmError, ViewMode};
 #[derive(Debug, Clone)]
 pub enum HindsightNoteGenerationMode {
     Single,
-    DraftAndRefine,
+    DraftAndRefine
 }
 
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ pub struct HindsightNoteGeneratorConfig {
     pub max_retries: u32,
     pub retry_delay_ms: u64,
     pub max_tokens: u32,
-    pub mode: HindsightNoteGenerationMode,
+    pub mode: HindsightNoteGenerationMode
 }
 
 impl Default for HindsightNoteGeneratorConfig {
@@ -27,7 +27,7 @@ impl Default for HindsightNoteGeneratorConfig {
             max_retries: 2,
             retry_delay_ms: 500,
             max_tokens: 600,
-            mode: HindsightNoteGenerationMode::Single,
+            mode: HindsightNoteGenerationMode::Single
         }
     }
 }
@@ -38,7 +38,7 @@ pub struct HindsightNoteRequest {
     pub resolutions: Vec<Resolution>,
     pub context: Option<String>,
     pub tags: Vec<String>,
-    pub view_mode: ViewMode,
+    pub view_mode: ViewMode
 }
 
 impl HindsightNoteRequest {
@@ -47,14 +47,14 @@ impl HindsightNoteRequest {
         resolutions: Vec<Resolution>,
         context: Option<String>,
         tags: Vec<String>,
-        view_mode: ViewMode,
+        view_mode: ViewMode
     ) -> Self {
         Self {
             error_signature,
             resolutions,
             context,
             tags,
-            view_mode,
+            view_mode
         }
     }
 }
@@ -62,7 +62,7 @@ impl HindsightNoteRequest {
 #[derive(Debug, Clone)]
 pub struct HindsightNoteResult {
     pub note: HindsightNote,
-    pub tokens_used: u32,
+    pub tokens_used: u32
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -80,20 +80,20 @@ pub enum NoteGenerationError {
     EmptyMessagePattern,
 
     #[error("Empty LLM response")]
-    EmptyResponse,
+    EmptyResponse
 }
 
 #[derive(Debug, Clone)]
 pub struct HindsightPromptTemplate {
     pub system: String,
-    pub user: String,
+    pub user: String
 }
 
 #[derive(Debug, Clone)]
 pub struct HindsightPromptTemplates {
     pub default: HindsightPromptTemplate,
     pub draft: HindsightPromptTemplate,
-    pub refine: HindsightPromptTemplate,
+    pub refine: HindsightPromptTemplate
 }
 
 impl Default for HindsightPromptTemplates {
@@ -101,16 +101,16 @@ impl Default for HindsightPromptTemplates {
         Self {
             default: HindsightPromptTemplate {
                 system: DEFAULT_SYSTEM.to_string(),
-                user: DEFAULT_USER.to_string(),
+                user: DEFAULT_USER.to_string()
             },
             draft: HindsightPromptTemplate {
                 system: DRAFT_SYSTEM.to_string(),
-                user: DRAFT_USER.to_string(),
+                user: DRAFT_USER.to_string()
             },
             refine: HindsightPromptTemplate {
                 system: REFINE_SYSTEM.to_string(),
-                user: REFINE_USER.to_string(),
-            },
+                user: REFINE_USER.to_string()
+            }
         }
     }
 }
@@ -122,7 +122,7 @@ impl HindsightPromptTemplates {
         resolutions: &[Resolution],
         context: Option<&str>,
         max_tokens: u32,
-        view_mode: ViewMode,
+        view_mode: ViewMode
     ) -> (String, String) {
         self.build_template(
             &self.default,
@@ -131,7 +131,7 @@ impl HindsightPromptTemplates {
             context,
             max_tokens,
             None,
-            view_mode,
+            view_mode
         )
     }
 
@@ -141,7 +141,7 @@ impl HindsightPromptTemplates {
         resolutions: &[Resolution],
         context: Option<&str>,
         max_tokens: u32,
-        view_mode: ViewMode,
+        view_mode: ViewMode
     ) -> (String, String) {
         self.build_template(
             &self.draft,
@@ -150,7 +150,7 @@ impl HindsightPromptTemplates {
             context,
             max_tokens,
             None,
-            view_mode,
+            view_mode
         )
     }
 
@@ -161,7 +161,7 @@ impl HindsightPromptTemplates {
         context: Option<&str>,
         draft: &str,
         max_tokens: u32,
-        view_mode: ViewMode,
+        view_mode: ViewMode
     ) -> (String, String) {
         self.build_template(
             &self.refine,
@@ -170,7 +170,7 @@ impl HindsightPromptTemplates {
             context,
             max_tokens,
             Some(draft),
-            view_mode,
+            view_mode
         )
     }
 
@@ -182,7 +182,7 @@ impl HindsightPromptTemplates {
         context: Option<&str>,
         max_tokens: u32,
         draft: Option<&str>,
-        view_mode: ViewMode,
+        view_mode: ViewMode
     ) -> (String, String) {
         let context_text = context.unwrap_or("None");
         let stack_patterns = format_list(&signature.stack_patterns);
@@ -211,7 +211,7 @@ pub struct HindsightNoteGenerator<C: LlmClient> {
     client: Arc<C>,
     config: HindsightNoteGeneratorConfig,
     prompts: HindsightPromptTemplates,
-    storage: Option<Arc<PostgresBackend>>,
+    storage: Option<Arc<PostgresBackend>>
 }
 
 impl<C: LlmClient> HindsightNoteGenerator<C> {
@@ -220,7 +220,7 @@ impl<C: LlmClient> HindsightNoteGenerator<C> {
             client,
             config,
             prompts: HindsightPromptTemplates::default(),
-            storage: None,
+            storage: None
         }
     }
 
@@ -236,7 +236,7 @@ impl<C: LlmClient> HindsightNoteGenerator<C> {
 
     pub async fn generate_note(
         &self,
-        request: &HindsightNoteRequest,
+        request: &HindsightNoteRequest
     ) -> Result<HindsightNoteResult, NoteGenerationError> {
         let span = info_span!(
             "generate_hindsight_note",
@@ -259,7 +259,7 @@ impl<C: LlmClient> HindsightNoteGenerator<C> {
                         &request.resolutions,
                         request.context.as_deref(),
                         self.config.max_tokens,
-                        request.view_mode,
+                        request.view_mode
                     );
                     self.call_llm_with_retry(&system, &user).await?
                 }
@@ -269,7 +269,7 @@ impl<C: LlmClient> HindsightNoteGenerator<C> {
                         &request.resolutions,
                         request.context.as_deref(),
                         self.config.max_tokens,
-                        request.view_mode,
+                        request.view_mode
                     );
                     let draft = self.call_llm_with_retry(&system, &user).await?;
                     let draft = draft.trim();
@@ -282,7 +282,7 @@ impl<C: LlmClient> HindsightNoteGenerator<C> {
                         request.context.as_deref(),
                         draft,
                         self.config.max_tokens,
-                        request.view_mode,
+                        request.view_mode
                     );
                     self.call_llm_with_retry(&system, &user).await?
                 }
@@ -310,12 +310,12 @@ impl<C: LlmClient> HindsightNoteGenerator<C> {
                 content: response.clone(),
                 tags,
                 created_at: now,
-                updated_at: now,
+                updated_at: now
             };
 
             Ok(HindsightNoteResult {
                 note,
-                tokens_used: estimate_tokens(&response),
+                tokens_used: estimate_tokens(&response)
             })
         }
         .instrument(span)
@@ -325,7 +325,7 @@ impl<C: LlmClient> HindsightNoteGenerator<C> {
     pub async fn generate_and_store(
         &self,
         tenant_id: &str,
-        request: &HindsightNoteRequest,
+        request: &HindsightNoteRequest
     ) -> Result<HindsightNoteResult, NoteGenerationError> {
         let span = info_span!(
             "generate_and_store_hindsight_note",
@@ -353,7 +353,7 @@ impl<C: LlmClient> HindsightNoteGenerator<C> {
     async fn call_llm_with_retry(
         &self,
         system: &str,
-        user: &str,
+        user: &str
     ) -> Result<String, NoteGenerationError> {
         let mut attempt = 0;
         loop {
@@ -416,17 +416,17 @@ fn derive_tags(signature: &ErrorSignature, context: &Option<String>) -> Vec<Stri
     let mut tags = vec![signature.error_type.to_lowercase()];
 
     for pattern in &signature.context_patterns {
-        if let Some((key, value)) = pattern.split_once(':') {
-            if key == "tool" || key == "op" || key == "file" {
-                tags.push(value.to_lowercase());
-            }
+        if let Some((key, value)) = pattern.split_once(':')
+            && (key == "tool" || key == "op" || key == "file")
+        {
+            tags.push(value.to_lowercase());
         }
     }
 
-    if let Some(ctx) = context {
-        if ctx.to_lowercase().contains("test") {
-            tags.push("tests".to_string());
-        }
+    if let Some(ctx) = context
+        && ctx.to_lowercase().contains("test")
+    {
+        tags.push("tests".to_string());
     }
 
     tags
@@ -436,7 +436,8 @@ const DEFAULT_SYSTEM: &str = "You are a hindsight learning assistant. Produce a 
                               note that captures the error pattern, root cause, resolution, and \
                               prevention guidance. Be factual and avoid speculation.";
 
-const DEFAULT_USER: &str = "Error type: {error_type}\nMessage pattern: {message_pattern}\n\nStack \
+const DEFAULT_USER: &str =
+    "Error type: {error_type}\nMessage pattern: {message_pattern}\n\nStack \
      patterns:\n{stack_patterns}\n\nContext patterns:\n{context_patterns}\n\nKnown \
      resolutions:\n{resolutions}\n\nAdditional context:\n{context}\n\nView mode: \
      {view_mode}\n\nWrite a markdown note with these sections:\n- Summary\n- Root Cause\n- \
@@ -446,7 +447,8 @@ const DRAFT_SYSTEM: &str = "You are a hindsight learning assistant. Draft a conc
                             that captures the error pattern, root cause, resolution, and \
                             prevention guidance. Be factual and avoid speculation.";
 
-const DRAFT_USER: &str = "Error type: {error_type}\nMessage pattern: {message_pattern}\n\nStack \
+const DRAFT_USER: &str =
+    "Error type: {error_type}\nMessage pattern: {message_pattern}\n\nStack \
      patterns:\n{stack_patterns}\n\nContext patterns:\n{context_patterns}\n\nKnown \
      resolutions:\n{resolutions}\n\nAdditional context:\n{context}\n\nView mode: \
      {view_mode}\n\nDraft a markdown note with these sections:\n- Summary\n- Root Cause\n- \
@@ -468,7 +470,7 @@ fn view_mode_label(view_mode: ViewMode) -> &'static str {
     match view_mode {
         ViewMode::Ax => "AX",
         ViewMode::Ux => "UX",
-        ViewMode::Dx => "DX",
+        ViewMode::Dx => "DX"
     }
 }
 
@@ -478,13 +480,13 @@ mod tests {
     use std::sync::Mutex;
 
     struct MockLlmClient {
-        responses: Mutex<Vec<String>>,
+        responses: Mutex<Vec<String>>
     }
 
     impl MockLlmClient {
         fn new(responses: Vec<String>) -> Self {
             Self {
-                responses: Mutex::new(responses),
+                responses: Mutex::new(responses)
             }
         }
     }
@@ -501,7 +503,7 @@ mod tests {
         async fn complete_with_system(
             &self,
             _system: &str,
-            _user: &str,
+            _user: &str
         ) -> Result<String, LlmError> {
             let mut responses = self.responses.lock().unwrap();
             responses
@@ -512,14 +514,14 @@ mod tests {
 
     struct RecordingLlmClient {
         responses: Mutex<Vec<String>>,
-        calls: Mutex<Vec<(String, String)>>,
+        calls: Mutex<Vec<(String, String)>>
     }
 
     impl RecordingLlmClient {
         fn new(responses: Vec<String>) -> Self {
             Self {
                 responses: Mutex::new(responses),
-                calls: Mutex::new(Vec::new()),
+                calls: Mutex::new(Vec::new())
             }
         }
 
@@ -552,7 +554,7 @@ mod tests {
             message_pattern: "cannot read property".to_string(),
             stack_patterns: vec!["at foo (src/lib.rs:10)".to_string()],
             context_patterns: vec!["tool:cargo_test".to_string()],
-            embedding: None,
+            embedding: None
         }
     }
 
@@ -564,7 +566,7 @@ mod tests {
             changes: vec![],
             success_rate: 0.9,
             application_count: 3,
-            last_success_at: 0,
+            last_success_at: 0
         }
     }
 
@@ -580,7 +582,7 @@ mod tests {
             vec![sample_resolution()],
             Some("running tests".to_string()),
             vec!["rust".to_string()],
-            ViewMode::Dx,
+            ViewMode::Dx
         );
 
         let result = generator.generate_note(&request).await.unwrap();
@@ -610,7 +612,7 @@ mod tests {
             vec![sample_resolution()],
             Some("running tests".to_string()),
             vec!["rust".to_string()],
-            ViewMode::Dx,
+            ViewMode::Dx
         );
 
         let result = generator.generate_note(&request).await.unwrap();
@@ -632,12 +634,12 @@ mod tests {
                 message_pattern: "".to_string(),
                 stack_patterns: vec![],
                 context_patterns: vec![],
-                embedding: None,
+                embedding: None
             },
             vec![],
             None,
             vec![],
-            ViewMode::Dx,
+            ViewMode::Dx
         );
 
         let result = generator.generate_note(&request).await;
@@ -668,7 +670,7 @@ mod tests {
             &[sample_resolution()],
             Some("extra context"),
             400,
-            ViewMode::Dx,
+            ViewMode::Dx
         );
 
         assert!(system.contains("hindsight"));

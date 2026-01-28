@@ -14,7 +14,7 @@ tokio.workspace = true
 uuid.workspace = true
 tracing.workspace = true
 validator.workspace = true
-schemars = { workspace = true, features = ["chrono"] }
+schemars = { workspace = true, features = ["chrono04"] }
 async-trait.workspace = true
 strum.workspace = true
 chrono.workspace = true

@@ -4,7 +4,7 @@ use axum::{Router, routing::get};
 use std::sync::Arc;
 use tower_http::{
     cors::{Any, CorsLayer},
-    trace::TraceLayer,
+    trace::TraceLayer
 };
 
 use crate::handlers;

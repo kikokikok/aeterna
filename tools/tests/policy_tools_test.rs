@@ -10,7 +10,7 @@ pub enum PolicyLayer {
     Company,
     Org,
     Team,
-    Project,
+    Project
 }
 
 impl std::fmt::Display for PolicyLayer {
@@ -19,7 +19,7 @@ impl std::fmt::Display for PolicyLayer {
             PolicyLayer::Company => write!(f, "company"),
             PolicyLayer::Org => write!(f, "org"),
             PolicyLayer::Team => write!(f, "team"),
-            PolicyLayer::Project => write!(f, "project"),
+            PolicyLayer::Project => write!(f, "project")
         }
     }
 }
@@ -35,7 +35,7 @@ impl std::str::FromStr for PolicyLayer {
             _ => Err(format!(
                 "Invalid layer: {}. Use: company, org, team, project",
                 s
-            )),
+            ))
         }
     }
 }
@@ -44,7 +44,7 @@ impl std::str::FromStr for PolicyLayer {
 #[serde(rename_all = "lowercase")]
 pub enum PolicyMode {
     Mandatory,
-    Optional,
+    Optional
 }
 
 impl std::str::FromStr for PolicyMode {
@@ -53,7 +53,7 @@ impl std::str::FromStr for PolicyMode {
         match s.to_lowercase().as_str() {
             "mandatory" => Ok(PolicyMode::Mandatory),
             "optional" => Ok(PolicyMode::Optional),
-            _ => Err(format!("Invalid mode: {}. Use: mandatory, optional", s)),
+            _ => Err(format!("Invalid mode: {}. Use: mandatory, optional", s))
         }
     }
 }
@@ -64,7 +64,7 @@ pub enum Severity {
     Info,
     Warn,
     Error,
-    Block,
+    Block
 }
 
 impl std::str::FromStr for Severity {
@@ -78,7 +78,7 @@ impl std::str::FromStr for Severity {
             _ => Err(format!(
                 "Invalid severity: {}. Use: info, warn, error, block",
                 s
-            )),
+            ))
         }
     }
 }
@@ -89,7 +89,7 @@ pub enum RuleTarget {
     Dependency,
     File,
     Code,
-    Config,
+    Config
 }
 
 impl std::str::FromStr for RuleTarget {
@@ -103,7 +103,7 @@ impl std::str::FromStr for RuleTarget {
             _ => Err(format!(
                 "Invalid target: {}. Use: dependency, file, code, config",
                 s
-            )),
+            ))
         }
     }
 }
@@ -115,7 +115,7 @@ pub enum DraftStatus {
     Submitted,
     Approved,
     Rejected,
-    Expired,
+    Expired
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,7 +125,7 @@ pub struct PolicyRule {
     pub target: RuleTarget,
     pub pattern: String,
     pub severity: Severity,
-    pub message: String,
+    pub message: String
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,7 +140,7 @@ pub struct Policy {
     pub tenant_id: String,
     pub created_at: i64,
     pub updated_at: i64,
-    pub created_by: String,
+    pub created_by: String
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,14 +162,14 @@ pub struct PolicyDraft {
     pub submitted_at: Option<i64>,
     pub reviewed_at: Option<i64>,
     pub reviewed_by: Option<String>,
-    pub rejection_reason: Option<String>,
+    pub rejection_reason: Option<String>
 }
 
 #[derive(Debug, Clone)]
 pub struct SimulationScenario {
     pub scenario_type: String,
     pub input: String,
-    pub context: HashMap<String, String>,
+    pub context: HashMap<String, String>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,40 +179,40 @@ pub struct SimulationResult {
     pub input: String,
     pub decision: String,
     pub matched_rules: Vec<String>,
-    pub violations: Vec<SimulationViolation>,
+    pub violations: Vec<SimulationViolation>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimulationViolation {
     pub rule_id: String,
     pub severity: Severity,
-    pub message: String,
+    pub message: String
 }
 
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
     pub valid: bool,
     pub errors: Vec<ValidationError>,
-    pub warnings: Vec<ValidationWarning>,
+    pub warnings: Vec<ValidationWarning>
 }
 
 #[derive(Debug, Clone)]
 pub struct ValidationError {
     pub code: String,
     pub message: String,
-    pub location: Option<String>,
+    pub location: Option<String>
 }
 
 #[derive(Debug, Clone)]
 pub struct ValidationWarning {
     pub code: String,
-    pub message: String,
+    pub message: String
 }
 
 pub struct MockPolicyStorage {
     policies: Arc<RwLock<HashMap<String, Policy>>>,
     drafts: Arc<RwLock<HashMap<String, PolicyDraft>>>,
-    templates: Arc<RwLock<HashMap<String, PolicyTemplate>>>,
+    templates: Arc<RwLock<HashMap<String, PolicyTemplate>>>
 }
 
 #[derive(Debug, Clone)]
@@ -222,7 +222,7 @@ pub struct PolicyTemplate {
     pub description: String,
     pub rules: Vec<PolicyRule>,
     pub default_layer: PolicyLayer,
-    pub default_mode: PolicyMode,
+    pub default_mode: PolicyMode
 }
 
 impl MockPolicyStorage {
@@ -242,7 +242,7 @@ impl MockPolicyStorage {
                         target: RuleTarget::Dependency,
                         pattern: "cve:critical".to_string(),
                         severity: Severity::Block,
-                        message: "Critical CVE found in dependency".to_string(),
+                        message: "Critical CVE found in dependency".to_string()
                     },
                     PolicyRule {
                         id: "require-security-md".to_string(),
@@ -250,12 +250,12 @@ impl MockPolicyStorage {
                         target: RuleTarget::File,
                         pattern: "SECURITY.md".to_string(),
                         severity: Severity::Warn,
-                        message: "SECURITY.md file required".to_string(),
+                        message: "SECURITY.md file required".to_string()
                     },
                 ],
                 default_layer: PolicyLayer::Company,
-                default_mode: PolicyMode::Mandatory,
-            },
+                default_mode: PolicyMode::Mandatory
+            }
         );
 
         templates.insert(
@@ -270,11 +270,11 @@ impl MockPolicyStorage {
                     target: RuleTarget::Code,
                     pattern: r"console\.log".to_string(),
                     severity: Severity::Warn,
-                    message: "Avoid console.log in production code".to_string(),
+                    message: "Avoid console.log in production code".to_string()
                 }],
                 default_layer: PolicyLayer::Team,
-                default_mode: PolicyMode::Optional,
-            },
+                default_mode: PolicyMode::Optional
+            }
         );
 
         templates.insert(
@@ -289,17 +289,17 @@ impl MockPolicyStorage {
                     target: RuleTarget::Dependency,
                     pattern: "license:GPL".to_string(),
                     severity: Severity::Error,
-                    message: "GPL licensed dependencies not allowed".to_string(),
+                    message: "GPL licensed dependencies not allowed".to_string()
                 }],
                 default_layer: PolicyLayer::Org,
-                default_mode: PolicyMode::Mandatory,
-            },
+                default_mode: PolicyMode::Mandatory
+            }
         );
 
         Self {
             policies: Arc::new(RwLock::new(HashMap::new())),
             drafts: Arc::new(RwLock::new(HashMap::new())),
-            templates: Arc::new(RwLock::new(templates)),
+            templates: Arc::new(RwLock::new(templates))
         }
     }
 
@@ -379,7 +379,7 @@ impl MockPolicyStorage {
             tenant_id: draft.tenant_id.clone(),
             created_at: Utc::now().timestamp(),
             updated_at: Utc::now().timestamp(),
-            created_by: draft.created_by.clone(),
+            created_by: draft.created_by.clone()
         };
 
         drop(drafts);
@@ -416,7 +416,7 @@ impl MockPolicyStorage {
         &self,
         tenant_id: &str,
         layer: Option<PolicyLayer>,
-        mode: Option<PolicyMode>,
+        mode: Option<PolicyMode>
     ) -> Result<Vec<Policy>, String> {
         let policies = self.policies.read().await;
         Ok(policies
@@ -448,14 +448,14 @@ impl MockPolicyStorage {
             errors.push(ValidationError {
                 code: "E001".to_string(),
                 message: "Policy name cannot be empty".to_string(),
-                location: Some("name".to_string()),
+                location: Some("name".to_string())
             });
         }
 
         if policy.rules.is_empty() {
             warnings.push(ValidationWarning {
                 code: "W001".to_string(),
-                message: "Policy has no rules defined".to_string(),
+                message: "Policy has no rules defined".to_string()
             });
         }
 
@@ -464,7 +464,7 @@ impl MockPolicyStorage {
                 errors.push(ValidationError {
                     code: "E002".to_string(),
                     message: format!("Rule '{}' has empty pattern", rule.id),
-                    location: Some(format!("rules[{}].pattern", rule.id)),
+                    location: Some(format!("rules[{}].pattern", rule.id))
                 });
             }
         }
@@ -474,7 +474,7 @@ impl MockPolicyStorage {
                 errors.push(ValidationError {
                     code: "E003".to_string(),
                     message: "Cedar policy must contain permit or forbid statement".to_string(),
-                    location: Some("cedar_policy".to_string()),
+                    location: Some("cedar_policy".to_string())
                 });
             }
         }
@@ -482,7 +482,7 @@ impl MockPolicyStorage {
         ValidationResult {
             valid: errors.is_empty(),
             errors,
-            warnings,
+            warnings
         }
     }
 
@@ -494,7 +494,7 @@ impl MockPolicyStorage {
             errors.push(ValidationError {
                 code: "E001".to_string(),
                 message: "Draft name cannot be empty".to_string(),
-                location: Some("name".to_string()),
+                location: Some("name".to_string())
             });
         }
 
@@ -502,7 +502,7 @@ impl MockPolicyStorage {
             errors.push(ValidationError {
                 code: "E004".to_string(),
                 message: "Draft must have description or template".to_string(),
-                location: None,
+                location: None
             });
         }
 
@@ -510,21 +510,21 @@ impl MockPolicyStorage {
         if draft.expires_at < now {
             warnings.push(ValidationWarning {
                 code: "W002".to_string(),
-                message: "Draft has expired".to_string(),
+                message: "Draft has expired".to_string()
             });
         }
 
         ValidationResult {
             valid: errors.is_empty(),
             errors,
-            warnings,
+            warnings
         }
     }
 
     pub async fn simulate_policy(
         &self,
         policy_id: &str,
-        scenario: &SimulationScenario,
+        scenario: &SimulationScenario
     ) -> Result<SimulationResult, String> {
         let policies = self.policies.read().await;
         let policy = policies
@@ -545,7 +545,7 @@ impl MockPolicyStorage {
                 "code-change" => {
                     rule.target == RuleTarget::Code && scenario.input.contains(&rule.pattern)
                 }
-                _ => false,
+                _ => false
             };
 
             if matches {
@@ -554,7 +554,7 @@ impl MockPolicyStorage {
                     violations.push(SimulationViolation {
                         rule_id: rule.id.clone(),
                         severity: rule.severity,
-                        message: rule.message.clone(),
+                        message: rule.message.clone()
                     });
                 }
             }
@@ -576,7 +576,7 @@ impl MockPolicyStorage {
             input: scenario.input.clone(),
             decision: decision.to_string(),
             matched_rules,
-            violations,
+            violations
         })
     }
 }
@@ -586,7 +586,7 @@ fn create_test_draft(
     name: &str,
     description: Option<&str>,
     template: Option<&str>,
-    layer: PolicyLayer,
+    layer: PolicyLayer
 ) -> PolicyDraft {
     let now = Utc::now().timestamp();
     PolicyDraft {
@@ -607,7 +607,7 @@ fn create_test_draft(
         submitted_at: None,
         reviewed_at: None,
         reviewed_by: None,
-        rejection_reason: None,
+        rejection_reason: None
     }
 }
 
@@ -624,7 +624,7 @@ fn create_test_policy(id: &str, name: &str, layer: PolicyLayer, rules: Vec<Polic
         tenant_id: "test-tenant".to_string(),
         created_at: now,
         updated_at: now,
-        created_by: "test-user".to_string(),
+        created_by: "test-user".to_string()
     }
 }
 
@@ -753,7 +753,7 @@ mod draft_tests {
             "Block CVEs",
             Some("Block all critical CVEs"),
             None,
-            PolicyLayer::Project,
+            PolicyLayer::Project
         );
 
         let result = storage.create_draft(draft).await;
@@ -769,7 +769,7 @@ mod draft_tests {
             "Security Policy",
             None,
             Some("security-baseline"),
-            PolicyLayer::Company,
+            PolicyLayer::Company
         );
 
         let result = storage.create_draft(draft).await;
@@ -794,7 +794,7 @@ mod draft_tests {
             "Test",
             Some("Test policy"),
             None,
-            PolicyLayer::Project,
+            PolicyLayer::Project
         );
         draft.name = String::new();
 
@@ -811,7 +811,7 @@ mod draft_tests {
             "Test Policy",
             Some("Test"),
             None,
-            PolicyLayer::Project,
+            PolicyLayer::Project
         );
         storage.create_draft(draft).await.unwrap();
 
@@ -968,7 +968,7 @@ mod policy_tests {
             "Test Policy",
             Some("Desc"),
             None,
-            PolicyLayer::Project,
+            PolicyLayer::Project
         );
         storage.create_draft(draft).await.unwrap();
         storage.submit_draft("d1").await.unwrap();
@@ -988,7 +988,7 @@ mod policy_tests {
             "Company Policy",
             Some("D"),
             None,
-            PolicyLayer::Company,
+            PolicyLayer::Company
         );
         storage.create_draft(d1).await.unwrap();
         storage.submit_draft("d1").await.unwrap();
@@ -999,7 +999,7 @@ mod policy_tests {
             "Project Policy",
             Some("D"),
             None,
-            PolicyLayer::Project,
+            PolicyLayer::Project
         );
         storage.create_draft(d2).await.unwrap();
         storage.submit_draft("d2").await.unwrap();
@@ -1022,7 +1022,7 @@ mod policy_tests {
             "Mandatory Policy",
             Some("D"),
             None,
-            PolicyLayer::Project,
+            PolicyLayer::Project
         );
         d1.mode = PolicyMode::Mandatory;
         storage.create_draft(d1).await.unwrap();
@@ -1098,7 +1098,7 @@ mod validation_tests {
             target: RuleTarget::File,
             pattern: "README.md".to_string(),
             severity: Severity::Warn,
-            message: "README required".to_string(),
+            message: "README required".to_string()
         }];
         let policy = create_test_policy("p1", "Test", PolicyLayer::Project, rules);
 
@@ -1137,7 +1137,7 @@ mod validation_tests {
             target: RuleTarget::File,
             pattern: String::new(),
             severity: Severity::Warn,
-            message: "Test".to_string(),
+            message: "Test".to_string()
         }];
         let policy = create_test_policy("p1", "Test", PolicyLayer::Project, rules);
 
@@ -1189,7 +1189,7 @@ mod simulation_tests {
                 target: RuleTarget::Dependency,
                 pattern: "lodash@3".to_string(),
                 severity: Severity::Block,
-                message: "Lodash 3.x has critical vulnerabilities".to_string(),
+                message: "Lodash 3.x has critical vulnerabilities".to_string()
             },
             PolicyRule {
                 id: "warn-console".to_string(),
@@ -1197,7 +1197,7 @@ mod simulation_tests {
                 target: RuleTarget::Code,
                 pattern: "console.log".to_string(),
                 severity: Severity::Warn,
-                message: "Avoid console.log".to_string(),
+                message: "Avoid console.log".to_string()
             },
         ];
 
@@ -1218,7 +1218,7 @@ mod simulation_tests {
         let scenario = SimulationScenario {
             scenario_type: "dependency-add".to_string(),
             input: "react@18.0.0".to_string(),
-            context: HashMap::new(),
+            context: HashMap::new()
         };
 
         let result = storage
@@ -1237,7 +1237,7 @@ mod simulation_tests {
         let scenario = SimulationScenario {
             scenario_type: "dependency-add".to_string(),
             input: "lodash@3.10.1".to_string(),
-            context: HashMap::new(),
+            context: HashMap::new()
         };
 
         let result = storage
@@ -1262,7 +1262,7 @@ mod simulation_tests {
         let scenario = SimulationScenario {
             scenario_type: "code-change".to_string(),
             input: "console.log('debug')".to_string(),
-            context: HashMap::new(),
+            context: HashMap::new()
         };
 
         let result = storage
@@ -1280,7 +1280,7 @@ mod simulation_tests {
         let scenario = SimulationScenario {
             scenario_type: "dependency-add".to_string(),
             input: "test".to_string(),
-            context: HashMap::new(),
+            context: HashMap::new()
         };
 
         let result = storage.simulate_policy("nonexistent", &scenario).await;
@@ -1304,7 +1304,7 @@ mod simulation_tests {
             let scenario = SimulationScenario {
                 scenario_type: scenario_type.to_string(),
                 input: input.to_string(),
-                context: HashMap::new(),
+                context: HashMap::new()
             };
 
             let result = storage
@@ -1339,7 +1339,7 @@ mod integration_tests {
             "My Security Policy",
             Some("Custom security policy based on baseline"),
             Some("security-baseline"),
-            template.default_layer,
+            template.default_layer
         );
         draft.mode = template.default_mode;
         draft.rules = template.rules.clone();
@@ -1364,7 +1364,7 @@ mod integration_tests {
         let scenario = SimulationScenario {
             scenario_type: "dependency-add".to_string(),
             input: "cve:critical-2024-1234".to_string(),
-            context: HashMap::new(),
+            context: HashMap::new()
         };
         let sim_result = storage
             .simulate_policy(&policy.id, &scenario)
@@ -1382,7 +1382,7 @@ mod integration_tests {
             "Company Security",
             Some("Company-wide security"),
             None,
-            PolicyLayer::Company,
+            PolicyLayer::Company
         );
         storage.create_draft(company_draft).await.unwrap();
         storage.submit_draft("d-company").await.unwrap();
@@ -1393,7 +1393,7 @@ mod integration_tests {
             "Project Rules",
             Some("Project-specific rules"),
             None,
-            PolicyLayer::Project,
+            PolicyLayer::Project
         );
         storage.create_draft(project_draft).await.unwrap();
         storage.submit_draft("d-project").await.unwrap();

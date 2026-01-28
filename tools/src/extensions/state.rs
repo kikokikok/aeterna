@@ -14,26 +14,26 @@ pub enum ExtensionStateError {
     Redis(#[from] redis::RedisError),
 
     #[error("Serialization error: {0}")]
-    Serialization(String),
+    Serialization(String)
 }
 
 pub type StateMigrator = Arc<
     dyn Fn(ExtensionContextState) -> Result<ExtensionContextState, ExtensionStateError>
         + Send
-        + Sync,
+        + Sync
 >;
 
 pub type StateCompactor = Arc<
     dyn Fn(ExtensionContextState) -> Result<ExtensionContextState, ExtensionStateError>
         + Send
-        + Sync,
+        + Sync
 >;
 
 #[async_trait]
 pub trait AsyncStateCompactor: Send + Sync {
     async fn compact(
         &self,
-        payload: ExtensionContextState,
+        payload: ExtensionContextState
     ) -> Result<ExtensionContextState, ExtensionStateError>;
 }
 
@@ -45,22 +45,23 @@ pub struct ExtensionStateStore {
     version: u32,
     migrator: Option<StateMigrator>,
     compactor: Option<StateCompactor>,
-    async_compactor: Option<AsyncStateCompactorHandle>,
+    async_compactor: Option<AsyncStateCompactorHandle>
 }
 
 #[allow(dead_code)]
 pub struct LlmStateCompactor<C: LlmClient> {
     client: Arc<C>,
     min_state_bytes: usize,
-    max_tokens: u32,
+    max_tokens: u32
 }
 
+#[allow(dead_code)]
 impl<C: LlmClient> LlmStateCompactor<C> {
     pub fn new(client: Arc<C>, min_state_bytes: usize, max_tokens: u32) -> Self {
         Self {
             client,
             min_state_bytes,
-            max_tokens,
+            max_tokens
         }
     }
 
@@ -84,7 +85,7 @@ impl<C: LlmClient> LlmStateCompactor<C> {
 
     async fn compress_payload(
         &self,
-        payload: ExtensionContextState,
+        payload: ExtensionContextState
     ) -> Result<ExtensionContextState, ExtensionStateError> {
         if !self.should_compact(&payload) {
             return Ok(payload);
@@ -105,7 +106,7 @@ impl<C: LlmClient> LlmStateCompactor<C> {
             .map_err(|err| ExtensionStateError::Serialization(err.to_string()))?;
         Ok(ExtensionContextState {
             state: parsed,
-            version: payload.version,
+            version: payload.version
         })
     }
 }
@@ -114,7 +115,7 @@ impl<C: LlmClient> LlmStateCompactor<C> {
 impl<C: LlmClient> AsyncStateCompactor for LlmStateCompactor<C> {
     async fn compact(
         &self,
-        payload: ExtensionContextState,
+        payload: ExtensionContextState
     ) -> Result<ExtensionContextState, ExtensionStateError> {
         self.compress_payload(payload).await
     }
@@ -128,7 +129,7 @@ impl ExtensionStateStore {
             version: 1,
             migrator: None,
             compactor: None,
-            async_compactor: None,
+            async_compactor: None
         }
     }
 
@@ -208,11 +209,11 @@ impl ExtensionStateStore {
 
     fn migrate(
         &self,
-        mut payload: ExtensionContextState,
+        mut payload: ExtensionContextState
     ) -> Result<ExtensionContextState, ExtensionStateError> {
         if payload.version > self.version {
             return Err(ExtensionStateError::Serialization(
-                "Unsupported state version".to_string(),
+                "Unsupported state version".to_string()
             ));
         }
         if let Some(migrator) = &self.migrator {
@@ -265,7 +266,7 @@ mod tests {
             "session".to_string(),
             "ext".to_string(),
             registry,
-            1024,
+            1024
         );
         ctx.set_state("key", "value").unwrap();
         store.save(&ctx).await.unwrap();
@@ -281,9 +282,9 @@ mod tests {
         let payload = serde_json::to_vec(&ExtensionContextState {
             state: std::collections::HashMap::from([(
                 "key".to_string(),
-                serde_json::json!("value"),
+                serde_json::json!("value")
             )]),
-            version: 1,
+            version: 1
         })
         .unwrap();
         let compressed = compress_payload(&payload).unwrap();
@@ -302,9 +303,9 @@ mod tests {
         let payload = ExtensionContextState {
             state: std::collections::HashMap::from([(
                 "key".to_string(),
-                serde_json::json!("value"),
+                serde_json::json!("value")
             )]),
-            version: 1,
+            version: 1
         };
         let compacted = store.compactor.unwrap()(payload).unwrap();
         assert!(compacted.state.is_empty());
@@ -321,9 +322,9 @@ mod tests {
         let payload = ExtensionContextState {
             state: std::collections::HashMap::from([(
                 "key".to_string(),
-                serde_json::json!("value"),
+                serde_json::json!("value")
             )]),
-            version: 1,
+            version: 1
         };
         let migrated = store.migrate(payload).unwrap();
         assert!(migrated.state.is_empty());
@@ -337,7 +338,7 @@ mod tests {
         impl LlmClient for MockClient {
             async fn complete(
                 &self,
-                _prompt: &str,
+                _prompt: &str
             ) -> Result<String, knowledge::context_architect::LlmError> {
                 Ok("{}".to_string())
             }
@@ -345,7 +346,7 @@ mod tests {
             async fn complete_with_system(
                 &self,
                 _system: &str,
-                _user: &str,
+                _user: &str
             ) -> Result<String, knowledge::context_architect::LlmError> {
                 Ok("{}".to_string())
             }
@@ -355,9 +356,9 @@ mod tests {
         let payload = ExtensionContextState {
             state: std::collections::HashMap::from([(
                 "key".to_string(),
-                serde_json::json!("value"),
+                serde_json::json!("value")
             )]),
-            version: 1,
+            version: 1
         };
         let compacted = compactor.compact(payload.clone()).await.unwrap();
         assert_eq!(compacted.state, payload.state);
@@ -371,7 +372,7 @@ mod tests {
         impl LlmClient for MockClient {
             async fn complete(
                 &self,
-                _prompt: &str,
+                _prompt: &str
             ) -> Result<String, knowledge::context_architect::LlmError> {
                 Ok("{\"summary\":\"ok\"}".to_string())
             }
@@ -379,7 +380,7 @@ mod tests {
             async fn complete_with_system(
                 &self,
                 _system: &str,
-                _user: &str,
+                _user: &str
             ) -> Result<String, knowledge::context_architect::LlmError> {
                 Ok("{\"summary\":\"ok\"}".to_string())
             }
@@ -389,9 +390,9 @@ mod tests {
         let payload = ExtensionContextState {
             state: std::collections::HashMap::from([(
                 "key".to_string(),
-                serde_json::json!("value"),
+                serde_json::json!("value")
             )]),
-            version: 1,
+            version: 1
         };
         let compacted = compactor.compact(payload).await.unwrap();
         assert_eq!(compacted.state.len(), 1);

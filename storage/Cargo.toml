@@ -30,9 +30,7 @@ sha2 = "0.10"
 hex = "0.4"
 
 # Metrics and observability (Task 8)
-opentelemetry = { version = "0.21", features = ["metrics"] }
-opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
-metrics = "0.21"
+metrics.workspace = true
 statig.workspace = true
 
 [dev-dependencies]
@@ -41,5 +39,5 @@ tokio-test = "0.4"
 adapters.workspace = true
 knowledge.workspace = true
 config.workspace = true
-metrics-util = { version = "0.15", features = ["debugging"] }
+metrics-util.workspace = true
 wiremock.workspace = true

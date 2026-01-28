@@ -34,3 +34,8 @@ config.workspace = true
 storage.workspace = true
 testing.workspace = true
 
+[features]
+default = []
+llm-integration = []  # Enables tests requiring LLM services
+embedding-integration = []  # Enables tests requiring embedding services
+

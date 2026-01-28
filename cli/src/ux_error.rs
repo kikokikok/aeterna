@@ -5,7 +5,7 @@ pub struct UxError {
     pub what: String,
     pub why: Option<String>,
     pub how_to_fix: Vec<String>,
-    pub suggested_command: Option<String>,
+    pub suggested_command: Option<String>
 }
 
 impl UxError {
@@ -14,7 +14,7 @@ impl UxError {
             what: what.into(),
             why: None,
             how_to_fix: Vec::new(),
-            suggested_command: None,
+            suggested_command: None
         }
     }
 
@@ -66,14 +66,16 @@ impl std::fmt::Display for UxError {
 
 impl std::error::Error for UxError {}
 
+#[must_use]
 pub fn context_not_found(path: &str) -> UxError {
-    UxError::new(format!("No Aeterna context found at '{}'", path))
+    UxError::new(format!("No Aeterna context found at '{path}'"))
         .why("Expected .aeterna/context.toml in this or parent directories")
         .fix("Initialize Aeterna in this directory")
         .fix("Or navigate to a directory with an existing Aeterna project")
         .suggest("aeterna init")
 }
 
+#[must_use]
 pub fn server_not_connected() -> UxError {
     UxError::new("Cannot connect to Aeterna server")
         .why("The memory/knowledge backend is not running or unreachable")
@@ -83,141 +85,154 @@ pub fn server_not_connected() -> UxError {
         .suggest("aeterna status")
 }
 
+#[must_use]
 pub fn invalid_layer(layer: &str, valid: &[&str]) -> UxError {
-    UxError::new(format!("Invalid layer: '{}'", layer))
+    UxError::new(format!("Invalid layer: '{layer}'"))
         .why(format!("Valid layers are: {}", valid.join(", ")))
         .fix("Use one of the valid layer names")
         .suggest(format!("aeterna memory list --layer {}", valid[0]))
 }
 
+#[must_use]
 pub fn invalid_preset(preset: &str) -> UxError {
-    UxError::new(format!("Unknown hints preset: '{}'", preset))
+    UxError::new(format!("Unknown hints preset: '{preset}'"))
         .why("Presets control which features are enabled for an operation")
         .fix("Use one of: minimal, fast, standard, full, offline, agent")
         .suggest("aeterna hints list")
 }
 
+#[must_use]
 pub fn missing_required_field(field: &str, context: &str) -> UxError {
-    UxError::new(format!("Missing required field: '{}'", field))
-        .why(format!("This field is required for {}", context))
-        .fix(format!("Provide the {} value", field))
+    UxError::new(format!("Missing required field: '{field}'"))
+        .why(format!("This field is required for {context}"))
+        .fix(format!("Provide the {field} value"))
 }
 
+#[must_use]
 pub fn permission_denied(resource: &str) -> UxError {
-    UxError::new(format!("Permission denied: {}", resource))
+    UxError::new(format!("Permission denied: {resource}"))
         .why("Your user or agent doesn't have access to this resource")
         .fix("Check your role and permissions")
         .fix("Contact your administrator for access")
         .suggest("aeterna status")
 }
 
+#[must_use]
 pub fn rate_limited(retry_after: u64) -> UxError {
     UxError::new("Rate limit exceeded")
         .why(format!(
-            "Too many requests. Retry after {} seconds",
-            retry_after
+            "Too many requests. Retry after {retry_after} seconds"
         ))
         .fix("Wait before retrying")
         .fix("Consider using the 'minimal' or 'offline' preset to reduce API calls")
         .suggest("aeterna hints explain minimal")
 }
 
+#[must_use]
 pub fn memory_not_found(id: &str) -> UxError {
-    UxError::new(format!("Memory not found: {}", id))
+    UxError::new(format!("Memory not found: {id}"))
         .why("The specified memory ID doesn't exist or has been deleted")
         .fix("Verify the memory ID is correct")
         .fix("Search for memories to find the right ID")
         .suggest("aeterna memory search <query>")
 }
 
+#[must_use]
 pub fn knowledge_not_found(path: &str, layer: &str) -> UxError {
-    UxError::new(format!("Knowledge not found: {} in {} layer", path, layer))
+    UxError::new(format!("Knowledge not found: {path} in {layer} layer"))
         .why("The specified knowledge entry doesn't exist in this layer")
         .fix("Check the path is correct")
         .fix("Try searching across all layers")
-        .suggest(format!("aeterna knowledge search \"{}\"", path))
+        .suggest(format!("aeterna knowledge search \"{path}\""))
 }
 
+#[must_use]
 pub fn policy_violation(policy_id: &str, details: &str) -> UxError {
-    UxError::new(format!("Policy violation: {}", policy_id))
+    UxError::new(format!("Policy violation: {policy_id}"))
         .why(details.to_string())
         .fix("Review the policy requirements")
         .fix("Request an exception if needed")
         .suggest(format!(
-            "aeterna knowledge get policies/{}.md --layer company",
-            policy_id
+            "aeterna knowledge get policies/{policy_id}.md --layer company"
         ))
 }
 
+#[must_use]
 pub fn config_error(message: &str) -> UxError {
-    UxError::new(format!("Configuration error: {}", message))
+    UxError::new(format!("Configuration error: {message}"))
         .why("The configuration file may be invalid or missing required fields")
         .fix("Check your .aeterna/context.toml file")
         .fix("Re-initialize with defaults")
         .suggest("aeterna init --force")
 }
 
+#[must_use]
 pub fn git_error(operation: &str, reason: &str) -> UxError {
-    UxError::new(format!("Git error during {}: {}", operation, reason))
+    UxError::new(format!("Git error during {operation}: {reason}"))
         .why("The knowledge repository uses Git for version control")
         .fix("Ensure you're in a Git repository")
         .fix("Check your Git configuration")
         .suggest("git status")
 }
 
+#[must_use]
 pub fn timeout_error(operation: &str, timeout_ms: u64) -> UxError {
-    UxError::new(format!("Operation timed out: {}", operation))
-        .why(format!("Operation took longer than {}ms", timeout_ms))
+    UxError::new(format!("Operation timed out: {operation}"))
+        .why(format!("Operation took longer than {timeout_ms}ms"))
         .fix("Check server/network connectivity")
         .fix("Try with fewer results or simpler query")
         .fix("Use 'offline' preset to skip network calls")
         .suggest("aeterna hints explain offline")
 }
 
+#[must_use]
 pub fn invalid_feedback_type(feedback_type: &str) -> UxError {
-    UxError::new(format!("Invalid feedback type: '{}'", feedback_type))
+    UxError::new(format!("Invalid feedback type: '{feedback_type}'"))
         .why("Feedback type must describe how the memory was useful or not")
         .fix("Use one of: helpful, irrelevant, outdated, inaccurate, duplicate")
         .suggest("aeterna memory feedback <id> --layer project --feedback-type helpful --score 0.8")
 }
 
+#[must_use]
 pub fn invalid_score(score: f32) -> UxError {
-    UxError::new(format!("Invalid score: {}", score))
+    UxError::new(format!("Invalid score: {score}"))
         .why("Score must be between -1.0 (completely wrong) and 1.0 (very helpful)")
         .fix("Use a value in the range -1.0 to 1.0")
         .suggest("aeterna memory feedback <id> --layer project --feedback-type helpful --score 0.8")
 }
 
+#[must_use]
 pub fn invalid_metadata_json(error: &str) -> UxError {
     UxError::new("Invalid metadata JSON")
-        .why(format!("Parse error: {}", error))
+        .why(format!("Parse error: {error}"))
         .fix("Provide valid JSON for the --metadata flag")
         .fix("Example: --metadata '{\"key\": \"value\"}'")
 }
 
+#[must_use]
 pub fn invalid_knowledge_layer(layer: &str) -> UxError {
-    UxError::new(format!("Invalid knowledge layer: '{}'", layer))
+    UxError::new(format!("Invalid knowledge layer: '{layer}'"))
         .why("Knowledge layers represent organizational hierarchy")
         .fix("Use one of: company, org, team, project")
         .suggest("aeterna knowledge list --layer project")
 }
 
+#[must_use]
 pub fn promotion_direction_invalid(from_layer: &str, to_layer: &str) -> UxError {
     UxError::new(format!(
-        "Cannot promote from '{}' to '{}'",
-        from_layer, to_layer
+        "Cannot promote from '{from_layer}' to '{to_layer}'"
     ))
     .why("Promotion must be to a broader (higher) layer in the hierarchy")
     .fix("Layer hierarchy: agent < user < session < project < team < org < company")
     .fix("Choose a target layer that is broader than the source")
     .suggest(format!(
-        "aeterna memory promote <id> --from-layer {} --to-layer team",
-        from_layer
+        "aeterna memory promote <id> --from-layer {from_layer} --to-layer team"
     ))
 }
 
+#[must_use]
 pub fn invalid_knowledge_type(knowledge_type: &str, valid: &[&str]) -> UxError {
-    UxError::new(format!("Invalid knowledge type: '{}'", knowledge_type))
+    UxError::new(format!("Invalid knowledge type: '{knowledge_type}'"))
         .why(format!("Valid types are: {}", valid.join(", ")))
         .fix("Use one of the valid knowledge type names")
         .fix("Or omit --type to let the system auto-detect from your description")

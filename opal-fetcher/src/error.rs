@@ -3,7 +3,7 @@
 use axum::{
     Json,
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Response}
 };
 use serde::Serialize;
 use thiserror::Error;
@@ -34,7 +34,7 @@ pub enum FetcherError {
     #[error("Server error: {0}")]
     Server(String),
 
-    /// Listener (PostgreSQL NOTIFY) error.
+    /// Listener (`PostgreSQL` NOTIFY) error.
     #[error("Listener error: {0}")]
     Listener(String),
 
@@ -44,7 +44,7 @@ pub enum FetcherError {
 
     /// Internal error for unexpected conditions.
     #[error("Internal error: {0}")]
-    Internal(String),
+    Internal(String)
 }
 
 /// Error response body for HTTP endpoints.
@@ -53,7 +53,7 @@ pub struct ErrorResponse {
     pub error: String,
     pub code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<String>,
+    pub details: Option<String>
 }
 
 impl IntoResponse for FetcherError {
@@ -65,38 +65,38 @@ impl IntoResponse for FetcherError {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "DATABASE_ERROR",
                     "A database error occurred",
-                    None,
+                    None
                 )
             }
             Self::Configuration(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "CONFIGURATION_ERROR",
                 msg.as_str(),
-                None,
+                None
             ),
             Self::EntityTransform(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "ENTITY_TRANSFORM_ERROR",
                 msg.as_str(),
-                None,
+                None
             ),
             Self::Cedar(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "CEDAR_ERROR",
                 msg.as_str(),
-                None,
+                None
             ),
             Self::Server(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "SERVER_ERROR",
                 msg.as_str(),
-                None,
+                None
             ),
             Self::Listener(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "LISTENER_ERROR",
                 msg.as_str(),
-                None,
+                None
             ),
             Self::Serialization(e) => {
                 tracing::error!(error = %e, "Serialization error");
@@ -104,7 +104,7 @@ impl IntoResponse for FetcherError {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "SERIALIZATION_ERROR",
                     "Failed to serialize response",
-                    Some(e.to_string()),
+                    Some(e.to_string())
                 )
             }
             Self::Internal(msg) => {
@@ -113,7 +113,7 @@ impl IntoResponse for FetcherError {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "INTERNAL_ERROR",
                     "An internal error occurred",
-                    Some(msg.clone()),
+                    Some(msg.clone())
                 )
             }
         };
@@ -121,7 +121,7 @@ impl IntoResponse for FetcherError {
         let body = ErrorResponse {
             error: message.to_string(),
             code: code.to_string(),
-            details,
+            details
         };
 
         (status, Json(body)).into_response()
@@ -165,7 +165,7 @@ mod tests {
         let resp = ErrorResponse {
             error: "test error".to_string(),
             code: "TEST_ERROR".to_string(),
-            details: Some("additional info".to_string()),
+            details: Some("additional info".to_string())
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("test error"));
@@ -178,7 +178,7 @@ mod tests {
         let resp = ErrorResponse {
             error: "test error".to_string(),
             code: "TEST_ERROR".to_string(),
-            details: None,
+            details: None
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(!json.contains("details"));

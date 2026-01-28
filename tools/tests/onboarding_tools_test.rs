@@ -10,7 +10,7 @@ pub struct User {
     pub email: String,
     pub name: String,
     pub tenant_id: TenantId,
-    pub created_at: i64,
+    pub created_at: i64
 }
 
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ pub struct Membership {
     pub user_id: String,
     pub unit_id: String,
     pub role: String,
-    pub created_at: i64,
+    pub created_at: i64
 }
 
 #[derive(Debug, Clone)]
@@ -30,14 +30,14 @@ pub struct Agent {
     pub capabilities: Vec<String>,
     pub tenant_id: TenantId,
     pub created_at: i64,
-    pub active: bool,
+    pub active: bool
 }
 
 pub struct MockOnboardingStorage {
     units: Arc<RwLock<HashMap<String, OrganizationalUnit>>>,
     users: Arc<RwLock<HashMap<String, User>>>,
     memberships: Arc<RwLock<Vec<Membership>>>,
-    agents: Arc<RwLock<HashMap<String, Agent>>>,
+    agents: Arc<RwLock<HashMap<String, Agent>>>
 }
 
 impl MockOnboardingStorage {
@@ -46,7 +46,7 @@ impl MockOnboardingStorage {
             units: Arc::new(RwLock::new(HashMap::new())),
             users: Arc::new(RwLock::new(HashMap::new())),
             memberships: Arc::new(RwLock::new(Vec::new())),
-            agents: Arc::new(RwLock::new(HashMap::new())),
+            agents: Arc::new(RwLock::new(HashMap::new()))
         }
     }
 
@@ -253,7 +253,7 @@ fn create_test_unit(
     id: &str,
     name: &str,
     unit_type: UnitType,
-    parent_id: Option<&str>,
+    parent_id: Option<&str>
 ) -> OrganizationalUnit {
     let now = Utc::now().timestamp();
     OrganizationalUnit {
@@ -264,7 +264,7 @@ fn create_test_unit(
         tenant_id: TenantId::new("test-tenant".to_string()).unwrap(),
         metadata: HashMap::new(),
         created_at: now,
-        updated_at: now,
+        updated_at: now
     }
 }
 
@@ -274,7 +274,7 @@ fn create_test_user(id: &str, email: &str, name: &str) -> User {
         email: email.to_string(),
         name: name.to_string(),
         tenant_id: TenantId::new("test-tenant".to_string()).unwrap(),
-        created_at: Utc::now().timestamp(),
+        created_at: Utc::now().timestamp()
     }
 }
 
@@ -283,7 +283,7 @@ fn create_test_agent(
     name: &str,
     owner_id: &str,
     delegated_by: Option<&str>,
-    capabilities: Vec<&str>,
+    capabilities: Vec<&str>
 ) -> Agent {
     Agent {
         id: id.to_string(),
@@ -293,7 +293,7 @@ fn create_test_agent(
         capabilities: capabilities.into_iter().map(String::from).collect(),
         tenant_id: TenantId::new("test-tenant".to_string()).unwrap(),
         created_at: Utc::now().timestamp(),
-        active: true,
+        active: true
     }
 }
 
@@ -335,7 +335,7 @@ mod organizational_unit_tests {
             "org-1",
             "Engineering",
             UnitType::Organization,
-            Some("company-1"),
+            Some("company-1")
         );
         let result = storage.create_unit(org).await;
         assert!(result.is_ok());
@@ -351,7 +351,7 @@ mod organizational_unit_tests {
             "org-1",
             "Engineering",
             UnitType::Organization,
-            Some("company-1"),
+            Some("company-1")
         );
         storage.create_unit(org).await.unwrap();
 
@@ -370,7 +370,7 @@ mod organizational_unit_tests {
             "org-1",
             "Engineering",
             UnitType::Organization,
-            Some("company-1"),
+            Some("company-1")
         );
         storage.create_unit(org).await.unwrap();
 
@@ -381,7 +381,7 @@ mod organizational_unit_tests {
             "project-1",
             "payments-service",
             UnitType::Project,
-            Some("team-1"),
+            Some("team-1")
         );
         let result = storage.create_unit(project).await;
         assert!(result.is_ok());
@@ -409,7 +409,7 @@ mod organizational_unit_tests {
             "org-1",
             "Engineering",
             UnitType::Organization,
-            Some("company-1"),
+            Some("company-1")
         );
         storage.create_unit(org).await.unwrap();
 
@@ -417,7 +417,7 @@ mod organizational_unit_tests {
             "project-1",
             "payments-service",
             UnitType::Project,
-            Some("org-1"),
+            Some("org-1")
         );
         let result = storage.create_unit(project).await;
         assert!(result.is_err());
@@ -434,7 +434,7 @@ mod organizational_unit_tests {
             "org-1",
             "Engineering",
             UnitType::Organization,
-            Some("company-1"),
+            Some("company-1")
         );
         storage.create_unit(org).await.unwrap();
 
@@ -445,7 +445,7 @@ mod organizational_unit_tests {
             "project-1",
             "payments-service",
             UnitType::Project,
-            Some("team-1"),
+            Some("team-1")
         );
         storage.create_unit(project).await.unwrap();
 
@@ -453,7 +453,7 @@ mod organizational_unit_tests {
             "org-2",
             "Nested Org",
             UnitType::Organization,
-            Some("project-1"),
+            Some("project-1")
         );
         let result = storage.create_unit(nested_org).await;
         assert!(result.is_err());
@@ -466,7 +466,7 @@ mod organizational_unit_tests {
             "org-1",
             "Engineering",
             UnitType::Organization,
-            Some("nonexistent"),
+            Some("nonexistent")
         );
 
         let result = storage.create_unit(org).await;
@@ -504,7 +504,7 @@ mod organizational_unit_tests {
             "org-1",
             "Engineering",
             UnitType::Organization,
-            Some("company-1"),
+            Some("company-1")
         );
         storage.create_unit(org1).await.unwrap();
 
@@ -512,7 +512,7 @@ mod organizational_unit_tests {
             "org-2",
             "Product",
             UnitType::Organization,
-            Some("company-1"),
+            Some("company-1")
         );
         storage.create_unit(org2).await.unwrap();
 
@@ -531,7 +531,7 @@ mod organizational_unit_tests {
             "org-1",
             "Engineering",
             UnitType::Organization,
-            Some("company-1"),
+            Some("company-1")
         );
         storage.create_unit(org).await.unwrap();
 
@@ -542,7 +542,7 @@ mod organizational_unit_tests {
             "project-1",
             "payments-service",
             UnitType::Project,
-            Some("team-1"),
+            Some("team-1")
         );
         storage.create_unit(project).await.unwrap();
 
@@ -577,7 +577,7 @@ mod organizational_unit_tests {
             "org-1",
             "Engineering",
             UnitType::Organization,
-            Some("company-1"),
+            Some("company-1")
         );
         storage.create_unit(org).await.unwrap();
 
@@ -660,7 +660,7 @@ mod membership_tests {
             user_id: "user-1".to_string(),
             unit_id: "team-1".to_string(),
             role: "developer".to_string(),
-            created_at: Utc::now().timestamp(),
+            created_at: Utc::now().timestamp()
         };
 
         let result = storage.add_membership(membership).await;
@@ -674,7 +674,7 @@ mod membership_tests {
             user_id: "user-1".to_string(),
             unit_id: "team-1".to_string(),
             role: "developer".to_string(),
-            created_at: Utc::now().timestamp(),
+            created_at: Utc::now().timestamp()
         };
         storage.add_membership(membership.clone()).await.unwrap();
 
@@ -691,7 +691,7 @@ mod membership_tests {
             user_id: "user-1".to_string(),
             unit_id: "team-1".to_string(),
             role: "developer".to_string(),
-            created_at: Utc::now().timestamp(),
+            created_at: Utc::now().timestamp()
         };
         storage.add_membership(m1).await.unwrap();
 
@@ -699,7 +699,7 @@ mod membership_tests {
             user_id: "user-1".to_string(),
             unit_id: "team-2".to_string(),
             role: "techlead".to_string(),
-            created_at: Utc::now().timestamp(),
+            created_at: Utc::now().timestamp()
         };
         storage.add_membership(m2).await.unwrap();
 
@@ -715,7 +715,7 @@ mod membership_tests {
             user_id: "user-1".to_string(),
             unit_id: "team-1".to_string(),
             role: "developer".to_string(),
-            created_at: Utc::now().timestamp(),
+            created_at: Utc::now().timestamp()
         };
         storage.add_membership(m1).await.unwrap();
 
@@ -723,7 +723,7 @@ mod membership_tests {
             user_id: "user-2".to_string(),
             unit_id: "team-1".to_string(),
             role: "techlead".to_string(),
-            created_at: Utc::now().timestamp(),
+            created_at: Utc::now().timestamp()
         };
         storage.add_membership(m2).await.unwrap();
 
@@ -738,7 +738,7 @@ mod membership_tests {
             user_id: "user-1".to_string(),
             unit_id: "team-1".to_string(),
             role: "developer".to_string(),
-            created_at: Utc::now().timestamp(),
+            created_at: Utc::now().timestamp()
         };
         storage.add_membership(membership).await.unwrap();
 
@@ -771,7 +771,7 @@ mod agent_registration_tests {
             "Code Assistant",
             "user-1",
             None,
-            vec!["code_review", "testing"],
+            vec!["code_review", "testing"]
         );
 
         let result = storage.register_agent(agent).await;
@@ -791,7 +791,7 @@ mod agent_registration_tests {
             "Code Assistant",
             "user-1",
             Some("user-1"),
-            vec!["code_review"],
+            vec!["code_review"]
         );
 
         let result = storage.register_agent(agent).await;
@@ -810,7 +810,7 @@ mod agent_registration_tests {
             "Primary Agent",
             "user-1",
             Some("user-1"),
-            vec!["code_review", "testing"],
+            vec!["code_review", "testing"]
         );
         storage.register_agent(agent1).await.unwrap();
 
@@ -819,7 +819,7 @@ mod agent_registration_tests {
             "Sub Agent",
             "user-1",
             Some("agent-1"),
-            vec!["testing"],
+            vec!["testing"]
         );
 
         let result = storage.register_agent(agent2).await;
@@ -835,7 +835,7 @@ mod agent_registration_tests {
             "Code Assistant",
             "user-1",
             Some("nonexistent"),
-            vec!["code_review"],
+            vec!["code_review"]
         );
 
         let result = storage.register_agent(agent).await;
@@ -851,7 +851,7 @@ mod agent_registration_tests {
             "Code Assistant",
             "user-1",
             None,
-            vec!["code_review"],
+            vec!["code_review"]
         );
         storage.register_agent(agent).await.unwrap();
 
@@ -887,7 +887,7 @@ mod agent_registration_tests {
             "Code Assistant",
             "user-1",
             None,
-            vec!["code_review"],
+            vec!["code_review"]
         );
         storage.register_agent(agent).await.unwrap();
 
@@ -919,7 +919,7 @@ mod agent_registration_tests {
             "Primary Agent",
             "user-1",
             Some("user-1"),
-            vec!["all"],
+            vec!["all"]
         );
         storage.register_agent(agent1).await.unwrap();
 
@@ -928,7 +928,7 @@ mod agent_registration_tests {
             "Sub Agent",
             "user-1",
             Some("agent-1"),
-            vec!["subset"],
+            vec!["subset"]
         );
         storage.register_agent(agent2).await.unwrap();
 
@@ -947,7 +947,7 @@ mod agent_registration_tests {
             "Code Assistant",
             "user-1",
             None,
-            vec!["code_review", "testing", "documentation"],
+            vec!["code_review", "testing", "documentation"]
         );
         storage.register_agent(agent).await.unwrap();
 
@@ -978,7 +978,7 @@ mod integration_tests {
             "org-1",
             "Engineering",
             UnitType::Organization,
-            Some("company-1"),
+            Some("company-1")
         );
         storage.create_unit(org).await.unwrap();
 
@@ -989,7 +989,7 @@ mod integration_tests {
             "project-1",
             "payments-service",
             UnitType::Project,
-            Some("team-1"),
+            Some("team-1")
         );
         storage.create_unit(project).await.unwrap();
 
@@ -1000,7 +1000,7 @@ mod integration_tests {
             user_id: "user-1".to_string(),
             unit_id: "team-1".to_string(),
             role: "developer".to_string(),
-            created_at: Utc::now().timestamp(),
+            created_at: Utc::now().timestamp()
         };
         storage.add_membership(membership).await.unwrap();
 
@@ -1009,7 +1009,7 @@ mod integration_tests {
             "Alice's Assistant",
             "user-1",
             Some("user-1"),
-            vec!["code_review", "testing"],
+            vec!["code_review", "testing"]
         );
         storage.register_agent(agent).await.unwrap();
 
@@ -1037,7 +1037,7 @@ mod integration_tests {
             "org-1",
             "Engineering",
             UnitType::Organization,
-            Some("company-1"),
+            Some("company-1")
         );
         storage.create_unit(org).await.unwrap();
 
@@ -1054,7 +1054,7 @@ mod integration_tests {
             user_id: "user-1".to_string(),
             unit_id: "team-1".to_string(),
             role: "developer".to_string(),
-            created_at: Utc::now().timestamp(),
+            created_at: Utc::now().timestamp()
         };
         storage.add_membership(m1).await.unwrap();
 
@@ -1062,7 +1062,7 @@ mod integration_tests {
             user_id: "user-1".to_string(),
             unit_id: "team-2".to_string(),
             role: "techlead".to_string(),
-            created_at: Utc::now().timestamp(),
+            created_at: Utc::now().timestamp()
         };
         storage.add_membership(m2).await.unwrap();
 
@@ -1090,7 +1090,7 @@ mod integration_tests {
             "Secondary",
             "user-1",
             Some("agent-1"),
-            vec!["subset"],
+            vec!["subset"]
         );
         storage.register_agent(agent2).await.unwrap();
 
@@ -1099,7 +1099,7 @@ mod integration_tests {
             "Tertiary",
             "user-1",
             Some("agent-2"),
-            vec!["minimal"],
+            vec!["minimal"]
         );
         storage.register_agent(agent3).await.unwrap();
 

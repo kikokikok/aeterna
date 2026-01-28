@@ -3,7 +3,7 @@ use crate::governance_client::{GovernanceClient, RemoteGovernanceClient};
 use config::config::DeploymentConfig;
 use mk_core::traits::StorageBackend;
 use mk_core::types::{
-    DriftConfig, DriftResult, DriftSuppression, GovernanceEvent, KnowledgeLayer, TenantContext,
+    DriftConfig, DriftResult, DriftSuppression, GovernanceEvent, KnowledgeLayer, TenantContext
 };
 use std::sync::Arc;
 use storage::postgres::PostgresBackend;
@@ -43,7 +43,7 @@ pub struct GovernanceDashboardApi {
     engine: Arc<GovernanceEngine>,
     storage: Arc<PostgresBackend>,
     governance_client: Option<Arc<dyn GovernanceClient>>,
-    deployment_config: DeploymentConfig,
+    deployment_config: DeploymentConfig
 }
 
 #[utoipa::path(
@@ -64,15 +64,15 @@ pub struct GovernanceDashboardApi {
 pub async fn get_drift_status(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
-    project_id: &str,
+    project_id: &str
 ) -> anyhow::Result<Option<DriftResult>> {
-    if api.deployment_config.mode == "remote" {
-        if let Some(client) = &api.governance_client {
-            return client
-                .get_drift_status(ctx, project_id)
-                .await
-                .map_err(|e| anyhow::anyhow!("Remote drift status failed: {}", e));
-        }
+    if api.deployment_config.mode == "remote"
+        && let Some(client) = &api.governance_client
+    {
+        return client
+            .get_drift_status(ctx, project_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("Remote drift status failed: {}", e));
     }
 
     let result =
@@ -101,7 +101,7 @@ pub async fn get_drift_status(
 pub async fn get_org_report(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
-    org_id: &str,
+    org_id: &str
 ) -> anyhow::Result<serde_json::Value> {
     let descendants = StorageBackend::get_descendants(api.storage.as_ref(), ctx.clone(), org_id)
         .await
@@ -109,10 +109,10 @@ pub async fn get_org_report(
 
     let mut project_drifts = Vec::new();
     for unit in descendants {
-        if unit.unit_type == mk_core::types::UnitType::Project {
-            if let Some(drift) = get_drift_status(api.clone(), ctx, &unit.id).await? {
-                project_drifts.push(drift);
-            }
+        if unit.unit_type == mk_core::types::UnitType::Project
+            && let Some(drift) = get_drift_status(api.clone(), ctx, &unit.id).await?
+        {
+            project_drifts.push(drift);
         }
     }
 
@@ -150,7 +150,7 @@ pub async fn get_org_report(
 pub async fn approve_proposal(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
-    proposal_id: &str,
+    proposal_id: &str
 ) -> anyhow::Result<()> {
     let repo = api
         .engine
@@ -161,7 +161,7 @@ pub async fn approve_proposal(
         .get(
             ctx.clone(),
             mk_core::types::KnowledgeLayer::Project,
-            proposal_id,
+            proposal_id
         )
         .await
         .map_err(|e| anyhow::anyhow!("Failed to fetch proposal: {:?}", e))?
@@ -198,7 +198,7 @@ pub async fn reject_proposal(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
     proposal_id: &str,
-    reason: &str,
+    reason: &str
 ) -> anyhow::Result<()> {
     let repo = api
         .engine
@@ -209,7 +209,7 @@ pub async fn reject_proposal(
         .get(
             ctx.clone(),
             mk_core::types::KnowledgeLayer::Project,
-            proposal_id,
+            proposal_id
         )
         .await
         .map_err(|e| anyhow::anyhow!("Failed to fetch proposal: {:?}", e))?
@@ -224,7 +224,7 @@ pub async fn reject_proposal(
     repo.store(
         ctx.clone(),
         rejected_entry,
-        &format!("Proposal rejected: {}", reason),
+        &format!("Proposal rejected: {}", reason)
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to reject proposal: {:?}", e))?;
@@ -250,13 +250,13 @@ pub async fn reject_proposal(
 pub async fn get_job_status(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
-    job_name: Option<&str>,
+    job_name: Option<&str>
 ) -> anyhow::Result<serde_json::Value> {
     let rows = sqlx::query(
         "SELECT id, job_name, status, message, started_at, finished_at, duration_ms 
          FROM job_status 
          WHERE tenant_id = $1 OR tenant_id = 'all' 
-         ORDER BY started_at DESC LIMIT 50",
+         ORDER BY started_at DESC LIMIT 50"
     )
     .bind(ctx.tenant_id.as_str())
     .fetch_all(api.storage.pool())
@@ -267,10 +267,10 @@ pub async fn get_job_status(
     for row in rows {
         use sqlx::Row;
         let name: String = row.get("job_name");
-        if let Some(filter) = job_name {
-            if name != filter {
-                continue;
-            }
+        if let Some(filter) = job_name
+            && name != filter
+        {
+            continue;
         }
 
         jobs.push(serde_json::json!({
@@ -307,22 +307,22 @@ pub async fn replay_events(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
     since_timestamp: i64,
-    limit: usize,
+    limit: usize
 ) -> anyhow::Result<Vec<mk_core::types::GovernanceEvent>> {
-    if api.deployment_config.mode == "remote" {
-        if let Some(client) = &api.governance_client {
-            return client
-                .replay_events(ctx, since_timestamp, limit)
-                .await
-                .map_err(|e| anyhow::anyhow!("Remote replay events failed: {}", e));
-        }
+    if api.deployment_config.mode == "remote"
+        && let Some(client) = &api.governance_client
+    {
+        return client
+            .replay_events(ctx, since_timestamp, limit)
+            .await
+            .map_err(|e| anyhow::anyhow!("Remote replay events failed: {}", e));
     }
 
     let events = StorageBackend::get_governance_events(
         api.storage.as_ref(),
         ctx.clone(),
         since_timestamp,
-        limit,
+        limit
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to replay governance events: {:?}", e))?;
@@ -356,14 +356,14 @@ pub async fn create_suppression(
     policy_id: &str,
     reason: &str,
     rule_pattern: Option<&str>,
-    expires_at: Option<i64>,
+    expires_at: Option<i64>
 ) -> anyhow::Result<DriftSuppression> {
     let mut suppression = DriftSuppression::new(
         project_id.to_string(),
         ctx.tenant_id.clone(),
         policy_id.to_string(),
         reason.to_string(),
-        ctx.user_id.clone(),
+        ctx.user_id.clone()
     );
 
     if let Some(pattern) = rule_pattern {
@@ -399,7 +399,7 @@ pub async fn create_suppression(
 pub async fn list_suppressions(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
-    project_id: &str,
+    project_id: &str
 ) -> anyhow::Result<Vec<DriftSuppression>> {
     let suppressions =
         StorageBackend::list_suppressions(api.storage.as_ref(), ctx.clone(), project_id)
@@ -433,7 +433,7 @@ pub async fn list_suppressions(
 pub async fn delete_suppression(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
-    suppression_id: &str,
+    suppression_id: &str
 ) -> anyhow::Result<()> {
     StorageBackend::delete_suppression(api.storage.as_ref(), ctx.clone(), suppression_id)
         .await
@@ -460,7 +460,7 @@ pub async fn delete_suppression(
 pub async fn get_drift_config(
     api: Arc<GovernanceDashboardApi>,
     ctx: &TenantContext,
-    project_id: &str,
+    project_id: &str
 ) -> anyhow::Result<DriftConfig> {
     let config = StorageBackend::get_drift_config(api.storage.as_ref(), ctx.clone(), project_id)
         .await
@@ -492,7 +492,7 @@ pub async fn save_drift_config(
     project_id: &str,
     threshold: f32,
     low_confidence_threshold: Option<f32>,
-    auto_suppress_info: Option<bool>,
+    auto_suppress_info: Option<bool>
 ) -> anyhow::Result<()> {
     let mut config = DriftConfig::for_project(project_id.to_string(), ctx.tenant_id.clone());
     config.threshold = threshold;
@@ -514,7 +514,7 @@ impl GovernanceDashboardApi {
     pub fn new(
         engine: Arc<GovernanceEngine>,
         storage: Arc<PostgresBackend>,
-        deployment_config: DeploymentConfig,
+        deployment_config: DeploymentConfig
     ) -> Self {
         let governance_client = if deployment_config.mode == "remote" {
             deployment_config.remote_url.as_ref().map(|url: &String| {
@@ -528,22 +528,22 @@ impl GovernanceDashboardApi {
             engine,
             storage,
             governance_client,
-            deployment_config,
+            deployment_config
         }
     }
 
     pub async fn list_proposals(
         &self,
         ctx: &TenantContext,
-        layer: Option<KnowledgeLayer>,
+        layer: Option<KnowledgeLayer>
     ) -> anyhow::Result<Vec<mk_core::types::KnowledgeEntry>> {
-        if self.deployment_config.mode == "remote" {
-            if let Some(client) = &self.governance_client {
-                return client
-                    .list_proposals(ctx, layer)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Remote list proposals failed: {}", e));
-            }
+        if self.deployment_config.mode == "remote"
+            && let Some(client) = &self.governance_client
+        {
+            return client
+                .list_proposals(ctx, layer)
+                .await
+                .map_err(|e| anyhow::anyhow!("Remote list proposals failed: {}", e));
         }
 
         let repo = self

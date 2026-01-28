@@ -19,7 +19,7 @@ pub fn unique_tenant_id() -> String {
 pub struct PostgresFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Postgres>,
-    url: String,
+    url: String
 }
 
 impl PostgresFixture {
@@ -60,7 +60,7 @@ pub async fn postgres() -> Option<&'static PostgresFixture> {
 pub struct RedisFixture {
     #[allow(dead_code)]
     container: ContainerAsync<Redis>,
-    url: String,
+    url: String
 }
 
 impl RedisFixture {
@@ -114,7 +114,7 @@ pub struct QdrantFixture {
     #[allow(dead_code)]
     container: ContainerAsync<GenericImage>,
     grpc_url: String,
-    http_url: String,
+    http_url: String
 }
 
 impl QdrantFixture {
@@ -170,7 +170,7 @@ pub async fn qdrant() -> Option<&'static QdrantFixture> {
                     Some(QdrantFixture {
                         container,
                         grpc_url,
-                        http_url,
+                        http_url
                     })
                 }
                 Err(e) => {
@@ -205,7 +205,7 @@ pub const MINIO_DEFAULT_BUCKET: &str = "aeterna-test";
 pub struct MinioFixture {
     #[allow(dead_code)]
     container: ContainerAsync<GenericImage>,
-    endpoint: String,
+    endpoint: String
 }
 
 impl MinioFixture {
@@ -245,7 +245,7 @@ pub async fn minio() -> Option<&'static MinioFixture> {
                     tracing::info!("MinIO fixture started on port {}", port);
                     Some(MinioFixture {
                         container,
-                        endpoint,
+                        endpoint
                     })
                 }
                 Err(e) => {

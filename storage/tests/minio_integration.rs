@@ -26,7 +26,7 @@ fn make_config(endpoint: &str, prefix: &str) -> DuckDbGraphConfig {
 fn make_config_with_cold_start(
     endpoint: &str,
     prefix: &str,
-    cold_start: ColdStartConfig,
+    cold_start: ColdStartConfig
 ) -> DuckDbGraphConfig {
     DuckDbGraphConfig {
         path: ":memory:".to_string(),
@@ -57,7 +57,7 @@ async fn test_persist_and_load_s3_roundtrip() {
             id: format!("node-{}", i),
             label: format!("TestNode-{}", i),
             properties: serde_json::json!({"index": i, "data": "test"}),
-            tenant_id: tenant_id.clone(),
+            tenant_id: tenant_id.clone()
         };
         store.add_node(ctx.clone(), node).await.unwrap();
     }
@@ -68,7 +68,7 @@ async fn test_persist_and_load_s3_roundtrip() {
         target_id: "node-2".to_string(),
         relation: "CONNECTS".to_string(),
         properties: serde_json::json!({"weight": 1.5}),
-        tenant_id: tenant_id.clone(),
+        tenant_id: tenant_id.clone()
     };
     store.add_edge(ctx.clone(), edge).await.unwrap();
 
@@ -109,7 +109,7 @@ async fn test_s3_checksum_verification() {
         id: "node-1".to_string(),
         label: "ChecksumTest".to_string(),
         properties: serde_json::Value::Null,
-        tenant_id: tenant_id.clone(),
+        tenant_id: tenant_id.clone()
     };
     store.add_node(ctx, node).await.unwrap();
 
@@ -144,18 +144,18 @@ async fn test_multi_tenant_s3_isolation() {
 
     let ctx1 = TenantContext::new(
         TenantId::new("tenant-1".to_string()).unwrap(),
-        UserId::new("user-1".to_string()).unwrap(),
+        UserId::new("user-1".to_string()).unwrap()
     );
     let ctx2 = TenantContext::new(
         TenantId::new("tenant-2".to_string()).unwrap(),
-        UserId::new("user-2".to_string()).unwrap(),
+        UserId::new("user-2".to_string()).unwrap()
     );
 
     let node1 = GraphNode {
         id: "tenant1-node".to_string(),
         label: "Tenant1Data".to_string(),
         properties: serde_json::json!({"secret": "tenant1-only"}),
-        tenant_id: "tenant-1".to_string(),
+        tenant_id: "tenant-1".to_string()
     };
     store.add_node(ctx1.clone(), node1).await.unwrap();
 
@@ -163,7 +163,7 @@ async fn test_multi_tenant_s3_isolation() {
         id: "tenant2-node".to_string(),
         label: "Tenant2Data".to_string(),
         properties: serde_json::json!({"secret": "tenant2-only"}),
-        tenant_id: "tenant-2".to_string(),
+        tenant_id: "tenant-2".to_string()
     };
     store.add_node(ctx2.clone(), node2).await.unwrap();
 
@@ -196,7 +196,7 @@ async fn test_s3_partition_fetch_error_trigger() {
         access_tracking_enabled: true,
         prewarm_partition_count: 5,
         warm_pool_enabled: false,
-        warm_pool_min_instances: 0,
+        warm_pool_min_instances: 0
     };
     let config =
         make_config_with_cold_start(minio_fixture.endpoint(), "partition-error-test", cold_start);
@@ -247,7 +247,7 @@ async fn test_s3_partition_not_found_graceful_handling() {
         access_tracking_enabled: true,
         prewarm_partition_count: 5,
         warm_pool_enabled: false,
-        warm_pool_min_instances: 0,
+        warm_pool_min_instances: 0
     };
     let config =
         make_config_with_cold_start(minio_fixture.endpoint(), "not-found-test", cold_start);
@@ -291,7 +291,7 @@ async fn test_s3_partition_budget_exhaustion_defers_remaining() {
         access_tracking_enabled: true,
         prewarm_partition_count: 5,
         warm_pool_enabled: false,
-        warm_pool_min_instances: 0,
+        warm_pool_min_instances: 0
     };
     let config = make_config_with_cold_start(minio_fixture.endpoint(), "budget-test", cold_start);
 
@@ -331,7 +331,7 @@ async fn test_s3_lazy_loading_disabled_skips_all() {
         access_tracking_enabled: false,
         prewarm_partition_count: 0,
         warm_pool_enabled: false,
-        warm_pool_min_instances: 0,
+        warm_pool_min_instances: 0
     };
     let config = DuckDbGraphConfig {
         path: ":memory:".to_string(),

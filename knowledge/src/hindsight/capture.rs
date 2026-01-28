@@ -11,7 +11,7 @@ pub struct ErrorCaptureConfig {
     pub normalize_line_numbers: bool,
     pub normalize_hex: bool,
     pub normalize_uuid: bool,
-    pub normalize_timestamps: bool,
+    pub normalize_timestamps: bool
 }
 
 impl Default for ErrorCaptureConfig {
@@ -22,28 +22,17 @@ impl Default for ErrorCaptureConfig {
             normalize_line_numbers: true,
             normalize_hex: true,
             normalize_uuid: true,
-            normalize_timestamps: true,
+            normalize_timestamps: true
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ErrorContext {
     pub tool_name: Option<String>,
     pub operation: Option<String>,
     pub file_path: Option<String>,
-    pub metadata: HashMap<String, String>,
-}
-
-impl Default for ErrorContext {
-    fn default() -> Self {
-        Self {
-            tool_name: None,
-            operation: None,
-            file_path: None,
-            metadata: HashMap::new(),
-        }
-    }
+    pub metadata: HashMap<String, String>
 }
 
 impl ErrorContext {
@@ -73,7 +62,7 @@ pub struct CapturedError {
     pub signature: ErrorSignature,
     pub raw_message: String,
     pub raw_stack: Vec<String>,
-    pub context: ErrorContext,
+    pub context: ErrorContext
 }
 
 pub trait ErrorNormalizer: Send + Sync {
@@ -83,7 +72,7 @@ pub trait ErrorNormalizer: Send + Sync {
 
 #[derive(Debug, Clone)]
 pub struct DefaultErrorNormalizer {
-    cfg: ErrorCaptureConfig,
+    cfg: ErrorCaptureConfig
 }
 
 impl DefaultErrorNormalizer {
@@ -105,7 +94,7 @@ impl ErrorNormalizer for DefaultErrorNormalizer {
 #[derive(Debug, Clone)]
 pub struct ErrorCapture<N> {
     normalizer: N,
-    cfg: ErrorCaptureConfig,
+    cfg: ErrorCaptureConfig
 }
 
 impl ErrorCapture<DefaultErrorNormalizer> {
@@ -125,7 +114,7 @@ impl<N: ErrorNormalizer> ErrorCapture<N> {
         error_type: impl Into<String>,
         message: &str,
         stack: &[String],
-        context: ErrorContext,
+        context: ErrorContext
     ) -> CapturedError {
         let error_type_str = error_type.into();
         let _span = info_span!(
@@ -176,11 +165,11 @@ impl<N: ErrorNormalizer> ErrorCapture<N> {
                 message_pattern: normalized_message,
                 stack_patterns,
                 context_patterns,
-                embedding: None,
+                embedding: None
             },
             raw_message: message.to_string(),
             raw_stack: stack.to_vec(),
-            context,
+            context
         }
     }
 
@@ -190,7 +179,7 @@ impl<N: ErrorNormalizer> ErrorCapture<N> {
         message: &str,
         stack: &[String],
         context: ErrorContext,
-        embedder: Option<&Arc<dyn EmbeddingService<Error = E>>>,
+        embedder: Option<&Arc<dyn EmbeddingService<Error = E>>>
     ) -> CapturedError {
         let error_type_str = error_type.into();
         let span = info_span!(
@@ -218,7 +207,7 @@ impl<N: ErrorNormalizer> ErrorCapture<N> {
         &self,
         candidate: &ErrorSignature,
         existing: &[ErrorSignature],
-        threshold: f32,
+        threshold: f32
     ) -> bool {
         existing.iter().any(|sig| {
             if sig.error_type != candidate.error_type {
@@ -227,7 +216,7 @@ impl<N: ErrorNormalizer> ErrorCapture<N> {
 
             let msg_sim = jaccard_similarity(
                 &tokenize(&candidate.message_pattern),
-                &tokenize(&sig.message_pattern),
+                &tokenize(&sig.message_pattern)
             );
             let ctx_sim = jaccard_similarity(&candidate.context_patterns, &sig.context_patterns);
             let stack_sim = jaccard_similarity(&candidate.stack_patterns, &sig.stack_patterns);
@@ -268,7 +257,7 @@ fn replace_uuid_like(input: &str) -> String {
         regex::Regex::new(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b");
     match re {
         Ok(re) => re.replace_all(input, "<uuid>").to_string(),
-        Err(_) => input.to_string(),
+        Err(_) => input.to_string()
     }
 }
 
@@ -276,7 +265,7 @@ fn replace_hex_like(input: &str) -> String {
     let re = regex::Regex::new(r"(?i)\b0x[0-9a-f]+\b");
     match re {
         Ok(re) => re.replace_all(input, "<hex>").to_string(),
-        Err(_) => input.to_string(),
+        Err(_) => input.to_string()
     }
 }
 
@@ -284,7 +273,7 @@ fn replace_line_numbers(input: &str) -> String {
     let re = regex::Regex::new(r"\bline\s+\d+\b");
     match re {
         Ok(re) => re.replace_all(input, "line <n>").to_string(),
-        Err(_) => input.to_string(),
+        Err(_) => input.to_string()
     }
 }
 
@@ -292,7 +281,7 @@ fn replace_timestamps(input: &str) -> String {
     let re = regex::Regex::new(r"\b\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?\b");
     match re {
         Ok(re) => re.replace_all(input, "<ts>").to_string(),
-        Err(_) => input.to_string(),
+        Err(_) => input.to_string()
     }
 }
 
@@ -437,7 +426,7 @@ mod tests {
             message_pattern: "cannot read property".to_string(),
             stack_patterns: vec!["at foo".to_string()],
             context_patterns: vec!["tool:cargo_test".to_string()],
-            embedding: None,
+            embedding: None
         }];
 
         let candidate = ErrorSignature {
@@ -445,7 +434,7 @@ mod tests {
             message_pattern: "cannot read property".to_string(),
             stack_patterns: vec!["at foo".to_string()],
             context_patterns: vec!["tool:cargo_test".to_string()],
-            embedding: None,
+            embedding: None
         };
 
         assert!(cap.should_deduplicate(&candidate, &existing, 0.6));
@@ -459,7 +448,7 @@ mod tests {
             message_pattern: "cannot read property".to_string(),
             stack_patterns: vec![],
             context_patterns: vec![],
-            embedding: None,
+            embedding: None
         }];
 
         let candidate = ErrorSignature {
@@ -467,7 +456,7 @@ mod tests {
             message_pattern: "different error".to_string(),
             stack_patterns: vec![],
             context_patterns: vec![],
-            embedding: None,
+            embedding: None
         };
 
         assert!(!cap.should_deduplicate(&candidate, &existing, 0.8));
