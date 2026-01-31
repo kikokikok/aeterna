@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: opal-server
+  namespace: aeterna
+  labels:
+    app: opal-server
+    component: authorization
+spec:
+  serviceName: opal-server
+  replicas: 3
+  selector:
+    matchLabels:
+      app: opal-server
+  template:
+    metadata:
+      labels:
+        app: opal-server
+        component: authorization
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: opal-server
+              topologyKey: topology.kubernetes.io/zone
+      containers:
+        - name: opal-server
+          image: permitio/opal-server:0.7.5
+          ports:
+            - name: http
+              containerPort: 7002
+          env:
+            - name: OPAL_SERVER_URL
+              value: "http://opal-server:7002"
+            - name: OPAL_BROADCAST_URI
+              valueFrom:
+                secretKeyRef:
+                  name: opal-secrets
+                  key: broadcast-uri
+            - name: OPAL_AUTH_MASTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: opal-secrets
+                  key: master-token
+            - name: OPAL_DATA_CONFIG_SOURCES
+              valueFrom:
+                configMapKeyRef:
+                  name: opal-config
+                  key: data-sources
+            - name: OPAL_LOG_LEVEL
+              value: "INFO"
+            - name: OPAL_STATISTICS_ENABLED
+              value: "true"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 7002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 7002
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: policies
+              mountPath: /policies
+              readOnly: true
+      volumes:
+        - name: policies
+          configMap:
+            name: cedar-policies
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opal-server
+  namespace: aeterna
+  labels:
+    app: opal-server
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7002
+      targetPort: 7002
+      name: http
+  selector:
+    app: opal-server
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: opal-server-pdb
+  namespace: aeterna
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: opal-server

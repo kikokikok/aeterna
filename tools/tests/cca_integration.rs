@@ -143,6 +143,7 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
         ))),
         Arc::new(MockAuthService),
         None,
+        None,
         None
     ));
 

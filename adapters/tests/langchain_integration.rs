@@ -146,6 +146,7 @@ async fn setup_server() -> Arc<McpServer> {
         mock_reasoner,
         auth_service,
         None,
+        None,
         None
     ))
 }

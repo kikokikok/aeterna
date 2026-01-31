@@ -28,6 +28,7 @@
 //! ```
 
 pub mod cedar;
+pub mod migration;
 mod resolver;
 mod types;
 

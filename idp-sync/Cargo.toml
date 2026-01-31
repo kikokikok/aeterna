@@ -1,0 +1,73 @@
+[package]
+name = "idp-sync"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Identity Provider synchronization service for Aeterna"
+authors = ["Aeterna Team"]
+
+[dependencies]
+# Workspace dependencies
+storage = { workspace = true }
+mk_core = { workspace = true }
+config = { workspace = true }
+errors = { workspace = true }
+
+# HTTP client
+reqwest = { workspace = true, features = ["json"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# UUID
+uuid = { workspace = true }
+
+# Logging/tracing
+tracing = { workspace = true }
+
+# Date/time
+chrono = { workspace = true }
+
+# Database
+sqlx = { workspace = true }
+
+# Scheduling
+tokio-cron-scheduler = "0.14"
+
+# Web server for webhooks
+axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+
+# OAuth2 for Azure AD
+oauth2 = "5.0.0"
+
+# Retry logic
+backoff = { workspace = true }
+
+# Metrics
+metrics = { workspace = true }
+
+# Crypto
+sha2 = { workspace = true }
+
+# URL encoding
+urlencoding = "2.1"
+
+[dev-dependencies]
+wiremock = { workspace = true }
+tempfile = { workspace = true }
+serial_test = { workspace = true }
+testing = { workspace = true }
+
+[lints]
+workspace = true
