@@ -1,22 +1,105 @@
 //! Pluggable vector database backends for the Aeterna memory system.
 //!
-//! This module provides a unified interface for multiple vector database backends,
-//! enabling organizations to choose the backend that best fits their infrastructure.
+//! This module provides a unified interface for multiple vector database
+//! backends, enabling organizations to choose the backend that best fits their
+//! infrastructure.
 //!
-//! # Supported Backends
+//! # Backend Comparison
 //!
-//! | Backend | Status | Multi-tenancy | Hybrid Search |
-//! |---------|--------|---------------|---------------|
-//! | Qdrant | ✅ Ready | Collection/filter | ✅ |
-//! | Pinecone | 🚧 WIP | Namespace | ❌ |
-//! | pgvector | 🚧 WIP | Schema/filter | ❌ |
-//! | Vertex AI | 🚧 WIP | Index/filter | ❌ |
-//! | Databricks | 🚧 WIP | Unity Catalog | ❌ |
-//! | Weaviate | 🚧 WIP | Tenant key | ✅ |
-//! | MongoDB Atlas | 🚧 WIP | Database/filter | ✅ |
+//! | Backend | Status | Multi-tenancy | Hybrid Search | Max Dimensions | Best For |
+//! |---------|--------|---------------|---------------|----------------|----------|
+//! | Qdrant | ✅ Ready | Collection/filter | ✅ | 65536 | Self-hosted, full control |
+//! | Pinecone | ✅ Ready | Namespace | ❌ | 20000 | Serverless, minimal ops |
+//! | pgvector | ✅ Ready | Schema/filter | ❌ | 2000 | Existing PostgreSQL |
+//! | Weaviate | ✅ Ready | Tenant key | ✅ | 65536 | GraphQL, hybrid search |
+//! | MongoDB Atlas | ✅ Ready | Collection/filter | ✅ | 4096 | Existing MongoDB |
+//! | Vertex AI | ⏳ Planned | Index/filter | ❌ | 2048 | GCP native |
+//! | Databricks | ⏳ Planned | Unity Catalog | ❌ | 4096 | Data lakehouse |
+//!
+//! # Backend Selection Guide
+//!
+//! Choose your backend based on these criteria:
+//!
+//! ## Self-Hosted / Full Control
+//! - **Qdrant**: Best for teams wanting full control, supports hybrid search
+//! - **pgvector**: Best if you already have PostgreSQL infrastructure
+//!
+//! ## Managed / Serverless
+//! - **Pinecone**: Simplest setup, pay-per-query, good for prototypes
+//! - **MongoDB Atlas**: Good if you already use MongoDB
+//! - **Weaviate Cloud**: Managed Weaviate with GraphQL API
+//!
+//! ## Cloud Provider Native
+//! - **Vertex AI**: Best for GCP-centric organizations (planned)
+//! - **Databricks**: Best for data lakehouse architectures (planned)
+//!
+//! # Feature Flags
+//!
+//! Enable backends via Cargo features:
+//!
+//! ```toml
+//! [dependencies]
+//! memory = { version = "0.1", features = ["pinecone", "pgvector", "weaviate", "mongodb"] }
+//! ```
+//!
+//! Available features:
+//! - `pinecone` - Pinecone serverless backend
+//! - `pgvector` - PostgreSQL with pgvector extension
+//! - `weaviate` - Weaviate vector database
+//! - `mongodb` - MongoDB Atlas Vector Search
+//! - `vertex-ai` - Google Vertex AI (planned)
+//! - `databricks` - Databricks Vector Search (planned)
+//!
+//! # Environment Configuration
+//!
+//! Set `VECTOR_BACKEND` to select the backend:
+//!
+//! ```bash
+//! # Qdrant (default)
+//! export VECTOR_BACKEND=qdrant
+//! export QDRANT_URL=http://localhost:6334
+//!
+//! # Pinecone
+//! export VECTOR_BACKEND=pinecone
+//! export PINECONE_API_KEY=your-api-key
+//! export PINECONE_ENVIRONMENT=us-east-1-aws
+//! export PINECONE_INDEX_NAME=aeterna-memories
+//!
+//! # pgvector
+//! export VECTOR_BACKEND=pgvector
+//! export PGVECTOR_URL=postgres://user:pass@localhost/aeterna
+//!
+//! # Weaviate
+//! export VECTOR_BACKEND=weaviate
+//! export WEAVIATE_URL=http://localhost:8080
+//!
+//! # MongoDB Atlas
+//! export VECTOR_BACKEND=mongodb
+//! export MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net
+//! export MONGODB_DATABASE=aeterna
+//! ```
+//!
+//! # Observability
+//!
+//! Wrap any backend with instrumentation for metrics and circuit breaker:
+//!
+//! ```rust,ignore
+//! use memory::backends::{create_backend, wrap_with_instrumentation, BackendConfig};
+//!
+//! let config = BackendConfig::from_env()?;
+//! let backend = create_backend(config).await?;
+//! let instrumented = wrap_with_instrumentation(backend);
+//!
+//! // Now all operations emit metrics:
+//! // - vector_backend_operation_duration_seconds
+//! // - vector_backend_operations_total
+//! // - vector_backend_errors_total
+//! // - vector_backend_circuit_breaker_rejected_total
+//! ```
 
 pub mod error;
 pub mod factory;
+pub mod observability;
 pub mod qdrant;
 pub mod types;
 
@@ -39,18 +122,20 @@ pub mod weaviate;
 pub mod mongodb;
 
 pub use error::BackendError;
-pub use factory::{create_backend, BackendConfig, VectorBackendType};
+pub use factory::{BackendConfig, VectorBackendType, create_backend};
+pub use observability::{CircuitBreaker, InstrumentedBackend, wrap_with_instrumentation};
 pub use types::{
     BackendCapabilities, DeleteResult, DistanceMetric, HealthStatus, SearchQuery, SearchResult,
-    UpsertResult, VectorRecord,
+    UpsertResult, VectorRecord
 };
 
 use async_trait::async_trait;
 
 /// Unified trait for all vector database backends.
 ///
-/// This trait provides a common interface for vector operations across different
-/// storage backends, enabling seamless backend switching via configuration.
+/// This trait provides a common interface for vector operations across
+/// different storage backends, enabling seamless backend switching via
+/// configuration.
 ///
 /// # Tenant Isolation
 ///
@@ -92,7 +177,8 @@ pub trait VectorBackend: Send + Sync {
 
     /// Returns the capabilities advertised by this backend.
     ///
-    /// Use this to adapt behavior based on backend features (e.g., hybrid search).
+    /// Use this to adapt behavior based on backend features (e.g., hybrid
+    /// search).
     async fn capabilities(&self) -> BackendCapabilities;
 
     /// Upserts (insert or update) vectors into the backend.
@@ -106,7 +192,7 @@ pub trait VectorBackend: Send + Sync {
     async fn upsert(
         &self,
         tenant_id: &str,
-        vectors: Vec<VectorRecord>,
+        vectors: Vec<VectorRecord>
     ) -> Result<UpsertResult, BackendError>;
 
     /// Performs semantic vector search.
@@ -120,7 +206,7 @@ pub trait VectorBackend: Send + Sync {
     async fn search(
         &self,
         tenant_id: &str,
-        query: SearchQuery,
+        query: SearchQuery
     ) -> Result<Vec<SearchResult>, BackendError>;
 
     /// Deletes vectors by their IDs.
@@ -131,11 +217,8 @@ pub trait VectorBackend: Send + Sync {
     ///
     /// # Returns
     /// Result containing the number of vectors deleted
-    async fn delete(
-        &self,
-        tenant_id: &str,
-        ids: Vec<String>,
-    ) -> Result<DeleteResult, BackendError>;
+    async fn delete(&self, tenant_id: &str, ids: Vec<String>)
+    -> Result<DeleteResult, BackendError>;
 
     /// Retrieves a single vector by ID.
     ///
@@ -145,11 +228,7 @@ pub trait VectorBackend: Send + Sync {
     ///
     /// # Returns
     /// The vector record if found, None otherwise
-    async fn get(
-        &self,
-        tenant_id: &str,
-        id: &str,
-    ) -> Result<Option<VectorRecord>, BackendError>;
+    async fn get(&self, tenant_id: &str, id: &str) -> Result<Option<VectorRecord>, BackendError>;
 
     /// Returns the name of this backend implementation.
     fn backend_name(&self) -> &'static str;

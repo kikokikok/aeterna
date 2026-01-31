@@ -42,7 +42,10 @@ pub enum BackendError {
     Configuration(String),
 
     #[error("Internal backend error: {0}")]
-    Internal(String)
+    Internal(String),
+
+    #[error("Circuit breaker open for backend: {0}")]
+    CircuitOpen(String)
 }
 
 impl BackendError {
@@ -53,6 +56,7 @@ impl BackendError {
                 | BackendError::RateLimited { .. }
                 | BackendError::Unavailable(_)
                 | BackendError::Timeout(_)
+                | BackendError::CircuitOpen(_)
         )
     }
 
@@ -61,6 +65,7 @@ impl BackendError {
             BackendError::RateLimited { retry_after_ms } => Some(*retry_after_ms),
             BackendError::Timeout(_) => Some(1000),
             BackendError::ConnectionFailed(_) | BackendError::Unavailable(_) => Some(5000),
+            BackendError::CircuitOpen(_) => Some(10000),
             _ => None
         }
     }

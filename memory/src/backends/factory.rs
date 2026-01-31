@@ -346,12 +346,38 @@ pub async fn create_backend(config: BackendConfig) -> Result<Arc<dyn VectorBacke
                 ))
             }
         }
-        VectorBackendType::VertexAi => Err(BackendError::Configuration(
-            "Vertex AI backend not yet implemented".into()
-        )),
-        VectorBackendType::Databricks => Err(BackendError::Configuration(
-            "Databricks backend not yet implemented".into()
-        )),
+        VectorBackendType::VertexAi => {
+            #[cfg(feature = "vertex-ai")]
+            {
+                let vertex_config = config.vertex_ai.ok_or_else(|| {
+                    BackendError::Configuration("Vertex AI config missing".into())
+                })?;
+                let backend = super::vertex_ai::VertexAiBackend::new(vertex_config).await?;
+                Ok(Arc::new(backend))
+            }
+            #[cfg(not(feature = "vertex-ai"))]
+            {
+                Err(BackendError::Configuration(
+                    "Vertex AI backend not enabled. Compile with --features vertex-ai".into()
+                ))
+            }
+        }
+        VectorBackendType::Databricks => {
+            #[cfg(feature = "databricks")]
+            {
+                let databricks_config = config.databricks.ok_or_else(|| {
+                    BackendError::Configuration("Databricks config missing".into())
+                })?;
+                let backend = super::databricks::DatabricksBackend::new(databricks_config).await?;
+                Ok(Arc::new(backend))
+            }
+            #[cfg(not(feature = "databricks"))]
+            {
+                Err(BackendError::Configuration(
+                    "Databricks backend not enabled. Compile with --features databricks".into()
+                ))
+            }
+        }
         VectorBackendType::Weaviate => {
             #[cfg(feature = "weaviate")]
             {

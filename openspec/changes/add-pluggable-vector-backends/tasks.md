@@ -43,27 +43,27 @@
 
 ## 5. Vertex AI Vector Search Backend
 
-- [ ] 5.1 Implement Google Cloud authentication (service account, workload identity)
-- [ ] 5.2 Create REST/gRPC client wrapper for Vertex AI Vector Search
-- [ ] 5.3 Implement `VectorBackend` trait for Vertex AI
-- [ ] 5.4 Implement index deployment and endpoint management
-- [ ] 5.5 Implement tenant isolation via metadata filter or separate indexes
-- [ ] 5.6 Implement batch upsert via streaming updates
-- [ ] 5.7 Implement semantic search with neighbor count and distance threshold
-- [ ] 5.8 Handle Vertex AI specific errors (quota, not found, permission)
+- [x] 5.1 Implement Google Cloud authentication (service account, workload identity)
+- [x] 5.2 Create REST client wrapper for Vertex AI Vector Search
+- [x] 5.3 Implement `VectorBackend` trait for Vertex AI
+- [x] 5.4 Implement index endpoint management (upsertDatapoints, findNeighbors)
+- [x] 5.5 Implement tenant isolation via restricts namespace filters
+- [x] 5.6 Implement batch upsert
+- [x] 5.7 Implement semantic search with neighbor count and distance threshold
+- [x] 5.8 Handle Vertex AI specific errors (authentication, API errors)
 - [ ] 5.9 Write integration tests (requires GCP project)
 - [ ] 5.10 Document Vertex AI setup (index creation, endpoint, IAM)
 
 ## 6. Databricks Vector Search Backend
 
-- [ ] 6.1 Implement Databricks authentication (PAT, OAuth)
-- [ ] 6.2 Create REST client wrapper for Vector Search API
-- [ ] 6.3 Implement `VectorBackend` trait for Databricks
-- [ ] 6.4 Implement tenant isolation via Unity Catalog namespaces
-- [ ] 6.5 Implement vector index creation and management
-- [ ] 6.6 Implement upsert via Delta table writes
-- [ ] 6.7 Implement semantic search with endpoint query
-- [ ] 6.8 Handle Databricks specific errors (compute, quota, permission)
+- [x] 6.1 Implement Databricks authentication (PAT via bearer token)
+- [x] 6.2 Create REST client wrapper for Vector Search API
+- [x] 6.3 Implement `VectorBackend` trait for Databricks
+- [x] 6.4 Implement tenant isolation via Unity Catalog (catalog.schema.index_tenant)
+- [x] 6.5 Implement upsert via REST API
+- [x] 6.6 Implement semantic search with queryIndex endpoint
+- [x] 6.7 Implement delete via deleteDataVectorIndex endpoint
+- [x] 6.8 Handle Databricks specific errors (rate limits, auth)
 - [ ] 6.9 Write integration tests (requires Databricks workspace)
 - [ ] 6.10 Document Databricks setup (workspace, Unity Catalog, endpoint)
 
@@ -95,12 +95,12 @@
 
 ## 9. Observability and Health
 
-- [ ] 9.1 Add backend-specific metrics (latency histogram, operation counter, error counter)
-- [ ] 9.2 Add health check endpoint per backend
-- [ ] 9.3 Add capability discovery endpoint
-- [ ] 9.4 Implement circuit breaker for backend failures
+- [x] 9.1 Add backend-specific metrics (latency histogram, operation counter, error counter)
+- [x] 9.2 Add health check endpoint per backend (InstrumentedBackend wraps health_check)
+- [x] 9.3 Add capability discovery endpoint (capabilities() method)
+- [x] 9.4 Implement circuit breaker for backend failures
 - [ ] 9.5 Add distributed tracing spans for backend operations
-- [ ] 9.6 Write observability integration tests
+- [x] 9.6 Write observability integration tests (CircuitBreaker unit tests)
 
 ## 10. Documentation and Testing
 
