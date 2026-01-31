@@ -107,6 +107,6 @@
 - [x] 10.1 Update module docs with backend selection guide and comparison matrix
 - [x] 10.2 Create backend selection guide (in mod.rs documentation)
 - [x] 10.3 Create backend comparison matrix (in mod.rs documentation)
-- [ ] 10.4 Add E2E tests for backend switching (requires running instances)
-- [ ] 10.5 Add performance benchmarks per backend (requires running instances)
-- [ ] 10.6 Create troubleshooting guide per backend
+- [x] 10.4 Add E2E tests for backend switching (requires running instances)
+- [x] 10.5 Add performance benchmarks per backend (requires running instances)
+- [x] 10.6 Create troubleshooting guide per backend
