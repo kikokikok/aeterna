@@ -2,6 +2,7 @@
 //!
 //! Implementation of hierarchical memory storage and retrieval.
 
+pub mod backends;
 pub mod circuit_breaker;
 pub mod embedding;
 pub mod episodic;
