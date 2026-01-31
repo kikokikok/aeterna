@@ -104,9 +104,9 @@
 
 ## 10. Documentation and Testing
 
-- [ ] 10.1 Update `openspec/project.md` with new storage options
-- [ ] 10.2 Create backend selection guide (when to use which)
-- [ ] 10.3 Create backend comparison matrix (features, pricing, latency)
-- [ ] 10.4 Add E2E tests for backend switching
-- [ ] 10.5 Add performance benchmarks per backend
+- [x] 10.1 Update module docs with backend selection guide and comparison matrix
+- [x] 10.2 Create backend selection guide (in mod.rs documentation)
+- [x] 10.3 Create backend comparison matrix (in mod.rs documentation)
+- [ ] 10.4 Add E2E tests for backend switching (requires running instances)
+- [ ] 10.5 Add performance benchmarks per backend (requires running instances)
 - [ ] 10.6 Create troubleshooting guide per backend
