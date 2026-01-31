@@ -1,8 +1,11 @@
 use crate::bridge::{ResolveFederationConflictTool, SyncNowTool, SyncStatusTool};
 use crate::cca::{ContextAssembleTool, HindsightQueryTool, MetaLoopStatusTool, NoteCaptureTool};
 use crate::governance::{
-    HierarchyNavigateTool, UnitCreateTool, UnitPolicyAddTool, UserRoleAssignTool,
-    UserRoleRemoveTool
+    GovernanceApproveTool, GovernanceAuditListTool, GovernanceConfigGetTool,
+    GovernanceConfigureTool, GovernanceRejectTool, GovernanceRequestCreateTool,
+    GovernanceRequestGetTool, GovernanceRequestListTool, GovernanceRoleAssignTool,
+    GovernanceRoleListTool, GovernanceRoleRevokeTool, HierarchyNavigateTool, UnitCreateTool,
+    UnitPolicyAddTool, UserRoleAssignTool, UserRoleRemoveTool
 };
 use crate::knowledge::{KnowledgeGetTool, KnowledgeListTool, KnowledgeQueryTool};
 use crate::memory::{
@@ -18,6 +21,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
 use storage::events::EventError;
+use storage::governance::GovernanceStorage;
 use storage::graph_duckdb::DuckDbGraphStore;
 use sync::bridge::SyncManager;
 use tokio::time::timeout;
@@ -31,7 +35,8 @@ pub struct McpServer {
     auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>,
     event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
     extension_executor: Option<Arc<crate::extensions::ExtensionExecutor>>,
-    timeout_duration: Duration
+    timeout_duration: Duration,
+    governance_storage: Option<Arc<GovernanceStorage>>
 }
 
 impl McpServer {
@@ -49,7 +54,8 @@ impl McpServer {
         reflective_reasoner: Arc<dyn memory::reasoning::ReflectiveReasoner>,
         auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>,
         event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
-        graph_store: Option<Arc<DuckDbGraphStore>>
+        graph_store: Option<Arc<DuckDbGraphStore>>,
+        governance_storage: Option<Arc<GovernanceStorage>>
     ) -> Self {
         let mut registry = ToolRegistry::new();
 
@@ -96,9 +102,41 @@ impl McpServer {
         )));
         registry.register(Box::new(UserRoleRemoveTool::new(
             storage_backend.clone(),
-            governance_engine
+            governance_engine.clone()
         )));
         registry.register(Box::new(HierarchyNavigateTool::new(storage_backend)));
+
+        // Register UX-first governance workflow tools
+        if let Some(gov_storage) = governance_storage.clone() {
+            registry.register(Box::new(GovernanceConfigureTool::new(
+                gov_storage.clone(),
+                governance_engine.clone()
+            )));
+            registry.register(Box::new(GovernanceConfigGetTool::new(gov_storage.clone())));
+            registry.register(Box::new(GovernanceRequestCreateTool::new(
+                gov_storage.clone(),
+                governance_engine.clone()
+            )));
+            registry.register(Box::new(GovernanceApproveTool::new(
+                gov_storage.clone(),
+                governance_engine.clone()
+            )));
+            registry.register(Box::new(GovernanceRejectTool::new(
+                gov_storage.clone(),
+                governance_engine.clone()
+            )));
+            registry.register(Box::new(GovernanceRequestListTool::new(
+                gov_storage.clone()
+            )));
+            registry.register(Box::new(GovernanceRequestGetTool::new(gov_storage.clone())));
+            registry.register(Box::new(GovernanceAuditListTool::new(gov_storage.clone())));
+            registry.register(Box::new(GovernanceRoleAssignTool::new(
+                gov_storage.clone(),
+                governance_engine.clone()
+            )));
+            registry.register(Box::new(GovernanceRoleRevokeTool::new(gov_storage.clone())));
+            registry.register(Box::new(GovernanceRoleListTool::new(gov_storage.clone())));
+        }
 
         // Register CCA tools
         registry.register(Box::new(ContextAssembleTool::with_default_provider(
@@ -123,7 +161,8 @@ impl McpServer {
             auth_service,
             event_publisher,
             extension_executor: None,
-            timeout_duration: Duration::from_secs(30)
+            timeout_duration: Duration::from_secs(30),
+            governance_storage
         }
     }
 
@@ -847,6 +886,7 @@ mod tests {
             governance,
             mock_reasoner,
             Arc::new(MockAuthService),
+            None,
             None,
             None
         )

@@ -1,0 +1,89 @@
+{{- if .Values.cedarAgent.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "aeterna-opal.fullname" . }}-cedar-agent
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "aeterna-opal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cedar-agent
+spec:
+  selector:
+    matchLabels:
+      {{- include "aeterna-opal.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: cedar-agent
+  template:
+    metadata:
+      labels:
+        {{- include "aeterna-opal.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: cedar-agent
+    spec:
+      containers:
+        - name: opal-client
+          image: "{{ .Values.cedarAgent.image.repository }}:{{ .Values.cedarAgent.image.tag }}"
+          imagePullPolicy: {{ .Values.cedarAgent.image.pullPolicy }}
+          ports:
+            - name: cedar
+              containerPort: 8180
+            - name: opal
+              containerPort: 7000
+          env:
+            - name: OPAL_SERVER_URL
+              value: "http://{{ include "aeterna-opal.fullname" . }}-opal-server:7002"
+            - name: OPAL_CLIENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna-opal.fullname" . }}-secrets
+                  key: client-token
+            - name: OPAL_INLINE_CEDAR_ENABLED
+              value: "true"
+            - name: OPAL_INLINE_CEDAR_CONFIG
+              value: '{"addr": "0.0.0.0:8180"}'
+            - name: OPAL_DATA_TOPICS
+              value: "policy_data"
+            - name: OPAL_DEFAULT_DATA_SOURCES_CONFIG_URL
+              value: "http://{{ include "aeterna-opal.fullname" . }}-opal-server:7002/data/config"
+            - name: OPAL_POLICY_STORE_URL
+              value: "http://localhost:8180"
+            - name: OPAL_LOG_LEVEL
+              value: {{ .Values.cedarAgent.logLevel | quote }}
+          resources:
+            {{- toYaml .Values.cedarAgent.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8180
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8180
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      {{- with .Values.cedarAgent.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aeterna-opal.fullname" . }}-cedar-agent
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "aeterna-opal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cedar-agent
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8180
+      targetPort: 8180
+      name: cedar
+    - port: 7000
+      targetPort: 7000
+      name: opal
+  selector:
+    {{- include "aeterna-opal.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: cedar-agent
+{{- end }}

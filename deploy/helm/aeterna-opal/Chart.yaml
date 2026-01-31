@@ -1,0 +1,22 @@
+apiVersion: v2
+name: aeterna-opal
+description: OPAL Authorization Stack for Aeterna Memory-Knowledge System
+type: application
+version: 0.1.0
+appVersion: "0.7.5"
+keywords:
+  - opal
+  - cedar
+  - authorization
+  - policy
+  - aeterna
+maintainers:
+  - name: Aeterna Team
+    url: https://github.com/kikokikok/aeterna
+sources:
+  - https://github.com/kikokikok/aeterna
+dependencies:
+  - name: postgresql
+    version: "15.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled

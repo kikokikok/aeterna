@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace }}
+  labels:
+    {{- include "aeterna-opal.labels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aeterna-opal.fullname" . }}-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "aeterna-opal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opal
+data:
+  data-sources: |
+    {
+      "config": {
+        "entries": [
+          {
+            "url": "http://{{ include "aeterna-opal.fullname" . }}-opal-fetcher:8080/v1/all",
+            "topics": ["policy_data"],
+            "dst_path": "/aeterna",
+            "config": {
+              "fetcher": "HttpFetchProvider"
+            }
+          }
+        ]
+      }
+    }
+  opal-log-level: {{ .Values.opalServer.logLevel | default "INFO" | quote }}
+  opal-statistics-enabled: {{ .Values.opalServer.statisticsEnabled | default true | quote }}

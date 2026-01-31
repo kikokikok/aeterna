@@ -210,7 +210,7 @@ pub struct ValidationWarning {
 }
 
 pub struct MockPolicyStorage {
-    policies: Arc<RwLock<HashMap<String, Policy>>>,
+    pub policies: Arc<RwLock<HashMap<String, Policy>>>,
     drafts: Arc<RwLock<HashMap<String, PolicyDraft>>>,
     templates: Arc<RwLock<HashMap<String, PolicyTemplate>>>
 }

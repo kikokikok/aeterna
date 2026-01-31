@@ -335,6 +335,7 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
         ))),
         auth_service,
         None,
+        None,
         None
     );
 

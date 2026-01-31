@@ -107,6 +107,36 @@ impl OpenCodeAdapter {
             .map(|t| serde_json::to_value(t).unwrap())
             .collect()
     }
+
+    pub fn get_policy_tools(&self) -> Vec<Value> {
+        self.server
+            .list_tools()
+            .into_iter()
+            .filter(|t| t.name.starts_with("aeterna_policy_") || t.name.starts_with("policy_"))
+            .map(|t| serde_json::to_value(t).unwrap())
+            .collect()
+    }
+
+    pub fn get_all_ux_governance_tools(&self) -> Vec<Value> {
+        self.server
+            .list_tools()
+            .into_iter()
+            .filter(|t| {
+                t.name.starts_with("governance_")
+                    || t.name.starts_with("aeterna_")
+                    || t.name.starts_with("policy_")
+            })
+            .map(|t| serde_json::to_value(t).unwrap())
+            .collect()
+    }
+
+    pub fn list_all_tools(&self) -> Vec<tools::tools::ToolDefinition> {
+        self.server.list_tools()
+    }
+
+    pub fn get_tool_count(&self) -> usize {
+        self.server.list_tools().len()
+    }
 }
 
 #[async_trait]
@@ -484,6 +514,7 @@ mod tests {
             Arc::new(MockReasoner),
             Arc::new(MockAuthService),
             Some(Arc::new(MockPublisher)),
+            None,
             None
         ));
         let adapter = OpenCodeAdapter::new(server);
@@ -533,6 +564,7 @@ mod tests {
             Arc::new(MockReasoner),
             Arc::new(MockAuthService),
             Some(Arc::new(MockPublisher)),
+            None,
             None
         ));
         let adapter = OpenCodeAdapter::new(server);
@@ -612,6 +644,7 @@ mod tests {
             Arc::new(MockReasoner),
             Arc::new(MockAuthService),
             None,
+            None,
             None
         ));
 
@@ -663,6 +696,7 @@ mod tests {
             Arc::new(MockReasoner),
             Arc::new(MockAuthService),
             Some(Arc::new(MockPublisher)),
+            None,
             None
         ));
         let adapter = OpenCodeAdapter::new(server);
