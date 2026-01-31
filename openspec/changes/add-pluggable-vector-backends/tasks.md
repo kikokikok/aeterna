@@ -1,21 +1,21 @@
 ## 1. Core Trait and Configuration
 
-- [ ] 1.1 Define `VectorBackend` trait with async methods (health_check, capabilities, upsert, search, delete, get)
-- [ ] 1.2 Define `BackendCapabilities` struct for feature advertisement
-- [ ] 1.3 Define `VectorRecord`, `SearchQuery`, `SearchResult` common types
-- [ ] 1.4 Implement backend configuration loading from env vars and config files
-- [ ] 1.5 Implement backend factory pattern for dynamic instantiation
-- [ ] 1.6 Add backend selection enum: `qdrant | vertex_ai | databricks | pinecone | weaviate | mongodb | pgvector`
-- [ ] 1.7 Write unit tests for configuration loading
+- [x] 1.1 Define `VectorBackend` trait with async methods (health_check, capabilities, upsert, search, delete, get)
+- [x] 1.2 Define `BackendCapabilities` struct for feature advertisement
+- [x] 1.3 Define `VectorRecord`, `SearchQuery`, `SearchResult` common types
+- [x] 1.4 Implement backend configuration loading from env vars and config files
+- [x] 1.5 Implement backend factory pattern for dynamic instantiation
+- [x] 1.6 Add backend selection enum: `qdrant | vertex_ai | databricks | pinecone | weaviate | mongodb | pgvector`
+- [x] 1.7 Write unit tests for configuration loading
 
 ## 2. Qdrant Backend (Reference Implementation)
 
-- [ ] 2.1 Refactor existing Qdrant code to implement `VectorBackend` trait
-- [ ] 2.2 Implement tenant isolation via collection naming or payload filter
-- [ ] 2.3 Implement capability advertisement (hybrid search, metadata filter, batch ops)
-- [ ] 2.4 Add Qdrant-specific health check
-- [ ] 2.5 Write integration tests for Qdrant backend
-- [ ] 2.6 Ensure backward compatibility with existing deployments
+- [x] 2.1 Refactor existing Qdrant code to implement `VectorBackend` trait
+- [x] 2.2 Implement tenant isolation via collection naming or payload filter
+- [x] 2.3 Implement capability advertisement (hybrid search, metadata filter, batch ops)
+- [x] 2.4 Add Qdrant-specific health check
+- [x] 2.5 Write integration tests for Qdrant backend
+- [x] 2.6 Ensure backward compatibility with existing deployments
 
 ## 3. Pinecone Backend
 
@@ -31,13 +31,13 @@
 
 ## 4. pgvector Backend
 
-- [ ] 4.1 Add PostgreSQL driver dependency (`sqlx` with pgvector extension)
-- [ ] 4.2 Implement `VectorBackend` trait for pgvector
-- [ ] 4.3 Create schema migrations for vector tables
-- [ ] 4.4 Implement tenant isolation via schema or row-level filter
-- [ ] 4.5 Implement HNSW index creation and management
-- [ ] 4.6 Implement upsert with ON CONFLICT handling
-- [ ] 4.7 Implement semantic search using `<=>` (cosine), `<->` (L2), or `<#>` (inner product)
+- [x] 4.1 Add PostgreSQL driver dependency (`sqlx` with pgvector extension)
+- [x] 4.2 Implement `VectorBackend` trait for pgvector
+- [x] 4.3 Create schema migrations for vector tables
+- [x] 4.4 Implement tenant isolation via schema or row-level filter
+- [x] 4.5 Implement HNSW index creation and management
+- [x] 4.6 Implement upsert with ON CONFLICT handling
+- [x] 4.7 Implement semantic search using `<=>` (cosine), `<->` (L2), or `<#>` (inner product)
 - [ ] 4.8 Write integration tests (requires PostgreSQL with pgvector)
 - [ ] 4.9 Document pgvector setup and configuration
 
