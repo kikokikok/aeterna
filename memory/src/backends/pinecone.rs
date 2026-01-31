@@ -65,6 +65,7 @@ struct DeleteRequest {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct FetchRequest {
     ids: Vec<String>,
     namespace: String
@@ -89,6 +90,7 @@ struct DescribeIndexResponse {
 
 #[derive(Debug, Deserialize)]
 struct IndexDatabase {
+    #[allow(dead_code)]
     name: String,
     host: String
 }
