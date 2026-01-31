@@ -96,6 +96,68 @@
 //! // - vector_backend_errors_total
 //! // - vector_backend_circuit_breaker_rejected_total
 //! ```
+//!
+//! # Troubleshooting
+//!
+//! ## Common Errors
+//!
+//! ### ConnectionFailed
+//! - **Qdrant**: Check `QDRANT_URL` is reachable, default port is 6334
+//! - **pgvector**: Verify `PGVECTOR_URL` connection string and pgvector
+//!   extension installed
+//! - **Weaviate**: Ensure `WEAVIATE_URL` points to running instance (default
+//!   port 8080)
+//! - **MongoDB**: Verify `MONGODB_URI` and network access to Atlas cluster
+//!
+//! ### AuthenticationFailed
+//! - **Pinecone**: Verify `PINECONE_API_KEY` is valid and not expired
+//! - **Vertex AI**: Check GCP credentials (metadata server or
+//!   `GOOGLE_ACCESS_TOKEN`)
+//! - **Databricks**: Verify `DATABRICKS_TOKEN` has correct permissions
+//!
+//! ### RateLimited
+//! - All backends may rate limit. Use `BackendError::retry_after_ms()` for
+//!   backoff
+//! - Pinecone: Check pod quotas in Pinecone console
+//! - Databricks: Monitor workspace API limits
+//!
+//! ### CircuitOpen
+//! - Circuit breaker opened after repeated failures
+//! - Default: opens after 5 failures, resets after 30 seconds
+//! - Configure via `InstrumentedBackend::with_circuit_breaker(threshold,
+//!   timeout_secs)`
+//!
+//! ## Backend-Specific Issues
+//!
+//! ### Qdrant
+//! - Collection not found: Will be auto-created on first upsert
+//! - Dimension mismatch: Ensure `embedding_dimension` matches your vectors
+//!
+//! ### pgvector
+//! - Extension not installed: Run `CREATE EXTENSION vector;`
+//! - Index not created: Backend auto-creates HNSW index on first use
+//! - Slow queries: Check `EXPLAIN ANALYZE` and index settings
+//!
+//! ### Pinecone
+//! - Namespace limits: Free tier has namespace restrictions
+//! - Index not ready: Wait for index to be ready after creation
+//!
+//! ### Weaviate
+//! - Class not found: Auto-created with multi-tenancy enabled
+//! - Tenant not found: Auto-created on first upsert
+//!
+//! ### MongoDB Atlas
+//! - Vector index not found: Create via Atlas UI or API before use
+//! - `$vectorSearch` errors: Ensure index name matches `MONGODB_VECTOR_INDEX`
+//!
+//! ### Vertex AI
+//! - Not running on GCP: Set `GOOGLE_ACCESS_TOKEN` manually
+//! - Index endpoint not deployed: Deploy index to endpoint first
+//! - Restricts not working: Ensure namespace filter matches tenant pattern
+//!
+//! ### Databricks
+//! - Index not found: Create DIRECT_ACCESS index via Databricks UI/API
+//! - Unity Catalog errors: Ensure catalog/schema exist and user has access
 
 pub mod error;
 pub mod factory;
