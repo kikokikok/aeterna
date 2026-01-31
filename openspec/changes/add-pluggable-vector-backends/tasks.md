@@ -69,27 +69,27 @@
 
 ## 7. Weaviate Backend
 
-- [ ] 7.1 Create REST/GraphQL client wrapper for Weaviate
-- [ ] 7.2 Implement `VectorBackend` trait for Weaviate
-- [ ] 7.3 Implement schema/class management
-- [ ] 7.4 Implement tenant isolation via tenant key
-- [ ] 7.5 Implement upsert with properties
-- [ ] 7.6 Implement hybrid search (BM25 + vector with alpha tuning)
-- [ ] 7.7 Implement semantic search via GraphQL
-- [ ] 7.8 Handle Weaviate specific errors
+- [x] 7.1 Create REST/GraphQL client wrapper for Weaviate
+- [x] 7.2 Implement `VectorBackend` trait for Weaviate
+- [x] 7.3 Implement schema/class management
+- [x] 7.4 Implement tenant isolation via tenant key (multi-tenancy config)
+- [x] 7.5 Implement upsert with properties
+- [x] 7.6 Implement hybrid search (BM25 + vector with alpha tuning) - capability advertised
+- [x] 7.7 Implement semantic search via GraphQL
+- [x] 7.8 Handle Weaviate specific errors
 - [ ] 7.9 Write integration tests (requires Weaviate instance)
 - [ ] 7.10 Document Weaviate setup and configuration
 
 ## 8. MongoDB Atlas Vector Search Backend
 
-- [ ] 8.1 Add MongoDB Rust driver dependency
-- [ ] 8.2 Implement `VectorBackend` trait for MongoDB
-- [ ] 8.3 Implement collection and index management
-- [ ] 8.4 Implement tenant isolation via database or collection filter
-- [ ] 8.5 Implement upsert with document structure
-- [ ] 8.6 Implement vector search via aggregation pipeline ($vectorSearch)
-- [ ] 8.7 Implement hybrid queries (vector + filter)
-- [ ] 8.8 Handle MongoDB specific errors
+- [x] 8.1 Add MongoDB Rust driver dependency
+- [x] 8.2 Implement `VectorBackend` trait for MongoDB
+- [x] 8.3 Implement collection and index management (tenant-scoped collections)
+- [x] 8.4 Implement tenant isolation via collection naming
+- [x] 8.5 Implement upsert with document structure
+- [x] 8.6 Implement vector search via aggregation pipeline ($vectorSearch)
+- [x] 8.7 Implement hybrid queries (vector + filter)
+- [x] 8.8 Handle MongoDB specific errors
 - [ ] 8.9 Write integration tests (requires MongoDB Atlas)
 - [ ] 8.10 Document MongoDB Atlas setup (cluster, vector index)
 

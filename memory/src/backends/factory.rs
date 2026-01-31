@@ -352,12 +352,38 @@ pub async fn create_backend(config: BackendConfig) -> Result<Arc<dyn VectorBacke
         VectorBackendType::Databricks => Err(BackendError::Configuration(
             "Databricks backend not yet implemented".into()
         )),
-        VectorBackendType::Weaviate => Err(BackendError::Configuration(
-            "Weaviate backend not yet implemented".into()
-        )),
-        VectorBackendType::Mongodb => Err(BackendError::Configuration(
-            "MongoDB backend not yet implemented".into()
-        ))
+        VectorBackendType::Weaviate => {
+            #[cfg(feature = "weaviate")]
+            {
+                let weaviate_config = config
+                    .weaviate
+                    .ok_or_else(|| BackendError::Configuration("Weaviate config missing".into()))?;
+                let backend = super::weaviate::WeaviateBackend::new(weaviate_config).await?;
+                Ok(Arc::new(backend))
+            }
+            #[cfg(not(feature = "weaviate"))]
+            {
+                Err(BackendError::Configuration(
+                    "Weaviate backend not enabled. Compile with --features weaviate".into()
+                ))
+            }
+        }
+        VectorBackendType::Mongodb => {
+            #[cfg(feature = "mongodb")]
+            {
+                let mongodb_config = config
+                    .mongodb
+                    .ok_or_else(|| BackendError::Configuration("MongoDB config missing".into()))?;
+                let backend = super::mongodb::MongodbBackend::new(mongodb_config).await?;
+                Ok(Arc::new(backend))
+            }
+            #[cfg(not(feature = "mongodb"))]
+            {
+                Err(BackendError::Configuration(
+                    "MongoDB backend not enabled. Compile with --features mongodb".into()
+                ))
+            }
+        }
     }
 }
 
