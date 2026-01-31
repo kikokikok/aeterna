@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cedar-agent
+  namespace: aeterna
+  labels:
+    app: cedar-agent
+    component: authorization
+spec:
+  selector:
+    matchLabels:
+      app: cedar-agent
+  template:
+    metadata:
+      labels:
+        app: cedar-agent
+        component: authorization
+    spec:
+      containers:
+        - name: opal-client
+          image: permitio/opal-client-cedar:0.7.5
+          ports:
+            - name: cedar
+              containerPort: 8180
+            - name: opal
+              containerPort: 7000
+          env:
+            - name: OPAL_SERVER_URL
+              value: "http://opal-server:7002"
+            - name: OPAL_CLIENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: opal-secrets
+                  key: client-token
+            - name: OPAL_INLINE_CEDAR_ENABLED
+              value: "true"
+            - name: OPAL_INLINE_CEDAR_CONFIG
+              value: '{"addr": "0.0.0.0:8180"}'
+            - name: OPAL_DATA_TOPICS
+              value: "policy_data"
+            - name: OPAL_DEFAULT_DATA_SOURCES_CONFIG_URL
+              value: "http://opal-server:7002/data/config"
+            - name: OPAL_POLICY_STORE_URL
+              value: "http://localhost:8180"
+            - name: OPAL_LOG_LEVEL
+              value: "INFO"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8180
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8180
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cedar-agent
+  namespace: aeterna
+  labels:
+    app: cedar-agent
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8180
+      targetPort: 8180
+      name: cedar
+    - port: 7000
+      targetPort: 7000
+      name: opal
+  selector:
+    app: cedar-agent

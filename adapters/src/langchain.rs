@@ -110,6 +110,7 @@ mod tests {
             ))),
             auth_service,
             None,
+            None,
             None
         )
     }

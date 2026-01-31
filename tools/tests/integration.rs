@@ -190,6 +190,7 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
         ))),
         Arc::new(MockAuthService),
         None,
+        None,
         None
     ));
 
@@ -269,6 +270,7 @@ async fn test_server_timeout() -> anyhow::Result<()> {
         ))),
         Arc::new(MockAuthService),
         None,
+        None,
         None
     );
 
@@ -322,6 +324,7 @@ async fn test_server_timeout() -> anyhow::Result<()> {
             memory::llm::mock::MockLlmService::new()
         ))),
         Arc::new(DenyAuthService),
+        None,
         None,
         None
     );
