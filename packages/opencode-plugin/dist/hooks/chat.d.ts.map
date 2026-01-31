@@ -1,0 +1,1 @@
+{"version":3,"file":"chat.d.ts","sourceRoot":"","sources":["../../src/hooks/chat.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,WAAW,EAAE,WAAW,EAAE,MAAM,qBAAqB,CAAC;AACpE,OAAO,KAAK,EAAE,aAAa,EAAE,MAAM,cAAc,CAAC;AAGlD,eAAO,MAAM,cAAc,GAAI,QAAQ,aAAa;4BACpB,WAAW,WAAW,WAAW;CA0C/D,CAAC"}

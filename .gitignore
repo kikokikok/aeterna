@@ -26,3 +26,5 @@ Cargo.lock
 # Temporary
 *.tmp
 *.temp
+node_modules/
+build_rs_cov.profraw

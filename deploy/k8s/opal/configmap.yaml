@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opal-config
+  namespace: aeterna
+  labels:
+    app: opal
+    component: authorization
+data:
+  data-sources: |
+    {
+      "config": {
+        "entries": [
+          {
+            "url": "http://opal-fetcher:8080/v1/all",
+            "topics": ["policy_data"],
+            "dst_path": "/aeterna",
+            "config": {
+              "fetcher": "HttpFetchProvider"
+            }
+          }
+        ]
+      }
+    }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aeterna
+  labels:
+    name: aeterna
+    app.kubernetes.io/name: aeterna

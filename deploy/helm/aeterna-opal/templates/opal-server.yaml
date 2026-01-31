@@ -1,0 +1,116 @@
+{{- if .Values.opalServer.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "aeterna-opal.fullname" . }}-server
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "aeterna-opal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opal-server
+spec:
+  serviceName: {{ include "aeterna-opal.fullname" . }}-server
+  replicas: {{ .Values.opalServer.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "aeterna-opal.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: opal-server
+  template:
+    metadata:
+      labels:
+        {{- include "aeterna-opal.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: opal-server
+    spec:
+      {{- if .Values.opalServer.podAntiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  {{- include "aeterna-opal.selectorLabels" . | nindent 18 }}
+                  app.kubernetes.io/component: opal-server
+              topologyKey: {{ .Values.opalServer.podAntiAffinity.topologyKey }}
+      {{- end }}
+      containers:
+        - name: opal-server
+          image: "{{ .Values.opalServer.image.repository }}:{{ .Values.opalServer.image.tag }}"
+          imagePullPolicy: {{ .Values.opalServer.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 7002
+          env:
+            - name: OPAL_SERVER_URL
+              value: "http://{{ include "aeterna-opal.fullname" . }}-server:7002"
+            - name: OPAL_BROADCAST_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna-opal.fullname" . }}-secrets
+                  key: broadcast-uri
+            - name: OPAL_AUTH_MASTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna-opal.fullname" . }}-secrets
+                  key: master-token
+            - name: OPAL_DATA_CONFIG_SOURCES
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "aeterna-opal.fullname" . }}-config
+                  key: data-sources
+            - name: OPAL_LOG_LEVEL
+              value: {{ .Values.opalServer.logLevel | quote }}
+            - name: OPAL_STATISTICS_ENABLED
+              value: {{ .Values.opalServer.statisticsEnabled | quote }}
+          resources:
+            {{- toYaml .Values.opalServer.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 7002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 7002
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: policies
+              mountPath: /policies
+              readOnly: true
+      volumes:
+        - name: policies
+          configMap:
+            name: {{ include "aeterna-opal.fullname" . }}-policies
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aeterna-opal.fullname" . }}-server
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "aeterna-opal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opal-server
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7002
+      targetPort: 7002
+      name: http
+  selector:
+    {{- include "aeterna-opal.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: opal-server
+{{- if .Values.opalServer.pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aeterna-opal.fullname" . }}-server-pdb
+  namespace: {{ .Values.namespace }}
+spec:
+  minAvailable: {{ .Values.opalServer.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "aeterna-opal.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: opal-server
+{{- end }}
+{{- end }}
