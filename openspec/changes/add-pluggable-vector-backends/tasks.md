@@ -19,13 +19,13 @@
 
 ## 3. Pinecone Backend
 
-- [ ] 3.1 Add `pinecone-sdk` dependency (alpha, pin version)
-- [ ] 3.2 Implement `VectorBackend` trait for Pinecone
-- [ ] 3.3 Implement tenant isolation via namespaces
-- [ ] 3.4 Implement upsert with metadata
-- [ ] 3.5 Implement semantic search with score threshold
-- [ ] 3.6 Implement delete by ID
-- [ ] 3.7 Add Pinecone-specific error handling (rate limits, quota)
+- [x] 3.1 Add `pinecone-sdk` dependency (alpha, pin version) - used reqwest REST client instead
+- [x] 3.2 Implement `VectorBackend` trait for Pinecone
+- [x] 3.3 Implement tenant isolation via namespaces
+- [x] 3.4 Implement upsert with metadata
+- [x] 3.5 Implement semantic search with score threshold
+- [x] 3.6 Implement delete by ID
+- [x] 3.7 Add Pinecone-specific error handling (rate limits, quota)
 - [ ] 3.8 Write integration tests (requires Pinecone account)
 - [ ] 3.9 Document Pinecone setup and configuration
 
