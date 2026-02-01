@@ -5,7 +5,7 @@ TBD - created by archiving change add-opencode-plugin. Update Purpose after arch
 ## Requirements
 ### Requirement: NPM Plugin Package
 
-The system SHALL provide an NPM package `@aeterna/opencode-plugin` that integrates with OpenCode using the official `@opencode-ai/plugin` SDK.
+The system SHALL provide an NPM package `@kiko-aeterna/opencode-plugin` that integrates with OpenCode using the official `@opencode-ai/plugin` SDK.
 
 The plugin MUST:
 - Export a default Plugin function conforming to OpenCode's Plugin type
@@ -14,7 +14,7 @@ The plugin MUST:
 - Support configuration via `.aeterna/config.toml`
 
 #### Scenario: Plugin installation
-- **WHEN** a user runs `npm install -D @aeterna/opencode-plugin`
+- **WHEN** a user runs `npm install -D @kiko-aeterna/opencode-plugin`
 - **THEN** the plugin SHALL be available for OpenCode configuration
 - **AND** the plugin SHALL be compatible with the current OpenCode version
 
@@ -25,7 +25,7 @@ The plugin MUST:
 - **AND** the plugin SHALL start a session context
 
 #### Scenario: Plugin configuration via opencode.jsonc
-- **WHEN** the user adds `"plugin": ["@aeterna/opencode-plugin"]` to opencode.jsonc
+- **WHEN** the user adds `"plugin": ["@kiko-aeterna/opencode-plugin"]` to opencode.jsonc
 - **THEN** OpenCode SHALL load and initialize the Aeterna plugin
 - **AND** all Aeterna tools SHALL be available to the AI
 

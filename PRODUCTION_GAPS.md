@@ -175,7 +175,7 @@ This document identifies production-grade gaps across all active OpenSpec change
 
 | ID | Gap | Problem | Solution |
 |----|-----|---------|----------|
-| OC-M1 | **Package naming undefined** | `@aeterna/opencode-plugin` vs `aeterna-opencode` not decided. | Standardize on `@aeterna/opencode-plugin` for namespace consistency. |
+| OC-M1 | **Package naming undefined** | `@kiko-aeterna/opencode-plugin` vs `aeterna-opencode` not decided. | Standardize on `@kiko-aeterna/opencode-plugin` for namespace consistency. |
 | OC-M2 | **TypeScript client bundling** | Should client be bundled or separate `@aeterna/client`? | Separate package for reuse. Bundle minimal version in plugin. |
 | OC-M3 | **Significance detection heuristics** | What makes a tool execution "significant" for promotion? | Document criteria. Make configurable. Start with conservative defaults. |
 
