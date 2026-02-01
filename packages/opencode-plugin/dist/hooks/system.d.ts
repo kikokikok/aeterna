@@ -1,6 +1,10 @@
-import type { PluginInput, HookContext } from "@opencode-ai/plugin";
 import type { AeternaClient } from "../client.js";
-export declare const createSystemHook: (client: AeternaClient) => {
-    "experimental.chat.system.transform": (input: PluginInput, context: HookContext) => Promise<void>;
+type SystemTransformInput = {
+    sessionID: string;
 };
+type SystemTransformOutput = {
+    system: string[];
+};
+export declare const createSystemHook: (client: AeternaClient) => (_input: SystemTransformInput, output: SystemTransformOutput) => Promise<void>;
+export {};
 //# sourceMappingURL=system.d.ts.map

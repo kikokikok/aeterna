@@ -1,0 +1,20 @@
+{{- if and .Values.aeterna.enabled .Values.observability.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "aeterna.fullname" . }}
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+    {{- with .Values.observability.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "aeterna.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.observability.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.observability.serviceMonitor.scrapeTimeout }}
+      path: /metrics
+{{- end }}

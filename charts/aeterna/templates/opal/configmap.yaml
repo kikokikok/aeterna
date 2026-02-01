@@ -1,0 +1,26 @@
+{{- if .Values.opal.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aeterna.fullname" . }}-opal
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+data:
+  # Data sources configuration for OPAL
+  data-config-sources: |
+    {
+      "config": {
+        "entries": [
+          {
+            "url": "http://{{ include "aeterna.fullname" . }}-opal-fetcher:7000/policy-data",
+            "topics": ["policy_data"],
+            "dst_path": "/aeterna"
+          }
+        ]
+      }
+    }
+  # Policy repository URL (optional, can be overridden)
+  policy-repo-url: ""
+  # Log level
+  log-level: {{ .Values.observability.logging.level | default "info" | quote }}
+{{- end }}

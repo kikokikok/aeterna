@@ -1,11 +1,12 @@
-export const createSessionHook = (client) => ({
-    event: async (input, context) => {
-        if (context.event.type === "session.start") {
+export const createSessionHook = (client) => {
+    return async (input) => {
+        const eventType = input.event.type;
+        if (eventType === "session.start") {
             await client.sessionStart();
         }
-        else if (context.event.type === "session.end") {
+        else if (eventType === "session.end") {
             await client.sessionEnd();
         }
-    },
-});
+    };
+};
 //# sourceMappingURL=session.js.map

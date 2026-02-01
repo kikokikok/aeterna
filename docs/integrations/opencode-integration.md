@@ -73,7 +73,7 @@ Aeterna integrates with OpenCode to provide:
 ### 1. Install the Plugin
 
 ```bash
-npm install -D @aeterna/opencode-plugin
+npm install -D @kiko-aeterna/opencode-plugin
 ```
 
 ### 2. Initialize Configuration
@@ -94,7 +94,7 @@ Add to your `opencode.jsonc`:
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@aeterna/opencode-plugin"]
+  "plugin": ["@kiko-aeterna/opencode-plugin"]
 }
 ```
 
@@ -144,7 +144,7 @@ Aeterna provides **two integration methods**:
 ### Architecture
 
 ```typescript
-// @aeterna/opencode-plugin/src/index.ts
+// @kiko-aeterna/opencode-plugin/src/index.ts
 import type { Plugin, Hooks, PluginInput } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin/tool"
 import { AeternaClient } from "@aeterna/client"
@@ -178,7 +178,7 @@ export default aeterna
 ### Package Structure
 
 ```
-@aeterna/opencode-plugin/
+@kiko-aeterna/opencode-plugin/
 ├── package.json
 ├── src/
 │   ├── index.ts          # Plugin entry point
@@ -908,11 +908,11 @@ url = "http://localhost:8080"
   "$schema": "https://opencode.ai/config.json",
   
   // NPM Plugin configuration
-  "plugin": ["@aeterna/opencode-plugin"],
+  "plugin": ["@kiko-aeterna/opencode-plugin"],
   
   // Plugin-specific options
   "pluginConfig": {
-    "@aeterna/opencode-plugin": {
+    "@kiko-aeterna/opencode-plugin": {
       "capture": {
         "enabled": true,
         "sensitivity": "medium"
@@ -935,12 +935,12 @@ url = "http://localhost:8080"
 #### Plugin Not Loading
 
 ```
-Error: Cannot find module '@aeterna/opencode-plugin'
+Error: Cannot find module '@kiko-aeterna/opencode-plugin'
 ```
 
 **Solution:**
 ```bash
-npm install -D @aeterna/opencode-plugin
+npm install -D @kiko-aeterna/opencode-plugin
 # Verify in package.json
 ```
 

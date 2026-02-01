@@ -403,7 +403,7 @@ Meta-Agent orchestrates all other components in a feedback loop:
 
 ### Client-Side Extensions
 
-- Deployed as part of OpenCode plugin (npm package: `@aeterna/opencode-plugin`)
+- Deployed as part of OpenCode plugin (npm package: `@kiko-aeterna/opencode-plugin`)
 - State stored in Redis, compressed with zstd
 - LRU eviction when state exceeds 1MB per extension
 - Callback timeouts prevent hanging (default: 5s)

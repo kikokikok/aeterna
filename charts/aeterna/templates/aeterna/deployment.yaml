@@ -1,0 +1,144 @@
+{{- if .Values.aeterna.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aeterna.fullname" . }}
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.aeterna.autoscaling.enabled }}
+  replicas: {{ .Values.aeterna.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "aeterna.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "aeterna.checksumAnnotations" . | nindent 8 }}
+        {{- with .Values.aeterna.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "aeterna.labels" . | nindent 8 }}
+        {{- with .Values.aeterna.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.aeterna.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "aeterna.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.aeterna.podSecurityContext | nindent 8 }}
+      containers:
+        - name: aeterna
+          securityContext:
+            {{- toYaml .Values.aeterna.securityContext | nindent 12 }}
+          image: {{ include "aeterna.image" . | quote }}
+          imagePullPolicy: {{ .Values.aeterna.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "aeterna.fullname" . }}
+          env:
+            - name: AETERNA_POSTGRESQL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.postgresql.secretName" . }}
+                  key: username
+                  optional: true
+            - name: AETERNA_POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.postgresql.secretName" . }}
+                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+            {{- if and .Values.cache.external.enabled .Values.cache.external.existingSecret }}
+            - name: AETERNA_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.cache.external.existingSecret }}
+                  key: {{ .Values.cache.external.secretKey | default "redis-password" }}
+            {{- end }}
+            {{- if and (ne .Values.deploymentMode "local") .Values.central.url }}
+            - name: AETERNA_CENTRAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.central.existingSecret | default (printf "%s-central" (include "aeterna.fullname" .)) }}
+                  key: {{ .Values.central.secretKey | default "api-key" }}
+            {{- end }}
+            {{- if and (eq .Values.llm.provider "openai") }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llm.openai.existingSecret | default (printf "%s-openai" (include "aeterna.fullname" .)) }}
+                  key: api-key
+            {{- end }}
+            {{- if and (eq .Values.llm.provider "anthropic") }}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llm.anthropic.existingSecret | default (printf "%s-anthropic" (include "aeterna.fullname" .)) }}
+                  key: api-key
+            {{- end }}
+            {{- if and (eq .Values.vectorBackend.type "pinecone") }}
+            - name: AETERNA_PINECONE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vectorBackend.pinecone.existingSecret | default (printf "%s-pinecone" (include "aeterna.fullname" .)) }}
+                  key: api-key
+            {{- end }}
+            {{- if and (eq .Values.vectorBackend.type "qdrant") (not .Values.vectorBackend.qdrant.bundled) }}
+            - name: AETERNA_QDRANT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vectorBackend.qdrant.external.existingSecret | default (printf "%s-qdrant" (include "aeterna.fullname" .)) }}
+                  key: api-key
+                  optional: true
+            {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.aeterna.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.aeterna.readinessProbe | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.aeterna.startupProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.aeterna.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /home/aeterna/.cache
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+      {{- with .Values.aeterna.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.aeterna.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.aeterna.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.aeterna.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

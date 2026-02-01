@@ -74,10 +74,15 @@ Modern enterprises face critical challenges when deploying AI agents:
 ┌────────────────────────────────────▼────────────────────────────────────────┐
 │                           STORAGE ADAPTERS                                   │
 │                                                                              │
+│   Vector Backends (Pluggable):                                              │
 │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐  │
-│   │  Mem0   │ │  Letta  │ │ Qdrant  │ │Pinecone │ │ Chroma  │ │PostgreSQL│  │
+│   │ Qdrant  │ │pgvector │ │Pinecone │ │Weaviate │ │ MongoDB │ │VertexAI │  │
 │   └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘  │
+│   ┌───────────┐                                                              │
+│   │Databricks │                                                              │
+│   └───────────┘                                                              │
 │                                                                              │
+│   Infrastructure:                                                            │
 │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────────────────┐  │
 │   │  Redis  │ │ DuckDB  │ │Permit.io│ │   OPAL  │ │     Radkit A2A      │  │
 │   └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────────────────┘  │
@@ -384,55 +389,54 @@ Aeterna exposes 11 unified tools via Model Context Protocol:
 
 ## Roadmap: Active OpenSpec Changes
 
-The following 8 changes are currently in development:
+The following 2 changes are currently in development:
 
-### 1. **add-r1-graph-memory** - Memory-R1 + Dynamic Knowledge Graph Layer
+### 1. **add-helm-chart** - Kubernetes Deployment + CLI Setup Wizard
 - **Status**: Implementation Phase
-- **Key Features**: DuckDB-based graph store, memory pruning/compression, relationship traversal
-- **New Tools**: `graph_query`, `memory_prune`
-- **Impact**: Enables complex relationship discovery between memories
-
-### 2. **add-ux-first-governance** - UX-First Architecture
-- **Status**: Design Phase
-- **Key Features**: Natural language → Cedar policy translation, OPAL + Cedar Agent integration
-- **New CLI Commands**: `aeterna policy create`, `aeterna init`, `aeterna context resolve`
-- **New Skills**: Policy, Governance, Onboarding, Context, Memory Discovery, Knowledge Discovery, CLI Interface (8 categories total)
-- **Impact**: Dramatically simplifies policy creation and governance management
-
-### 3. **add-cca-capabilities** - Confucius Code Agent (CCA) Capabilities
-- **Status**: Implementation Phase
-- **Key Features**: Context Architect, Note-Taking Agent, Hindsight Learning, Meta-Agent
-- **Extension System**: Typed callbacks with state management
-- **Impact**: Advanced agent self-improvement and learning capabilities
-
-### 4. **add-radkit-integration** - Radkit A2A Integration
-- **Status**: Testing Phase
-- **Key Features**: Agent-to-Agent protocol support, skill definitions for A2A discovery
-- **Thread Management**: Conversation persistence across agents
-- **Impact**: Enables multi-agent coordination and knowledge sharing
-
-### 5. **add-opencode-plugin** - OpenCode Plugin Integration
-- **Status**: Implementation Phase
-- **Key Features**: MCP server for OpenCode, session lifecycle hooks, knowledge query integration
-- **NPM Package**: `@aeterna/opencode-plugin`
-- **Impact**: Native integration with AI coding assistants
-
-### 6. **add-helm-chart** - Kubernetes Deployment
-- **Status**: Testing Phase
-- **Key Features**: Helm chart with configurable dependencies, external/bundled Redis/PostgreSQL/Qdrant
-- **Kubernetes Features**: HPA, RBAC, NetworkPolicies, ServiceMonitor
+- **Key Features**: Helm chart with configurable dependencies, CLI setup wizard (`aeterna setup`)
+- **Implemented**: Chart.yaml, values.yaml, values.schema.json, core templates (deployment, service, ingress, configmap, secret, HPA, PDB, NetworkPolicy, ServiceMonitor, migration job)
+- **Remaining**: OPAL stack integration, deployment mode examples, testing, full documentation
 - **Impact**: Production-ready enterprise deployment
 
-### 7. **add-multi-tenant-governance** - Enterprise Multi-Tenancy
-- **Status**: Implementation Phase
-- **Key Features**: Tenant isolation with ReBAC (Permit.io + OPA/Cedar), governance roles
-- **Real-time Features**: Event streaming + batch reporting, drift detection with semantic analysis
-- **Impact**: True enterprise-grade multi-tenancy
+### 2. **add-pluggable-vector-backends** - Enterprise Vector Database Support
+- **Status**: Implementation Phase (90% complete)
+- **Implemented Backends**: Qdrant, pgvector, Pinecone, Weaviate, MongoDB Atlas, Vertex AI, Databricks
+- **Key Features**: Pluggable `VectorBackend` trait, tenant isolation, circuit breaker, observability
+- **Remaining**: Integration tests (require live instances), backend-specific documentation
+- **Impact**: Enterprise flexibility with cloud-native vector stores
 
-### 8. **add-reflective-reasoning** - Reflective Memory Reasoning (MemR³)
-- **Status**: Design Phase
-- **Key Features**: Pre-retrieval reasoning, multi-hop retrieval, query refinement
-- **Impact**: Reduces noise in memory retrieval, improves search accuracy
+---
+
+## Recently Completed
+
+The following changes have been archived (completed and deployed):
+
+| Change | Description | Completed |
+|--------|-------------|-----------|
+| **add-opencode-plugin** | OpenCode plugin with MCP tools, hooks, SDK v1.1.36 | Jan 2026 |
+| **add-radkit-integration** | Agent-to-Agent protocol via Radkit SDK | Jan 2026 |
+| **add-ux-first-governance** | Natural language → Cedar policy, OPAL integration | Jan 2026 |
+| **add-rlm-memory-navigation** | RLM memory navigation infrastructure | Jan 2026 |
+| **add-cca-capabilities** | Context Architect, Note-Taking, Hindsight, Meta-Agent | Jan 2026 |
+| **add-reflective-reasoning** | Pre-retrieval reasoning, multi-hop retrieval | Jan 2026 |
+| **add-r1-graph-memory** | DuckDB graph layer, Memory-R1 optimization | Jan 2026 |
+| **add-multi-tenant-governance** | ReBAC with Permit.io + Cedar, drift detection | Jan 2026 |
+
+### OpenCode Plugin
+
+The OpenCode plugin is published as `@kiko-aeterna/opencode-plugin`:
+
+```bash
+npm install -D @kiko-aeterna/opencode-plugin
+```
+
+```jsonc
+{
+  "plugin": ["@kiko-aeterna/opencode-plugin"]
+}
+```
+
+**Features**: Memory tools, knowledge tools, graph tools, CCA tools, governance tools, automatic context injection, tool execution capture
 
 ---
 

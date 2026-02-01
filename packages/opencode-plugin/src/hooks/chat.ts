@@ -1,13 +1,34 @@
-import type { PluginInput, HookContext } from "@opencode-ai/plugin";
+import type { Part, UserMessage } from "@opencode-ai/sdk";
 import type { AeternaClient } from "../client.js";
 import { formatKnowledgeContext, formatMemoryContext } from "../utils/format.js";
 
-export const createChatHook = (client: AeternaClient) => ({
-  "chat.message": async (input: PluginInput, context: HookContext) => {
+type ChatMessageInput = {
+  sessionID: string;
+  agent?: string;
+  model?: {
+    providerID: string;
+    modelID: string;
+  };
+  messageID?: string;
+  variant?: string;
+};
+
+type ChatMessageOutput = {
+  message: UserMessage;
+  parts: Part[];
+};
+
+export const createChatHook = (client: AeternaClient) => {
+  return async (_input: ChatMessageInput, output: ChatMessageOutput): Promise<void> => {
     const sessionContext = client.getSessionContext();
     if (!sessionContext) return;
 
-    const userMessage = context.message.content;
+    const textParts = output.parts.filter(
+      (part): part is Part & { type: "text"; text: string } => part.type === "text"
+    );
+    const userMessage = textParts.map((p) => p.text).join("\n");
+
+    if (!userMessage) return;
 
     const [knowledge, memories] = await Promise.all([
       client.queryRelevantKnowledge(userMessage, {
@@ -19,30 +40,22 @@ export const createChatHook = (client: AeternaClient) => ({
 
     if (knowledge.length === 0 && memories.length === 0) return;
 
-    const contextParts = [];
+    const contextParts: string[] = [];
 
     if (knowledge.length > 0) {
-      const knowledgeText = formatKnowledgeContext(knowledge);
-      contextParts.push({
-        type: "text",
-        text: knowledgeText,
-      });
+      contextParts.push(formatKnowledgeContext(knowledge));
     }
 
     if (memories.length > 0) {
-      const memoryText = formatMemoryContext(memories);
-      contextParts.push({
-        type: "text",
-        text: memoryText,
-      });
+      contextParts.push(formatMemoryContext(memories));
     }
 
     if (contextParts.length > 0) {
-      const combinedContext = contextParts.map((p) => p.text).join("\n\n");
-      context.output.parts.unshift({
+      const combinedContext = contextParts.join("\n\n");
+      output.parts.unshift({
         type: "text",
         text: `<aeterna_context>\n${combinedContext}\n</aeterna_context>`,
-      });
+      } as Part);
     }
-  },
-});
+  };
+};

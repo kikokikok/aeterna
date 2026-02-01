@@ -1,12 +1,11 @@
-import type { tool } from "@opencode-ai/plugin/tool.js";
-import { z } from "zod";
+import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { AeternaClient } from "../client.js";
 
-export const createGovernanceTools = (client: AeternaClient) => ({
+export const createGovernanceTools = (client: AeternaClient): Record<string, ToolDefinition> => ({
   aeterna_sync_status: tool({
     description: "Check the sync status between memory and knowledge repository",
     args: {},
-    async execute() {
+    async execute(_args, _context) {
       const status = await client.getSyncStatus();
       const statusEmoji = {
         healthy: "✅",
@@ -25,7 +24,7 @@ export const createGovernanceTools = (client: AeternaClient) => ({
   aeterna_governance_status: tool({
     description: "Check governance state: policies, proposals, and compliance",
     args: {},
-    async execute() {
+    async execute(_args, _context) {
       const status = await client.getGovernanceStatus();
       const driftEmoji = status.driftDetected ? "⚠️" : "✅";
 

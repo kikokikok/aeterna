@@ -1,4 +1,5 @@
-import { z } from "zod";
+import { tool } from "@opencode-ai/plugin/tool";
+const z = tool.schema;
 export const createCcaTools = (client) => ({
     aeterna_context_assemble: tool({
         description: "Assemble hierarchical context from memory layers using CCA Context Architect",
@@ -13,7 +14,7 @@ export const createCcaTools = (client) => ({
             includeKnowledge: z.boolean().optional()
                 .describe("Include knowledge repository (default: true)"),
         },
-        async execute(args, context) {
+        async execute(args, _context) {
             const result = await client.contextAssemble({
                 query: args.query,
                 tokenBudget: args.tokenBudget,
@@ -39,7 +40,7 @@ export const createCcaTools = (client) => ({
             tags: z.array(z.string()).optional()
                 .describe("Tags for categorization"),
         },
-        async execute(args, context) {
+        async execute(args, _context) {
             const result = await client.noteCapture({
                 description: args.description,
                 toolName: args.toolName,
@@ -61,7 +62,7 @@ export const createCcaTools = (client) => ({
             limit: z.number().min(1).max(50).optional()
                 .describe("Max results (default: 10)"),
         },
-        async execute(args) {
+        async execute(args, _context) {
             const results = await client.hindsightQuery({
                 errorType: args.errorType,
                 messagePattern: args.messagePattern,
@@ -87,7 +88,7 @@ export const createCcaTools = (client) => ({
             includeDetails: z.boolean().optional()
                 .describe("Include detailed phase information"),
         },
-        async execute(args) {
+        async execute(args, _context) {
             const status = await client.metaLoopStatus(args.loopId);
             const phaseEmoji = {
                 build: "🔨",

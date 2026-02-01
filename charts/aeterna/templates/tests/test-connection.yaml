@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "aeterna.fullname" . }}-test-connection"
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: test-aeterna
+      image: curlimages/curl:8.5.0
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Testing Aeterna health endpoint..."
+          curl -sf http://{{ include "aeterna.fullname" . }}:{{ .Values.aeterna.service.port }}/health/ready
+          echo "Aeterna is ready!"
+    {{- if .Values.postgresql.bundled }}
+    - name: test-postgresql
+      image: postgres:16-alpine
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Testing PostgreSQL connection..."
+          pg_isready -h {{ include "aeterna.postgresql.host" . }} -p {{ include "aeterna.postgresql.port" . }}
+          echo "PostgreSQL is ready!"
+    {{- end }}
+    {{- if and (eq .Values.vectorBackend.type "qdrant") .Values.vectorBackend.qdrant.bundled }}
+    - name: test-qdrant
+      image: curlimages/curl:8.5.0
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Testing Qdrant connection..."
+          curl -sf http://{{ include "aeterna.qdrant.host" . }}:{{ include "aeterna.qdrant.port" . }}/readyz
+          echo "Qdrant is ready!"
+    {{- end }}
+    {{- if .Values.opal.enabled }}
+    - name: test-opal
+      image: curlimages/curl:8.5.0
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Testing OPAL Server connection..."
+          curl -sf http://{{ include "aeterna.fullname" . }}-opal-server:7002/healthcheck
+          echo "OPAL Server is ready!"
+    {{- end }}

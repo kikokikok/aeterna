@@ -1,6 +1,8 @@
-import type { PluginInput, HookContext } from "@opencode-ai/plugin";
+import type { Permission } from "@opencode-ai/sdk";
 import type { AeternaClient } from "../client.js";
-export declare const createPermissionHook: (client: AeternaClient) => {
-    "permission.ask": (input: PluginInput, context: HookContext) => Promise<void>;
+type PermissionOutput = {
+    status: "ask" | "deny" | "allow";
 };
+export declare const createPermissionHook: (client: AeternaClient) => (input: Permission, output: PermissionOutput) => Promise<void>;
+export {};
 //# sourceMappingURL=permission.d.ts.map
