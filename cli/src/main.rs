@@ -33,6 +33,7 @@ async fn main() -> Result<()> {
         Commands::Agent(cmd) => commands::agent::run(cmd).await,
         Commands::Govern(cmd) => commands::govern::run(cmd).await,
         Commands::Admin(cmd) => commands::admin::run(cmd).await,
-        Commands::Completion(args) => commands::completion::run(args)
+        Commands::Completion(args) => commands::completion::run(args),
+        Commands::Setup(args) => commands::setup::run(args).await
     }
 }
