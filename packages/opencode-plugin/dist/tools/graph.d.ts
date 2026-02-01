@@ -1,7 +1,4 @@
+import { type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { AeternaClient } from "../client.js";
-export declare const createGraphTools: (client: AeternaClient) => {
-    aeterna_graph_query: any;
-    aeterna_graph_neighbors: any;
-    aeterna_graph_path: any;
-};
+export declare const createGraphTools: (client: AeternaClient) => Record<string, ToolDefinition>;
 //# sourceMappingURL=graph.d.ts.map

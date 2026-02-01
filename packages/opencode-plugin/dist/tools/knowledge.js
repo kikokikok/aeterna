@@ -1,4 +1,5 @@
-import { z } from "zod";
+import { tool } from "@opencode-ai/plugin/tool";
+const z = tool.schema;
 export const createKnowledgeTools = (client) => ({
     aeterna_knowledge_query: tool({
         description: "Query the knowledge repository for project/team/org knowledge",
@@ -13,7 +14,7 @@ export const createKnowledgeTools = (client) => ({
             threshold: z.number().min(0).max(1).optional()
                 .describe("Similarity threshold (default: 0.75)"),
         },
-        async execute(args, context) {
+        async execute(args, _context) {
             const results = await client.knowledgeQuery({
                 query: args.query,
                 scope: args.scope ?? "project",
@@ -40,10 +41,10 @@ export const createKnowledgeTools = (client) => ({
                 .describe("Knowledge scope level"),
             tags: z.array(z.string()).optional()
                 .describe("Tags for categorization"),
-            metadata: z.record(z.unknown()).optional()
+            metadata: z.record(z.string(), z.unknown()).optional()
                 .describe("Additional metadata"),
         },
-        async execute(args, context) {
+        async execute(args, _context) {
             const result = await client.knowledgePropose({
                 type: args.type,
                 title: args.title,

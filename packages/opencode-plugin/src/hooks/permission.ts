@@ -1,20 +1,25 @@
-import type { PluginInput, HookContext } from "@opencode-ai/plugin";
+import type { Permission } from "@opencode-ai/sdk";
 import type { AeternaClient } from "../client.js";
 
-export const createPermissionHook = (client: AeternaClient) => ({
-  "permission.ask": async (input: PluginInput, context: HookContext) => {
-    if (!input.tool?.startsWith("aeterna_knowledge_propose")) {
-      context.status = "allow";
+type PermissionOutput = {
+  status: "ask" | "deny" | "allow";
+};
+
+export const createPermissionHook = (client: AeternaClient) => {
+  return async (input: Permission, output: PermissionOutput): Promise<void> => {
+    const toolName = (input as { tool?: string }).tool;
+    
+    if (!toolName?.startsWith("aeterna_knowledge_propose")) {
+      output.status = "allow";
       return;
     }
 
     const canPropose = await client.checkProposalPermission();
 
     if (!canPropose) {
-      context.status = "deny";
-      context.message = "You do not have permission to propose knowledge to this scope. Contact your team lead or architect.";
+      output.status = "deny";
     } else {
-      context.status = "allow";
+      output.status = "allow";
     }
-  },
-});
+  };
+};

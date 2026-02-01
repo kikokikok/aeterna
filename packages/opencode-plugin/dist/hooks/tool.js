@@ -1,33 +1,32 @@
+import { detectSignificance } from "../utils/detect.js";
 export const createToolHooks = (client) => ({
-    "tool.execute.before": async (input, context) => {
+    before: async (input, output) => {
         if (!input.tool.startsWith("aeterna_"))
             return;
-        const enrichedArgs = await client.enrichToolArgs(input.tool, context.args);
-        if (Object.keys(enrichedArgs).length > Object.keys(context.args).length) {
-            context.args = enrichedArgs;
+        const enrichedArgs = await client.enrichToolArgs(input.tool, output.args);
+        if (Object.keys(enrichedArgs).length > Object.keys(output.args).length) {
+            Object.assign(output.args, enrichedArgs);
         }
     },
-    "tool.execute.after": async (input, context) => {
+    after: async (input, output) => {
         const sessionContext = client.getSessionContext();
         if (!sessionContext)
             return;
         await client.captureToolExecution({
             tool: input.tool,
             sessionId: sessionContext.sessionId,
-            callId: context.callID,
-            title: context.title,
-            args: context.args,
-            output: String(context.output),
-            metadata: {
-                timestamp: Date.now(),
-                directory: input.directory,
-            },
+            callId: input.callID,
+            title: output.title,
+            args: {},
+            output: String(output.output),
+            metadata: {},
+            timestamp: Date.now(),
             duration: undefined,
-            success: !context.error,
+            success: true,
         });
-        const isSignificant = await client.detectSignificance({ tool: input.tool }, { output: { output: String(context.output) } });
+        const isSignificant = detectSignificance(input, output);
         if (isSignificant) {
-            await client.flagForPromotion(sessionContext.sessionId, context.callID);
+            await client.flagForPromotion(sessionContext.sessionId, input.callID);
         }
     },
 });

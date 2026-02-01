@@ -1,6 +1,5 @@
-export const createSystemHook = (client) => ({
-    "experimental.chat.system.transform": async (input, context) => {
-        const sessionContext = client.getSessionContext();
+export const createSystemHook = (client) => {
+    return async (_input, output) => {
         const projectContext = await client.getProjectContext();
         const policiesText = projectContext.policies
             .map((p) => `- ${p.name}: ${p.summary}`)
@@ -43,7 +42,7 @@ ${memoriesText || "No recent learnings"}
 
 ${guidance}
 `;
-        context.output.system.push(systemContext);
-    },
-});
+        output.system.push(systemContext);
+    };
+};
 //# sourceMappingURL=system.js.map
