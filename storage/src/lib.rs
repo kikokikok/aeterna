@@ -13,6 +13,8 @@ pub mod query_builder;
 pub mod redis;
 pub mod rlm_weights;
 pub mod rls_migration;
+pub mod shard_manager;
+pub mod tenant_router;
 
 // Re-export Redis lock types for job coordination
 pub use redis::{JobSkipReason, LockResult};
@@ -63,3 +65,7 @@ pub use gdpr::{
     AnonymizationStrategy, GdprAuditLog, GdprConsent, GdprError, GdprOperations,
     PostgresGdprStorage, UserDataExport
 };
+
+// Re-export tenant sharding types
+pub use tenant_router::{TenantRouter, TenantShard, TenantSize};
+pub use shard_manager::{ShardError, ShardInfo, ShardManager, ShardStatistics, ShardStatus};
