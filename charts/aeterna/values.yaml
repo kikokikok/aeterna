@@ -464,6 +464,73 @@ networkPolicy:
   ## @param networkPolicy.enabled Enable network policies
   enabled: false
 
+## GrepAI integration configuration
+grepai:
+  ## @param grepai.enabled Enable GrepAI sidecar for semantic code search
+  enabled: false
+  
+  ## @param grepai.mcpServerUrl MCP server URL (defaults to localhost:9090 for sidecar)
+  mcpServerUrl: "http://localhost:9090"
+  
+  ## GrepAI container configuration
+  image:
+    ## @param grepai.image.repository GrepAI image repository
+    repository: ghcr.io/grepai/grepai
+    ## @param grepai.image.tag GrepAI image tag
+    tag: "latest"
+    ## @param grepai.image.pullPolicy Image pull policy
+    pullPolicy: IfNotPresent
+  
+  ## Resource limits for GrepAI sidecar
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+  
+  ## Embedder configuration
+  embedder:
+    ## @param grepai.embedder.type Embedder type: ollama, openai
+    type: ollama
+    ## @param grepai.embedder.model Model name
+    model: "nomic-embed-text"
+    ## @param grepai.embedder.endpoint Custom endpoint URL (optional)
+    endpoint: ""
+  
+  ## Storage backend configuration
+  store:
+    ## @param grepai.store.type Storage type: qdrant, postgres, gob
+    type: qdrant
+    
+    ## Qdrant store configuration
+    qdrant:
+      ## @param grepai.store.qdrant.collectionPrefix Collection name prefix (defaults to grepai_)
+      collectionPrefix: "grepai_"
+    
+    ## PostgreSQL store configuration  
+    postgres:
+      ## @param grepai.store.postgres.schema PostgreSQL schema name (defaults to grepai)
+      schema: "grepai"
+  
+  ## Projects to initialize
+  projects:
+    ## @param grepai.projects List of projects to initialize on startup
+    ## Example:
+    ## - path: /workspace/project1
+    ##   name: project1
+    ## - path: /workspace/project2
+    ##   name: project2
+    []
+  
+  ## Init container configuration
+  initContainer:
+    ## @param grepai.initContainer.enabled Enable init container to initialize projects
+    enabled: true
+    ## @param grepai.initContainer.timeout Timeout for initialization (seconds)
+    timeout: 300
+
 ## Global settings
 global:
   ## @param global.imageRegistry Global image registry
