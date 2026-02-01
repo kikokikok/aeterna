@@ -17,6 +17,7 @@ members = [
     "opal-fetcher",
     "testing",
     "idp-sync",
+    "observability",
 ]
 
 [workspace.lints.rust]
