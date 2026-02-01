@@ -10,6 +10,7 @@ pub mod knowledge;
 pub mod memory;
 pub mod org;
 pub mod policy;
+pub mod setup;
 pub mod status;
 pub mod sync;
 pub mod team;
@@ -80,5 +81,8 @@ pub enum Commands {
     Admin(admin::AdminCommand),
 
     #[command(about = "Generate shell completions")]
-    Completion(completion::CompletionArgs)
+    Completion(completion::CompletionArgs),
+
+    #[command(about = "Interactive setup wizard for deployment configuration")]
+    Setup(setup::SetupArgs)
 }
