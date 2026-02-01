@@ -36,6 +36,46 @@ spec:
       serviceAccountName: {{ include "aeterna.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.aeterna.podSecurityContext | nindent 8 }}
+      {{- if and .Values.grepai.enabled .Values.grepai.initContainer.enabled }}
+      initContainers:
+        - name: grepai-init
+          image: {{ .Values.grepai.image.repository }}:{{ .Values.grepai.image.tag }}
+          imagePullPolicy: {{ .Values.grepai.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              /scripts/init-projects.sh
+          envFrom:
+            - configMapRef:
+                name: {{ include "aeterna.fullname" . }}-grepai
+          {{- if eq .Values.grepai.store.type "postgres" }}
+          env:
+            - name: GREPAI_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.postgresql.secretName" . }}
+                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+          {{- end }}
+          {{- if and (eq .Values.grepai.embedder.type "openai") }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llm.openai.existingSecret | default (printf "%s-openai" (include "aeterna.fullname" .)) }}
+                  key: api-key
+          {{- end }}
+          volumeMounts:
+            - name: grepai-config
+              mountPath: /scripts
+            - name: grepai-data
+              mountPath: /data
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+      {{- end }}
       containers:
         - name: aeterna
           securityContext:
@@ -120,11 +160,80 @@ spec:
               mountPath: /tmp
             - name: cache
               mountPath: /home/aeterna/.cache
+        {{- if .Values.grepai.enabled }}
+        - name: grepai
+          image: {{ .Values.grepai.image.repository }}:{{ .Values.grepai.image.tag }}
+          imagePullPolicy: {{ .Values.grepai.image.pullPolicy }}
+          command: ["grepai"]
+          args: ["mcp", "serve", "--host", "0.0.0.0", "--port", "9090"]
+          ports:
+            - name: mcp
+              containerPort: 9090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "aeterna.fullname" . }}-grepai
+          {{- if eq .Values.grepai.store.type "postgres" }}
+          env:
+            - name: GREPAI_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.postgresql.secretName" . }}
+                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+          {{- end }}
+          {{- if and (eq .Values.grepai.embedder.type "openai") }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llm.openai.existingSecret | default (printf "%s-openai" (include "aeterna.fullname" .)) }}
+                  key: api-key
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: mcp
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: mcp
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.grepai.resources | nindent 12 }}
+          volumeMounts:
+            - name: grepai-data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+        {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
         - name: cache
           emptyDir: {}
+        {{- if .Values.grepai.enabled }}
+        - name: grepai-config
+          configMap:
+            name: {{ include "aeterna.fullname" . }}-grepai
+            defaultMode: 0755
+            items:
+              - key: init-projects.sh
+                path: init-projects.sh
+        - name: grepai-data
+          emptyDir: {}
+        {{- end }}
       {{- with .Values.aeterna.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
