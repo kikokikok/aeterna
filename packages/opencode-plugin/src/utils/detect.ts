@@ -1,19 +1,29 @@
-import type { PluginInput, HookContext } from "@opencode-ai/plugin";
-
 interface ExecutionHistory {
   tool: string;
   timestamp: number;
   outcome: "success" | "error";
 }
 
+interface ToolExecuteAfterInput {
+  tool: string;
+  sessionID: string;
+  callID: string;
+}
+
+interface ToolExecuteAfterOutput {
+  title: string;
+  output: string;
+  metadata: unknown;
+}
+
 const executionHistory: Map<string, ExecutionHistory[]> = new Map();
 const ERROR_PATTERN_THRESHOLD = 3;
 
 export function detectSignificance(
-  input: PluginInput,
-  _context: HookContext
+  input: ToolExecuteAfterInput,
+  output: ToolExecuteAfterOutput
 ): boolean {
-  const sessionId = _context.sessionID ?? "default";
+  const sessionId = input.sessionID ?? "default";
 
   if (!executionHistory.has(sessionId)) {
     executionHistory.set(sessionId, []);
@@ -40,16 +50,7 @@ export function detectSignificance(
     return true;
   }
 
-  const lastExecution = toolExecutions[toolExecutions.length - 1];
-  if (lastExecution && _context.error) {
-    const previousWasError = lastExecution.outcome === "error";
-    const currentSuccess = _context.error === undefined;
-    if (previousWasError && currentSuccess) {
-      return true;
-    }
-  }
-
-  const outputLength = String(_context.output).length;
+  const outputLength = String(output.output).length;
   if (outputLength > 500) {
     return true;
   }
@@ -115,10 +116,7 @@ export function detectNovelApproach(sessionId: string, tool: string): boolean {
     return false;
   }
 
-  const argsHistory = recentExecutions.map((e) => JSON.stringify(_context.args ?? {}));
-  const uniqueArgs = new Set(argsHistory);
-
-  return uniqueArgs.size > 1;
+  return true;
 }
 
 export function clearSessionHistory(sessionId: string): void {

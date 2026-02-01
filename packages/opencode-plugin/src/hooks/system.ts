@@ -1,9 +1,15 @@
-import type { PluginInput, HookContext } from "@opencode-ai/plugin";
 import type { AeternaClient } from "../client.js";
 
-export const createSystemHook = (client: AeternaClient) => ({
-  "experimental.chat.system.transform": async (input: PluginInput, context: HookContext) => {
-    const sessionContext = client.getSessionContext();
+type SystemTransformInput = {
+  sessionID: string;
+};
+
+type SystemTransformOutput = {
+  system: string[];
+};
+
+export const createSystemHook = (client: AeternaClient) => {
+  return async (_input: SystemTransformInput, output: SystemTransformOutput): Promise<void> => {
     const projectContext = await client.getProjectContext();
 
     const policiesText = projectContext.policies
@@ -51,6 +57,6 @@ ${memoriesText || "No recent learnings"}
 ${guidance}
 `;
 
-    context.output.system.push(systemContext);
-  },
-});
+    output.system.push(systemContext);
+  };
+};

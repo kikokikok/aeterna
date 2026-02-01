@@ -1,7 +1,7 @@
 const executionHistory = new Map();
 const ERROR_PATTERN_THRESHOLD = 3;
-export function detectSignificance(input, _context) {
-    const sessionId = _context.sessionID ?? "default";
+export function detectSignificance(input, output) {
+    const sessionId = input.sessionID ?? "default";
     if (!executionHistory.has(sessionId)) {
         executionHistory.set(sessionId, []);
     }
@@ -21,15 +21,7 @@ export function detectSignificance(input, _context) {
     if (recentCount >= ERROR_PATTERN_THRESHOLD) {
         return true;
     }
-    const lastExecution = toolExecutions[toolExecutions.length - 1];
-    if (lastExecution && _context.error) {
-        const previousWasError = lastExecution.outcome === "error";
-        const currentSuccess = _context.error === undefined;
-        if (previousWasError && currentSuccess) {
-            return true;
-        }
-    }
-    const outputLength = String(_context.output).length;
+    const outputLength = String(output.output).length;
     if (outputLength > 500) {
         return true;
     }
@@ -79,9 +71,7 @@ export function detectNovelApproach(sessionId, tool) {
     if (lastTwo[0].outcome === lastTwo[1].outcome) {
         return false;
     }
-    const argsHistory = recentExecutions.map((e) => JSON.stringify(_context.args ?? {}));
-    const uniqueArgs = new Set(argsHistory);
-    return uniqueArgs.size > 1;
+    return true;
 }
 export function clearSessionHistory(sessionId) {
     executionHistory.delete(sessionId);

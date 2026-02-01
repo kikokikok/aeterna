@@ -1,4 +1,5 @@
-import { z } from "zod";
+import { tool } from "@opencode-ai/plugin/tool";
+const z = tool.schema;
 export const createMemoryTools = (client) => ({
     aeterna_memory_add: tool({
         description: "Add a memory entry to Aeterna. Use this to capture learnings, solutions, or important context.",
@@ -13,7 +14,7 @@ export const createMemoryTools = (client) => ({
                 .describe("Importance score 0-1 (default: auto-calculated)"),
             sessionId: z.string().optional()
                 .describe("Session ID for context"),
-            metadata: z.record(z.unknown()).optional()
+            metadata: z.record(z.string(), z.unknown()).optional()
                 .describe("Additional metadata"),
         },
         async execute(args, context) {
@@ -65,7 +66,7 @@ export const createMemoryTools = (client) => ({
         args: {
             memoryId: z.string().describe("Memory ID to retrieve"),
         },
-        async execute(args) {
+        async execute(args, _context) {
             const memory = await client.memoryGet(args.memoryId);
             if (!memory) {
                 return `Memory not found: ${args.memoryId}`;
@@ -82,7 +83,7 @@ export const createMemoryTools = (client) => ({
             reason: z.string().optional()
                 .describe("Reason for promotion"),
         },
-        async execute(args) {
+        async execute(args, _context) {
             const result = await client.memoryPromote({
                 memoryId: args.memoryId,
                 targetLayer: args.targetLayer,

@@ -1,8 +1,9 @@
-import type { tool } from "@opencode-ai/plugin/tool.js";
-import { z } from "zod";
+import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { AeternaClient } from "../client.js";
 
-export const createGraphTools = (client: AeternaClient) => ({
+const z = tool.schema;
+
+export const createGraphTools = (client: AeternaClient): Record<string, ToolDefinition> => ({
   aeterna_graph_query: tool({
     description: "Query memory relationships and traversals in the knowledge graph",
     args: {
@@ -16,7 +17,7 @@ export const createGraphTools = (client: AeternaClient) => ({
       direction: z.enum(["outgoing", "incoming", "both"] as const).optional()
         .describe("Direction of traversal (default: outgoing)"),
     },
-    async execute(args) {
+    async execute(args, _context) {
       const result = await client.graphQuery({
         startNodeId: args.startNodeId,
         relations: args.relations,
@@ -53,7 +54,7 @@ export const createGraphTools = (client: AeternaClient) => ({
       limit: z.number().min(1).max(50).optional()
         .describe("Max results (default: 20)"),
     },
-    async execute(args) {
+    async execute(args, _context) {
       const result = await client.graphNeighbors({
         nodeId: args.nodeId,
         relations: args.relations,
@@ -81,7 +82,7 @@ export const createGraphTools = (client: AeternaClient) => ({
       relations: z.array(z.string()).optional()
         .describe("Relationship types to traverse"),
     },
-    async execute(args) {
+    async execute(args, _context) {
       const result = await client.graphPath({
         sourceId: args.sourceId,
         targetId: args.targetId,

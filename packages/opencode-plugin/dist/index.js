@@ -6,14 +6,22 @@ import { createKnowledgeTools } from "./tools/knowledge.js";
 import { createGovernanceTools } from "./tools/governance.js";
 import { createChatHook, createSystemHook, createToolHooks, createPermissionHook, createSessionHook } from "./hooks/index.js";
 export const aeterna = async (input) => {
+    // Extract project identifier from worktree path or project ID
+    // OpenCode SDK Project type has: id, worktree, vcsDir, vcs, time
+    const projectName = input.project.id || input.worktree.split("/").pop() || "unknown";
+    // Team and org can be configured via environment variables since
+    // the OpenCode SDK doesn't provide them in the PluginInput
+    const team = process.env.AETERNA_TEAM;
+    const org = process.env.AETERNA_ORG;
     const client = new AeternaClient({
-        project: input.project.name,
+        project: projectName,
         directory: input.directory,
         serverUrl: process.env.AETERNA_SERVER_URL,
         token: process.env.AETERNA_TOKEN,
-        team: input.project.org ?? input.project.team,
-        org: input.project.org,
-        userId: input.user?.id,
+        team,
+        org,
+        // userId not available in PluginInput, can be set via environment
+        userId: process.env.AETERNA_USER_ID,
     });
     await client.sessionStart();
     return {

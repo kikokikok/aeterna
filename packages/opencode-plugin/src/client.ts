@@ -16,7 +16,6 @@ import type {
   ToolExecutionRecord,
   ProjectContext,
   PluginConfig,
-  DEFAULT_CONFIG,
   Result,
   AeternaError,
   ContextAssembleParams,
@@ -33,7 +32,9 @@ import type {
   GraphPath,
   MemoryOptimizeParams,
   MemoryOptimizeResult,
+  MemoryLayer,
 } from "./types.js";
+import { DEFAULT_CONFIG } from "./types.js";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
@@ -83,10 +84,10 @@ export class AeternaClient {
       });
 
       if (!response.ok) {
-        const error: AeternaError = await response.json().catch(() => ({
+        const error = await response.json().catch(() => ({
           code: "HTTP_ERROR",
           message: `HTTP ${response.status}: ${response.statusText}`,
-        }));
+        })) as AeternaError;
         return { ok: false, error };
       }
 
@@ -474,7 +475,7 @@ export class AeternaClient {
         context: "",
         tokensUsed: 0,
         tokenBudget: params.tokenBudget ?? 8000,
-        layerBreakdown: {},
+        layerBreakdown: { agent: 0, user: 0, session: 0, project: 0, team: 0, org: 0, company: 0 } as Record<MemoryLayer, number>,
         truncated: false,
         sources: [],
       };

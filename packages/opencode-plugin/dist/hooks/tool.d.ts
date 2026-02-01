@@ -1,7 +1,25 @@
-import type { PluginInput, HookContext } from "@opencode-ai/plugin";
 import type { AeternaClient } from "../client.js";
-export declare const createToolHooks: (client: AeternaClient) => {
-    "tool.execute.before": (input: PluginInput, context: HookContext) => Promise<void>;
-    "tool.execute.after": (input: PluginInput, context: HookContext) => Promise<void>;
+type ToolExecuteBeforeInput = {
+    tool: string;
+    sessionID: string;
+    callID: string;
 };
+type ToolExecuteBeforeOutput = {
+    args: Record<string, unknown>;
+};
+type ToolExecuteAfterInput = {
+    tool: string;
+    sessionID: string;
+    callID: string;
+};
+type ToolExecuteAfterOutput = {
+    title: string;
+    output: string;
+    metadata: unknown;
+};
+export declare const createToolHooks: (client: AeternaClient) => {
+    before: (input: ToolExecuteBeforeInput, output: ToolExecuteBeforeOutput) => Promise<void>;
+    after: (input: ToolExecuteAfterInput, output: ToolExecuteAfterOutput) => Promise<void>;
+};
+export {};
 //# sourceMappingURL=tool.d.ts.map

@@ -1,6 +1,4 @@
+import { type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { AeternaClient } from "../client.js";
-export declare const createKnowledgeTools: (client: AeternaClient) => {
-    aeterna_knowledge_query: any;
-    aeterna_knowledge_propose: any;
-};
+export declare const createKnowledgeTools: (client: AeternaClient) => Record<string, ToolDefinition>;
 //# sourceMappingURL=knowledge.d.ts.map

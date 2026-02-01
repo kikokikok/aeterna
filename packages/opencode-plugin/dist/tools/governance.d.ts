@@ -1,6 +1,4 @@
+import { type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { AeternaClient } from "../client.js";
-export declare const createGovernanceTools: (client: AeternaClient) => {
-    aeterna_sync_status: any;
-    aeterna_governance_status: any;
-};
+export declare const createGovernanceTools: (client: AeternaClient) => Record<string, ToolDefinition>;
 //# sourceMappingURL=governance.d.ts.map

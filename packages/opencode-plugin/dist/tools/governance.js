@@ -1,8 +1,9 @@
+import { tool } from "@opencode-ai/plugin/tool";
 export const createGovernanceTools = (client) => ({
     aeterna_sync_status: tool({
         description: "Check the sync status between memory and knowledge repository",
         args: {},
-        async execute() {
+        async execute(_args, _context) {
             const status = await client.getSyncStatus();
             const statusEmoji = {
                 healthy: "✅",
@@ -18,7 +19,7 @@ export const createGovernanceTools = (client) => ({
     aeterna_governance_status: tool({
         description: "Check governance state: policies, proposals, and compliance",
         args: {},
-        async execute() {
+        async execute(_args, _context) {
             const status = await client.getGovernanceStatus();
             const driftEmoji = status.driftDetected ? "⚠️" : "✅";
             return `Governance Status:\n\nActive policies: ${status.activePolicies}\nPending proposals: ${status.pendingProposals}\nRecent violations: ${status.recentViolations}\nSemantic drift: ${driftEmoji} ${status.driftDetected ? "detected" : "none"}\n\nRecent notifications:\n${status.notifications.length > 0 ? status.notifications.map((n) => `  [${n.type}] ${n.message}`).join("\n") : "  None"}`;
