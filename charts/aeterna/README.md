@@ -422,6 +422,152 @@ curl http://localhost:8080/health/live
 - Verify policy repository access
 - Check fetcher connectivity
 
+## GrepAI Integration
+
+Aeterna integrates with GrepAI to provide semantic code search and call graph analysis capabilities. GrepAI runs as a sidecar container and communicates with Aeterna via MCP (Model Context Protocol).
+
+### Quick Start
+
+Enable GrepAI in your values:
+
+```yaml
+grepai:
+  enabled: true
+  
+  embedder:
+    type: ollama
+    model: nomic-embed-text
+  
+  store:
+    type: qdrant
+  
+  projects:
+    - path: /workspace/my-project
+      name: my-project
+```
+
+### Features
+
+- **Semantic Code Search**: Natural language queries to find code
+- **Call Graph Analysis**: Trace function callers and callees
+- **Dependency Graphs**: Visualize code dependencies
+- **MCP Tools**: 5 code intelligence tools for AI agents
+
+### Configuration Options
+
+#### Embedder Types
+
+**Ollama** (Default - Local, free):
+```yaml
+grepai:
+  embedder:
+    type: ollama
+    model: nomic-embed-text  # or mxbai-embed-large, all-minilm
+
+llm:
+  ollama:
+    host: http://ollama:11434
+```
+
+**OpenAI** (Cloud - High quality):
+```yaml
+grepai:
+  embedder:
+    type: openai
+    model: text-embedding-3-small
+
+llm:
+  provider: openai
+  openai:
+    apiKey: sk-...
+    # Or use existing secret:
+    # existingSecret: my-openai-secret
+```
+
+#### Storage Backends
+
+**Qdrant** (Recommended):
+```yaml
+grepai:
+  store:
+    type: qdrant
+    qdrant:
+      collectionPrefix: grepai_
+
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: true
+```
+
+**PostgreSQL**:
+```yaml
+grepai:
+  store:
+    type: postgres
+    postgres:
+      schema: grepai
+
+postgresql:
+  bundled: true
+```
+
+### CLI Usage
+
+```bash
+# Initialize a project
+kubectl exec -it <pod-name> -c aeterna -- \
+  aeterna grepai init /workspace/project
+
+# Semantic search
+kubectl exec -it <pod-name> -c aeterna -- \
+  aeterna grepai search "authentication middleware"
+
+# Call graph analysis
+kubectl exec -it <pod-name> -c aeterna -- \
+  aeterna grepai trace callers HandleLogin --recursive
+
+# Build dependency graph
+kubectl exec -it <pod-name> -c aeterna -- \
+  aeterna grepai trace graph UserService --depth 2 --format dot
+```
+
+### Monitoring
+
+```bash
+# Check GrepAI health
+kubectl exec -it <pod-name> -c grepai -- \
+  curl http://localhost:9090/health
+
+# View logs
+kubectl logs <pod-name> -c grepai -f
+
+# Check index status
+kubectl exec -it <pod-name> -c aeterna -- \
+  aeterna grepai status
+```
+
+### Troubleshooting
+
+**Sidecar not starting**:
+```bash
+kubectl logs <pod-name> -c grepai-init
+kubectl logs <pod-name> -c grepai
+```
+
+**Project initialization fails**:
+```bash
+kubectl exec -it <pod-name> -c grepai -- \
+  grepai init /workspace/project --force
+```
+
+**Slow search**:
+- Increase GrepAI resources in values.yaml
+- Use faster embedder (all-minilm)
+- Enable Redis/Dragonfly cache
+
+For complete documentation, see [docs/grepai-integration.md](../../docs/grepai-integration.md)
+
 ## Values Reference
 
 See [values.yaml](./values.yaml) for the complete list of configurable parameters.
@@ -435,6 +581,9 @@ Key parameters:
 | `cache.type` | Cache type | `dragonfly` |
 | `postgresql.bundled` | Use bundled PostgreSQL | `true` |
 | `opal.enabled` | Enable OPAL stack | `true` |
+| `grepai.enabled` | Enable GrepAI sidecar | `false` |
+| `grepai.embedder.type` | GrepAI embedder type | `ollama` |
+| `grepai.store.type` | GrepAI storage backend | `qdrant` |
 | `aeterna.replicaCount` | Aeterna replicas | `1` |
 | `aeterna.autoscaling.enabled` | Enable HPA | `false` |
 | `networkPolicy.enabled` | Enable network policies | `false` |
