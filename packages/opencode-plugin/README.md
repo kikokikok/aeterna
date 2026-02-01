@@ -1,4 +1,4 @@
-# @aeterna/opencode-plugin
+# @kiko-aeterna/opencode-plugin
 
 OpenCode plugin for Aeterna memory and knowledge integration with CCA and RLM support.
 
@@ -19,7 +19,7 @@ OpenCode plugin for Aeterna memory and knowledge integration with CCA and RLM su
 ## Installation
 
 ```bash
-npm install -D @aeterna/opencode-plugin
+npm install -D @kiko-aeterna/opencode-plugin
 ```
 
 ## Configuration
@@ -30,7 +30,7 @@ Add the plugin to your `opencode.jsonc`:
 {
   "$schema": "https://opencode.ai/config.json",
 
-  "plugin": ["@aeterna/opencode-plugin"]
+  "plugin": ["@kiko-aeterna/opencode-plugin"]
 }
 ```
 
@@ -40,6 +40,9 @@ Add the plugin to your `opencode.jsonc`:
 |-----------|-------------|---------|
 | `AETERNA_SERVER_URL` | Aeterna server URL | `http://localhost:8080` |
 | `AETERNA_TOKEN` | API authentication token | (required for API calls) |
+| `AETERNA_TEAM` | Team context for multi-tenant hierarchy | (optional) |
+| `AETERNA_ORG` | Organization context for multi-tenant hierarchy | (optional) |
+| `AETERNA_USER_ID` | User ID for personalization | (optional) |
 
 ### Aeterna Configuration
 
@@ -186,6 +189,13 @@ Contributions are welcome! Please read the main Aeterna repository for guideline
 
 ## Compatibility
 
-- Requires OpenCode version 1.1.36 or higher
+- Requires `@opencode-ai/plugin` version 1.1.36 or higher
 - Node.js version 18.0.0 or higher
 - Requires Aeterna backend server running on HTTP
+
+## Changelog
+
+### 0.1.0
+
+- Initial release with memory, knowledge, graph, CCA, and governance tools
+- Updated to `@opencode-ai/plugin` v1.1.36 API (Zod v4, new hook signatures)
