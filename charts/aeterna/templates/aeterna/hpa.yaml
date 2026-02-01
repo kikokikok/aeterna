@@ -1,0 +1,32 @@
+{{- if and .Values.aeterna.enabled .Values.aeterna.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "aeterna.fullname" . }}
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "aeterna.fullname" . }}
+  minReplicas: {{ .Values.aeterna.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.aeterna.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.aeterna.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.aeterna.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.aeterna.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.aeterna.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}

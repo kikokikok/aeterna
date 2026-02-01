@@ -1,0 +1,13 @@
+{{- if and .Values.aeterna.enabled .Values.aeterna.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aeterna.fullname" . }}
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.aeterna.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "aeterna.selectorLabels" . | nindent 6 }}
+{{- end }}

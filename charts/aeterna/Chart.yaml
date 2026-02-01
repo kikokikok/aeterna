@@ -1,0 +1,59 @@
+apiVersion: v2
+name: aeterna
+description: Universal Memory & Knowledge Framework for Enterprise AI Agent Systems
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+home: https://github.com/kikokikok/aeterna
+icon: https://raw.githubusercontent.com/kikokikok/aeterna/main/docs/logo.png
+sources:
+  - https://github.com/kikokikok/aeterna
+
+maintainers:
+  - name: kikokikok
+    url: https://github.com/kikokikok
+
+keywords:
+  - ai
+  - agents
+  - memory
+  - knowledge
+  - vector-database
+  - enterprise
+  - mcp
+
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: ai-machine-learning
+
+dependencies:
+  - name: cloudnative-pg
+    version: "0.23.*"
+    repository: https://cloudnative-pg.github.io/charts
+    condition: cnpg.enabled
+    alias: cnpg
+
+  - name: dragonfly
+    version: "1.*"
+    repository: oci://ghcr.io/dragonflydb/dragonfly/helm
+    condition: dragonfly.enabled
+    alias: dragonfly
+
+  - name: qdrant
+    version: "0.10.*"
+    repository: https://qdrant.github.io/qdrant-helm
+    condition: qdrant.enabled
+    alias: qdrant
+
+  - name: weaviate
+    version: "17.*"
+    repository: https://weaviate.github.io/weaviate-helm
+    condition: weaviate.enabled
+    alias: weaviate
+
+  - name: psmdb-operator
+    version: "1.21.*"
+    repository: https://percona.github.io/percona-helm-charts
+    condition: mongodb.enabled
+    alias: mongodb
