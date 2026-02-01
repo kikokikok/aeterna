@@ -1,0 +1,105 @@
+{{- if and .Values.opal.enabled .Values.opal.cedarAgent.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "aeterna.fullname" . }}-cedar-agent
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+    {{- include "aeterna.opal.cedarAgent.selectorLabels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "aeterna.opal.cedarAgent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/opal/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/opal/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "aeterna.opal.labels" . | nindent 8 }}
+        {{- include "aeterna.opal.cedarAgent.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "aeterna.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: cedar-agent
+          image: "{{ .Values.opal.cedarAgent.image.repository }}:{{ .Values.opal.cedarAgent.image.tag }}"
+          imagePullPolicy: {{ .Values.opal.cedarAgent.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 8180
+              protocol: TCP
+          env:
+            - name: CEDAR_AGENT_ADDR
+              value: "0.0.0.0:8180"
+            - name: OPAL_SERVER_URL
+              value: "http://{{ include "aeterna.fullname" . }}-opal-server:7002"
+            - name: OPAL_CLIENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.fullname" . }}-opal
+                  key: client-token
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.opal.cedarAgent.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cedar-data
+              mountPath: /data
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cedar-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aeterna.fullname" . }}-cedar-agent
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+    {{- include "aeterna.opal.cedarAgent.selectorLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8180
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "aeterna.opal.cedarAgent.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -1,3 +1,4 @@
+import { DEFAULT_CONFIG } from "./types.js";
 export class AeternaClient {
     serverUrl;
     token;
@@ -342,7 +343,7 @@ export class AeternaClient {
                 context: "",
                 tokensUsed: 0,
                 tokenBudget: params.tokenBudget ?? 8000,
-                layerBreakdown: {},
+                layerBreakdown: { agent: 0, user: 0, session: 0, project: 0, team: 0, org: 0, company: 0 },
                 truncated: false,
                 sources: [],
             };

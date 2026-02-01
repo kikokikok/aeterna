@@ -1,43 +1,60 @@
-import type { PluginInput, HookContext } from "@opencode-ai/plugin";
 import type { AeternaClient } from "../client.js";
+import { detectSignificance } from "../utils/detect.js";
+
+type ToolExecuteBeforeInput = {
+  tool: string;
+  sessionID: string;
+  callID: string;
+};
+
+type ToolExecuteBeforeOutput = {
+  args: Record<string, unknown>;
+};
+
+type ToolExecuteAfterInput = {
+  tool: string;
+  sessionID: string;
+  callID: string;
+};
+
+type ToolExecuteAfterOutput = {
+  title: string;
+  output: string;
+  metadata: unknown;
+};
 
 export const createToolHooks = (client: AeternaClient) => ({
-  "tool.execute.before": async (input: PluginInput, context: HookContext) => {
+  before: async (input: ToolExecuteBeforeInput, output: ToolExecuteBeforeOutput): Promise<void> => {
     if (!input.tool.startsWith("aeterna_")) return;
 
-    const enrichedArgs = await client.enrichToolArgs(input.tool, context.args);
+    const enrichedArgs = await client.enrichToolArgs(input.tool, output.args);
 
-    if (Object.keys(enrichedArgs).length > Object.keys(context.args).length) {
-      context.args = enrichedArgs;
+    if (Object.keys(enrichedArgs).length > Object.keys(output.args).length) {
+      Object.assign(output.args, enrichedArgs);
     }
   },
 
-  "tool.execute.after": async (input: PluginInput, context: HookContext) => {
+  after: async (input: ToolExecuteAfterInput, output: ToolExecuteAfterOutput): Promise<void> => {
     const sessionContext = client.getSessionContext();
     if (!sessionContext) return;
 
     await client.captureToolExecution({
       tool: input.tool,
       sessionId: sessionContext.sessionId,
-      callId: context.callID,
-      title: context.title,
-      args: context.args as Record<string, unknown>,
-      output: String(context.output),
-      metadata: {
-        timestamp: Date.now(),
-        directory: input.directory,
-      },
+      callId: input.callID,
+      title: output.title,
+      args: {} as Record<string, unknown>,
+      output: String(output.output),
+      metadata: {},
+      timestamp: Date.now(),
       duration: undefined,
-      success: !context.error,
+      success: true,
     });
 
-    const isSignificant = await client.detectSignificance(
-      { tool: input.tool },
-      { output: { output: String(context.output) } }
-    );
+    const isSignificant = detectSignificance(input, output);
 
     if (isSignificant) {
-      await client.flagForPromotion(sessionContext.sessionId, context.callID);
+      await client.flagForPromotion(sessionContext.sessionId, input.callID);
     }
   },
 });

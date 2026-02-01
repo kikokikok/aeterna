@@ -1,0 +1,513 @@
+## Aeterna Helm Chart Values
+## Universal Memory & Knowledge Framework for Enterprise AI Agent Systems
+
+## Deployment mode configuration
+## @param deploymentMode Deployment mode: local (all components), hybrid (local cache + remote), remote (thin client)
+deploymentMode: local
+
+## Central server configuration (required for hybrid/remote modes)
+central:
+  ## @param central.url Central Aeterna server URL
+  url: ""
+  ## @param central.auth Authentication method: apiKey, oauth2, serviceAccount
+  auth: apiKey
+  ## @param central.apiKey API key for central server (use existingSecret in production)
+  apiKey: ""
+  ## @param central.existingSecret Name of existing secret containing central server credentials
+  existingSecret: ""
+  ## @param central.secretKey Key in the secret containing the API key
+  secretKey: "api-key"
+
+## Aeterna server configuration
+aeterna:
+  ## @param aeterna.enabled Enable Aeterna server deployment
+  enabled: true
+
+  ## @param aeterna.replicaCount Number of replicas
+  replicaCount: 1
+
+  image:
+    ## @param aeterna.image.repository Image repository
+    repository: ghcr.io/kikokikok/aeterna
+    ## @param aeterna.image.tag Image tag (defaults to chart appVersion)
+    tag: ""
+    ## @param aeterna.image.pullPolicy Image pull policy
+    pullPolicy: IfNotPresent
+
+  ## @param aeterna.imagePullSecrets Docker registry secrets
+  imagePullSecrets: []
+
+  ## @param aeterna.nameOverride Override chart name
+  nameOverride: ""
+  ## @param aeterna.fullnameOverride Override full name
+  fullnameOverride: ""
+
+  ## Service account configuration
+  serviceAccount:
+    ## @param aeterna.serviceAccount.create Create service account
+    create: true
+    ## @param aeterna.serviceAccount.automount Automount service account token
+    automount: true
+    ## @param aeterna.serviceAccount.annotations Service account annotations
+    annotations: {}
+    ## @param aeterna.serviceAccount.name Service account name
+    name: ""
+
+  ## @param aeterna.podAnnotations Pod annotations
+  podAnnotations: {}
+
+  ## @param aeterna.podLabels Additional pod labels
+  podLabels: {}
+
+  ## Pod security context
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+
+  ## Container security context
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  ## Service configuration
+  service:
+    ## @param aeterna.service.type Service type
+    type: ClusterIP
+    ## @param aeterna.service.port Service port
+    port: 8080
+    ## @param aeterna.service.metricsPort Metrics port for Prometheus
+    metricsPort: 9090
+
+  ## Ingress configuration
+  ingress:
+    ## @param aeterna.ingress.enabled Enable ingress
+    enabled: false
+    ## @param aeterna.ingress.className Ingress class name
+    className: ""
+    ## @param aeterna.ingress.annotations Ingress annotations
+    annotations: {}
+    ## @param aeterna.ingress.hosts Ingress hosts
+    hosts:
+      - host: aeterna.local
+        paths:
+          - path: /
+            pathType: Prefix
+    ## @param aeterna.ingress.tls Ingress TLS configuration
+    tls: []
+
+  ## Resource limits and requests
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+  ## Probes configuration
+  livenessProbe:
+    httpGet:
+      path: /health/live
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  startupProbe:
+    httpGet:
+      path: /health/startup
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 30
+
+  ## Autoscaling configuration
+  autoscaling:
+    ## @param aeterna.autoscaling.enabled Enable HPA
+    enabled: false
+    ## @param aeterna.autoscaling.minReplicas Minimum replicas
+    minReplicas: 1
+    ## @param aeterna.autoscaling.maxReplicas Maximum replicas
+    maxReplicas: 10
+    ## @param aeterna.autoscaling.targetCPUUtilizationPercentage Target CPU utilization
+    targetCPUUtilizationPercentage: 80
+    ## @param aeterna.autoscaling.targetMemoryUtilizationPercentage Target memory utilization
+    targetMemoryUtilizationPercentage: 80
+
+  ## Pod disruption budget
+  pdb:
+    ## @param aeterna.pdb.enabled Enable PDB
+    enabled: false
+    ## @param aeterna.pdb.minAvailable Minimum available pods
+    minAvailable: 1
+
+  ## @param aeterna.nodeSelector Node selector
+  nodeSelector: {}
+
+  ## @param aeterna.tolerations Tolerations
+  tolerations: []
+
+  ## @param aeterna.affinity Affinity rules
+  affinity: {}
+
+  ## @param aeterna.topologySpreadConstraints Topology spread constraints
+  topologySpreadConstraints: []
+
+  ## Feature flags
+  features:
+    ## @param aeterna.features.cca Enable CCA capabilities
+    cca: true
+    ## @param aeterna.features.radkit Enable Radkit A2A integration
+    radkit: false
+    ## @param aeterna.features.rlm Enable RLM graph memory
+    rlm: true
+    ## @param aeterna.features.reflective Enable reflective reasoning
+    reflective: true
+
+## Vector backend configuration
+vectorBackend:
+  ## @param vectorBackend.type Vector backend type: qdrant, pgvector, pinecone, weaviate, mongodb, vertexai, databricks
+  type: qdrant
+
+  ## Qdrant configuration
+  qdrant:
+    ## @param vectorBackend.qdrant.bundled Use bundled Qdrant (subchart)
+    bundled: true
+    ## External Qdrant configuration (when bundled=false)
+    external:
+      ## @param vectorBackend.qdrant.external.host External Qdrant host
+      host: ""
+      ## @param vectorBackend.qdrant.external.port External Qdrant port
+      port: 6333
+      ## @param vectorBackend.qdrant.external.apiKey External Qdrant API key
+      apiKey: ""
+      ## @param vectorBackend.qdrant.external.existingSecret Secret containing Qdrant API key
+      existingSecret: ""
+
+  ## pgvector configuration (uses PostgreSQL)
+  pgvector:
+    ## @param vectorBackend.pgvector.enabled Enable pgvector (requires PostgreSQL with pgvector extension)
+    enabled: false
+
+  ## Pinecone configuration
+  pinecone:
+    ## @param vectorBackend.pinecone.enabled Enable Pinecone
+    enabled: false
+    ## @param vectorBackend.pinecone.apiKey Pinecone API key
+    apiKey: ""
+    ## @param vectorBackend.pinecone.environment Pinecone environment
+    environment: ""
+    ## @param vectorBackend.pinecone.indexName Pinecone index name
+    indexName: "aeterna"
+    ## @param vectorBackend.pinecone.existingSecret Secret containing Pinecone API key
+    existingSecret: ""
+
+  ## Weaviate configuration
+  weaviate:
+    ## @param vectorBackend.weaviate.enabled Enable Weaviate (bundled subchart)
+    enabled: false
+    ## External Weaviate configuration
+    external:
+      ## @param vectorBackend.weaviate.external.host External Weaviate host
+      host: ""
+      ## @param vectorBackend.weaviate.external.apiKey External Weaviate API key
+      apiKey: ""
+      ## @param vectorBackend.weaviate.external.existingSecret Secret containing Weaviate API key
+      existingSecret: ""
+
+  ## MongoDB Atlas Vector Search configuration
+  mongodb:
+    ## @param vectorBackend.mongodb.enabled Enable MongoDB (bundled Percona operator)
+    enabled: false
+    ## External MongoDB configuration
+    external:
+      ## @param vectorBackend.mongodb.external.uri MongoDB connection URI
+      uri: ""
+      ## @param vectorBackend.mongodb.external.existingSecret Secret containing MongoDB URI
+      existingSecret: ""
+
+  ## Vertex AI Vector Search configuration
+  vertexai:
+    ## @param vectorBackend.vertexai.enabled Enable Vertex AI
+    enabled: false
+    ## @param vectorBackend.vertexai.project GCP project ID
+    project: ""
+    ## @param vectorBackend.vertexai.region GCP region
+    region: "us-central1"
+    ## @param vectorBackend.vertexai.endpoint Vertex AI endpoint ID
+    endpoint: ""
+    ## @param vectorBackend.vertexai.serviceAccountKey GCP service account key JSON
+    serviceAccountKey: ""
+    ## @param vectorBackend.vertexai.existingSecret Secret containing service account key
+    existingSecret: ""
+
+  ## Databricks Vector Search configuration
+  databricks:
+    ## @param vectorBackend.databricks.enabled Enable Databricks
+    enabled: false
+    ## @param vectorBackend.databricks.workspaceUrl Databricks workspace URL
+    workspaceUrl: ""
+    ## @param vectorBackend.databricks.token Databricks access token
+    token: ""
+    ## @param vectorBackend.databricks.catalog Unity Catalog name
+    catalog: ""
+    ## @param vectorBackend.databricks.existingSecret Secret containing Databricks token
+    existingSecret: ""
+
+## Cache configuration
+cache:
+  ## @param cache.type Cache type: dragonfly, valkey, external
+  type: dragonfly
+
+  ## Dragonfly configuration (Redis-compatible)
+  dragonfly:
+    ## @param cache.dragonfly.enabled Enable bundled Dragonfly
+    enabled: true
+
+  ## Valkey configuration (Redis fork)
+  valkey:
+    ## @param cache.valkey.enabled Enable bundled Valkey
+    enabled: false
+
+  ## External Redis configuration
+  external:
+    ## @param cache.external.enabled Use external Redis
+    enabled: false
+    ## @param cache.external.host External Redis host
+    host: ""
+    ## @param cache.external.port External Redis port
+    port: 6379
+    ## @param cache.external.password External Redis password
+    password: ""
+    ## @param cache.external.existingSecret Secret containing Redis password
+    existingSecret: ""
+    ## @param cache.external.secretKey Key in secret containing password
+    secretKey: "redis-password"
+
+## PostgreSQL configuration
+postgresql:
+  ## @param postgresql.bundled Use bundled CloudNativePG
+  bundled: true
+
+  ## CloudNativePG cluster configuration (when bundled=true)
+  cluster:
+    ## @param postgresql.cluster.instances Number of PostgreSQL instances
+    instances: 1
+    ## @param postgresql.cluster.storage.size Storage size
+    storage:
+      size: 10Gi
+      storageClass: ""
+    ## @param postgresql.cluster.resources Resource limits
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+  ## External PostgreSQL configuration (when bundled=false)
+  external:
+    ## @param postgresql.external.host External PostgreSQL host
+    host: ""
+    ## @param postgresql.external.port External PostgreSQL port
+    port: 5432
+    ## @param postgresql.external.database Database name
+    database: "aeterna"
+    ## @param postgresql.external.username Username
+    username: "aeterna"
+    ## @param postgresql.external.password Password
+    password: ""
+    ## @param postgresql.external.existingSecret Secret containing PostgreSQL password
+    existingSecret: ""
+    ## @param postgresql.external.secretKey Key in secret containing password
+    secretKey: "postgres-password"
+    ## @param postgresql.external.sslMode SSL mode
+    sslMode: "prefer"
+
+## OPAL authorization stack
+opal:
+  ## @param opal.enabled Enable OPAL stack (Server + Cedar Agent)
+  enabled: true
+
+  ## OPAL Server configuration
+  server:
+    ## @param opal.server.replicaCount Number of OPAL Server replicas
+    replicaCount: 1
+    image:
+      repository: permitio/opal-server
+      tag: "0.8.0"
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+
+  ## Cedar Agent configuration
+  cedarAgent:
+    ## @param opal.cedarAgent.enabled Enable Cedar Agent
+    enabled: true
+    image:
+      repository: permitio/cedar-agent
+      tag: "0.4.0"
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 20m
+        memory: 64Mi
+
+  ## OPAL Fetcher configuration
+  fetcher:
+    ## @param opal.fetcher.enabled Enable OPAL Fetcher
+    enabled: true
+    image:
+      repository: permitio/opal-client
+      tag: "0.8.0"
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 20m
+        memory: 64Mi
+
+## LLM provider configuration
+llm:
+  ## @param llm.provider LLM provider: openai, anthropic, ollama, none
+  provider: none
+
+  ## OpenAI configuration
+  openai:
+    ## @param llm.openai.apiKey OpenAI API key
+    apiKey: ""
+    ## @param llm.openai.existingSecret Secret containing OpenAI API key
+    existingSecret: ""
+    ## @param llm.openai.model Model name
+    model: "gpt-4o"
+    ## @param llm.openai.embeddingModel Embedding model name
+    embeddingModel: "text-embedding-3-small"
+
+  ## Anthropic configuration
+  anthropic:
+    ## @param llm.anthropic.apiKey Anthropic API key
+    apiKey: ""
+    ## @param llm.anthropic.existingSecret Secret containing Anthropic API key
+    existingSecret: ""
+    ## @param llm.anthropic.model Model name
+    model: "claude-sonnet-4-20250514"
+
+  ## Ollama configuration
+  ollama:
+    ## @param llm.ollama.host Ollama host URL
+    host: "http://localhost:11434"
+    ## @param llm.ollama.model Model name
+    model: "llama3.2"
+    ## @param llm.ollama.embeddingModel Embedding model name
+    embeddingModel: "nomic-embed-text"
+
+## Observability configuration
+observability:
+  ## ServiceMonitor configuration
+  serviceMonitor:
+    ## @param observability.serviceMonitor.enabled Enable ServiceMonitor for Prometheus Operator
+    enabled: false
+    ## @param observability.serviceMonitor.interval Scrape interval
+    interval: 30s
+    ## @param observability.serviceMonitor.scrapeTimeout Scrape timeout
+    scrapeTimeout: 10s
+    ## @param observability.serviceMonitor.labels Additional labels
+    labels: {}
+
+  ## Tracing configuration
+  tracing:
+    ## @param observability.tracing.enabled Enable OpenTelemetry tracing
+    enabled: false
+    ## @param observability.tracing.endpoint OTLP endpoint
+    endpoint: ""
+    ## @param observability.tracing.samplingRatio Sampling ratio (0.0-1.0)
+    samplingRatio: 0.1
+
+  ## Logging configuration
+  logging:
+    ## @param observability.logging.level Log level: debug, info, warn, error
+    level: info
+    ## @param observability.logging.format Log format: json, pretty
+    format: json
+
+## Network policies
+networkPolicy:
+  ## @param networkPolicy.enabled Enable network policies
+  enabled: false
+
+## Global settings
+global:
+  ## @param global.imageRegistry Global image registry
+  imageRegistry: ""
+  ## @param global.imagePullSecrets Global image pull secrets
+  imagePullSecrets: []
+  ## @param global.storageClass Global storage class
+  storageClass: ""
+
+## Subchart configuration overrides
+
+## CloudNativePG subchart (aliased as cnpg)
+cnpg:
+  enabled: true
+
+## Dragonfly subchart
+dragonfly:
+  enabled: true
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+## Qdrant subchart
+qdrant:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    size: 10Gi
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 50m
+      memory: 256Mi
+
+## Weaviate subchart (disabled by default)
+weaviate:
+  enabled: false
+
+## MongoDB Percona operator subchart (disabled by default)
+mongodb:
+  enabled: false

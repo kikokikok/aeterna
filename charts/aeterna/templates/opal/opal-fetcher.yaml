@@ -1,0 +1,117 @@
+{{- if and .Values.opal.enabled .Values.opal.fetcher.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aeterna.fullname" . }}-opal-fetcher
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+    {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/opal/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/opal/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "aeterna.opal.labels" . | nindent 8 }}
+        {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "aeterna.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: opal-fetcher
+          image: "{{ .Values.opal.fetcher.image.repository }}:{{ .Values.opal.fetcher.image.tag }}"
+          imagePullPolicy: {{ .Values.opal.fetcher.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 7000
+              protocol: TCP
+          env:
+            - name: OPAL_SERVER_URL
+              value: "http://{{ include "aeterna.fullname" . }}-opal-server:7002"
+            - name: OPAL_CLIENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.fullname" . }}-opal
+                  key: client-token
+            - name: OPAL_INLINE_OPA_ENABLED
+              value: "false"
+            - name: OPAL_DATA_UPDATER_ENABLED
+              value: "true"
+            # PostgreSQL connection for data fetching
+            - name: OPAL_FETCH_PROVIDER_MODULES
+              value: "opal_common.fetcher.providers,opal_fetcher_postgres.provider"
+            - name: POSTGRES_HOST
+              value: {{ include "aeterna.postgresql.host" . | quote }}
+            - name: POSTGRES_PORT
+              value: {{ include "aeterna.postgresql.port" . | quote }}
+            - name: POSTGRES_DB
+              value: {{ include "aeterna.postgresql.database" . | quote }}
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.postgresql.secretName" . }}
+                  key: username
+                  optional: true
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.postgresql.secretName" . }}
+                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.opal.fetcher.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aeterna.fullname" . }}-opal-fetcher
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+    {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 4 }}
+{{- end }}

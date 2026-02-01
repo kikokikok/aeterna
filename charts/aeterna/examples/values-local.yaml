@@ -1,0 +1,114 @@
+# Aeterna Local Development Values
+# Use for development and single-node deployments
+
+deploymentMode: local
+
+aeterna:
+  enabled: true
+  replicaCount: 1
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+  # Disable HA features for local
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+
+  # Enable ingress for local access
+  ingress:
+    enabled: true
+    className: ""
+    hosts:
+      - host: aeterna.local
+        paths:
+          - path: /
+            pathType: Prefix
+
+  # Enable all features
+  features:
+    cca: true
+    radkit: false
+    rlm: true
+    reflective: true
+
+# Use bundled Qdrant
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: true
+
+# Use bundled Dragonfly
+cache:
+  type: dragonfly
+  dragonfly:
+    enabled: true
+
+# Use bundled PostgreSQL
+postgresql:
+  bundled: true
+  cluster:
+    instances: 1
+    storage:
+      size: 5Gi
+
+# Enable OPAL for authorization
+opal:
+  enabled: true
+  server:
+    replicaCount: 1
+  cedarAgent:
+    enabled: true
+  fetcher:
+    enabled: true
+
+# No LLM by default (configure manually)
+llm:
+  provider: none
+
+# Minimal observability
+observability:
+  serviceMonitor:
+    enabled: false
+  tracing:
+    enabled: false
+  logging:
+    level: debug
+    format: pretty
+
+# No network policies for local
+networkPolicy:
+  enabled: false
+
+# Enable subcharts
+cnpg:
+  enabled: true
+
+dragonfly:
+  enabled: true
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+qdrant:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    size: 5Gi
+  resources:
+    limits:
+      cpu: 200m
+      memory: 512Mi
+    requests:
+      cpu: 50m
+      memory: 256Mi

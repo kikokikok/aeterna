@@ -1,8 +1,4 @@
+import { type ToolDefinition } from "@opencode-ai/plugin/tool";
 import type { AeternaClient } from "../client.js";
-export declare const createMemoryTools: (client: AeternaClient) => {
-    aeterna_memory_add: any;
-    aeterna_memory_search: any;
-    aeterna_memory_get: any;
-    aeterna_memory_promote: any;
-};
+export declare const createMemoryTools: (client: AeternaClient) => Record<string, ToolDefinition>;
 //# sourceMappingURL=memory.d.ts.map

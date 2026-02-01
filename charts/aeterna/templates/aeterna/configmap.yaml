@@ -1,0 +1,73 @@
+{{- if .Values.aeterna.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aeterna.fullname" . }}
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+data:
+  AETERNA_DEPLOYMENT_MODE: {{ .Values.deploymentMode | quote }}
+  AETERNA_LOG_LEVEL: {{ .Values.observability.logging.level | quote }}
+  AETERNA_LOG_FORMAT: {{ .Values.observability.logging.format | quote }}
+  AETERNA_FEATURE_CCA: {{ .Values.aeterna.features.cca | quote }}
+  AETERNA_FEATURE_RADKIT: {{ .Values.aeterna.features.radkit | quote }}
+  AETERNA_FEATURE_RLM: {{ .Values.aeterna.features.rlm | quote }}
+  AETERNA_FEATURE_REFLECTIVE: {{ .Values.aeterna.features.reflective | quote }}
+  AETERNA_VECTOR_BACKEND: {{ .Values.vectorBackend.type | quote }}
+  AETERNA_POSTGRESQL_HOST: {{ include "aeterna.postgresql.host" . | quote }}
+  AETERNA_POSTGRESQL_PORT: {{ include "aeterna.postgresql.port" . | quote }}
+  AETERNA_POSTGRESQL_DATABASE: {{ include "aeterna.postgresql.database" . | quote }}
+  AETERNA_REDIS_HOST: {{ include "aeterna.redis.host" . | quote }}
+  AETERNA_REDIS_PORT: {{ include "aeterna.redis.port" . | quote }}
+  {{- if eq .Values.vectorBackend.type "qdrant" }}
+  AETERNA_QDRANT_HOST: {{ include "aeterna.qdrant.host" . | quote }}
+  AETERNA_QDRANT_PORT: {{ include "aeterna.qdrant.port" . | quote }}
+  {{- end }}
+  {{- if eq .Values.vectorBackend.type "pgvector" }}
+  AETERNA_PGVECTOR_ENABLED: "true"
+  {{- end }}
+  {{- if eq .Values.vectorBackend.type "pinecone" }}
+  AETERNA_PINECONE_ENVIRONMENT: {{ .Values.vectorBackend.pinecone.environment | quote }}
+  AETERNA_PINECONE_INDEX_NAME: {{ .Values.vectorBackend.pinecone.indexName | quote }}
+  {{- end }}
+  {{- if eq .Values.vectorBackend.type "weaviate" }}
+  AETERNA_WEAVIATE_HOST: {{ .Values.vectorBackend.weaviate.external.host | quote }}
+  {{- end }}
+  {{- if eq .Values.vectorBackend.type "vertexai" }}
+  AETERNA_VERTEXAI_PROJECT: {{ .Values.vectorBackend.vertexai.project | quote }}
+  AETERNA_VERTEXAI_REGION: {{ .Values.vectorBackend.vertexai.region | quote }}
+  AETERNA_VERTEXAI_ENDPOINT: {{ .Values.vectorBackend.vertexai.endpoint | quote }}
+  {{- end }}
+  {{- if eq .Values.vectorBackend.type "databricks" }}
+  AETERNA_DATABRICKS_WORKSPACE_URL: {{ .Values.vectorBackend.databricks.workspaceUrl | quote }}
+  AETERNA_DATABRICKS_CATALOG: {{ .Values.vectorBackend.databricks.catalog | quote }}
+  {{- end }}
+  {{- if .Values.opal.enabled }}
+  AETERNA_OPAL_ENABLED: "true"
+  AETERNA_CEDAR_AGENT_HOST: {{ printf "%s-cedar-agent" (include "aeterna.fullname" .) | quote }}
+  AETERNA_CEDAR_AGENT_PORT: "8180"
+  {{- end }}
+  {{- if and (ne .Values.deploymentMode "local") .Values.central.url }}
+  AETERNA_CENTRAL_URL: {{ .Values.central.url | quote }}
+  AETERNA_CENTRAL_AUTH: {{ .Values.central.auth | quote }}
+  {{- end }}
+  {{- if ne .Values.llm.provider "none" }}
+  AETERNA_LLM_PROVIDER: {{ .Values.llm.provider | quote }}
+  {{- if eq .Values.llm.provider "openai" }}
+  AETERNA_OPENAI_MODEL: {{ .Values.llm.openai.model | quote }}
+  AETERNA_OPENAI_EMBEDDING_MODEL: {{ .Values.llm.openai.embeddingModel | quote }}
+  {{- end }}
+  {{- if eq .Values.llm.provider "anthropic" }}
+  AETERNA_ANTHROPIC_MODEL: {{ .Values.llm.anthropic.model | quote }}
+  {{- end }}
+  {{- if eq .Values.llm.provider "ollama" }}
+  AETERNA_OLLAMA_HOST: {{ .Values.llm.ollama.host | quote }}
+  AETERNA_OLLAMA_MODEL: {{ .Values.llm.ollama.model | quote }}
+  AETERNA_OLLAMA_EMBEDDING_MODEL: {{ .Values.llm.ollama.embeddingModel | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.observability.tracing.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.observability.tracing.endpoint | quote }}
+  OTEL_TRACES_SAMPLER_ARG: {{ .Values.observability.tracing.samplingRatio | quote }}
+  {{- end }}
+{{- end }}

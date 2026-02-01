@@ -1,0 +1,78 @@
+{{- if .Values.aeterna.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "aeterna.fullname" . }}-migration
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "aeterna.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.aeterna.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.aeterna.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migration
+          securityContext:
+            {{- toYaml .Values.aeterna.securityContext | nindent 12 }}
+          image: {{ include "aeterna.image" . | quote }}
+          imagePullPolicy: {{ .Values.aeterna.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Running database migrations..."
+              aeterna migrate --yes
+              echo "Migrations completed successfully"
+          env:
+            - name: AETERNA_POSTGRESQL_HOST
+              value: {{ include "aeterna.postgresql.host" . | quote }}
+            - name: AETERNA_POSTGRESQL_PORT
+              value: {{ include "aeterna.postgresql.port" . | quote }}
+            - name: AETERNA_POSTGRESQL_DATABASE
+              value: {{ include "aeterna.postgresql.database" . | quote }}
+            - name: AETERNA_POSTGRESQL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.postgresql.secretName" . }}
+                  key: username
+                  optional: true
+            - name: AETERNA_POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.postgresql.secretName" . }}
+                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+      {{- with .Values.aeterna.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.aeterna.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
