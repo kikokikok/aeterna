@@ -29,6 +29,11 @@ bytes = "1.10"
 sha2 = "0.10"
 hex = "0.4"
 
+# Encryption and security (Phase 4)
+aes-gcm = "0.10"
+base64 = "0.22"
+aws-sdk-kms = "1.57"
+
 # Metrics and observability (Task 8)
 metrics.workspace = true
 statig.workspace = true
