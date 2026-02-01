@@ -3,28 +3,28 @@
 ## 1. CLI Setup Wizard (`aeterna setup`)
 
 ### 1.1 Core CLI Infrastructure
-- [ ] 1.1.1 Create `cli/` crate with Cargo.toml (dependencies: dialoguer, console, clap, serde, toml)
-- [ ] 1.1.2 Implement main entry point with subcommands (setup, status, validate)
-- [ ] 1.1.3 Add --non-interactive mode with CLI flags for all options
-- [ ] 1.1.4 Add --reconfigure flag to modify existing configuration
-- [ ] 1.1.5 Add --validate flag to check configuration validity
-- [ ] 1.1.6 Add --show flag to display current configuration
+- [x] 1.1.1 Create `cli/` crate with Cargo.toml (dependencies: dialoguer, console, clap, serde, toml)
+- [x] 1.1.2 Implement main entry point with subcommands (setup, status, validate)
+- [x] 1.1.3 Add --non-interactive mode with CLI flags for all options
+- [x] 1.1.4 Add --reconfigure flag to modify existing configuration
+- [x] 1.1.5 Add --validate flag to check configuration validity
+- [x] 1.1.6 Add --show flag to display current configuration
 - [ ] 1.1.7 Write unit tests for CLI argument parsing
 
 ### 1.2 Wizard Flow Implementation
-- [ ] 1.2.1 Implement deployment mode selector (Local / Hybrid / Remote)
-- [ ] 1.2.2 Implement vector backend selector (Qdrant, pgvector, Pinecone, Weaviate, MongoDB, Vertex AI, Databricks)
-- [ ] 1.2.3 Implement cache selector (Dragonfly, Valkey, External Redis)
-- [ ] 1.2.4 Implement PostgreSQL selector (CloudNativePG, External)
-- [ ] 1.2.5 Implement OPAL authorization toggle with explanation
-- [ ] 1.2.6 Implement LLM provider selector (OpenAI, Anthropic, Ollama, Skip)
-- [ ] 1.2.7 Implement OpenCode integration toggle
-- [ ] 1.2.8 Implement advanced options (Ingress, ServiceMonitor, NetworkPolicy, HPA, PDB)
+- [x] 1.2.1 Implement deployment mode selector (Local / Hybrid / Remote)
+- [x] 1.2.2 Implement vector backend selector (Qdrant, pgvector, Pinecone, Weaviate, MongoDB, Vertex AI, Databricks)
+- [x] 1.2.3 Implement cache selector (Dragonfly, Valkey, External Redis)
+- [x] 1.2.4 Implement PostgreSQL selector (CloudNativePG, External)
+- [x] 1.2.5 Implement OPAL authorization toggle with explanation
+- [x] 1.2.6 Implement LLM provider selector (OpenAI, Anthropic, Ollama, Skip)
+- [x] 1.2.7 Implement OpenCode integration toggle
+- [x] 1.2.8 Implement advanced options (Ingress, ServiceMonitor, NetworkPolicy, HPA, PDB)
 - [ ] 1.2.9 Write integration tests for wizard flow
 
 ### 1.3 Hybrid Mode Configuration
-- [ ] 1.3.1 Add central server URL prompt (for Hybrid/Remote modes)
-- [ ] 1.3.2 Add authentication method selector (API Key, OAuth2, Service Account)
+- [x] 1.3.1 Add central server URL prompt (for Hybrid/Remote modes)
+- [x] 1.3.2 Add authentication method selector (API Key, OAuth2, Service Account)
 - [ ] 1.3.3 Add local cache size selector for Hybrid mode
 - [ ] 1.3.4 Add offline Cedar Agent toggle for Hybrid mode
 - [ ] 1.3.5 Add sync interval configuration
@@ -32,12 +32,12 @@
 - [ ] 1.3.7 Write tests for Hybrid mode configuration
 
 ### 1.4 Configuration Generators
-- [ ] 1.4.1 Implement `values.yaml` generator for Helm deployments
-- [ ] 1.4.2 Implement `docker-compose.yaml` generator for local development
-- [ ] 1.4.3 Implement `.aeterna/config.toml` generator for runtime configuration
-- [ ] 1.4.4 Implement `~/.config/opencode/mcp.json` generator for OpenCode MCP
+- [x] 1.4.1 Implement `values.yaml` generator for Helm deployments
+- [x] 1.4.2 Implement `docker-compose.yaml` generator for local development
+- [x] 1.4.3 Implement `.aeterna/config.toml` generator for runtime configuration
+- [x] 1.4.4 Implement `~/.config/opencode/mcp.json` generator for OpenCode MCP
 - [ ] 1.4.5 Add template validation before writing files
-- [ ] 1.4.6 Add backup of existing files before overwriting
+- [x] 1.4.6 Add backup of existing files before overwriting
 - [ ] 1.4.7 Write unit tests for each generator
 
 ### 1.5 External Service Prompts
@@ -46,11 +46,11 @@
 - [ ] 1.5.3 Add MongoDB Atlas configuration prompts (connection URI)
 - [ ] 1.5.4 Add Vertex AI configuration prompts (project, region, endpoint, service account)
 - [ ] 1.5.5 Add Databricks configuration prompts (workspace URL, token, catalog)
-- [ ] 1.5.6 Add external PostgreSQL configuration prompts (host, port, database, credentials)
-- [ ] 1.5.7 Add external Redis configuration prompts (host, port, password)
-- [ ] 1.5.8 Add OpenAI API key prompt with validation
-- [ ] 1.5.9 Add Anthropic API key prompt with validation
-- [ ] 1.5.10 Add Ollama host configuration prompt
+- [x] 1.5.6 Add external PostgreSQL configuration prompts (host, port, database, credentials)
+- [x] 1.5.7 Add external Redis configuration prompts (host, port, password)
+- [x] 1.5.8 Add OpenAI API key prompt with validation
+- [x] 1.5.9 Add Anthropic API key prompt with validation
+- [x] 1.5.10 Add Ollama host configuration prompt
 - [ ] 1.5.11 Write tests for external service configuration
 
 ---
@@ -58,19 +58,19 @@
 ## 2. Helm Chart Structure
 
 ### 2.1 Project Setup
-- [ ] 2.1.1 Create `charts/aeterna/` directory structure
-- [ ] 2.1.2 Create `Chart.yaml` with metadata and subchart dependencies
-- [ ] 2.1.3 Create `values.yaml` with full schema (all options documented)
-- [ ] 2.1.4 Create `values.schema.json` for IDE validation
-- [ ] 2.1.5 Create `.helmignore` file
+- [x] 2.1.1 Create `charts/aeterna/` directory structure
+- [x] 2.1.2 Create `Chart.yaml` with metadata and subchart dependencies
+- [x] 2.1.3 Create `values.yaml` with full schema (all options documented)
+- [x] 2.1.4 Create `values.schema.json` for IDE validation
+- [x] 2.1.5 Create `.helmignore` file
 - [ ] 2.1.6 Add chart versioning strategy documentation
 
 ### 2.2 Template Helpers
-- [ ] 2.2.1 Create `_helpers.tpl` with naming conventions
-- [ ] 2.2.2 Add label generation helpers (app.kubernetes.io/*)
-- [ ] 2.2.3 Add selector helpers
-- [ ] 2.2.4 Add image reference helpers (with registry prefix support)
-- [ ] 2.2.5 Add secret reference helpers (inline vs existingSecret)
+- [x] 2.2.1 Create `_helpers.tpl` with naming conventions
+- [x] 2.2.2 Add label generation helpers (app.kubernetes.io/*)
+- [x] 2.2.3 Add selector helpers
+- [x] 2.2.4 Add image reference helpers (with registry prefix support)
+- [x] 2.2.5 Add secret reference helpers (inline vs existingSecret)
 - [ ] 2.2.6 Add resource calculation helpers
 - [ ] 2.2.7 Add validation helpers (mutual exclusivity checks)
 
@@ -79,43 +79,43 @@
 ## 3. Aeterna Core Services (Helm Templates)
 
 ### 3.1 Main Application Deployment
-- [ ] 3.1.1 Create `templates/aeterna/deployment.yaml` for Aeterna server
-- [ ] 3.1.2 Add environment variable injection from ConfigMap and Secrets
-- [ ] 3.1.3 Add deployment mode configuration (Local/Hybrid/Remote)
-- [ ] 3.1.4 Add feature flag environment variables (CCA, Radkit, RLM)
-- [ ] 3.1.5 Add liveness probe configuration
-- [ ] 3.1.6 Add readiness probe configuration
-- [ ] 3.1.7 Add startup probe configuration
-- [ ] 3.1.8 Add resource requests and limits
-- [ ] 3.1.9 Add pod anti-affinity for HA
-- [ ] 3.1.10 Add node selector and tolerations support
+- [x] 3.1.1 Create `templates/aeterna/deployment.yaml` for Aeterna server
+- [x] 3.1.2 Add environment variable injection from ConfigMap and Secrets
+- [x] 3.1.3 Add deployment mode configuration (Local/Hybrid/Remote)
+- [x] 3.1.4 Add feature flag environment variables (CCA, Radkit, RLM)
+- [x] 3.1.5 Add liveness probe configuration
+- [x] 3.1.6 Add readiness probe configuration
+- [x] 3.1.7 Add startup probe configuration
+- [x] 3.1.8 Add resource requests and limits
+- [x] 3.1.9 Add pod anti-affinity for HA
+- [x] 3.1.10 Add node selector and tolerations support
 
 ### 3.2 Service and Networking
-- [ ] 3.2.1 Create `templates/aeterna/service.yaml` for ClusterIP service
-- [ ] 3.2.2 Add metrics port to service (for Prometheus)
-- [ ] 3.2.3 Create `templates/aeterna/ingress.yaml` with TLS support
-- [ ] 3.2.4 Add Ingress class detection logic
-- [ ] 3.2.5 Add path-based routing for API endpoints
+- [x] 3.2.1 Create `templates/aeterna/service.yaml` for ClusterIP service
+- [x] 3.2.2 Add metrics port to service (for Prometheus)
+- [x] 3.2.3 Create `templates/aeterna/ingress.yaml` with TLS support
+- [x] 3.2.4 Add Ingress class detection logic
+- [x] 3.2.5 Add path-based routing for API endpoints
 
 ### 3.3 Configuration
-- [ ] 3.3.1 Create `templates/aeterna/configmap.yaml` for non-sensitive config
-- [ ] 3.3.2 Create `templates/aeterna/secret.yaml` with password generation
+- [x] 3.3.1 Create `templates/aeterna/configmap.yaml` for non-sensitive config
+- [x] 3.3.2 Create `templates/aeterna/secret.yaml` with password generation
 - [ ] 3.3.3 Add checksum annotation for rolling restarts on config change
 - [ ] 3.3.4 Add support for existingSecret references
 
 ### 3.4 Security
-- [ ] 3.4.1 Create `templates/aeterna/serviceaccount.yaml`
+- [x] 3.4.1 Create `templates/aeterna/serviceaccount.yaml`
 - [ ] 3.4.2 Create `templates/aeterna/rbac.yaml` (Role, RoleBinding)
 - [ ] 3.4.3 Add securityContext to pods (runAsNonRoot, readOnlyRootFilesystem)
-- [ ] 3.4.4 Create `templates/aeterna/networkpolicy.yaml` for isolation
+- [x] 3.4.4 Create `templates/aeterna/networkpolicy.yaml` for isolation
 
 ### 3.5 Scaling and Availability
-- [ ] 3.5.1 Create `templates/aeterna/hpa.yaml` for horizontal pod autoscaling
-- [ ] 3.5.2 Create `templates/aeterna/pdb.yaml` for pod disruption budget
+- [x] 3.5.1 Create `templates/aeterna/hpa.yaml` for horizontal pod autoscaling
+- [x] 3.5.2 Create `templates/aeterna/pdb.yaml` for pod disruption budget
 - [ ] 3.5.3 Add VPA support (VerticalPodAutoscaler template)
 
 ### 3.6 Database Migrations
-- [ ] 3.6.1 Create `templates/aeterna/job-migration.yaml` for schema migrations
+- [x] 3.6.1 Create `templates/aeterna/job-migration.yaml` for schema migrations
 - [ ] 3.6.2 Add pre-upgrade hook for migrations
 - [ ] 3.6.3 Add migration job cleanup policy
 
@@ -218,10 +218,10 @@
 ## 7. Observability
 
 ### 7.1 Prometheus Integration
-- [ ] 7.1.1 Create `templates/servicemonitor.yaml` for Prometheus Operator
+- [x] 7.1.1 Create `templates/aeterna/servicemonitor.yaml` for Prometheus Operator
 - [ ] 7.1.2 Add metrics port configuration
 - [ ] 7.1.3 Add scrape interval and timeout settings
-- [ ] 7.1.4 Add conditional rendering (when serviceMonitor.enabled=true)
+- [x] 7.1.4 Add conditional rendering (when serviceMonitor.enabled=true)
 
 ### 7.2 Tracing
 - [ ] 7.2.1 Add OpenTelemetry configuration to deployment
@@ -311,10 +311,10 @@
 ## 11. Documentation
 
 ### 11.1 Chart Documentation
-- [ ] 11.1.1 Create `charts/aeterna/README.md` with full reference
-- [ ] 11.1.2 Document all values.yaml options
+- [x] 11.1.1 Create `charts/aeterna/README.md` with full reference
+- [x] 11.1.2 Document all values.yaml options
 - [ ] 11.1.3 Add architecture diagram
-- [ ] 11.1.4 Add troubleshooting section
+- [x] 11.1.4 Add troubleshooting section
 
 ### 11.2 Deployment Guides
 - [ ] 11.2.1 Create Local mode quick start guide

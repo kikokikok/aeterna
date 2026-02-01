@@ -655,7 +655,7 @@ agent = initialize_agent([context_tool, hindsight_tool], llm, agent="zero-shot-r
 ### OpenCode Plugin
 
 ```typescript
-import { McpClient } from '@aeterna/opencode-plugin';
+import { McpClient } from '@kiko-aeterna/opencode-plugin';
 
 const client = new McpClient({ url: 'http://localhost:8080' });
 
