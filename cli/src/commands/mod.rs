@@ -4,6 +4,7 @@ pub mod check;
 pub mod completion;
 pub mod context;
 pub mod govern;
+pub mod grepai;
 pub mod hints;
 pub mod init;
 pub mod knowledge;
@@ -79,6 +80,9 @@ pub enum Commands {
 
     #[command(subcommand, about = "System administration (health, migrate, export)")]
     Admin(admin::AdminCommand),
+
+    #[command(subcommand, about = "Semantic code search and call graph analysis (GrepAI)")]
+    GrepAI(grepai::GrepAICommand),
 
     #[command(about = "Generate shell completions")]
     Completion(completion::CompletionArgs),
