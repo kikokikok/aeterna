@@ -1,0 +1,21 @@
+{{- if .Values.aeterna.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aeterna.fullname" . }}
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.aeterna.service.type }}
+  ports:
+    - port: {{ .Values.aeterna.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: {{ .Values.aeterna.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "aeterna.selectorLabels" . | nindent 4 }}
+{{- end }}
