@@ -1,0 +1,41 @@
+# chart-testing configuration
+# https://github.com/helm/chart-testing
+
+# Directories containing charts (relative to project root)
+chart-dirs:
+  - charts
+
+# Chart repositories to add before linting
+chart-repos:
+  - name: cloudnative-pg
+    url: https://cloudnative-pg.github.io/charts
+  - name: qdrant
+    url: https://qdrant.github.io/qdrant-helm
+  - name: weaviate
+    url: https://weaviate.github.io/weaviate-helm/
+  - name: percona
+    url: https://percona.github.io/percona-helm-charts/
+
+# Branch to compare against for change detection
+target-branch: main
+
+# Lint configuration
+helm-extra-args: --timeout 600s
+
+# Validate chart version increment
+check-version-increment: true
+
+# Validate maintainers in Chart.yaml
+validate-maintainers: true
+
+# Validate chart YAML structure
+validate-chart-schema: true
+
+# Additional args for helm dependency build
+helm-dependency-extra-args: --skip-refresh
+
+# Files to exclude from change detection
+excluded-charts: []
+
+# Debug mode
+debug: false
