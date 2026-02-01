@@ -1,0 +1,150 @@
+{{- if .Values.opal.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "aeterna.fullname" . }}-opal-server
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+    {{- include "aeterna.opal.server.selectorLabels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "aeterna.fullname" . }}-opal-server
+  replicas: {{ .Values.opal.server.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "aeterna.opal.server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/opal/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/opal/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "aeterna.opal.labels" . | nindent 8 }}
+        {{- include "aeterna.opal.server.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "aeterna.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: opal-server
+          image: "{{ .Values.opal.server.image.repository }}:{{ .Values.opal.server.image.tag }}"
+          imagePullPolicy: {{ .Values.opal.server.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 7002
+              protocol: TCP
+            - name: broadcast
+              containerPort: 7003
+              protocol: TCP
+          env:
+            - name: OPAL_BROADCAST_URI
+              value: "http://{{ include "aeterna.fullname" . }}-opal-server:7003"
+            - name: OPAL_DATA_CONFIG_SOURCES
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "aeterna.fullname" . }}-opal
+                  key: data-config-sources
+            - name: OPAL_POLICY_REPO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "aeterna.fullname" . }}-opal
+                  key: policy-repo-url
+                  optional: true
+            - name: OPAL_AUTH_MASTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.fullname" . }}-opal
+                  key: master-token
+            - name: OPAL_AUTH_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.fullname" . }}-opal
+                  key: public-key
+                  optional: true
+            - name: OPAL_AUTH_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.fullname" . }}-opal
+                  key: private-key
+                  optional: true
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.opal.server.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- if gt (int .Values.opal.server.replicaCount) 1 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "aeterna.opal.server.selectorLabels" . | nindent 20 }}
+                topologyKey: topology.kubernetes.io/zone
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aeterna.fullname" . }}-opal-server
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+    {{- include "aeterna.opal.server.selectorLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7002
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 7003
+      targetPort: broadcast
+      protocol: TCP
+      name: broadcast
+  selector:
+    {{- include "aeterna.opal.server.selectorLabels" . | nindent 4 }}
+---
+{{- if gt (int .Values.opal.server.replicaCount) 1 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aeterna.fullname" . }}-opal-server
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+    {{- include "aeterna.opal.server.selectorLabels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "aeterna.opal.server.selectorLabels" . | nindent 6 }}
+{{- end }}
+{{- end }}

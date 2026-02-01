@@ -1,0 +1,130 @@
+# Aeterna Hybrid Mode Values
+# Local cache with central server for data persistence
+
+deploymentMode: hybrid
+
+# Central server configuration
+central:
+  url: "https://aeterna-central.example.com"
+  auth: apiKey
+  existingSecret: "aeterna-central-credentials"
+  secretKey: "api-key"
+
+aeterna:
+  enabled: true
+  replicaCount: 2
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+  ingress:
+    enabled: true
+    className: "nginx"
+    hosts:
+      - host: aeterna.local.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+
+  features:
+    cca: true
+    radkit: false
+    rlm: true
+    reflective: true
+
+# Use bundled Qdrant for local vector cache
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: true
+
+# Use bundled Dragonfly for local cache
+cache:
+  type: dragonfly
+  dragonfly:
+    enabled: true
+
+# Disable local PostgreSQL (data on central server)
+postgresql:
+  bundled: false
+  external:
+    host: ""  # Not needed in hybrid mode
+
+# Enable local Cedar Agent for offline policy evaluation
+opal:
+  enabled: true
+  server:
+    replicaCount: 1
+  cedarAgent:
+    enabled: true
+  fetcher:
+    enabled: false  # Central server handles data fetching
+
+# Use central server's LLM configuration
+llm:
+  provider: none
+
+# Basic observability
+observability:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+
+  tracing:
+    enabled: false
+
+  logging:
+    level: info
+    format: json
+
+# Enable network policies
+networkPolicy:
+  enabled: true
+
+# Subcharts - only local cache components
+cnpg:
+  enabled: false
+
+dragonfly:
+  enabled: true
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+qdrant:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    size: 20Gi
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+weaviate:
+  enabled: false
+
+mongodb:
+  enabled: false
