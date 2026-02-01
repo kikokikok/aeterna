@@ -1,0 +1,170 @@
+# Aeterna Production Values
+# Use for production deployments with high availability
+
+deploymentMode: local
+
+aeterna:
+  enabled: true
+  replicaCount: 3
+
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+  # Enable HA features
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  pdb:
+    enabled: true
+    minAvailable: 2
+
+  # Spread across zones
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: aeterna
+
+  # Production ingress with TLS
+  ingress:
+    enabled: true
+    className: "nginx"
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - host: aeterna.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: aeterna-tls
+        hosts:
+          - aeterna.example.com
+
+  features:
+    cca: true
+    radkit: true
+    rlm: true
+    reflective: true
+
+# Use bundled Qdrant with HA
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: true
+
+# Use bundled Dragonfly
+cache:
+  type: dragonfly
+  dragonfly:
+    enabled: true
+
+# Use bundled PostgreSQL with HA
+postgresql:
+  bundled: true
+  cluster:
+    instances: 3
+    storage:
+      size: 100Gi
+      storageClass: "fast-ssd"
+
+# OPAL with HA
+opal:
+  enabled: true
+  server:
+    replicaCount: 2
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+  cedarAgent:
+    enabled: true
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  fetcher:
+    enabled: true
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+# Configure LLM provider (use existingSecret)
+llm:
+  provider: openai
+  openai:
+    existingSecret: "openai-credentials"
+    model: "gpt-4o"
+    embeddingModel: "text-embedding-3-small"
+
+# Full observability
+observability:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    labels:
+      release: prometheus
+
+  tracing:
+    enabled: true
+    endpoint: "http://jaeger-collector:4317"
+    samplingRatio: 0.1
+
+  logging:
+    level: info
+    format: json
+
+# Enable network policies
+networkPolicy:
+  enabled: true
+
+# Subcharts with HA
+cnpg:
+  enabled: true
+
+dragonfly:
+  enabled: true
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+
+qdrant:
+  enabled: true
+  replicaCount: 3
+  persistence:
+    size: 100Gi
+    storageClass: "fast-ssd"
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi

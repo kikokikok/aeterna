@@ -100,13 +100,13 @@
 ### 3.3 Configuration
 - [x] 3.3.1 Create `templates/aeterna/configmap.yaml` for non-sensitive config
 - [x] 3.3.2 Create `templates/aeterna/secret.yaml` with password generation
-- [ ] 3.3.3 Add checksum annotation for rolling restarts on config change
-- [ ] 3.3.4 Add support for existingSecret references
+- [x] 3.3.3 Add checksum annotation for rolling restarts on config change
+- [x] 3.3.4 Add support for existingSecret references
 
 ### 3.4 Security
 - [x] 3.4.1 Create `templates/aeterna/serviceaccount.yaml`
-- [ ] 3.4.2 Create `templates/aeterna/rbac.yaml` (Role, RoleBinding)
-- [ ] 3.4.3 Add securityContext to pods (runAsNonRoot, readOnlyRootFilesystem)
+- [x] 3.4.2 Create `templates/aeterna/rbac.yaml` (Role, RoleBinding)
+- [x] 3.4.3 Add securityContext to pods (runAsNonRoot, readOnlyRootFilesystem)
 - [x] 3.4.4 Create `templates/aeterna/networkpolicy.yaml` for isolation
 
 ### 3.5 Scaling and Availability
@@ -124,86 +124,86 @@
 ## 4. OPAL Stack Integration (Merge from aeterna-opal)
 
 ### 4.1 OPAL Server
-- [ ] 4.1.1 Create `templates/opal/opal-server.yaml` (StatefulSet + Service)
-- [ ] 4.1.2 Add pod anti-affinity for zone-aware distribution
-- [ ] 4.1.3 Add PodDisruptionBudget for OPAL Server
-- [ ] 4.1.4 Add broadcasting configuration for multi-replica
+- [x] 4.1.1 Create `templates/opal/opal-server.yaml` (StatefulSet + Service)
+- [x] 4.1.2 Add pod anti-affinity for zone-aware distribution
+- [x] 4.1.3 Add PodDisruptionBudget for OPAL Server
+- [x] 4.1.4 Add broadcasting configuration for multi-replica
 
 ### 4.2 Cedar Agent
-- [ ] 4.2.1 Create `templates/opal/cedar-agent.yaml` (DaemonSet + Service)
-- [ ] 4.2.2 Add tolerations for control-plane nodes
-- [ ] 4.2.3 Configure OPAL Client connection to Server
+- [x] 4.2.1 Create `templates/opal/cedar-agent.yaml` (DaemonSet + Service)
+- [x] 4.2.2 Add tolerations for control-plane nodes
+- [x] 4.2.3 Configure OPAL Client connection to Server
 
 ### 4.3 OPAL Fetcher
-- [ ] 4.3.1 Create `templates/opal/opal-fetcher.yaml` (Deployment + Service)
-- [ ] 4.3.2 Configure PostgreSQL data source connection
-- [ ] 4.3.3 Add health check endpoints
+- [x] 4.3.1 Create `templates/opal/opal-fetcher.yaml` (Deployment + Service)
+- [x] 4.3.2 Configure PostgreSQL data source connection
+- [x] 4.3.3 Add health check endpoints
 
 ### 4.4 OPAL Configuration
-- [ ] 4.4.1 Create `templates/opal/configmap.yaml` for OPAL config
-- [ ] 4.4.2 Create `templates/opal/secrets.yaml` for tokens and credentials
-- [ ] 4.4.3 Add conditional rendering (only when opal.enabled=true)
+- [x] 4.4.1 Create `templates/opal/configmap.yaml` for OPAL config
+- [x] 4.4.2 Create `templates/opal/secrets.yaml` for tokens and credentials
+- [x] 4.4.3 Add conditional rendering (only when opal.enabled=true)
 
 ---
 
 ## 5. Subchart Dependencies (Open-Source Only)
 
 ### 5.1 CloudNativePG (PostgreSQL)
-- [ ] 5.1.1 Add CloudNativePG as subchart dependency in Chart.yaml
-- [ ] 5.1.2 Pin to specific version (0.23.x)
+- [x] 5.1.1 Add CloudNativePG as subchart dependency in Chart.yaml
+- [x] 5.1.2 Pin to specific version (0.23.x)
 - [ ] 5.1.3 Configure cluster creation template
 - [ ] 5.1.4 Add pgvector extension installation
 - [ ] 5.1.5 Configure backup to S3/GCS/Azure
-- [ ] 5.1.6 Add conditional logic for external PostgreSQL
+- [x] 5.1.6 Add conditional logic for external PostgreSQL
 - [ ] 5.1.7 Document CloudNativePG upgrade procedure
 
 ### 5.2 Dragonfly (Redis-Compatible Cache)
-- [ ] 5.2.1 Add Dragonfly operator as subchart dependency
-- [ ] 5.2.2 Pin to specific version
+- [x] 5.2.1 Add Dragonfly operator as subchart dependency
+- [x] 5.2.2 Pin to specific version
 - [ ] 5.2.3 Configure Dragonfly instance template
 - [ ] 5.2.4 Add HA configuration (master/replica)
-- [ ] 5.2.5 Add conditional logic for external Redis
+- [x] 5.2.5 Add conditional logic for external Redis
 
 ### 5.3 Valkey (Alternative Redis)
 - [ ] 5.3.1 Add Valkey as subchart dependency
 - [ ] 5.3.2 Pin to specific version
 - [ ] 5.3.3 Configure Valkey instance template
-- [ ] 5.3.4 Add mutual exclusivity with Dragonfly (only one enabled)
+- [x] 5.3.4 Add mutual exclusivity with Dragonfly (only one enabled)
 
 ### 5.4 Qdrant (Vector Database)
-- [ ] 5.4.1 Add official Qdrant chart as subchart dependency
-- [ ] 5.4.2 Pin to specific version (0.10.x)
+- [x] 5.4.1 Add official Qdrant chart as subchart dependency
+- [x] 5.4.2 Pin to specific version (0.10.x)
 - [ ] 5.4.3 Configure distributed deployment (3+ nodes for production)
 - [ ] 5.4.4 Add snapshot/backup configuration
-- [ ] 5.4.5 Add conditional logic for external Qdrant
+- [x] 5.4.5 Add conditional logic for external Qdrant
 
 ### 5.5 Weaviate (Optional Vector Backend)
-- [ ] 5.5.1 Add Weaviate as optional subchart dependency
-- [ ] 5.5.2 Pin to specific version (17.x)
+- [x] 5.5.1 Add Weaviate as optional subchart dependency
+- [x] 5.5.2 Pin to specific version (17.x)
 - [ ] 5.5.3 Configure multi-tenancy settings
-- [ ] 5.5.4 Add conditional logic (only when vectorBackend.type=weaviate)
+- [x] 5.5.4 Add conditional logic (only when vectorBackend.type=weaviate)
 
 ### 5.6 Percona MongoDB (Optional Vector Backend)
-- [ ] 5.6.1 Add Percona MongoDB Operator as optional subchart
-- [ ] 5.6.2 Pin to specific version (1.21.x)
+- [x] 5.6.1 Add Percona MongoDB Operator as optional subchart
+- [x] 5.6.2 Pin to specific version (1.21.x)
 - [ ] 5.6.3 Configure replica set with Atlas Search
-- [ ] 5.6.4 Add conditional logic (only when vectorBackend.type=mongodb)
+- [x] 5.6.4 Add conditional logic (only when vectorBackend.type=mongodb)
 
 ---
 
 ## 6. Deployment Modes
 
 ### 6.1 Local Mode
-- [ ] 6.1.1 Create values-local.yaml with all components enabled
-- [ ] 6.1.2 Configure resource limits for single-node deployment
-- [ ] 6.1.3 Disable HA features (single replicas)
+- [x] 6.1.1 Create values-local.yaml with all components enabled
+- [x] 6.1.2 Configure resource limits for single-node deployment
+- [x] 6.1.3 Disable HA features (single replicas)
 - [ ] 6.1.4 Document local mode limitations
 
 ### 6.2 Hybrid Mode
-- [ ] 6.2.1 Create values-hybrid.yaml with local cache only
-- [ ] 6.2.2 Add central server connection configuration
+- [x] 6.2.1 Create values-hybrid.yaml with local cache only
+- [x] 6.2.2 Add central server connection configuration
 - [ ] 6.2.3 Configure sync service settings
-- [ ] 6.2.4 Enable local Cedar Agent for offline policy evaluation
+- [x] 6.2.4 Enable local Cedar Agent for offline policy evaluation
 - [ ] 6.2.5 Configure memory layer sync (Working/Session → Episodic)
 - [ ] 6.2.6 Document hybrid mode architecture and data flow
 
@@ -238,8 +238,8 @@
 ## 8. Secret Management
 
 ### 8.1 Helm Secrets (Default)
-- [ ] 8.1.1 Implement password generation in secret templates
-- [ ] 8.1.2 Add checksum annotation for secret rotation
+- [x] 8.1.1 Implement password generation in secret templates
+- [x] 8.1.2 Add checksum annotation for secret rotation
 
 ### 8.2 SOPS Integration
 - [ ] 8.2.1 Create values-sops.yaml example
@@ -286,12 +286,12 @@
 ## 10. Testing
 
 ### 10.1 Chart Testing
-- [ ] 10.1.1 Create `tests/` directory with helm test pods
-- [ ] 10.1.2 Write connection test for PostgreSQL
+- [x] 10.1.1 Create `tests/` directory with helm test pods
+- [x] 10.1.2 Write connection test for PostgreSQL
 - [ ] 10.1.3 Write connection test for Redis/Dragonfly
-- [ ] 10.1.4 Write connection test for Qdrant
-- [ ] 10.1.5 Write health check test for Aeterna server
-- [ ] 10.1.6 Write OPAL connectivity test
+- [x] 10.1.4 Write connection test for Qdrant
+- [x] 10.1.5 Write health check test for Aeterna server
+- [x] 10.1.6 Write OPAL connectivity test
 
 ### 10.2 Integration Testing
 - [ ] 10.2.1 Test Local mode deployment (all bundled)
@@ -323,9 +323,9 @@
 - [ ] 11.2.4 Create production deployment checklist
 
 ### 11.3 Example Configurations
-- [ ] 11.3.1 Create values-local.yaml example
-- [ ] 11.3.2 Create values-production.yaml example
-- [ ] 11.3.3 Create values-hybrid.yaml example
+- [x] 11.3.1 Create values-local.yaml example
+- [x] 11.3.2 Create values-production.yaml example
+- [x] 11.3.3 Create values-hybrid.yaml example
 - [ ] 11.3.4 Create values-aws.yaml example (EKS-specific)
 - [ ] 11.3.5 Create values-gke.yaml example (GKE-specific)
 - [ ] 11.3.6 Create values-aks.yaml example (AKS-specific)
