@@ -341,21 +341,21 @@
 ## 12. CI/CD
 
 ### 12.1 Chart Validation
-- [ ] 12.1.1 Add chart linting to CI (helm lint)
-- [ ] 12.1.2 Add helm template validation
-- [ ] 12.1.3 Add kubeval/kubeconform validation
-- [ ] 12.1.4 Add values schema validation
+- [x] 12.1.1 Add chart linting to CI (helm lint)
+- [x] 12.1.2 Add helm template validation
+- [x] 12.1.3 Add kubeval/kubeconform validation
+- [x] 12.1.4 Add values schema validation
 
 ### 12.2 Publishing
-- [ ] 12.2.1 Add chart publishing workflow to GitHub Pages
-- [ ] 12.2.2 Add OCI registry publishing (ghcr.io)
-- [ ] 12.2.3 Add release automation with changelog
+- [x] 12.2.1 Add chart publishing workflow to GitHub Pages
+- [x] 12.2.2 Add OCI registry publishing (ghcr.io)
+- [x] 12.2.3 Add release automation with changelog
 
 ### 12.3 Docker Images
-- [ ] 12.3.1 Add Dockerfile for Aeterna server
-- [ ] 12.3.2 Add multi-arch build (amd64 + arm64)
-- [ ] 12.3.3 Add image scanning (Trivy)
-- [ ] 12.3.4 Add image signing (Cosign)
+- [x] 12.3.1 Add Dockerfile for Aeterna server
+- [x] 12.3.2 Add multi-arch build (amd64 + arm64)
+- [x] 12.3.3 Add image scanning (Trivy)
+- [x] 12.3.4 Add image signing (Cosign)
 
 ---
 
