@@ -319,34 +319,36 @@ fn generate_helm_values(config: &SetupConfig) -> String {
 }
 
 fn generate_opencode_config(config: &SetupConfig) -> Result<Option<PathBuf>> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot find home directory"))?;
-    let opencode_dir = home.join(".config").join("opencode");
-    fs::create_dir_all(&opencode_dir)?;
+    let cwd = std::env::current_dir()?;
+    let opencode_jsonc_path = cwd.join("opencode.jsonc");
+    backup_if_exists(&opencode_jsonc_path)?;
 
-    let mcp_path = opencode_dir.join("mcp.json");
-    backup_if_exists(&mcp_path)?;
-
-    let transport = if matches!(config.mode, DeploymentMode::Local) {
+    let mcp_transport = if matches!(config.mode, DeploymentMode::Local) {
         r#"{
-      "type": "stdio",
-      "command": "aeterna-mcp"
-    }"#
+        "type": "stdio",
+        "command": "aeterna-mcp"
+      }"#
+        .to_string()
     } else {
         let url = config
             .central_url
             .as_deref()
             .unwrap_or("http://localhost:8080");
-        &format!(
+        format!(
             r#"{{
-      "type": "http",
-      "url": "{}/mcp"
-    }}"#,
+        "type": "http",
+        "url": "{}/mcp"
+      }}"#,
             url
         )
     };
 
     let content = format!(
         r#"{{
+  "$schema": "https://opencode.ai/schemas/opencode.json",
+  "plugins": [
+    "@aeterna/opencode-plugin"
+  ],
   "mcpServers": {{
     "aeterna": {{
       "transport": {}
@@ -354,9 +356,9 @@ fn generate_opencode_config(config: &SetupConfig) -> Result<Option<PathBuf>> {
   }}
 }}
 "#,
-        transport
+        mcp_transport
     );
 
-    fs::write(&mcp_path, content)?;
-    Ok(Some(mcp_path))
+    fs::write(&opencode_jsonc_path, content)?;
+    Ok(Some(opencode_jsonc_path))
 }
