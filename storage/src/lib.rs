@@ -1,9 +1,12 @@
 pub mod approval_workflow;
 pub mod budget_storage;
+pub mod encryption;
 pub mod events;
+pub mod gdpr;
 pub mod governance;
 pub mod graph;
 pub mod graph_duckdb;
+pub mod kms_integration;
 pub mod meta_governance;
 pub mod postgres;
 pub mod query_builder;
@@ -43,4 +46,20 @@ pub use meta_governance::{
 // Re-export RLM weight storage types
 pub use rlm_weights::{
     PostgresRlmWeightStorage, RlmWeightStorage, RlmWeightStorageError, StoredPolicyState
+};
+
+// Re-export encryption types
+pub use encryption::{
+    EncryptedData, EncryptionConfig, EncryptionError, EncryptionManager
+};
+
+// Re-export KMS types
+pub use kms_integration::{
+    AwsKmsProvider, KmsClient, KmsConfig, KmsError, KmsKeyMetadata, KmsProvider, LocalKmsProvider
+};
+
+// Re-export GDPR types
+pub use gdpr::{
+    AnonymizationStrategy, GdprAuditLog, GdprConsent, GdprError, GdprOperations,
+    PostgresGdprStorage, UserDataExport
 };
