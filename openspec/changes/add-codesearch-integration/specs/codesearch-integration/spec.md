@@ -1,9 +1,9 @@
-# GrepAI Integration Specification
+# Code Search Integration Specification
 
 ## ADDED Requirements
 
 ### Requirement: Semantic Code Search
-The system SHALL provide semantic code search via GrepAI integration, enabling natural language queries to find relevant code chunks.
+The system SHALL provide semantic code search via Code Search integration, enabling natural language queries to find relevant code chunks.
 
 #### Scenario: Search code by meaning
 - **GIVEN** a project with indexed code
@@ -23,7 +23,7 @@ The system SHALL provide semantic code search via GrepAI integration, enabling n
 ---
 
 ### Requirement: Call Graph Analysis
-The system SHALL provide call graph analysis via GrepAI integration, enabling agents to trace function callers and callees.
+The system SHALL provide call graph analysis via Code Search integration, enabling agents to trace function callers and callees.
 
 #### Scenario: Trace callers
 - **GIVEN** a codebase with function `HandleLogin`
@@ -46,117 +46,117 @@ The system SHALL provide call graph analysis via GrepAI integration, enabling ag
 The system SHALL maintain up-to-date code indexes by watching file changes.
 
 #### Scenario: Index updates on file change
-- **GIVEN** GrepAI is watching a project directory
+- **GIVEN** Code Search is watching a project directory
 - **WHEN** a source file is modified
 - **THEN** the index is updated within 5 seconds
 
 #### Scenario: Index updates on file creation
-- **GIVEN** GrepAI is watching a project directory
+- **GIVEN** Code Search is watching a project directory
 - **WHEN** a new source file is created
 - **THEN** the file is indexed within 5 seconds
 
 #### Scenario: Index updates on file deletion
-- **GIVEN** GrepAI is watching a project directory
+- **GIVEN** Code Search is watching a project directory
 - **WHEN** a source file is deleted
 - **THEN** the file is removed from the index within 5 seconds
 
 ---
 
 ### Requirement: MCP Tool Proxy
-The system SHALL expose GrepAI tools through Aeterna's MCP interface as `code_*` tools.
+The system SHALL expose Code Search tools through Aeterna's MCP interface as `code_*` tools.
 
 #### Scenario: Tool discovery
-- **GIVEN** GrepAI sidecar is enabled
+- **GIVEN** Code Search sidecar is enabled
 - **WHEN** agent requests available tools via MCP
 - **THEN** response includes `code_search`, `code_trace_callers`, `code_trace_callees`, `code_graph`, `code_index_status`
 
 #### Scenario: Proxy forwards requests
-- **GIVEN** GrepAI sidecar is running
+- **GIVEN** Code Search sidecar is running
 - **WHEN** agent calls `code_search` tool
-- **THEN** Aeterna forwards request to GrepAI's `grepai_search` tool and returns transformed response
+- **THEN** Aeterna forwards request to Code Search's `codesearch_search` tool and returns transformed response
 
-#### Scenario: Proxy handles GrepAI failure
-- **GIVEN** GrepAI sidecar is unavailable
+#### Scenario: Proxy handles Code Search failure
+- **GIVEN** Code Search sidecar is unavailable
 - **WHEN** agent calls `code_search` tool
 - **THEN** Aeterna returns graceful error with status code and message
 
 ---
 
 ### Requirement: Shared Vector Backend
-The system SHALL support configuring GrepAI to use Aeterna's vector backend (Qdrant or PostgreSQL/pgvector).
+The system SHALL support configuring Code Search to use Aeterna's vector backend (Qdrant or PostgreSQL/pgvector).
 
 #### Scenario: Shared Qdrant backend
 - **GIVEN** Aeterna deployed with Qdrant
-- **WHEN** GrepAI is configured with `store.backend: qdrant`
-- **THEN** GrepAI creates collections prefixed with `grepai_` in the same Qdrant instance
+- **WHEN** Code Search is configured with `store.backend: qdrant`
+- **THEN** Code Search creates collections prefixed with `codesearch_` in the same Qdrant instance
 
 #### Scenario: Shared PostgreSQL backend
 - **GIVEN** Aeterna deployed with PostgreSQL/pgvector
-- **WHEN** GrepAI is configured with `store.backend: postgres`
-- **THEN** GrepAI creates tables in `grepai` schema in the same PostgreSQL database
+- **WHEN** Code Search is configured with `store.backend: postgres`
+- **THEN** Code Search creates tables in `codesearch` schema in the same PostgreSQL database
 
 #### Scenario: Collection isolation by tenant
-- **GIVEN** multi-tenant deployment with GrepAI enabled
+- **GIVEN** multi-tenant deployment with Code Search enabled
 - **WHEN** indexing projects for tenant "acme-corp"
-- **THEN** GrepAI uses collection `grepai_acme-corp_{project}` for isolation
+- **THEN** Code Search uses collection `codesearch_acme-corp_{project}` for isolation
 
 ---
 
 ### Requirement: Helm Chart Sidecar Deployment
-The system SHALL support deploying GrepAI as a sidecar container in the Aeterna pod.
+The system SHALL support deploying Code Search as a sidecar container in the Aeterna pod.
 
-#### Scenario: Enable GrepAI sidecar
-- **GIVEN** Helm values with `grepai.enabled: true`
+#### Scenario: Enable Code Search sidecar
+- **GIVEN** Helm values with `codesearch.enabled: true`
 - **WHEN** deploying the chart
-- **THEN** Aeterna pod includes GrepAI container alongside main container
+- **THEN** Aeterna pod includes Code Search container alongside main container
 
-#### Scenario: Disable GrepAI sidecar
-- **GIVEN** Helm values with `grepai.enabled: false` (default)
+#### Scenario: Disable Code Search sidecar
+- **GIVEN** Helm values with `codesearch.enabled: false` (default)
 - **WHEN** deploying the chart
-- **THEN** Aeterna pod does not include GrepAI container
+- **THEN** Aeterna pod does not include Code Search container
 
-#### Scenario: Configure GrepAI resources
-- **GIVEN** Helm values with `grepai.resources.limits.memory: 1Gi`
+#### Scenario: Configure Code Search resources
+- **GIVEN** Helm values with `codesearch.resources.limits.memory: 1Gi`
 - **WHEN** deploying the chart
-- **THEN** GrepAI container has memory limit of 1Gi
+- **THEN** Code Search container has memory limit of 1Gi
 
 ---
 
 ### Requirement: CLI Integration
-The system SHALL provide CLI commands for interacting with GrepAI functionality.
+The system SHALL provide CLI commands for interacting with Code Search functionality.
 
 #### Scenario: Initialize project for indexing
 - **GIVEN** a project directory at `/path/to/project`
-- **WHEN** user runs `aeterna grepai init /path/to/project`
-- **THEN** GrepAI configuration is created and initial index is built
+- **WHEN** user runs `aeterna codesearch init /path/to/project`
+- **THEN** Code Search configuration is created and initial index is built
 
 #### Scenario: Search from CLI
 - **GIVEN** an indexed project
-- **WHEN** user runs `aeterna grepai search "authentication logic"`
+- **WHEN** user runs `aeterna codesearch search "authentication logic"`
 - **THEN** CLI displays matching code chunks with file paths and snippets
 
 #### Scenario: Trace from CLI
 - **GIVEN** an indexed project
-- **WHEN** user runs `aeterna grepai trace callers LoginHandler`
+- **WHEN** user runs `aeterna codesearch trace callers LoginHandler`
 - **THEN** CLI displays functions that call LoginHandler
 
 ---
 
 ### Requirement: Embedder Configuration
-The system SHALL support configuring embedding providers for GrepAI (Ollama or OpenAI).
+The system SHALL support configuring embedding providers for Code Search (Ollama or OpenAI).
 
 #### Scenario: Use Ollama embeddings (default)
-- **GIVEN** Helm values with `grepai.embedder.provider: ollama`
-- **WHEN** GrepAI indexes code
+- **GIVEN** Helm values with `codesearch.embedder.provider: ollama`
+- **WHEN** Code Search indexes code
 - **THEN** embeddings are generated using local Ollama with model `nomic-embed-text`
 
 #### Scenario: Use OpenAI embeddings
-- **GIVEN** Helm values with `grepai.embedder.provider: openai` and API key configured
-- **WHEN** GrepAI indexes code
+- **GIVEN** Helm values with `codesearch.embedder.provider: openai` and API key configured
+- **WHEN** Code Search indexes code
 - **THEN** embeddings are generated using OpenAI's `text-embedding-3-small` model
 
 #### Scenario: Embedding model alignment
-- **GIVEN** both Aeterna and GrepAI configured with same embedding model
+- **GIVEN** both Aeterna and Code Search configured with same embedding model
 - **WHEN** comparing embedding dimensions
 - **THEN** both produce embeddings of identical dimensions (768 for nomic-embed-text)
 
@@ -176,7 +176,7 @@ The system SHALL maintain a unified graph in DuckDB linking knowledge, memories,
 - **THEN** a graph node of type `memory` is created in DuckDB with the memory's ID and embedding
 
 #### Scenario: Code node creation
-- **GIVEN** GrepAI indexes a new file `src/auth/login.rs`
+- **GIVEN** Code Search indexes a new file `src/auth/login.rs`
 - **WHEN** the file is indexed
 - **THEN** graph nodes of type `code_file` and `code_symbol` are created for the file and its functions
 
@@ -197,7 +197,7 @@ The system SHALL support creating edges (relationships) between any graph nodes.
 
 #### Scenario: Policy violation link
 - **GIVEN** a policy "No panic!() in production code" exists
-- **WHEN** GrepAI indexes code containing `panic!()`
+- **WHEN** Code Search indexes code containing `panic!()`
 - **THEN** an edge of type `violates` is created from the code chunk to the policy
 
 ---
@@ -253,7 +253,7 @@ The system SHALL support organization-wide code indexing with updates triggered 
 #### Scenario: Index update on PR merge
 - **GIVEN** a GitHub Actions workflow configured for repository `payments-api`
 - **WHEN** a PR is merged to the `main` branch
-- **THEN** GrepAI indexes the repository and notifies Aeterna Central via webhook
+- **THEN** Code Search indexes the repository and notifies Aeterna Central via webhook
 
 #### Scenario: Cross-repository search
 - **GIVEN** an organization with 5 indexed repositories
@@ -298,7 +298,7 @@ The system SHALL support incremental indexing to minimize processing time on lar
 #### Scenario: Index only changed files
 - **GIVEN** a repository with last indexed commit `abc123`
 - **WHEN** new commit `def456` changes 3 files
-- **THEN** GrepAI indexes only the 3 changed files, not the entire repository
+- **THEN** Code Search indexes only the 3 changed files, not the entire repository
 
 #### Scenario: Handle force push
 - **GIVEN** a repository with indexed history

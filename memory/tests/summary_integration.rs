@@ -37,7 +37,7 @@ fn create_test_memory_entry(id: &str, content: &str, layer: MemoryLayer) -> Memo
 }
 
 #[tokio::test]
-async fn test_summary_cache_set_and_get() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_summary_cache_set_and_get() -> Result<(), anyhow::Error> {
     let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -71,7 +71,7 @@ async fn test_summary_cache_set_and_get() -> Result<(), Box<dyn std::error::Erro
 }
 
 #[tokio::test]
-async fn test_summary_cache_all_depths() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_summary_cache_all_depths() -> Result<(), anyhow::Error> {
     let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -114,7 +114,7 @@ async fn test_summary_cache_all_depths() -> Result<(), Box<dyn std::error::Error
 }
 
 #[tokio::test]
-async fn test_summary_cache_invalidation_single_depth() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_summary_cache_invalidation_single_depth() -> Result<(), anyhow::Error> {
     let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -168,7 +168,7 @@ async fn test_summary_cache_invalidation_single_depth() -> Result<(), Box<dyn st
 }
 
 #[tokio::test]
-async fn test_summary_cache_invalidation_all_depths() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_summary_cache_invalidation_all_depths() -> Result<(), anyhow::Error> {
     let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -203,7 +203,7 @@ async fn test_summary_cache_invalidation_all_depths() -> Result<(), Box<dyn std:
 }
 
 #[tokio::test]
-async fn test_summary_cache_with_ttl() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_summary_cache_with_ttl() -> Result<(), anyhow::Error> {
     let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -251,7 +251,7 @@ async fn test_summary_cache_with_ttl() -> Result<(), Box<dyn std::error::Error>>
 }
 
 #[tokio::test]
-async fn test_summary_cache_tenant_isolation() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_summary_cache_tenant_isolation() -> Result<(), anyhow::Error> {
     let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -296,7 +296,7 @@ async fn test_summary_cache_tenant_isolation() -> Result<(), Box<dyn std::error:
 }
 
 #[tokio::test]
-async fn test_summary_cache_layer_isolation() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_summary_cache_layer_isolation() -> Result<(), anyhow::Error> {
     let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -447,7 +447,7 @@ async fn test_memory_entry_summary_staleness() {
 }
 
 #[tokio::test]
-async fn test_personalized_summary_storage() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_personalized_summary_storage() -> Result<(), anyhow::Error> {
     let Some(redis_fixture) = redis().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());

@@ -360,7 +360,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[tokio::test]
-    async fn test_git_repository_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_git_repository_lifecycle() -> Result<(), anyhow::Error> {
         let dir = tempdir()?;
         let repo = GitRepository::new(dir.path())?;
         let tenant_id = mk_core::types::TenantId::new("c1".into()).unwrap();
@@ -408,7 +408,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_git_repository_isolation() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_git_repository_isolation() -> Result<(), anyhow::Error> {
         let dir = tempdir()?;
         let repo = GitRepository::new(dir.path())?;
 
@@ -457,10 +457,8 @@ mod tests {
 
         Ok(())
     }
-
     #[tokio::test]
-    async fn test_git_repository_path_traversal_protection()
-    -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_git_repository_path_traversal_protection() -> Result<(), anyhow::Error> {
         let dir = tempdir()?;
         let repo = GitRepository::new(dir.path())?;
 

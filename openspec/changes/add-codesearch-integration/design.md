@@ -1,11 +1,11 @@
-# Design: GrepAI Integration
+# Design: Code Search Integration
 
 ## Context
 
-Aeterna provides memory and knowledge management for AI agents. GrepAI provides semantic code search and call graph analysis. Combining them gives agents complete context: organizational knowledge + codebase understanding.
+Aeterna provides memory and knowledge management for AI agents. Code Search provides semantic code search and call graph analysis. Combining them gives agents complete context: organizational knowledge + codebase understanding.
 
 **Constraints:**
-- GrepAI is written in Go; Aeterna is Rust
+- Code Search is written in Go; Aeterna is Rust
 - Both support MCP protocol
 - Both support Qdrant and PostgreSQL/pgvector backends
 - Must not break standalone operation of either tool
@@ -18,15 +18,15 @@ Aeterna provides memory and knowledge management for AI agents. GrepAI provides 
 ## Goals / Non-Goals
 
 ### Goals
-- Unified MCP interface exposing both Aeterna and GrepAI tools
+- Unified MCP interface exposing both Aeterna and Code Search tools
 - Shared vector backend to reduce infrastructure
 - Tenant-aware code search (isolate by project/team)
-- Seamless Helm deployment with GrepAI sidecar
+- Seamless Helm deployment with Code Search sidecar
 
 ### Non-Goals
-- Rewriting GrepAI in Rust
-- Replacing GrepAI's indexing logic
-- Breaking GrepAI's standalone CLI operation
+- Rewriting Code Search in Rust
+- Replacing Code Search's indexing logic
+- Breaking Code Search's standalone CLI operation
 - Real-time bidirectional sync of embeddings
 
 ## Architecture Decision
@@ -38,14 +38,14 @@ Aeterna provides memory and knowledge management for AI agents. GrepAI provides 
 │                    Kubernetes Pod                        │
 │                                                          │
 │  ┌──────────────────┐    ┌──────────────────┐          │
-│  │  Aeterna Server  │    │  GrepAI Sidecar  │          │
+│  │  Aeterna Server  │    │  Code Search Sidecar  │          │
 │  │                  │    │                  │          │
 │  │  MCP Server      │◄──►│  MCP Server      │          │
 │  │  (Rust)          │    │  (Go)            │          │
 │  │                  │    │                  │          │
 │  │  Tools:          │    │  Tools:          │          │
-│  │  - memory_*      │    │  - grepai_search │          │
-│  │  - knowledge_*   │    │  - grepai_trace_*│          │
+│  │  - memory_*      │    │  - codesearch_search │          │
+│  │  - knowledge_*   │    │  - codesearch_trace_*│          │
 │  │  - graph_*       │    │                  │          │
 │  │  - code_* (proxy)│───►│                  │          │
 │  └────────┬─────────┘    └────────┬─────────┘          │
@@ -65,8 +65,8 @@ Aeterna provides memory and knowledge management for AI agents. GrepAI provides 
     │             │          │  +pgvector  │
     │ Collections:│          │             │
     │ - aeterna_* │          │ Schemas:    │
-    │ - grepai_*  │          │ - aeterna   │
-    └─────────────┘          │ - grepai    │
+    │ - codesearch_*  │          │ - aeterna   │
+    └─────────────┘          │ - codesearch    │
                              └─────────────┘
 ```
 
@@ -83,7 +83,7 @@ Aeterna provides memory and knowledge management for AI agents. GrepAI provides 
 
 ### Option 2: HTTP API Gateway (Rejected)
 
-Run GrepAI as separate Deployment, proxy via HTTP.
+Run Code Search as separate Deployment, proxy via HTTP.
 
 **Rejected because:**
 - MCP is stdio-based, adding HTTP adds complexity
@@ -92,7 +92,7 @@ Run GrepAI as separate Deployment, proxy via HTTP.
 
 ### Option 3: Embedded Library (Rejected)
 
-Call GrepAI Go code from Rust via FFI.
+Call Code Search Go code from Rust via FFI.
 
 **Rejected because:**
 - FFI complexity (cgo + Rust)
@@ -102,15 +102,15 @@ Call GrepAI Go code from Rust via FFI.
 ## Decisions
 
 ### D1: Sidecar Pattern
-**Decision:** Deploy GrepAI as sidecar container in Aeterna pod.
+**Decision:** Deploy Code Search as sidecar container in Aeterna pod.
 **Rationale:** Shares pod lifecycle, network namespace, and volumes. MCP over stdio is reliable and fast.
 
 ### D2: Shared Qdrant Collections
-**Decision:** Use separate collections with prefixes: `aeterna_memories_{tenant}`, `grepai_code_{tenant}`.
+**Decision:** Use separate collections with prefixes: `aeterna_memories_{tenant}`, `codesearch_code_{tenant}`.
 **Rationale:** Isolation by tenant, same Qdrant instance reduces cost.
 
 ### D3: MCP Proxy Tools
-**Decision:** Aeterna exposes `code_*` tools that proxy to GrepAI's `grepai_*` tools.
+**Decision:** Aeterna exposes `code_*` tools that proxy to Code Search's `codesearch_*` tools.
 **Rationale:** Single MCP endpoint for AI agents. Aeterna handles auth/tenant context.
 
 ### D4: Embedding Model Alignment
@@ -118,19 +118,19 @@ Call GrepAI Go code from Rust via FFI.
 **Rationale:** Enables future cross-search (find memories related to code), consistent dimensions.
 
 ### D5: File Watching Coordination
-**Decision:** GrepAI watches project directories; Aeterna watches knowledge repo. No overlap.
-**Rationale:** Clear responsibility boundaries. GrepAI indexes `.rs`, `.ts`, etc. Aeterna indexes knowledge markdown.
+**Decision:** Code Search watches project directories; Aeterna watches knowledge repo. No overlap.
+**Rationale:** Clear responsibility boundaries. Code Search indexes `.rs`, `.ts`, etc. Aeterna indexes knowledge markdown.
 
 ## Data Flow
 
 ### Code Search Flow
 
 ```
-Agent                Aeterna               GrepAI              Qdrant
+Agent                Aeterna               Code Search              Qdrant
   │                    │                     │                   │
   │─code_search────────►                     │                   │
   │                    │                     │                   │
-  │                    │─grepai_search───────►                   │
+  │                    │─codesearch_search───────►                   │
   │                    │   (MCP stdio)       │                   │
   │                    │                     │─vector_search─────►
   │                    │                     │                   │
@@ -145,7 +145,7 @@ Agent                Aeterna               GrepAI              Qdrant
 ### Memory + Code Linked Query (Future)
 
 ```
-Agent                Aeterna               GrepAI              DuckDB
+Agent                Aeterna               Code Search              DuckDB
   │                    │                     │                   │
   │─"find code related │                     │                   │
   │  to auth decision" │                     │                   │
@@ -159,7 +159,7 @@ Agent                Aeterna               GrepAI              DuckDB
   │                    │   (find linked code)│                   │
   │                    │◄──code_file_refs────────────────────────│
   │                    │                     │                   │
-  │                    │─grepai_search───────►                   │
+  │                    │─codesearch_search───────►                   │
   │                    │   (file context)    │                   │
   │                    │◄──code_chunks───────│                   │
   │                    │                     │                   │
@@ -169,11 +169,11 @@ Agent                Aeterna               GrepAI              DuckDB
 ## Helm Values Schema
 
 ```yaml
-grepai:
+codesearch:
   enabled: false
   
   image:
-    repository: ghcr.io/yoanbernabeu/grepai
+    repository: ghcr.io/yoanbernabeu/codesearch
     tag: "v0.26.0"
     pullPolicy: IfNotPresent
   
@@ -188,7 +188,7 @@ grepai:
   store:
     backend: qdrant  # qdrant | postgres | gob
     # Uses Aeterna's Qdrant/PostgreSQL by default
-    collectionPrefix: grepai
+    collectionPrefix: codesearch
   
   projects:
     - path: /data/projects/api
@@ -213,9 +213,9 @@ grepai:
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| GrepAI version breaks MCP contract | High | Pin version, test in CI, monitor releases |
+| Code Search version breaks MCP contract | High | Pin version, test in CI, monitor releases |
 | Embedding dimension mismatch | High | Validate at startup, fail fast |
-| Index corruption on crash | Medium | GrepAI handles gracefully, add liveness probe |
+| Index corruption on crash | Medium | Code Search handles gracefully, add liveness probe |
 | Sidecar resource contention | Medium | Separate resource limits, priority classes |
 | Ollama not available | Medium | Fallback to OpenAI with warning |
 
@@ -231,7 +231,7 @@ The killer feature: **linking organizational knowledge and memories to actual co
 │                                                                              │
 │   ┌─────────────┐         ┌─────────────┐         ┌─────────────┐          │
 │   │  KNOWLEDGE  │         │   MEMORY    │         │    CODE     │          │
-│   │             │         │             │         │  (GrepAI)   │          │
+│   │             │         │             │         │  (Code Search)   │          │
 │   │  • ADRs     │────────►│  • Learnings│────────►│  • Functions│          │
 │   │  • Policies │         │  • Decisions│         │  • Classes  │          │
 │   │  • Patterns │◄────────│  • Context  │◄────────│  • Files    │          │
@@ -259,9 +259,9 @@ The killer feature: **linking organizational knowledge and memories to actual co
 |-----------|--------|---------|
 | `knowledge` | Aeterna Knowledge | ADR-042: Use PostgreSQL |
 | `memory` | Aeterna Memory | "Auth service needs retry logic" |
-| `code_file` | GrepAI | `src/auth/login.rs` |
-| `code_symbol` | GrepAI | `fn handle_login()` |
-| `code_chunk` | GrepAI | Lines 23-45 of login.rs |
+| `code_file` | Code Search | `src/auth/login.rs` |
+| `code_symbol` | Code Search | `fn handle_login()` |
+| `code_chunk` | Code Search | Lines 23-45 of login.rs |
 
 ### Graph Edge Types (Relationships)
 
@@ -271,7 +271,7 @@ The killer feature: **linking organizational knowledge and memories to actual co
 | `references` | memory → code_file | Memory mentions this file |
 | `violates` | code_chunk → knowledge | Code violates a policy |
 | `derived_from` | memory → code_chunk | Learning derived from this code |
-| `calls` | code_symbol → code_symbol | Function call (from GrepAI) |
+| `calls` | code_symbol → code_symbol | Function call (from Code Search) |
 | `supersedes` | knowledge → knowledge | ADR replaces older ADR |
 | `related_to` | any → any | Semantic similarity link |
 
@@ -283,7 +283,7 @@ CREATE TABLE graph_nodes (
     id VARCHAR PRIMARY KEY,
     node_type VARCHAR NOT NULL,  -- 'knowledge', 'memory', 'code_file', 'code_symbol', 'code_chunk'
     tenant_id VARCHAR NOT NULL,
-    source VARCHAR NOT NULL,     -- 'aeterna' or 'grepai'
+    source VARCHAR NOT NULL,     -- 'aeterna' or 'codesearch'
     external_id VARCHAR,         -- ID in source system
     content TEXT,
     metadata JSON,
@@ -328,7 +328,7 @@ System detects similarity between memory/knowledge and code:
 ```rust
 // When memory is added, find related code
 let memory_embedding = embed("Auth retry logic needs exponential backoff");
-let similar_code = grepai_search(embedding: memory_embedding, threshold: 0.85);
+let similar_code = codesearch_search(embedding: memory_embedding, threshold: 0.85);
 for chunk in similar_code {
     graph.create_edge(memory.id, chunk.id, "related_to", weight: chunk.score);
 }
@@ -338,7 +338,7 @@ for chunk in similar_code {
 When code is indexed, check against policies:
 
 ```rust
-// GrepAI indexes new code chunk
+// Code Search indexes new code chunk
 let chunk = CodeChunk { file: "api/handler.rs", content: "panic!()" };
 
 // Check against knowledge policies
@@ -358,7 +358,7 @@ Link code that implements architectural decisions:
 let adr = knowledge_get("ADR-015-error-handling");
 
 // Find code implementing this pattern
-let implementations = grepai_search("Result<.*, Error>");
+let implementations = codesearch_search("Result<.*, Error>");
 for impl in implementations {
     graph.create_edge(impl.id, adr.id, "implements");
 }
@@ -431,7 +431,7 @@ SELECT DISTINCT * FROM traversal;
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Aeterna   │     │   GrepAI    │     │   DuckDB    │
+│   Aeterna   │     │   Code Search    │     │   DuckDB    │
 │   Events    │     │   Events    │     │   Graph     │
 └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
        │                   │                   │
@@ -485,18 +485,18 @@ SELECT DISTINCT * FROM traversal;
 ## Migration Plan
 
 ### Phase 1: Optional Sidecar (v0.2.0)
-- Add GrepAI sidecar (disabled by default)
+- Add Code Search sidecar (disabled by default)
 - Implement MCP proxy tools
 - Test with shared Qdrant
 
 ### Phase 2: CLI Integration (v0.3.0)
-- Add `aeterna grepai` commands
+- Add `aeterna codesearch` commands
 - Setup wizard integration
 - Documentation
 
 ### Phase 3: Deep Integration (v0.4.0)
 - DuckDB graph schema for unified nodes/edges
-- Sync events from Aeterna and GrepAI
+- Sync events from Aeterna and Code Search
 - Automatic semantic linking
 - `graph_*` MCP tools for traversal
 
@@ -508,7 +508,7 @@ SELECT DISTINCT * FROM traversal;
 
 ## Central Index Service (Org-Wide Repository Indexing)
 
-The enterprise killer feature: **Central GrepAI index across all organization repositories**, updated automatically on PR merge.
+The enterprise killer feature: **Central Code Search index across all organization repositories**, updated automatically on PR merge.
 
 ### Architecture
 
@@ -527,9 +527,9 @@ The enterprise killer feature: **Central GrepAI index across all organization re
 │   ┌─────────────────────────────────────────────────────────────────┐      │
 │   │                   GitHub Actions Workflow                        │      │
 │   │                                                                  │      │
-│   │   1. grepai init --workspace org-{org_id}                       │      │
-│   │   2. grepai workspace add org-{org_id} .                        │      │
-│   │   3. grepai watch --workspace org-{org_id} --once               │      │
+│   │   1. codesearch init --workspace org-{org_id}                       │      │
+│   │   2. codesearch workspace add org-{org_id} .                        │      │
+│   │   3. codesearch watch --workspace org-{org_id} --once               │      │
 │   │   4. Notify Aeterna Central: POST /api/v1/index/updated         │      │
 │   └─────────────────────────────────────────────────────────────────┘      │
 │                                    │                                        │
@@ -538,7 +538,7 @@ The enterprise killer feature: **Central GrepAI index across all organization re
 │   │                    AETERNA CENTRAL SERVICE                       │      │
 │   │                                                                  │      │
 │   │   ┌─────────────────┐    ┌─────────────────┐                   │      │
-│   │   │  GrepAI Server  │    │  Aeterna Server │                   │      │
+│   │   │  Code Search Server  │    │  Aeterna Server │                   │      │
 │   │   │                 │    │                 │                   │      │
 │   │   │  Workspaces:    │    │  Tenants:       │                   │      │
 │   │   │  - org-acme     │    │  - acme-corp    │                   │      │
@@ -551,10 +551,10 @@ The enterprise killer feature: **Central GrepAI index across all organization re
 │   │              │   Shared Qdrant │                               │      │
 │   │              │                 │                               │      │
 │   │              │  Collections:   │                               │      │
-│   │              │  - grepai_acme_payments-api                     │      │
-│   │              │  - grepai_acme_auth-service                     │      │
-│   │              │  - grepai_acme_web-frontend                     │      │
-│   │              │  - grepai_bigco_backend                         │      │
+│   │              │  - codesearch_acme_payments-api                     │      │
+│   │              │  - codesearch_acme_auth-service                     │      │
+│   │              │  - codesearch_acme_web-frontend                     │      │
+│   │              │  - codesearch_bigco_backend                         │      │
 │   │              │  - aeterna_acme_memories                        │      │
 │   │              │  - aeterna_bigco_memories                       │      │
 │   │              └─────────────────┘                               │      │
@@ -562,12 +562,12 @@ The enterprise killer feature: **Central GrepAI index across all organization re
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### GrepAI Workspace for Org-Wide Indexing
+### Code Search Workspace for Org-Wide Indexing
 
-GrepAI natively supports **workspaces** for multi-project indexing:
+Code Search natively supports **workspaces** for multi-project indexing:
 
 ```yaml
-# ~/.grepai/workspace.yaml (on central server)
+# ~/.codesearch/workspace.yaml (on central server)
 version: 1
 workspaces:
   org-acme-corp:
@@ -577,7 +577,7 @@ workspaces:
       qdrant:
         endpoint: "qdrant.aeterna-central.svc"
         port: 6334
-        collection: "grepai_acme-corp"
+        collection: "codesearch_acme-corp"
     embedder:
       provider: ollama
       model: nomic-embed-text
@@ -600,10 +600,10 @@ Stored:   org-acme-corp/payments-api/src/handler.rs
 This enables **cross-project search with project filtering**:
 ```bash
 # Search all repos in org
-grepai search --workspace org-acme-corp "authentication flow"
+codesearch search --workspace org-acme-corp "authentication flow"
 
 # Search specific repos only
-grepai search --workspace org-acme-corp --project payments-api --project auth-service "JWT token"
+codesearch search --workspace org-acme-corp --project payments-api --project auth-service "JWT token"
 ```
 
 ### GitHub Actions Workflow (Per Repository)
@@ -637,15 +637,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install GrepAI
+      - name: Install Code Search
         run: |
-          curl -sSL https://raw.githubusercontent.com/yoanbernabeu/grepai/main/install.sh | sh
+          curl -sSL https://raw.githubusercontent.com/yoanbernabeu/codesearch/main/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Configure GrepAI
+      - name: Configure Code Search
         run: |
-          mkdir -p ~/.grepai
-          cat > ~/.grepai/config.yaml << EOF
+          mkdir -p ~/.codesearch
+          cat > ~/.codesearch/config.yaml << EOF
           embedder:
             provider: openai
             model: text-embedding-3-small
@@ -657,13 +657,13 @@ jobs:
               port: 443
               use_tls: true
               api_key: ${{ secrets.QDRANT_API_KEY }}
-              collection: grepai_${{ env.ORG_ID }}_${{ env.PROJECT_NAME }}
+              collection: codesearch_${{ env.ORG_ID }}_${{ env.PROJECT_NAME }}
           EOF
 
       - name: Index Repository
         run: |
-          grepai init
-          grepai watch --once  # Index once and exit
+          codesearch init
+          codesearch watch --once  # Index once and exit
 
       - name: Notify Aeterna Central
         run: |
@@ -793,7 +793,7 @@ struct CrossRepoSearchRequest {
 │           Aeterna Central Cluster            │
 │                                              │
 │   ┌──────────┐  ┌──────────┐  ┌──────────┐ │
-│   │ Aeterna  │  │  GrepAI  │  │  Qdrant  │ │
+│   │ Aeterna  │  │  Code Search  │  │  Qdrant  │ │
 │   │  Server  │  │  Server  │  │ Cluster  │ │
 │   └──────────┘  └──────────┘  └──────────┘ │
 │                                              │
@@ -818,7 +818,7 @@ struct CrossRepoSearchRequest {
 ┌───────────────┐     ┌───────────────┐     ┌───────────────┐
 │  US-East      │     │  EU-West      │     │  APAC         │
 │  Aeterna      │◄───►│  Aeterna      │◄───►│  Aeterna      │
-│  + GrepAI     │     │  + GrepAI     │     │  + GrepAI     │
+│  + Code Search     │     │  + Code Search     │     │  + Code Search     │
 │  + Qdrant     │     │  + Qdrant     │     │  + Qdrant     │
 └───────────────┘     └───────────────┘     └───────────────┘
         │                    │                    │
@@ -845,7 +845,7 @@ struct CrossRepoSearchRequest {
 │  Team A Pod  │  │  Team B Pod  │  │  Team C Pod  │
 │              │  │              │  │              │
 │  Aeterna     │  │  Aeterna     │  │  Aeterna     │
-│  + GrepAI    │  │  + GrepAI    │  │  + GrepAI    │
+│  + Code Search    │  │  + Code Search    │  │  + Code Search    │
 │  (sidecar)   │  │  (sidecar)   │  │  (sidecar)   │
 └──────────────┘  └──────────────┘  └──────────────┘
         │                │                │
@@ -870,10 +870,10 @@ Repositories:
 Agent Query: "What legacy code still needs migration?"
 
 1. Search legacy-monolith for unmigrated handlers
-   grepai search --workspace org-acme --project legacy-monolith "func Handle"
+   codesearch search --workspace org-acme --project legacy-monolith "func Handle"
 
 2. Cross-reference with new services
-   grepai search --workspace org-acme --exclude-project legacy-monolith "PaymentHandler"
+   codesearch search --workspace org-acme --exclude-project legacy-monolith "PaymentHandler"
 
 3. Graph query: Find code NOT yet implementing new patterns
    SELECT code.* FROM graph_nodes code
@@ -892,20 +892,20 @@ Result: 47 handlers in legacy need migration
 
 ## Open Questions
 
-1. **Q: Should we vendor GrepAI or use upstream releases?**
+1. **Q: Should we vendor Code Search or use upstream releases?**
    A: Use upstream. Pin version. Fork only if critical patches needed.
 
-2. **Q: How to handle GrepAI downtime?**
+2. **Q: How to handle Code Search downtime?**
    A: Circuit breaker in proxy. Return graceful error. Memory/knowledge tools still work.
 
 3. **Q: Multi-tenant index isolation?**
-   A: Collection prefix per tenant: `grepai_{company}_{team}_{project}`.
+   A: Collection prefix per tenant: `codesearch_{company}_{team}_{project}`.
 
 4. **Q: Central vs Distributed indexing?**
    A: Start with centralized (Model A) for simplicity. Add federation (Model B) when multi-region is needed.
 
 5. **Q: How to handle large repos (>1M LOC)?**
-   A: Incremental indexing via `grepai watch --since <commit>`. Only re-index changed files.
+   A: Incremental indexing via `codesearch watch --since <commit>`. Only re-index changed files.
 
 6. **Q: Rate limiting for GitHub Actions?**
    A: Use concurrency groups. Debounce multiple pushes. Batch index updates.

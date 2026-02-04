@@ -360,6 +360,86 @@
         "enabled": { "type": "boolean", "default": false }
       }
     },
+    "codesearch": {
+      "type": "object",
+      "description": "Code Search integration configuration",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false, "description": "Enable Code Search sidecar" },
+        "mcpServerUrl": { "type": "string", "default": "http://localhost:9090", "description": "MCP server URL" },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "default": "ghcr.io/codesearch/codesearch" },
+            "tag": { "type": "string", "default": "latest" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"], "default": "IfNotPresent" }
+          }
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string", "default": "500m" },
+                "memory": { "type": "string", "default": "512Mi" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string", "default": "50m" },
+                "memory": { "type": "string", "default": "128Mi" }
+              }
+            }
+          }
+        },
+        "embedder": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["ollama", "openai"], "default": "ollama" },
+            "model": { "type": "string", "default": "nomic-embed-text" },
+            "endpoint": { "type": "string" }
+          }
+        },
+        "store": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["qdrant", "postgres", "gob"], "default": "qdrant" },
+            "qdrant": {
+              "type": "object",
+              "properties": {
+                "collectionPrefix": { "type": "string", "default": "codesearch_" }
+              }
+            },
+            "postgres": {
+              "type": "object",
+              "properties": {
+                "schema": { "type": "string", "default": "codesearch" }
+              }
+            }
+          }
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string" },
+              "name": { "type": "string" }
+            },
+            "required": ["path", "name"]
+          },
+          "default": []
+        },
+        "initContainer": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "timeout": { "type": "integer", "default": 300 }
+          }
+        }
+      }
+    },
     "global": {
       "type": "object",
       "properties": {

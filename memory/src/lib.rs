@@ -5,6 +5,8 @@
 pub mod backends;
 pub mod circuit_breaker;
 pub mod embedding;
+pub mod embedding_cache;
+pub mod embedding_cache_redis;
 pub mod episodic;
 pub mod error;
 pub mod governance;

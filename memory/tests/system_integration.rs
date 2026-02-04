@@ -23,7 +23,7 @@ fn test_uuid(prefix: &str) -> String {
 }
 
 #[tokio::test]
-async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_system_wide_memory_flow() -> Result<(), anyhow::Error> {
     let (Some(pg_fixture), Some(redis_fixture), Some(qdrant_fixture)) =
         (postgres().await, redis().await, qdrant().await)
     else {
@@ -42,7 +42,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
     qdrant_provider
         .ensure_collection()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     let manager = MemoryManager::new();
     manager
@@ -68,12 +68,12 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
     manager
         .add_to_layer(ctx.clone(), MemoryLayer::User, entry.clone())
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     let retrieved = manager
         .get_from_layer(ctx.clone(), MemoryLayer::User, &msg_id)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| anyhow::anyhow!(e))?;
     assert!(retrieved.is_some());
     let retrieved = retrieved.unwrap();
     assert_eq!(retrieved.content, entry.content);
@@ -81,7 +81,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
     let search_results = manager
         .search_hierarchical(ctx.clone(), vec![0.1; 128], 1, HashMap::new())
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| anyhow::anyhow!(e))?;
     assert_eq!(search_results.len(), 1);
     assert_eq!(search_results[0].id, msg_id);
 
@@ -92,7 +92,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
     session_provider
         .ensure_collection()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     let project_collection = unique_id("project_test");
     let project_qdrant_client = Qdrant::new(QdrantConfig::from_url(qdrant_fixture.grpc_url()))?;
@@ -101,7 +101,7 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
     project_provider
         .ensure_collection()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     manager
         .register_provider(MemoryLayer::Session, Arc::new(session_provider))
@@ -136,18 +136,18 @@ async fn test_system_wide_memory_flow() -> Result<(), Box<dyn std::error::Error>
     manager
         .add_to_layer(ctx.clone(), MemoryLayer::Session, session_entry)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     let promoted_ids = manager
         .promote_important_memories(ctx.clone(), MemoryLayer::Session)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| anyhow::anyhow!(e))?;
     assert_eq!(promoted_ids.len(), 1);
 
     let promoted_entry = manager
         .get_from_layer(ctx, MemoryLayer::Project, &promoted_ids[0])
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| anyhow::anyhow!(e))?;
     assert!(promoted_entry.is_some());
     let promoted = promoted_entry.unwrap();
     assert_eq!(promoted.content, "Important session content for promotion");

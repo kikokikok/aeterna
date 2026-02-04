@@ -213,6 +213,17 @@ impl MemoryTelemetry {
         counter!("memory_multi_hop_paths_terminated_budget_total")
             .increment(metrics.paths_terminated_budget as u64);
     }
+
+    pub fn record_embedding_cache_hit(&self, cache_type: &str) {
+        counter!("memory_embedding_cache_hits_total",
+            "cache_type" => cache_type.to_string()
+        )
+        .increment(1);
+    }
+
+    pub fn record_embedding_cache_miss(&self) {
+        counter!("memory_embedding_cache_misses_total").increment(1);
+    }
 }
 
 pub fn init_telemetry() -> Result<MemoryTelemetry, Box<dyn std::error::Error + Send + Sync>> {

@@ -115,7 +115,7 @@ mod tests {
     use mk_core::types::{TenantId, UserId};
 
     #[tokio::test]
-    async fn test_cedar_authorization() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_cedar_authorization() -> Result<(), anyhow::Error> {
         let schema = r#"{
             "": {
                 "entityTypes": {
@@ -137,7 +137,7 @@ mod tests {
             permit(principal == User::"u1", action == Action::"View", resource == Unit::"unit1");
         "#;
 
-        let authorizer = CedarAuthorizer::new(policies, schema)?;
+        let authorizer = CedarAuthorizer::new(policies, schema).map_err(|e| anyhow::anyhow!(e))?;
 
         let ctx = TenantContext::new(
             TenantId::new("t1".into()).unwrap(),

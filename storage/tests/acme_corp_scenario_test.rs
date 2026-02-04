@@ -90,7 +90,7 @@ impl AcmeCorpHierarchy {
         }
     }
 
-    async fn setup(&self, storage: &PostgresBackend) -> Result<(), Box<dyn std::error::Error>> {
+    async fn setup(&self, storage: &PostgresBackend) -> Result<(), anyhow::Error> {
         let now = Utc::now().timestamp();
 
         let company = OrganizationalUnit {

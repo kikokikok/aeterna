@@ -48,10 +48,7 @@ impl LlmClient for MockLlmClient {
     }
 }
 
-async fn create_tenant(
-    storage: &PostgresBackend,
-    tenant_id: &str
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn create_tenant(storage: &PostgresBackend, tenant_id: &str) -> Result<(), anyhow::Error> {
     let unit = OrganizationalUnit {
         id: tenant_id.to_string(),
         name: format!("Test Company {}", tenant_id),
@@ -111,7 +108,7 @@ fn create_test_hindsight_note(
 }
 
 #[tokio::test]
-async fn test_hindsight_note_generation_storage() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_hindsight_note_generation_storage() -> Result<(), anyhow::Error> {
     let Some(storage) = create_test_storage().await else {
         eprintln!("Skipping Postgres test: Docker not available");
         return Ok(());
@@ -157,7 +154,7 @@ async fn test_hindsight_note_generation_storage() -> Result<(), Box<dyn std::err
 }
 
 #[tokio::test]
-async fn test_error_signature_crud() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_error_signature_crud() -> Result<(), anyhow::Error> {
     let Some(storage) = create_test_storage().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -189,7 +186,7 @@ async fn test_error_signature_crud() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn test_error_signature_with_embedding() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_error_signature_with_embedding() -> Result<(), anyhow::Error> {
     let Some(storage) = create_test_storage().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -220,7 +217,7 @@ async fn test_error_signature_with_embedding() -> Result<(), Box<dyn std::error:
 }
 
 #[tokio::test]
-async fn test_resolution_crud() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_resolution_crud() -> Result<(), anyhow::Error> {
     let Some(storage) = create_test_storage().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -254,7 +251,7 @@ async fn test_resolution_crud() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn test_resolutions_for_error() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_resolutions_for_error() -> Result<(), anyhow::Error> {
     let Some(storage) = create_test_storage().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -301,7 +298,7 @@ async fn test_resolutions_for_error() -> Result<(), Box<dyn std::error::Error>> 
 }
 
 #[tokio::test]
-async fn test_hindsight_note_crud() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_hindsight_note_crud() -> Result<(), anyhow::Error> {
     let Some(storage) = create_test_storage().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -332,7 +329,7 @@ async fn test_hindsight_note_crud() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn test_hindsight_note_update() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_hindsight_note_update() -> Result<(), anyhow::Error> {
     let Some(storage) = create_test_storage().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -363,7 +360,7 @@ async fn test_hindsight_note_update() -> Result<(), Box<dyn std::error::Error>> 
 }
 
 #[tokio::test]
-async fn test_hindsight_note_list() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_hindsight_note_list() -> Result<(), anyhow::Error> {
     let Some(storage) = create_test_storage().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -394,7 +391,7 @@ async fn test_hindsight_note_list() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn test_tenant_isolation() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_tenant_isolation() -> Result<(), anyhow::Error> {
     let Some(storage) = create_test_storage().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -418,7 +415,7 @@ async fn test_tenant_isolation() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn test_hindsight_note_with_resolutions() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_hindsight_note_with_resolutions() -> Result<(), anyhow::Error> {
     let Some(storage) = create_test_storage().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
@@ -458,7 +455,7 @@ async fn test_hindsight_note_with_resolutions() -> Result<(), Box<dyn std::error
 }
 
 #[tokio::test]
-async fn test_code_change_serialization() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_code_change_serialization() -> Result<(), anyhow::Error> {
     let Some(storage) = create_test_storage().await else {
         eprintln!("Skipping test: Docker not available");
         return Ok(());
