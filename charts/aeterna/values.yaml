@@ -464,24 +464,24 @@ networkPolicy:
   ## @param networkPolicy.enabled Enable network policies
   enabled: false
 
-## GrepAI integration configuration
-grepai:
-  ## @param grepai.enabled Enable GrepAI sidecar for semantic code search
+## Code Search integration configuration
+codesearch:
+  ## @param codesearch.enabled Enable Code Search sidecar for semantic code search
   enabled: false
   
-  ## @param grepai.mcpServerUrl MCP server URL (defaults to localhost:9090 for sidecar)
+  ## @param codesearch.mcpServerUrl MCP server URL (defaults to localhost:9090 for sidecar)
   mcpServerUrl: "http://localhost:9090"
   
-  ## GrepAI container configuration
+  ## Code Search container configuration
   image:
-    ## @param grepai.image.repository GrepAI image repository
-    repository: ghcr.io/grepai/grepai
-    ## @param grepai.image.tag GrepAI image tag
+    ## @param codesearch.image.repository Code Search image repository
+    repository: ghcr.io/kikokikok/codesearch
+    ## @param codesearch.image.tag Code Search image tag
     tag: "latest"
-    ## @param grepai.image.pullPolicy Image pull policy
+    ## @param codesearch.image.pullPolicy Image pull policy
     pullPolicy: IfNotPresent
   
-  ## Resource limits for GrepAI sidecar
+  ## Resource limits for Code Search sidecar
   resources:
     limits:
       cpu: 500m
@@ -492,31 +492,31 @@ grepai:
   
   ## Embedder configuration
   embedder:
-    ## @param grepai.embedder.type Embedder type: ollama, openai
+    ## @param codesearch.embedder.type Embedder type: ollama, openai
     type: ollama
-    ## @param grepai.embedder.model Model name
+    ## @param codesearch.embedder.model Model name
     model: "nomic-embed-text"
-    ## @param grepai.embedder.endpoint Custom endpoint URL (optional)
+    ## @param codesearch.embedder.endpoint Custom endpoint URL (optional)
     endpoint: ""
   
   ## Storage backend configuration
   store:
-    ## @param grepai.store.type Storage type: qdrant, postgres, gob
+    ## @param codesearch.store.type Storage type: qdrant, postgres, gob
     type: qdrant
     
     ## Qdrant store configuration
     qdrant:
-      ## @param grepai.store.qdrant.collectionPrefix Collection name prefix (defaults to grepai_)
-      collectionPrefix: "grepai_"
+      ## @param codesearch.store.qdrant.collectionPrefix Collection name prefix (defaults to codesearch_)
+      collectionPrefix: "codesearch_"
     
     ## PostgreSQL store configuration  
     postgres:
-      ## @param grepai.store.postgres.schema PostgreSQL schema name (defaults to grepai)
-      schema: "grepai"
+      ## @param codesearch.store.postgres.schema PostgreSQL schema name (defaults to codesearch)
+      schema: "codesearch"
   
   ## Projects to initialize
   projects:
-    ## @param grepai.projects List of projects to initialize on startup
+    ## @param codesearch.projects List of projects to initialize on startup
     ## Example:
     ## - path: /workspace/project1
     ##   name: project1
@@ -526,9 +526,9 @@ grepai:
   
   ## Init container configuration
   initContainer:
-    ## @param grepai.initContainer.enabled Enable init container to initialize projects
+    ## @param codesearch.initContainer.enabled Enable init container to initialize projects
     enabled: true
-    ## @param grepai.initContainer.timeout Timeout for initialization (seconds)
+    ## @param codesearch.initContainer.timeout Timeout for initialization (seconds)
     timeout: 300
 
 ## Global settings

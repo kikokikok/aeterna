@@ -103,7 +103,7 @@ pub async fn redis() -> Option<&'static RedisFixture> {
         .as_ref()
 }
 
-async fn verify_redis_connection(url: &str) -> Result<(), Box<dyn std::error::Error>> {
+async fn verify_redis_connection(url: &str) -> anyhow::Result<()> {
     let client = redis::Client::open(url)?;
     let mut conn = client.get_multiplexed_async_connection().await?;
     let _: String = redis::cmd("PING").query_async(&mut conn).await?;
@@ -183,7 +183,7 @@ pub async fn qdrant() -> Option<&'static QdrantFixture> {
         .as_ref()
 }
 
-async fn verify_qdrant_connection(http_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+async fn verify_qdrant_connection(http_url: &str) -> anyhow::Result<()> {
     let health_url = format!("{}/healthz", http_url);
     for attempt in 0..10 {
         match reqwest::get(&health_url).await {
@@ -195,7 +195,7 @@ async fn verify_qdrant_connection(http_url: &str) -> Result<(), Box<dyn std::err
             }
         }
     }
-    Err("Qdrant health check failed after 10 attempts".into())
+    anyhow::bail!("Qdrant health check failed after 10 attempts")
 }
 
 pub const MINIO_ACCESS_KEY: &str = "minioadmin";

@@ -36,7 +36,7 @@ pub struct McpServer {
     event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
     extension_executor: Option<Arc<crate::extensions::ExtensionExecutor>>,
     timeout_duration: Duration,
-    governance_storage: Option<Arc<GovernanceStorage>>
+    _governance_storage: Option<Arc<GovernanceStorage>>
 }
 
 impl McpServer {
@@ -162,7 +162,7 @@ impl McpServer {
             event_publisher,
             extension_executor: None,
             timeout_duration: Duration::from_secs(30),
-            governance_storage
+            _governance_storage: governance_storage
         }
     }
 

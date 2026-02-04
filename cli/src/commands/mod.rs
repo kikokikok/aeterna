@@ -4,13 +4,13 @@ pub mod check;
 pub mod completion;
 pub mod context;
 pub mod govern;
-pub mod grepai;
 pub mod hints;
 pub mod init;
 pub mod knowledge;
 pub mod memory;
 pub mod org;
 pub mod policy;
+pub mod search;
 pub mod setup;
 pub mod status;
 pub mod sync;
@@ -81,8 +81,8 @@ pub enum Commands {
     #[command(subcommand, about = "System administration (health, migrate, export)")]
     Admin(admin::AdminCommand),
 
-    #[command(subcommand, about = "Semantic code search and call graph analysis (GrepAI)")]
-    GrepAI(grepai::GrepAICommand),
+    #[command(name = "code-search", subcommand, about = "Code search and call graph analysis")]
+    CodeSearch(search::CodeSearchCommand),
 
     #[command(about = "Generate shell completions")]
     Completion(completion::CompletionArgs),

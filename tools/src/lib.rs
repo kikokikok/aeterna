@@ -6,7 +6,7 @@ pub mod bridge;
 pub mod cca;
 pub mod extensions;
 pub mod governance;
-pub mod grepai;
+pub mod codesearch;
 pub mod knowledge;
 pub mod memory;
 pub mod orchestrator;

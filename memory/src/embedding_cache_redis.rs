@@ -6,15 +6,15 @@
 ///! - TTL management
 ///! - Per-tenant isolation
 
-use super::{CacheError, CachedEmbedding, EmbeddingCacheBackend};
+use crate::embedding_cache::{CacheError, CachedEmbedding, EmbeddingCacheBackend};
 use async_trait::async_trait;
 use mk_core::types::TenantContext;
 use redis::AsyncCommands;
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::debug;
 
 pub struct RedisEmbeddingCacheBackend {
-    client: Arc<redis::Client>,
+    _client: Arc<redis::Client>,
     connection_manager: redis::aio::ConnectionManager,
     /// Whether RediSearch is available for similarity search
     similarity_enabled: bool,
@@ -34,13 +34,13 @@ impl RedisEmbeddingCacheBackend {
         let similarity_enabled = Self::check_redisearch_available(&connection_manager).await;
 
         Ok(Self {
-            client: Arc::new(client),
+            _client: Arc::new(client),
             connection_manager,
             similarity_enabled,
         })
     }
 
-    async fn check_redisearch_available(conn: &redis::aio::ConnectionManager) -> bool {
+    async fn check_redisearch_available(_conn: &redis::aio::ConnectionManager) -> bool {
         // Try to check if RediSearch module is loaded
         // For now, we'll default to false and implement basic caching only
         // In production, you'd check: MODULE LIST and look for "search"
@@ -51,6 +51,7 @@ impl RedisEmbeddingCacheBackend {
         format!("{}:emb:{}", tenant_id, key)
     }
 
+    #[allow(dead_code)]
     fn semantic_index_key(&self, tenant_id: &str) -> String {
         format!("{}:emb:semantic:index", tenant_id)
     }
@@ -88,7 +89,7 @@ impl EmbeddingCacheBackend for RedisEmbeddingCacheBackend {
             CacheError::SerializationError(format!("Failed to serialize: {}", e))
         })?;
 
-        conn.set_ex(key, json_str, ttl_seconds as u64)
+        let _: () = conn.set_ex(key, json_str, ttl_seconds)
             .await
             .map_err(|e| CacheError::OperationError(format!("Redis SET failed: {}", e)))?;
 
@@ -98,7 +99,7 @@ impl EmbeddingCacheBackend for RedisEmbeddingCacheBackend {
     async fn find_similar(
         &self,
         ctx: &TenantContext,
-        embedding: &[f32],
+        _embedding: &[f32],
         threshold: f32,
     ) -> Result<Option<CachedEmbedding>, CacheError> {
         if !self.similarity_enabled {
@@ -135,7 +136,7 @@ impl EmbeddingCacheBackend for RedisEmbeddingCacheBackend {
             CacheError::SerializationError(format!("Failed to serialize embedding: {}", e))
         })?;
 
-        conn.set_ex(key, embedding_json, ttl_seconds)
+        let _: () = conn.set_ex(key, embedding_json, ttl_seconds)
             .await
             .map_err(|e| {
                 CacheError::OperationError(format!("Failed to store vector: {}", e))
@@ -150,8 +151,6 @@ impl EmbeddingCacheBackend for RedisEmbeddingCacheBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mk_core::types::{TenantId, UserId};
-
     #[tokio::test]
     #[ignore] // Requires Redis to be running
     async fn test_redis_exact_cache() {

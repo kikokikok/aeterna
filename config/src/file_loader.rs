@@ -41,7 +41,7 @@ pub enum ConfigFileError {
 /// use config::load_from_toml;
 /// use std::path::Path;
 ///
-/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// fn main() -> Result<(), anyhow::Result<()>> {
 ///     let config = load_from_toml(Path::new("config.toml"))?;
 ///     println!("PostgreSQL host: {}", config.providers.postgres.host);
 ///     Ok(())
@@ -75,7 +75,7 @@ pub fn load_from_toml(path: &Path) -> Result<Config, ConfigFileError> {
 /// use config::load_from_yaml;
 /// use std::path::Path;
 ///
-/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// fn main() -> Result<(), anyhow::Result<()>> {
 ///     let config = load_from_yaml(Path::new("config.yaml"))?;
 ///     println!("PostgreSQL host: {}", config.providers.postgres.host);
 ///     Ok(())
@@ -115,7 +115,7 @@ pub fn load_from_yaml(path: &Path) -> Result<Config, ConfigFileError> {
 /// use config::load_from_file;
 /// use std::path::Path;
 ///
-/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// fn main() -> Result<(), anyhow::Result<()>> {
 ///     let config = load_from_file(Path::new("config.yaml"))?;
 ///     Ok(())
 /// }

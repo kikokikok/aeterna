@@ -204,12 +204,16 @@ impl TraceCorrelator {
         let spans = self.get_trace(trace_id)?;
         let metrics = self.get_trace_metrics(trace_id).unwrap_or_default();
 
+        // Calculate values before moving spans
+        let total_duration_ms = self.calculate_total_duration(&spans);
+        let error_count = self.count_errors(&spans);
+
         Some(FullTrace {
             trace_id: trace_id.to_string(),
             spans,
             metrics,
-            total_duration_ms: self.calculate_total_duration(&spans),
-            error_count: self.count_errors(&spans),
+            total_duration_ms,
+            error_count,
         })
     }
 

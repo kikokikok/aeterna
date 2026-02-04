@@ -4,7 +4,7 @@
 /// with support for key rotation and multiple encryption keys.
 
 use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng},
+    aead::{Aead, KeyInit, OsRng, AeadCore},
     Aes256Gcm, Nonce, Key
 };
 use base64::{Engine as _, engine::general_purpose};
