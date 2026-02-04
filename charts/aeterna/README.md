@@ -422,6 +422,152 @@ curl http://localhost:8080/health/live
 - Verify policy repository access
 - Check fetcher connectivity
 
+## Code Search Integration
+
+Aeterna integrates with Code Search to provide semantic code search and call graph analysis capabilities. Code Search runs as a sidecar container and communicates with Aeterna via MCP (Model Context Protocol).
+
+### Quick Start
+
+Enable Code Search in your values:
+
+```yaml
+codesearch:
+  enabled: true
+  
+  embedder:
+    type: ollama
+    model: nomic-embed-text
+  
+  store:
+    type: qdrant
+  
+  projects:
+    - path: /workspace/my-project
+      name: my-project
+```
+
+### Features
+
+- **Semantic Code Search**: Natural language queries to find code
+- **Call Graph Analysis**: Trace function callers and callees
+- **Dependency Graphs**: Visualize code dependencies
+- **MCP Tools**: 5 code intelligence tools for AI agents
+
+### Configuration Options
+
+#### Embedder Types
+
+**Ollama** (Default - Local, free):
+```yaml
+codesearch:
+  embedder:
+    type: ollama
+    model: nomic-embed-text  # or mxbai-embed-large, all-minilm
+
+llm:
+  ollama:
+    host: http://ollama:11434
+```
+
+**OpenAI** (Cloud - High quality):
+```yaml
+codesearch:
+  embedder:
+    type: openai
+    model: text-embedding-3-small
+
+llm:
+  provider: openai
+  openai:
+    apiKey: sk-...
+    # Or use existing secret:
+    # existingSecret: my-openai-secret
+```
+
+#### Storage Backends
+
+**Qdrant** (Recommended):
+```yaml
+codesearch:
+  store:
+    type: qdrant
+    qdrant:
+      collectionPrefix: codesearch_
+
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: true
+```
+
+**PostgreSQL**:
+```yaml
+codesearch:
+  store:
+    type: postgres
+    postgres:
+      schema: codesearch
+
+postgresql:
+  bundled: true
+```
+
+### CLI Usage
+
+```bash
+# Initialize a project
+kubectl exec -it <pod-name> -c aeterna -- \
+  aeterna codesearch init /workspace/project
+
+# Semantic search
+kubectl exec -it <pod-name> -c aeterna -- \
+  aeterna codesearch search "authentication middleware"
+
+# Call graph analysis
+kubectl exec -it <pod-name> -c aeterna -- \
+  aeterna codesearch trace callers HandleLogin --recursive
+
+# Build dependency graph
+kubectl exec -it <pod-name> -c aeterna -- \
+  aeterna codesearch trace graph UserService --depth 2 --format dot
+```
+
+### Monitoring
+
+```bash
+# Check Code Search health
+kubectl exec -it <pod-name> -c codesearch -- \
+  curl http://localhost:9090/health
+
+# View logs
+kubectl logs <pod-name> -c codesearch -f
+
+# Check index status
+kubectl exec -it <pod-name> -c aeterna -- \
+  aeterna codesearch status
+```
+
+### Troubleshooting
+
+**Sidecar not starting**:
+```bash
+kubectl logs <pod-name> -c codesearch-init
+kubectl logs <pod-name> -c codesearch
+```
+
+**Project initialization fails**:
+```bash
+kubectl exec -it <pod-name> -c codesearch -- \
+  codesearch init /workspace/project --force
+```
+
+**Slow search**:
+- Increase Code Search resources in values.yaml
+- Use faster embedder (all-minilm)
+- Enable Redis/Dragonfly cache
+
+For complete documentation, see [docs/codesearch-integration.md](../../docs/codesearch-integration.md)
+
 ## Values Reference
 
 See [values.yaml](./values.yaml) for the complete list of configurable parameters.
@@ -435,6 +581,9 @@ Key parameters:
 | `cache.type` | Cache type | `dragonfly` |
 | `postgresql.bundled` | Use bundled PostgreSQL | `true` |
 | `opal.enabled` | Enable OPAL stack | `true` |
+| `codesearch.enabled` | Enable Code Search sidecar | `false` |
+| `codesearch.embedder.type` | Code Search embedder type | `ollama` |
+| `codesearch.store.type` | Code Search storage backend | `qdrant` |
 | `aeterna.replicaCount` | Aeterna replicas | `1` |
 | `aeterna.autoscaling.enabled` | Enable HPA | `false` |
 | `networkPolicy.enabled` | Enable network policies | `false` |

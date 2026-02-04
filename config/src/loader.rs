@@ -32,7 +32,8 @@ use std::env;
 /// ```rust,no_run
 /// use config::load_from_env;
 ///
-/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// #[tokio::main]
+/// async fn main() -> anyhow::Result<()> {
 ///     let config = load_from_env()?;
 ///     println!("PostgreSQL host: {}", config.providers.postgres.host);
 ///     Ok(())
@@ -86,7 +87,7 @@ use std::env;
 /// - `OB_LOGGING_LEVEL`: Logging level (trace/debug/info/warn/error, default:
 ///   "info")
 /// - `OB_METRICS_PORT`: Metrics server port (default: 9090)
-pub fn load_from_env() -> Result<Config, Box<dyn std::error::Error>> {
+pub fn load_from_env() -> anyhow::Result<Config> {
     let config = Config {
         providers: load_provider_from_env()?,
         sync: load_sync_from_env()?,
@@ -101,8 +102,7 @@ pub fn load_from_env() -> Result<Config, Box<dyn std::error::Error>> {
     Ok(config)
 }
 
-fn load_deployment_from_env() -> Result<crate::config::DeploymentConfig, Box<dyn std::error::Error>>
-{
+fn load_deployment_from_env() -> anyhow::Result<crate::config::DeploymentConfig> {
     Ok(crate::config::DeploymentConfig {
         mode: env::var("AETERNA_DEPLOYMENT_MODE").unwrap_or_else(|_| "local".to_string()),
         remote_url: env::var("AETERNA_REMOTE_GOVERNANCE_URL").ok(),
@@ -110,7 +110,7 @@ fn load_deployment_from_env() -> Result<crate::config::DeploymentConfig, Box<dyn
     })
 }
 
-fn load_job_from_env() -> Result<crate::config::JobConfig, Box<dyn std::error::Error>> {
+fn load_job_from_env() -> anyhow::Result<crate::config::JobConfig> {
     Ok(crate::config::JobConfig {
         lock_ttl_seconds: parse_env("AETERNA_JOB_LOCK_TTL_SECONDS").unwrap_or(2100),
         job_timeout_seconds: parse_env("AETERNA_JOB_TIMEOUT_SECONDS").unwrap_or(1800),
@@ -121,7 +121,7 @@ fn load_job_from_env() -> Result<crate::config::JobConfig, Box<dyn std::error::E
     })
 }
 
-fn load_provider_from_env() -> Result<ProviderConfig, Box<dyn std::error::Error>> {
+fn load_provider_from_env() -> anyhow::Result<ProviderConfig> {
     Ok(ProviderConfig {
         postgres: load_postgres_from_env()?,
         qdrant: load_qdrant_from_env()?,
@@ -130,7 +130,7 @@ fn load_provider_from_env() -> Result<ProviderConfig, Box<dyn std::error::Error>
     })
 }
 
-fn load_postgres_from_env() -> Result<PostgresConfig, Box<dyn std::error::Error>> {
+fn load_postgres_from_env() -> anyhow::Result<PostgresConfig> {
     Ok(PostgresConfig {
         host: env::var("PG_HOST").unwrap_or_else(|_| "localhost".to_string()),
         port: parse_env("PG_PORT").unwrap_or(5432),
@@ -142,7 +142,7 @@ fn load_postgres_from_env() -> Result<PostgresConfig, Box<dyn std::error::Error>
     })
 }
 
-fn load_qdrant_from_env() -> Result<QdrantConfig, Box<dyn std::error::Error>> {
+fn load_qdrant_from_env() -> anyhow::Result<QdrantConfig> {
     Ok(QdrantConfig {
         host: env::var("QD_HOST").unwrap_or_else(|_| "localhost".to_string()),
         port: parse_env("QD_PORT").unwrap_or(6333),
@@ -151,7 +151,7 @@ fn load_qdrant_from_env() -> Result<QdrantConfig, Box<dyn std::error::Error>> {
     })
 }
 
-fn load_redis_from_env() -> Result<RedisConfig, Box<dyn std::error::Error>> {
+fn load_redis_from_env() -> anyhow::Result<RedisConfig> {
     Ok(RedisConfig {
         host: env::var("RD_HOST").unwrap_or_else(|_| "localhost".to_string()),
         port: parse_env("RD_PORT").unwrap_or(6379),
@@ -161,7 +161,7 @@ fn load_redis_from_env() -> Result<RedisConfig, Box<dyn std::error::Error>> {
     })
 }
 
-fn load_graph_from_env() -> Result<GraphConfig, Box<dyn std::error::Error>> {
+fn load_graph_from_env() -> anyhow::Result<GraphConfig> {
     Ok(GraphConfig {
         enabled: parse_env("GR_ENABLED").unwrap_or(true),
         database_path: env::var("GR_DATABASE_PATH").unwrap_or_else(|_| ":memory:".to_string()),
@@ -173,7 +173,7 @@ fn load_graph_from_env() -> Result<GraphConfig, Box<dyn std::error::Error>> {
     })
 }
 
-fn load_sync_from_env() -> Result<SyncConfig, Box<dyn std::error::Error>> {
+fn load_sync_from_env() -> anyhow::Result<SyncConfig> {
     Ok(SyncConfig {
         enabled: parse_env("SY_ENABLED").unwrap_or(true),
         sync_interval_seconds: parse_env("SY_SYNC_INTERVAL_SECONDS").unwrap_or(60),
@@ -184,7 +184,7 @@ fn load_sync_from_env() -> Result<SyncConfig, Box<dyn std::error::Error>> {
     })
 }
 
-fn load_memory_from_env() -> Result<MemoryConfig, Box<dyn std::error::Error>> {
+fn load_memory_from_env() -> anyhow::Result<MemoryConfig> {
     Ok(MemoryConfig {
         promotion_threshold: parse_env("MK_PROMOTION_THRESHOLD").unwrap_or(0.8),
         decay_interval_secs: parse_env("MK_DECAY_INTERVAL_SECS").unwrap_or(86400),
@@ -196,7 +196,7 @@ fn load_memory_from_env() -> Result<MemoryConfig, Box<dyn std::error::Error>> {
     })
 }
 
-fn load_rlm_from_env() -> Result<RlmConfig, Box<dyn std::error::Error>> {
+fn load_rlm_from_env() -> anyhow::Result<RlmConfig> {
     Ok(RlmConfig {
         enabled: parse_env("MK_RLM_ENABLED").unwrap_or(true),
         max_steps: parse_env("MK_RLM_MAX_STEPS").unwrap_or(5),
@@ -204,7 +204,7 @@ fn load_rlm_from_env() -> Result<RlmConfig, Box<dyn std::error::Error>> {
     })
 }
 
-fn load_tools_from_env() -> Result<ToolConfig, Box<dyn std::error::Error>> {
+fn load_tools_from_env() -> anyhow::Result<ToolConfig> {
     Ok(ToolConfig {
         enabled: parse_env("TL_ENABLED").unwrap_or(true),
         host: env::var("TL_HOST").unwrap_or_else(|_| "localhost".to_string()),
@@ -215,7 +215,7 @@ fn load_tools_from_env() -> Result<ToolConfig, Box<dyn std::error::Error>> {
     })
 }
 
-fn load_observability_from_env() -> Result<ObservabilityConfig, Box<dyn std::error::Error>> {
+fn load_observability_from_env() -> anyhow::Result<ObservabilityConfig> {
     Ok(ObservabilityConfig {
         metrics_enabled: parse_env("OB_METRICS_ENABLED").unwrap_or(true),
         tracing_enabled: parse_env("OB_TRACING_ENABLED").unwrap_or(true),
@@ -224,7 +224,7 @@ fn load_observability_from_env() -> Result<ObservabilityConfig, Box<dyn std::err
     })
 }
 
-fn parse_env<T>(key: &str) -> Result<T, Box<dyn std::error::Error>>
+fn parse_env<T>(key: &str) -> anyhow::Result<T>
 where
     T: std::str::FromStr,
     T::Err: std::error::Error + Send + Sync + 'static
@@ -232,8 +232,8 @@ where
     match env::var(key) {
         Ok(s) => s
             .parse::<T>()
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
-        Err(e) => Err(Box::new(e) as Box<dyn std::error::Error>)
+            .map_err(anyhow::Error::from),
+        Err(e) => Err(anyhow::Error::from(e))
     }
 }
 

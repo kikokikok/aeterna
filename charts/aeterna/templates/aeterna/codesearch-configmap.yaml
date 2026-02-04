@@ -1,0 +1,72 @@
+{{- if and .Values.aeterna.enabled .Values.codesearch.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aeterna.fullname" . }}-codesearch
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+    app.kubernetes.io/component: codesearch
+data:
+  # Code Search server configuration
+  CODESEARCH_MCP_PORT: "9090"
+  CODESEARCH_LOG_LEVEL: {{ .Values.observability.logging.level | quote }}
+  CODESEARCH_LOG_FORMAT: {{ .Values.observability.logging.format | quote }}
+  
+  # Embedder configuration
+  CODESEARCH_EMBEDDER_TYPE: {{ .Values.codesearch.embedder.type | quote }}
+  CODESEARCH_EMBEDDER_MODEL: {{ .Values.codesearch.embedder.model | quote }}
+  {{- if .Values.codesearch.embedder.endpoint }}
+  CODESEARCH_EMBEDDER_ENDPOINT: {{ .Values.codesearch.embedder.endpoint | quote }}
+  {{- else if eq .Values.codesearch.embedder.type "ollama" }}
+  CODESEARCH_EMBEDDER_ENDPOINT: {{ .Values.llm.ollama.host | quote }}
+  {{- end }}
+  
+  # Storage backend configuration
+  CODESEARCH_STORE_TYPE: {{ .Values.codesearch.store.type | quote }}
+  
+  {{- if eq .Values.codesearch.store.type "qdrant" }}
+  # Qdrant configuration
+  {{- if .Values.vectorBackend.qdrant.bundled }}
+  CODESEARCH_QDRANT_URL: "http://{{ include "aeterna.fullname" . }}-qdrant:6333"
+  {{- else }}
+  CODESEARCH_QDRANT_URL: "http://{{ .Values.vectorBackend.qdrant.external.host }}:{{ .Values.vectorBackend.qdrant.external.port }}"
+  {{- end }}
+  CODESEARCH_QDRANT_COLLECTION_PREFIX: {{ .Values.codesearch.store.qdrant.collectionPrefix | default "codesearch_" | quote }}
+  {{- end }}
+  
+  {{- if eq .Values.codesearch.store.type "postgres" }}
+  # PostgreSQL configuration
+  {{- if .Values.postgresql.bundled }}
+  CODESEARCH_POSTGRES_HOST: "{{ include "aeterna.fullname" . }}-postgresql-rw"
+  CODESEARCH_POSTGRES_PORT: "5432"
+  CODESEARCH_POSTGRES_DATABASE: {{ .Values.postgresql.external.database | default "aeterna" | quote }}
+  {{- else }}
+  CODESEARCH_POSTGRES_HOST: {{ .Values.postgresql.external.host | quote }}
+  CODESEARCH_POSTGRES_PORT: {{ .Values.postgresql.external.port | quote }}
+  CODESEARCH_POSTGRES_DATABASE: {{ .Values.postgresql.external.database | quote }}
+  {{- end }}
+  CODESEARCH_POSTGRES_SCHEMA: {{ .Values.codesearch.store.postgres.schema | default "codesearch" | quote }}
+  CODESEARCH_POSTGRES_USERNAME: {{ .Values.postgresql.external.username | default "aeterna" | quote }}
+  CODESEARCH_POSTGRES_SSL_MODE: {{ .Values.postgresql.external.sslMode | default "prefer" | quote }}
+  {{- end }}
+  
+  # Init script for projects
+  init-projects.sh: |
+    #!/bin/sh
+    set -e
+    
+    echo "Code Search initialization starting..."
+    
+    {{- range .Values.codesearch.projects }}
+    echo "Initializing project: {{ .name }} at {{ .path }}"
+    codesearch init {{ .path }} \
+      --embedder {{ $.Values.codesearch.embedder.type }} \
+      --store {{ $.Values.codesearch.store.type }} \
+      {{- if eq $.Values.codesearch.embedder.type "ollama" }}
+      --embedder-endpoint {{ $.Values.llm.ollama.host | quote }} \
+      {{- end }}
+      || echo "Warning: Failed to initialize {{ .name }}"
+    {{- end }}
+    
+    echo "Code Search initialization complete"
+{{- end }}

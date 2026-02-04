@@ -1,12 +1,12 @@
-# Tasks: GrepAI Integration
+# Tasks: Code Search Integration
 
 ## 1. Research & Design
 
-### 1.1 GrepAI Analysis
-- [ ] 1.1.1 Clone GrepAI repo and analyze MCP server implementation
-- [ ] 1.1.2 Document GrepAI's VectorStore interface compatibility with Aeterna backends
-- [ ] 1.1.3 Test GrepAI with Qdrant backend (same as Aeterna)
-- [ ] 1.1.4 Test GrepAI with PostgreSQL/pgvector backend
+### 1.1 Code Search Analysis
+- [ ] 1.1.1 Clone Code Search repo and analyze MCP server implementation
+- [ ] 1.1.2 Document Code Search's VectorStore interface compatibility with Aeterna backends
+- [ ] 1.1.3 Test Code Search with Qdrant backend (same as Aeterna)
+- [ ] 1.1.4 Test Code Search with PostgreSQL/pgvector backend
 - [ ] 1.1.5 Document call graph analysis capabilities and languages supported
 
 ### 1.2 Integration Architecture
@@ -19,33 +19,33 @@
 
 ## 2. Helm Chart Integration
 
-### 2.1 GrepAI Sidecar
-- [ ] 2.1.1 Add GrepAI container to Aeterna deployment as sidecar
+### 2.1 Code Search Sidecar
+- [ ] 2.1.1 Add Code Search container to Aeterna deployment as sidecar
 - [ ] 2.1.2 Configure shared volume for index files (GOB backend)
-- [ ] 2.1.3 Add GrepAI ConfigMap for `.grepai/config.yaml`
-- [ ] 2.1.4 Configure GrepAI to use Aeterna's Qdrant instance
-- [ ] 2.1.5 Add init container for `grepai init` on mounted project paths
+- [ ] 2.1.3 Add Code Search ConfigMap for `.codesearch/config.yaml`
+- [ ] 2.1.4 Configure Code Search to use Aeterna's Qdrant instance
+- [ ] 2.1.5 Add init container for `codesearch init` on mounted project paths
 
 ### 2.2 Values Configuration
-- [ ] 2.2.1 Add `grepai.enabled` toggle (default: false)
-- [ ] 2.2.2 Add `grepai.image` configuration
-- [ ] 2.2.3 Add `grepai.embedder` configuration (ollama, openai)
-- [ ] 2.2.4 Add `grepai.store` configuration (shared with Aeterna or separate)
-- [ ] 2.2.5 Add `grepai.resources` (requests/limits)
-- [ ] 2.2.6 Add `grepai.projects` list for auto-initialization
+- [ ] 2.2.1 Add `codesearch.enabled` toggle (default: false)
+- [ ] 2.2.2 Add `codesearch.image` configuration
+- [ ] 2.2.3 Add `codesearch.embedder` configuration (ollama, openai)
+- [ ] 2.2.4 Add `codesearch.store` configuration (shared with Aeterna or separate)
+- [ ] 2.2.5 Add `codesearch.resources` (requests/limits)
+- [ ] 2.2.6 Add `codesearch.projects` list for auto-initialization
 
 ### 2.3 Networking
-- [ ] 2.3.1 Add GrepAI MCP port to Service (stdio or HTTP)
+- [ ] 2.3.1 Add Code Search MCP port to Service (stdio or HTTP)
 - [ ] 2.3.2 Configure inter-container communication for MCP proxy
-- [ ] 2.3.3 Add NetworkPolicy rules for GrepAI
+- [ ] 2.3.3 Add NetworkPolicy rules for Code Search
 
 ---
 
 ## 3. MCP Proxy Layer
 
 ### 3.1 Tool Proxy Implementation
-- [ ] 3.1.1 Create `tools/src/grepai/mod.rs` module
-- [ ] 3.1.2 Implement `code_search` tool (proxy to `grepai_search`)
+- [ ] 3.1.1 Create `tools/src/codesearch/mod.rs` module
+- [ ] 3.1.2 Implement `code_search` tool (proxy to `codesearch_search`)
 - [ ] 3.1.3 Implement `code_trace_callers` tool
 - [ ] 3.1.4 Implement `code_trace_callees` tool
 - [ ] 3.1.5 Implement `code_graph` tool
@@ -53,12 +53,12 @@
 
 ### 3.2 MCP Client
 - [ ] 3.2.1 Add MCP client library to Cargo.toml
-- [ ] 3.2.2 Implement stdio transport to GrepAI sidecar
+- [ ] 3.2.2 Implement stdio transport to Code Search sidecar
 - [ ] 3.2.3 Add connection pooling and retry logic
-- [ ] 3.2.4 Add circuit breaker for GrepAI failures
+- [ ] 3.2.4 Add circuit breaker for Code Search failures
 
 ### 3.3 Response Transformation
-- [ ] 3.3.1 Map GrepAI responses to Aeterna's unified format
+- [ ] 3.3.1 Map Code Search responses to Aeterna's unified format
 - [ ] 3.3.2 Add tenant context to code search results
 - [ ] 3.3.3 Integrate call graph data with DuckDB graph layer
 
@@ -67,32 +67,32 @@
 ## 4. CLI Integration
 
 ### 4.1 Subcommands
-- [ ] 4.1.1 Add `aeterna grepai` subcommand group
-- [ ] 4.1.2 Implement `aeterna grepai init <path>` command
-- [ ] 4.1.3 Implement `aeterna grepai search <query>` command
-- [ ] 4.1.4 Implement `aeterna grepai trace callers <symbol>` command
-- [ ] 4.1.5 Implement `aeterna grepai trace callees <symbol>` command
-- [ ] 4.1.6 Implement `aeterna grepai status` command
+- [ ] 4.1.1 Add `aeterna codesearch` subcommand group
+- [ ] 4.1.2 Implement `aeterna codesearch init <path>` command
+- [ ] 4.1.3 Implement `aeterna codesearch search <query>` command
+- [ ] 4.1.4 Implement `aeterna codesearch trace callers <symbol>` command
+- [ ] 4.1.5 Implement `aeterna codesearch trace callees <symbol>` command
+- [ ] 4.1.6 Implement `aeterna codesearch status` command
 
 ### 4.2 Setup Wizard Integration
-- [ ] 4.2.1 Add GrepAI option to `aeterna setup` wizard
+- [ ] 4.2.1 Add Code Search option to `aeterna setup` wizard
 - [ ] 4.2.2 Add embedder selection (Ollama local vs OpenAI cloud)
 - [ ] 4.2.3 Add project path configuration
-- [ ] 4.2.4 Generate `.grepai/config.yaml` alongside other configs
+- [ ] 4.2.4 Generate `.codesearch/config.yaml` alongside other configs
 
 ---
 
 ## 5. Shared Backend Configuration
 
 ### 5.1 Qdrant Shared Collections
-- [ ] 5.1.1 Design collection naming: `aeterna_memories_*` vs `grepai_code_*`
+- [ ] 5.1.1 Design collection naming: `aeterna_memories_*` vs `codesearch_code_*`
 - [ ] 5.1.2 Document embedding dimension requirements (must match)
 - [ ] 5.1.3 Test concurrent access from both services
 - [ ] 5.1.4 Add collection cleanup for removed projects
 
 ### 5.2 PostgreSQL/pgvector Shared Schema
-- [ ] 5.2.1 Design table structure: `aeterna.memories` vs `grepai.chunks`
-- [ ] 5.2.2 Add migration for GrepAI schema (if not auto-created)
+- [ ] 5.2.1 Design table structure: `aeterna.memories` vs `codesearch.chunks`
+- [ ] 5.2.2 Add migration for Code Search schema (if not auto-created)
 - [ ] 5.2.3 Configure connection pooling for shared database
 - [ ] 5.2.4 Add health checks for shared database
 
@@ -102,8 +102,8 @@
 - [ ] 5.3.3 Create DuckDB migrations for graph_nodes and graph_edges tables
 - [ ] 5.3.4 Implement node sync: Aeterna knowledge → graph_nodes
 - [ ] 5.3.5 Implement node sync: Aeterna memory → graph_nodes
-- [ ] 5.3.6 Implement node sync: GrepAI chunks → graph_nodes
-- [ ] 5.3.7 Implement edge sync: GrepAI call graph → graph_edges (calls)
+- [ ] 5.3.6 Implement node sync: Code Search chunks → graph_nodes
+- [ ] 5.3.7 Implement edge sync: Code Search call graph → graph_edges (calls)
 - [ ] 5.3.8 Add graph visualization export (DOT, JSON)
 
 ### 5.4 Automatic Link Detection
@@ -128,12 +128,12 @@
 ## 6. OpenCode Plugin Integration
 
 ### 6.1 Tool Registration
-- [ ] 6.1.1 Add GrepAI tools to OpenCode plugin manifest
+- [ ] 6.1.1 Add Code Search tools to OpenCode plugin manifest
 - [ ] 6.1.2 Update MCP tool definitions in plugin
 - [ ] 6.1.3 Add tool documentation and examples
 
 ### 6.2 Context Enhancement
-- [ ] 6.2.1 Auto-inject relevant code context from GrepAI search
+- [ ] 6.2.1 Auto-inject relevant code context from Code Search search
 - [ ] 6.2.2 Add call graph context for refactoring tasks
 - [ ] 6.2.3 Link code chunks to related memories
 
@@ -155,7 +155,7 @@
 ### 7.3 E2E Tests
 - [ ] 7.3.1 Test full flow: index code → search → trace → memory link
 - [ ] 7.3.2 Test with real codebase (Aeterna itself)
-- [ ] 7.3.3 Test OpenCode plugin with GrepAI tools
+- [ ] 7.3.3 Test OpenCode plugin with Code Search tools
 
 ---
 
@@ -179,7 +179,7 @@
 - [ ] 8.2.6 Add rate limiting for index update notifications
 - [ ] 8.2.7 Add webhook signature verification
 
-### 8.3 GrepAI Workspace Management
+### 8.3 Code Search Workspace Management
 - [ ] 8.3.1 Design workspace naming convention: `org-{tenant_id}`
 - [ ] 8.3.2 Implement workspace auto-creation on first project index
 - [ ] 8.3.3 Implement project auto-registration to workspace
@@ -207,14 +207,14 @@
 ## 9. Documentation
 
 ### 8.1 User Documentation
-- [ ] 8.1.1 Add GrepAI integration guide to docs
+- [ ] 8.1.1 Add Code Search integration guide to docs
 - [ ] 8.1.2 Document shared backend configuration
 - [ ] 8.1.3 Add troubleshooting section
 - [ ] 8.1.4 Add architecture diagram
 
 ### 8.2 Chart Documentation
-- [ ] 8.2.1 Update charts/aeterna/README.md with GrepAI section
-- [ ] 8.2.2 Add example values for GrepAI-enabled deployment
+- [ ] 8.2.1 Update charts/aeterna/README.md with Code Search section
+- [ ] 8.2.2 Add example values for Code Search-enabled deployment
 - [ ] 8.2.3 Document resource requirements
 
 ---
@@ -242,14 +242,14 @@
 
 | Dependency | Version | License | Notes |
 |------------|---------|---------|-------|
-| GrepAI | v0.26.0+ | MIT | Go binary, runs as sidecar |
+| Code Search | v0.26.0+ | MIT | Go binary, runs as sidecar |
 | MCP SDK | latest | MIT | For client communication |
 
 ---
 
 ## Open Questions
 
-1. **Embedding model alignment**: Should Aeterna and GrepAI use the same embedding model for cross-search compatibility?
-2. **Index freshness**: How to coordinate file watching between Aeterna's sync and GrepAI's watcher?
-3. **Multi-tenant isolation**: How to isolate GrepAI indexes per tenant in shared backend?
+1. **Embedding model alignment**: Should Aeterna and Code Search use the same embedding model for cross-search compatibility?
+2. **Index freshness**: How to coordinate file watching between Aeterna's sync and Code Search's watcher?
+3. **Multi-tenant isolation**: How to isolate Code Search indexes per tenant in shared backend?
 4. **Local vs Cloud embeddings**: Default to Ollama (privacy) or OpenAI (speed)?

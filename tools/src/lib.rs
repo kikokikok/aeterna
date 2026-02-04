@@ -1,11 +1,12 @@
 //! # MCP Tools Interface
 //!
-//! 8 MCP tools for memory-knowledge system.
+//! MCP tools for memory-knowledge system and code navigation.
 
 pub mod bridge;
 pub mod cca;
 pub mod extensions;
 pub mod governance;
+pub mod codesearch;
 pub mod knowledge;
 pub mod memory;
 pub mod orchestrator;

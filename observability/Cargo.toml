@@ -1,0 +1,17 @@
+[package]
+name = "observability"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+mk_core = { path = "../mk_core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full"] }

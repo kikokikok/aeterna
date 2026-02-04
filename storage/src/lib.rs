@@ -1,15 +1,24 @@
 pub mod approval_workflow;
 pub mod budget_storage;
+pub mod encryption;
 pub mod events;
+pub mod gdpr;
 pub mod governance;
 pub mod graph;
 pub mod graph_duckdb;
+pub mod kms_integration;
 pub mod meta_governance;
 pub mod postgres;
 pub mod query_builder;
 pub mod redis;
 pub mod rlm_weights;
 pub mod rls_migration;
+pub mod shard_manager;
+pub mod tenant_router;
+pub mod repo_manager;
+pub mod secret_provider;
+pub mod policy_evaluator;
+pub mod shard_router;
 
 // Re-export Redis lock types for job coordination
 pub use redis::{JobSkipReason, LockResult};
@@ -43,4 +52,28 @@ pub use meta_governance::{
 // Re-export RLM weight storage types
 pub use rlm_weights::{
     PostgresRlmWeightStorage, RlmWeightStorage, RlmWeightStorageError, StoredPolicyState
+};
+
+// Re-export encryption types
+pub use encryption::{
+    EncryptedData, EncryptionConfig, EncryptionError, EncryptionManager
+};
+
+// Re-export KMS types
+pub use kms_integration::{
+    AwsKmsProvider, KmsClient, KmsConfig, KmsError, KmsKeyMetadata, KmsProvider, LocalKmsProvider
+};
+
+// Re-export GDPR types
+pub use gdpr::{
+    AnonymizationStrategy, GdprAuditLog, GdprConsent, GdprError, GdprOperations,
+    PostgresGdprStorage, UserDataExport
+};
+
+// Re-export tenant sharding types
+pub use tenant_router::{TenantRouter, TenantShard, TenantSize};
+pub use shard_manager::{ShardError, ShardInfo, ShardManager, ShardStatistics, ShardStatus};
+pub use repo_manager::{
+    CleanupLog, CreateRepository, CreateRequest, IndexMetadata, RepoRequest, Repository,
+    RepositoryStatus, RepositoryType, RepoRequestStatus, SyncStrategy, UsageMetrics, RepoStorage
 };

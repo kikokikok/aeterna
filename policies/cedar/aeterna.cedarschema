@@ -54,23 +54,31 @@ namespace Aeterna {
     // ENTITY TYPES - Principals (Who can perform actions)
     // =========================================================================
     
+    // Role: Entity-based role for hierarchical permissions
+    entity Role = {
+        "name": String,
+        "tenant_id"?: String,
+    };
+
     // User: Human identity
-    entity User in [Team] = {
+    entity User in [Team, Role] = {
         "email": String,
         "name"?: String,
-        // Role within teams: "admin", "architect", "tech_lead", "developer", "viewer"
+        // Role attribute (sync'd from Role entity for convenience)
         "role": String,
         // IdP information
         "idp_provider"?: String,
         // Status: "active", "inactive", "suspended"
         "status": String,
+        "tenant_id": String,
     };
 
     // Agent: AI agent identity with delegation
-    entity Agent = {
+    entity Agent in [Role] = {
         "name": String,
         // Type: "opencode", "langchain", "autogen", "custom"
         "agent_type": String,
+        "tenant_id": String,
         // Who delegated authority to this agent
         "delegated_by_user"?: User,
         "delegated_by_agent"?: Agent,
@@ -381,4 +389,69 @@ namespace Aeterna {
         },
     };
 
+}
+
+// =============================================================================
+// NAMESPACE: CodeSearch
+// =============================================================================
+namespace CodeSearch {
+    
+    // Repository: A Git repository managed by Code Search
+    entity Repository = {
+        "name": String,
+        "tenant_id": String,
+        "status": String, // "requested", "approved", "ready", "error"
+        "sync_strategy": String,
+        "current_branch": String,
+    };
+
+    // Request: A pending request to add a repository for indexing
+    entity Request = {
+        "repository_name": String,
+        "tenant_id": String,
+        "principal_id": String,
+    };
+
+    // Identity: Git credentials/auth provider info
+    entity Identity = {
+        "name": String,
+        "tenant_id": String,
+        "provider": String,
+    };
+
+    // Actions
+    action RequestRepository appliesTo {
+        principal: [Aeterna::User, Aeterna::Agent],
+        resource: [Repository],
+    };
+
+    action ApproveRepository appliesTo {
+        principal: [Aeterna::User],
+        resource: [Request],
+    };
+
+    action IndexRepository appliesTo {
+        principal: [Aeterna::User, Aeterna::Agent],
+        resource: [Repository],
+    };
+
+    action Search appliesTo {
+        principal: [Aeterna::User, Aeterna::Agent],
+        resource: [Repository],
+    };
+
+    action Trace appliesTo {
+        principal: [Aeterna::User, Aeterna::Agent],
+        resource: [Repository],
+    };
+
+    action AddIdentity appliesTo {
+        principal: [Aeterna::User],
+        resource: [Identity],
+    };
+
+    action ListIdentities appliesTo {
+        principal: [Aeterna::User],
+        resource: [Identity],
+    };
 }

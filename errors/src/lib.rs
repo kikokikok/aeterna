@@ -178,3 +178,34 @@ pub enum StorageError {
     #[error("Transaction on {backend} failed: {reason}")]
     TransactionError { backend: String, reason: String }
 }
+
+/// Code Search repository management errors
+#[derive(Debug, Error)]
+pub enum CodeSearchError {
+    #[error("Repository not found: {name}")]
+    RepoNotFound { name: String },
+
+    #[error("Invalid repository type: found {found}, expected {expected}")]
+    InvalidType { found: String, expected: String },
+
+    #[error("Invalid status transition: {from} to {to}")]
+    InvalidStatusTransition { from: String, to: String },
+
+    #[error("Policy violation {policy}: {reason}")]
+    PolicyViolation { policy: String, reason: String },
+
+    #[error("Approval required for repository: {name}")]
+    ApprovalRequired { name: String },
+
+    #[error("Git operation failed: {reason}")]
+    GitError { reason: String },
+
+    #[error("Indexing failed for {repo}: {reason}")]
+    IndexingFailed { repo: String, reason: String },
+
+    #[error("Database error: {reason}")]
+    DatabaseError { reason: String },
+
+    #[error("Cleanup failed: {reason}")]
+    CleanupError { reason: String },
+}

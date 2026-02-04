@@ -25,7 +25,7 @@ use crate::config::{
 /// use config::{Config, load_from_env, load_from_file, merge_configs};
 /// use std::path::Path;
 ///
-/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// fn main() -> Result<(), anyhow::Result<()>> {
 ///     let defaults = Config::default();
 ///     let from_file = load_from_file(Path::new("config.toml"))?;
 ///     let from_env = load_from_env()?;
