@@ -191,59 +191,46 @@ pub async fn get_agents(State(state): State<Arc<AppState>>) -> Result<Json<Cedar
 
 /// GET /v1/all
 ///
-/// Returns all entities (hierarchy, users, agents) in a single response.
+/// Returns all entities (hierarchy, users, agents, and Code Search) in a single response.
 /// Useful for initial full sync.
-pub async fn get_all_entities(
-    State(state): State<Arc<AppState>>
-) -> Result<Json<CedarEntitiesResponse>> {
+pub async fn get_all_entities(State(state): State<Arc<AppState>>) -> Result<Json<CedarEntitiesResponse>> {
     tracing::debug!("Fetching all entities");
 
     // Fetch all entity types in parallel
-    let (hierarchy_rows, user_rows, agent_rows) = tokio::try_join!(
+    let (hierarchy_rows, user_rows, agent_rows, codesearch_repo_rows, codesearch_req_rows, codesearch_id_rows) = tokio::try_join!(
         sqlx::query_as::<_, HierarchyRow>(
-            r"
-            SELECT
-                company_id, company_slug, company_name,
-                org_id, org_slug, org_name,
-                team_id, team_slug, team_name,
-                project_id, project_slug, project_name,
-                git_remote
-            FROM v_hierarchy
-            "
-        )
-        .fetch_all(&state.pool),
+            r"SELECT company_id, company_slug, company_name, org_id, org_slug, org_name, team_id, team_slug, team_name, project_id, project_slug, project_name, git_remote FROM v_hierarchy"
+        ).fetch_all(&state.pool),
         sqlx::query_as::<_, UserPermissionRow>(
-            r"
-            SELECT
-                user_id, email, user_name, user_status,
-                team_id, role, permissions,
-                org_id, company_id, company_slug, org_slug, team_slug
-            FROM v_user_permissions
-            "
-        )
-        .fetch_all(&state.pool),
+            r"SELECT user_id, email, user_name, user_status, team_id, role, permissions, org_id, company_id, company_slug, org_slug, team_slug FROM v_user_permissions"
+        ).fetch_all(&state.pool),
         sqlx::query_as::<_, AgentPermissionRow>(
-            r"
-            SELECT
-                agent_id, agent_name, agent_type,
-                delegated_by_user_id, delegated_by_agent_id, delegation_depth,
-                capabilities, allowed_company_ids, allowed_org_ids,
-                allowed_team_ids, allowed_project_ids, agent_status,
-                delegating_user_email, delegating_user_name
-            FROM v_agent_permissions
-            "
-        )
-        .fetch_all(&state.pool),
+            r"SELECT agent_id, agent_name, agent_type, delegated_by_user_id, delegated_by_agent_id, delegation_depth, capabilities, allowed_company_ids, allowed_org_ids, allowed_team_ids, allowed_project_ids, agent_status, delegating_user_email, delegating_user_name FROM v_agent_permissions"
+        ).fetch_all(&state.pool),
+        sqlx::query_as::<_, crate::entities::CodeSearchRepositoryRow>(
+            r"SELECT id, tenant_id, name, status, sync_strategy, current_branch FROM v_code_search_repositories"
+        ).fetch_all(&state.pool),
+        sqlx::query_as::<_, crate::entities::CodeSearchRequestRow>(
+            r"SELECT id, repository_id, requester_id, status, tenant_id FROM v_code_search_requests"
+        ).fetch_all(&state.pool),
+        sqlx::query_as::<_, crate::entities::CodeSearchIdentityRow>(
+            r"SELECT id, tenant_id, name, provider FROM v_code_search_identities"
+        ).fetch_all(&state.pool),
     )?;
 
     // Transform all entities
     let mut all_entities = transform_hierarchy(hierarchy_rows)?;
     all_entities.extend(transform_users(user_rows)?);
     all_entities.extend(transform_agents(agent_rows)?);
+    
+    // Add Code Search entities
+    all_entities.extend(crate::entities::transform_code_search_repositories(codesearch_repo_rows));
+    all_entities.extend(crate::entities::transform_code_search_requests(codesearch_req_rows));
+    all_entities.extend(crate::entities::transform_code_search_identities(codesearch_id_rows));
 
     let response = CedarEntitiesResponse::new(all_entities);
 
-    tracing::info!(entity_count = response.count, "Returning all entities");
+    tracing::info!(entity_count = response.count, "Returning all entities (including Code Search)");
 
     Ok(Json(response))
 }

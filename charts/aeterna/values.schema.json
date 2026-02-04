@@ -360,16 +360,16 @@
         "enabled": { "type": "boolean", "default": false }
       }
     },
-    "grepai": {
+    "codesearch": {
       "type": "object",
-      "description": "GrepAI integration configuration",
+      "description": "Code Search integration configuration",
       "properties": {
-        "enabled": { "type": "boolean", "default": false, "description": "Enable GrepAI sidecar" },
+        "enabled": { "type": "boolean", "default": false, "description": "Enable Code Search sidecar" },
         "mcpServerUrl": { "type": "string", "default": "http://localhost:9090", "description": "MCP server URL" },
         "image": {
           "type": "object",
           "properties": {
-            "repository": { "type": "string", "default": "ghcr.io/grepai/grepai" },
+            "repository": { "type": "string", "default": "ghcr.io/codesearch/codesearch" },
             "tag": { "type": "string", "default": "latest" },
             "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"], "default": "IfNotPresent" }
           }
@@ -408,13 +408,13 @@
             "qdrant": {
               "type": "object",
               "properties": {
-                "collectionPrefix": { "type": "string", "default": "grepai_" }
+                "collectionPrefix": { "type": "string", "default": "codesearch_" }
               }
             },
             "postgres": {
               "type": "object",
               "properties": {
-                "schema": { "type": "string", "default": "grepai" }
+                "schema": { "type": "string", "default": "codesearch" }
               }
             }
           }

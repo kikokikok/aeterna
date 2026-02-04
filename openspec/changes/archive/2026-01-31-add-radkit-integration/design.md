@@ -228,7 +228,7 @@ fn configure_agent() -> AgentDefinition {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), anyhow::Result<()>> {
     // Initialize domain managers
     let memory_manager = Arc::new(MemoryManager::new()
         .with_config(config.memory)

@@ -226,7 +226,7 @@ pub async fn create_collection_with_replication(
     collection_name: &str,
     vector_size: u64,
     replication_factor: u32,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), anyhow::Result<()>> {
     client.create_collection(&CreateCollection {
         collection_name: collection_name.to_string(),
         vectors_config: Some(VectorsConfig {

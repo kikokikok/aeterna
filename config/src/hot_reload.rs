@@ -43,7 +43,7 @@ pub enum ConfigReloadEvent {
 /// use tokio::signal;
 ///
 /// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// async fn main() -> anyhow::Result<()> {
 ///     let config_path = std::path::Path::new("config.toml");
 ///     let (_tx, mut rx) = watch_config(&config_path).await?;
 ///
@@ -78,20 +78,14 @@ pub enum ConfigReloadEvent {
 /// Uses debouncing to avoid multiple reload events for single file change.
 pub async fn watch_config(
     config_path: &Path
-) -> Result<
-    (
-        tokio::sync::mpsc::Sender<ConfigReloadEvent>,
-        tokio::sync::mpsc::Receiver<ConfigReloadEvent>
-    ),
-    Box<dyn std::error::Error>
-> {
+) -> anyhow::Result<(
+    tokio::sync::mpsc::Sender<ConfigReloadEvent>,
+    tokio::sync::mpsc::Receiver<ConfigReloadEvent>
+)> {
     let config_path = config_path.to_path_buf();
 
     if !config_path.exists() {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("Config file not found: {:?}", config_path)
-        )));
+        anyhow::bail!("Config file not found: {:?}", config_path);
     }
 
     let (tx, rx) = tokio::sync::mpsc::channel(100);

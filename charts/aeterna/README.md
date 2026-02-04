@@ -422,16 +422,16 @@ curl http://localhost:8080/health/live
 - Verify policy repository access
 - Check fetcher connectivity
 
-## GrepAI Integration
+## Code Search Integration
 
-Aeterna integrates with GrepAI to provide semantic code search and call graph analysis capabilities. GrepAI runs as a sidecar container and communicates with Aeterna via MCP (Model Context Protocol).
+Aeterna integrates with Code Search to provide semantic code search and call graph analysis capabilities. Code Search runs as a sidecar container and communicates with Aeterna via MCP (Model Context Protocol).
 
 ### Quick Start
 
-Enable GrepAI in your values:
+Enable Code Search in your values:
 
 ```yaml
-grepai:
+codesearch:
   enabled: true
   
   embedder:
@@ -459,7 +459,7 @@ grepai:
 
 **Ollama** (Default - Local, free):
 ```yaml
-grepai:
+codesearch:
   embedder:
     type: ollama
     model: nomic-embed-text  # or mxbai-embed-large, all-minilm
@@ -471,7 +471,7 @@ llm:
 
 **OpenAI** (Cloud - High quality):
 ```yaml
-grepai:
+codesearch:
   embedder:
     type: openai
     model: text-embedding-3-small
@@ -488,11 +488,11 @@ llm:
 
 **Qdrant** (Recommended):
 ```yaml
-grepai:
+codesearch:
   store:
     type: qdrant
     qdrant:
-      collectionPrefix: grepai_
+      collectionPrefix: codesearch_
 
 vectorBackend:
   type: qdrant
@@ -502,11 +502,11 @@ vectorBackend:
 
 **PostgreSQL**:
 ```yaml
-grepai:
+codesearch:
   store:
     type: postgres
     postgres:
-      schema: grepai
+      schema: codesearch
 
 postgresql:
   bundled: true
@@ -517,56 +517,56 @@ postgresql:
 ```bash
 # Initialize a project
 kubectl exec -it <pod-name> -c aeterna -- \
-  aeterna grepai init /workspace/project
+  aeterna codesearch init /workspace/project
 
 # Semantic search
 kubectl exec -it <pod-name> -c aeterna -- \
-  aeterna grepai search "authentication middleware"
+  aeterna codesearch search "authentication middleware"
 
 # Call graph analysis
 kubectl exec -it <pod-name> -c aeterna -- \
-  aeterna grepai trace callers HandleLogin --recursive
+  aeterna codesearch trace callers HandleLogin --recursive
 
 # Build dependency graph
 kubectl exec -it <pod-name> -c aeterna -- \
-  aeterna grepai trace graph UserService --depth 2 --format dot
+  aeterna codesearch trace graph UserService --depth 2 --format dot
 ```
 
 ### Monitoring
 
 ```bash
-# Check GrepAI health
-kubectl exec -it <pod-name> -c grepai -- \
+# Check Code Search health
+kubectl exec -it <pod-name> -c codesearch -- \
   curl http://localhost:9090/health
 
 # View logs
-kubectl logs <pod-name> -c grepai -f
+kubectl logs <pod-name> -c codesearch -f
 
 # Check index status
 kubectl exec -it <pod-name> -c aeterna -- \
-  aeterna grepai status
+  aeterna codesearch status
 ```
 
 ### Troubleshooting
 
 **Sidecar not starting**:
 ```bash
-kubectl logs <pod-name> -c grepai-init
-kubectl logs <pod-name> -c grepai
+kubectl logs <pod-name> -c codesearch-init
+kubectl logs <pod-name> -c codesearch
 ```
 
 **Project initialization fails**:
 ```bash
-kubectl exec -it <pod-name> -c grepai -- \
-  grepai init /workspace/project --force
+kubectl exec -it <pod-name> -c codesearch -- \
+  codesearch init /workspace/project --force
 ```
 
 **Slow search**:
-- Increase GrepAI resources in values.yaml
+- Increase Code Search resources in values.yaml
 - Use faster embedder (all-minilm)
 - Enable Redis/Dragonfly cache
 
-For complete documentation, see [docs/grepai-integration.md](../../docs/grepai-integration.md)
+For complete documentation, see [docs/codesearch-integration.md](../../docs/codesearch-integration.md)
 
 ## Values Reference
 
@@ -581,9 +581,9 @@ Key parameters:
 | `cache.type` | Cache type | `dragonfly` |
 | `postgresql.bundled` | Use bundled PostgreSQL | `true` |
 | `opal.enabled` | Enable OPAL stack | `true` |
-| `grepai.enabled` | Enable GrepAI sidecar | `false` |
-| `grepai.embedder.type` | GrepAI embedder type | `ollama` |
-| `grepai.store.type` | GrepAI storage backend | `qdrant` |
+| `codesearch.enabled` | Enable Code Search sidecar | `false` |
+| `codesearch.embedder.type` | Code Search embedder type | `ollama` |
+| `codesearch.store.type` | Code Search storage backend | `qdrant` |
 | `aeterna.replicaCount` | Aeterna replicas | `1` |
 | `aeterna.autoscaling.enabled` | Enable HPA | `false` |
 | `networkPolicy.enabled` | Enable network policies | `false` |

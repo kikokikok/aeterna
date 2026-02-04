@@ -162,7 +162,7 @@ impl ShardManager {
         
         if shard.current_tenants > 0 {
             // Put it back and return error
-            self.shards.insert(shard_id.to_string(), shard);
+            self.shards.insert(shard_id.to_string(), shard.clone());
             return Err(ShardError::ProvisionFailed(
                 format!("Cannot remove shard {} with {} active tenants", shard_id, shard.current_tenants)
             ));

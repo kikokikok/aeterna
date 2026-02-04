@@ -69,6 +69,36 @@ pub struct AgentPermissionRow {
     pub delegating_user_name: Option<String>
 }
 
+/// Row from the `codesearch_repositories` table.
+#[derive(Debug, Clone, FromRow)]
+pub struct CodeSearchRepositoryRow {
+    pub id: Uuid,
+    pub tenant_id: String,
+    pub name: String,
+    pub status: String,
+    pub sync_strategy: String,
+    pub current_branch: String,
+}
+
+/// Row from the `codesearch_requests` table.
+#[derive(Debug, Clone, FromRow)]
+pub struct CodeSearchRequestRow {
+    pub id: Uuid,
+    pub repository_id: Uuid,
+    pub requester_id: String,
+    pub status: String,
+    pub tenant_id: String,
+}
+
+/// Row from the `codesearch_identities` table.
+#[derive(Debug, Clone, FromRow)]
+pub struct CodeSearchIdentityRow {
+    pub id: Uuid,
+    pub tenant_id: String,
+    pub name: String,
+    pub provider: String,
+}
+
 // ============================================================================
 // Cedar Entity Types
 // ============================================================================
@@ -345,6 +375,54 @@ pub fn transform_agents(rows: Vec<AgentPermissionRow>) -> Result<Vec<CedarEntity
     }
 
     Ok(entities)
+}
+
+/// Transforms code search repositories into Cedar entities.
+pub fn transform_code_search_repositories(rows: Vec<CodeSearchRepositoryRow>) -> Vec<CedarEntity> {
+    rows.into_iter()
+        .map(|row| CedarEntity {
+            uid: CedarEntityUid::new("CodeSearch::Repository", row.id.to_string()),
+            attrs: serde_json::json!({
+                "name": row.name,
+                "tenant_id": row.tenant_id,
+                "status": row.status,
+                "sync_strategy": row.sync_strategy,
+                "current_branch": row.current_branch,
+            }),
+            parents: vec![],
+        })
+        .collect()
+}
+
+/// Transforms code search requests into Cedar entities.
+pub fn transform_code_search_requests(rows: Vec<CodeSearchRequestRow>) -> Vec<CedarEntity> {
+    rows.into_iter()
+        .map(|row| CedarEntity {
+            uid: CedarEntityUid::new("CodeSearch::Request", row.id.to_string()),
+            attrs: serde_json::json!({
+                "repository_id": row.repository_id.to_string(),
+                "requester_id": row.requester_id,
+                "status": row.status,
+                "tenant_id": row.tenant_id,
+            }),
+            parents: vec![],
+        })
+        .collect()
+}
+
+/// Transforms code search identities into Cedar entities.
+pub fn transform_code_search_identities(rows: Vec<CodeSearchIdentityRow>) -> Vec<CedarEntity> {
+    rows.into_iter()
+        .map(|row| CedarEntity {
+            uid: CedarEntityUid::new("CodeSearch::Identity", row.id.to_string()),
+            attrs: serde_json::json!({
+                "name": row.name,
+                "tenant_id": row.tenant_id,
+                "provider": row.provider,
+            }),
+            parents: vec![],
+        })
+        .collect()
 }
 
 #[cfg(test)]

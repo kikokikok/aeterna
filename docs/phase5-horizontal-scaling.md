@@ -145,7 +145,7 @@ fn create_router(state: AppState) -> Router {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), anyhow::Result<()>> {
     let port = std::env::var("PORT").unwrap_or("8001".to_string());
     let state = AppState {};
     let app = create_router(state);
@@ -401,7 +401,7 @@ impl TenantRouter {
         &self,
         tenant_id: &str,
         new_size: TenantSize,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), anyhow::Result<()>> {
         // 1. Create new shard assignment
         let new_shard = self.assign_shard(tenant_id, new_size);
         
@@ -471,7 +471,7 @@ impl ShardManager {
     pub async fn create_dedicated_shard(
         &mut self,
         tenant_id: &str,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    ) -> Result<String, anyhow::Result<()>> {
         let shard_id = format!("dedicated-{}", tenant_id);
         
         // TODO: Provision new Qdrant instance or collection

@@ -8,8 +8,10 @@ use std::collections::HashMap;
 use storage::postgres::PostgresBackend;
 use testing::postgres;
 
-async fn setup_postgres_backend() -> Result<PostgresBackend, Box<dyn std::error::Error>> {
-    let fixture = postgres().await.ok_or("Docker not available")?;
+async fn setup_postgres_backend() -> Result<PostgresBackend, anyhow::Error> {
+    let fixture = postgres()
+        .await
+        .ok_or_else(|| anyhow::anyhow!("Docker not available"))?;
     let backend = PostgresBackend::new(fixture.url()).await?;
     backend.initialize_schema().await?;
     Ok(backend)
@@ -122,7 +124,7 @@ async fn test_hierarchy_strict_enforcement() {
 
 #[tokio::test]
 async fn test_recursive_hierarchy_navigation() {
-    let backend = match setup_postgres_backend().await {
+    let backend: PostgresBackend = match setup_postgres_backend().await {
         Ok(b) => b,
         Err(_) => {
             eprintln!("Skipping PostgreSQL hierarchy test: Docker not available");

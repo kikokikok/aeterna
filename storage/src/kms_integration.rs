@@ -100,7 +100,7 @@ pub struct AwsKmsProvider {
 
 impl AwsKmsProvider {
     pub async fn new(region: String, key_id: String, endpoint: Option<String>) -> Result<Self, KmsError> {
-        let config = aws_config::from_env()
+        let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .region(aws_sdk_kms::config::Region::new(region))
             .load()
             .await;
