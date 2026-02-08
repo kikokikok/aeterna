@@ -132,7 +132,12 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Run tarpaulin
-        run: cargo tarpaulin --out Html --timeout 300 --workspace
+        # Exclude tests requiring external services (embedding, LLM, Redis)
+        # Patterns:
+        #   - openai.rs, mock.rs: Excludes embedding service tests
+        #   - reasoning_tests.rs: Excludes reasoning tests that need embedding service
+        #   - tools/src/memory.rs: Excludes tools memory tests with LLM integration
+        run: cargo tarpaulin --out Html --timeout 300 --workspace --exclude-files 'openai.rs','mock.rs','reasoning_tests.rs','tools/src/memory.rs'
 
       - name: Upload coverage
         uses: actions/upload-artifact@v3
