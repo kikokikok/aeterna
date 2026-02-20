@@ -10,7 +10,7 @@ pub enum BudgetStorageError {
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
     #[error("Budget not found for tenant: {0}")]
-    NotFound(String)
+    NotFound(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,7 +23,7 @@ pub struct StoredBudget {
     pub critical_threshold_percent: i32,
     pub exhausted_action: String,
     pub created_at: i64,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,11 +32,11 @@ pub struct StoredUsage {
     pub layer: String,
     pub window_type: String,
     pub tokens_used: i64,
-    pub window_start: i64
+    pub window_start: i64,
 }
 
 pub struct BudgetStorage {
-    pool: Pool<Postgres>
+    pool: Pool<Postgres>,
 }
 
 impl BudgetStorage {
@@ -56,7 +56,7 @@ impl BudgetStorage {
                 exhausted_action TEXT NOT NULL DEFAULT 'reject',
                 created_at BIGINT NOT NULL,
                 updated_at BIGINT NOT NULL
-            )"
+            )",
         )
         .execute(&self.pool)
         .await?;
@@ -69,14 +69,14 @@ impl BudgetStorage {
                 tokens_used BIGINT NOT NULL DEFAULT 0,
                 window_start BIGINT NOT NULL,
                 PRIMARY KEY (tenant_id, layer, window_type)
-            )"
+            )",
         )
         .execute(&self.pool)
         .await?;
 
         sqlx::query(
             "CREATE INDEX IF NOT EXISTS idx_summarization_usage_tenant 
-             ON summarization_usage(tenant_id)"
+             ON summarization_usage(tenant_id)",
         )
         .execute(&self.pool)
         .await?;
@@ -86,13 +86,13 @@ impl BudgetStorage {
 
     pub async fn get_budget(
         &self,
-        tenant_id: &str
+        tenant_id: &str,
     ) -> Result<Option<StoredBudget>, BudgetStorageError> {
         let row = sqlx::query(
             "SELECT tenant_id, daily_token_limit, hourly_token_limit, per_layer_limits,
                     warning_threshold_percent, critical_threshold_percent, exhausted_action,
                     created_at, updated_at
-             FROM summarization_budgets WHERE tenant_id = $1"
+             FROM summarization_budgets WHERE tenant_id = $1",
         )
         .bind(tenant_id)
         .fetch_optional(&self.pool)
@@ -108,9 +108,9 @@ impl BudgetStorage {
                 critical_threshold_percent: row.get("critical_threshold_percent"),
                 exhausted_action: row.get("exhausted_action"),
                 created_at: row.get("created_at"),
-                updated_at: row.get("updated_at")
+                updated_at: row.get("updated_at"),
             })),
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -128,7 +128,7 @@ impl BudgetStorage {
                 warning_threshold_percent = EXCLUDED.warning_threshold_percent,
                 critical_threshold_percent = EXCLUDED.critical_threshold_percent,
                 exhausted_action = EXCLUDED.exhausted_action,
-                updated_at = EXCLUDED.updated_at"
+                updated_at = EXCLUDED.updated_at",
         )
         .bind(&budget.tenant_id)
         .bind(budget.daily_token_limit)
@@ -160,7 +160,7 @@ impl BudgetStorage {
         layer: MemoryLayer,
         window_type: &str,
         tokens: i64,
-        window_start: i64
+        window_start: i64,
     ) -> Result<(), BudgetStorageError> {
         let layer_str = layer.display_name();
 
@@ -176,7 +176,7 @@ impl BudgetStorage {
                 window_start = CASE 
                     WHEN summarization_usage.window_start < $5 THEN $5
                     ELSE summarization_usage.window_start
-                END"
+                END",
         )
         .bind(tenant_id)
         .bind(layer_str)
@@ -194,7 +194,7 @@ impl BudgetStorage {
         tenant_id: &str,
         layer: Option<MemoryLayer>,
         window_type: &str,
-        current_window_start: i64
+        current_window_start: i64,
     ) -> Result<i64, BudgetStorageError> {
         let query = if let Some(l) = layer {
             let layer_str = l.display_name();
@@ -203,7 +203,7 @@ impl BudgetStorage {
                     CASE WHEN window_start >= $3 THEN tokens_used ELSE 0 END
                 ), 0) as total
                  FROM summarization_usage 
-                 WHERE tenant_id = $1 AND layer = $2 AND window_type = $4"
+                 WHERE tenant_id = $1 AND layer = $2 AND window_type = $4",
             )
             .bind(tenant_id)
             .bind(layer_str)
@@ -215,7 +215,7 @@ impl BudgetStorage {
                     CASE WHEN window_start >= $2 THEN tokens_used ELSE 0 END
                 ), 0) as total
                  FROM summarization_usage 
-                 WHERE tenant_id = $1 AND window_type = $3"
+                 WHERE tenant_id = $1 AND window_type = $3",
             )
             .bind(tenant_id)
             .bind(current_window_start)
@@ -231,13 +231,13 @@ impl BudgetStorage {
         &self,
         tenant_id: &str,
         window_type: &str,
-        current_window_start: i64
+        current_window_start: i64,
     ) -> Result<Vec<(String, i64)>, BudgetStorageError> {
         let rows = sqlx::query(
             "SELECT layer, 
                     CASE WHEN window_start >= $2 THEN tokens_used ELSE 0 END as tokens
              FROM summarization_usage 
-             WHERE tenant_id = $1 AND window_type = $3"
+             WHERE tenant_id = $1 AND window_type = $3",
         )
         .bind(tenant_id)
         .bind(current_window_start)
@@ -256,11 +256,11 @@ impl BudgetStorage {
     pub async fn reset_usage(
         &self,
         tenant_id: &str,
-        window_type: &str
+        window_type: &str,
     ) -> Result<(), BudgetStorageError> {
         sqlx::query(
             "DELETE FROM summarization_usage 
-             WHERE tenant_id = $1 AND window_type = $2"
+             WHERE tenant_id = $1 AND window_type = $2",
         )
         .bind(tenant_id)
         .bind(window_type)
@@ -272,7 +272,7 @@ impl BudgetStorage {
 
     pub async fn cleanup_old_usage(
         &self,
-        before_timestamp: i64
+        before_timestamp: i64,
     ) -> Result<u64, BudgetStorageError> {
         let result = sqlx::query("DELETE FROM summarization_usage WHERE window_start < $1")
             .bind(before_timestamp)
@@ -301,7 +301,7 @@ mod tests {
             critical_threshold_percent: 90,
             exhausted_action: "reject".to_string(),
             created_at: 1704067200,
-            updated_at: 1704067200
+            updated_at: 1704067200,
         };
 
         let json = serde_json::to_string(&budget).unwrap();
@@ -319,7 +319,7 @@ mod tests {
             layer: "session".to_string(),
             window_type: "daily".to_string(),
             tokens_used: 5000,
-            window_start: 1704067200
+            window_start: 1704067200,
         };
 
         let json = serde_json::to_string(&usage).unwrap();

@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 /// Shard Router for Scalable Code Search Repository Management
 ///
 /// This module provides consistent hashing and affinity routing to ensure
@@ -8,13 +9,11 @@
 /// - Each indexer pod registers itself with a unique `shard_id`
 /// - Repositories are assigned to shards using consistent hashing
 /// - On scale events, a rebalancing job reassigns and migrates repos
-
 use serde::{Deserialize, Serialize};
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
 use sqlx::{FromRow, PgPool};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use uuid::Uuid;
 
 /// Shard information for an indexer pod
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -22,8 +21,8 @@ pub struct IndexerShard {
     pub shard_id: String,
     pub pod_name: String,
     pub pod_ip: String,
-    pub capacity: i32,       // Max repos this shard can handle
-    pub current_load: i32,   // Current number of repos
+    pub capacity: i32,     // Max repos this shard can handle
+    pub current_load: i32, // Current number of repos
     pub status: ShardStatus,
     pub last_heartbeat: DateTime<Utc>,
     pub registered_at: DateTime<Utc>,
@@ -33,7 +32,7 @@ pub struct IndexerShard {
 #[sqlx(rename_all = "lowercase")]
 pub enum ShardStatus {
     Active,
-    Draining,    // No new repos, migrating existing
+    Draining, // No new repos, migrating existing
     Offline,
     Maintenance,
 }
@@ -42,7 +41,7 @@ pub enum ShardStatus {
 pub struct ShardRouter {
     pool: PgPool,
     local_shard_id: Option<String>,
-    virtual_nodes: i32,  // Virtual nodes per shard for better distribution
+    virtual_nodes: i32, // Virtual nodes per shard for better distribution
 }
 
 impl ShardRouter {
@@ -78,16 +77,18 @@ impl ShardRouter {
         .bind(capacity)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
 
     /// Send heartbeat to mark shard as alive
     pub async fn heartbeat(&self, shard_id: &str) -> Result<(), sqlx::Error> {
-        sqlx::query("UPDATE codesearch_indexer_shards SET last_heartbeat = NOW() WHERE shard_id = $1")
-            .bind(shard_id)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "UPDATE codesearch_indexer_shards SET last_heartbeat = NOW() WHERE shard_id = $1",
+        )
+        .bind(shard_id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -102,9 +103,11 @@ impl ShardRouter {
 
     /// Assign a repository to an optimal shard using consistent hashing
     pub async fn assign_shard(&self, repo_id: Uuid) -> Result<String, ShardRoutingError> {
-        let shards = self.get_active_shards().await
+        let shards = self
+            .get_active_shards()
+            .await
             .map_err(|e| ShardRoutingError::DatabaseError(e.to_string()))?;
-        
+
         if shards.is_empty() {
             return Err(ShardRoutingError::NoShardsAvailable);
         }
@@ -130,14 +133,18 @@ impl ShardRouter {
 
         // Find the shard for this repo
         let repo_hash = self.hash_key(&repo_id.to_string());
-        let target_shard = ring.iter()
+        let target_shard = ring
+            .iter()
             .find(|(h, _)| *h >= repo_hash)
             .unwrap_or(&ring[0])
             .1
             .clone();
 
         // Update the repo's shard assignment and increment load
-        let mut tx = self.pool.begin().await
+        let mut tx = self
+            .pool
+            .begin()
+            .await
             .map_err(|e| ShardRoutingError::DatabaseError(e.to_string()))?;
 
         sqlx::query("UPDATE codesearch_repositories SET shard_id = $1 WHERE id = $2")
@@ -153,7 +160,8 @@ impl ShardRouter {
             .await
             .map_err(|e| ShardRoutingError::DatabaseError(e.to_string()))?;
 
-        tx.commit().await
+        tx.commit()
+            .await
             .map_err(|e| ShardRoutingError::DatabaseError(e.to_string()))?;
 
         Ok(target_shard)
@@ -161,12 +169,11 @@ impl ShardRouter {
 
     /// Get the shard for a repository (already assigned)
     pub async fn get_shard_for_repo(&self, repo_id: Uuid) -> Result<Option<String>, sqlx::Error> {
-        let row: Option<(Option<String>,)> = sqlx::query_as(
-            "SELECT shard_id FROM codesearch_repositories WHERE id = $1"
-        )
-        .bind(repo_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row: Option<(Option<String>,)> =
+            sqlx::query_as("SELECT shard_id FROM codesearch_repositories WHERE id = $1")
+                .bind(repo_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
         Ok(row.and_then(|(s,)| s))
     }
@@ -178,12 +185,15 @@ impl ShardRouter {
     }
 
     /// Get routing info for a repository
-    pub async fn get_routing_info(&self, repo_id: Uuid) -> Result<Option<IndexerShard>, sqlx::Error> {
+    pub async fn get_routing_info(
+        &self,
+        repo_id: Uuid,
+    ) -> Result<Option<IndexerShard>, sqlx::Error> {
         let shard_id = self.get_shard_for_repo(repo_id).await?;
         match shard_id {
             Some(id) => {
                 sqlx::query_as::<_, IndexerShard>(
-                    "SELECT * FROM codesearch_indexer_shards WHERE shard_id = $1"
+                    "SELECT * FROM codesearch_indexer_shards WHERE shard_id = $1",
                 )
                 .bind(id)
                 .fetch_optional(&self.pool)
@@ -203,14 +213,16 @@ impl ShardRouter {
     }
 
     /// Rebalance repos from a draining shard to active shards
-    pub async fn rebalance_from_shard(&self, draining_shard_id: &str) -> Result<i32, ShardRoutingError> {
-        let repos: Vec<(Uuid,)> = sqlx::query_as(
-            "SELECT id FROM codesearch_repositories WHERE shard_id = $1"
-        )
-        .bind(draining_shard_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| ShardRoutingError::DatabaseError(e.to_string()))?;
+    pub async fn rebalance_from_shard(
+        &self,
+        draining_shard_id: &str,
+    ) -> Result<i32, ShardRoutingError> {
+        let repos: Vec<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM codesearch_repositories WHERE shard_id = $1")
+                .bind(draining_shard_id)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| ShardRoutingError::DatabaseError(e.to_string()))?;
 
         let mut migrated = 0;
         for (repo_id,) in repos {
@@ -274,7 +286,9 @@ impl ColdStorageManager {
             .map_err(|e| ColdStorageError::BundleFailed(e.to_string()))?;
 
         if !output.status.success() {
-            return Err(ColdStorageError::BundleFailed(String::from_utf8_lossy(&output.stderr).to_string()));
+            return Err(ColdStorageError::BundleFailed(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
         }
 
         // Upload to S3
@@ -282,7 +296,8 @@ impl ColdStorageManager {
             .await
             .map_err(|e| ColdStorageError::UploadFailed(e.to_string()))?;
 
-        self.s3_client.put_object()
+        self.s3_client
+            .put_object()
             .bucket(&self.bucket)
             .key(&s3_key)
             .body(body)
@@ -303,19 +318,25 @@ impl ColdStorageManager {
         local_path: &std::path::Path,
     ) -> Result<(), ColdStorageError> {
         // Parse S3 URI
-        let key = s3_uri.strip_prefix(&format!("s3://{}/", self.bucket))
+        let key = s3_uri
+            .strip_prefix(&format!("s3://{}/", self.bucket))
             .ok_or_else(|| ColdStorageError::InvalidUri(s3_uri.to_string()))?;
 
         // Download bundle
         let bundle_path = local_path.with_extension("bundle");
-        let resp = self.s3_client.get_object()
+        let resp = self
+            .s3_client
+            .get_object()
             .bucket(&self.bucket)
             .key(key)
             .send()
             .await
             .map_err(|e| ColdStorageError::DownloadFailed(e.to_string()))?;
 
-        let data = resp.body.collect().await
+        let data = resp
+            .body
+            .collect()
+            .await
             .map_err(|e| ColdStorageError::DownloadFailed(e.to_string()))?;
 
         std::fs::write(&bundle_path, data.into_bytes())
@@ -332,7 +353,9 @@ impl ColdStorageManager {
             .map_err(|e| ColdStorageError::RestoreFailed(e.to_string()))?;
 
         if !output.status.success() {
-            return Err(ColdStorageError::RestoreFailed(String::from_utf8_lossy(&output.stderr).to_string()));
+            return Err(ColdStorageError::RestoreFailed(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
         }
 
         // Cleanup bundle
@@ -343,10 +366,12 @@ impl ColdStorageManager {
 
     /// Delete a backup from S3
     pub async fn delete_backup(&self, s3_uri: &str) -> Result<(), ColdStorageError> {
-        let key = s3_uri.strip_prefix(&format!("s3://{}/", self.bucket))
+        let key = s3_uri
+            .strip_prefix(&format!("s3://{}/", self.bucket))
             .ok_or_else(|| ColdStorageError::InvalidUri(s3_uri.to_string()))?;
 
-        self.s3_client.delete_object()
+        self.s3_client
+            .delete_object()
             .bucket(&self.bucket)
             .key(key)
             .send()
