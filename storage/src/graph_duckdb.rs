@@ -652,10 +652,25 @@ impl DuckDbGraphStore {
 
         if store.config.iceberg.enabled {
             let conn = store.conn.lock();
-            Self::install_iceberg_extension(&conn)?;
-            Self::configure_iceberg_catalog(&conn, &store.config.iceberg)?;
+            match Self::install_iceberg_extension(&conn) {
+                Ok(()) => {
+                    if let Err(e) = Self::configure_iceberg_catalog(&conn, &store.config.iceberg) {
+                        warn!(
+                            "Iceberg catalog configuration failed (operations will fail): {}",
+                            e
+                        );
+                    } else {
+                        info!("Iceberg extension installed and catalog configured");
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Iceberg extension unavailable (operations will fail): {}",
+                        e
+                    );
+                }
+            }
             drop(conn);
-            info!("Iceberg extension installed and catalog configured");
         }
 
         info!("DuckDB graph store initialized successfully");
@@ -2875,9 +2890,8 @@ impl DuckDbGraphStore {
 /// Leiden community detection: iteratively refines partitions for high-quality communities.
 ///
 /// Phases per iteration:
-///   1. Local moving — greedily move nodes to maximize modularity gain
-///   2. Refinement — within each community, allow further splits via merges from singleton
-///   3. Aggregation — collapse communities into super-nodes and recurse
+///   1. Local moving — greedily move nodes to maximize modularity gain (deterministic tie-breaking)
+///   2. Aggregation — collapse communities into super-nodes and recurse
 ///
 /// Modularity: Q = (1/2m) Σ [A_ij - k_i*k_j/(2m)] δ(c_i, c_j)
 fn leiden_detect(
@@ -2886,7 +2900,6 @@ fn leiden_detect(
     total_edge_weight: f64,
     min_community_size: usize,
 ) -> Vec<Community> {
-    use rand::seq::SliceRandom;
     use std::collections::{HashMap, HashSet};
 
     if node_ids.is_empty() || total_edge_weight == 0.0 {
@@ -2920,14 +2933,12 @@ fn leiden_detect(
     let mut community: Vec<usize> = (0..n).collect();
 
     let max_iterations = 10;
-    let mut rng = rand::thread_rng();
 
     for _iteration in 0..max_iterations {
         let mut improved = false;
 
         // Phase 1: Local moving — greedily assign each node to the community giving max modularity gain
-        let mut order: Vec<usize> = (0..n).collect();
-        order.shuffle(&mut rng);
+        let order: Vec<usize> = (0..n).collect();
 
         let mut phase1_improved = true;
         while phase1_improved {
@@ -2953,20 +2964,27 @@ fn leiden_detect(
                 let remove_cost = ki_in_current / two_m - (sigma_current * ki) / (two_m * two_m);
 
                 let mut best_comm = current_comm;
-                let mut best_gain = 0.0;
+                let best_gain = 0.0;
 
-                for (&candidate_comm, &ki_in_candidate) in &comm_weights {
-                    if candidate_comm == current_comm {
-                        continue;
-                    }
-                    let sigma_candidate = sigma_tot.get(&candidate_comm).copied().unwrap_or(0.0);
-                    let add_gain =
-                        ki_in_candidate / two_m - (sigma_candidate * ki) / (two_m * two_m);
-                    let delta_q = add_gain - remove_cost;
-
-                    if delta_q > best_gain {
-                        best_gain = delta_q;
-                        best_comm = candidate_comm;
+                let mut candidates: Vec<(usize, f64)> = comm_weights
+                    .iter()
+                    .filter(|&(&cc, _)| cc != current_comm)
+                    .map(|(&cc, &ki_in_candidate)| {
+                        let sigma_candidate = sigma_tot.get(&cc).copied().unwrap_or(0.0);
+                        let add_gain =
+                            ki_in_candidate / two_m - (sigma_candidate * ki) / (two_m * two_m);
+                        let delta_q = add_gain - remove_cost;
+                        (cc, delta_q)
+                    })
+                    .collect();
+                candidates.sort_unstable_by(|a, b| {
+                    b.1.partial_cmp(&a.1)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then(a.0.cmp(&b.0))
+                });
+                if let Some(&(cc, gain)) = candidates.first() {
+                    if gain > best_gain {
+                        best_comm = cc;
                     }
                 }
 
@@ -2978,39 +2996,48 @@ fn leiden_detect(
             }
         }
 
-        // Phase 2: Refinement — within each community, check if nodes are better off splitting
-        let mut comm_members: HashMap<usize, Vec<usize>> = HashMap::new();
-        for (i, &c) in community.iter().enumerate() {
-            comm_members.entry(c).or_default().push(i);
-        }
-
-        let mut next_comm_id = *community.iter().max().unwrap_or(&0) + 1;
-        for (_comm_id, members) in &comm_members {
-            if members.len() <= 1 {
-                continue;
-            }
-
-            for &node in members {
-                let mut internal_weight = 0.0;
-                let mut total_weight = 0.0;
-                for &(neighbor, w) in &adj_weights[node] {
-                    total_weight += w;
-                    if community[neighbor] == community[node] {
-                        internal_weight += w;
-                    }
-                }
-
-                // CPM-style: if a node has more external than internal connections, split it off
-                if internal_weight < total_weight * 0.5 && members.len() > min_community_size {
-                    community[node] = next_comm_id;
-                    next_comm_id += 1;
-                    improved = true;
-                }
-            }
-        }
-
         if !improved {
             break;
+        }
+    }
+
+    let unique_comms: HashSet<usize> = community.iter().copied().collect();
+    if unique_comms.len() > 1 {
+        let mut comm_list: Vec<usize> = {
+            let mut v: Vec<usize> = unique_comms.into_iter().collect();
+            v.sort_unstable();
+            v
+        };
+        let mut merged = true;
+        while merged {
+            merged = false;
+            'outer: for i in 0..comm_list.len() {
+                for j in (i + 1)..comm_list.len() {
+                    let ca = comm_list[i];
+                    let cb = comm_list[j];
+                    let members_a: Vec<usize> = (0..n).filter(|&x| community[x] == ca).collect();
+                    let members_b: Vec<usize> = (0..n).filter(|&x| community[x] == cb).collect();
+                    let cross: f64 = members_a
+                        .iter()
+                        .flat_map(|&a| adj_weights[a].iter().map(move |&(b, w)| (a, b, w)))
+                        .filter(|&(_, b, _)| members_b.contains(&b))
+                        .map(|(_, _, w)| w)
+                        .sum();
+                    let sa: f64 = members_a.iter().map(|&x| k[x]).sum();
+                    let sb: f64 = members_b.iter().map(|&x| k[x]).sum();
+                    let delta_q = cross / two_m - (sa * sb) / (two_m * two_m);
+                    if sa > 0.0 && sb > 0.0 && delta_q >= 0.0 {
+                        for x in 0..n {
+                            if community[x] == cb {
+                                community[x] = ca;
+                            }
+                        }
+                        comm_list.remove(j);
+                        merged = true;
+                        break 'outer;
+                    }
+                }
+            }
         }
     }
 
