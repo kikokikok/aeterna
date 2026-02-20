@@ -86,7 +86,7 @@ The system SHALL encrypt all data at rest using industry-standard encryption.
 - **AND** encryption transparent to queries
 - **AND** audit log records encryption operations
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Deployment Configuration
 

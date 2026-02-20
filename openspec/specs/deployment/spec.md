@@ -1,13 +1,38 @@
-# 08 - Deployment Patterns
+# deployment Specification
 
-```yaml
-status: draft
-version: 0.1.0
-date: 2026-01-07
-depends_on:
-  - 05-adapter-architecture.md
-  - 07-configuration.md
-```
+## Purpose
+Deployment configuration, high availability infrastructure, disaster recovery, horizontal scaling, and encryption at rest for Aeterna enterprise deployments.
+## Requirements
+### Requirement: Deployment Configuration
+
+The system SHALL support multiple deployment modes WITH high availability options.
+
+#### Scenario: Production HA Deployment
+- **WHEN** deploying to production
+- **THEN** Helm chart deploys:
+  - PostgreSQL with Patroni (1 primary + 2 replicas)
+  - Qdrant cluster (3 nodes, RF=2)
+  - Redis Sentinel (3 nodes)
+  - Memory service (3+ replicas)
+  - Knowledge service (2+ replicas)
+- **AND** configures PodDisruptionBudgets
+- **AND** enables automatic backups
+- **AND** configures monitoring
+
+### Requirement: OpenTofu Multi-Cloud Provisioning
+The platform SHALL provide OpenTofu Infrastructure-as-Code modules for automated, highly-available deployment across GCP, AWS, and Azure.
+
+#### Scenario: Provisioning AWS
+- **WHEN** applying the AWS module
+- **THEN** an EKS cluster, Multi-AZ RDS Postgres, and ElastiCache Redis are provisioned
+- **AND** IAM Roles for Service Accounts (IRSA) are generated and bound to Aeterna components
+
+### Requirement: Cloud KMS Encryption
+The deployment modules MUST enforce Customer-Managed Encryption Keys (CMEK) at rest for all stateful stores.
+
+#### Scenario: GCP Encryption
+- **WHEN** provisioning GCS Buckets or Cloud SQL in GCP
+- **THEN** the resources must be encrypted with a Cloud KMS key provisioned by the module
 
 ## Overview
 
