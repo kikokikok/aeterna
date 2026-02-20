@@ -1,22 +1,23 @@
 use super::{
     BackendCapabilities, BackendError, DeleteResult, HealthStatus, SearchQuery, SearchResult,
-    UpsertResult, VectorBackend, VectorRecord
+    UpsertResult, VectorBackend, VectorRecord,
 };
 use async_trait::async_trait;
 use metrics::{counter, gauge, histogram};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
+use tracing::{Instrument, Level, span};
 
 pub struct InstrumentedBackend<B: VectorBackend> {
     inner: B,
-    circuit_breaker: CircuitBreaker
+    circuit_breaker: CircuitBreaker,
 }
 
 impl<B: VectorBackend> InstrumentedBackend<B> {
     pub fn new(inner: B) -> Self {
         Self {
             inner,
-            circuit_breaker: CircuitBreaker::new(5, 30)
+            circuit_breaker: CircuitBreaker::new(5, 30),
         }
     }
 
@@ -89,15 +90,26 @@ impl<B: VectorBackend> InstrumentedBackend<B> {
 #[async_trait]
 impl<B: VectorBackend + Send + Sync> VectorBackend for InstrumentedBackend<B> {
     async fn health_check(&self) -> Result<HealthStatus, BackendError> {
+        let backend = self.inner.backend_name();
+
         let start = Instant::now();
-        let result = self.inner.health_check().await;
+        let result = self
+            .inner
+            .health_check()
+            .instrument(span!(Level::DEBUG, "vector_backend.health_check", backend))
+            .await;
         let duration = start.elapsed();
 
-        let backend = self.inner.backend_name();
         histogram!("vector_backend_health_check_duration_seconds", "backend" => backend)
             .record(duration.as_secs_f64());
 
         if let Ok(ref status) = result {
+            tracing::debug!(
+                backend = backend,
+                healthy = status.healthy,
+                latency_ms = status.latency_ms,
+                "health check completed"
+            );
             gauge!("vector_backend_healthy", "backend" => backend).set(if status.healthy {
                 1.0
             } else {
@@ -107,31 +119,50 @@ impl<B: VectorBackend + Send + Sync> VectorBackend for InstrumentedBackend<B> {
             if let Some(latency) = status.latency_ms {
                 gauge!("vector_backend_latency_ms", "backend" => backend).set(latency as f64);
             }
+        } else if let Err(ref e) = result {
+            tracing::warn!(backend = backend, error = %e, "health check failed");
         }
 
         result
     }
 
     async fn capabilities(&self) -> BackendCapabilities {
-        self.inner.capabilities().await
+        let backend = self.inner.backend_name();
+        self.inner
+            .capabilities()
+            .instrument(span!(Level::DEBUG, "vector_backend.capabilities", backend))
+            .await
     }
 
     async fn upsert(
         &self,
         tenant_id: &str,
-        vectors: Vec<VectorRecord>
+        vectors: Vec<VectorRecord>,
     ) -> Result<UpsertResult, BackendError> {
+        let backend = self.inner.backend_name();
+        let batch_size = vectors.len();
+
         if !self.circuit_breaker.allow_request() {
-            counter!("vector_backend_circuit_breaker_rejected_total", "backend" => self.inner.backend_name())
+            tracing::warn!(backend, tenant_id, "circuit breaker rejected upsert");
+            counter!("vector_backend_circuit_breaker_rejected_total", "backend" => backend)
                 .increment(1);
-            return Err(BackendError::CircuitOpen(self.inner.backend_name().into()));
+            return Err(BackendError::CircuitOpen(backend.into()));
         }
 
-        let batch_size = vectors.len();
         self.record_upsert_batch_size(batch_size);
 
         let start = Instant::now();
-        let result = self.inner.upsert(tenant_id, vectors).await;
+        let result = self
+            .inner
+            .upsert(tenant_id, vectors)
+            .instrument(span!(
+                Level::DEBUG,
+                "vector_backend.upsert",
+                backend,
+                tenant_id,
+                batch_size
+            ))
+            .await;
         let duration = start.elapsed();
 
         let success = result.is_ok();
@@ -140,11 +171,22 @@ impl<B: VectorBackend + Send + Sync> VectorBackend for InstrumentedBackend<B> {
         if success {
             self.circuit_breaker.record_success();
             if let Ok(ref r) = result {
-                counter!("vector_backend_vectors_upserted_total", "backend" => self.inner.backend_name())
+                tracing::debug!(
+                    backend,
+                    tenant_id,
+                    upserted = r.upserted_count,
+                    failed = r.failed_ids.len(),
+                    duration_ms = duration.as_millis(),
+                    "upsert completed"
+                );
+                counter!("vector_backend_vectors_upserted_total", "backend" => backend)
                     .increment(r.upserted_count as u64);
             }
         } else {
             self.circuit_breaker.record_failure();
+            if let Err(ref e) = result {
+                tracing::error!(backend, tenant_id, error = %e, "upsert failed");
+            }
         }
 
         result
@@ -153,16 +195,30 @@ impl<B: VectorBackend + Send + Sync> VectorBackend for InstrumentedBackend<B> {
     async fn search(
         &self,
         tenant_id: &str,
-        query: SearchQuery
+        query: SearchQuery,
     ) -> Result<Vec<SearchResult>, BackendError> {
+        let backend = self.inner.backend_name();
+        let limit = query.limit;
+
         if !self.circuit_breaker.allow_request() {
-            counter!("vector_backend_circuit_breaker_rejected_total", "backend" => self.inner.backend_name())
+            tracing::warn!(backend, tenant_id, "circuit breaker rejected search");
+            counter!("vector_backend_circuit_breaker_rejected_total", "backend" => backend)
                 .increment(1);
-            return Err(BackendError::CircuitOpen(self.inner.backend_name().into()));
+            return Err(BackendError::CircuitOpen(backend.into()));
         }
 
         let start = Instant::now();
-        let result = self.inner.search(tenant_id, query).await;
+        let result = self
+            .inner
+            .search(tenant_id, query)
+            .instrument(span!(
+                Level::DEBUG,
+                "vector_backend.search",
+                backend,
+                tenant_id,
+                limit
+            ))
+            .await;
         let duration = start.elapsed();
 
         let success = result.is_ok();
@@ -171,11 +227,21 @@ impl<B: VectorBackend + Send + Sync> VectorBackend for InstrumentedBackend<B> {
         if success {
             self.circuit_breaker.record_success();
             if let Ok(ref results) = result {
-                histogram!("vector_backend_search_results_count", "backend" => self.inner.backend_name())
+                tracing::debug!(
+                    backend,
+                    tenant_id,
+                    result_count = results.len(),
+                    duration_ms = duration.as_millis(),
+                    "search completed"
+                );
+                histogram!("vector_backend_search_results_count", "backend" => backend)
                     .record(results.len() as f64);
             }
         } else {
             self.circuit_breaker.record_failure();
+            if let Err(ref e) = result {
+                tracing::error!(backend, tenant_id, error = %e, "search failed");
+            }
         }
 
         result
@@ -184,19 +250,32 @@ impl<B: VectorBackend + Send + Sync> VectorBackend for InstrumentedBackend<B> {
     async fn delete(
         &self,
         tenant_id: &str,
-        ids: Vec<String>
+        ids: Vec<String>,
     ) -> Result<DeleteResult, BackendError> {
+        let backend = self.inner.backend_name();
+        let batch_size = ids.len();
+
         if !self.circuit_breaker.allow_request() {
-            counter!("vector_backend_circuit_breaker_rejected_total", "backend" => self.inner.backend_name())
+            tracing::warn!(backend, tenant_id, "circuit breaker rejected delete");
+            counter!("vector_backend_circuit_breaker_rejected_total", "backend" => backend)
                 .increment(1);
-            return Err(BackendError::CircuitOpen(self.inner.backend_name().into()));
+            return Err(BackendError::CircuitOpen(backend.into()));
         }
 
-        let batch_size = ids.len();
         self.record_delete_batch_size(batch_size);
 
         let start = Instant::now();
-        let result = self.inner.delete(tenant_id, ids).await;
+        let result = self
+            .inner
+            .delete(tenant_id, ids)
+            .instrument(span!(
+                Level::DEBUG,
+                "vector_backend.delete",
+                backend,
+                tenant_id,
+                batch_size
+            ))
+            .await;
         let duration = start.elapsed();
 
         let success = result.is_ok();
@@ -205,25 +284,48 @@ impl<B: VectorBackend + Send + Sync> VectorBackend for InstrumentedBackend<B> {
         if success {
             self.circuit_breaker.record_success();
             if let Ok(ref r) = result {
-                counter!("vector_backend_vectors_deleted_total", "backend" => self.inner.backend_name())
+                tracing::debug!(
+                    backend,
+                    tenant_id,
+                    deleted = r.deleted_count,
+                    duration_ms = duration.as_millis(),
+                    "delete completed"
+                );
+                counter!("vector_backend_vectors_deleted_total", "backend" => backend)
                     .increment(r.deleted_count as u64);
             }
         } else {
             self.circuit_breaker.record_failure();
+            if let Err(ref e) = result {
+                tracing::error!(backend, tenant_id, error = %e, "delete failed");
+            }
         }
 
         result
     }
 
     async fn get(&self, tenant_id: &str, id: &str) -> Result<Option<VectorRecord>, BackendError> {
+        let backend = self.inner.backend_name();
+
         if !self.circuit_breaker.allow_request() {
-            counter!("vector_backend_circuit_breaker_rejected_total", "backend" => self.inner.backend_name())
+            tracing::warn!(backend, tenant_id, id, "circuit breaker rejected get");
+            counter!("vector_backend_circuit_breaker_rejected_total", "backend" => backend)
                 .increment(1);
-            return Err(BackendError::CircuitOpen(self.inner.backend_name().into()));
+            return Err(BackendError::CircuitOpen(backend.into()));
         }
 
         let start = Instant::now();
-        let result = self.inner.get(tenant_id, id).await;
+        let result = self
+            .inner
+            .get(tenant_id, id)
+            .instrument(span!(
+                Level::DEBUG,
+                "vector_backend.get",
+                backend,
+                tenant_id,
+                id
+            ))
+            .await;
         let duration = start.elapsed();
 
         let success = result.is_ok();
@@ -232,8 +334,16 @@ impl<B: VectorBackend + Send + Sync> VectorBackend for InstrumentedBackend<B> {
         if success {
             self.circuit_breaker.record_success();
             if let Ok(ref opt) = result {
-                let backend = self.inner.backend_name();
-                if opt.is_some() {
+                let hit = opt.is_some();
+                tracing::debug!(
+                    backend,
+                    tenant_id,
+                    id,
+                    hit,
+                    duration_ms = duration.as_millis(),
+                    "get completed"
+                );
+                if hit {
                     counter!("vector_backend_get_hits_total", "backend" => backend, "hit" => "true").increment(1);
                 } else {
                     counter!("vector_backend_get_hits_total", "backend" => backend, "hit" => "false").increment(1);
@@ -241,6 +351,9 @@ impl<B: VectorBackend + Send + Sync> VectorBackend for InstrumentedBackend<B> {
             }
         } else {
             self.circuit_breaker.record_failure();
+            if let Err(ref e) = result {
+                tracing::error!(backend, tenant_id, id, error = %e, "get failed");
+            }
         }
 
         result
@@ -258,7 +371,7 @@ pub struct CircuitBreaker {
     last_failure_time: AtomicU64,
     failure_threshold: u32,
     reset_timeout_secs: u64,
-    state: std::sync::atomic::AtomicU8
+    state: std::sync::atomic::AtomicU8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -266,7 +379,7 @@ pub struct CircuitBreaker {
 enum CircuitState {
     Closed = 0,
     Open = 1,
-    HalfOpen = 2
+    HalfOpen = 2,
 }
 
 impl CircuitBreaker {
@@ -277,7 +390,7 @@ impl CircuitBreaker {
             last_failure_time: AtomicU64::new(0),
             failure_threshold,
             reset_timeout_secs,
-            state: std::sync::atomic::AtomicU8::new(CircuitState::Closed as u8)
+            state: std::sync::atomic::AtomicU8::new(CircuitState::Closed as u8),
         }
     }
 
@@ -286,7 +399,7 @@ impl CircuitBreaker {
             0 => CircuitState::Closed,
             1 => CircuitState::Open,
             2 => CircuitState::HalfOpen,
-            _ => CircuitState::Closed
+            _ => CircuitState::Closed,
         }
     }
 
@@ -311,7 +424,7 @@ impl CircuitBreaker {
                     false
                 }
             }
-            CircuitState::HalfOpen => true
+            CircuitState::HalfOpen => true,
         }
     }
 
