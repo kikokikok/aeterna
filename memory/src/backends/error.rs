@@ -45,7 +45,7 @@ pub enum BackendError {
     Internal(String),
 
     #[error("Circuit breaker open for backend: {0}")]
-    CircuitOpen(String)
+    CircuitOpen(String),
 }
 
 impl BackendError {
@@ -66,7 +66,7 @@ impl BackendError {
             BackendError::Timeout(_) => Some(1000),
             BackendError::ConnectionFailed(_) | BackendError::Unavailable(_) => Some(5000),
             BackendError::CircuitOpen(_) => Some(10000),
-            _ => None
+            _ => None,
         }
     }
 }

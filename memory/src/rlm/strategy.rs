@@ -11,7 +11,7 @@ pub trait ActionExecutor: Send + Sync {
     async fn execute(
         &self,
         action: DecompositionAction,
-        tenant: &TenantContext
+        tenant: &TenantContext,
     ) -> anyhow::Result<(String, Vec<String>)>;
 }
 
@@ -20,23 +20,23 @@ pub trait ActionExecutor: Send + Sync {
 pub enum DecompositionAction {
     SearchLayer {
         layer: MemoryLayer,
-        query: String
+        query: String,
     },
     DrillDown {
         memory_id: String,
-        query: String
+        query: String,
     },
     Filter {
         criteria: String,
-        results: Vec<String>
+        results: Vec<String>,
     },
     RecursiveCall {
-        sub_query: String
+        sub_query: String,
     },
     Aggregate {
         strategy: AggregationStrategy,
-        results: Vec<String>
-    }
+        results: Vec<String>,
+    },
 }
 
 /// Strategies for aggregating search results.
@@ -45,7 +45,7 @@ pub enum AggregationStrategy {
     Union,
     Intersection,
     Difference,
-    Summary
+    Summary,
 }
 
 /// Executes decomposition actions against knowledge and graph stores.
@@ -55,16 +55,16 @@ pub struct StrategyExecutor {
         Arc<
             dyn storage::graph::GraphStore<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync
-        >
-    >
+                + Sync,
+        >,
+    >,
 }
 
 impl StrategyExecutor {
     pub fn new(knowledge_manager: Arc<KnowledgeManager>) -> Self {
         Self {
             knowledge_manager,
-            graph_store: None
+            graph_store: None,
         }
     }
 
@@ -73,8 +73,8 @@ impl StrategyExecutor {
         graph_store: Arc<
             dyn storage::graph::GraphStore<Error = Box<dyn std::error::Error + Send + Sync>>
                 + Send
-                + Sync
-        >
+                + Sync,
+        >,
     ) -> Self {
         self.graph_store = Some(graph_store);
         self
@@ -86,7 +86,7 @@ impl ActionExecutor for StrategyExecutor {
     async fn execute(
         &self,
         action: DecompositionAction,
-        tenant: &TenantContext
+        tenant: &TenantContext,
     ) -> anyhow::Result<(String, Vec<String>)> {
         match action {
             DecompositionAction::SearchLayer { layer, query } => {
@@ -185,7 +185,7 @@ impl ActionExecutor for StrategyExecutor {
                 if filtered.is_empty() {
                     Ok((
                         "No results matched the filter criteria.".to_string(),
-                        vec![]
+                        vec![],
                     ))
                 } else {
                     Ok((filtered.join("\n---\n"), discovered_ids))
@@ -211,7 +211,7 @@ impl StrategyExecutor {
     async fn aggregate(
         &self,
         strategy: AggregationStrategy,
-        results: Vec<String>
+        results: Vec<String>,
     ) -> anyhow::Result<String> {
         match strategy {
             AggregationStrategy::Union => {
@@ -267,7 +267,7 @@ mod tests {
                 "this is an error message".to_string(),
                 "another error occurred".to_string(),
                 "some warning".to_string(),
-            ]
+            ],
         };
 
         let result = executor.execute(action, &tenant).await.unwrap();
@@ -287,7 +287,7 @@ mod tests {
 
         let action = DecompositionAction::Filter {
             criteria: "missing".to_string(),
-            results: vec!["alpha".to_string(), "beta".to_string()]
+            results: vec!["alpha".to_string(), "beta".to_string()],
         };
 
         let result = executor.execute(action, &tenant).await.unwrap();

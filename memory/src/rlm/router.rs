@@ -11,13 +11,13 @@ pub struct ComplexitySignals {
     pub keyword_density: f32,
     pub multi_hop_indicators: usize,
     pub temporal_constraints: bool,
-    pub aggregate_operators: bool
+    pub aggregate_operators: bool,
 }
 
 /// Routes queries to RLM or standard search based on complexity score.
 pub struct ComplexityRouter {
     config: config::RlmConfig,
-    keywords: Vec<Regex>
+    keywords: Vec<Regex>,
 }
 
 impl ComplexityRouter {
@@ -96,7 +96,7 @@ impl ComplexityRouter {
             keyword_density: keyword_count as f32 / self.keywords.len() as f32,
             multi_hop_indicators,
             temporal_constraints,
-            aggregate_operators
+            aggregate_operators,
         }
     }
 
@@ -106,7 +106,7 @@ impl ComplexityRouter {
             r"(?i)\bafter\b",
             r"(?i)\bfollowed by\b",
             r"(?i)\bcaused\b",
-            r"(?i)\bleading to\b"
+            r"(?i)\bleading to\b",
         ];
 
         patterns
@@ -124,7 +124,7 @@ impl ComplexityRouter {
             r"(?i)\bperiod\b",
             r"(?i)\bover the last\b",
             r"(?i)\bin the last\b",
-            r"(?i)\bover time\b"
+            r"(?i)\bover time\b",
         ];
 
         patterns
@@ -138,7 +138,7 @@ impl ComplexityRouter {
             r"(?i)\bevery\b",
             r"(?i)\btotal\b",
             r"(?i)\baverage\b",
-            r"(?i)\bcount\b"
+            r"(?i)\bcount\b",
         ];
 
         patterns
@@ -157,7 +157,7 @@ mod tests {
         let router = ComplexityRouter::new(config::RlmConfig {
             enabled: true,
             max_steps: 5,
-            complexity_threshold: 0.3
+            complexity_threshold: 0.3,
         });
 
         let q1 = SearchQuery {
@@ -182,7 +182,7 @@ mod tests {
         let router = ComplexityRouter::new(config::RlmConfig {
             enabled: true,
             max_steps: 5,
-            complexity_threshold: 0.3
+            complexity_threshold: 0.3,
         });
 
         let simple_queries = vec![
@@ -210,7 +210,7 @@ mod tests {
         let router = ComplexityRouter::new(config::RlmConfig {
             enabled: true,
             max_steps: 5,
-            complexity_threshold: 0.3
+            complexity_threshold: 0.3,
         });
 
         let complex_queries = vec![
@@ -239,7 +239,7 @@ mod tests {
         let router = ComplexityRouter::new(config::RlmConfig {
             enabled: false,
             max_steps: 5,
-            complexity_threshold: 0.3
+            complexity_threshold: 0.3,
         });
 
         let complex_query = SearchQuery {
@@ -259,7 +259,7 @@ mod tests {
         let router = ComplexityRouter::new(config::RlmConfig {
             enabled: true,
             max_steps: 5,
-            complexity_threshold: 0.3
+            complexity_threshold: 0.3,
         });
 
         let boundary_query = SearchQuery {
@@ -282,7 +282,7 @@ mod tests {
         let router = ComplexityRouter::new(config::RlmConfig {
             enabled: true,
             max_steps: 5,
-            complexity_threshold: 0.3
+            complexity_threshold: 0.3,
         });
 
         let without_multi_hop = SearchQuery {
@@ -310,7 +310,7 @@ mod tests {
         let router = ComplexityRouter::new(config::RlmConfig {
             enabled: true,
             max_steps: 5,
-            complexity_threshold: 0.3
+            complexity_threshold: 0.3,
         });
 
         let without_temporal = SearchQuery {
@@ -337,7 +337,7 @@ mod tests {
         let router = ComplexityRouter::new(config::RlmConfig {
             enabled: true,
             max_steps: 5,
-            complexity_threshold: 0.3
+            complexity_threshold: 0.3,
         });
 
         let without_aggregate = SearchQuery {

@@ -20,7 +20,7 @@ pub struct CombinedTrainingMetrics {
     /// Decomposition training metrics
     pub decomposition_metrics: DecompositionTrainingMetrics,
     /// Total trajectories processed
-    pub total_trajectories: usize
+    pub total_trajectories: usize,
 }
 
 /// Decomposition training metrics
@@ -31,7 +31,7 @@ pub struct DecompositionTrainingMetrics {
     /// Average reward for decomposition
     pub average_reward: f32,
     /// Current exploration rate (epsilon)
-    pub exploration_rate: f32
+    pub exploration_rate: f32,
 }
 
 /// Combined Memory Trainer for unified R1 + RLM training.
@@ -45,7 +45,7 @@ pub struct CombinedMemoryTrainer {
     decomposition_trainer: crate::rlm::trainer::DecompositionTrainer,
     /// Storage for decomposition trajectories
     pub(crate) decomposition_trajectories:
-        Arc<RwLock<Vec<crate::rlm::trainer::DecompositionTrajectory>>>
+        Arc<RwLock<Vec<crate::rlm::trainer::DecompositionTrajectory>>>,
 }
 
 impl CombinedMemoryTrainer {
@@ -60,15 +60,15 @@ impl CombinedMemoryTrainer {
         r1_config: R1TrainerConfig,
         decomposition_config: RewardConfig,
         r1_trajectories: Arc<
-            RwLock<std::collections::HashMap<String, Vec<mk_core::types::MemoryTrajectoryEvent>>>
-        >
+            RwLock<std::collections::HashMap<String, Vec<mk_core::types::MemoryTrajectoryEvent>>>,
+        >,
     ) -> Self {
         Self {
             r1_trainer: MemoryR1Trainer::new(r1_config, r1_trajectories),
             decomposition_trainer: crate::rlm::trainer::DecompositionTrainer::new(
-                decomposition_config
+                decomposition_config,
             ),
-            decomposition_trajectories: Arc::new(RwLock::new(Vec::new()))
+            decomposition_trajectories: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -91,13 +91,13 @@ impl CombinedMemoryTrainer {
             r1_metrics: r1_result.clone(),
             decomposition_metrics: decomposition_result.clone(),
             total_trajectories: r1_result.memories_processed
-                + decomposition_result.trajectories_trained
+                + decomposition_result.trajectories_trained,
         })
     }
 
     /// Trains decomposition trainer on accumulated trajectories.
     pub async fn train_decomposition(
-        &mut self
+        &mut self,
     ) -> Result<DecompositionTrainingMetrics, TrainerError> {
         let complete_trajectories: Vec<_> = {
             let trajectories = self.decomposition_trajectories.read().await;
@@ -105,7 +105,7 @@ impl CombinedMemoryTrainer {
                 return Ok(DecompositionTrainingMetrics {
                     trajectories_trained: 0,
                     average_reward: 0.0,
-                    exploration_rate: self.decomposition_trainer.epsilon()
+                    exploration_rate: self.decomposition_trainer.epsilon(),
                 });
             }
 
@@ -120,7 +120,7 @@ impl CombinedMemoryTrainer {
             return Ok(DecompositionTrainingMetrics {
                 trajectories_trained: 0,
                 average_reward: 0.0,
-                exploration_rate: self.decomposition_trainer.epsilon()
+                exploration_rate: self.decomposition_trainer.epsilon(),
             });
         }
 
@@ -144,7 +144,7 @@ impl CombinedMemoryTrainer {
         Ok(DecompositionTrainingMetrics {
             trajectories_trained: trained_count,
             average_reward,
-            exploration_rate
+            exploration_rate,
         })
     }
 
@@ -155,7 +155,7 @@ impl CombinedMemoryTrainer {
     /// * `trajectory` - The decomposition trajectory to add
     pub async fn add_decomposition_trajectory(
         &self,
-        trajectory: crate::rlm::trainer::DecompositionTrajectory
+        trajectory: crate::rlm::trainer::DecompositionTrajectory,
     ) {
         let mut trajectories = self.decomposition_trajectories.write().await;
         trajectories.push(trajectory);
@@ -170,7 +170,7 @@ impl CombinedMemoryTrainer {
     pub async fn record_decomposition_outcome(
         &self,
         trajectory_id: &str,
-        outcome: TrainingOutcome
+        outcome: TrainingOutcome,
     ) -> Result<(), TrainerError> {
         let mut trajectories = self.decomposition_trajectories.write().await;
 
@@ -219,7 +219,7 @@ impl CombinedMemoryTrainer {
             decomposition_state: self
                 .decomposition_trainer
                 .export_state()
-                .unwrap_or_default()
+                .unwrap_or_default(),
         }
     }
 
@@ -241,7 +241,7 @@ impl CombinedMemoryTrainer {
     pub async fn save_policy_state<S: storage::RlmWeightStorage>(
         &self,
         storage: &S,
-        tenant_id: &str
+        tenant_id: &str,
     ) -> Result<(), TrainerError> {
         let policy_state = self
             .decomposition_trainer
@@ -253,7 +253,7 @@ impl CombinedMemoryTrainer {
             action_weights: policy_state.action_weights,
             epsilon: policy_state.epsilon,
             step_count: policy_state.step_count,
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         };
 
         storage
@@ -273,7 +273,7 @@ impl CombinedMemoryTrainer {
     pub async fn load_policy_state<S: storage::RlmWeightStorage>(
         &mut self,
         storage: &S,
-        tenant_id: &str
+        tenant_id: &str,
     ) -> Result<bool, TrainerError> {
         let stored = storage
             .load_policy_state(tenant_id)
@@ -284,7 +284,7 @@ impl CombinedMemoryTrainer {
             let policy_state = crate::rlm::trainer::PolicyState {
                 action_weights: stored.action_weights,
                 epsilon: stored.epsilon,
-                step_count: stored.step_count
+                step_count: stored.step_count,
             };
 
             self.decomposition_trainer
@@ -313,7 +313,7 @@ impl CombinedMemoryTrainer {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CombinedTrainerState {
     pub r1_state: crate::trainer::TrainerState,
-    pub decomposition_state: crate::rlm::trainer::PolicyState
+    pub decomposition_state: crate::rlm::trainer::PolicyState,
 }
 
 #[cfg(test)]
@@ -327,7 +327,7 @@ mod tests {
             ..Default::default()
         };
         let r1_trajectories: Arc<
-            RwLock<std::collections::HashMap<String, Vec<mk_core::types::MemoryTrajectoryEvent>>>
+            RwLock<std::collections::HashMap<String, Vec<mk_core::types::MemoryTrajectoryEvent>>>,
         > = Arc::new(RwLock::new(std::collections::HashMap::new()));
         let decomposition_config = RewardConfig::default();
 
@@ -348,7 +348,7 @@ mod tests {
                 text: "test".to_string(),
                 ..Default::default()
             },
-            TenantContext::default()
+            TenantContext::default(),
         );
 
         trainer
@@ -368,7 +368,7 @@ mod tests {
                 text: "test".to_string(),
                 ..Default::default()
             },
-            TenantContext::default()
+            TenantContext::default(),
         );
 
         trainer
@@ -378,7 +378,7 @@ mod tests {
         let result = trainer
             .record_decomposition_outcome(
                 &trajectory.id,
-                TrainingOutcome::ResultUsed { quality_score: 0.8 }
+                TrainingOutcome::ResultUsed { quality_score: 0.8 },
             )
             .await;
 
@@ -420,7 +420,7 @@ mod tests {
                 text: "test".to_string(),
                 ..Default::default()
             },
-            TenantContext::default()
+            TenantContext::default(),
         );
 
         trainer.add_decomposition_trajectory(trajectory).await;
@@ -439,14 +439,14 @@ mod tests {
                 text: "test 1".to_string(),
                 ..Default::default()
             },
-            TenantContext::default()
+            TenantContext::default(),
         );
         let trajectory2 = crate::rlm::trainer::DecompositionTrajectory::new(
             SearchQuery {
                 text: "test 2".to_string(),
                 ..Default::default()
             },
-            TenantContext::default()
+            TenantContext::default(),
         );
 
         trainer.add_decomposition_trajectory(trajectory1).await;
@@ -471,13 +471,13 @@ mod tests {
         use std::sync::Mutex;
 
         struct MockRlmWeightStorage {
-            states: Mutex<HashMap<String, storage::StoredPolicyState>>
+            states: Mutex<HashMap<String, storage::StoredPolicyState>>,
         }
 
         impl MockRlmWeightStorage {
             fn new() -> Self {
                 Self {
-                    states: Mutex::new(HashMap::new())
+                    states: Mutex::new(HashMap::new()),
                 }
             }
         }
@@ -488,7 +488,7 @@ mod tests {
 
             async fn save_policy_state(
                 &self,
-                state: &storage::StoredPolicyState
+                state: &storage::StoredPolicyState,
             ) -> Result<(), Self::Error> {
                 let mut states = self.states.lock().unwrap();
                 states.insert(state.tenant_id.clone(), state.clone());
@@ -497,7 +497,7 @@ mod tests {
 
             async fn load_policy_state(
                 &self,
-                tenant_id: &str
+                tenant_id: &str,
             ) -> Result<Option<storage::StoredPolicyState>, Self::Error> {
                 let states = self.states.lock().unwrap();
                 Ok(states.get(tenant_id).cloned())
@@ -511,7 +511,7 @@ mod tests {
 
             async fn list_policy_states(
                 &self,
-                limit: usize
+                limit: usize,
             ) -> Result<Vec<storage::StoredPolicyState>, Self::Error> {
                 let states = self.states.lock().unwrap();
                 Ok(states.values().take(limit).cloned().collect())
@@ -532,7 +532,7 @@ mod tests {
                         w
                     },
                     epsilon: 0.05,
-                    step_count: 500
+                    step_count: 500,
                 })
                 .unwrap();
 

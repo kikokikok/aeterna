@@ -5,7 +5,7 @@
 
 use crate::rlm::strategy::{AggregationStrategy, DecompositionAction};
 use crate::rlm::trainer::{
-    DecompositionTrainer, DecompositionTrajectory, RewardConfig, TimestampedAction, TrainingOutcome
+    DecompositionTrainer, DecompositionTrajectory, RewardConfig, TimestampedAction, TrainingOutcome,
 };
 use chrono::Utc;
 use mk_core::types::{MemoryLayer, TenantContext};
@@ -18,7 +18,7 @@ pub struct BootstrapTaskTemplate {
     pub query_pattern: String,
     pub expected_actions: Vec<DecompositionAction>,
     pub expected_outcome: TrainingOutcome,
-    pub complexity_level: ComplexityLevel
+    pub complexity_level: ComplexityLevel,
 }
 
 /// Complexity classification for bootstrap tasks.
@@ -29,7 +29,7 @@ pub enum ComplexityLevel {
     /// Multi-layer search across 2-3 layers.
     Moderate,
     /// Deep traversal with drill-down and recursive calls.
-    Complex
+    Complex,
 }
 
 impl BootstrapTaskTemplate {
@@ -40,15 +40,15 @@ impl BootstrapTaskTemplate {
             expected_actions: vec![
                 DecompositionAction::SearchLayer {
                     layer: MemoryLayer::Project,
-                    query: query.to_string()
+                    query: query.to_string(),
                 },
                 DecompositionAction::Aggregate {
                     strategy: AggregationStrategy::Summary,
-                    results: vec![]
+                    results: vec![],
                 },
             ],
             expected_outcome: TrainingOutcome::ResultUsed { quality_score: 0.8 },
-            complexity_level: ComplexityLevel::Simple
+            complexity_level: ComplexityLevel::Simple,
         }
     }
 
@@ -57,13 +57,13 @@ impl BootstrapTaskTemplate {
             .into_iter()
             .map(|layer| DecompositionAction::SearchLayer {
                 layer,
-                query: query.to_string()
+                query: query.to_string(),
             })
             .collect();
 
         actions.push(DecompositionAction::Aggregate {
             strategy: AggregationStrategy::Union,
-            results: vec![]
+            results: vec![],
         });
 
         Self {
@@ -71,9 +71,9 @@ impl BootstrapTaskTemplate {
             query_pattern: query.to_string(),
             expected_actions: actions,
             expected_outcome: TrainingOutcome::ResultUsed {
-                quality_score: 0.85
+                quality_score: 0.85,
             },
-            complexity_level: ComplexityLevel::Moderate
+            complexity_level: ComplexityLevel::Moderate,
         }
     }
 
@@ -84,22 +84,22 @@ impl BootstrapTaskTemplate {
             expected_actions: vec![
                 DecompositionAction::SearchLayer {
                     layer: MemoryLayer::Team,
-                    query: "related patterns".to_string()
+                    query: "related patterns".to_string(),
                 },
                 DecompositionAction::DrillDown {
                     memory_id: "discovered-memory-id".to_string(),
-                    query: "specific details".to_string()
+                    query: "specific details".to_string(),
                 },
                 DecompositionAction::RecursiveCall {
-                    sub_query: format!("details about {}", query)
+                    sub_query: format!("details about {}", query),
                 },
                 DecompositionAction::Aggregate {
                     strategy: AggregationStrategy::Summary,
-                    results: vec![]
+                    results: vec![],
                 },
             ],
             expected_outcome: TrainingOutcome::ResultUsed { quality_score: 0.9 },
-            complexity_level: ComplexityLevel::Complex
+            complexity_level: ComplexityLevel::Complex,
         }
     }
 
@@ -113,13 +113,13 @@ impl BootstrapTaskTemplate {
             .map(|(i, action)| {
                 let reward = match i {
                     _ if i == self.expected_actions.len() - 1 => 0.5,
-                    _ => 0.1
+                    _ => 0.1,
                 };
 
                 TimestampedAction {
                     action: action.clone(),
                     timestamp: now,
-                    intermediate_reward: reward
+                    intermediate_reward: reward,
                 }
             })
             .collect();
@@ -128,7 +128,7 @@ impl BootstrapTaskTemplate {
             TrainingOutcome::ResultUsed { quality_score } => *quality_score,
             TrainingOutcome::QueryRefined { .. } => 0.3,
             TrainingOutcome::ResultIgnored => -0.5,
-            TrainingOutcome::NoSignal => 0.0
+            TrainingOutcome::NoSignal => 0.0,
         };
 
         DecompositionTrajectory {
@@ -143,10 +143,10 @@ impl BootstrapTaskTemplate {
             tokens_used: match self.complexity_level {
                 ComplexityLevel::Simple => 5_000,
                 ComplexityLevel::Moderate => 15_000,
-                ComplexityLevel::Complex => 30_000
+                ComplexityLevel::Complex => 30_000,
             },
             max_depth: self.expected_actions.len() as u8,
-            reward: Some(outcome_reward)
+            reward: Some(outcome_reward),
         }
     }
 }
@@ -159,29 +159,29 @@ pub fn default_bootstrap_templates() -> Vec<BootstrapTaskTemplate> {
         BootstrapTaskTemplate::moderate(
             "multi_layer_search",
             "authentication patterns",
-            vec![MemoryLayer::Project, MemoryLayer::Team]
+            vec![MemoryLayer::Project, MemoryLayer::Team],
         ),
         BootstrapTaskTemplate::moderate(
             "team_wide_patterns",
             "error handling conventions",
-            vec![MemoryLayer::Team, MemoryLayer::Org]
+            vec![MemoryLayer::Team, MemoryLayer::Org],
         ),
         BootstrapTaskTemplate::moderate(
             "org_standards",
             "coding guidelines",
-            vec![MemoryLayer::Org, MemoryLayer::Company]
+            vec![MemoryLayer::Org, MemoryLayer::Company],
         ),
         BootstrapTaskTemplate::complex(
             "complex_comparison",
-            "compare authentication patterns across all teams"
+            "compare authentication patterns across all teams",
         ),
         BootstrapTaskTemplate::complex(
             "complex_evolution",
-            "trace the evolution of our API design"
+            "trace the evolution of our API design",
         ),
         BootstrapTaskTemplate::complex(
             "complex_aggregation",
-            "summarize all database decisions since last quarter"
+            "summarize all database decisions since last quarter",
         ),
     ]
 }
@@ -189,7 +189,7 @@ pub fn default_bootstrap_templates() -> Vec<BootstrapTaskTemplate> {
 pub fn generate_bootstrap_tasks(
     templates: &[BootstrapTaskTemplate],
     tenant: &TenantContext,
-    multiplier: usize
+    multiplier: usize,
 ) -> Vec<DecompositionTrajectory> {
     let mut tasks = Vec::with_capacity(templates.len() * multiplier);
 
@@ -205,7 +205,7 @@ pub fn generate_bootstrap_tasks(
 pub struct BootstrapTrainer {
     trainer: DecompositionTrainer,
     templates: Vec<BootstrapTaskTemplate>,
-    trained_count: usize
+    trained_count: usize,
 }
 
 impl BootstrapTrainer {
@@ -213,7 +213,7 @@ impl BootstrapTrainer {
         Self {
             trainer: DecompositionTrainer::new(reward_config),
             templates: default_bootstrap_templates(),
-            trained_count: 0
+            trained_count: 0,
         }
     }
 
@@ -225,7 +225,7 @@ impl BootstrapTrainer {
     pub async fn bootstrap(
         &mut self,
         tenant: &TenantContext,
-        iterations: usize
+        iterations: usize,
     ) -> anyhow::Result<BootstrapResult> {
         let tasks = generate_bootstrap_tasks(&self.templates, tenant, iterations);
         let total_tasks = tasks.len();
@@ -246,7 +246,7 @@ impl BootstrapTrainer {
         Ok(BootstrapResult {
             tasks_trained: total_tasks,
             average_reward: avg_reward,
-            final_epsilon: self.trainer.epsilon()
+            final_epsilon: self.trainer.epsilon(),
         })
     }
 
@@ -267,7 +267,7 @@ impl BootstrapTrainer {
 pub struct BootstrapResult {
     pub tasks_trained: usize,
     pub average_reward: f32,
-    pub final_epsilon: f32
+    pub final_epsilon: f32,
 }
 
 #[cfg(test)]
@@ -279,7 +279,7 @@ mod tests {
         use mk_core::types::{TenantId, UserId};
         TenantContext::new(
             TenantId::from_str("test-tenant").unwrap(),
-            UserId::from_str("test-user").unwrap()
+            UserId::from_str("test-user").unwrap(),
         )
     }
 
@@ -299,7 +299,7 @@ mod tests {
         let template = BootstrapTaskTemplate::moderate(
             "test",
             "multi query",
-            vec![MemoryLayer::Project, MemoryLayer::Team]
+            vec![MemoryLayer::Project, MemoryLayer::Team],
         );
         let trajectory = template.to_trajectory(&test_tenant());
 
@@ -383,7 +383,7 @@ mod tests {
             match self.max_depth {
                 0..=2 => ComplexityLevel::Simple,
                 3 => ComplexityLevel::Moderate,
-                _ => ComplexityLevel::Complex
+                _ => ComplexityLevel::Complex,
             }
         }
     }

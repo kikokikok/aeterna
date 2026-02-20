@@ -12,13 +12,13 @@ pub struct PromotionService {
     telemetry: Arc<MemoryTelemetry>,
     config: config::MemoryConfig,
     promote_important: bool,
-    cleanup_after_promotion: bool
+    cleanup_after_promotion: bool,
 }
 
 impl PromotionService {
     pub fn new(
         memory_manager: Arc<MemoryManager>,
-        knowledge_manager: Arc<KnowledgeManager>
+        knowledge_manager: Arc<KnowledgeManager>,
     ) -> Self {
         Self {
             memory_manager,
@@ -26,7 +26,7 @@ impl PromotionService {
             telemetry: Arc::new(MemoryTelemetry::new()),
             config: config::MemoryConfig::default(),
             promote_important: true,
-            cleanup_after_promotion: false
+            cleanup_after_promotion: false,
         }
     }
 
@@ -57,7 +57,7 @@ impl PromotionService {
     pub async fn evaluate_and_promote(
         &self,
         ctx: mk_core::types::TenantContext,
-        entry: &MemoryEntry
+        entry: &MemoryEntry,
     ) -> Result<Option<String>> {
         if !self.promote_important {
             return Ok(None);
@@ -67,7 +67,7 @@ impl PromotionService {
         context.insert("content".to_string(), serde_json::json!(entry.content));
         context.insert(
             "metadata".to_string(),
-            serde_json::to_value(&entry.metadata).unwrap_or(serde_json::json!({}))
+            serde_json::to_value(&entry.metadata).unwrap_or(serde_json::json!({})),
         );
 
         let validation = self
@@ -75,7 +75,7 @@ impl PromotionService {
             .check_constraints(
                 ctx.clone(),
                 self.map_memory_layer_to_knowledge(entry.layer),
-                context
+                context,
             )
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
@@ -115,11 +115,11 @@ impl PromotionService {
 
             promoted_entry.metadata.insert(
                 "original_memory_id".to_string(),
-                serde_json::json!(entry.id)
+                serde_json::json!(entry.id),
             );
             promoted_entry.metadata.insert(
                 "promoted_at".to_string(),
-                serde_json::json!(chrono::Utc::now().timestamp())
+                serde_json::json!(chrono::Utc::now().timestamp()),
             );
             promoted_entry
                 .metadata
@@ -186,7 +186,7 @@ impl PromotionService {
         &self,
         ctx: mk_core::types::TenantContext,
         layer: MemoryLayer,
-        _identifiers: &mk_core::types::LayerIdentifiers
+        _identifiers: &mk_core::types::LayerIdentifiers,
     ) -> Result<Vec<String>> {
         let entries = self
             .memory_manager
@@ -207,7 +207,7 @@ impl PromotionService {
         match current_layer {
             MemoryLayer::Agent => Some(MemoryLayer::User),
             MemoryLayer::Session => Some(MemoryLayer::Project),
-            _ => None
+            _ => None,
         }
     }
 
@@ -217,7 +217,7 @@ impl PromotionService {
             MemoryLayer::Team => mk_core::types::KnowledgeLayer::Team,
             MemoryLayer::Org => mk_core::types::KnowledgeLayer::Org,
             MemoryLayer::Company => mk_core::types::KnowledgeLayer::Company,
-            _ => mk_core::types::KnowledgeLayer::Project
+            _ => mk_core::types::KnowledgeLayer::Project,
         }
     }
 }
@@ -241,15 +241,15 @@ mod tests {
         let ctx = test_ctx();
         let mock_session: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         let mock_project: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
 
         manager
@@ -267,7 +267,7 @@ mod tests {
                 optimization_trigger_count: 100,
                 layer_summary_configs: std::collections::HashMap::new(),
                 reasoning: config::ReasoningConfig::default(),
-                rlm: config::RlmConfig::default()
+                rlm: config::RlmConfig::default(),
             });
 
         let entry = MemoryEntry {
@@ -284,12 +284,12 @@ mod tests {
                 m.insert("access_count".to_string(), serde_json::json!(10));
                 m.insert(
                     "last_accessed_at".to_string(),
-                    serde_json::json!(chrono::Utc::now().timestamp())
+                    serde_json::json!(chrono::Utc::now().timestamp()),
                 );
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service
@@ -317,7 +317,7 @@ mod tests {
     #[tokio::test]
     async fn test_evaluate_and_promote_low_score() {
         let repo = Arc::new(
-            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap()
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
         );
         let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
         let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
@@ -331,7 +331,7 @@ mod tests {
             optimization_trigger_count: 100,
             layer_summary_configs: std::collections::HashMap::new(),
             reasoning: config::ReasoningConfig::default(),
-            rlm: config::RlmConfig::default()
+            rlm: config::RlmConfig::default(),
         });
 
         let entry = MemoryEntry {
@@ -348,7 +348,7 @@ mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();
@@ -358,7 +358,7 @@ mod tests {
     #[tokio::test]
     async fn test_promotion_blocked_by_governance() {
         let repo = Arc::new(
-            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap()
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
         );
         // Mock engine that blocks "sensitive"
         let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
@@ -383,7 +383,7 @@ mod tests {
                 m
             },
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();
@@ -393,7 +393,7 @@ mod tests {
     #[tokio::test]
     async fn test_promotion_redacts_pii() {
         let repo = Arc::new(
-            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap()
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
         );
         let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
         let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
@@ -402,15 +402,15 @@ mod tests {
         let ctx = test_ctx();
         let mock_session: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         let mock_project: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager
             .register_provider(MemoryLayer::Session, mock_session)
@@ -427,7 +427,7 @@ mod tests {
                 optimization_trigger_count: 100,
                 layer_summary_configs: std::collections::HashMap::new(),
                 reasoning: config::ReasoningConfig::default(),
-                rlm: config::RlmConfig::default()
+                rlm: config::RlmConfig::default(),
             });
 
         let entry = MemoryEntry {
@@ -440,7 +440,7 @@ mod tests {
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service
@@ -460,7 +460,7 @@ mod tests {
     #[tokio::test]
     async fn test_promotion_cleanup() {
         let repo = Arc::new(
-            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap()
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
         );
         let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
         let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
@@ -469,15 +469,15 @@ mod tests {
         let ctx = test_ctx();
         let mock_session: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         let mock_project: Arc<
             dyn mk_core::traits::MemoryProviderAdapter<
-                    Error = Box<dyn std::error::Error + Send + Sync>
+                    Error = Box<dyn std::error::Error + Send + Sync>,
                 > + Send
-                + Sync
+                + Sync,
         > = Arc::new(MockProvider::new());
         manager
             .register_provider(MemoryLayer::Session, mock_session)
@@ -494,7 +494,7 @@ mod tests {
                 optimization_trigger_count: 100,
                 layer_summary_configs: std::collections::HashMap::new(),
                 reasoning: config::ReasoningConfig::default(),
-                rlm: config::RlmConfig::default()
+                rlm: config::RlmConfig::default(),
             })
             .with_cleanup(true);
 
@@ -508,7 +508,7 @@ mod tests {
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         manager
@@ -538,7 +538,7 @@ mod tests {
     #[tokio::test]
     async fn test_with_promote_important_false() {
         let repo = Arc::new(
-            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap()
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
         );
         let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
         let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
@@ -557,7 +557,7 @@ mod tests {
             layer: MemoryLayer::Session,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();
@@ -567,7 +567,7 @@ mod tests {
     #[tokio::test]
     async fn test_determine_target_layer_none() {
         let repo = Arc::new(
-            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap()
+            knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path()).unwrap(),
         );
         let engine = Arc::new(knowledge::governance::GovernanceEngine::new());
         let k_manager = Arc::new(KnowledgeManager::new(repo, engine));
@@ -586,7 +586,7 @@ mod tests {
             layer: MemoryLayer::User,
             metadata: HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let result = service.evaluate_and_promote(ctx, &entry).await.unwrap();
