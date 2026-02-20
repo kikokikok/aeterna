@@ -48,9 +48,7 @@ pub async fn handle(args: InitArgs) -> anyhow::Result<()> {
     }
 
     // Check if Code Search backend is installed
-    let codesearch_check = Command::new("codesearch")
-        .arg("--version")
-        .output();
+    let codesearch_check = Command::new("codesearch").arg("--version").output();
 
     match codesearch_check {
         Ok(output) if output.status.success() => {
@@ -90,8 +88,15 @@ pub async fn handle(args: InitArgs) -> anyhow::Result<()> {
     }
 
     if !args.json {
-        println!("Initializing Code Search for project: {}", args.path.display());
-        println!("Embedder: {} ({})", args.embedder, args.model.as_deref().unwrap_or("default"));
+        println!(
+            "Initializing Code Search for project: {}",
+            args.path.display()
+        );
+        println!(
+            "Embedder: {} ({})",
+            args.embedder,
+            args.model.as_deref().unwrap_or("default")
+        );
         println!("Store: {}", args.store);
     }
 
@@ -109,11 +114,16 @@ pub async fn handle(args: InitArgs) -> anyhow::Result<()> {
             println!("\nNext steps:");
             println!("  1. Run 'aeterna code-search status' to check indexing progress");
             println!("  2. Run 'aeterna code-search search \"your query\"' to search code");
-            println!("  3. Run 'aeterna code-search trace callers <symbol>' for call graph analysis");
+            println!(
+                "  3. Run 'aeterna code-search trace callers <symbol>' for call graph analysis"
+            );
         }
         Ok(())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(anyhow::anyhow!("Code Search initialization failed: {}", stderr))
+        Err(anyhow::anyhow!(
+            "Code Search initialization failed: {}",
+            stderr
+        ))
     }
 }

@@ -3,7 +3,7 @@ use clap::{Args, Subcommand};
 #[derive(Args)]
 pub struct RepoArgs {
     #[command(subcommand)]
-    pub command: RepoSubcommand
+    pub command: RepoSubcommand,
 }
 
 #[derive(Subcommand)]
@@ -17,13 +17,13 @@ pub enum RepoSubcommand {
     #[command(about = "Reject a repository request")]
     Reject(RejectArgs),
     #[command(about = "Manage Git identities")]
-    Identity(IdentityArgs)
+    Identity(IdentityArgs),
 }
 
 #[derive(Args)]
 pub struct IdentityArgs {
     #[command(subcommand)]
-    pub command: IdentitySubcommand
+    pub command: IdentitySubcommand,
 }
 
 #[derive(Subcommand)]
@@ -31,7 +31,7 @@ pub enum IdentitySubcommand {
     #[command(about = "Register a new Git identity")]
     Add(AddIdentityArgs),
     #[command(about = "List registered identities")]
-    List
+    List,
 }
 
 #[derive(Args)]
@@ -48,7 +48,7 @@ pub struct AddIdentityArgs {
         help = "Secret provider (aws-secrets, vault)",
         default_value = "aws-secrets"
     )]
-    pub secret_provider: String
+    pub secret_provider: String,
 }
 
 #[derive(Args)]
@@ -76,13 +76,13 @@ pub struct RequestArgs {
         help = "Sync interval in minutes",
         default_value = "15"
     )]
-    pub interval: i32
+    pub interval: i32,
 }
 
 #[derive(Args)]
 pub struct ListArgs {
     #[arg(short, long, help = "Output as JSON")]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -90,7 +90,7 @@ pub struct ApproveArgs {
     #[arg(help = "Request ID to approve")]
     pub id: String,
     #[arg(short, long, help = "Reason for approval")]
-    pub reason: Option<String>
+    pub reason: Option<String>,
 }
 
 #[derive(Args)]
@@ -98,7 +98,7 @@ pub struct RejectArgs {
     #[arg(help = "Request ID to reject")]
     pub id: String,
     #[arg(short, long, help = "Reason for rejection")]
-    pub reason: String
+    pub reason: String,
 }
 
 pub async fn handle(args: RepoArgs) -> anyhow::Result<()> {
@@ -107,7 +107,7 @@ pub async fn handle(args: RepoArgs) -> anyhow::Result<()> {
         RepoSubcommand::List(list) => handle_list(list).await,
         RepoSubcommand::Approve(app) => handle_approve(app).await,
         RepoSubcommand::Reject(rej) => handle_reject(rej).await,
-        RepoSubcommand::Identity(id) => handle_identity(id).await
+        RepoSubcommand::Identity(id) => handle_identity(id).await,
     }
 }
 
