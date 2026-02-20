@@ -18,7 +18,7 @@ pub enum RlmWeightStorageError {
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
     #[error("Policy state not found for tenant: {0}")]
-    NotFound(String)
+    NotFound(String),
 }
 
 /// Stored policy state matching the trainer's PolicyState structure.
@@ -33,7 +33,7 @@ pub struct StoredPolicyState {
     /// Number of training steps.
     pub step_count: usize,
     /// Last update timestamp.
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 /// Trait for RLM weight storage operations.
@@ -48,7 +48,7 @@ pub trait RlmWeightStorage {
     /// Load policy state for a tenant.
     async fn load_policy_state(
         &self,
-        tenant_id: &str
+        tenant_id: &str,
     ) -> Result<Option<StoredPolicyState>, Self::Error>;
 
     /// Delete policy state for a tenant.
@@ -61,7 +61,7 @@ pub trait RlmWeightStorage {
 
 /// PostgreSQL implementation of RLM weight storage.
 pub struct PostgresRlmWeightStorage {
-    pool: Pool<Postgres>
+    pool: Pool<Postgres>,
 }
 
 impl PostgresRlmWeightStorage {
@@ -80,14 +80,14 @@ impl PostgresRlmWeightStorage {
                 step_count BIGINT NOT NULL DEFAULT 0,
                 updated_at BIGINT NOT NULL,
                 created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
-            )"
+            )",
         )
         .execute(&self.pool)
         .await?;
 
         sqlx::query(
             "CREATE INDEX IF NOT EXISTS idx_rlm_policy_state_updated_at ON \
-             rlm_policy_state(updated_at)"
+             rlm_policy_state(updated_at)",
         )
         .execute(&self.pool)
         .await?;
@@ -116,7 +116,7 @@ impl RlmWeightStorage for PostgresRlmWeightStorage {
                  action_weights = $2,
                  epsilon = $3,
                  step_count = $4,
-                 updated_at = $5"
+                 updated_at = $5",
         )
         .bind(&state.tenant_id)
         .bind(&weights_json)
@@ -137,12 +137,12 @@ impl RlmWeightStorage for PostgresRlmWeightStorage {
 
     async fn load_policy_state(
         &self,
-        tenant_id: &str
+        tenant_id: &str,
     ) -> Result<Option<StoredPolicyState>, Self::Error> {
         let row = sqlx::query(
             "SELECT tenant_id, action_weights, epsilon, step_count, updated_at
              FROM rlm_policy_state
-             WHERE tenant_id = $1"
+             WHERE tenant_id = $1",
         )
         .bind(tenant_id)
         .fetch_optional(&self.pool)
@@ -157,7 +157,7 @@ impl RlmWeightStorage for PostgresRlmWeightStorage {
                 action_weights,
                 epsilon: row.get("epsilon"),
                 step_count: row.get::<i64, _>("step_count") as usize,
-                updated_at: row.get("updated_at")
+                updated_at: row.get("updated_at"),
             }))
         } else {
             Ok(None)
@@ -176,13 +176,13 @@ impl RlmWeightStorage for PostgresRlmWeightStorage {
 
     async fn list_policy_states(
         &self,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<StoredPolicyState>, Self::Error> {
         let rows = sqlx::query(
             "SELECT tenant_id, action_weights, epsilon, step_count, updated_at
              FROM rlm_policy_state
              ORDER BY updated_at DESC
-             LIMIT $1"
+             LIMIT $1",
         )
         .bind(limit as i64)
         .fetch_all(&self.pool)
@@ -198,7 +198,7 @@ impl RlmWeightStorage for PostgresRlmWeightStorage {
                 action_weights,
                 epsilon: row.get("epsilon"),
                 step_count: row.get::<i64, _>("step_count") as usize,
-                updated_at: row.get("updated_at")
+                updated_at: row.get("updated_at"),
             });
         }
 
@@ -221,7 +221,7 @@ mod tests {
             action_weights,
             epsilon: 0.05,
             step_count: 1000,
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         };
 
         let json = serde_json::to_string(&state).unwrap();
@@ -241,7 +241,7 @@ mod tests {
             action_weights: HashMap::new(),
             epsilon: 0.1,
             step_count: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         assert!(state.action_weights.is_empty());

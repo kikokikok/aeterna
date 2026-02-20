@@ -1,32 +1,31 @@
 /// GDPR Compliance Module
-/// 
+///
 /// This module provides functionality to comply with GDPR requirements:
 /// - Right to be forgotten (data anonymization)
 /// - Data export (data portability)
 /// - Consent management
 /// - Audit trail for data access
-
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use thiserror::Error;
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum GdprError {
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
-    
+
     #[error("User not found: {0}")]
     UserNotFound(String),
-    
+
     #[error("Export failed: {0}")]
     ExportFailed(String),
-    
+
     #[error("Anonymization failed: {0}")]
     AnonymizationFailed(String),
-    
+
     #[error("Consent error: {0}")]
     ConsentError(String),
 }
@@ -77,13 +76,13 @@ pub struct UserDataExport {
 pub enum AnonymizationStrategy {
     /// Replace with fixed value
     Replace(String),
-    
+
     /// Hash the value
     Hash,
-    
+
     /// Delete/null the value
     Delete,
-    
+
     /// Redact (replace with [REDACTED])
     Redact,
 }
@@ -103,7 +102,7 @@ pub trait GdprOperations: Send + Sync {
         tenant_id: &str,
         user_id: &str,
     ) -> Result<UserDataExport, GdprError>;
-    
+
     /// Anonymize user data (right to be forgotten)
     async fn anonymize_user_data(
         &self,
@@ -111,7 +110,7 @@ pub trait GdprOperations: Send + Sync {
         user_id: &str,
         strategy: AnonymizationStrategy,
     ) -> Result<(), GdprError>;
-    
+
     /// Record consent
     async fn record_consent(
         &self,
@@ -120,14 +119,14 @@ pub trait GdprOperations: Send + Sync {
         purpose: &str,
         granted: bool,
     ) -> Result<GdprConsent, GdprError>;
-    
+
     /// Get user consents
     async fn get_user_consents(
         &self,
         tenant_id: &str,
         user_id: &str,
     ) -> Result<Vec<GdprConsent>, GdprError>;
-    
+
     /// Revoke consent
     async fn revoke_consent(
         &self,
@@ -135,7 +134,7 @@ pub trait GdprOperations: Send + Sync {
         user_id: &str,
         purpose: &str,
     ) -> Result<(), GdprError>;
-    
+
     /// Log data access for audit trail
     async fn log_data_access(
         &self,
@@ -147,7 +146,7 @@ pub trait GdprOperations: Send + Sync {
         ip_address: Option<&str>,
         user_agent: Option<&str>,
     ) -> Result<(), GdprError>;
-    
+
     /// Get audit logs for a user
     async fn get_audit_logs(
         &self,
@@ -167,7 +166,7 @@ impl PostgresGdprStorage {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    
+
     /// Initialize GDPR tables
     pub async fn initialize(&self) -> Result<(), GdprError> {
         sqlx::query(
@@ -214,14 +213,14 @@ impl PostgresGdprStorage {
             DROP POLICY IF EXISTS tenant_isolation_gdpr_audit ON gdpr_audit_logs;
             CREATE POLICY tenant_isolation_gdpr_audit ON gdpr_audit_logs
                 USING (tenant_id = current_setting('app.tenant_id', true));
-            "#
+            "#,
         )
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Anonymize memories for a user
     async fn anonymize_memories(
         &self,
@@ -235,7 +234,7 @@ impl PostgresGdprStorage {
             AnonymizationStrategy::Delete => String::new(),
             AnonymizationStrategy::Redact => "[REDACTED]".to_string(),
         };
-        
+
         // Anonymize memory entries
         sqlx::query(
             r#"
@@ -250,17 +249,17 @@ impl PostgresGdprStorage {
             WHERE tenant_id = $2 
                 AND user_id = $3
                 AND NOT (metadata->>'anonymized')::boolean IS TRUE
-            "#
+            "#,
         )
         .bind(&replacement)
         .bind(tenant_id)
         .bind(user_id)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Anonymize knowledge items for a user
     async fn anonymize_knowledge(
         &self,
@@ -274,7 +273,7 @@ impl PostgresGdprStorage {
             AnonymizationStrategy::Delete => String::new(),
             AnonymizationStrategy::Redact => "[REDACTED]".to_string(),
         };
-        
+
         // Anonymize knowledge items
         sqlx::query(
             r#"
@@ -289,14 +288,14 @@ impl PostgresGdprStorage {
             WHERE tenant_id = $2 
                 AND created_by = $3
                 AND NOT (metadata->>'anonymized')::boolean IS TRUE
-            "#
+            "#,
         )
         .bind(&replacement)
         .bind(tenant_id)
         .bind(user_id)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
 }
@@ -313,7 +312,7 @@ impl GdprOperations for PostgresGdprStorage {
             .bind(tenant_id)
             .execute(&self.pool)
             .await?;
-        
+
         // Export memories
         let memories: Vec<serde_json::Value> = sqlx::query_scalar(
             r#"
@@ -326,13 +325,13 @@ impl GdprOperations for PostgresGdprStorage {
             )
             FROM memory_entries
             WHERE tenant_id = $1 AND user_id = $2
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
-        
+
         // Export knowledge items
         let knowledge_items: Vec<serde_json::Value> = sqlx::query_scalar(
             r#"
@@ -346,13 +345,13 @@ impl GdprOperations for PostgresGdprStorage {
             )
             FROM knowledge_items
             WHERE tenant_id = $1 AND created_by = $2
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
-        
+
         // Export organizational units
         let organizational_units: Vec<serde_json::Value> = sqlx::query_scalar(
             r#"
@@ -365,21 +364,21 @@ impl GdprOperations for PostgresGdprStorage {
             )
             FROM organizational_units
             WHERE tenant_id = $1 AND created_by = $2
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
-        
+
         // Export consents
         let consents = self.get_user_consents(tenant_id, user_id).await?;
-        
+
         // Export audit logs (last 90 days)
         let from = Utc::now() - chrono::Duration::days(90);
         let to = Utc::now();
         let audit_logs = self.get_audit_logs(tenant_id, user_id, from, to).await?;
-        
+
         Ok(UserDataExport {
             user_id: user_id.to_string(),
             tenant_id: tenant_id.to_string(),
@@ -391,7 +390,7 @@ impl GdprOperations for PostgresGdprStorage {
             audit_logs,
         })
     }
-    
+
     async fn anonymize_user_data(
         &self,
         tenant_id: &str,
@@ -403,7 +402,7 @@ impl GdprOperations for PostgresGdprStorage {
             .bind(tenant_id)
             .execute(&self.pool)
             .await?;
-        
+
         // Log the anonymization action
         self.log_data_access(
             tenant_id,
@@ -413,12 +412,15 @@ impl GdprOperations for PostgresGdprStorage {
             Some(user_id),
             None,
             None,
-        ).await?;
-        
+        )
+        .await?;
+
         // Anonymize different data types
-        self.anonymize_memories(tenant_id, user_id, &strategy).await?;
-        self.anonymize_knowledge(tenant_id, user_id, &strategy).await?;
-        
+        self.anonymize_memories(tenant_id, user_id, &strategy)
+            .await?;
+        self.anonymize_knowledge(tenant_id, user_id, &strategy)
+            .await?;
+
         // Revoke all consents
         sqlx::query(
             r#"
@@ -426,16 +428,16 @@ impl GdprOperations for PostgresGdprStorage {
             SET granted = false,
                 revoked_at = NOW()
             WHERE tenant_id = $1 AND user_id = $2 AND granted = true
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(user_id)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     async fn record_consent(
         &self,
         tenant_id: &str,
@@ -454,7 +456,7 @@ impl GdprOperations for PostgresGdprStorage {
                 granted_at = CASE WHEN $4 THEN NOW() ELSE gdpr_consents.granted_at END,
                 revoked_at = CASE WHEN NOT $4 THEN NOW() ELSE NULL END
             RETURNING *
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(user_id)
@@ -463,10 +465,10 @@ impl GdprOperations for PostgresGdprStorage {
         .bind(if granted { Some(Utc::now()) } else { None })
         .fetch_one(&self.pool)
         .await?;
-        
+
         Ok(consent)
     }
-    
+
     async fn get_user_consents(
         &self,
         tenant_id: &str,
@@ -477,16 +479,16 @@ impl GdprOperations for PostgresGdprStorage {
             SELECT * FROM gdpr_consents
             WHERE tenant_id = $1 AND user_id = $2
             ORDER BY created_at DESC
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(consents)
     }
-    
+
     async fn revoke_consent(
         &self,
         tenant_id: &str,
@@ -499,17 +501,17 @@ impl GdprOperations for PostgresGdprStorage {
             SET granted = false,
                 revoked_at = NOW()
             WHERE tenant_id = $1 AND user_id = $2 AND purpose = $3
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(user_id)
         .bind(purpose)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     async fn log_data_access(
         &self,
         tenant_id: &str,
@@ -525,7 +527,7 @@ impl GdprOperations for PostgresGdprStorage {
             INSERT INTO gdpr_audit_logs
                 (tenant_id, user_id, action, resource_type, resource_id, ip_address, user_agent)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(user_id)
@@ -536,10 +538,10 @@ impl GdprOperations for PostgresGdprStorage {
         .bind(user_agent)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     async fn get_audit_logs(
         &self,
         tenant_id: &str,
@@ -555,7 +557,7 @@ impl GdprOperations for PostgresGdprStorage {
                 AND created_at >= $3
                 AND created_at <= $4
             ORDER BY created_at DESC
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(user_id)
@@ -563,7 +565,7 @@ impl GdprOperations for PostgresGdprStorage {
         .bind(to)
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(logs)
     }
 }
@@ -571,16 +573,16 @@ impl GdprOperations for PostgresGdprStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     // Note: These tests require a PostgreSQL database
     // They are marked as integration tests and skipped in unit test runs
-    
+
     #[test]
     fn test_anonymization_strategy() {
         let strategy = AnonymizationStrategy::default();
         assert!(matches!(strategy, AnonymizationStrategy::Redact));
     }
-    
+
     #[test]
     fn test_user_data_export_structure() {
         let export = UserDataExport {
@@ -593,7 +595,7 @@ mod tests {
             consents: vec![],
             audit_logs: vec![],
         };
-        
+
         assert_eq!(export.user_id, "user-123");
         assert_eq!(export.tenant_id, "tenant-456");
     }
