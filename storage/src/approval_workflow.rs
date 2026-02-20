@@ -11,7 +11,7 @@ pub struct ApprovalWorkflowContext {
     pub approval_mode: ApprovalModeKind,
     pub timeout_hours: i32,
     pub auto_approve_low_risk: bool,
-    pub risk_level: RiskLevelKind
+    pub risk_level: RiskLevelKind,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -19,7 +19,7 @@ pub enum ApprovalModeKind {
     Single,
     #[default]
     Quorum,
-    Unanimous
+    Unanimous,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -28,43 +28,43 @@ pub enum RiskLevelKind {
     #[default]
     Medium,
     High,
-    Critical
+    Critical,
 }
 
 #[derive(Debug, Clone)]
 pub enum ApprovalEvent {
     Submit {
         requestor_id: Uuid,
-        submitted_at: DateTime<Utc>
+        submitted_at: DateTime<Utc>,
     },
     Approve {
         approver_id: Uuid,
         approved_at: DateTime<Utc>,
-        comment: Option<String>
+        comment: Option<String>,
     },
     Reject {
         rejector_id: Uuid,
         rejected_at: DateTime<Utc>,
-        reason: String
+        reason: String,
     },
     Expire {
-        expired_at: DateTime<Utc>
+        expired_at: DateTime<Utc>,
     },
     Cancel {
         cancelled_by: Uuid,
-        cancelled_at: DateTime<Utc>
+        cancelled_at: DateTime<Utc>,
     },
     Apply {
         applied_by: Uuid,
-        applied_at: DateTime<Utc>
-    }
+        applied_at: DateTime<Utc>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalDecisionRecord {
     pub approver_id: Uuid,
     pub timestamp: DateTime<Utc>,
-    pub comment: Option<String>
+    pub comment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -72,24 +72,24 @@ pub enum WorkflowState {
     #[default]
     Draft,
     Pending {
-        submitted_at: DateTime<Utc>
+        submitted_at: DateTime<Utc>,
     },
     Approved {
-        approved_at: DateTime<Utc>
+        approved_at: DateTime<Utc>,
     },
     Applied {
-        applied_at: DateTime<Utc>
+        applied_at: DateTime<Utc>,
     },
     Rejected {
         reason: String,
-        rejected_at: DateTime<Utc>
+        rejected_at: DateTime<Utc>,
     },
     Expired {
-        expired_at: DateTime<Utc>
+        expired_at: DateTime<Utc>,
     },
     Cancelled {
-        cancelled_at: DateTime<Utc>
-    }
+        cancelled_at: DateTime<Utc>,
+    },
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -98,7 +98,7 @@ pub struct ApprovalWorkflow {
     pub state: WorkflowState,
     pub decisions: Vec<ApprovalDecisionRecord>,
     pub rejection_reason: Option<String>,
-    pub resolution_timestamp: Option<DateTime<Utc>>
+    pub resolution_timestamp: Option<DateTime<Utc>>,
 }
 
 impl ApprovalWorkflow {
@@ -108,7 +108,7 @@ impl ApprovalWorkflow {
             state: WorkflowState::Draft,
             decisions: Vec::new(),
             rejection_reason: None,
-            resolution_timestamp: None
+            resolution_timestamp: None,
         }
     }
 
@@ -132,12 +132,12 @@ impl ApprovalWorkflow {
         &mut self,
         approver_id: Uuid,
         timestamp: DateTime<Utc>,
-        comment: Option<String>
+        comment: Option<String>,
     ) {
         self.decisions.push(ApprovalDecisionRecord {
             approver_id,
             timestamp,
-            comment
+            comment,
         });
         self.context.current_approvals += 1;
     }
@@ -148,7 +148,7 @@ impl ApprovalWorkflow {
                 if self.should_auto_approve() {
                     self.resolution_timestamp = Some(submitted_at);
                     self.state = WorkflowState::Approved {
-                        approved_at: submitted_at
+                        approved_at: submitted_at,
                     };
                     tracing::info!(request_id = ?self.context.request_id, "Auto-approved low-risk request");
                 } else {
@@ -163,8 +163,8 @@ impl ApprovalWorkflow {
                 ApprovalEvent::Approve {
                     approver_id,
                     approved_at,
-                    comment
-                }
+                    comment,
+                },
             ) => {
                 self.record_approval(approver_id, approved_at, comment);
 
@@ -193,13 +193,13 @@ impl ApprovalWorkflow {
                     rejected_at,
                     reason,
                     ..
-                }
+                },
             ) => {
                 self.rejection_reason = Some(reason.clone());
                 self.resolution_timestamp = Some(rejected_at);
                 self.state = WorkflowState::Rejected {
                     reason,
-                    rejected_at
+                    rejected_at,
                 };
                 tracing::info!(request_id = ?self.context.request_id, "Request rejected");
                 Ok(())
@@ -227,8 +227,8 @@ impl ApprovalWorkflow {
 
             (current_state, event) => Err(WorkflowError::InvalidTransition {
                 current_state: format!("{current_state:?}"),
-                event: format!("{event:?}")
-            })
+                event: format!("{event:?}"),
+            }),
         }
     }
 
@@ -240,7 +240,7 @@ impl ApprovalWorkflow {
             WorkflowState::Applied { .. } => "applied",
             WorkflowState::Rejected { .. } => "rejected",
             WorkflowState::Expired { .. } => "expired",
-            WorkflowState::Cancelled { .. } => "cancelled"
+            WorkflowState::Cancelled { .. } => "cancelled",
         }
     }
 
@@ -271,8 +271,8 @@ pub enum WorkflowError {
     #[error("Invalid transition from {current_state} with event {event}")]
     InvalidTransition {
         current_state: String,
-        event: String
-    }
+        event: String,
+    },
 }
 
 pub fn create_workflow(context: ApprovalWorkflowContext) -> ApprovalWorkflow {
@@ -292,7 +292,7 @@ mod tests {
             approval_mode: ApprovalModeKind::Quorum,
             timeout_hours: 72,
             auto_approve_low_risk: false,
-            risk_level: RiskLevelKind::Medium
+            risk_level: RiskLevelKind::Medium,
         }
     }
 
@@ -303,7 +303,7 @@ mod tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now()
+                submitted_at: Utc::now(),
             })
             .unwrap();
 
@@ -321,7 +321,7 @@ mod tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now()
+                submitted_at: Utc::now(),
             })
             .unwrap();
 
@@ -335,7 +335,7 @@ mod tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now()
+                submitted_at: Utc::now(),
             })
             .unwrap();
 
@@ -343,7 +343,7 @@ mod tests {
             .handle(ApprovalEvent::Approve {
                 approver_id: Uuid::new_v4(),
                 approved_at: Utc::now(),
-                comment: None
+                comment: None,
             })
             .unwrap();
 
@@ -354,7 +354,7 @@ mod tests {
             .handle(ApprovalEvent::Approve {
                 approver_id: Uuid::new_v4(),
                 approved_at: Utc::now(),
-                comment: Some("LGTM".to_string())
+                comment: Some("LGTM".to_string()),
             })
             .unwrap();
 
@@ -373,7 +373,7 @@ mod tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now()
+                submitted_at: Utc::now(),
             })
             .unwrap();
 
@@ -381,7 +381,7 @@ mod tests {
             .handle(ApprovalEvent::Approve {
                 approver_id: Uuid::new_v4(),
                 approved_at: Utc::now(),
-                comment: None
+                comment: None,
             })
             .unwrap();
 
@@ -395,7 +395,7 @@ mod tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now()
+                submitted_at: Utc::now(),
             })
             .unwrap();
 
@@ -403,7 +403,7 @@ mod tests {
             .handle(ApprovalEvent::Reject {
                 rejector_id: Uuid::new_v4(),
                 rejected_at: Utc::now(),
-                reason: "Does not meet requirements".to_string()
+                reason: "Does not meet requirements".to_string(),
             })
             .unwrap();
 
@@ -421,13 +421,13 @@ mod tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now()
+                submitted_at: Utc::now(),
             })
             .unwrap();
 
         workflow
             .handle(ApprovalEvent::Expire {
-                expired_at: Utc::now()
+                expired_at: Utc::now(),
             })
             .unwrap();
 
@@ -441,14 +441,14 @@ mod tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now()
+                submitted_at: Utc::now(),
             })
             .unwrap();
 
         workflow
             .handle(ApprovalEvent::Cancel {
                 cancelled_by: Uuid::new_v4(),
-                cancelled_at: Utc::now()
+                cancelled_at: Utc::now(),
             })
             .unwrap();
 
@@ -466,7 +466,7 @@ mod tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now()
+                submitted_at: Utc::now(),
             })
             .unwrap();
 
@@ -474,14 +474,14 @@ mod tests {
             .handle(ApprovalEvent::Approve {
                 approver_id: Uuid::new_v4(),
                 approved_at: Utc::now(),
-                comment: None
+                comment: None,
             })
             .unwrap();
 
         workflow
             .handle(ApprovalEvent::Apply {
                 applied_by: Uuid::new_v4(),
-                applied_at: Utc::now()
+                applied_at: Utc::now(),
             })
             .unwrap();
 
@@ -495,7 +495,7 @@ mod tests {
         let result = workflow.handle(ApprovalEvent::Approve {
             approver_id: Uuid::new_v4(),
             approved_at: Utc::now(),
-            comment: None
+            comment: None,
         });
 
         assert!(result.is_err());
@@ -508,7 +508,7 @@ mod tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now()
+                submitted_at: Utc::now(),
             })
             .unwrap();
 
@@ -516,7 +516,7 @@ mod tests {
             .handle(ApprovalEvent::Approve {
                 approver_id: Uuid::new_v4(),
                 approved_at: Utc::now(),
-                comment: Some("First approval".to_string())
+                comment: Some("First approval".to_string()),
             })
             .unwrap();
 
@@ -541,7 +541,7 @@ mod tests {
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: Utc::now()
+                submitted_at: Utc::now(),
             })
             .unwrap();
 

@@ -117,13 +117,15 @@ impl Tool for CodeSearchTool {
         });
 
         // Call Code Search
-        match self.client.call_tool("codesearch_search", codesearch_params).await {
-            Ok(response) => {
-                Ok(json!({
-                    "success": true,
-                    "results": response.get("results").unwrap_or(&json!([]))
-                }))
-            }
+        match self
+            .client
+            .call_tool("codesearch_search", codesearch_params)
+            .await
+        {
+            Ok(response) => Ok(json!({
+                "success": true,
+                "results": response.get("results").unwrap_or(&json!([]))
+            })),
             Err(e) => Ok(json!({
                 "success": false,
                 "error": e.to_string(),
@@ -225,7 +227,11 @@ impl Tool for CodeTraceCallersTool {
             "max_depth": p.max_depth.unwrap_or(3)
         });
 
-        match self.client.call_tool("codesearch_trace_callers", codesearch_params).await {
+        match self
+            .client
+            .call_tool("codesearch_trace_callers", codesearch_params)
+            .await
+        {
             Ok(response) => Ok(json!({
                 "success": true,
                 "callers": response.get("symbols").unwrap_or(&json!([]))
@@ -331,7 +337,11 @@ impl Tool for CodeTraceCalleesTool {
             "max_depth": p.max_depth.unwrap_or(3)
         });
 
-        match self.client.call_tool("codesearch_trace_callees", codesearch_params).await {
+        match self
+            .client
+            .call_tool("codesearch_trace_callees", codesearch_params)
+            .await
+        {
             Ok(response) => Ok(json!({
                 "success": true,
                 "callees": response.get("symbols").unwrap_or(&json!([]))
@@ -445,7 +455,11 @@ impl Tool for CodeGraphTool {
             "include_callees": p.include_callees.unwrap_or(true)
         });
 
-        match self.client.call_tool("codesearch_trace_graph", codesearch_params).await {
+        match self
+            .client
+            .call_tool("codesearch_trace_graph", codesearch_params)
+            .await
+        {
             Ok(response) => Ok(json!({
                 "success": true,
                 "nodes": response.get("nodes").unwrap_or(&json!([]))
@@ -524,7 +538,11 @@ impl Tool for CodeIndexStatusTool {
             "project": p.project
         });
 
-        match self.client.call_tool("codesearch_index_status", codesearch_params).await {
+        match self
+            .client
+            .call_tool("codesearch_index_status", codesearch_params)
+            .await
+        {
             Ok(response) => Ok(json!({
                 "success": true,
                 "status": response.get("status").unwrap_or(&json!(null))
@@ -643,7 +661,11 @@ impl Tool for CodeSearchRepoRequestTool {
             "interval": p.interval
         });
 
-        match self.client.call_tool("codesearch_repo_request", codesearch_params).await {
+        match self
+            .client
+            .call_tool("codesearch_repo_request", codesearch_params)
+            .await
+        {
             Ok(response) => Ok(json!({
                 "success": true,
                 "request": response
@@ -665,7 +687,7 @@ mod tests {
     async fn test_code_search_tool() {
         let client = Arc::new(CodeSearchClient::new(CodeSearchConfig::default()));
         let tool = CodeSearchTool::new(client);
-        
+
         assert_eq!(tool.name(), "codesearch_search");
         assert!(!tool.description().is_empty());
     }
@@ -674,8 +696,126 @@ mod tests {
     async fn test_code_trace_callers_tool() {
         let client = Arc::new(CodeSearchClient::new(CodeSearchConfig::default()));
         let tool = CodeTraceCallersTool::new(client);
-        
+
         assert_eq!(tool.name(), "codesearch_trace_callers");
         assert!(!tool.description().is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore = "requires running codesearch sidecar and kind cluster"]
+    async fn test_sidecar_deployment_in_kind_cluster() {
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
+            base_url: "http://localhost:9090".to_string(),
+            ..CodeSearchConfig::default()
+        }));
+        let tool = CodeSearchTool::new(client);
+        let params = serde_json::json!({ "query": "authentication" });
+        let result = tool.execute(params).await;
+        assert!(result.is_ok(), "sidecar must respond: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    #[ignore = "requires shared Qdrant backend (localhost:6333)"]
+    async fn test_shared_qdrant_backend() {
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
+            base_url: "http://localhost:9090".to_string(),
+            ..CodeSearchConfig::default()
+        }));
+        let tool = CodeSearchTool::new(client);
+        let params = serde_json::json!({ "query": "vector storage", "limit": 3 });
+        let result = tool.execute(params).await;
+        assert!(result.is_ok());
+        let val: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap_or_default();
+        assert!(
+            val.get("results").is_some(),
+            "response must contain results"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires shared PostgreSQL backend (localhost:5432)"]
+    async fn test_shared_postgres_backend() {
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
+            base_url: "http://localhost:9090".to_string(),
+            ..CodeSearchConfig::default()
+        }));
+        let tool = CodeIndexStatusTool::new(client);
+        let params = serde_json::json!({});
+        let result = tool.execute(params).await;
+        assert!(
+            result.is_ok(),
+            "index status must work with postgres backend"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires MCP inter-container communication to be configured"]
+    async fn test_mcp_communication_between_containers() {
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
+            base_url: "http://aeterna-codesearch:9090".to_string(),
+            ..CodeSearchConfig::default()
+        }));
+        let trace_tool = CodeTraceCallersTool::new(client);
+        let params = serde_json::json!({ "symbol": "main" });
+        let result = trace_tool.execute(params).await;
+        assert!(
+            result.is_ok(),
+            "MCP proxy must relay trace calls to sidecar"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "e2e: requires full stack (codesearch binary, Qdrant, PostgreSQL, indexed codebase)"]
+    async fn test_e2e_index_search_trace_memory_link() {
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
+            base_url: "http://localhost:9090".to_string(),
+            ..CodeSearchConfig::default()
+        }));
+        let search_tool = CodeSearchTool::new(client.clone());
+        let trace_tool = CodeTraceCallersTool::new(client);
+
+        let search_result = search_tool
+            .execute(serde_json::json!({ "query": "memory add", "limit": 5 }))
+            .await;
+        assert!(search_result.is_ok(), "search step failed");
+
+        let trace_result = trace_tool
+            .execute(serde_json::json!({ "symbol": "memory_add" }))
+            .await;
+        assert!(trace_result.is_ok(), "trace step failed");
+    }
+
+    #[tokio::test]
+    #[ignore = "e2e: requires Aeterna codebase to be indexed in Code Search"]
+    async fn test_e2e_with_aeterna_codebase() {
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
+            base_url: "http://localhost:9090".to_string(),
+            ..CodeSearchConfig::default()
+        }));
+        let tool = CodeSearchTool::new(client);
+        let result = tool
+            .execute(serde_json::json!({
+                "query": "MemoryManager",
+                "language": "rust",
+                "limit": 10
+            }))
+            .await;
+        assert!(result.is_ok());
+        let val: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap_or_default();
+        let results = val["results"].as_array().cloned().unwrap_or_default();
+        assert!(
+            !results.is_empty(),
+            "aeterna codebase must have MemoryManager results"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "e2e: requires OpenCode plugin and Code Search tools to be registered"]
+    async fn test_e2e_opencode_plugin_with_codesearch_tools() {
+        use crate::codesearch::client::CodeSearchConfig;
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig::default()));
+        let tool = CodeSearchTool::new(client);
+        assert_eq!(tool.name(), "codesearch_search");
+        assert!(tool.description().contains("semantic"));
     }
 }

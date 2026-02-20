@@ -16,6 +16,13 @@ opalServer:
       memory: 512Mi
   logLevel: INFO
   statisticsEnabled: true
+  ## Redis backend for multi-replica PubSub coordination (HA)
+  redis:
+    enabled: true
+    ## @param opalServer.redis.pubsubUri Redis URI for OPAL broadcast channel
+    pubsubUri: "redis://aeterna-redis:6379/0"
+    ## @param opalServer.redis.existingSecret Existing secret with Redis URI (key: pubsub-uri)
+    existingSecret: ""
   podAntiAffinity:
     enabled: true
     topologyKey: topology.kubernetes.io/zone

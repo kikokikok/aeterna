@@ -4,19 +4,19 @@ use std::collections::HashMap;
 pub struct PromptWiring {
     pub additions: Vec<PromptAddition>,
     pub tool_config: ToolConfig,
-    pub sequencing_hints: Vec<ToolSequenceHint>
+    pub sequencing_hints: Vec<ToolSequenceHint>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ToolSequenceHint {
     pub when_tool: String,
-    pub suggest_next: String
+    pub suggest_next: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct PromptAddition {
     pub role: String,
-    pub content: String
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -25,7 +25,7 @@ pub struct ToolConfig {
     pub suggested_tools: Vec<String>,
     pub overrides: HashMap<String, String>,
     pub hints: Vec<String>,
-    pub context_hints: Vec<String>
+    pub context_hints: Vec<String>,
 }
 
 impl ToolConfig {

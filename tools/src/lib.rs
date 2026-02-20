@@ -4,9 +4,11 @@
 
 pub mod bridge;
 pub mod cca;
+pub mod central_index;
+pub mod codesearch;
 pub mod extensions;
 pub mod governance;
-pub mod codesearch;
+pub mod graph;
 pub mod knowledge;
 pub mod memory;
 pub mod orchestrator;

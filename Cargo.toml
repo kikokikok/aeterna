@@ -107,6 +107,7 @@ statig = { version = "0.4.1", features = ["async"] }
 # A2A/Agent dependencies
 radkit = "=0.0.4"
 a2a-types = "0.1"
+parking_lot = "0.12"
 
 [workspace.metadata.tarpaulin]
 all-features = true

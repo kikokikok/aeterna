@@ -69,10 +69,10 @@ pub async fn handle(args: SearchArgs) -> anyhow::Result<()> {
 
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
-        
+
         if args.json {
-            let results: serde_json::Value = serde_json::from_str(&stdout)
-                .unwrap_or_else(|_| json!({"results": []}));
+            let results: serde_json::Value =
+                serde_json::from_str(&stdout).unwrap_or_else(|_| json!({"results": []}));
             println!("{}", serde_json::to_string_pretty(&results)?);
         } else if args.files_only {
             if let Ok(results) = serde_json::from_str::<serde_json::Value>(&stdout) {

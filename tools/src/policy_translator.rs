@@ -20,7 +20,7 @@
 use async_trait::async_trait;
 use knowledge::context_architect::{LlmClient, LlmError};
 use mk_core::types::{
-    ConstraintOperator, ConstraintSeverity, ConstraintTarget, PolicyRule, RuleType
+    ConstraintOperator, ConstraintSeverity, ConstraintTarget, PolicyRule, RuleType,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -33,14 +33,14 @@ use std::time::{Duration, Instant};
 #[serde(rename_all = "lowercase")]
 pub enum PolicyAction {
     Allow,
-    Deny
+    Deny,
 }
 
 impl std::fmt::Display for PolicyAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PolicyAction::Allow => write!(f, "allow"),
-            PolicyAction::Deny => write!(f, "deny")
+            PolicyAction::Deny => write!(f, "deny"),
         }
     }
 }
@@ -52,7 +52,7 @@ impl std::str::FromStr for PolicyAction {
         match s.to_lowercase().as_str() {
             "allow" | "permit" | "enable" | "require" => Ok(PolicyAction::Allow),
             "deny" | "forbid" | "block" | "prevent" | "disallow" => Ok(PolicyAction::Deny),
-            _ => Err(PolicyTranslatorError::InvalidAction(s.to_string()))
+            _ => Err(PolicyTranslatorError::InvalidAction(s.to_string())),
         }
     }
 }
@@ -65,7 +65,7 @@ pub enum TargetType {
     File,
     Code,
     Import,
-    Config
+    Config,
 }
 
 impl std::fmt::Display for TargetType {
@@ -75,7 +75,7 @@ impl std::fmt::Display for TargetType {
             TargetType::File => write!(f, "file"),
             TargetType::Code => write!(f, "code"),
             TargetType::Import => write!(f, "import"),
-            TargetType::Config => write!(f, "config")
+            TargetType::Config => write!(f, "config"),
         }
     }
 }
@@ -92,7 +92,7 @@ impl std::str::FromStr for TargetType {
             "config" | "configuration" | "setting" | "api" | "endpoint" | "route" => {
                 Ok(TargetType::Config)
             }
-            _ => Err(PolicyTranslatorError::InvalidTargetType(s.to_string()))
+            _ => Err(PolicyTranslatorError::InvalidTargetType(s.to_string())),
         }
     }
 }
@@ -104,7 +104,7 @@ impl From<TargetType> for ConstraintTarget {
             TargetType::File => ConstraintTarget::File,
             TargetType::Code => ConstraintTarget::Code,
             TargetType::Import => ConstraintTarget::Import,
-            TargetType::Config => ConstraintTarget::Config
+            TargetType::Config => ConstraintTarget::Config,
         }
     }
 }
@@ -116,7 +116,7 @@ impl From<ConstraintTarget> for TargetType {
             ConstraintTarget::File => TargetType::File,
             ConstraintTarget::Code => TargetType::Code,
             ConstraintTarget::Import => TargetType::Import,
-            ConstraintTarget::Config => TargetType::Config
+            ConstraintTarget::Config => TargetType::Config,
         }
     }
 }
@@ -127,7 +127,7 @@ impl From<ConstraintTarget> for TargetType {
 pub enum PolicySeverity {
     Info,
     Warn,
-    Block
+    Block,
 }
 
 impl std::fmt::Display for PolicySeverity {
@@ -135,7 +135,7 @@ impl std::fmt::Display for PolicySeverity {
         match self {
             PolicySeverity::Info => write!(f, "info"),
             PolicySeverity::Warn => write!(f, "warn"),
-            PolicySeverity::Block => write!(f, "block")
+            PolicySeverity::Block => write!(f, "block"),
         }
     }
 }
@@ -148,7 +148,7 @@ impl std::str::FromStr for PolicySeverity {
             "info" | "information" => Ok(PolicySeverity::Info),
             "warn" | "warning" => Ok(PolicySeverity::Warn),
             "block" | "blocking" | "critical" | "error" | "err" => Ok(PolicySeverity::Block),
-            _ => Err(PolicyTranslatorError::InvalidSeverity(s.to_string()))
+            _ => Err(PolicyTranslatorError::InvalidSeverity(s.to_string())),
         }
     }
 }
@@ -158,7 +158,7 @@ impl From<PolicySeverity> for ConstraintSeverity {
         match ps {
             PolicySeverity::Info => ConstraintSeverity::Info,
             PolicySeverity::Warn => ConstraintSeverity::Warn,
-            PolicySeverity::Block => ConstraintSeverity::Block
+            PolicySeverity::Block => ConstraintSeverity::Block,
         }
     }
 }
@@ -168,7 +168,7 @@ impl From<ConstraintSeverity> for PolicySeverity {
         match cs {
             ConstraintSeverity::Info => PolicySeverity::Info,
             ConstraintSeverity::Warn => PolicySeverity::Warn,
-            ConstraintSeverity::Block => PolicySeverity::Block
+            ConstraintSeverity::Block => PolicySeverity::Block,
         }
     }
 }
@@ -180,7 +180,7 @@ pub enum PolicyScope {
     Company,
     Org,
     Team,
-    Project
+    Project,
 }
 
 impl std::fmt::Display for PolicyScope {
@@ -189,7 +189,7 @@ impl std::fmt::Display for PolicyScope {
             PolicyScope::Company => write!(f, "company"),
             PolicyScope::Org => write!(f, "org"),
             PolicyScope::Team => write!(f, "team"),
-            PolicyScope::Project => write!(f, "project")
+            PolicyScope::Project => write!(f, "project"),
         }
     }
 }
@@ -203,7 +203,7 @@ impl std::str::FromStr for PolicyScope {
             "org" | "organization" | "department" => Ok(PolicyScope::Org),
             "team" | "group" => Ok(PolicyScope::Team),
             "project" | "repository" | "repo" => Ok(PolicyScope::Project),
-            _ => Err(PolicyTranslatorError::InvalidScope(s.to_string()))
+            _ => Err(PolicyTranslatorError::InvalidScope(s.to_string())),
         }
     }
 }
@@ -226,7 +226,7 @@ pub struct StructuredIntent {
     /// Severity level
     pub severity: PolicySeverity,
     /// Confidence score (0.0 - 1.0)
-    pub confidence: f32
+    pub confidence: f32,
 }
 
 /// Translation context for policy creation
@@ -241,7 +241,7 @@ pub struct TranslationContext {
     /// Organization name (if available)
     pub org: Option<String>,
     /// Additional context hints
-    pub hints: Vec<String>
+    pub hints: Vec<String>,
 }
 
 impl Default for TranslationContext {
@@ -251,7 +251,7 @@ impl Default for TranslationContext {
             project: None,
             team: None,
             org: None,
-            hints: Vec::new()
+            hints: Vec::new(),
         }
     }
 }
@@ -260,7 +260,7 @@ impl Default for TranslationContext {
 pub struct ValidationResult {
     pub is_valid: bool,
     pub errors: Vec<ValidationError>,
-    pub warnings: Vec<String>
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -268,7 +268,7 @@ pub struct ValidationError {
     pub error_type: String,
     pub message: String,
     pub rule_index: Option<usize>,
-    pub suggestion: Option<String>
+    pub suggestion: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -279,7 +279,7 @@ pub struct PolicyDraft {
     pub rules: Vec<PolicyRule>,
     pub explanation: String,
     pub validation: ValidationResult,
-    pub name: String
+    pub name: String,
 }
 
 /// Draft status
@@ -291,7 +291,7 @@ pub enum DraftStatus {
     ValidationFailed,
     Submitted,
     Approved,
-    Rejected
+    Rejected,
 }
 
 impl std::fmt::Display for DraftStatus {
@@ -302,7 +302,7 @@ impl std::fmt::Display for DraftStatus {
             DraftStatus::ValidationFailed => write!(f, "validation_failed"),
             DraftStatus::Submitted => write!(f, "submitted"),
             DraftStatus::Approved => write!(f, "approved"),
-            DraftStatus::Rejected => write!(f, "rejected")
+            DraftStatus::Rejected => write!(f, "rejected"),
         }
     }
 }
@@ -335,7 +335,7 @@ pub enum PolicyTranslatorError {
     TemplateNotFound(String),
 
     #[error("Intent extraction failed: {0}")]
-    IntentExtractionFailed(String)
+    IntentExtractionFailed(String),
 }
 
 impl From<LlmError> for PolicyTranslatorError {
@@ -364,7 +364,7 @@ pub struct PolicyTranslatorConfig {
     /// Cache TTL in seconds (default: 1 hour)
     pub cache_ttl_secs: u64,
     /// Maximum cache entries (default: 1000)
-    pub cache_max_entries: usize
+    pub cache_max_entries: usize,
 }
 
 impl Default for PolicyTranslatorConfig {
@@ -378,7 +378,7 @@ impl Default for PolicyTranslatorConfig {
             include_schema: true,
             enable_cache: true,
             cache_ttl_secs: 3600,
-            cache_max_entries: 1000
+            cache_max_entries: 1000,
         }
     }
 }
@@ -387,20 +387,20 @@ impl Default for PolicyTranslatorConfig {
 pub struct TranslationExample {
     pub natural_language: String,
     pub structured_intent: StructuredIntent,
-    pub rules: Vec<PolicyRule>
+    pub rules: Vec<PolicyRule>,
 }
 
 #[derive(Debug, Clone)]
 struct CacheEntry {
     draft: PolicyDraft,
-    created_at: Instant
+    created_at: Instant,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CacheKey {
     intent: String,
     scope: String,
-    project: String
+    project: String,
 }
 
 impl Hash for CacheKey {
@@ -416,7 +416,7 @@ impl CacheKey {
         Self {
             intent: intent.to_lowercase().trim().to_string(),
             scope: ctx.scope.to_string(),
-            project: ctx.project.clone().unwrap_or_default()
+            project: ctx.project.clone().unwrap_or_default(),
         }
     }
 }
@@ -426,7 +426,7 @@ pub struct PolicyTranslator<C: LlmClient> {
     client: Arc<C>,
     config: PolicyTranslatorConfig,
     examples: Vec<TranslationExample>,
-    cache: RwLock<HashMap<CacheKey, CacheEntry>>
+    cache: RwLock<HashMap<CacheKey, CacheEntry>>,
 }
 
 impl<C: LlmClient> PolicyTranslator<C> {
@@ -435,27 +435,27 @@ impl<C: LlmClient> PolicyTranslator<C> {
             client,
             examples: Self::default_examples(config.few_shot_count),
             config,
-            cache: RwLock::new(HashMap::new())
+            cache: RwLock::new(HashMap::new()),
         }
     }
 
     pub fn with_examples(
         client: Arc<C>,
         config: PolicyTranslatorConfig,
-        examples: Vec<TranslationExample>
+        examples: Vec<TranslationExample>,
     ) -> Self {
         Self {
             client,
             examples,
             config,
-            cache: RwLock::new(HashMap::new())
+            cache: RwLock::new(HashMap::new()),
         }
     }
 
     pub async fn translate(
         &self,
         intent: &str,
-        context: &TranslationContext
+        context: &TranslationContext,
     ) -> Result<PolicyDraft, PolicyTranslatorError> {
         if self.config.enable_cache
             && let Some(cached) = self.get_cached(intent, context)
@@ -475,7 +475,7 @@ impl<C: LlmClient> PolicyTranslator<C> {
     async fn translate_uncached(
         &self,
         intent: &str,
-        context: &TranslationContext
+        context: &TranslationContext,
     ) -> Result<PolicyDraft, PolicyTranslatorError> {
         let structured = self.extract_intent(intent, context).await?;
 
@@ -504,7 +504,7 @@ impl<C: LlmClient> PolicyTranslator<C> {
             intent: structured,
             rules,
             explanation,
-            validation
+            validation,
         })
     }
 
@@ -536,8 +536,8 @@ impl<C: LlmClient> PolicyTranslator<C> {
                     key,
                     CacheEntry {
                         draft: draft.clone(),
-                        created_at: Instant::now()
-                    }
+                        created_at: Instant::now(),
+                    },
                 );
             }
         }
@@ -564,7 +564,7 @@ impl<C: LlmClient> PolicyTranslator<C> {
     async fn extract_intent(
         &self,
         natural: &str,
-        ctx: &TranslationContext
+        ctx: &TranslationContext,
     ) -> Result<StructuredIntent, PolicyTranslatorError> {
         // First, try template-based extraction for common patterns
         if self.config.use_templates
@@ -617,7 +617,7 @@ Rules:
     fn template_extract(
         &self,
         natural: &str,
-        _ctx: &TranslationContext
+        _ctx: &TranslationContext,
     ) -> Option<StructuredIntent> {
         let lower = natural.to_lowercase();
 
@@ -628,7 +628,7 @@ Rules:
             (r"prevent\s+(\w+)", PolicyAction::Deny),
             (r"disallow\s+(\w+)", PolicyAction::Deny),
             (r"no\s+(\w+)", PolicyAction::Deny),
-            (r"ban\s+(\w+)", PolicyAction::Deny)
+            (r"ban\s+(\w+)", PolicyAction::Deny),
         ];
 
         for (pattern, action) in block_dep_patterns {
@@ -644,7 +644,7 @@ Rules:
                         target_value: target.to_string(),
                         condition: None,
                         severity: PolicySeverity::Block,
-                        confidence: 0.95
+                        confidence: 0.95,
                     });
                 }
             }
@@ -654,7 +654,7 @@ Rules:
         let require_file_patterns = [
             (r"require\s+([\w\.]+)", "file"),
             (r"must\s+have\s+([\w\.]+)", "file"),
-            (r"needs?\s+([\w\.]+)", "file")
+            (r"needs?\s+([\w\.]+)", "file"),
         ];
 
         for (pattern, _) in require_file_patterns {
@@ -669,7 +669,7 @@ Rules:
                         target_value: target.to_string(),
                         condition: Some("must_exist".to_string()),
                         severity: PolicySeverity::Warn,
-                        confidence: 0.9
+                        confidence: 0.9,
                     });
                 }
             }
@@ -699,7 +699,7 @@ Rules:
             "request",
             "sqlite",
             "mariadb",
-            "oracle"
+            "oracle",
         ];
         common_deps.contains(&s.to_lowercase().as_str()) ||
             // npm-style package names
@@ -716,7 +716,7 @@ Rules:
                 "security",
                 "contributing",
                 "dockerfile",
-                "makefile"
+                "makefile",
             ]
             .contains(&s.to_lowercase().as_str())
     }
@@ -725,7 +725,7 @@ Rules:
     fn parse_intent_response(
         &self,
         response: &str,
-        original: &str
+        original: &str,
     ) -> Result<StructuredIntent, PolicyTranslatorError> {
         // Try to extract JSON from response (handle markdown code blocks)
         let json_str = if response.contains("```json") {
@@ -748,7 +748,7 @@ Rules:
             condition: Option<String>,
             severity: String,
             interpreted: String,
-            confidence: f32
+            confidence: f32,
         }
 
         let parsed: LlmIntentResponse = serde_json::from_str(json_str.trim())
@@ -762,14 +762,14 @@ Rules:
             target_value: parsed.target_value,
             condition: parsed.condition,
             severity: parsed.severity.parse()?,
-            confidence: parsed.confidence
+            confidence: parsed.confidence,
         })
     }
 
     async fn generate_rules(
         &self,
         intent: &StructuredIntent,
-        _ctx: &TranslationContext
+        _ctx: &TranslationContext,
     ) -> Result<Vec<PolicyRule>, PolicyTranslatorError> {
         let operator = self.intent_to_operator(intent);
         let target: ConstraintTarget = intent.target_type.into();
@@ -777,7 +777,7 @@ Rules:
 
         let rule_type = match intent.action {
             PolicyAction::Allow => RuleType::Allow,
-            PolicyAction::Deny => RuleType::Deny
+            PolicyAction::Deny => RuleType::Deny,
         };
 
         let rule = PolicyRule {
@@ -787,7 +787,7 @@ Rules:
             operator,
             value: serde_json::Value::String(intent.target_value.clone()),
             severity,
-            message: intent.interpreted.clone()
+            message: intent.interpreted.clone(),
         };
 
         Ok(vec![rule])
@@ -804,7 +804,7 @@ Rules:
             (PolicyAction::Deny, TargetType::Config) => ConstraintOperator::MustNotMatch,
             (PolicyAction::Allow, TargetType::Config) => ConstraintOperator::MustMatch,
             (PolicyAction::Deny, TargetType::File) => ConstraintOperator::MustNotExist,
-            (PolicyAction::Allow, TargetType::File) => ConstraintOperator::MustExist
+            (PolicyAction::Allow, TargetType::File) => ConstraintOperator::MustExist,
         }
     }
 
@@ -818,7 +818,7 @@ Rules:
                     error_type: "missing_id".to_string(),
                     message: "Rule must have an ID".to_string(),
                     rule_index: Some(idx),
-                    suggestion: Some("Add a unique rule ID".to_string())
+                    suggestion: Some("Add a unique rule ID".to_string()),
                 });
             }
 
@@ -827,7 +827,7 @@ Rules:
                     error_type: "missing_message".to_string(),
                     message: "Rule should have a descriptive message".to_string(),
                     rule_index: Some(idx),
-                    suggestion: Some("Add a human-readable message".to_string())
+                    suggestion: Some("Add a human-readable message".to_string()),
                 });
             }
 
@@ -838,7 +838,7 @@ Rules:
                     error_type: "empty_value".to_string(),
                     message: "Rule value cannot be empty".to_string(),
                     rule_index: Some(idx),
-                    suggestion: Some("Provide a pattern or value to match".to_string())
+                    suggestion: Some("Provide a pattern or value to match".to_string()),
                 });
             }
         }
@@ -846,14 +846,14 @@ Rules:
         ValidationResult {
             is_valid: errors.is_empty(),
             errors,
-            warnings
+            warnings,
         }
     }
 
     async fn generate_explanation(
         &self,
         intent: &StructuredIntent,
-        _rules: &[PolicyRule]
+        _rules: &[PolicyRule],
     ) -> Result<String, PolicyTranslatorError> {
         let explanation = match (&intent.action, &intent.target_type) {
             (PolicyAction::Deny, TargetType::Dependency) => {
@@ -926,7 +926,7 @@ Rules:
     fn generate_policy_name(&self, intent: &StructuredIntent) -> String {
         let action_prefix = match intent.action {
             PolicyAction::Allow => "require",
-            PolicyAction::Deny => "no"
+            PolicyAction::Deny => "no",
         };
 
         let target = intent
@@ -964,7 +964,7 @@ Rules:
             "syntax" => self.explain_syntax_error(&error.message),
             "schema" => self.explain_schema_error(&error.message).await,
             "semantic" => self.explain_semantic_error(&error.message),
-            _ => self.explain_unknown_error(&error.message).await
+            _ => self.explain_unknown_error(&error.message).await,
         }
     }
 
@@ -1038,7 +1038,7 @@ Rules:
         );
         match self.client.complete(&prompt).await {
             Ok(explanation) => explanation,
-            Err(_) => format!("Schema validation error: {}", message)
+            Err(_) => format!("Schema validation error: {}", message),
         }
     }
 
@@ -1079,7 +1079,7 @@ Rules:
             Err(_) => format!(
                 "Error: {}. Try reviewing your policy syntax or consult the Cedar documentation.",
                 message
-            )
+            ),
         }
     }
 
@@ -1125,7 +1125,7 @@ fn severity_effect(severity: &PolicySeverity) -> &'static str {
     match severity {
         PolicySeverity::Info => "logged as information",
         PolicySeverity::Warn => "warned",
-        PolicySeverity::Block => "blocked"
+        PolicySeverity::Block => "blocked",
     }
 }
 
@@ -1135,7 +1135,7 @@ pub trait PolicyTranslate: Send + Sync {
     async fn translate(
         &self,
         intent: &str,
-        context: &TranslationContext
+        context: &TranslationContext,
     ) -> Result<PolicyDraft, PolicyTranslatorError>;
 
     fn validate_policy_rules(&self, rules: &[PolicyRule]) -> ValidationResult;
@@ -1146,7 +1146,7 @@ impl<C: LlmClient> PolicyTranslate for PolicyTranslator<C> {
     async fn translate(
         &self,
         intent: &str,
-        context: &TranslationContext
+        context: &TranslationContext,
     ) -> Result<PolicyDraft, PolicyTranslatorError> {
         PolicyTranslator::translate(self, intent, context).await
     }
@@ -1163,13 +1163,13 @@ mod tests {
     use std::sync::Mutex;
 
     struct MockLlmClient {
-        responses: Mutex<VecDeque<String>>
+        responses: Mutex<VecDeque<String>>,
     }
 
     impl MockLlmClient {
         fn new(responses: Vec<String>) -> Self {
             Self {
-                responses: Mutex::new(responses.into())
+                responses: Mutex::new(responses.into()),
             }
         }
     }
@@ -1187,7 +1187,7 @@ mod tests {
         async fn complete_with_system(
             &self,
             _system: &str,
-            _user: &str
+            _user: &str,
         ) -> Result<String, LlmError> {
             self.responses
                 .lock()
@@ -1342,7 +1342,7 @@ mod tests {
             target_value: "mysql".to_string(),
             condition: None,
             severity: PolicySeverity::Block,
-            confidence: 0.9
+            confidence: 0.9,
         };
 
         let name = translator.generate_policy_name(&intent);
@@ -1356,7 +1356,7 @@ mod tests {
             target_value: "README.md".to_string(),
             condition: None,
             severity: PolicySeverity::Warn,
-            confidence: 0.9
+            confidence: 0.9,
         };
 
         let name2 = translator.generate_policy_name(&intent2);
@@ -1468,7 +1468,7 @@ mod tests {
             warnings: vec![
                 "Policy does not reference 'principal'".to_string(),
                 "Policy does not reference 'action'".to_string(),
-            ]
+            ],
         };
 
         let explanations = translator.explain_validation_warnings(&result);
@@ -1489,16 +1489,16 @@ mod tests {
                     error_type: "syntax".to_string(),
                     message: "Unbalanced braces".to_string(),
                     rule_index: None,
-                    suggestion: None
+                    suggestion: None,
                 },
                 ValidationError {
                     error_type: "syntax".to_string(),
                     message: "Missing semicolon".to_string(),
                     rule_index: None,
-                    suggestion: None
+                    suggestion: None,
                 },
             ],
-            warnings: vec![]
+            warnings: vec![],
         };
 
         let explanations = translator.explain_errors(&result).await;
@@ -1551,7 +1551,7 @@ mod tests {
         let key = CacheKey {
             intent: "test".to_string(),
             scope: "project".to_string(),
-            project: "".to_string()
+            project: "".to_string(),
         };
 
         {
@@ -1571,18 +1571,18 @@ mod tests {
                             target_value: "test".to_string(),
                             condition: None,
                             severity: PolicySeverity::Block,
-                            confidence: 0.9
+                            confidence: 0.9,
                         },
                         rules: vec![],
                         explanation: "test".to_string(),
                         validation: ValidationResult {
                             is_valid: true,
                             errors: vec![],
-                            warnings: vec![]
-                        }
+                            warnings: vec![],
+                        },
                     },
-                    created_at: Instant::now()
-                }
+                    created_at: Instant::now(),
+                },
             );
         }
 
@@ -1650,7 +1650,7 @@ mod tests {
                 operator: ConstraintOperator::MustNotUse,
                 value: serde_json::Value::String("mysql".to_string()),
                 severity: ConstraintSeverity::Block,
-                message: "Block mysql".to_string()
+                message: "Block mysql".to_string(),
             }];
 
             let result = translator.validate_rules(&rules);
@@ -1670,7 +1670,7 @@ mod tests {
                 operator: ConstraintOperator::MustNotUse,
                 value: serde_json::Value::String("".to_string()),
                 severity: ConstraintSeverity::Block,
-                message: "Block mysql".to_string()
+                message: "Block mysql".to_string(),
             }];
 
             let result = translator.validate_rules(&rules);
@@ -1690,7 +1690,7 @@ mod tests {
                 operator: ConstraintOperator::MustNotUse,
                 value: serde_json::Value::String("mysql".to_string()),
                 severity: ConstraintSeverity::Block,
-                message: "Block mysql".to_string()
+                message: "Block mysql".to_string(),
             }];
 
             let result = translator.validate_rules(&rules);
@@ -1706,7 +1706,7 @@ mod tests {
             let test_cases = [
                 ("Block mysql", "mysql", PolicyAction::Deny),
                 ("Forbid lodash", "lodash", PolicyAction::Deny),
-                ("Prevent axios", "axios", PolicyAction::Deny)
+                ("Prevent axios", "axios", PolicyAction::Deny),
             ];
 
             for (input, expected_target, expected_action) in test_cases {
@@ -1735,7 +1735,7 @@ mod tests {
             let test_cases = [
                 ("Require README.md", "README.md", PolicyAction::Allow),
                 ("Must have LICENSE", "LICENSE", PolicyAction::Allow),
-                ("Need CHANGELOG.md", "CHANGELOG.md", PolicyAction::Allow)
+                ("Need CHANGELOG.md", "CHANGELOG.md", PolicyAction::Allow),
             ];
 
             for (input, expected_target, expected_action) in test_cases {
@@ -1764,7 +1764,7 @@ mod tests {
                 (PolicyAction::Deny, "mysql", "no-mysql"),
                 (PolicyAction::Deny, "@babel/core", "no-babel-core"),
                 (PolicyAction::Allow, "README.md", "require-readme-md"),
-                (PolicyAction::Allow, "tests/", "require-tests-")
+                (PolicyAction::Allow, "tests/", "require-tests-"),
             ];
 
             for (action, target, expected_prefix) in test_cases {
@@ -1776,7 +1776,7 @@ mod tests {
                     target_value: target.to_string(),
                     condition: None,
                     severity: PolicySeverity::Block,
-                    confidence: 0.9
+                    confidence: 0.9,
                 };
 
                 let name = translator.generate_policy_name(&intent);
@@ -1801,33 +1801,33 @@ mod tests {
                 (
                     PolicyAction::Deny,
                     TargetType::Dependency,
-                    ConstraintOperator::MustNotUse
+                    ConstraintOperator::MustNotUse,
                 ),
                 (
                     PolicyAction::Allow,
                     TargetType::Dependency,
-                    ConstraintOperator::MustUse
+                    ConstraintOperator::MustUse,
                 ),
                 (
                     PolicyAction::Deny,
                     TargetType::File,
-                    ConstraintOperator::MustNotExist
+                    ConstraintOperator::MustNotExist,
                 ),
                 (
                     PolicyAction::Allow,
                     TargetType::File,
-                    ConstraintOperator::MustExist
+                    ConstraintOperator::MustExist,
                 ),
                 (
                     PolicyAction::Deny,
                     TargetType::Code,
-                    ConstraintOperator::MustNotMatch
+                    ConstraintOperator::MustNotMatch,
                 ),
                 (
                     PolicyAction::Allow,
                     TargetType::Code,
-                    ConstraintOperator::MustMatch
-                )
+                    ConstraintOperator::MustMatch,
+                ),
             ];
 
             for (action, target_type, expected_operator) in test_cases {
@@ -1839,7 +1839,7 @@ mod tests {
                     target_value: "test".to_string(),
                     condition: None,
                     severity: PolicySeverity::Block,
-                    confidence: 0.9
+                    confidence: 0.9,
                 };
 
                 let operator = translator.intent_to_operator(&intent);

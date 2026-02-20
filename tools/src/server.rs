@@ -5,12 +5,12 @@ use crate::governance::{
     GovernanceConfigureTool, GovernanceRejectTool, GovernanceRequestCreateTool,
     GovernanceRequestGetTool, GovernanceRequestListTool, GovernanceRoleAssignTool,
     GovernanceRoleListTool, GovernanceRoleRevokeTool, HierarchyNavigateTool, UnitCreateTool,
-    UnitPolicyAddTool, UserRoleAssignTool, UserRoleRemoveTool
+    UnitPolicyAddTool, UserRoleAssignTool, UserRoleRemoveTool,
 };
 use crate::knowledge::{KnowledgeGetTool, KnowledgeListTool, KnowledgeQueryTool};
 use crate::memory::{
     GraphNeighborsTool, GraphPathTool, GraphQueryTool, MemoryAddTool, MemoryCloseTool,
-    MemoryDeleteTool, MemoryFeedbackTool, MemoryOptimizeTool, MemoryReasonTool, MemorySearchTool
+    MemoryDeleteTool, MemoryFeedbackTool, MemoryOptimizeTool, MemoryReasonTool, MemorySearchTool,
 };
 use crate::tools::{ToolDefinition, ToolRegistry};
 use knowledge::governance::GovernanceEngine;
@@ -36,7 +36,7 @@ pub struct McpServer {
     event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
     extension_executor: Option<Arc<crate::extensions::ExtensionExecutor>>,
     timeout_duration: Duration,
-    _governance_storage: Option<Arc<GovernanceStorage>>
+    _governance_storage: Option<Arc<GovernanceStorage>>,
 }
 
 impl McpServer {
@@ -45,17 +45,17 @@ impl McpServer {
         memory_manager: Arc<MemoryManager>,
         sync_manager: Arc<SyncManager>,
         knowledge_repository: Arc<
-            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>
+            dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
         >,
         storage_backend: Arc<
-            dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>
+            dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>,
         >,
         governance_engine: Arc<GovernanceEngine>,
         reflective_reasoner: Arc<dyn memory::reasoning::ReflectiveReasoner>,
         auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error>>,
         event_publisher: Option<Arc<dyn EventPublisher<Error = EventError>>>,
         graph_store: Option<Arc<DuckDbGraphStore>>,
-        governance_storage: Option<Arc<GovernanceStorage>>
+        governance_storage: Option<Arc<GovernanceStorage>>,
     ) -> Self {
         let mut registry = ToolRegistry::new();
 
@@ -74,14 +74,14 @@ impl McpServer {
         }
 
         registry.register(Box::new(KnowledgeGetTool::new(
-            knowledge_repository.clone()
+            knowledge_repository.clone(),
         )));
         registry.register(Box::new(KnowledgeListTool::new(
-            knowledge_repository.clone()
+            knowledge_repository.clone(),
         )));
         registry.register(Box::new(KnowledgeQueryTool::new(
             memory_manager.clone(),
-            knowledge_repository.clone()
+            knowledge_repository.clone(),
         )));
 
         registry.register(Box::new(SyncNowTool::new(sync_manager.clone())));
@@ -90,19 +90,19 @@ impl McpServer {
 
         registry.register(Box::new(UnitCreateTool::new(
             storage_backend.clone(),
-            governance_engine.clone()
+            governance_engine.clone(),
         )));
         registry.register(Box::new(UnitPolicyAddTool::new(
             storage_backend.clone(),
-            governance_engine.clone()
+            governance_engine.clone(),
         )));
         registry.register(Box::new(UserRoleAssignTool::new(
             storage_backend.clone(),
-            governance_engine.clone()
+            governance_engine.clone(),
         )));
         registry.register(Box::new(UserRoleRemoveTool::new(
             storage_backend.clone(),
-            governance_engine.clone()
+            governance_engine.clone(),
         )));
         registry.register(Box::new(HierarchyNavigateTool::new(storage_backend)));
 
@@ -110,29 +110,29 @@ impl McpServer {
         if let Some(gov_storage) = governance_storage.clone() {
             registry.register(Box::new(GovernanceConfigureTool::new(
                 gov_storage.clone(),
-                governance_engine.clone()
+                governance_engine.clone(),
             )));
             registry.register(Box::new(GovernanceConfigGetTool::new(gov_storage.clone())));
             registry.register(Box::new(GovernanceRequestCreateTool::new(
                 gov_storage.clone(),
-                governance_engine.clone()
+                governance_engine.clone(),
             )));
             registry.register(Box::new(GovernanceApproveTool::new(
                 gov_storage.clone(),
-                governance_engine.clone()
+                governance_engine.clone(),
             )));
             registry.register(Box::new(GovernanceRejectTool::new(
                 gov_storage.clone(),
-                governance_engine.clone()
+                governance_engine.clone(),
             )));
             registry.register(Box::new(GovernanceRequestListTool::new(
-                gov_storage.clone()
+                gov_storage.clone(),
             )));
             registry.register(Box::new(GovernanceRequestGetTool::new(gov_storage.clone())));
             registry.register(Box::new(GovernanceAuditListTool::new(gov_storage.clone())));
             registry.register(Box::new(GovernanceRoleAssignTool::new(
                 gov_storage.clone(),
-                governance_engine.clone()
+                governance_engine.clone(),
             )));
             registry.register(Box::new(GovernanceRoleRevokeTool::new(gov_storage.clone())));
             registry.register(Box::new(GovernanceRoleListTool::new(gov_storage.clone())));
@@ -141,18 +141,18 @@ impl McpServer {
         // Register CCA tools
         registry.register(Box::new(ContextAssembleTool::with_default_provider(
             Arc::new(knowledge::context_architect::ContextAssembler::new(
-                knowledge::context_architect::AssemblerConfig::default()
-            ))
+                knowledge::context_architect::AssemblerConfig::default(),
+            )),
         )));
         registry.register(Box::new(NoteCaptureTool::new(Arc::new(
             std::sync::RwLock::new(knowledge::note_taking::TrajectoryCapture::new(
-                knowledge::note_taking::TrajectoryConfig::default()
-            ))
+                knowledge::note_taking::TrajectoryConfig::default(),
+            )),
         ))));
         registry.register(Box::new(HindsightQueryTool::with_default_provider(
             Arc::new(knowledge::hindsight::HindsightQuery::new(
-                knowledge::hindsight::HindsightQueryConfig::default()
-            ))
+                knowledge::hindsight::HindsightQueryConfig::default(),
+            )),
         )));
         registry.register(Box::new(MetaLoopStatusTool::with_default_provider()));
 
@@ -162,13 +162,13 @@ impl McpServer {
             event_publisher,
             extension_executor: None,
             timeout_duration: Duration::from_secs(30),
-            _governance_storage: governance_storage
+            _governance_storage: governance_storage,
         }
     }
 
     pub fn with_extension_executor(
         mut self,
-        executor: Arc<crate::extensions::ExtensionExecutor>
+        executor: Arc<crate::extensions::ExtensionExecutor>,
     ) -> Self {
         self.extension_executor = Some(executor);
         self
@@ -196,7 +196,7 @@ impl McpServer {
                 jsonrpc: "2.0".to_string(),
                 id: request.id,
                 result: None,
-                error: Some(JsonRpcError::internal_error("Simulated failure"))
+                error: Some(JsonRpcError::internal_error("Simulated failure")),
             };
         }
 
@@ -212,7 +212,7 @@ impl McpServer {
                     jsonrpc: "2.0".to_string(),
                     id: Value::Null,
                     result: None,
-                    error: Some(JsonRpcError::request_timeout("Request timed out"))
+                    error: Some(JsonRpcError::request_timeout("Request timed out")),
                 }
             }
         }
@@ -235,7 +235,7 @@ impl McpServer {
                         "version": "0.1.0"
                     }
                 })),
-                error: None
+                error: None,
             },
             "tools/list" => {
                 let tools = self.registry.list_tools();
@@ -243,7 +243,7 @@ impl McpServer {
                     jsonrpc: "2.0".to_string(),
                     id: request.id,
                     result: Some(serde_json::to_value(tools).unwrap()),
-                    error: None
+                    error: None,
                 }
             }
             "tools/call" => {
@@ -254,14 +254,14 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: None,
-                            error: Some(JsonRpcError::invalid_params("Invalid params"))
+                            error: Some(JsonRpcError::invalid_params("Invalid params")),
                         };
                     }
                 };
 
                 let tenant_context: mk_core::types::TenantContext =
                     match serde_json::from_value::<mk_core::types::TenantContext>(
-                        params["tenantContext"].clone()
+                        params["tenantContext"].clone(),
                     ) {
                         Ok(ctx) => {
                             if ctx.tenant_id.as_str().contains("TRIGGER_FAILURE") {
@@ -270,8 +270,8 @@ impl McpServer {
                                     id: request.id,
                                     result: None,
                                     error: Some(JsonRpcError::internal_error(
-                                        "Simulated tenant failure"
-                                    ))
+                                        "Simulated tenant failure",
+                                    )),
                                 };
                             }
                             ctx
@@ -282,8 +282,8 @@ impl McpServer {
                                 id: request.id,
                                 result: None,
                                 error: Some(JsonRpcError::invalid_params(
-                                    "Missing or invalid tenant context"
-                                ))
+                                    "Missing or invalid tenant context",
+                                )),
                             };
                         }
                     };
@@ -295,7 +295,7 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: None,
-                            error: Some(JsonRpcError::invalid_params(e))
+                            error: Some(JsonRpcError::invalid_params(e)),
                         };
                     }
                 };
@@ -311,7 +311,7 @@ impl McpServer {
                             tenant_context.clone(),
                             session_id,
                             tool_registry.clone(),
-                            input.to_string()
+                            input.to_string(),
                         )
                         .await;
                     if let Ok(text) = updated
@@ -343,8 +343,8 @@ impl McpServer {
                                         "Authorization error: access denied for tool {}",
                                         name
                                     ),
-                                    data: None
-                                })
+                                    data: None,
+                                }),
                             };
                         }
                     }
@@ -357,8 +357,8 @@ impl McpServer {
                             error: Some(JsonRpcError {
                                 code: -32002,
                                 message: format!("Authorization error: {}", e),
-                                data: None
-                            })
+                                data: None,
+                            }),
                         };
                     }
                 }
@@ -379,14 +379,14 @@ impl McpServer {
                                             .unwrap_or_default()
                                             .to_string(),
                                         unit_type: serde_json::from_value(
-                                            result["unit_type"].clone()
+                                            result["unit_type"].clone(),
                                         )
                                         .unwrap_or(mk_core::types::UnitType::Project),
                                         tenant_id: tenant_context.tenant_id.clone(),
                                         parent_id: result["parent_id"]
                                             .as_str()
                                             .map(|s| s.to_string()),
-                                        timestamp
+                                        timestamp,
                                     })
                                 }
                                 "role_assign" => {
@@ -400,7 +400,7 @@ impl McpServer {
                                         role: serde_json::from_value(result["role"].clone())
                                             .unwrap_or(mk_core::types::Role::Developer),
                                         tenant_id: tenant_context.tenant_id.clone(),
-                                        timestamp
+                                        timestamp,
                                     })
                                 }
                                 "role_remove" => {
@@ -414,7 +414,7 @@ impl McpServer {
                                         role: serde_json::from_value(result["role"].clone())
                                             .unwrap_or(mk_core::types::Role::Developer),
                                         tenant_id: tenant_context.tenant_id.clone(),
-                                        timestamp
+                                        timestamp,
                                     })
                                 }
                                 "unit_policy_add" => {
@@ -426,10 +426,10 @@ impl McpServer {
                                         layer: serde_json::from_value(result["layer"].clone())
                                             .unwrap_or(mk_core::types::KnowledgeLayer::Project),
                                         tenant_id: tenant_context.tenant_id.clone(),
-                                        timestamp
+                                        timestamp,
                                     })
                                 }
-                                _ => None
+                                _ => None,
                             };
 
                             if let Some(event) = event
@@ -443,7 +443,7 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: Some(result),
-                            error: None
+                            error: None,
                         }
                     }
                     Err(e) => {
@@ -463,7 +463,7 @@ impl McpServer {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
                             result: None,
-                            error: Some(rpc_error)
+                            error: Some(rpc_error),
                         }
                     }
                 }
@@ -474,7 +474,7 @@ impl McpServer {
                     jsonrpc: "2.0".to_string(),
                     id: request.id,
                     result: None,
-                    error: Some(JsonRpcError::method_not_found("Method not found"))
+                    error: Some(JsonRpcError::method_not_found("Method not found")),
                 }
             }
         }
@@ -483,11 +483,11 @@ impl McpServer {
     fn extract_call_params(
         &self,
         params: &Value,
-        tenant_context: &mk_core::types::TenantContext
+        tenant_context: &mk_core::types::TenantContext,
     ) -> Result<(String, Value), String> {
         let name = match params["name"].as_str() {
             Some(n) => n.to_string(),
-            None => return Err("Missing tool name".to_string())
+            None => return Err("Missing tool name".to_string()),
         };
 
         let mut tool_params = params["arguments"].clone();
@@ -498,11 +498,11 @@ impl McpServer {
         if let Some(obj) = tool_params.as_object_mut() {
             obj.insert(
                 "tenant_context".to_string(),
-                serde_json::to_value(tenant_context).unwrap()
+                serde_json::to_value(tenant_context).unwrap(),
             );
             obj.insert(
                 "tenantContext".to_string(),
-                serde_json::to_value(tenant_context).unwrap()
+                serde_json::to_value(tenant_context).unwrap(),
             );
         } else {
             tool_params = serde_json::json!({
@@ -522,7 +522,7 @@ pub struct JsonRpcResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRpcError>
+    pub error: Option<JsonRpcError>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -530,7 +530,7 @@ pub struct JsonRpcError {
     pub code: i32,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>
+    pub data: Option<Value>,
 }
 
 impl JsonRpcError {
@@ -538,7 +538,7 @@ impl JsonRpcError {
         Self {
             code: -32602,
             message: message.into(),
-            data: None
+            data: None,
         }
     }
 
@@ -546,7 +546,7 @@ impl JsonRpcError {
         Self {
             code: -32601,
             message: message.into(),
-            data: None
+            data: None,
         }
     }
 
@@ -554,7 +554,7 @@ impl JsonRpcError {
         Self {
             code: -32000,
             message: message.into(),
-            data: None
+            data: None,
         }
     }
 
@@ -562,7 +562,7 @@ impl JsonRpcError {
         Self {
             code: -32001,
             message: message.into(),
-            data: None
+            data: None,
         }
     }
 }
@@ -573,7 +573,7 @@ pub struct JsonRpcRequest {
     pub id: Value,
     pub method: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub params: Option<Value>
+    pub params: Option<Value>,
 }
 
 #[cfg(test)]
@@ -590,7 +590,7 @@ mod tests {
     impl SyncStatePersister for MockPersister {
         async fn load(
             &self,
-            _tenant_id: &mk_core::types::TenantId
+            _tenant_id: &mk_core::types::TenantId,
         ) -> std::result::Result<sync::state::SyncState, Box<dyn std::error::Error + Send + Sync>>
         {
             Ok(sync::state::SyncState::default())
@@ -598,7 +598,7 @@ mod tests {
         async fn save(
             &self,
             _tenant_id: &mk_core::types::TenantId,
-            _: &sync::state::SyncState
+            _: &sync::state::SyncState,
         ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
         }
@@ -612,13 +612,13 @@ mod tests {
             &self,
             _ctx: &mk_core::types::TenantContext,
             _action: &str,
-            _resource: &str
+            _resource: &str,
         ) -> anyhow::Result<bool> {
             Ok(true)
         }
         async fn get_user_roles(
             &self,
-            _ctx: &mk_core::types::TenantContext
+            _ctx: &mk_core::types::TenantContext,
         ) -> anyhow::Result<Vec<mk_core::types::Role>> {
             Ok(vec![])
         }
@@ -626,7 +626,7 @@ mod tests {
             &self,
             _ctx: &mk_core::types::TenantContext,
             _user_id: &mk_core::types::UserId,
-            _role: mk_core::types::Role
+            _role: mk_core::types::Role,
         ) -> anyhow::Result<()> {
             Ok(())
         }
@@ -634,7 +634,7 @@ mod tests {
             &self,
             _ctx: &mk_core::types::TenantContext,
             _user_id: &mk_core::types::UserId,
-            _role: mk_core::types::Role
+            _role: mk_core::types::Role,
         ) -> anyhow::Result<()> {
             Ok(())
         }
@@ -648,55 +648,55 @@ mod tests {
             &self,
             _ctx: mk_core::types::TenantContext,
             _key: &str,
-            _value: &[u8]
+            _value: &[u8],
         ) -> Result<(), Self::Error> {
             Ok(())
         }
         async fn retrieve(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _key: &str
+            _key: &str,
         ) -> Result<Option<Vec<u8>>, Self::Error> {
             Ok(None)
         }
         async fn delete(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _key: &str
+            _key: &str,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
         async fn exists(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _key: &str
+            _key: &str,
         ) -> Result<bool, Self::Error> {
             Ok(false)
         }
         async fn get_ancestors(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _unit_id: &str
+            _unit_id: &str,
         ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
             Ok(vec![])
         }
         async fn get_descendants(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _unit_id: &str
+            _unit_id: &str,
         ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
             Ok(vec![])
         }
         async fn get_unit_policies(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _unit_id: &str
+            _unit_id: &str,
         ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
             Ok(vec![])
         }
         async fn create_unit(
             &self,
-            _unit: &mk_core::types::OrganizationalUnit
+            _unit: &mk_core::types::OrganizationalUnit,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -704,7 +704,7 @@ mod tests {
             &self,
             _ctx: &mk_core::types::TenantContext,
             _unit_id: &str,
-            _policy: &mk_core::types::Policy
+            _policy: &mk_core::types::Policy,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -713,7 +713,7 @@ mod tests {
             _user_id: &mk_core::types::UserId,
             _tenant_id: &mk_core::types::TenantId,
             _unit_id: &str,
-            _role: mk_core::types::Role
+            _role: mk_core::types::Role,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -722,25 +722,25 @@ mod tests {
             _user_id: &mk_core::types::UserId,
             _tenant_id: &mk_core::types::TenantId,
             _unit_id: &str,
-            _role: mk_core::types::Role
+            _role: mk_core::types::Role,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
         async fn store_drift_result(
             &self,
-            _result: mk_core::types::DriftResult
+            _result: mk_core::types::DriftResult,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
         async fn get_latest_drift_result(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _project_id: &str
+            _project_id: &str,
         ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
             Ok(None)
         }
         async fn list_all_units(
-            &self
+            &self,
         ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
             Ok(vec![])
         }
@@ -751,7 +751,7 @@ mod tests {
             _status: &str,
             _message: Option<&str>,
             _started_at: i64,
-            _finished_at: Option<i64>
+            _finished_at: Option<i64>,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -759,53 +759,53 @@ mod tests {
             &self,
             _ctx: mk_core::types::TenantContext,
             _since_timestamp: i64,
-            _limit: usize
+            _limit: usize,
         ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
             Ok(vec![])
         }
         async fn create_suppression(
             &self,
-            _suppression: mk_core::types::DriftSuppression
+            _suppression: mk_core::types::DriftSuppression,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
         async fn list_suppressions(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _project_id: &str
+            _project_id: &str,
         ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
             Ok(vec![])
         }
         async fn delete_suppression(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _suppression_id: &str
+            _suppression_id: &str,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
         async fn get_drift_config(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _project_id: &str
+            _project_id: &str,
         ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
             Ok(None)
         }
         async fn save_drift_config(
             &self,
-            _config: mk_core::types::DriftConfig
+            _config: mk_core::types::DriftConfig,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
         async fn persist_event(
             &self,
-            _event: mk_core::types::PersistentEvent
+            _event: mk_core::types::PersistentEvent,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
         async fn get_pending_events(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _limit: usize
+            _limit: usize,
         ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
             Ok(vec![])
         }
@@ -813,27 +813,27 @@ mod tests {
             &self,
             _event_id: &str,
             _status: mk_core::types::EventStatus,
-            _error: Option<String>
+            _error: Option<String>,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
         async fn get_dead_letter_events(
             &self,
             _ctx: mk_core::types::TenantContext,
-            _limit: usize
+            _limit: usize,
         ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
             Ok(vec![])
         }
         async fn check_idempotency(
             &self,
             _consumer_group: &str,
-            _idempotency_key: &str
+            _idempotency_key: &str,
         ) -> Result<bool, Self::Error> {
             Ok(false)
         }
         async fn record_consumer_state(
             &self,
-            _state: mk_core::types::ConsumerState
+            _state: mk_core::types::ConsumerState,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -841,13 +841,13 @@ mod tests {
             &self,
             _ctx: mk_core::types::TenantContext,
             _period_start: i64,
-            _period_end: i64
+            _period_end: i64,
         ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
             Ok(vec![])
         }
         async fn record_event_metrics(
             &self,
-            _metrics: mk_core::types::EventDeliveryMetrics
+            _metrics: mk_core::types::EventDeliveryMetrics,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -859,7 +859,7 @@ mod tests {
         let governance = Arc::new(knowledge::governance::GovernanceEngine::new());
         let knowledge_manager = Arc::new(knowledge::manager::KnowledgeManager::new(
             repo.clone(),
-            governance.clone()
+            governance.clone(),
         ));
         let sync_manager = Arc::new(
             SyncManager::new(
@@ -868,14 +868,14 @@ mod tests {
                 config::config::DeploymentConfig::default(),
                 None,
                 Arc::new(MockPersister),
-                None
+                None,
             )
             .await
-            .unwrap()
+            .unwrap(),
         );
 
         let mock_reasoner = Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
-            memory::llm::mock::MockLlmService::new()
+            memory::llm::mock::MockLlmService::new(),
         )));
 
         McpServer::new(
@@ -888,7 +888,7 @@ mod tests {
             Arc::new(MockAuthService),
             None,
             None,
-            None
+            None,
         )
     }
 
@@ -899,7 +899,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "initialize".to_string(),
-            params: None
+            params: None,
         };
 
         let response = server.handle_request(request).await;
@@ -915,7 +915,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "tools/list".to_string(),
-            params: None
+            params: None,
         };
 
         let response = server.handle_request(request).await;
@@ -931,7 +931,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "unknown_method".to_string(),
-            params: None
+            params: None,
         };
 
         let response = server.handle_request(request).await;
@@ -946,7 +946,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "tools/call".to_string(),
-            params: None
+            params: None,
         };
 
         let response = server.handle_request(request).await;
@@ -968,7 +968,7 @@ mod tests {
                 },
                 "name": "non_existent_tool",
                 "arguments": {}
-            }))
+            })),
         };
 
         let response = server.handle_request(request).await;
@@ -995,7 +995,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "tools/call".to_string(),
-            params: Some(params)
+            params: Some(params),
         };
 
         let _response = server.handle_request(request).await;
@@ -1016,7 +1016,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "tools/call".to_string(),
-            params: Some(params)
+            params: Some(params),
         };
 
         let response = server.handle_request(request).await;
@@ -1034,7 +1034,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "TRIGGER_FAILURE_METHOD".to_string(),
-            params: None
+            params: None,
         };
 
         let response = server.handle_request(request).await;
@@ -1054,7 +1054,7 @@ mod tests {
                 "arguments": {
                     "content": "test"
                 }
-            }))
+            })),
         };
 
         let response = server.handle_request(request).await;
@@ -1070,7 +1070,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "initialize".to_string(),
-            params: None
+            params: None,
         };
 
         let _response = server.handle_request(request).await;
@@ -1109,7 +1109,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             method: "test".to_string(),
-            params: Some(json!({"key": "value"}))
+            params: Some(json!({"key": "value"})),
         };
 
         let serialized = serde_json::to_string(&request).unwrap();
@@ -1126,7 +1126,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             result: Some(json!({"data": "test"})),
-            error: None
+            error: None,
         };
 
         let serialized = serde_json::to_string(&response_success).unwrap();
@@ -1136,7 +1136,7 @@ mod tests {
             jsonrpc: "2.0".to_string(),
             id: json!(1),
             result: None,
-            error: Some(JsonRpcError::internal_error("fail"))
+            error: Some(JsonRpcError::internal_error("fail")),
         };
 
         let serialized_err = serde_json::to_string(&response_error).unwrap();
@@ -1157,7 +1157,7 @@ mod tests {
                     "user_id": "u1"
                 },
                 "arguments": {}
-            }))
+            })),
         };
 
         let response = server.handle_request(request).await;

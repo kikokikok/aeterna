@@ -6,11 +6,14 @@
 //! - stdio-based MCP communication with Code Search process
 //! - JSON-RPC for tool invocation
 //! - Circuit breaker for resilience
-//! - Connection pooling and retry logic
+//! - Spawn-per-call: each request spawns a new `codesearch mcp serve` process
 
 use serde_json::Value;
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
-use tokio::time::{timeout, Duration};
+use tokio::io::AsyncWriteExt;
+use tokio::process::Command;
+use tokio::time::{Duration, timeout};
 
 /// Configuration for Code Search client
 #[derive(Debug, Clone)]
@@ -23,6 +26,10 @@ pub struct CodeSearchConfig {
     pub timeout_secs: u64,
     /// Enable debug logging
     pub debug: bool,
+    /// Extra arguments to pass to the Code Search binary (default: ["mcp", "serve"])
+    pub mcp_args: Vec<String>,
+    /// When true, use mock responses instead of spawning the binary (default: false)
+    pub use_mock: bool,
 }
 
 impl Default for CodeSearchConfig {
@@ -32,6 +39,8 @@ impl Default for CodeSearchConfig {
             workspace: "default".to_string(),
             timeout_secs: 30,
             debug: false,
+            mcp_args: vec!["mcp".to_string(), "serve".to_string()],
+            use_mock: false,
         }
     }
 }
@@ -107,7 +116,10 @@ impl CodeSearchClient {
         });
 
         if self.config.debug {
-            eprintln!("Code Search request: {}", serde_json::to_string_pretty(&request)?);
+            eprintln!(
+                "Code Search request: {}",
+                serde_json::to_string_pretty(&request)?
+            );
         }
 
         // Execute with timeout
@@ -133,27 +145,104 @@ impl CodeSearchClient {
         }
     }
 
-    /// Execute MCP call to Code Search binary
-    ///
-    /// This simulates stdio communication. In production, this would:
-    /// 1. Connect to Code Search sidecar via stdio
-    /// 2. Send JSON-RPC request
-    /// 3. Read JSON-RPC response
-    ///
-    /// For now, returns mock data for development.
     async fn execute_mcp_call(
         &self,
         request: Value,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        // TODO: Implement actual MCP communication with Code Search sidecar
-        // For now, return mock success response
-        
-        // Extract tool name from request
+        if self.config.use_mock {
+            return self.execute_mcp_call_mock(&request);
+        }
+
+        match self.execute_mcp_call_stdio(&request).await {
+            Ok(response) => Ok(response),
+            Err(e) => {
+                let err_msg = e.to_string();
+                let is_binary_missing = err_msg.contains("No such file or directory")
+                    || err_msg.contains("not found")
+                    || err_msg.contains("os error 2");
+
+                if is_binary_missing && self.config.use_mock {
+                    self.execute_mcp_call_mock(&request)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    async fn execute_mcp_call_stdio(
+        &self,
+        request: &Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let mut child = Command::new(&self.config.binary_path)
+            .args(&self.config.mcp_args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+                format!(
+                    "Failed to spawn Code Search binary '{}': {}",
+                    self.config.binary_path, e
+                )
+                .into()
+            })?;
+
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or("Failed to open stdin for Code Search process")?;
+        let request_bytes = serde_json::to_vec(request)?;
+        stdin.write_all(&request_bytes).await?;
+        stdin.write_all(b"\n").await?;
+        drop(stdin);
+
+        let output = child.wait_with_output().await.map_err(
+            |e| -> Box<dyn std::error::Error + Send + Sync> {
+                format!("Code Search process failed: {}", e).into()
+            },
+        )?;
+
+        if !output.status.success() {
+            return Err(
+                format!("Code Search process exited with status: {}", output.status).into(),
+            );
+        }
+
+        let response: Value = serde_json::from_slice(&output.stdout).map_err(
+            |e| -> Box<dyn std::error::Error + Send + Sync> {
+                format!("Failed to parse Code Search response: {}", e).into()
+            },
+        )?;
+
+        if let Some(err) = response.get("error") {
+            return Err(format!("Code Search MCP error: {}", err).into());
+        }
+
+        if let Some(text) = response
+            .pointer("/result/content/0/text")
+            .and_then(|v| v.as_str())
+        {
+            let parsed: Value =
+                serde_json::from_str(text).unwrap_or_else(|_| Value::String(text.to_string()));
+            return Ok(parsed);
+        }
+
+        if let Some(result) = response.get("result") {
+            return Ok(result.clone());
+        }
+
+        Err("Code Search returned empty response".into())
+    }
+
+    fn execute_mcp_call_mock(
+        &self,
+        request: &Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let tool_name = request["params"]["name"]
             .as_str()
             .ok_or("Missing tool name")?;
 
-        // Return mock response based on tool
         match tool_name {
             "codesearch_search" => Ok(serde_json::json!({
                 "success": true,
@@ -200,18 +289,45 @@ mod tests {
     async fn test_circuit_breaker() {
         let client = CodeSearchClient::new(CodeSearchConfig {
             binary_path: "nonexistent".to_string(),
+            use_mock: true,
             ..Default::default()
         });
 
-        // Should be available initially
         assert!(client.is_available());
 
-        // Record failures
         for _ in 0..5 {
             client.record_failure();
         }
 
-        // Should be unavailable after max failures
         assert!(!client.is_available());
+    }
+
+    #[tokio::test]
+    async fn test_mock_call_tool() {
+        let client = CodeSearchClient::new(CodeSearchConfig {
+            use_mock: true,
+            ..Default::default()
+        });
+
+        let result = client
+            .call_tool("codesearch_search", serde_json::json!({"query": "test"}))
+            .await;
+        assert!(result.is_ok());
+        let val = result.unwrap();
+        assert_eq!(val["success"], true);
+    }
+
+    #[tokio::test]
+    async fn test_binary_not_found_returns_error() {
+        let client = CodeSearchClient::new(CodeSearchConfig {
+            binary_path: "nonexistent_binary_that_does_not_exist".to_string(),
+            use_mock: false,
+            ..Default::default()
+        });
+
+        let result = client
+            .call_tool("codesearch_search", serde_json::json!({"query": "test"}))
+            .await;
+        assert!(result.is_err());
     }
 }
