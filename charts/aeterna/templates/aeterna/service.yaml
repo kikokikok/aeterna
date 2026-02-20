@@ -16,6 +16,12 @@ spec:
       targetPort: metrics
       protocol: TCP
       name: metrics
+    {{- if .Values.codesearch.enabled }}
+    - port: 9090
+      targetPort: mcp
+      protocol: TCP
+      name: mcp
+    {{- end }}
   selector:
     {{- include "aeterna.selectorLabels" . | nindent 4 }}
 {{- end }}

@@ -350,8 +350,8 @@ opal:
 
   ## OPAL Server configuration
   server:
-    ## @param opal.server.replicaCount Number of OPAL Server replicas
-    replicaCount: 1
+    ## @param opal.server.replicaCount Number of OPAL Server replicas (>=2 for HA)
+    replicaCount: 3
     image:
       repository: permitio/opal-server
       tag: "0.8.0"
@@ -363,6 +363,14 @@ opal:
       requests:
         cpu: 50m
         memory: 128Mi
+    ## @param opal.server.redis Redis backend for multi-replica broadcast coordination
+    redis:
+      ## @param opal.server.redis.enabled Enable Redis PubSub backend (required when replicaCount > 1)
+      enabled: true
+      ## @param opal.server.redis.pubsubUri Redis URI for OPAL broadcast channel
+      pubsubUri: "redis://aeterna-redis:6379/0"
+      ## @param opal.server.redis.existingSecret Existing secret containing Redis URI (key: pubsub-uri)
+      existingSecret: ""
 
   ## Cedar Agent configuration
   cedarAgent:

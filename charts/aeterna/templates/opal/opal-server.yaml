@@ -76,6 +76,19 @@ spec:
                   name: {{ include "aeterna.fullname" . }}-opal
                   key: private-key
                   optional: true
+            {{- if and (gt (int .Values.opal.server.replicaCount) 1) .Values.opal.server.redis.enabled }}
+            - name: OPAL_BROADCAST_CHANNEL_BACKEND
+              value: "redis"
+            - name: OPAL_BROADCAST_CHANNEL_REDIS_URL
+              {{- if .Values.opal.server.redis.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.opal.server.redis.existingSecret }}
+                  key: pubsub-uri
+              {{- else }}
+              value: {{ .Values.opal.server.redis.pubsubUri | quote }}
+              {{- end }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthcheck
@@ -142,7 +155,7 @@ metadata:
     {{- include "aeterna.opal.labels" . | nindent 4 }}
     {{- include "aeterna.opal.server.selectorLabels" . | nindent 4 }}
 spec:
-  minAvailable: 1
+  minAvailable: {{ max 1 (sub (int .Values.opal.server.replicaCount) 1) }}
   selector:
     matchLabels:
       {{- include "aeterna.opal.server.selectorLabels" . | nindent 6 }}

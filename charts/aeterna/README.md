@@ -568,6 +568,66 @@ kubectl exec -it <pod-name> -c codesearch -- \
 
 For complete documentation, see [docs/codesearch-integration.md](../../docs/codesearch-integration.md)
 
+## Code Search Central Index
+
+The Central Index Service coordinates code search indexing across repositories via a REST API. It receives webhook notifications from CI pipelines, manages multi-tenant workspaces, and provides cross-repository search.
+
+### Enabling CI Integration
+
+Add the reusable GitHub Actions workflow to each repository:
+
+```yaml
+# .github/workflows/index.yml
+name: Index Code Search
+on:
+  push:
+    branches: [main]
+
+jobs:
+  index:
+    uses: kikokikok/aeterna/.github/workflows/codesearch-index.yml@main
+    secrets:
+      AETERNA_API_KEY: ${{ secrets.AETERNA_API_KEY }}
+      QDRANT_URL: ${{ secrets.QDRANT_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+### Central Index Values
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `centralIndex.enabled` | Enable Central Index API endpoints | `false` |
+| `centralIndex.apiKeySecret` | K8s secret with `AETERNA_API_KEY` | `""` |
+| `centralIndex.webhookSecret` | K8s secret with `AETERNA_WEBHOOK_SECRET` | `""` |
+| `centralIndex.rateLimitPerMinute` | Max API requests per key per minute | `100` |
+
+### Example: Full Code Search + Central Index
+
+```yaml
+codesearch:
+  enabled: true
+  embedder:
+    type: openai
+    model: text-embedding-3-small
+  store:
+    type: qdrant
+
+centralIndex:
+  enabled: true
+  apiKeySecret: aeterna-api-key
+  webhookSecret: aeterna-webhook-secret
+  rateLimitPerMinute: 100
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/index/updated` | POST | Notify after repository indexing |
+| `/api/v1/graph/refresh` | POST | Trigger call-graph refresh |
+| `/api/v1/index/status` | GET | Query index status |
+| `/api/v1/search/cross-repo` | POST | Cross-repository semantic search |
+
 ## Values Reference
 
 See [values.yaml](./values.yaml) for the complete list of configurable parameters.
@@ -584,6 +644,8 @@ Key parameters:
 | `codesearch.enabled` | Enable Code Search sidecar | `false` |
 | `codesearch.embedder.type` | Code Search embedder type | `ollama` |
 | `codesearch.store.type` | Code Search storage backend | `qdrant` |
+| `centralIndex.enabled` | Enable Central Index API | `false` |
+| `centralIndex.rateLimitPerMinute` | Rate limit per API key | `100` |
 | `aeterna.replicaCount` | Aeterna replicas | `1` |
 | `aeterna.autoscaling.enabled` | Enable HPA | `false` |
 | `networkPolicy.enabled` | Enable network policies | `false` |
