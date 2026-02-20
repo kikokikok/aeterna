@@ -3,7 +3,7 @@
 use super::factory::PineconeConfig;
 use super::{
     BackendCapabilities, BackendError, DeleteResult, HealthStatus, SearchQuery, SearchResult,
-    UpsertResult, VectorBackend, VectorRecord
+    UpsertResult, VectorBackend, VectorRecord,
 };
 use async_trait::async_trait;
 use reqwest::Client;
@@ -14,13 +14,13 @@ use std::time::Instant;
 pub struct PineconeBackend {
     client: Client,
     config: PineconeConfig,
-    host: String
+    host: String,
 }
 
 #[derive(Debug, Serialize)]
 struct UpsertRequest {
     vectors: Vec<PineconeVector>,
-    namespace: String
+    namespace: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -28,7 +28,7 @@ struct PineconeVector {
     id: String,
     values: Vec<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    metadata: Option<HashMap<String, serde_json::Value>>
+    metadata: Option<HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -42,12 +42,12 @@ struct QueryRequest {
     #[serde(rename = "includeValues")]
     include_values: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    filter: Option<HashMap<String, serde_json::Value>>
+    filter: Option<HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct QueryResponse {
-    matches: Vec<QueryMatch>
+    matches: Vec<QueryMatch>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,44 +55,44 @@ struct QueryMatch {
     id: String,
     score: f32,
     values: Option<Vec<f32>>,
-    metadata: Option<HashMap<String, serde_json::Value>>
+    metadata: Option<HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Serialize)]
 struct DeleteRequest {
     ids: Vec<String>,
-    namespace: String
+    namespace: String,
 }
 
 #[derive(Debug, Serialize)]
 #[allow(dead_code)]
 struct FetchRequest {
     ids: Vec<String>,
-    namespace: String
+    namespace: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct FetchResponse {
-    vectors: HashMap<String, FetchedVector>
+    vectors: HashMap<String, FetchedVector>,
 }
 
 #[derive(Debug, Deserialize)]
 struct FetchedVector {
     id: String,
     values: Vec<f32>,
-    metadata: Option<HashMap<String, serde_json::Value>>
+    metadata: Option<HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct DescribeIndexResponse {
-    database: IndexDatabase
+    database: IndexDatabase,
 }
 
 #[derive(Debug, Deserialize)]
 struct IndexDatabase {
     #[allow(dead_code)]
     name: String,
-    host: String
+    host: String,
 }
 
 impl PineconeBackend {
@@ -125,7 +125,7 @@ impl PineconeBackend {
         Ok(Self {
             client,
             host: format!("https://{}", index_info.database.host),
-            config
+            config,
         })
     }
 
@@ -156,9 +156,9 @@ impl VectorBackend for PineconeBackend {
             }
             Ok(resp) => Ok(HealthStatus::unhealthy(
                 "pinecone",
-                format!("HTTP {}", resp.status())
+                format!("HTTP {}", resp.status()),
             )),
-            Err(e) => Ok(HealthStatus::unhealthy("pinecone", e.to_string()))
+            Err(e) => Ok(HealthStatus::unhealthy("pinecone", e.to_string())),
         }
     }
 
@@ -169,7 +169,7 @@ impl VectorBackend for PineconeBackend {
     async fn upsert(
         &self,
         tenant_id: &str,
-        vectors: Vec<VectorRecord>
+        vectors: Vec<VectorRecord>,
     ) -> Result<UpsertResult, BackendError> {
         let url = format!("{}/vectors/upsert", self.host);
         let count = vectors.len();
@@ -184,10 +184,10 @@ impl VectorBackend for PineconeBackend {
                         None
                     } else {
                         Some(r.metadata)
-                    }
+                    },
                 })
                 .collect(),
-            namespace: self.namespace(tenant_id)
+            namespace: self.namespace(tenant_id),
         };
 
         let resp = self
@@ -206,7 +206,7 @@ impl VectorBackend for PineconeBackend {
 
             if status.as_u16() == 429 {
                 return Err(BackendError::RateLimited {
-                    retry_after_ms: 1000
+                    retry_after_ms: 1000,
                 });
             }
 
@@ -222,7 +222,7 @@ impl VectorBackend for PineconeBackend {
     async fn search(
         &self,
         tenant_id: &str,
-        query: SearchQuery
+        query: SearchQuery,
     ) -> Result<Vec<SearchResult>, BackendError> {
         let url = format!("{}/query", self.host);
 
@@ -236,7 +236,7 @@ impl VectorBackend for PineconeBackend {
                 None
             } else {
                 Some(query.filters)
-            }
+            },
         };
 
         let resp = self
@@ -270,7 +270,7 @@ impl VectorBackend for PineconeBackend {
                 id: m.id,
                 score: m.score,
                 vector: m.values,
-                metadata: m.metadata.unwrap_or_default()
+                metadata: m.metadata.unwrap_or_default(),
             })
             .collect())
     }
@@ -278,14 +278,14 @@ impl VectorBackend for PineconeBackend {
     async fn delete(
         &self,
         tenant_id: &str,
-        ids: Vec<String>
+        ids: Vec<String>,
     ) -> Result<DeleteResult, BackendError> {
         let url = format!("{}/vectors/delete", self.host);
         let count = ids.len();
 
         let request = DeleteRequest {
             ids,
-            namespace: self.namespace(tenant_id)
+            namespace: self.namespace(tenant_id),
         };
 
         let resp = self
@@ -346,7 +346,7 @@ impl VectorBackend for PineconeBackend {
         Ok(result.vectors.get(id).map(|v| VectorRecord {
             id: v.id.clone(),
             vector: v.values.clone(),
-            metadata: v.metadata.clone().unwrap_or_default()
+            metadata: v.metadata.clone().unwrap_or_default(),
         }))
     }
 
@@ -364,13 +364,13 @@ mod tests {
         let config = PineconeConfig {
             api_key: "test".to_string(),
             environment: "test".to_string(),
-            index_name: "test".to_string()
+            index_name: "test".to_string(),
         };
 
         let backend = PineconeBackend {
             client: Client::new(),
             config,
-            host: "https://test.svc.pinecone.io".to_string()
+            host: "https://test.svc.pinecone.io".to_string(),
         };
 
         assert_eq!(backend.namespace("tenant-123"), "tenant-123");

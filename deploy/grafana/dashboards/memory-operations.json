@@ -1,0 +1,130 @@
+{
+  "id": null,
+  "uid": "aeterna-memory-ops",
+  "title": "Aeterna - Memory Operations",
+  "tags": ["aeterna", "memory"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Memory Write Rate (by layer)",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(aeterna_memory_writes_total[5m])) by (layer)",
+          "legendFormat": "{{layer}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ops" }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Memory Search Rate",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(aeterna_memory_searches_total[5m])) by (layer)",
+          "legendFormat": "{{layer}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ops" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Embedding Cache Hit Rate",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(aeterna_cache_hits_total[5m]) / (rate(aeterna_cache_hits_total[5m]) + rate(aeterna_cache_misses_total[5m]))",
+          "legendFormat": "Hit rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 1 }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Search Latency P50/P95/P99 (ms)",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(aeterna_memory_search_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(aeterna_memory_search_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(aeterna_memory_search_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Total Memories Stored",
+      "gridPos": { "x": 0, "y": 16, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(aeterna_memory_count_total)",
+          "legendFormat": "Total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Memory Promotions (24h)",
+      "gridPos": { "x": 6, "y": 16, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "increase(aeterna_memory_promotions_total[24h])",
+          "legendFormat": "Promotions"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Cold Tier Archival Rate",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(aeterna_cold_tier_archives_total[5m])",
+          "legendFormat": "Archives/s"
+        },
+        {
+          "expr": "rate(aeterna_cold_tier_restores_total[5m])",
+          "legendFormat": "Restores/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ops" }
+      }
+    }
+  ]
+}

@@ -10,7 +10,7 @@ pub struct KnowledgePointer {
     pub content_hash: String,
     pub synced_at: i64,
     pub source_layer: KnowledgeLayer,
-    pub is_orphaned: bool
+    pub is_orphaned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -25,7 +25,7 @@ pub struct SummaryPointer {
     pub synced_at: i64,
     pub is_stale: bool,
     pub personalized: bool,
-    pub personalization_context: Option<String>
+    pub personalization_context: Option<String>,
 }
 
 impl SummaryPointer {
@@ -35,7 +35,7 @@ impl SummaryPointer {
         depth: SummaryDepth,
         content_hash: String,
         source_content_hash: String,
-        token_count: u32
+        token_count: u32,
     ) -> Self {
         Self {
             entry_id,
@@ -47,7 +47,7 @@ impl SummaryPointer {
             synced_at: chrono::Utc::now().timestamp(),
             is_stale: false,
             personalized: false,
-            personalization_context: None
+            personalization_context: None,
         }
     }
 
@@ -66,7 +66,7 @@ pub struct SummaryPointerState {
     pub pointers: HashMap<String, HashMap<SummaryDepth, SummaryPointer>>,
     pub last_sync_at: Option<i64>,
     pub total_summaries: u64,
-    pub stale_count: u64
+    pub stale_count: u64,
 }
 
 impl SummaryPointerState {
@@ -85,7 +85,7 @@ impl SummaryPointerState {
     pub fn remove_pointer(
         &mut self,
         entry_id: &str,
-        depth: SummaryDepth
+        depth: SummaryDepth,
     ) -> Option<SummaryPointer> {
         if let Some(entry) = self.pointers.get_mut(entry_id)
             && let Some(ptr) = entry.remove(&depth)
@@ -174,7 +174,7 @@ pub struct HindsightPointer {
     pub source_layer: MemoryLayer,
     pub synced_at: i64,
     pub success_rate: f32,
-    pub application_count: u32
+    pub application_count: u32,
 }
 
 impl HindsightPointer {
@@ -187,7 +187,7 @@ impl HindsightPointer {
             source_layer,
             synced_at: chrono::Utc::now().timestamp(),
             success_rate: 0.0,
-            application_count: 0
+            application_count: 0,
         }
     }
 
@@ -215,7 +215,7 @@ pub struct HindsightPointerState {
     pub pointers: HashMap<String, HindsightPointer>,
     pub last_sync_at: Option<i64>,
     pub total_patterns: u64,
-    pub total_resolutions: u64
+    pub total_resolutions: u64,
 }
 
 impl HindsightPointerState {
@@ -264,7 +264,7 @@ impl HindsightPointerState {
     pub fn get_high_success_pointers(
         &self,
         min_rate: f32,
-        min_applications: u32
+        min_applications: u32,
     ) -> Vec<&HindsightPointer> {
         self.pointers
             .values()
@@ -279,7 +279,7 @@ pub struct KnowledgePointerMetadata {
     #[serde(rename = "type")]
     pub kind: String,
     pub knowledge_pointer: KnowledgePointer,
-    pub tags: Vec<String>
+    pub tags: Vec<String>,
 }
 
 impl Default for KnowledgePointerMetadata {
@@ -292,9 +292,9 @@ impl Default for KnowledgePointerMetadata {
                 content_hash: String::new(),
                 synced_at: 0,
                 source_layer: KnowledgeLayer::Company,
-                is_orphaned: false
+                is_orphaned: false,
             },
-            tags: Vec::new()
+            tags: Vec::new(),
         }
     }
 }
@@ -304,7 +304,7 @@ pub fn map_layer(knowledge_layer: KnowledgeLayer) -> MemoryLayer {
         KnowledgeLayer::Company => MemoryLayer::Company,
         KnowledgeLayer::Org => MemoryLayer::Org,
         KnowledgeLayer::Team => MemoryLayer::Team,
-        KnowledgeLayer::Project => MemoryLayer::Project
+        KnowledgeLayer::Project => MemoryLayer::Project,
     }
 }
 
@@ -357,7 +357,7 @@ mod tests {
             SummaryDepth::Sentence,
             "content-hash".to_string(),
             "source-hash".to_string(),
-            50
+            50,
         );
 
         assert_eq!(ptr.entry_id, "entry-1");
@@ -379,7 +379,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "source".to_string(),
-            50
+            50,
         );
 
         assert!(!ptr.is_stale);
@@ -395,7 +395,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "source-hash".to_string(),
-            50
+            50,
         );
 
         assert!(!ptr.needs_update("source-hash"));
@@ -410,7 +410,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "source-hash".to_string(),
-            50
+            50,
         );
 
         ptr.mark_stale();
@@ -426,7 +426,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "source".to_string(),
-            50
+            50,
         );
 
         state.set_pointer(ptr.clone());
@@ -447,7 +447,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash1".to_string(),
             "source".to_string(),
-            50
+            50,
         ));
         state.set_pointer(SummaryPointer::new(
             "entry-1".to_string(),
@@ -455,7 +455,7 @@ mod tests {
             SummaryDepth::Paragraph,
             "hash2".to_string(),
             "source".to_string(),
-            200
+            200,
         ));
 
         assert_eq!(state.total_summaries, 2);
@@ -486,7 +486,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "source".to_string(),
-            50
+            50,
         ));
 
         let removed = state.remove_pointer("entry-1", SummaryDepth::Sentence);
@@ -509,7 +509,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash1".to_string(),
             "source".to_string(),
-            50
+            50,
         ));
         state.set_pointer(SummaryPointer::new(
             "entry-1".to_string(),
@@ -517,7 +517,7 @@ mod tests {
             SummaryDepth::Paragraph,
             "hash2".to_string(),
             "source".to_string(),
-            200
+            200,
         ));
 
         assert_eq!(state.total_summaries, 2);
@@ -537,7 +537,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "source".to_string(),
-            50
+            50,
         ));
 
         assert_eq!(state.stale_count, 0);
@@ -560,7 +560,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash1".to_string(),
             "source".to_string(),
-            50
+            50,
         ));
         state.set_pointer(SummaryPointer::new(
             "entry-1".to_string(),
@@ -568,7 +568,7 @@ mod tests {
             SummaryDepth::Paragraph,
             "hash2".to_string(),
             "source".to_string(),
-            200
+            200,
         ));
 
         let count = state.mark_all_stale_for_entry("entry-1");
@@ -586,7 +586,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash1".to_string(),
             "source".to_string(),
-            50
+            50,
         ));
         state.set_pointer(SummaryPointer::new(
             "entry-2".to_string(),
@@ -594,7 +594,7 @@ mod tests {
             SummaryDepth::Paragraph,
             "hash2".to_string(),
             "source".to_string(),
-            200
+            200,
         ));
 
         state.mark_stale("entry-1", SummaryDepth::Sentence);
@@ -614,7 +614,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash1".to_string(),
             "source".to_string(),
-            50
+            50,
         ));
         state.set_pointer(SummaryPointer::new(
             "entry-2".to_string(),
@@ -622,7 +622,7 @@ mod tests {
             SummaryDepth::Paragraph,
             "hash2".to_string(),
             "source".to_string(),
-            200
+            200,
         ));
 
         let project_ptrs = state.get_pointers_for_layer(MemoryLayer::Project);
@@ -713,15 +713,15 @@ mod tests {
 
         state.set_pointer(HindsightPointer::new(
             "sig-1".to_string(),
-            MemoryLayer::User
+            MemoryLayer::User,
         ));
         state.set_pointer(HindsightPointer::new(
             "sig-2".to_string(),
-            MemoryLayer::Team
+            MemoryLayer::Team,
         ));
         state.set_pointer(HindsightPointer::new(
             "sig-3".to_string(),
-            MemoryLayer::User
+            MemoryLayer::User,
         ));
 
         let user_ptrs = state.get_pointers_by_layer(MemoryLayer::User);
@@ -765,7 +765,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "source".to_string(),
-            50
+            50,
         );
 
         let json = serde_json::to_string(&ptr).unwrap();

@@ -3,7 +3,7 @@
 use super::factory::DatabricksConfig;
 use super::{
     BackendCapabilities, BackendError, DeleteResult, DistanceMetric, HealthStatus, SearchQuery,
-    SearchResult, UpsertResult, VectorBackend, VectorRecord
+    SearchResult, UpsertResult, VectorBackend, VectorRecord,
 };
 use async_trait::async_trait;
 use reqwest::Client;
@@ -13,13 +13,13 @@ use std::time::Instant;
 
 pub struct DatabricksBackend {
     client: Client,
-    config: DatabricksConfig
+    config: DatabricksConfig,
 }
 
 #[derive(Debug, Serialize)]
 struct UpsertRequest {
     index_name: String,
-    inputs_json: String
+    inputs_json: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -27,7 +27,7 @@ struct VectorInput {
     id: String,
     vector: Vec<f32>,
     #[serde(flatten)]
-    metadata: HashMap<String, serde_json::Value>
+    metadata: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -37,32 +37,32 @@ struct QueryRequest {
     columns: Vec<String>,
     num_results: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
-    filters_json: Option<String>
+    filters_json: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct QueryResponse {
-    result: Option<QueryResult>
+    result: Option<QueryResult>,
 }
 
 #[derive(Debug, Deserialize)]
 struct QueryResult {
     data_array: Option<Vec<Vec<serde_json::Value>>>,
     #[allow(dead_code)]
-    row_count: Option<usize>
+    row_count: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
 struct DeleteRequest {
     index_name: String,
-    primary_keys: String
+    primary_keys: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct DeleteResponse {
     num_deleted: Option<usize>,
     #[allow(dead_code)]
-    status: Option<String>
+    status: Option<String>,
 }
 
 impl DatabricksBackend {
@@ -94,7 +94,7 @@ impl DatabricksBackend {
 
         if resp.status().as_u16() == 401 || resp.status().as_u16() == 403 {
             return Err(BackendError::AuthenticationFailed(
-                "Invalid Databricks token".into()
+                "Invalid Databricks token".into(),
             ));
         }
 
@@ -140,9 +140,9 @@ impl VectorBackend for DatabricksBackend {
             }
             Ok(resp) => Ok(HealthStatus::unhealthy(
                 "databricks",
-                format!("HTTP {}", resp.status())
+                format!("HTTP {}", resp.status()),
             )),
-            Err(e) => Ok(HealthStatus::unhealthy("databricks", e.to_string()))
+            Err(e) => Ok(HealthStatus::unhealthy("databricks", e.to_string())),
         }
     }
 
@@ -155,14 +155,14 @@ impl VectorBackend for DatabricksBackend {
             supports_namespaces: true,
             distance_metrics: vec![DistanceMetric::Cosine, DistanceMetric::Euclidean],
             max_batch_size: 1000,
-            supports_delete_by_filter: true
+            supports_delete_by_filter: true,
         }
     }
 
     async fn upsert(
         &self,
         tenant_id: &str,
-        vectors: Vec<VectorRecord>
+        vectors: Vec<VectorRecord>,
     ) -> Result<UpsertResult, BackendError> {
         let url = format!(
             "{}/api/2.0/vector-search/indexes/{}/upsert-data",
@@ -176,7 +176,7 @@ impl VectorBackend for DatabricksBackend {
             .map(|r| VectorInput {
                 id: r.id,
                 vector: r.vector,
-                metadata: r.metadata
+                metadata: r.metadata,
             })
             .collect();
 
@@ -185,7 +185,7 @@ impl VectorBackend for DatabricksBackend {
 
         let request = UpsertRequest {
             index_name: self.index_name(tenant_id),
-            inputs_json
+            inputs_json,
         };
 
         let resp = self
@@ -203,7 +203,7 @@ impl VectorBackend for DatabricksBackend {
 
             if status.as_u16() == 429 {
                 return Err(BackendError::RateLimited {
-                    retry_after_ms: 5000
+                    retry_after_ms: 5000,
                 });
             }
 
@@ -219,7 +219,7 @@ impl VectorBackend for DatabricksBackend {
     async fn search(
         &self,
         tenant_id: &str,
-        query: SearchQuery
+        query: SearchQuery,
     ) -> Result<Vec<SearchResult>, BackendError> {
         let url = format!(
             "{}/api/2.0/vector-search/indexes/{}/query",
@@ -230,7 +230,7 @@ impl VectorBackend for DatabricksBackend {
         let filters_json = if !query.filters.is_empty() {
             Some(
                 serde_json::to_string(&query.filters)
-                    .map_err(|e| BackendError::Serialization(e.to_string()))?
+                    .map_err(|e| BackendError::Serialization(e.to_string()))?,
             )
         } else {
             None
@@ -241,7 +241,7 @@ impl VectorBackend for DatabricksBackend {
             query_vector: query.vector,
             columns: vec!["id".to_string(), "vector".to_string()],
             num_results: query.limit,
-            filters_json
+            filters_json,
         };
 
         let resp = self
@@ -259,7 +259,7 @@ impl VectorBackend for DatabricksBackend {
 
             if status.as_u16() == 429 {
                 return Err(BackendError::RateLimited {
-                    retry_after_ms: 5000
+                    retry_after_ms: 5000,
                 });
             }
 
@@ -314,7 +314,7 @@ impl VectorBackend for DatabricksBackend {
                     id,
                     score,
                     vector,
-                    metadata
+                    metadata,
                 })
             })
             .collect();
@@ -325,7 +325,7 @@ impl VectorBackend for DatabricksBackend {
     async fn delete(
         &self,
         tenant_id: &str,
-        ids: Vec<String>
+        ids: Vec<String>,
     ) -> Result<DeleteResult, BackendError> {
         let url = format!(
             "{}/api/2.0/vector-search/indexes/{}/delete-data",
@@ -339,7 +339,7 @@ impl VectorBackend for DatabricksBackend {
 
         let request = DeleteRequest {
             index_name: self.index_name(tenant_id),
-            primary_keys
+            primary_keys,
         };
 
         let resp = self
@@ -357,7 +357,7 @@ impl VectorBackend for DatabricksBackend {
 
             if status.as_u16() == 429 {
                 return Err(BackendError::RateLimited {
-                    retry_after_ms: 5000
+                    retry_after_ms: 5000,
                 });
             }
 
@@ -449,7 +449,7 @@ impl VectorBackend for DatabricksBackend {
                 return Ok(Some(VectorRecord {
                     id,
                     vector,
-                    metadata
+                    metadata,
                 }));
             }
         }
@@ -472,7 +472,7 @@ mod tests {
             workspace_url: "https://test.cloud.databricks.com".into(),
             token: "test-token".into(),
             catalog: "main".into(),
-            schema: "aeterna".into()
+            schema: "aeterna".into(),
         };
 
         let client = Client::new();
@@ -489,7 +489,7 @@ mod tests {
         let input = VectorInput {
             id: "test-id".to_string(),
             vector: vec![0.1, 0.2, 0.3],
-            metadata: HashMap::new()
+            metadata: HashMap::new(),
         };
 
         let json = serde_json::to_string(&input).unwrap();
@@ -504,7 +504,7 @@ mod tests {
             query_vector: vec![0.1, 0.2],
             columns: vec!["id".to_string()],
             num_results: 10,
-            filters_json: None
+            filters_json: None,
         };
 
         let json = serde_json::to_string(&request).unwrap();

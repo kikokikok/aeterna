@@ -3,7 +3,7 @@
 use super::factory::WeaviateConfig;
 use super::{
     BackendCapabilities, BackendError, DeleteResult, DistanceMetric, HealthStatus, SearchQuery,
-    SearchResult, UpsertResult, VectorBackend, VectorRecord
+    SearchResult, UpsertResult, VectorBackend, VectorRecord,
 };
 use async_trait::async_trait;
 use reqwest::Client;
@@ -13,12 +13,12 @@ use std::time::Instant;
 
 pub struct WeaviateBackend {
     client: Client,
-    config: WeaviateConfig
+    config: WeaviateConfig,
 }
 
 #[derive(Debug, Serialize)]
 struct BatchRequest {
-    objects: Vec<WeaviateObject>
+    objects: Vec<WeaviateObject>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -28,31 +28,31 @@ struct WeaviateObject {
     vector: Vec<f32>,
     properties: HashMap<String, serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tenant: Option<String>
+    tenant: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct GraphQLQuery {
-    query: String
+    query: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct GraphQLResponse {
     data: Option<GraphQLData>,
-    errors: Option<Vec<GraphQLError>>
+    errors: Option<Vec<GraphQLError>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct GraphQLData {
     #[serde(rename = "Get")]
-    get: Option<HashMap<String, Vec<GraphQLObject>>>
+    get: Option<HashMap<String, Vec<GraphQLObject>>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct GraphQLObject {
     _additional: GraphQLAdditional,
     #[serde(flatten)]
-    properties: HashMap<String, serde_json::Value>
+    properties: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,18 +60,18 @@ struct GraphQLAdditional {
     id: String,
     distance: Option<f32>,
     certainty: Option<f32>,
-    vector: Option<Vec<f32>>
+    vector: Option<Vec<f32>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct GraphQLError {
-    message: String
+    message: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 struct ReadyResponse {
-    status: String
+    status: String,
 }
 
 impl WeaviateBackend {
@@ -81,7 +81,7 @@ impl WeaviateBackend {
             headers.insert(
                 "Authorization",
                 reqwest::header::HeaderValue::from_str(&format!("Bearer {}", api_key))
-                    .map_err(|e| BackendError::Configuration(e.to_string()))?
+                    .map_err(|e| BackendError::Configuration(e.to_string()))?,
             );
         }
 
@@ -149,7 +149,7 @@ impl WeaviateBackend {
                     body
                 )))
             }
-            Err(e) => Err(BackendError::ConnectionFailed(e.to_string()))
+            Err(e) => Err(BackendError::ConnectionFailed(e.to_string())),
         }
     }
 
@@ -182,9 +182,9 @@ impl VectorBackend for WeaviateBackend {
             }
             Ok(resp) => Ok(HealthStatus::unhealthy(
                 "weaviate",
-                format!("HTTP {}", resp.status())
+                format!("HTTP {}", resp.status()),
             )),
-            Err(e) => Ok(HealthStatus::unhealthy("weaviate", e.to_string()))
+            Err(e) => Ok(HealthStatus::unhealthy("weaviate", e.to_string())),
         }
     }
 
@@ -201,14 +201,14 @@ impl VectorBackend for WeaviateBackend {
                 DistanceMetric::DotProduct,
             ],
             max_batch_size: 100,
-            supports_delete_by_filter: true
+            supports_delete_by_filter: true,
         }
     }
 
     async fn upsert(
         &self,
         tenant_id: &str,
-        vectors: Vec<VectorRecord>
+        vectors: Vec<VectorRecord>,
     ) -> Result<UpsertResult, BackendError> {
         self.ensure_tenant(tenant_id).await?;
 
@@ -221,7 +221,7 @@ impl VectorBackend for WeaviateBackend {
                 let mut properties = HashMap::new();
                 properties.insert(
                     "metadata_json".to_string(),
-                    serde_json::json!(serde_json::to_string(&r.metadata).unwrap_or_default())
+                    serde_json::json!(serde_json::to_string(&r.metadata).unwrap_or_default()),
                 );
 
                 WeaviateObject {
@@ -229,7 +229,7 @@ impl VectorBackend for WeaviateBackend {
                     id: r.id,
                     vector: r.vector,
                     properties,
-                    tenant: Some(tenant_id.to_string())
+                    tenant: Some(tenant_id.to_string()),
                 }
             })
             .collect();
@@ -255,7 +255,7 @@ impl VectorBackend for WeaviateBackend {
     async fn search(
         &self,
         tenant_id: &str,
-        query: SearchQuery
+        query: SearchQuery,
     ) -> Result<Vec<SearchResult>, BackendError> {
         let url = format!("{}/v1/graphql", self.config.url);
 
@@ -293,7 +293,7 @@ impl VectorBackend for WeaviateBackend {
         );
 
         let request = GraphQLQuery {
-            query: graphql_query
+            query: graphql_query,
         };
 
         let resp = self
@@ -321,7 +321,7 @@ impl VectorBackend for WeaviateBackend {
                         .iter()
                         .map(|e| e.message.clone())
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join(", "),
                 ));
             }
         }
@@ -353,7 +353,7 @@ impl VectorBackend for WeaviateBackend {
                     id: obj._additional.id,
                     score,
                     vector: obj._additional.vector,
-                    metadata
+                    metadata,
                 }
             })
             .collect())
@@ -362,7 +362,7 @@ impl VectorBackend for WeaviateBackend {
     async fn delete(
         &self,
         tenant_id: &str,
-        ids: Vec<String>
+        ids: Vec<String>,
     ) -> Result<DeleteResult, BackendError> {
         let count = ids.len();
 
@@ -415,7 +415,7 @@ impl VectorBackend for WeaviateBackend {
         Ok(Some(VectorRecord {
             id: obj.id,
             vector: obj.vector,
-            metadata
+            metadata,
         }))
     }
 

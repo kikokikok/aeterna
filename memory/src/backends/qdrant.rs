@@ -1,7 +1,7 @@
 use super::factory::QdrantConfig;
 use super::{
     BackendCapabilities, BackendError, DeleteResult, HealthStatus, SearchQuery, SearchResult,
-    UpsertResult, VectorBackend, VectorRecord
+    UpsertResult, VectorBackend, VectorRecord,
 };
 use async_trait::async_trait;
 use qdrant_client::{
@@ -9,8 +9,8 @@ use qdrant_client::{
     qdrant::{
         Condition, CreateCollectionBuilder, Distance, Filter, GetPointsBuilder, PointId,
         PointStruct, SearchPointsBuilder, Value as QdrantValue, VectorParams, VectorsConfig,
-        point_id::PointIdOptions, vectors_config::Config
-    }
+        point_id::PointIdOptions, vectors_config::Config,
+    },
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -19,13 +19,13 @@ use std::time::Instant;
 pub struct QdrantBackend {
     client: Arc<Qdrant>,
     config: QdrantConfig,
-    embedding_dimension: usize
+    embedding_dimension: usize,
 }
 
 impl QdrantBackend {
     pub async fn new(
         config: QdrantConfig,
-        embedding_dimension: usize
+        embedding_dimension: usize,
     ) -> Result<Self, BackendError> {
         let mut builder = Qdrant::from_url(&config.url);
 
@@ -40,7 +40,7 @@ impl QdrantBackend {
         Ok(Self {
             client: Arc::new(client),
             config,
-            embedding_dimension
+            embedding_dimension,
         })
     }
 
@@ -68,7 +68,7 @@ impl QdrantBackend {
                         size: self.embedding_dimension as u64,
                         distance: Distance::Cosine.into(),
                         ..Default::default()
-                    }))
+                    })),
                 });
 
             self.client.create_collection(request).await.map_err(|e| {
@@ -99,7 +99,7 @@ impl QdrantBackend {
         PointStruct {
             id: Some(PointId::from(record.id.clone())),
             vectors: Some(record.vector.clone().into()),
-            payload
+            payload,
         }
     }
 
@@ -108,12 +108,12 @@ impl QdrantBackend {
         id: PointId,
         payload: HashMap<String, QdrantValue>,
         vectors: Option<qdrant_client::qdrant::VectorsOutput>,
-        score: Option<f32>
+        score: Option<f32>,
     ) -> VectorRecord {
         let id_str = match id.point_id_options {
             Some(PointIdOptions::Uuid(u)) => u,
             Some(PointIdOptions::Num(n)) => n.to_string(),
-            None => String::new()
+            None => String::new(),
         };
 
         let mut metadata: HashMap<String, serde_json::Value> = HashMap::new();
@@ -130,14 +130,14 @@ impl QdrantBackend {
             .and_then(|v| v.get_vector())
             .and_then(|vec| match vec {
                 qdrant_client::qdrant::vector_output::Vector::Dense(dense) => Some(dense.data),
-                _ => None
+                _ => None,
             })
             .unwrap_or_default();
 
         VectorRecord {
             id: id_str,
             vector,
-            metadata
+            metadata,
         }
     }
 }
@@ -152,7 +152,7 @@ impl VectorBackend for QdrantBackend {
                 let latency = start.elapsed().as_millis() as u64;
                 Ok(HealthStatus::healthy("qdrant").with_latency(latency))
             }
-            Err(e) => Ok(HealthStatus::unhealthy("qdrant", e.to_string()))
+            Err(e) => Ok(HealthStatus::unhealthy("qdrant", e.to_string())),
         }
     }
 
@@ -163,7 +163,7 @@ impl VectorBackend for QdrantBackend {
     async fn upsert(
         &self,
         tenant_id: &str,
-        vectors: Vec<VectorRecord>
+        vectors: Vec<VectorRecord>,
     ) -> Result<UpsertResult, BackendError> {
         self.ensure_collection(tenant_id).await?;
 
@@ -185,7 +185,7 @@ impl VectorBackend for QdrantBackend {
     async fn search(
         &self,
         tenant_id: &str,
-        query: SearchQuery
+        query: SearchQuery,
     ) -> Result<Vec<SearchResult>, BackendError> {
         self.ensure_collection(tenant_id).await?;
 
@@ -231,7 +231,7 @@ impl VectorBackend for QdrantBackend {
                     } else {
                         None
                     },
-                    metadata: record.metadata
+                    metadata: record.metadata,
                 })
             })
             .collect())
@@ -240,7 +240,7 @@ impl VectorBackend for QdrantBackend {
     async fn delete(
         &self,
         tenant_id: &str,
-        ids: Vec<String>
+        ids: Vec<String>,
     ) -> Result<DeleteResult, BackendError> {
         self.ensure_collection(tenant_id).await?;
 
@@ -294,13 +294,13 @@ mod tests {
         let config = QdrantConfig {
             url: "http://localhost:6334".to_string(),
             api_key: None,
-            collection_prefix: "aeterna".to_string()
+            collection_prefix: "aeterna".to_string(),
         };
 
         let backend = QdrantBackend {
             client: Arc::new(Qdrant::from_url("http://localhost:6334").build().unwrap()),
             config,
-            embedding_dimension: 1536
+            embedding_dimension: 1536,
         };
 
         assert_eq!(backend.collection_name("tenant-123"), "aeterna_tenant-123");
@@ -312,7 +312,7 @@ mod tests {
         let backend = QdrantBackend {
             client: Arc::new(Qdrant::from_url("http://localhost:6334").build().unwrap()),
             config,
-            embedding_dimension: 3
+            embedding_dimension: 3,
         };
 
         let mut metadata = HashMap::new();
