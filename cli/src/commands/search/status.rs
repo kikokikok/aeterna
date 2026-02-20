@@ -35,15 +35,15 @@ pub async fn handle(args: StatusArgs) -> anyhow::Result<()> {
 
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            
+
             // Clear screen in watch mode
             if args.watch && !args.json {
                 print!("\x1B[2J\x1B[1;1H"); // ANSI clear screen
                 println!("Code Search Status (watching, Ctrl+C to exit)\n");
             }
-            
+
             print!("{}", stdout);
-            
+
             if args.watch {
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
             } else {
