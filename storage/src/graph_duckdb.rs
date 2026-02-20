@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use duckdb::{Connection, params};
+use duckdb::{Config, Connection, params};
 use mk_core::types::TenantContext;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -630,11 +630,17 @@ impl DuckDbGraphStore {
     pub fn new(config: DuckDbGraphConfig) -> Result<Self, GraphError> {
         info!("Initializing DuckDB graph store");
 
+        let db_config = Config::default()
+            .enable_autoload_extension(false)
+            .map_err(|e| GraphError::DuckDb(e))?;
+
         let conn = if config.path == ":memory:" {
-            Connection::open_in_memory()?
+            Connection::open_in_memory_with_flags(db_config)?
         } else {
-            Connection::open(Path::new(&config.path))?
+            Connection::open_with_flags(Path::new(&config.path), db_config)?
         };
+
+        let _ = conn.execute_batch("LOAD json;");
 
         let store = Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -697,7 +703,7 @@ impl DuckDbGraphStore {
             CREATE TABLE IF NOT EXISTS memory_nodes (
                 id VARCHAR PRIMARY KEY,
                 label VARCHAR NOT NULL,
-                properties JSON,
+                properties VARCHAR,
                 tenant_id VARCHAR NOT NULL,
                 memory_id VARCHAR,
                 created_at TIMESTAMP DEFAULT (now()),
@@ -718,7 +724,7 @@ impl DuckDbGraphStore {
                 source_id VARCHAR NOT NULL,
                 target_id VARCHAR NOT NULL,
                 relation VARCHAR NOT NULL,
-                properties JSON,
+                properties VARCHAR,
                 tenant_id VARCHAR NOT NULL,
                 weight DOUBLE DEFAULT 1.0,
                 created_at TIMESTAMP DEFAULT (now()),
@@ -737,7 +743,7 @@ impl DuckDbGraphStore {
                 id VARCHAR PRIMARY KEY,
                 name VARCHAR NOT NULL,
                 entity_type VARCHAR NOT NULL,
-                properties JSON,
+                properties VARCHAR,
                 tenant_id VARCHAR NOT NULL,
                 created_at TIMESTAMP DEFAULT (now()),
                 deleted_at TIMESTAMP
@@ -756,7 +762,7 @@ impl DuckDbGraphStore {
                 source_entity_id VARCHAR NOT NULL,
                 target_entity_id VARCHAR NOT NULL,
                 relation VARCHAR NOT NULL,
-                properties JSON,
+                properties VARCHAR,
                 tenant_id VARCHAR NOT NULL,
                 created_at TIMESTAMP DEFAULT (now()),
                 deleted_at TIMESTAMP
