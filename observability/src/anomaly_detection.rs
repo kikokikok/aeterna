@@ -2,7 +2,6 @@
 ///!
 ///! Statistical anomaly detection for system metrics.
 ///! Detects unusual patterns in latency, error rates, and resource usage.
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
@@ -56,16 +55,16 @@ pub struct Anomaly {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AnomalyType {
-    Spike,      // Value significantly above normal
-    Drop,       // Value significantly below normal
-    Sustained,  // Value stays abnormal for multiple periods
+    Spike,     // Value significantly above normal
+    Drop,      // Value significantly below normal
+    Sustained, // Value stays abnormal for multiple periods
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AnomalySeverity {
-    Low,     // 2-3 stddev
-    Medium,  // 3-4 stddev
-    High,    // 4+ stddev
+    Low,    // 2-3 stddev
+    Medium, // 3-4 stddev
+    High,   // 4+ stddev
 }
 
 pub struct DetectionResult {
@@ -91,15 +90,13 @@ impl AnomalyDetector {
     }
 
     /// Add a new data point and check for anomalies
-    pub fn record_and_detect(
-        &self,
-        metric_name: &str,
-        value: f64,
-    ) -> DetectionResult {
+    pub fn record_and_detect(&self, metric_name: &str, value: f64) -> DetectionResult {
         // Add data point
         {
             let mut data = self.data.write().unwrap();
-            let points = data.entry(metric_name.to_string()).or_insert_with(VecDeque::new);
+            let points = data
+                .entry(metric_name.to_string())
+                .or_insert_with(VecDeque::new);
             points.push_back(value);
 
             // Keep only window_size recent points
@@ -142,18 +139,29 @@ impl AnomalyDetector {
             last_updated: Utc::now(),
         };
 
-        self.baselines.write().unwrap().insert(metric_name.to_string(), baseline);
+        self.baselines
+            .write()
+            .unwrap()
+            .insert(metric_name.to_string(), baseline);
     }
 
     fn detect_anomaly(&self, metric_name: &str, value: f64) -> DetectionResult {
         let baselines = self.baselines.read().unwrap();
         let baseline = match baselines.get(metric_name) {
             Some(b) => b,
-            None => return DetectionResult { is_anomaly: false, anomaly: None },
+            None => {
+                return DetectionResult {
+                    is_anomaly: false,
+                    anomaly: None,
+                };
+            }
         };
 
         if baseline.stddev == 0.0 {
-            return DetectionResult { is_anomaly: false, anomaly: None };
+            return DetectionResult {
+                is_anomaly: false,
+                anomaly: None,
+            };
         }
 
         let deviation = ((value - baseline.mean) / baseline.stddev).abs();
@@ -197,7 +205,10 @@ impl AnomalyDetector {
                 anomaly: Some(anomaly),
             }
         } else {
-            DetectionResult { is_anomaly: false, anomaly: None }
+            DetectionResult {
+                is_anomaly: false,
+                anomaly: None,
+            }
         }
     }
 
@@ -216,8 +227,8 @@ impl AnomalyDetector {
         if values.len() < 2 {
             return 0.0;
         }
-        let variance: f64 = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>()
-            / (values.len() - 1) as f64;
+        let variance: f64 =
+            values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (values.len() - 1) as f64;
         variance.sqrt()
     }
 }
@@ -267,7 +278,7 @@ mod tests {
         let baseline = detector.get_baseline("test_metric");
         assert!(baseline.is_some());
         let baseline = baseline.unwrap();
-        
+
         assert!(baseline.mean > 100.0 && baseline.mean < 120.0);
         assert!(baseline.stddev > 0.0);
     }
