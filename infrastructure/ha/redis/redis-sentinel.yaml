@@ -1,0 +1,357 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aeterna-redis
+  labels:
+    app.kubernetes.io/part-of: aeterna
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: aeterna-redis
+data:
+  redis.conf: |
+    bind 0.0.0.0
+    port 0
+    tls-port 6379
+    tls-cert-file /etc/redis/tls/tls.crt
+    tls-key-file /etc/redis/tls/tls.key
+    tls-ca-cert-file /etc/redis/tls/ca.crt
+    tls-replication yes
+    requirepass ${REDIS_PASSWORD}
+    masterauth ${REDIS_PASSWORD}
+    maxmemory 4gb
+    maxmemory-policy allkeys-lru
+    appendonly yes
+    appendfsync everysec
+    save 900 1
+    save 300 10
+    save 60 10000
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+    replica-read-only yes
+    repl-diskless-sync yes
+    repl-diskless-sync-delay 5
+    min-replicas-to-write 1
+    min-replicas-max-lag 10
+    tcp-keepalive 300
+    timeout 0
+    lfu-log-factor 10
+    lfu-decay-time 1
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+    latency-monitor-threshold 100
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel-config
+  namespace: aeterna-redis
+data:
+  sentinel.conf: |
+    port 0
+    tls-port 26379
+    tls-cert-file /etc/redis/tls/tls.crt
+    tls-key-file /etc/redis/tls/tls.key
+    tls-ca-cert-file /etc/redis/tls/ca.crt
+    tls-replication yes
+    sentinel monitor aeterna-master redis-0.redis-headless.aeterna-redis.svc.cluster.local 6379 2
+    sentinel auth-pass aeterna-master ${REDIS_PASSWORD}
+    sentinel down-after-milliseconds aeterna-master 5000
+    sentinel failover-timeout aeterna-master 30000
+    sentinel parallel-syncs aeterna-master 1
+    sentinel resolve-hostnames yes
+    sentinel announce-hostnames yes
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  namespace: aeterna-redis
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: aeterna
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: aeterna-redis
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: aeterna
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: redis
+    role: master
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel
+  namespace: aeterna-redis
+  labels:
+    app.kubernetes.io/name: redis-sentinel
+    app.kubernetes.io/part-of: aeterna
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: redis-sentinel
+  ports:
+    - name: sentinel
+      port: 26379
+      targetPort: 26379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: aeterna-redis
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: aeterna
+spec:
+  serviceName: redis-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/part-of: aeterna
+    spec:
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: redis
+              topologyKey: topology.kubernetes.io/zone
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      initContainers:
+        - name: init-redis
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              cp /etc/redis-config/redis.conf /etc/redis/redis.conf
+              HOSTNAME=$(hostname)
+              if [ "$HOSTNAME" != "redis-0" ]; then
+                echo "replicaof redis-0.redis-headless.aeterna-redis.svc.cluster.local 6379" >> /etc/redis/redis.conf
+              fi
+          volumeMounts:
+            - name: redis-config-vol
+              mountPath: /etc/redis-config
+            - name: redis-runtime-config
+              mountPath: /etc/redis
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+              name: redis
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: password
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-runtime-config
+              mountPath: /etc/redis
+            - name: redis-tls
+              mountPath: /etc/redis/tls
+              readOnly: true
+          resources:
+            requests:
+              cpu: 500m
+              memory: 4Gi
+            limits:
+              cpu: "2"
+              memory: 8Gi
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli --tls --cert /etc/redis/tls/tls.crt --key /etc/redis/tls/tls.key --cacert /etc/redis/tls/ca.crt -a "$REDIS_PASSWORD" ping | grep -q PONG
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli --tls --cert /etc/redis/tls/tls.crt --key /etc/redis/tls/tls.key --cacert /etc/redis/tls/ca.crt -a "$REDIS_PASSWORD" ping | grep -q PONG
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+      volumes:
+        - name: redis-config-vol
+          configMap:
+            name: redis-config
+        - name: redis-runtime-config
+          emptyDir: {}
+        - name: redis-tls
+          secret:
+            secretName: redis-tls
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3-encrypted
+        resources:
+          requests:
+            storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-sentinel
+  namespace: aeterna-redis
+  labels:
+    app.kubernetes.io/name: redis-sentinel
+    app.kubernetes.io/part-of: aeterna
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis-sentinel
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis-sentinel
+        app.kubernetes.io/part-of: aeterna
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: redis-sentinel
+              topologyKey: topology.kubernetes.io/zone
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      initContainers:
+        - name: init-sentinel
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              cp /etc/sentinel-config/sentinel.conf /etc/redis/sentinel.conf
+              chmod 0666 /etc/redis/sentinel.conf
+          volumeMounts:
+            - name: sentinel-config-vol
+              mountPath: /etc/sentinel-config
+            - name: sentinel-runtime-config
+              mountPath: /etc/redis
+      containers:
+        - name: sentinel
+          image: redis:7-alpine
+          ports:
+            - containerPort: 26379
+              name: sentinel
+          command:
+            - redis-sentinel
+            - /etc/redis/sentinel.conf
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: password
+          volumeMounts:
+            - name: sentinel-runtime-config
+              mountPath: /etc/redis
+            - name: redis-tls
+              mountPath: /etc/redis/tls
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli --tls --cert /etc/redis/tls/tls.crt --key /etc/redis/tls/tls.key --cacert /etc/redis/tls/ca.crt -p 26379 ping | grep -q PONG
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli --tls --cert /etc/redis/tls/tls.crt --key /etc/redis/tls/tls.key --cacert /etc/redis/tls/ca.crt -p 26379 ping | grep -q PONG
+            initialDelaySeconds: 15
+            periodSeconds: 15
+      volumes:
+        - name: sentinel-config-vol
+          configMap:
+            name: sentinel-config
+        - name: sentinel-runtime-config
+          emptyDir: {}
+        - name: redis-tls
+          secret:
+            secretName: redis-tls
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis-pdb
+  namespace: aeterna-redis
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis-sentinel-pdb
+  namespace: aeterna-redis
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis-sentinel
