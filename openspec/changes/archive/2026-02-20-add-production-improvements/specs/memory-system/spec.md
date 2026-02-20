@@ -107,7 +107,7 @@ The system SHALL capture significant trajectory events during agent execution.
 - **AND** extracts learnings
 - **AND** stores as procedural memory
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Memory Retrieval Performance
 
