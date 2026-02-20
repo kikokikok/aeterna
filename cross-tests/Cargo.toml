@@ -1,0 +1,20 @@
+[package]
+name = "cross-tests"
+version = "0.1.0"
+edition = "2024"
+description = "Cross-cutting integration, load, and DR tests"
+publish = false
+
+[dependencies]
+memory = { path = "../memory" }
+storage = { path = "../storage" }
+observability = { path = "../observability" }
+mk_core = { path = "../mk_core" }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tokio = { version = "1.35", features = ["full"] }
+
+[lints]
+workspace = true
