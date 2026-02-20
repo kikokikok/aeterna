@@ -1,0 +1,125 @@
+scope: aeterna-postgres
+name: "${PATRONI_NAME}"
+namespace: /aeterna/
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: "${PATRONI_NAME}.aeterna-patroni:8008"
+  authentication:
+    username: admin
+    password: "${PATRONI_RESTAPI_PASSWORD}"
+
+etcd3:
+  hosts:
+    - etcd-0.etcd-headless:2379
+    - etcd-1.etcd-headless:2379
+    - etcd-2.etcd-headless:2379
+  protocol: https
+  cacert: /etc/etcd/tls/ca.crt
+  cert: /etc/etcd/tls/client.crt
+  key: /etc/etcd/tls/client.key
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: true
+    synchronous_node_count: 1
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        max_wal_senders: 10
+        max_replication_slots: 10
+        wal_log_hints: "on"
+        archive_mode: "on"
+        archive_command: "/scripts/backup-postgres.sh wal %p %f"
+        archive_timeout: 60
+        shared_preload_libraries: "pg_stat_statements,pgvector"
+        max_connections: 200
+        shared_buffers: "2GB"
+        effective_cache_size: "6GB"
+        work_mem: "16MB"
+        maintenance_work_mem: "512MB"
+        wal_buffers: "64MB"
+        checkpoint_completion_target: 0.9
+        random_page_cost: 1.1
+        effective_io_concurrency: 200
+        min_wal_size: "1GB"
+        max_wal_size: "4GB"
+        log_min_duration_statement: 1000
+        log_checkpoints: "on"
+        log_connections: "on"
+        log_disconnections: "on"
+        log_lock_waits: "on"
+        log_temp_files: 0
+        track_activities: "on"
+        track_counts: "on"
+        track_io_timing: "on"
+        ssl: "on"
+        ssl_cert_file: /etc/postgresql/tls/server.crt
+        ssl_key_file: /etc/postgresql/tls/server.key
+        ssl_ca_file: /etc/postgresql/tls/ca.crt
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+    - locale: en_US.UTF-8
+
+  pg_hba:
+    - local   all all                   trust
+    - host    all all 127.0.0.1/32      scram-sha-256
+    - hostssl all all 0.0.0.0/0         scram-sha-256
+    - hostssl replication replicator 0.0.0.0/0 scram-sha-256
+
+  users:
+    admin:
+      password: "${POSTGRES_ADMIN_PASSWORD}"
+      options:
+        - createrole
+        - createdb
+    replicator:
+      password: "${POSTGRES_REPLICATION_PASSWORD}"
+      options:
+        - replication
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: "${PATRONI_NAME}.aeterna-patroni:5432"
+  data_dir: /var/lib/postgresql/data
+  bin_dir: /usr/lib/postgresql/16/bin
+  authentication:
+    superuser:
+      username: postgres
+      password: "${POSTGRES_SUPERUSER_PASSWORD}"
+      sslmode: verify-ca
+      sslrootcert: /etc/postgresql/tls/ca.crt
+    replication:
+      username: replicator
+      password: "${POSTGRES_REPLICATION_PASSWORD}"
+      sslmode: verify-ca
+      sslrootcert: /etc/postgresql/tls/ca.crt
+    rewind:
+      username: postgres
+      password: "${POSTGRES_SUPERUSER_PASSWORD}"
+  pgpass: /tmp/pgpass0
+  pg_hba:
+    - local   all all                   trust
+    - host    all all 127.0.0.1/32      scram-sha-256
+    - hostssl all all 0.0.0.0/0         scram-sha-256
+    - hostssl replication replicator 0.0.0.0/0 scram-sha-256
+
+watchdog:
+  mode: automatic
+  device: /dev/watchdog
+  safety_margin: 5
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false

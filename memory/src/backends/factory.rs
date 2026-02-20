@@ -12,7 +12,7 @@ pub enum VectorBackendType {
     VertexAi,
     Databricks,
     Weaviate,
-    Mongodb
+    Mongodb,
 }
 
 impl std::fmt::Display for VectorBackendType {
@@ -24,7 +24,7 @@ impl std::fmt::Display for VectorBackendType {
             VectorBackendType::VertexAi => write!(f, "vertex_ai"),
             VectorBackendType::Databricks => write!(f, "databricks"),
             VectorBackendType::Weaviate => write!(f, "weaviate"),
-            VectorBackendType::Mongodb => write!(f, "mongodb")
+            VectorBackendType::Mongodb => write!(f, "mongodb"),
         }
     }
 }
@@ -45,7 +45,7 @@ impl std::str::FromStr for VectorBackendType {
                 "Unknown backend type: {}. Valid options: qdrant, pinecone, pgvector, vertex_ai, \
                  databricks, weaviate, mongodb",
                 s
-            )))
+            ))),
         }
     }
 }
@@ -74,7 +74,7 @@ pub struct BackendConfig {
     pub weaviate: Option<WeaviateConfig>,
 
     #[serde(default)]
-    pub mongodb: Option<MongodbConfig>
+    pub mongodb: Option<MongodbConfig>,
 }
 
 impl Default for BackendConfig {
@@ -88,7 +88,7 @@ impl Default for BackendConfig {
             vertex_ai: None,
             databricks: None,
             weaviate: None,
-            mongodb: None
+            mongodb: None,
         }
     }
 }
@@ -115,7 +115,7 @@ impl BackendConfig {
             vertex_ai: VertexAiConfig::from_env().ok(),
             databricks: DatabricksConfig::from_env().ok(),
             weaviate: WeaviateConfig::from_env().ok(),
-            mongodb: MongodbConfig::from_env().ok()
+            mongodb: MongodbConfig::from_env().ok(),
         };
 
         Ok(config)
@@ -126,7 +126,7 @@ impl BackendConfig {
 pub struct QdrantConfig {
     pub url: String,
     pub api_key: Option<String>,
-    pub collection_prefix: String
+    pub collection_prefix: String,
 }
 
 impl Default for QdrantConfig {
@@ -134,7 +134,7 @@ impl Default for QdrantConfig {
         Self {
             url: "http://localhost:6334".to_string(),
             api_key: None,
-            collection_prefix: "aeterna".to_string()
+            collection_prefix: "aeterna".to_string(),
         }
     }
 }
@@ -146,7 +146,7 @@ impl QdrantConfig {
                 .unwrap_or_else(|_| "http://localhost:6334".to_string()),
             api_key: std::env::var("QDRANT_API_KEY").ok(),
             collection_prefix: std::env::var("QDRANT_COLLECTION_PREFIX")
-                .unwrap_or_else(|_| "aeterna".to_string())
+                .unwrap_or_else(|_| "aeterna".to_string()),
         })
     }
 }
@@ -155,7 +155,7 @@ impl QdrantConfig {
 pub struct PineconeConfig {
     pub api_key: String,
     pub environment: String,
-    pub index_name: String
+    pub index_name: String,
 }
 
 impl PineconeConfig {
@@ -166,7 +166,7 @@ impl PineconeConfig {
             environment: std::env::var("PINECONE_ENVIRONMENT")
                 .map_err(|_| BackendError::Configuration("PINECONE_ENVIRONMENT not set".into()))?,
             index_name: std::env::var("PINECONE_INDEX_NAME")
-                .unwrap_or_else(|_| "aeterna-memories".to_string())
+                .unwrap_or_else(|_| "aeterna-memories".to_string()),
         })
     }
 }
@@ -175,7 +175,7 @@ impl PineconeConfig {
 pub struct PgvectorConfig {
     pub connection_string: String,
     pub schema: String,
-    pub table_name: String
+    pub table_name: String,
 }
 
 impl Default for PgvectorConfig {
@@ -183,7 +183,7 @@ impl Default for PgvectorConfig {
         Self {
             connection_string: "postgres://localhost/aeterna".to_string(),
             schema: "public".to_string(),
-            table_name: "vectors".to_string()
+            table_name: "vectors".to_string(),
         }
     }
 }
@@ -197,7 +197,7 @@ impl PgvectorConfig {
                     BackendError::Configuration("PGVECTOR_URL or DATABASE_URL not set".into())
                 })?,
             schema: std::env::var("PGVECTOR_SCHEMA").unwrap_or_else(|_| "public".to_string()),
-            table_name: std::env::var("PGVECTOR_TABLE").unwrap_or_else(|_| "vectors".to_string())
+            table_name: std::env::var("PGVECTOR_TABLE").unwrap_or_else(|_| "vectors".to_string()),
         })
     }
 }
@@ -207,7 +207,7 @@ pub struct VertexAiConfig {
     pub project_id: String,
     pub location: String,
     pub index_endpoint: String,
-    pub deployed_index_id: String
+    pub deployed_index_id: String,
 }
 
 impl VertexAiConfig {
@@ -222,7 +222,7 @@ impl VertexAiConfig {
             })?,
             deployed_index_id: std::env::var("VERTEX_AI_DEPLOYED_INDEX_ID").map_err(|_| {
                 BackendError::Configuration("VERTEX_AI_DEPLOYED_INDEX_ID not set".into())
-            })?
+            })?,
         })
     }
 }
@@ -232,7 +232,7 @@ pub struct DatabricksConfig {
     pub workspace_url: String,
     pub token: String,
     pub catalog: String,
-    pub schema: String
+    pub schema: String,
 }
 
 impl DatabricksConfig {
@@ -243,7 +243,7 @@ impl DatabricksConfig {
             token: std::env::var("DATABRICKS_TOKEN")
                 .map_err(|_| BackendError::Configuration("DATABRICKS_TOKEN not set".into()))?,
             catalog: std::env::var("DATABRICKS_CATALOG").unwrap_or_else(|_| "main".to_string()),
-            schema: std::env::var("DATABRICKS_SCHEMA").unwrap_or_else(|_| "aeterna".to_string())
+            schema: std::env::var("DATABRICKS_SCHEMA").unwrap_or_else(|_| "aeterna".to_string()),
         })
     }
 }
@@ -252,7 +252,7 @@ impl DatabricksConfig {
 pub struct WeaviateConfig {
     pub url: String,
     pub api_key: Option<String>,
-    pub class_name: String
+    pub class_name: String,
 }
 
 impl Default for WeaviateConfig {
@@ -260,7 +260,7 @@ impl Default for WeaviateConfig {
         Self {
             url: "http://localhost:8080".to_string(),
             api_key: None,
-            class_name: "AeternaMemory".to_string()
+            class_name: "AeternaMemory".to_string(),
         }
     }
 }
@@ -272,7 +272,7 @@ impl WeaviateConfig {
                 .unwrap_or_else(|_| "http://localhost:8080".to_string()),
             api_key: std::env::var("WEAVIATE_API_KEY").ok(),
             class_name: std::env::var("WEAVIATE_CLASS")
-                .unwrap_or_else(|_| "AeternaMemory".to_string())
+                .unwrap_or_else(|_| "AeternaMemory".to_string()),
         })
     }
 }
@@ -282,7 +282,7 @@ pub struct MongodbConfig {
     pub connection_string: String,
     pub database: String,
     pub collection: String,
-    pub index_name: String
+    pub index_name: String,
 }
 
 impl MongodbConfig {
@@ -294,7 +294,7 @@ impl MongodbConfig {
             collection: std::env::var("MONGODB_COLLECTION")
                 .unwrap_or_else(|_| "vectors".to_string()),
             index_name: std::env::var("MONGODB_VECTOR_INDEX")
-                .unwrap_or_else(|_| "vector_index".to_string())
+                .unwrap_or_else(|_| "vector_index".to_string()),
         })
     }
 }
@@ -322,7 +322,7 @@ pub async fn create_backend(config: BackendConfig) -> Result<Arc<dyn VectorBacke
             #[cfg(not(feature = "pinecone"))]
             {
                 Err(BackendError::Configuration(
-                    "Pinecone backend not enabled. Compile with --features pinecone".into()
+                    "Pinecone backend not enabled. Compile with --features pinecone".into(),
                 ))
             }
         }
@@ -334,7 +334,7 @@ pub async fn create_backend(config: BackendConfig) -> Result<Arc<dyn VectorBacke
                     .ok_or_else(|| BackendError::Configuration("pgvector config missing".into()))?;
                 let backend = super::pgvector::PgvectorBackend::new(
                     pgvector_config,
-                    config.embedding_dimension
+                    config.embedding_dimension,
                 )
                 .await?;
                 Ok(Arc::new(backend))
@@ -342,7 +342,7 @@ pub async fn create_backend(config: BackendConfig) -> Result<Arc<dyn VectorBacke
             #[cfg(not(feature = "pgvector"))]
             {
                 Err(BackendError::Configuration(
-                    "pgvector backend not enabled. Compile with --features pgvector".into()
+                    "pgvector backend not enabled. Compile with --features pgvector".into(),
                 ))
             }
         }
@@ -358,7 +358,7 @@ pub async fn create_backend(config: BackendConfig) -> Result<Arc<dyn VectorBacke
             #[cfg(not(feature = "vertex-ai"))]
             {
                 Err(BackendError::Configuration(
-                    "Vertex AI backend not enabled. Compile with --features vertex-ai".into()
+                    "Vertex AI backend not enabled. Compile with --features vertex-ai".into(),
                 ))
             }
         }
@@ -374,7 +374,7 @@ pub async fn create_backend(config: BackendConfig) -> Result<Arc<dyn VectorBacke
             #[cfg(not(feature = "databricks"))]
             {
                 Err(BackendError::Configuration(
-                    "Databricks backend not enabled. Compile with --features databricks".into()
+                    "Databricks backend not enabled. Compile with --features databricks".into(),
                 ))
             }
         }
@@ -390,7 +390,7 @@ pub async fn create_backend(config: BackendConfig) -> Result<Arc<dyn VectorBacke
             #[cfg(not(feature = "weaviate"))]
             {
                 Err(BackendError::Configuration(
-                    "Weaviate backend not enabled. Compile with --features weaviate".into()
+                    "Weaviate backend not enabled. Compile with --features weaviate".into(),
                 ))
             }
         }
@@ -406,7 +406,7 @@ pub async fn create_backend(config: BackendConfig) -> Result<Arc<dyn VectorBacke
             #[cfg(not(feature = "mongodb"))]
             {
                 Err(BackendError::Configuration(
-                    "MongoDB backend not enabled. Compile with --features mongodb".into()
+                    "MongoDB backend not enabled. Compile with --features mongodb".into(),
                 ))
             }
         }

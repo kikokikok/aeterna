@@ -12,33 +12,33 @@ pub struct TrajectoryStep {
     pub action: DecompositionAction,
     pub observation: String,
     pub reward: f32,
-    pub involved_memory_ids: Vec<String>
+    pub involved_memory_ids: Vec<String>,
 }
 
 /// Complete trajectory from RLM execution.
 pub struct RlmTrajectory {
     pub query: SearchQuery,
     pub steps: Vec<TrajectoryStep>,
-    pub total_reward: f32
+    pub total_reward: f32,
 }
 
 /// Executes RLM decomposition strategies using an LLM.
 pub struct RlmExecutor {
     llm: Arc<dyn LlmService<Error = anyhow::Error>>,
     strategy_executor: Arc<dyn ActionExecutor>,
-    config: config::RlmConfig
+    config: config::RlmConfig,
 }
 
 impl RlmExecutor {
     pub fn new(
         llm: Arc<dyn LlmService<Error = anyhow::Error>>,
         strategy_executor: Arc<dyn ActionExecutor>,
-        config: config::RlmConfig
+        config: config::RlmConfig,
     ) -> Self {
         Self {
             llm,
             strategy_executor,
-            config
+            config,
         }
     }
 
@@ -46,7 +46,7 @@ impl RlmExecutor {
     pub async fn execute(
         &self,
         query: SearchQuery,
-        tenant: &TenantContext
+        tenant: &TenantContext,
     ) -> anyhow::Result<(Vec<SearchResult>, RlmTrajectory)> {
         let start = Instant::now();
         counter!("rlm_search_requests_total").increment(1);
@@ -54,7 +54,7 @@ impl RlmExecutor {
         let mut trajectory = RlmTrajectory {
             query: query.clone(),
             steps: Vec::new(),
-            total_reward: 0.0
+            total_reward: 0.0,
         };
 
         let mut current_observation = format!("Initial query: {}", query.text);
@@ -100,7 +100,7 @@ Next decomposition action:"#,
                 action: action.clone(),
                 observation: observation.clone(),
                 reward,
-                involved_memory_ids: involved_ids
+                involved_memory_ids: involved_ids,
             });
 
             current_observation = observation;
@@ -145,9 +145,9 @@ Next decomposition action:"#,
                     "steps": trajectory.steps.len(),
                     "total_reward": trajectory.total_reward
                 }),
-                memory_id: format!("rlm-{}", uuid::Uuid::new_v4())
+                memory_id: format!("rlm-{}", uuid::Uuid::new_v4()),
             }],
-            trajectory
+            trajectory,
         ))
     }
 }
@@ -161,7 +161,7 @@ mod tests {
     use std::sync::Arc;
 
     struct MockLlm {
-        responses: std::sync::Mutex<Vec<String>>
+        responses: std::sync::Mutex<Vec<String>>,
     }
 
     #[async_trait::async_trait]
@@ -179,11 +179,11 @@ mod tests {
         async fn analyze_drift(
             &self,
             _content: &str,
-            _policies: &[mk_core::types::Policy]
+            _policies: &[mk_core::types::Policy],
         ) -> Result<ValidationResult, Self::Error> {
             Ok(ValidationResult {
                 is_valid: true,
-                violations: vec![]
+                violations: vec![],
             })
         }
     }
@@ -192,24 +192,24 @@ mod tests {
     async fn test_rlm_executor_multi_hop() {
         let action1 = DecompositionAction::SearchLayer {
             layer: mk_core::types::MemoryLayer::Project,
-            query: "query 1".to_string()
+            query: "query 1".to_string(),
         };
         let action2 = DecompositionAction::Aggregate {
             strategy: AggregationStrategy::Summary,
-            results: vec!["Step 1 done".to_string(), "Final answer".to_string()]
+            results: vec!["Step 1 done".to_string(), "Final answer".to_string()],
         };
 
         let llm = Arc::new(MockLlm {
             responses: std::sync::Mutex::new(vec![
                 serde_json::to_string(&action1).unwrap(),
                 serde_json::to_string(&action2).unwrap(),
-            ])
+            ]),
         });
         let strategy_executor = Arc::new(StrategyExecutor::new(Arc::new(
             knowledge::manager::KnowledgeManager::new(
                 Arc::new(knowledge::repository::GitRepository::new_mock()),
-                Arc::new(knowledge::governance::GovernanceEngine::new())
-            )
+                Arc::new(knowledge::governance::GovernanceEngine::new()),
+            ),
         )));
         let executor = RlmExecutor::new(llm, strategy_executor, config::RlmConfig::default());
 
@@ -221,7 +221,7 @@ mod tests {
             use std::str::FromStr;
             TenantContext::new(
                 mk_core::types::TenantId::from_str("test-tenant").unwrap(),
-                mk_core::types::UserId::from_str("test-user").unwrap()
+                mk_core::types::UserId::from_str("test-user").unwrap(),
             )
         };
 

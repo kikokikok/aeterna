@@ -326,7 +326,16 @@ impl KmsProvider for LocalKmsProvider {
     }
 
     async fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, KmsError> {
-        self.decrypt_data_key(ciphertext).await
+        for master_key in self.keys.values() {
+            return Ok(ciphertext
+                .iter()
+                .zip(master_key.iter().cycle())
+                .map(|(a, b)| a ^ b)
+                .collect());
+        }
+        Err(KmsError::OperationFailed(
+            "Failed to decrypt data key".to_string(),
+        ))
     }
 
     async fn get_key_metadata(&self, key_id: &str) -> Result<KmsKeyMetadata, KmsError> {

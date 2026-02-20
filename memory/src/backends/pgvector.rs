@@ -3,7 +3,7 @@
 use super::factory::PgvectorConfig;
 use super::{
     BackendCapabilities, BackendError, DeleteResult, HealthStatus, SearchQuery, SearchResult,
-    UpsertResult, VectorBackend, VectorRecord
+    UpsertResult, VectorBackend, VectorRecord,
 };
 use async_trait::async_trait;
 use sqlx::{PgPool, Row, postgres::PgPoolOptions};
@@ -13,13 +13,13 @@ use std::time::Instant;
 pub struct PgvectorBackend {
     pool: PgPool,
     config: PgvectorConfig,
-    embedding_dimension: usize
+    embedding_dimension: usize,
 }
 
 impl PgvectorBackend {
     pub async fn new(
         config: PgvectorConfig,
-        embedding_dimension: usize
+        embedding_dimension: usize,
     ) -> Result<Self, BackendError> {
         let pool = PgPoolOptions::new()
             .max_connections(10)
@@ -30,7 +30,7 @@ impl PgvectorBackend {
         let backend = Self {
             pool,
             config,
-            embedding_dimension
+            embedding_dimension,
         };
 
         backend.ensure_extension().await?;
@@ -103,7 +103,7 @@ impl VectorBackend for PgvectorBackend {
                 let latency = start.elapsed().as_millis() as u64;
                 Ok(HealthStatus::healthy("pgvector").with_latency(latency))
             }
-            Err(e) => Ok(HealthStatus::unhealthy("pgvector", e.to_string()))
+            Err(e) => Ok(HealthStatus::unhealthy("pgvector", e.to_string())),
         }
     }
 
@@ -114,7 +114,7 @@ impl VectorBackend for PgvectorBackend {
     async fn upsert(
         &self,
         tenant_id: &str,
-        vectors: Vec<VectorRecord>
+        vectors: Vec<VectorRecord>,
     ) -> Result<UpsertResult, BackendError> {
         let mut count = 0;
         let mut failed_ids = Vec::new();
@@ -155,14 +155,14 @@ impl VectorBackend for PgvectorBackend {
 
         Ok(UpsertResult {
             upserted_count: count,
-            failed_ids
+            failed_ids,
         })
     }
 
     async fn search(
         &self,
         tenant_id: &str,
-        query: SearchQuery
+        query: SearchQuery,
     ) -> Result<Vec<SearchResult>, BackendError> {
         let vector_str = Self::vector_to_pgvector(&query.vector);
 
@@ -225,7 +225,7 @@ impl VectorBackend for PgvectorBackend {
                 } else {
                     None
                 },
-                metadata: metadata_map
+                metadata: metadata_map,
             });
         }
 
@@ -235,7 +235,7 @@ impl VectorBackend for PgvectorBackend {
     async fn delete(
         &self,
         tenant_id: &str,
-        ids: Vec<String>
+        ids: Vec<String>,
     ) -> Result<DeleteResult, BackendError> {
         if ids.is_empty() {
             return Ok(DeleteResult::new(0));
@@ -297,7 +297,7 @@ impl VectorBackend for PgvectorBackend {
             VectorRecord {
                 id,
                 vector: Self::pgvector_to_vector(&vector_text),
-                metadata: metadata_map
+                metadata: metadata_map,
             }
         }))
     }

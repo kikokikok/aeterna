@@ -188,7 +188,7 @@ pub use factory::{BackendConfig, VectorBackendType, create_backend};
 pub use observability::{CircuitBreaker, InstrumentedBackend, wrap_with_instrumentation};
 pub use types::{
     BackendCapabilities, DeleteResult, DistanceMetric, HealthStatus, SearchQuery, SearchResult,
-    UpsertResult, VectorRecord
+    UpsertResult, VectorRecord,
 };
 
 use async_trait::async_trait;
@@ -254,7 +254,7 @@ pub trait VectorBackend: Send + Sync {
     async fn upsert(
         &self,
         tenant_id: &str,
-        vectors: Vec<VectorRecord>
+        vectors: Vec<VectorRecord>,
     ) -> Result<UpsertResult, BackendError>;
 
     /// Performs semantic vector search.
@@ -268,7 +268,7 @@ pub trait VectorBackend: Send + Sync {
     async fn search(
         &self,
         tenant_id: &str,
-        query: SearchQuery
+        query: SearchQuery,
     ) -> Result<Vec<SearchResult>, BackendError>;
 
     /// Deletes vectors by their IDs.

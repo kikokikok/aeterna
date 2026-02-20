@@ -236,7 +236,7 @@ impl EncryptionManager {
     /// Check if a key should be rotated based on age
     pub fn should_rotate_key(&self, encrypted: &EncryptedData) -> bool {
         let age = chrono::Utc::now() - encrypted.encrypted_at;
-        age.num_days() > self.config.key_rotation_days as i64
+        age.num_days() >= self.config.key_rotation_days as i64
     }
 
     /// Re-encrypt data with the active key (for key rotation)

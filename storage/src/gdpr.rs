@@ -1,7 +1,7 @@
 /// GDPR Compliance Module
 ///
 /// This module provides functionality to comply with GDPR requirements:
-/// - Right to be forgotten (data anonymization)
+/// - Right to be forgotten (hard deletion across PostgreSQL + Redis)
 /// - Data export (data portability)
 /// - Consent management
 /// - Audit trail for data access
@@ -28,6 +28,22 @@ pub enum GdprError {
 
     #[error("Consent error: {0}")]
     ConsentError(String),
+
+    #[error("Cache deletion error: {0}")]
+    CacheDeletion(String),
+}
+
+/// Result of a GDPR right-to-be-forgotten deletion
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GdprDeleteResult {
+    pub user_id: String,
+    pub tenant_id: String,
+    pub deleted_at: DateTime<Utc>,
+    /// Memory IDs deleted from PostgreSQL — callers must also delete these from Qdrant
+    pub deleted_memory_ids: Vec<String>,
+    pub deleted_memory_count: u64,
+    pub deleted_knowledge_count: u64,
+    pub deleted_cache_key_count: u64,
 }
 
 /// GDPR consent record
@@ -96,6 +112,15 @@ impl Default for AnonymizationStrategy {
 /// GDPR operations trait
 #[async_trait]
 pub trait GdprOperations: Send + Sync {
+    /// Hard-delete all user data (right-to-be-forgotten) from PostgreSQL and Redis.
+    /// Returns the deleted memory IDs so callers can also remove them from Qdrant.
+    async fn delete_user_data(
+        &self,
+        tenant_id: &str,
+        user_id: &str,
+        redis: &redis::aio::ConnectionManager,
+    ) -> Result<GdprDeleteResult, GdprError>;
+
     /// Export all user data in JSON format
     async fn export_user_data(
         &self,
@@ -221,6 +246,77 @@ impl PostgresGdprStorage {
         Ok(())
     }
 
+    async fn delete_redis_user_keys(
+        redis: &redis::aio::ConnectionManager,
+        tenant_id: &str,
+        user_id: &str,
+    ) -> Result<u64, GdprError> {
+        let mut conn = redis.clone();
+        let pattern = format!("{}:*:{}:*", tenant_id, user_id);
+        let mut cursor: u64 = 0;
+        let mut deleted: u64 = 0;
+
+        loop {
+            let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(&pattern)
+                .arg("COUNT")
+                .arg(100u64)
+                .query_async(&mut conn)
+                .await
+                .map_err(|e| GdprError::CacheDeletion(format!("SCAN failed: {e}")))?;
+
+            if !keys.is_empty() {
+                let count = keys.len() as u64;
+                redis::cmd("DEL")
+                    .arg(&keys)
+                    .query_async::<()>(&mut conn)
+                    .await
+                    .map_err(|e| GdprError::CacheDeletion(format!("DEL failed: {e}")))?;
+                deleted += count;
+            }
+
+            cursor = next_cursor;
+            if cursor == 0 {
+                break;
+            }
+        }
+
+        let emb_pattern = format!("{}:emb:*", tenant_id);
+        cursor = 0;
+        loop {
+            let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(&emb_pattern)
+                .arg("COUNT")
+                .arg(100u64)
+                .query_async(&mut conn)
+                .await
+                .map_err(|e| GdprError::CacheDeletion(format!("SCAN emb failed: {e}")))?;
+
+            let user_keys: Vec<String> = keys.into_iter().filter(|k| k.contains(user_id)).collect();
+
+            if !user_keys.is_empty() {
+                let count = user_keys.len() as u64;
+                redis::cmd("DEL")
+                    .arg(&user_keys)
+                    .query_async::<()>(&mut conn)
+                    .await
+                    .map_err(|e| GdprError::CacheDeletion(format!("DEL emb failed: {e}")))?;
+                deleted += count;
+            }
+
+            cursor = next_cursor;
+            if cursor == 0 {
+                break;
+            }
+        }
+
+        Ok(deleted)
+    }
+
     /// Anonymize memories for a user
     async fn anonymize_memories(
         &self,
@@ -302,6 +398,89 @@ impl PostgresGdprStorage {
 
 #[async_trait]
 impl GdprOperations for PostgresGdprStorage {
+    async fn delete_user_data(
+        &self,
+        tenant_id: &str,
+        user_id: &str,
+        redis: &redis::aio::ConnectionManager,
+    ) -> Result<GdprDeleteResult, GdprError> {
+        sqlx::query("SELECT set_config('app.tenant_id', $1, true)")
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
+
+        self.log_data_access(
+            tenant_id,
+            user_id,
+            "right_to_be_forgotten",
+            "user_data",
+            Some(user_id),
+            None,
+            None,
+        )
+        .await?;
+
+        let memory_ids: Vec<String> = sqlx::query_scalar(
+            "SELECT id::text FROM memory_entries WHERE tenant_id = $1 AND user_id = $2",
+        )
+        .bind(tenant_id)
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let deleted_memory_count: u64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM memory_entries WHERE tenant_id = $1 AND user_id = $2",
+        )
+        .bind(tenant_id)
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0i64) as u64;
+
+        sqlx::query("DELETE FROM memory_entries WHERE tenant_id = $1 AND user_id = $2")
+            .bind(tenant_id)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+
+        let deleted_knowledge_count: u64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM knowledge_items WHERE tenant_id = $1 AND created_by = $2",
+        )
+        .bind(tenant_id)
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0i64) as u64;
+
+        sqlx::query("DELETE FROM knowledge_items WHERE tenant_id = $1 AND created_by = $2")
+            .bind(tenant_id)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query(
+            "UPDATE gdpr_consents SET granted = false, revoked_at = NOW() \
+             WHERE tenant_id = $1 AND user_id = $2 AND granted = true",
+        )
+        .bind(tenant_id)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+
+        let deleted_cache_key_count =
+            Self::delete_redis_user_keys(redis, tenant_id, user_id).await?;
+
+        Ok(GdprDeleteResult {
+            user_id: user_id.to_string(),
+            tenant_id: tenant_id.to_string(),
+            deleted_at: Utc::now(),
+            deleted_memory_ids: memory_ids,
+            deleted_memory_count,
+            deleted_knowledge_count,
+            deleted_cache_key_count,
+        })
+    }
+
     async fn export_user_data(
         &self,
         tenant_id: &str,
@@ -574,9 +753,6 @@ impl GdprOperations for PostgresGdprStorage {
 mod tests {
     use super::*;
 
-    // Note: These tests require a PostgreSQL database
-    // They are marked as integration tests and skipped in unit test runs
-
     #[test]
     fn test_anonymization_strategy() {
         let strategy = AnonymizationStrategy::default();
@@ -598,5 +774,34 @@ mod tests {
 
         assert_eq!(export.user_id, "user-123");
         assert_eq!(export.tenant_id, "tenant-456");
+    }
+
+    #[test]
+    fn test_gdpr_delete_result_structure() {
+        let result = GdprDeleteResult {
+            user_id: "user-123".to_string(),
+            tenant_id: "tenant-456".to_string(),
+            deleted_at: Utc::now(),
+            deleted_memory_ids: vec!["mem-1".to_string(), "mem-2".to_string()],
+            deleted_memory_count: 2,
+            deleted_knowledge_count: 1,
+            deleted_cache_key_count: 5,
+        };
+
+        assert_eq!(result.user_id, "user-123");
+        assert_eq!(result.tenant_id, "tenant-456");
+        assert_eq!(result.deleted_memory_ids.len(), 2);
+        assert_eq!(result.deleted_memory_count, 2);
+        assert_eq!(result.deleted_knowledge_count, 1);
+        assert_eq!(result.deleted_cache_key_count, 5);
+    }
+
+    #[test]
+    fn test_gdpr_error_variants() {
+        let cache_err = GdprError::CacheDeletion("SCAN failed: connection refused".to_string());
+        assert!(cache_err.to_string().contains("SCAN failed"));
+
+        let not_found = GdprError::UserNotFound("user-xyz".to_string());
+        assert!(not_found.to_string().contains("user-xyz"));
     }
 }

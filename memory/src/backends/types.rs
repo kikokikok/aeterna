@@ -5,19 +5,19 @@ use std::collections::HashMap;
 pub struct VectorRecord {
     pub id: String,
     pub vector: Vec<f32>,
-    pub metadata: HashMap<String, serde_json::Value>
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 impl VectorRecord {
     pub fn new(
         id: impl Into<String>,
         vector: Vec<f32>,
-        metadata: HashMap<String, serde_json::Value>
+        metadata: HashMap<String, serde_json::Value>,
     ) -> Self {
         Self {
             id: id.into(),
             vector,
-            metadata
+            metadata,
         }
     }
 
@@ -34,7 +34,7 @@ pub struct SearchQuery {
     pub score_threshold: Option<f32>,
     pub filters: HashMap<String, serde_json::Value>,
     pub include_vectors: bool,
-    pub include_metadata: bool
+    pub include_metadata: bool,
 }
 
 impl SearchQuery {
@@ -45,7 +45,7 @@ impl SearchQuery {
             score_threshold: None,
             filters: HashMap::new(),
             include_vectors: false,
-            include_metadata: true
+            include_metadata: true,
         }
     }
 
@@ -80,20 +80,20 @@ pub struct SearchResult {
     pub id: String,
     pub score: f32,
     pub vector: Option<Vec<f32>>,
-    pub metadata: HashMap<String, serde_json::Value>
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct UpsertResult {
     pub upserted_count: usize,
-    pub failed_ids: Vec<String>
+    pub failed_ids: Vec<String>,
 }
 
 impl UpsertResult {
     pub fn success(count: usize) -> Self {
         Self {
             upserted_count: count,
-            failed_ids: Vec::new()
+            failed_ids: Vec::new(),
         }
     }
 
@@ -105,13 +105,13 @@ impl UpsertResult {
 
 #[derive(Debug, Clone, Default)]
 pub struct DeleteResult {
-    pub deleted_count: usize
+    pub deleted_count: usize,
 }
 
 impl DeleteResult {
     pub fn new(count: usize) -> Self {
         Self {
-            deleted_count: count
+            deleted_count: count,
         }
     }
 }
@@ -120,7 +120,7 @@ impl DeleteResult {
 pub enum DistanceMetric {
     Cosine,
     Euclidean,
-    DotProduct
+    DotProduct,
 }
 
 impl Default for DistanceMetric {
@@ -138,7 +138,7 @@ pub struct BackendCapabilities {
     pub supports_namespaces: bool,
     pub distance_metrics: Vec<DistanceMetric>,
     pub max_batch_size: usize,
-    pub supports_delete_by_filter: bool
+    pub supports_delete_by_filter: bool,
 }
 
 impl Default for BackendCapabilities {
@@ -151,7 +151,7 @@ impl Default for BackendCapabilities {
             supports_namespaces: false,
             distance_metrics: vec![DistanceMetric::Cosine],
             max_batch_size: 100,
-            supports_delete_by_filter: false
+            supports_delete_by_filter: false,
         }
     }
 }
@@ -170,7 +170,7 @@ impl BackendCapabilities {
                 DistanceMetric::DotProduct,
             ],
             max_batch_size: 1000,
-            supports_delete_by_filter: true
+            supports_delete_by_filter: true,
         }
     }
 
@@ -187,7 +187,7 @@ impl BackendCapabilities {
                 DistanceMetric::DotProduct,
             ],
             max_batch_size: 100,
-            supports_delete_by_filter: true
+            supports_delete_by_filter: true,
         }
     }
 
@@ -204,7 +204,7 @@ impl BackendCapabilities {
                 DistanceMetric::DotProduct,
             ],
             max_batch_size: 1000,
-            supports_delete_by_filter: true
+            supports_delete_by_filter: true,
         }
     }
 }
@@ -214,7 +214,7 @@ pub struct HealthStatus {
     pub healthy: bool,
     pub latency_ms: Option<u64>,
     pub message: Option<String>,
-    pub backend: String
+    pub backend: String,
 }
 
 impl HealthStatus {
@@ -223,7 +223,7 @@ impl HealthStatus {
             healthy: true,
             latency_ms: None,
             message: None,
-            backend: backend.to_string()
+            backend: backend.to_string(),
         }
     }
 
@@ -232,7 +232,7 @@ impl HealthStatus {
             healthy: false,
             latency_ms: None,
             message: Some(message.into()),
-            backend: backend.to_string()
+            backend: backend.to_string(),
         }
     }
 

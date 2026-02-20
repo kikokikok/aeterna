@@ -3,20 +3,20 @@
 use super::factory::MongodbConfig;
 use super::{
     BackendCapabilities, BackendError, DeleteResult, DistanceMetric, HealthStatus, SearchQuery,
-    SearchResult, UpsertResult, VectorBackend, VectorRecord
+    SearchResult, UpsertResult, VectorBackend, VectorRecord,
 };
 use async_trait::async_trait;
 use mongodb::{
     Client, Collection,
     bson::{Bson, Document, doc},
-    options::ClientOptions
+    options::ClientOptions,
 };
 use std::collections::HashMap;
 use std::time::Instant;
 
 pub struct MongodbBackend {
     client: Client,
-    config: MongodbConfig
+    config: MongodbConfig,
 }
 
 impl MongodbBackend {
@@ -46,7 +46,7 @@ impl MongodbBackend {
 
     fn record_to_document(record: &VectorRecord) -> Document {
         let metadata_bson: Bson = serde_json::from_value::<Bson>(
-            serde_json::to_value(&record.metadata).unwrap_or(serde_json::json!({}))
+            serde_json::to_value(&record.metadata).unwrap_or(serde_json::json!({})),
         )
         .unwrap_or(Bson::Document(Document::new()));
 
@@ -85,7 +85,7 @@ impl MongodbBackend {
         Some(VectorRecord {
             id,
             vector,
-            metadata
+            metadata,
         })
     }
 
@@ -95,7 +95,7 @@ impl MongodbBackend {
             id: record.id,
             score,
             vector: Some(record.vector),
-            metadata: record.metadata
+            metadata: record.metadata,
         })
     }
 }
@@ -115,7 +115,7 @@ impl VectorBackend for MongodbBackend {
                 let latency = start.elapsed().as_millis() as u64;
                 Ok(HealthStatus::healthy("mongodb").with_latency(latency))
             }
-            Err(e) => Ok(HealthStatus::unhealthy("mongodb", e.to_string()))
+            Err(e) => Ok(HealthStatus::unhealthy("mongodb", e.to_string())),
         }
     }
 
@@ -128,14 +128,14 @@ impl VectorBackend for MongodbBackend {
             supports_namespaces: false,
             distance_metrics: vec![DistanceMetric::Cosine, DistanceMetric::Euclidean],
             max_batch_size: 100,
-            supports_delete_by_filter: true
+            supports_delete_by_filter: true,
         }
     }
 
     async fn upsert(
         &self,
         tenant_id: &str,
-        vectors: Vec<VectorRecord>
+        vectors: Vec<VectorRecord>,
     ) -> Result<UpsertResult, BackendError> {
         let collection = self.collection(tenant_id);
         let count = vectors.len();
@@ -154,14 +154,14 @@ impl VectorBackend for MongodbBackend {
 
         Ok(UpsertResult {
             upserted_count: count - failed_ids.len(),
-            failed_ids
+            failed_ids,
         })
     }
 
     async fn search(
         &self,
         tenant_id: &str,
-        query: SearchQuery
+        query: SearchQuery,
     ) -> Result<Vec<SearchResult>, BackendError> {
         let collection = self.collection(tenant_id);
 
@@ -221,7 +221,7 @@ impl VectorBackend for MongodbBackend {
     async fn delete(
         &self,
         tenant_id: &str,
-        ids: Vec<String>
+        ids: Vec<String>,
     ) -> Result<DeleteResult, BackendError> {
         let collection = self.collection(tenant_id);
 

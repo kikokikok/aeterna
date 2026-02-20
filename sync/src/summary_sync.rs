@@ -1,6 +1,6 @@
 use crate::events::{
     InvalidationReason, SummaryCreated, SummaryInvalidated, SummarySyncEvent, SummaryUpdateReason,
-    SummaryUpdated
+    SummaryUpdated,
 };
 use crate::pointer::{SummaryPointer, SummaryPointerState};
 use crate::state::SummarySyncTrigger;
@@ -11,7 +11,7 @@ pub struct SummarySyncResult {
     pub created: Vec<SummarySyncEvent>,
     pub updated: Vec<SummarySyncEvent>,
     pub invalidated: Vec<SummarySyncEvent>,
-    pub errors: Vec<SummarySyncError>
+    pub errors: Vec<SummarySyncError>,
 }
 
 impl Default for SummarySyncResult {
@@ -26,7 +26,7 @@ impl SummarySyncResult {
             created: Vec::new(),
             updated: Vec::new(),
             invalidated: Vec::new(),
-            errors: Vec::new()
+            errors: Vec::new(),
         }
     }
 
@@ -44,12 +44,12 @@ pub struct SummarySyncError {
     pub entry_id: String,
     pub layer: MemoryLayer,
     pub depth: Option<SummaryDepth>,
-    pub message: String
+    pub message: String,
 }
 
 pub struct IncrementalSummarySync {
     config_by_layer: HashMap<MemoryLayer, SummaryConfig>,
-    change_counts: HashMap<String, u32>
+    change_counts: HashMap<String, u32>,
 }
 
 impl Default for IncrementalSummarySync {
@@ -62,7 +62,7 @@ impl IncrementalSummarySync {
     pub fn new() -> Self {
         Self {
             config_by_layer: HashMap::new(),
-            change_counts: HashMap::new()
+            change_counts: HashMap::new(),
         }
     }
 
@@ -97,12 +97,12 @@ impl IncrementalSummarySync {
         layer: MemoryLayer,
         current_source_hash: &str,
         state: &SummaryPointerState,
-        now: i64
+        now: i64,
     ) -> Vec<SummarySyncTrigger> {
         let mut triggers = Vec::new();
         let config = match self.config_by_layer.get(&layer) {
             Some(c) => c,
-            None => return triggers
+            None => return triggers,
         };
 
         for depth in &config.depths {
@@ -112,7 +112,7 @@ impl IncrementalSummarySync {
                         entry_id: entry_id.to_string(),
                         layer,
                         previous_hash: ptr.source_content_hash.clone(),
-                        new_hash: current_source_hash.to_string()
+                        new_hash: current_source_hash.to_string(),
                     });
                     break;
                 }
@@ -124,7 +124,7 @@ impl IncrementalSummarySync {
                             entry_id: entry_id.to_string(),
                             layer,
                             age_seconds: age,
-                            threshold_seconds: interval
+                            threshold_seconds: interval,
                         });
                         break;
                     }
@@ -137,7 +137,7 @@ impl IncrementalSummarySync {
                             entry_id: entry_id.to_string(),
                             layer,
                             change_count: count,
-                            threshold
+                            threshold,
                         });
                         break;
                     }
@@ -145,7 +145,7 @@ impl IncrementalSummarySync {
             } else {
                 triggers.push(SummarySyncTrigger::ManualRefresh {
                     entry_id: entry_id.to_string(),
-                    layer
+                    layer,
                 });
                 break;
             }
@@ -161,7 +161,7 @@ impl IncrementalSummarySync {
         depth: SummaryDepth,
         summary: &LayerSummary,
         source_content_hash: &str,
-        state: &mut SummaryPointerState
+        state: &mut SummaryPointerState,
     ) -> Option<SummarySyncEvent> {
         let now = chrono::Utc::now().timestamp();
         let content_hash = utils::compute_content_hash(&summary.content);
@@ -187,7 +187,7 @@ impl IncrementalSummarySync {
                 depth,
                 content_hash.clone(),
                 source_content_hash.to_string(),
-                summary.token_count
+                summary.token_count,
             );
             state.set_pointer(ptr);
 
@@ -201,7 +201,7 @@ impl IncrementalSummarySync {
                 new_hash: content_hash,
                 token_count: summary.token_count,
                 updated_at: now,
-                reason
+                reason,
             }))
         } else {
             let ptr = SummaryPointer::new(
@@ -210,7 +210,7 @@ impl IncrementalSummarySync {
                 depth,
                 content_hash.clone(),
                 source_content_hash.to_string(),
-                summary.token_count
+                summary.token_count,
             );
             state.set_pointer(ptr);
 
@@ -222,7 +222,7 @@ impl IncrementalSummarySync {
                 depth,
                 content_hash,
                 token_count: summary.token_count,
-                created_at: now
+                created_at: now,
             }))
         }
     }
@@ -232,7 +232,7 @@ impl IncrementalSummarySync {
         entry_id: &str,
         layer: MemoryLayer,
         reason: InvalidationReason,
-        state: &mut SummaryPointerState
+        state: &mut SummaryPointerState,
     ) -> Option<SummarySyncEvent> {
         let count = state.mark_all_stale_for_entry(entry_id);
         if count == 0 {
@@ -248,7 +248,7 @@ impl IncrementalSummarySync {
         let source_hash = state
             .get_pointer(
                 entry_id,
-                depths.first().copied().unwrap_or(SummaryDepth::Sentence)
+                depths.first().copied().unwrap_or(SummaryDepth::Sentence),
             )
             .map(|p| p.source_content_hash.clone());
 
@@ -258,7 +258,7 @@ impl IncrementalSummarySync {
             depths,
             reason,
             invalidated_at: chrono::Utc::now().timestamp(),
-            source_content_hash: source_hash
+            source_content_hash: source_hash,
         }))
     }
 
@@ -268,7 +268,7 @@ impl IncrementalSummarySync {
         layer: MemoryLayer,
         previous_hash: &str,
         new_hash: &str,
-        state: &mut SummaryPointerState
+        state: &mut SummaryPointerState,
     ) -> Option<SummarySyncEvent> {
         let config = self.config_by_layer.get(&layer)?;
 
@@ -281,9 +281,9 @@ impl IncrementalSummarySync {
             layer,
             InvalidationReason::SourceContentChanged {
                 previous_hash: previous_hash.to_string(),
-                new_hash: new_hash.to_string()
+                new_hash: new_hash.to_string(),
             },
-            state
+            state,
         )
     }
 
@@ -292,11 +292,11 @@ impl IncrementalSummarySync {
         layer: MemoryLayer,
         source_hashes: &HashMap<String, String>,
         state: &SummaryPointerState,
-        now: i64
+        now: i64,
     ) -> Vec<String> {
         let config = match self.config_by_layer.get(&layer) {
             Some(c) => c,
-            None => return Vec::new()
+            None => return Vec::new(),
         };
 
         let mut needs_sync = Vec::new();
@@ -351,7 +351,7 @@ mod tests {
             update_on_changes: Some(10),
             skip_if_unchanged: false,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph]
+            depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph],
         }
     }
 
@@ -362,13 +362,13 @@ mod tests {
             token_count: match depth {
                 SummaryDepth::Sentence => 50,
                 SummaryDepth::Paragraph => 200,
-                SummaryDepth::Detailed => 500
+                SummaryDepth::Detailed => 500,
             },
             generated_at: chrono::Utc::now().timestamp(),
             source_hash: "source-hash".to_string(),
             content_hash: None,
             personalized: false,
-            personalization_context: None
+            personalization_context: None,
         }
     }
 
@@ -423,7 +423,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "old-source".to_string(),
-            50
+            50,
         );
         state.set_pointer(ptr);
 
@@ -432,7 +432,7 @@ mod tests {
             MemoryLayer::Project,
             "new-source",
             &state,
-            chrono::Utc::now().timestamp()
+            chrono::Utc::now().timestamp(),
         );
 
         assert_eq!(triggers.len(), 1);
@@ -450,7 +450,7 @@ mod tests {
             MemoryLayer::Project,
             "source-hash",
             &state,
-            chrono::Utc::now().timestamp()
+            chrono::Utc::now().timestamp(),
         );
 
         assert_eq!(triggers.len(), 1);
@@ -469,7 +469,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "source".to_string(),
-            50
+            50,
         );
         ptr.synced_at = chrono::Utc::now().timestamp() - 7200;
         state.set_pointer(ptr);
@@ -479,7 +479,7 @@ mod tests {
             MemoryLayer::Project,
             "source",
             &state,
-            chrono::Utc::now().timestamp()
+            chrono::Utc::now().timestamp(),
         );
 
         assert_eq!(triggers.len(), 1);
@@ -502,7 +502,7 @@ mod tests {
             SummaryDepth::Sentence,
             &summary,
             "source-hash",
-            &mut state
+            &mut state,
         );
 
         assert!(event.is_some());
@@ -522,7 +522,7 @@ mod tests {
             SummaryDepth::Sentence,
             "old-hash".to_string(),
             "old-source".to_string(),
-            40
+            40,
         );
         state.set_pointer(ptr);
 
@@ -533,7 +533,7 @@ mod tests {
             SummaryDepth::Sentence,
             &summary,
             "new-source",
-            &mut state
+            &mut state,
         );
 
         assert!(event.is_some());
@@ -555,7 +555,7 @@ mod tests {
             SummaryDepth::Sentence,
             content_hash,
             "source-hash".to_string(),
-            50
+            50,
         );
         state.set_pointer(ptr);
 
@@ -565,7 +565,7 @@ mod tests {
             SummaryDepth::Sentence,
             &summary,
             "source-hash",
-            &mut state
+            &mut state,
         );
 
         assert!(event.is_none());
@@ -583,7 +583,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash1".to_string(),
             "source".to_string(),
-            50
+            50,
         ));
         state.set_pointer(SummaryPointer::new(
             "entry-1".to_string(),
@@ -591,14 +591,14 @@ mod tests {
             SummaryDepth::Paragraph,
             "hash2".to_string(),
             "source".to_string(),
-            200
+            200,
         ));
 
         let event = sync.invalidate_summaries(
             "entry-1",
             MemoryLayer::Project,
             InvalidationReason::ManualInvalidation,
-            &mut state
+            &mut state,
         );
 
         assert!(event.is_some());
@@ -624,7 +624,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "old-source".to_string(),
-            50
+            50,
         ));
 
         let event = sync.invalidate_on_source_change(
@@ -632,7 +632,7 @@ mod tests {
             MemoryLayer::Project,
             "old-source",
             "new-source",
-            &mut state
+            &mut state,
         );
 
         assert!(event.is_some());
@@ -651,7 +651,7 @@ mod tests {
             SummaryDepth::Sentence,
             "hash".to_string(),
             "source-1".to_string(),
-            50
+            50,
         ));
 
         let mut source_hashes = HashMap::new();
@@ -663,7 +663,7 @@ mod tests {
             MemoryLayer::Project,
             &source_hashes,
             &state,
-            chrono::Utc::now().timestamp()
+            chrono::Utc::now().timestamp(),
         );
 
         assert!(needs_sync.contains(&"entry-2".to_string()));
@@ -684,7 +684,7 @@ mod tests {
                 depth: SummaryDepth::Sentence,
                 content_hash: "hash".to_string(),
                 token_count: 50,
-                created_at: 0
+                created_at: 0,
             }));
 
         assert_eq!(result.total_events(), 1);
@@ -693,7 +693,7 @@ mod tests {
             entry_id: "entry-2".to_string(),
             layer: MemoryLayer::Project,
             depth: None,
-            message: "Test error".to_string()
+            message: "Test error".to_string(),
         });
 
         assert!(result.has_errors());

@@ -8,20 +8,20 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub enum AisdkModel {
-    OpenAIGpt4o
+    OpenAIGpt4o,
 }
 
 pub struct AisdkLlmService {
     model: AisdkModel,
     api_key: Option<String>,
-    cache: Arc<RwLock<lru::LruCache<String, String>>>
+    cache: Arc<RwLock<lru::LruCache<String, String>>>,
 }
 
 impl AisdkLlmService {
     pub fn new(api_key: Option<String>, model_name: &str) -> anyhow::Result<Self> {
         let model = match model_name {
             "gpt-4o" | "openai:gpt-4o" => AisdkModel::OpenAIGpt4o,
-            _ => return Err(anyhow::anyhow!("Unsupported model: {}", model_name))
+            _ => return Err(anyhow::anyhow!("Unsupported model: {}", model_name)),
         };
 
         let cache = lru::LruCache::new(NonZeroUsize::new(100).unwrap());
@@ -29,7 +29,7 @@ impl AisdkLlmService {
         Ok(Self {
             model,
             api_key,
-            cache: Arc::new(RwLock::new(cache))
+            cache: Arc::new(RwLock::new(cache)),
         })
     }
 }
@@ -72,7 +72,7 @@ impl LlmService for AisdkLlmService {
     async fn analyze_drift(
         &self,
         content: &str,
-        policies: &[Policy]
+        policies: &[Policy],
     ) -> Result<ValidationResult, Self::Error> {
         let policies_json = serde_json::to_string_pretty(policies)?;
         let prompt = format!(

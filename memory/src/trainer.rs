@@ -66,7 +66,7 @@ pub struct R1TrainerConfig {
 
     /// Maximum weight value to prevent weights from dominating.
     /// Default: 10.0
-    pub max_weight: f32
+    pub max_weight: f32,
 }
 
 impl Default for R1TrainerConfig {
@@ -78,7 +78,7 @@ impl Default for R1TrainerConfig {
             max_trajectory_length: 100,
             baseline_decay: 0.9,
             min_weight: 0.1,
-            max_weight: 10.0
+            max_weight: 10.0,
         }
     }
 }
@@ -106,7 +106,7 @@ pub struct MemoryR1Trainer {
     /// Cumulative returns per memory for aggregation
     cumulative_returns: HashMap<String, f32>,
     /// Number of updates per memory (for averaging)
-    update_counts: HashMap<String, usize>
+    update_counts: HashMap<String, usize>,
 }
 
 impl MemoryR1Trainer {
@@ -118,7 +118,7 @@ impl MemoryR1Trainer {
     /// * `trajectories` - Shared trajectory storage from MemoryManager
     pub fn new(
         config: R1TrainerConfig,
-        trajectories: Arc<RwLock<HashMap<String, Vec<MemoryTrajectoryEvent>>>>
+        trajectories: Arc<RwLock<HashMap<String, Vec<MemoryTrajectoryEvent>>>>,
     ) -> Self {
         Self {
             config,
@@ -126,7 +126,7 @@ impl MemoryR1Trainer {
             baseline: 0.0,
             selection_weights: HashMap::new(),
             cumulative_returns: HashMap::new(),
-            update_counts: HashMap::new()
+            update_counts: HashMap::new(),
         }
     }
 
@@ -191,7 +191,7 @@ impl MemoryR1Trainer {
 
         let events = match trajectories.get(memory_id) {
             Some(events) => events,
-            None => return 0.0
+            None => return 0.0,
         };
 
         let events_to_process = if events.len() > self.config.max_trajectory_length {
@@ -244,7 +244,7 @@ impl MemoryR1Trainer {
         if memory_ids_with_rewards.len() < self.config.min_batch_size {
             return Err(TrainerError::InsufficientData(
                 memory_ids_with_rewards.len(),
-                self.config.min_batch_size
+                self.config.min_batch_size,
             ));
         }
 
@@ -296,7 +296,7 @@ impl MemoryR1Trainer {
             } else {
                 0.0
             },
-            baseline_value: self.baseline
+            baseline_value: self.baseline,
         })
     }
 
@@ -386,7 +386,7 @@ impl MemoryR1Trainer {
             baseline: self.baseline,
             selection_weights: self.selection_weights.clone(),
             cumulative_returns: self.cumulative_returns.clone(),
-            update_counts: self.update_counts.clone()
+            update_counts: self.update_counts.clone(),
         }
     }
 
@@ -409,7 +409,7 @@ pub struct TrainingMetrics {
     /// Average policy loss (negative advantage)
     pub policy_loss: f32,
     /// Current baseline value after update
-    pub baseline_value: f32
+    pub baseline_value: f32,
 }
 
 /// Serializable trainer state for persistence.
@@ -418,7 +418,7 @@ pub struct TrainerState {
     pub baseline: f32,
     pub selection_weights: HashMap<String, f32>,
     pub cumulative_returns: HashMap<String, f32>,
-    pub update_counts: HashMap<String, usize>
+    pub update_counts: HashMap<String, usize>,
 }
 
 /// Errors that can occur during training.
@@ -428,7 +428,7 @@ pub enum TrainerError {
     InsufficientData(usize, usize),
 
     #[error("Training failed: {0}")]
-    TrainingFailed(String)
+    TrainingFailed(String),
 }
 
 #[cfg(test)]
@@ -450,21 +450,21 @@ mod tests {
             score,
             reasoning: Some(format!("Test reward with score {}", score)),
             agent_id: None,
-            timestamp: chrono::Utc::now().timestamp()
+            timestamp: chrono::Utc::now().timestamp(),
         }
     }
 
     fn create_event(
         entry_id: &str,
         operation: MemoryOperation,
-        reward: Option<RewardSignal>
+        reward: Option<RewardSignal>,
     ) -> MemoryTrajectoryEvent {
         MemoryTrajectoryEvent {
             operation,
             entry_id: entry_id.to_string(),
             reward,
             reasoning: Some("Test event".to_string()),
-            timestamp: chrono::Utc::now().timestamp()
+            timestamp: chrono::Utc::now().timestamp(),
         }
     }
 
@@ -577,7 +577,7 @@ mod tests {
                 vec![
                     create_event("mem1", MemoryOperation::Add, None),
                     create_event("mem1", MemoryOperation::Retrieve, None),
-                ]
+                ],
             );
         }
 
@@ -598,7 +598,7 @@ mod tests {
                     create_event("mem1", MemoryOperation::Add, None),
                     create_event("mem1", MemoryOperation::Retrieve, Some(create_reward(0.5))),
                     create_event("mem1", MemoryOperation::Retrieve, Some(create_reward(0.3))),
-                ]
+                ],
             );
         }
 
@@ -627,7 +627,7 @@ mod tests {
                 events.push(create_event(
                     "mem1",
                     MemoryOperation::Retrieve,
-                    Some(create_reward(0.1))
+                    Some(create_reward(0.1)),
                 ));
             }
             traj.insert("mem1".to_string(), events);
@@ -660,8 +660,8 @@ mod tests {
                     vec![create_event(
                         &format!("mem{}", i),
                         MemoryOperation::Retrieve,
-                        Some(create_reward(0.5))
-                    )]
+                        Some(create_reward(0.5)),
+                    )],
                 );
             }
         }
@@ -675,7 +675,7 @@ mod tests {
                 assert_eq!(got, 5);
                 assert_eq!(need, 10);
             }
-            _ => panic!("Expected InsufficientData error")
+            _ => panic!("Expected InsufficientData error"),
         }
     }
 
@@ -693,8 +693,8 @@ mod tests {
                     vec![create_event(
                         &format!("mem{}", i),
                         MemoryOperation::Retrieve,
-                        Some(create_reward(score))
-                    )]
+                        Some(create_reward(score)),
+                    )],
                 );
             }
         }
@@ -722,8 +722,8 @@ mod tests {
                     vec![create_event(
                         &format!("mem{}", i),
                         MemoryOperation::Retrieve,
-                        Some(create_reward(0.5))
-                    )]
+                        Some(create_reward(0.5)),
+                    )],
                 );
             }
         }
@@ -755,8 +755,8 @@ mod tests {
                     vec![create_event(
                         &format!("mem{}", i),
                         MemoryOperation::Retrieve,
-                        Some(create_reward(score))
-                    )]
+                        Some(create_reward(score)),
+                    )],
                 );
             }
         }
@@ -816,7 +816,7 @@ mod tests {
             let mut traj = trajectories.write().await;
             traj.insert(
                 "active".to_string(),
-                vec![create_event("active", MemoryOperation::Add, None)]
+                vec![create_event("active", MemoryOperation::Add, None)],
             );
         }
 
@@ -844,8 +844,8 @@ mod tests {
                     vec![create_event(
                         &format!("mem{}", i),
                         MemoryOperation::Retrieve,
-                        Some(create_reward(0.5))
-                    )]
+                        Some(create_reward(0.5)),
+                    )],
                 );
             }
         }
@@ -881,7 +881,7 @@ mod tests {
                     events.push(create_event(
                         &format!("mem{}", i),
                         MemoryOperation::Retrieve,
-                        Some(create_reward(1.0))
+                        Some(create_reward(1.0)),
                     ));
                 }
                 traj.insert(format!("mem{}", i), events);
@@ -919,8 +919,8 @@ mod tests {
                     vec![create_event(
                         &format!("mem{}", i),
                         MemoryOperation::Retrieve,
-                        Some(create_reward(0.5))
-                    )]
+                        Some(create_reward(0.5)),
+                    )],
                 );
             }
         }
@@ -954,7 +954,7 @@ mod tests {
             baseline: 0.5,
             selection_weights: HashMap::from([("mem1".to_string(), 1.5)]),
             cumulative_returns: HashMap::from([("mem1".to_string(), 2.0)]),
-            update_counts: HashMap::from([("mem1".to_string(), 2)])
+            update_counts: HashMap::from([("mem1".to_string(), 2)]),
         };
 
         let json = serde_json::to_string(&state).unwrap();
@@ -986,8 +986,8 @@ mod tests {
                     vec![create_event(
                         &format!("mem{}", i),
                         MemoryOperation::Retrieve,
-                        Some(create_reward(1.0))
-                    )]
+                        Some(create_reward(1.0)),
+                    )],
                 );
             }
         }

@@ -27,7 +27,7 @@ pub enum SyncError {
     #[error("Distributed lock error: {0}")]
     DistributedLock(#[from] distributed_lock::LockError),
     #[error("Other error: {0}")]
-    Other(String)
+    Other(String),
 }
 
 impl From<Box<dyn std::error::Error + Send + Sync>> for SyncError {
@@ -50,7 +50,7 @@ mod tests {
 
         match sync_err {
             SyncError::Other(msg) => assert!(msg.contains("test error")),
-            _ => panic!("Expected SyncError::Other")
+            _ => panic!("Expected SyncError::Other"),
         }
     }
 
@@ -59,23 +59,23 @@ mod tests {
         let errors = vec![
             (
                 SyncError::GovernanceBlock("policy violated".to_string()),
-                "Governance violation: policy violated"
+                "Governance violation: policy violated",
             ),
             (
                 SyncError::ConflictDetection("hash mismatch".to_string()),
-                "Conflict detection failed: hash mismatch"
+                "Conflict detection failed: hash mismatch",
             ),
             (
                 SyncError::Persistence("disk full".to_string()),
-                "State persistence failed: disk full"
+                "State persistence failed: disk full",
             ),
             (
                 SyncError::Internal("unexpected".to_string()),
-                "Internal error: unexpected"
+                "Internal error: unexpected",
             ),
             (
                 SyncError::Other("unknown".to_string()),
-                "Other error: unknown"
+                "Other error: unknown",
             ),
         ];
 

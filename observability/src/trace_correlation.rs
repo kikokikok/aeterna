@@ -2,7 +2,6 @@
 ///!
 ///! Correlates traces, logs, and metrics across distributed services.
 ///! Provides unified view of system behavior for debugging and analysis.
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -132,11 +131,7 @@ impl TraceCorrelator {
         }
     }
 
-    pub fn start_span(
-        &self,
-        ctx: &TraceContext,
-        operation_name: &str,
-    ) -> Span {
+    pub fn start_span(&self, ctx: &TraceContext, operation_name: &str) -> Span {
         Span {
             trace_id: ctx.trace_id.clone(),
             span_id: ctx.span_id.clone(),
@@ -226,7 +221,10 @@ impl TraceCorrelator {
     }
 
     fn count_errors(&self, spans: &[Span]) -> usize {
-        spans.iter().filter(|s| s.status == SpanStatus::Error).count()
+        spans
+            .iter()
+            .filter(|s| s.status == SpanStatus::Error)
+            .count()
     }
 }
 
