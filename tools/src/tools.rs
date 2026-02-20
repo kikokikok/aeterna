@@ -92,7 +92,7 @@ pub enum ToolErrorCode {
     Unauthorized,
     Timeout,
     Conflict,
-    InternalError
+    InternalError,
 }
 
 /// Generic response wrapper for tool execution results.
@@ -133,7 +133,7 @@ pub struct ToolResponse<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<ToolError>
+    pub error: Option<ToolError>,
 }
 
 /// Detailed error information for tool failures.
@@ -174,7 +174,7 @@ pub struct ToolError {
     pub message: String,
     pub retryable: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<Value>
+    pub details: Option<Value>,
 }
 
 impl ToolError {
@@ -187,7 +187,7 @@ impl ToolError {
             code,
             message: message.into(),
             retryable,
-            details: None
+            details: None,
         }
     }
 
@@ -242,7 +242,7 @@ impl ToolError {
 /// - `list_tools`: Returns metadata for all registered tools
 #[derive(Clone, Default)]
 pub struct ToolRegistry {
-    tools: HashMap<String, Arc<dyn Tool>>
+    tools: HashMap<String, Arc<dyn Tool>>,
 }
 
 impl std::fmt::Debug for ToolRegistry {
@@ -271,7 +271,7 @@ impl ToolRegistry {
     pub async fn call(
         &self,
         name: &str,
-        params: Value
+        params: Value,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let tool = self
             .tools
@@ -286,7 +286,7 @@ impl ToolRegistry {
             .map(|t| ToolDefinition {
                 name: t.name().to_string(),
                 description: t.description().to_string(),
-                input_schema: t.input_schema()
+                input_schema: t.input_schema(),
             })
             .collect()
     }
@@ -326,7 +326,7 @@ impl ToolRegistry {
 pub struct ToolDefinition {
     pub name: String,
     pub description: String,
-    pub input_schema: Value
+    pub input_schema: Value,
 }
 
 #[cfg(test)]
@@ -334,7 +334,7 @@ mod tests {
     use super::*;
 
     struct TestTool {
-        name: String
+        name: String,
     }
 
     #[async_trait]
@@ -350,7 +350,7 @@ mod tests {
         }
         async fn call(
             &self,
-            _params: Value
+            _params: Value,
         ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
             Ok(serde_json::json!({"result": "success"}))
         }
@@ -361,10 +361,10 @@ mod tests {
         let mut registry = ToolRegistry::new();
 
         registry.register(Box::new(TestTool {
-            name: "tool1".to_string()
+            name: "tool1".to_string(),
         }));
         registry.register(Box::new(TestTool {
-            name: "tool2".to_string()
+            name: "tool2".to_string(),
         }));
 
         let tools = registry.list_tools();
@@ -385,10 +385,10 @@ mod tests {
         let mut registry = ToolRegistry::new();
 
         registry.register(Box::new(TestTool {
-            name: "same".to_string()
+            name: "same".to_string(),
         }));
         registry.register(Box::new(TestTool {
-            name: "same".to_string()
+            name: "same".to_string(),
         }));
 
         let tools = registry.list_tools();

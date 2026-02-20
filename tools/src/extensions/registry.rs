@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use super::{
     ExtensionCallback, ExtensionError, ExtensionStateConfig, PromptAddition, PromptWiring,
-    ToolConfig
+    ToolConfig,
 };
 
 #[derive(Clone)]
@@ -15,7 +15,7 @@ pub struct ExtensionRegistration {
     pub sequence_hints: Vec<super::prompt::ToolSequenceHint>,
     pub priority: i32,
     pub enabled: bool,
-    pub state_config: ExtensionStateConfig
+    pub state_config: ExtensionStateConfig,
 }
 
 impl ExtensionRegistration {
@@ -28,7 +28,7 @@ impl ExtensionRegistration {
             sequence_hints: Vec::new(),
             priority: 0,
             enabled: true,
-            state_config: ExtensionStateConfig::default()
+            state_config: ExtensionStateConfig::default(),
         }
     }
 
@@ -64,19 +64,19 @@ impl ExtensionRegistration {
 }
 
 pub struct ExtensionRegistry {
-    extensions: HashMap<String, ExtensionRegistration>
+    extensions: HashMap<String, ExtensionRegistration>,
 }
 
 impl ExtensionRegistry {
     pub fn new() -> Self {
         Self {
-            extensions: HashMap::new()
+            extensions: HashMap::new(),
         }
     }
 
     pub fn register_extension(
         &mut self,
-        registration: ExtensionRegistration
+        registration: ExtensionRegistration,
     ) -> Result<(), ExtensionError> {
         if self.extensions.contains_key(&registration.id) {
             return Err(ExtensionError::AlreadyRegistered);
@@ -92,7 +92,7 @@ impl ExtensionRegistry {
 
     fn validate_registration(
         &self,
-        registration: &ExtensionRegistration
+        registration: &ExtensionRegistration,
     ) -> Result<(), ExtensionError> {
         if registration
             .prompt_additions
@@ -100,7 +100,7 @@ impl ExtensionRegistry {
             .any(|p| p.role.trim().is_empty())
         {
             return Err(ExtensionError::InvalidRegistration(
-                "Missing role".to_string()
+                "Missing role".to_string(),
             ));
         }
         if registration
@@ -109,7 +109,7 @@ impl ExtensionRegistry {
             .any(|p| p.content.trim().is_empty())
         {
             return Err(ExtensionError::InvalidRegistration(
-                "Missing content".to_string()
+                "Missing content".to_string(),
             ));
         }
         if registration
@@ -119,7 +119,7 @@ impl ExtensionRegistry {
             .any(|t| t.trim().is_empty())
         {
             return Err(ExtensionError::InvalidRegistration(
-                "Invalid tool name".to_string()
+                "Invalid tool name".to_string(),
             ));
         }
         if registration
@@ -128,13 +128,13 @@ impl ExtensionRegistry {
             .any(|h| h.when_tool.trim().is_empty())
         {
             return Err(ExtensionError::InvalidRegistration(
-                "Missing tool hint".to_string()
+                "Missing tool hint".to_string(),
             ));
         }
         for (key, value) in &registration.tool_config.overrides {
             if key.trim().is_empty() || value.trim().is_empty() {
                 return Err(ExtensionError::InvalidRegistration(
-                    "Invalid override".to_string()
+                    "Invalid override".to_string(),
                 ));
             }
             if self
@@ -143,7 +143,7 @@ impl ExtensionRegistry {
                 .any(|ext| ext.tool_config.overrides.get(key).is_some())
             {
                 return Err(ExtensionError::InvalidRegistration(
-                    "Conflicting tool override".to_string()
+                    "Conflicting tool override".to_string(),
                 ));
             }
         }
@@ -225,7 +225,7 @@ mod tests {
         config.overrides.insert("tool".to_string(), "a".to_string());
         registry
             .register_extension(
-                ExtensionRegistration::new("a", Arc::new(Noop)).with_tool_config(config)
+                ExtensionRegistration::new("a", Arc::new(Noop)).with_tool_config(config),
             )
             .unwrap();
 
@@ -233,7 +233,7 @@ mod tests {
         config.overrides.insert("tool".to_string(), "b".to_string());
         let err = registry
             .register_extension(
-                ExtensionRegistration::new("b", Arc::new(Noop)).with_tool_config(config)
+                ExtensionRegistration::new("b", Arc::new(Noop)).with_tool_config(config),
             )
             .unwrap_err();
         assert!(matches!(err, ExtensionError::InvalidRegistration(_)));
@@ -246,7 +246,7 @@ mod tests {
         config.suggested_tools.push("tool1".to_string());
         let hint = super::super::prompt::ToolSequenceHint {
             when_tool: "a".to_string(),
-            suggest_next: "b".to_string()
+            suggest_next: "b".to_string(),
         };
         registry
             .register_extension(
@@ -255,8 +255,8 @@ mod tests {
                     .with_sequence_hints(vec![hint])
                     .with_prompt_additions(vec![PromptAddition {
                         role: "system".to_string(),
-                        content: "hint".to_string()
-                    }])
+                        content: "hint".to_string(),
+                    }]),
             )
             .unwrap();
 
