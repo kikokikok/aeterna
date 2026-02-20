@@ -1,8 +1,8 @@
 use crate::policy_translator::{
-    PolicyAction, PolicySeverity, StructuredIntent, TargetType, TranslationExample
+    PolicyAction, PolicySeverity, StructuredIntent, TargetType, TranslationExample,
 };
 use mk_core::types::{
-    ConstraintOperator, ConstraintSeverity, ConstraintTarget, PolicyRule, RuleType
+    ConstraintOperator, ConstraintSeverity, ConstraintTarget, PolicyRule, RuleType,
 };
 
 pub fn all_examples() -> Vec<TranslationExample> {
@@ -31,7 +31,7 @@ fn dependency_examples() -> Vec<TranslationExample> {
                 target_value: "mysql".to_string(),
                 condition: None,
                 severity: PolicySeverity::Block,
-                confidence: 0.95
+                confidence: 0.95,
             },
             rules: vec![PolicyRule {
                 id: "no-mysql".to_string(),
@@ -40,8 +40,8 @@ fn dependency_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustNotUse,
                 value: serde_json::Value::String("mysql".to_string()),
                 severity: ConstraintSeverity::Block,
-                message: "MySQL is prohibited. Use PostgreSQL instead.".to_string()
-            }]
+                message: "MySQL is prohibited. Use PostgreSQL instead.".to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Require opentelemetry for all services".to_string(),
@@ -53,7 +53,7 @@ fn dependency_examples() -> Vec<TranslationExample> {
                 target_value: "opentelemetry".to_string(),
                 condition: None,
                 severity: PolicySeverity::Warn,
-                confidence: 0.92
+                confidence: 0.92,
             },
             rules: vec![PolicyRule {
                 id: "require-otel".to_string(),
@@ -62,8 +62,8 @@ fn dependency_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustUse,
                 value: serde_json::Value::String("opentelemetry".to_string()),
                 severity: ConstraintSeverity::Warn,
-                message: "All services must include opentelemetry for tracing.".to_string()
-            }]
+                message: "All services must include opentelemetry for tracing.".to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Block lodash versions below 4.17.21 due to CVE".to_string(),
@@ -75,7 +75,7 @@ fn dependency_examples() -> Vec<TranslationExample> {
                 target_value: "lodash < 4.17.21".to_string(),
                 condition: Some("version < 4.17.21".to_string()),
                 severity: PolicySeverity::Block,
-                confidence: 0.98
+                confidence: 0.98,
             },
             rules: vec![PolicyRule {
                 id: "no-vulnerable-lodash".to_string(),
@@ -84,8 +84,8 @@ fn dependency_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustNotUse,
                 value: serde_json::json!({"name": "lodash", "version": "< 4.17.21"}),
                 severity: ConstraintSeverity::Block,
-                message: "CVE-2021-23337: Prototype pollution in lodash < 4.17.21".to_string()
-            }]
+                message: "CVE-2021-23337: Prototype pollution in lodash < 4.17.21".to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Warn about using moment.js, suggest date-fns instead".to_string(),
@@ -97,7 +97,7 @@ fn dependency_examples() -> Vec<TranslationExample> {
                 target_value: "moment".to_string(),
                 condition: None,
                 severity: PolicySeverity::Warn,
-                confidence: 0.88
+                confidence: 0.88,
             },
             rules: vec![PolicyRule {
                 id: "prefer-date-fns".to_string(),
@@ -106,8 +106,8 @@ fn dependency_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustNotUse,
                 value: serde_json::Value::String("moment".to_string()),
                 severity: ConstraintSeverity::Warn,
-                message: "moment.js is deprecated. Consider using date-fns instead.".to_string()
-            }]
+                message: "moment.js is deprecated. Consider using date-fns instead.".to_string(),
+            }],
         },
     ]
 }
@@ -124,7 +124,7 @@ fn file_examples() -> Vec<TranslationExample> {
                 target_value: "README.md".to_string(),
                 condition: None,
                 severity: PolicySeverity::Block,
-                confidence: 0.96
+                confidence: 0.96,
             },
             rules: vec![PolicyRule {
                 id: "require-readme".to_string(),
@@ -133,8 +133,8 @@ fn file_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustExist,
                 value: serde_json::Value::String("README.md".to_string()),
                 severity: ConstraintSeverity::Block,
-                message: "README.md is required for all projects.".to_string()
-            }]
+                message: "README.md is required for all projects.".to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Warn if SECURITY.md is missing".to_string(),
@@ -146,7 +146,7 @@ fn file_examples() -> Vec<TranslationExample> {
                 target_value: "SECURITY.md".to_string(),
                 condition: None,
                 severity: PolicySeverity::Warn,
-                confidence: 0.91
+                confidence: 0.91,
             },
             rules: vec![PolicyRule {
                 id: "recommend-security-md".to_string(),
@@ -155,8 +155,8 @@ fn file_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustExist,
                 value: serde_json::Value::String("SECURITY.md".to_string()),
                 severity: ConstraintSeverity::Warn,
-                message: "SECURITY.md is recommended for security documentation.".to_string()
-            }]
+                message: "SECURITY.md is recommended for security documentation.".to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Block commits with .env files".to_string(),
@@ -168,7 +168,7 @@ fn file_examples() -> Vec<TranslationExample> {
                 target_value: ".env".to_string(),
                 condition: None,
                 severity: PolicySeverity::Block,
-                confidence: 0.97
+                confidence: 0.97,
             },
             rules: vec![PolicyRule {
                 id: "no-env-files".to_string(),
@@ -177,8 +177,8 @@ fn file_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustNotExist,
                 value: serde_json::Value::String(".env".to_string()),
                 severity: ConstraintSeverity::Block,
-                message: ".env files must not be committed. Use .env.example instead.".to_string()
-            }]
+                message: ".env files must not be committed. Use .env.example instead.".to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Require LICENSE file in all public repositories".to_string(),
@@ -190,7 +190,7 @@ fn file_examples() -> Vec<TranslationExample> {
                 target_value: "LICENSE".to_string(),
                 condition: Some("public repository".to_string()),
                 severity: PolicySeverity::Block,
-                confidence: 0.94
+                confidence: 0.94,
             },
             rules: vec![PolicyRule {
                 id: "require-license".to_string(),
@@ -199,8 +199,8 @@ fn file_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustExist,
                 value: serde_json::Value::String("LICENSE".to_string()),
                 severity: ConstraintSeverity::Block,
-                message: "LICENSE file is required for public repositories.".to_string()
-            }]
+                message: "LICENSE file is required for public repositories.".to_string(),
+            }],
         },
     ]
 }
@@ -217,7 +217,7 @@ fn code_examples() -> Vec<TranslationExample> {
                 target_value: r"Result<.*, .*>".to_string(),
                 condition: None,
                 severity: PolicySeverity::Warn,
-                confidence: 0.89
+                confidence: 0.89,
             },
             rules: vec![PolicyRule {
                 id: "use-result-types".to_string(),
@@ -226,8 +226,8 @@ fn code_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustMatch,
                 value: serde_json::json!({"pattern": r"Result<.*, .*>", "context": "function return types"}),
                 severity: ConstraintSeverity::Warn,
-                message: "Use Result types for error handling instead of panics.".to_string()
-            }]
+                message: "Use Result types for error handling instead of panics.".to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Block usage of unwrap() in production code".to_string(),
@@ -239,7 +239,7 @@ fn code_examples() -> Vec<TranslationExample> {
                 target_value: r"\.unwrap\(\)".to_string(),
                 condition: Some("production code".to_string()),
                 severity: PolicySeverity::Block,
-                confidence: 0.93
+                confidence: 0.93,
             },
             rules: vec![PolicyRule {
                 id: "no-unwrap".to_string(),
@@ -250,8 +250,8 @@ fn code_examples() -> Vec<TranslationExample> {
                 severity: ConstraintSeverity::Block,
                 message: "Do not use unwrap() in production code. Use expect() or proper error \
                           handling."
-                    .to_string()
-            }]
+                    .to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Warn about TODO comments in code".to_string(),
@@ -263,7 +263,7 @@ fn code_examples() -> Vec<TranslationExample> {
                 target_value: r"// TODO".to_string(),
                 condition: None,
                 severity: PolicySeverity::Info,
-                confidence: 0.85
+                confidence: 0.85,
             },
             rules: vec![PolicyRule {
                 id: "track-todos".to_string(),
@@ -273,8 +273,8 @@ fn code_examples() -> Vec<TranslationExample> {
                 value: serde_json::json!({"pattern": r"// TODO|// FIXME|// HACK"}),
                 severity: ConstraintSeverity::Info,
                 message: "TODO/FIXME comments found. Consider tracking in issue tracker."
-                    .to_string()
-            }]
+                    .to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Block console.log statements in TypeScript".to_string(),
@@ -286,7 +286,7 @@ fn code_examples() -> Vec<TranslationExample> {
                 target_value: r"console\.log".to_string(),
                 condition: Some("TypeScript files".to_string()),
                 severity: PolicySeverity::Warn,
-                confidence: 0.90
+                confidence: 0.90,
             },
             rules: vec![PolicyRule {
                 id: "no-console-log".to_string(),
@@ -295,8 +295,8 @@ fn code_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustNotMatch,
                 value: serde_json::json!({"pattern": r"console\.log", "file_types": ["*.ts", "*.tsx"]}),
                 severity: ConstraintSeverity::Warn,
-                message: "Use a proper logging library instead of console.log.".to_string()
-            }]
+                message: "Use a proper logging library instead of console.log.".to_string(),
+            }],
         },
     ]
 }
@@ -313,7 +313,7 @@ fn import_examples() -> Vec<TranslationExample> {
                 target_value: "from * import *".to_string(),
                 condition: Some("Python files".to_string()),
                 severity: PolicySeverity::Block,
-                confidence: 0.94
+                confidence: 0.94,
             },
             rules: vec![PolicyRule {
                 id: "no-wildcard-imports".to_string(),
@@ -322,8 +322,8 @@ fn import_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustNotMatch,
                 value: serde_json::json!({"pattern": r"from .+ import \*", "file_types": ["*.py"]}),
                 severity: ConstraintSeverity::Block,
-                message: "Wildcard imports are prohibited. Use explicit imports.".to_string()
-            }]
+                message: "Wildcard imports are prohibited. Use explicit imports.".to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Require explicit imports for React hooks".to_string(),
@@ -335,7 +335,7 @@ fn import_examples() -> Vec<TranslationExample> {
                 target_value: "react hooks".to_string(),
                 condition: Some("React components".to_string()),
                 severity: PolicySeverity::Warn,
-                confidence: 0.87
+                confidence: 0.87,
             },
             rules: vec![PolicyRule {
                 id: "explicit-react-imports".to_string(),
@@ -344,8 +344,8 @@ fn import_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustMatch,
                 value: serde_json::json!({"pattern": r"import \{ .*(useState|useEffect|useCallback).* \} from 'react'"}),
                 severity: ConstraintSeverity::Warn,
-                message: "Import React hooks explicitly from 'react'.".to_string()
-            }]
+                message: "Import React hooks explicitly from 'react'.".to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Warn about importing internal modules from outside their package"
@@ -359,7 +359,7 @@ fn import_examples() -> Vec<TranslationExample> {
                 target_value: "internal module".to_string(),
                 condition: Some("cross-package".to_string()),
                 severity: PolicySeverity::Warn,
-                confidence: 0.82
+                confidence: 0.82,
             },
             rules: vec![PolicyRule {
                 id: "no-internal-imports".to_string(),
@@ -368,8 +368,8 @@ fn import_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustNotMatch,
                 value: serde_json::json!({"pattern": r"from '.*/_internal/.*'|from '.*\\.internal'"}),
                 severity: ConstraintSeverity::Warn,
-                message: "Do not import internal modules from outside their package.".to_string()
-            }]
+                message: "Do not import internal modules from outside their package.".to_string(),
+            }],
         },
     ]
 }
@@ -386,7 +386,7 @@ fn config_examples() -> Vec<TranslationExample> {
                 target_value: "timeout".to_string(),
                 condition: Some("API client config".to_string()),
                 severity: PolicySeverity::Warn,
-                confidence: 0.91
+                confidence: 0.91,
             },
             rules: vec![PolicyRule {
                 id: "require-timeout".to_string(),
@@ -395,8 +395,8 @@ fn config_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustMatch,
                 value: serde_json::json!({"pattern": r#""timeout":\s*\d+"#, "file_types": ["*.json", "*.yaml", "*.toml"]}),
                 severity: ConstraintSeverity::Warn,
-                message: "API clients must specify timeout values.".to_string()
-            }]
+                message: "API clients must specify timeout values.".to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Block hardcoded secrets in configuration files".to_string(),
@@ -408,7 +408,7 @@ fn config_examples() -> Vec<TranslationExample> {
                 target_value: "secret".to_string(),
                 condition: None,
                 severity: PolicySeverity::Block,
-                confidence: 0.96
+                confidence: 0.96,
             },
             rules: vec![PolicyRule {
                 id: "no-hardcoded-secrets".to_string(),
@@ -421,8 +421,8 @@ fn config_examples() -> Vec<TranslationExample> {
                 }),
                 severity: ConstraintSeverity::Block,
                 message: "Do not hardcode secrets. Use environment variables or secret management."
-                    .to_string()
-            }]
+                    .to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Require strict TypeScript configuration".to_string(),
@@ -434,7 +434,7 @@ fn config_examples() -> Vec<TranslationExample> {
                 target_value: "strict: true".to_string(),
                 condition: Some("tsconfig.json".to_string()),
                 severity: PolicySeverity::Block,
-                confidence: 0.93
+                confidence: 0.93,
             },
             rules: vec![PolicyRule {
                 id: "strict-typescript".to_string(),
@@ -443,8 +443,8 @@ fn config_examples() -> Vec<TranslationExample> {
                 operator: ConstraintOperator::MustMatch,
                 value: serde_json::json!({"pattern": r#""strict":\s*true"#, "file": "tsconfig.json"}),
                 severity: ConstraintSeverity::Block,
-                message: "TypeScript must be configured with strict mode enabled.".to_string()
-            }]
+                message: "TypeScript must be configured with strict mode enabled.".to_string(),
+            }],
         },
         TranslationExample {
             natural_language: "Suggest enabling ESLint rules for accessibility".to_string(),
@@ -456,7 +456,7 @@ fn config_examples() -> Vec<TranslationExample> {
                 target_value: "eslint-plugin-jsx-a11y".to_string(),
                 condition: Some("React projects".to_string()),
                 severity: PolicySeverity::Info,
-                confidence: 0.79
+                confidence: 0.79,
             },
             rules: vec![PolicyRule {
                 id: "suggest-a11y-eslint".to_string(),
@@ -467,8 +467,8 @@ fn config_examples() -> Vec<TranslationExample> {
                 severity: ConstraintSeverity::Info,
                 message: "Consider enabling ESLint accessibility rules with \
                           eslint-plugin-jsx-a11y."
-                    .to_string()
-            }]
+                    .to_string(),
+            }],
         },
     ]
 }
