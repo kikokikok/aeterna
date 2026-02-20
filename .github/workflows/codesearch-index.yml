@@ -1,0 +1,81 @@
+name: Code Search Index
+
+on:
+  push:
+    branches: [main, master]
+  workflow_call:
+    inputs:
+      project_name:
+        description: 'Override project name for indexing'
+        required: false
+        type: string
+    secrets:
+      AETERNA_API_KEY:
+        required: true
+      QDRANT_URL:
+        required: true
+      OPENAI_API_KEY:
+        required: false
+
+concurrency:
+  group: codesearch-index-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  index:
+    if: github.repository_owner == github.event.repository.owner.login
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Code Search
+        run: |
+          ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+          curl -sSfL "https://github.com/search2ai/codesearch/releases/latest/download/codesearch-linux-${ARCH}" \
+            -o /tmp/codesearch
+          chmod +x /tmp/codesearch
+          sudo mv /tmp/codesearch /usr/local/bin/codesearch
+
+      - name: Configure embedder type
+        id: embedder
+        run: |
+          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "type=openai" >> $GITHUB_OUTPUT
+            echo "model=text-embedding-3-small" >> $GITHUB_OUTPUT
+          else
+            echo "type=ollama" >> $GITHUB_OUTPUT
+            echo "model=nomic-embed-text" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Initialize Code Search
+        run: |
+          codesearch init . \
+            --embedder ${{ steps.embedder.outputs.type }} \
+            --model ${{ steps.embedder.outputs.model }} \
+            --store qdrant \
+            --qdrant-url "${{ secrets.QDRANT_URL }}"
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Index Repository
+        run: codesearch index . --workspace "org-${{ github.repository_owner }}"
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Notify Aeterna Central
+        if: vars.AETERNA_CENTRAL_URL != ''
+        run: |
+          curl -sSf -X POST "${{ vars.AETERNA_CENTRAL_URL }}/api/v1/index/updated" \
+            -H "Authorization: Bearer ${{ secrets.AETERNA_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"repository\":\"${{ github.repository }}\",\"tenant_id\":\"${{ github.repository_owner }}\",\"commit_sha\":\"${{ github.sha }}\",\"branch\":\"${{ github.ref_name }}\",\"project\":\"${{ inputs.project_name || github.repository }}\"}"
+
+      - name: Trigger Graph Refresh
+        if: vars.AETERNA_CENTRAL_URL != ''
+        run: |
+          curl -sSf -X POST "${{ vars.AETERNA_CENTRAL_URL }}/api/v1/graph/refresh" \
+            -H "Authorization: Bearer ${{ secrets.AETERNA_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"tenant_id\":\"${{ github.repository_owner }}\",\"project\":\"${{ inputs.project_name || github.repository }}\"}"
