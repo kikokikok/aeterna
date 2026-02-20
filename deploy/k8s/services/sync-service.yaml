@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aeterna-sync
+  namespace: aeterna
+  labels:
+    app: aeterna-sync
+    component: sync
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aeterna-sync
+  template:
+    metadata:
+      labels:
+        app: aeterna-sync
+        component: sync
+        version: v1
+    spec:
+      serviceAccountName: aeterna-sync
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: sync
+          image: ghcr.io/kikokikok/aeterna-sync:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8084
+              protocol: TCP
+            - name: ws
+              containerPort: 8085
+              protocol: TCP
+            - name: metrics
+              containerPort: 9094
+              protocol: TCP
+          env:
+            - name: AETERNA_SERVICE
+              value: sync
+            - name: AETERNA_PORT
+              value: "8084"
+            - name: AETERNA_WS_PORT
+              value: "8085"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aeterna-sync
+  namespace: aeterna
+  labels:
+    app: aeterna-sync
+spec:
+  selector:
+    app: aeterna-sync
+  ports:
+    - name: http
+      port: 8084
+      targetPort: http
+    - name: ws
+      port: 8085
+      targetPort: ws
+    - name: metrics
+      port: 9094
+      targetPort: metrics
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aeterna-sync
+  namespace: aeterna

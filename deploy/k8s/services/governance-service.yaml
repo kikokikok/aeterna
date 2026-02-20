@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aeterna-governance
+  namespace: aeterna
+  labels:
+    app: aeterna-governance
+    component: governance
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aeterna-governance
+  template:
+    metadata:
+      labels:
+        app: aeterna-governance
+        component: governance
+        version: v1
+    spec:
+      serviceAccountName: aeterna-governance
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: governance
+          image: ghcr.io/kikokikok/aeterna-governance:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8083
+              protocol: TCP
+            - name: metrics
+              containerPort: 9093
+              protocol: TCP
+          env:
+            - name: AETERNA_SERVICE
+              value: governance
+            - name: AETERNA_PORT
+              value: "8083"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aeterna-governance
+  namespace: aeterna
+  labels:
+    app: aeterna-governance
+spec:
+  selector:
+    app: aeterna-governance
+  ports:
+    - name: http
+      port: 8083
+      targetPort: http
+    - name: metrics
+      port: 9093
+      targetPort: metrics
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aeterna-governance
+  namespace: aeterna
