@@ -2,7 +2,6 @@
 ///
 /// Supports external secret managers like AWS Secrets Manager, GCP Secret Manager,
 /// Azure Key Vault, and HashiCorp Vault.
-
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -11,13 +10,13 @@ use thiserror::Error;
 pub enum SecretError {
     #[error("Secret operation failed: {0}")]
     OperationFailed(String),
-    
+
     #[error("Secret not found: {0}")]
     NotFound(String),
-    
+
     #[error("Authentication failed: {0}")]
     AuthFailed(String),
-    
+
     #[error("Invalid configuration: {0}")]
     ConfigError(String),
 
@@ -55,7 +54,7 @@ pub enum SecretProviderConfig {
 pub trait SecretProvider: Send + Sync {
     /// Retrieve a secret value by its identifier
     async fn get_secret(&self, secret_id: &str) -> Result<String, SecretError>;
-    
+
     /// Health check for the provider
     async fn is_available(&self) -> bool;
 }
@@ -68,7 +67,10 @@ pub struct AwsSecretProvider {
 
 impl AwsSecretProvider {
     pub fn new(region: String, endpoint: Option<String>) -> Self {
-        Self { region, _endpoint: endpoint }
+        Self {
+            region,
+            _endpoint: endpoint,
+        }
     }
 }
 
@@ -77,9 +79,12 @@ impl SecretProvider for AwsSecretProvider {
     async fn get_secret(&self, secret_id: &str) -> Result<String, SecretError> {
         // In a real implementation, we would use aws-sdk-secretsmanager
         // For now, returning a mock or placeholder result
-        Ok(format!("mock-secret-from-aws-{}-{}", self.region, secret_id))
+        Ok(format!(
+            "mock-secret-from-aws-{}-{}",
+            self.region, secret_id
+        ))
     }
-    
+
     async fn is_available(&self) -> bool {
         true
     }
@@ -99,11 +104,12 @@ impl LocalSecretProvider {
 #[async_trait]
 impl SecretProvider for LocalSecretProvider {
     async fn get_secret(&self, secret_id: &str) -> Result<String, SecretError> {
-        self.secrets.get(secret_id)
+        self.secrets
+            .get(secret_id)
             .cloned()
             .ok_or_else(|| SecretError::NotFound(secret_id.to_string()))
     }
-    
+
     async fn is_available(&self) -> bool {
         true
     }
@@ -130,23 +136,31 @@ impl VaultSecretProvider {
 impl SecretProvider for VaultSecretProvider {
     async fn get_secret(&self, secret_id: &str) -> Result<String, SecretError> {
         let url = format!("{}/v1/secret/data/{}", self.address, secret_id);
-        let response = self.client.get(&url)
+        let response = self
+            .client
+            .get(&url)
             .header("X-Vault-Token", &self.token)
             .send()
             .await
             .map_err(|e| SecretError::ConnectionFailed(e.to_string()))?;
 
         if response.status().is_success() {
-            let body: serde_json::Value = response.json::<serde_json::Value>().await
+            let body: serde_json::Value = response
+                .json::<serde_json::Value>()
+                .await
                 .map_err(|e| SecretError::FormatError(e.to_string()))?;
-            let token = body["data"]["data"]["token"].as_str()
-                .ok_or_else(|| SecretError::FormatError("Token not found in Vault secret".to_string()))?;
+            let token = body["data"]["data"]["token"].as_str().ok_or_else(|| {
+                SecretError::FormatError("Token not found in Vault secret".to_string())
+            })?;
             Ok(token.to_string())
         } else {
-            Err(SecretError::RetrievalFailed(format!("Vault returned error: {}", response.status())))
+            Err(SecretError::RetrievalFailed(format!(
+                "Vault returned error: {}",
+                response.status()
+            )))
         }
     }
-    
+
     async fn is_available(&self) -> bool {
         // Simple health check could go here
         true

@@ -20,6 +20,6 @@ pub mod types;
 
 pub use client::CodeSearchClient;
 pub use tools::{
-    CodeSearchTool, CodeTraceCallersTool, CodeTraceCalleesTool, CodeGraphTool,
-    CodeIndexStatusTool, CodeSearchRepoRequestTool,
+    CodeGraphTool, CodeIndexStatusTool, CodeSearchRepoRequestTool, CodeSearchTool,
+    CodeTraceCalleesTool, CodeTraceCallersTool,
 };

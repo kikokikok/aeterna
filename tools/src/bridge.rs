@@ -9,7 +9,7 @@ use sync::bridge::SyncManager;
 use validator::Validate;
 
 pub struct SyncNowTool {
-    sync_manager: Arc<SyncManager>
+    sync_manager: Arc<SyncManager>,
 }
 
 impl SyncNowTool {
@@ -23,7 +23,7 @@ pub struct SyncNowparams {
     #[serde(default)]
     pub force: bool,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 #[async_trait]
@@ -70,7 +70,7 @@ impl Tool for SyncNowTool {
 }
 
 pub struct SyncStatusTool {
-    sync_manager: Arc<SyncManager>
+    sync_manager: Arc<SyncManager>,
 }
 
 impl SyncStatusTool {
@@ -82,7 +82,7 @@ impl SyncStatusTool {
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct SyncStatusParams {
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 #[async_trait]
@@ -132,7 +132,7 @@ impl Tool for SyncStatusTool {
 }
 
 pub struct ResolveFederationConflictTool {
-    sync_manager: Arc<SyncManager>
+    sync_manager: Arc<SyncManager>,
 }
 
 impl ResolveFederationConflictTool {
@@ -146,7 +146,7 @@ pub struct ResolveFederationConflictParams {
     pub upstream_id: String,
     pub resolution: String,
     #[serde(rename = "tenantContext")]
-    pub tenant_context: Option<TenantContext>
+    pub tenant_context: Option<TenantContext>,
 }
 
 #[async_trait]

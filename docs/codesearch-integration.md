@@ -1105,6 +1105,235 @@ helm upgrade aeterna ./charts/aeterna \
   --set codesearch.image.tag=v2.0.0
 ```
 
+## Central Index Service
+
+The Central Index Service provides a centralised API for managing code search indexes across multiple repositories and tenants. It accepts webhook notifications from CI/CD pipelines, coordinates graph refreshes, reports index status, and enables cross-repository semantic search.
+
+### API Endpoints
+
+#### POST /api/v1/index/updated
+
+Notify the central service that a repository has been re-indexed.
+
+**Headers:**
+- `Authorization: Bearer <AETERNA_API_KEY>` (required)
+- `X-Hub-Signature-256: sha256=<hex>` (optional, verified when `AETERNA_WEBHOOK_SECRET` is set)
+
+**Request body:**
+
+```json
+{
+  "repository": "acme/api-server",
+  "tenant_id": "acme",
+  "commit_sha": "abc123def456",
+  "branch": "main",
+  "project": "acme/api-server"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "queued": true,
+  "job_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+#### POST /api/v1/graph/refresh
+
+Trigger a call-graph refresh for a tenant's project.
+
+**Request body:**
+
+```json
+{
+  "tenant_id": "acme",
+  "project": "acme/api-server"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "accepted",
+  "tenant_id": "acme",
+  "project": "acme/api-server"
+}
+```
+
+#### GET /api/v1/index/status
+
+Query current indexing status. Accepts optional `tenant_id` and `project` query parameters.
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "filters": { "tenant_id": "acme", "project": null },
+  "projects": []
+}
+```
+
+#### POST /api/v1/search/cross-repo
+
+Semantic search across all repositories within a tenant workspace.
+
+**Request body:**
+
+```json
+{
+  "query": "authentication middleware",
+  "tenant_id": "acme",
+  "projects": ["api-server", "auth-lib"],
+  "limit": 10
+}
+```
+
+**Response:**
+
+```json
+{
+  "results": [],
+  "total": 0
+}
+```
+
+### Authentication & Rate Limiting
+
+- All endpoints require `Authorization: Bearer <token>` matching the `AETERNA_API_KEY` env var.
+- Webhook endpoints optionally verify `X-Hub-Signature-256` against `AETERNA_WEBHOOK_SECRET`.
+- Rate limiting: 100 requests per minute per API key (sliding window).
+
+## GitHub Actions Setup
+
+A reusable workflow is provided at `.github/workflows/codesearch-index.yml` to automatically index repositories on push to `main`/`master`.
+
+### Basic Usage
+
+Add the following to your repository:
+
+```yaml
+# .github/workflows/index.yml
+name: Index Code Search
+on:
+  push:
+    branches: [main]
+
+jobs:
+  index:
+    uses: kikokikok/aeterna/.github/workflows/codesearch-index.yml@main
+    secrets:
+      AETERNA_API_KEY: ${{ secrets.AETERNA_API_KEY }}
+      QDRANT_URL: ${{ secrets.QDRANT_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+### Required Secrets
+
+| Secret | Required | Description |
+|--------|----------|-------------|
+| `AETERNA_API_KEY` | Yes | API key for Central Index Service |
+| `QDRANT_URL` | Yes | Qdrant instance URL (e.g. `http://qdrant:6333`) |
+| `OPENAI_API_KEY` | No | If set, uses OpenAI embeddings; otherwise falls back to Ollama |
+
+### Required Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AETERNA_CENTRAL_URL` | No | Central Index Service URL. When set, the workflow notifies Aeterna after indexing. |
+
+### Custom Project Name
+
+```yaml
+jobs:
+  index:
+    uses: kikokikok/aeterna/.github/workflows/codesearch-index.yml@main
+    with:
+      project_name: my-custom-project
+    secrets:
+      AETERNA_API_KEY: ${{ secrets.AETERNA_API_KEY }}
+      QDRANT_URL: ${{ secrets.QDRANT_URL }}
+```
+
+### What the Workflow Does
+
+1. Checks out the repository with full history
+2. Downloads the `codesearch` CLI binary
+3. Auto-detects embedder type (OpenAI if key present, else Ollama)
+4. Initialises and indexes the repository into the tenant's workspace
+5. Notifies the Central Index Service (if `AETERNA_CENTRAL_URL` is configured)
+6. Triggers a graph refresh for the project
+
+## Multi-Tenant Workspace Management
+
+Each tenant gets an isolated workspace with deterministic naming:
+
+| Concept | Convention | Example |
+|---------|------------|---------|
+| Workspace name | `org-<lowercase-tenant>` | `org-acme-corp` |
+| Collection prefix | `codesearch_<normalised>_` | `codesearch_acme_corp_` |
+| Project isolation | Per-project within workspace | `codesearch_acme_corp_api_server` |
+
+Workspaces are created on first use via the `WorkspaceManager`. Each workspace tracks:
+- Registered projects
+- Store type (qdrant, postgres, etc.)
+- Embedder type (openai, ollama)
+- Creation and last-active timestamps
+
+## Troubleshooting (Central Index)
+
+### Binary Not Found
+
+**Symptom:** `codesearch: command not found` in CI
+
+**Solutions:**
+1. Verify the download URL in the workflow matches the release architecture
+2. Check that the binary was moved to a directory in `$PATH`
+3. Test locally: `curl -sSfL <url> -o codesearch && chmod +x codesearch && ./codesearch --version`
+
+### Embedding Dimension Mismatch
+
+**Symptom:** `dimension mismatch` error during indexing or search
+
+**Cause:** The collection was created with one embedding model but you're now using a different one (e.g. switched from `nomic-embed-text` at 768 dims to `text-embedding-3-small` at 1536 dims).
+
+**Solutions:**
+1. Delete and recreate the Qdrant collection: `curl -X DELETE http://qdrant:6333/collections/<name>`
+2. Re-index with `codesearch index . --force`
+3. Ensure all repositories in a workspace use the same embedder model
+
+### Qdrant Connection Issues
+
+**Symptom:** `connection refused` or `timeout` when indexing
+
+**Solutions:**
+1. Verify `QDRANT_URL` is reachable from the CI runner
+2. For private clusters, use a self-hosted runner or tunnel
+3. Check firewall/network policy allows the runner IP
+4. Test connectivity: `curl -s $QDRANT_URL/collections`
+
+### Rate Limit Exceeded
+
+**Symptom:** `429 Too Many Requests` from the Central Index Service
+
+**Solutions:**
+1. The default limit is 100 requests/minute per API key
+2. Add concurrency controls to your workflow to avoid parallel runs
+3. For bulk re-indexing, space requests with `sleep` between repositories
+
+### Webhook Signature Verification Failed
+
+**Symptom:** `Invalid webhook signature` error
+
+**Solutions:**
+1. Ensure `AETERNA_WEBHOOK_SECRET` matches on both the sender and receiver
+2. Verify the signature header format is `sha256=<hex>`
+3. Check that the request body was not modified in transit (e.g. by a proxy)
+
 ## Support
 
 ### Documentation

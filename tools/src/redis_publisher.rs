@@ -18,7 +18,7 @@ pub const DLQ_CONSUMER_GROUP: &str = "dlq-processor";
 /// tenant stream based on the tenant_id in each event.
 pub struct RedisPublisher {
     redis_url: String,
-    base_stream_key: String
+    base_stream_key: String,
 }
 
 impl RedisPublisher {
@@ -29,7 +29,7 @@ impl RedisPublisher {
     pub fn new_with_tenant_isolation(redis_url: String, base_stream_key: String) -> Self {
         Self {
             redis_url,
-            base_stream_key
+            base_stream_key,
         }
     }
 
@@ -38,7 +38,7 @@ impl RedisPublisher {
         let base_stream_key = format!("governance:events:{}", tenant_id.as_str());
         Self {
             redis_url,
-            base_stream_key
+            base_stream_key,
         }
     }
 
@@ -47,7 +47,7 @@ impl RedisPublisher {
     pub fn new(redis_url: String, stream_key: String) -> Self {
         Self {
             redis_url,
-            base_stream_key: stream_key
+            base_stream_key: stream_key,
         }
     }
 
@@ -56,10 +56,10 @@ impl RedisPublisher {
     /// This spawns a Tokio task that listens for events and publishes them to
     /// Redis. Returns a channel sender that can be used to send events.
     pub fn start(
-        self
+        self,
     ) -> (
         tokio::sync::mpsc::UnboundedSender<GovernanceEvent>,
-        tokio::task::JoinHandle<()>
+        tokio::task::JoinHandle<()>,
     ) {
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
 
@@ -75,7 +75,7 @@ impl RedisPublisher {
     /// Main loop for the Redis publisher.
     async fn run(
         self,
-        mut event_rx: UnboundedReceiver<GovernanceEvent>
+        mut event_rx: UnboundedReceiver<GovernanceEvent>,
     ) -> Result<(), anyhow::Error> {
         info!(
             "Starting Redis publisher with tenant isolation, base stream: {}",
@@ -111,7 +111,7 @@ impl RedisPublisher {
     async fn publish_event(
         base_stream_key: &str,
         con: &mut redis::aio::ConnectionManager,
-        event: &GovernanceEvent
+        event: &GovernanceEvent,
     ) -> Result<(), anyhow::Error> {
         let tenant_id = match event {
             GovernanceEvent::UnitCreated { tenant_id, .. } => tenant_id,
@@ -125,7 +125,7 @@ impl RedisPublisher {
             GovernanceEvent::ConfigUpdated { tenant_id, .. } => tenant_id,
             GovernanceEvent::RequestCreated { tenant_id, .. } => tenant_id,
             GovernanceEvent::RequestApproved { tenant_id, .. } => tenant_id,
-            GovernanceEvent::RequestRejected { tenant_id, .. } => tenant_id
+            GovernanceEvent::RequestRejected { tenant_id, .. } => tenant_id,
         };
 
         let stream_key = format!("{}:{}", base_stream_key, tenant_id.as_str());
@@ -151,7 +151,7 @@ impl RedisPublisher {
     /// Publishes a failed event to the dead letter queue stream.
     pub async fn publish_to_dlq(
         redis_url: &str,
-        event: &PersistentEvent
+        event: &PersistentEvent,
     ) -> Result<(), anyhow::Error> {
         let client = redis::Client::open(redis_url)?;
         let mut con = client.get_connection_manager().await?;
@@ -184,7 +184,7 @@ impl RedisPublisher {
     pub async fn read_dlq_events(
         redis_url: &str,
         tenant_id: &TenantId,
-        count: usize
+        count: usize,
     ) -> Result<Vec<(String, PersistentEvent)>, anyhow::Error> {
         let client = redis::Client::open(redis_url)?;
         let mut con = client.get_connection_manager().await?;
@@ -222,7 +222,7 @@ impl RedisPublisher {
     pub async fn ack_dlq_event(
         redis_url: &str,
         tenant_id: &TenantId,
-        message_id: &str
+        message_id: &str,
     ) -> Result<(), anyhow::Error> {
         let client = redis::Client::open(redis_url)?;
         let mut con = client.get_connection_manager().await?;
@@ -247,7 +247,7 @@ impl RedisPublisher {
     /// Gets the count of events in the DLQ for a tenant.
     pub async fn get_dlq_length(
         redis_url: &str,
-        tenant_id: &TenantId
+        tenant_id: &TenantId,
     ) -> Result<usize, anyhow::Error> {
         let client = redis::Client::open(redis_url)?;
         let mut con = client.get_connection_manager().await?;
@@ -274,10 +274,10 @@ impl RedisPublisher {
 /// to_string()); let governance_engine =
 /// GovernanceEngine::new().with_events(event_tx); ```
 pub fn create_redis_publisher_with_tenant_isolation(
-    redis_url: String
+    redis_url: String,
 ) -> (
     tokio::sync::mpsc::UnboundedSender<GovernanceEvent>,
-    tokio::task::JoinHandle<()>
+    tokio::task::JoinHandle<()>,
 ) {
     let publisher =
         RedisPublisher::new_with_tenant_isolation(redis_url, "governance:events".to_string());
@@ -287,10 +287,10 @@ pub fn create_redis_publisher_with_tenant_isolation(
 /// Creates a Redis publisher for a specific tenant (legacy API).
 pub fn create_redis_publisher_for_tenant(
     redis_url: String,
-    tenant_id: &TenantId
+    tenant_id: &TenantId,
 ) -> (
     tokio::sync::mpsc::UnboundedSender<GovernanceEvent>,
-    tokio::task::JoinHandle<()>
+    tokio::task::JoinHandle<()>,
 ) {
     let publisher = RedisPublisher::new_for_tenant(redis_url, tenant_id);
     publisher.start()
@@ -299,10 +299,10 @@ pub fn create_redis_publisher_for_tenant(
 /// Creates a Redis publisher with a custom stream key (no tenant isolation).
 pub fn create_redis_publisher(
     redis_url: String,
-    stream_key: String
+    stream_key: String,
 ) -> (
     tokio::sync::mpsc::UnboundedSender<GovernanceEvent>,
-    tokio::task::JoinHandle<()>
+    tokio::task::JoinHandle<()>,
 ) {
     let publisher = RedisPublisher::new(redis_url, stream_key);
     publisher.start()
@@ -317,7 +317,7 @@ mod tests {
     fn test_redis_publisher_new_with_tenant_isolation() {
         let publisher = RedisPublisher::new_with_tenant_isolation(
             "redis://localhost:6379".to_string(),
-            "governance:events".to_string()
+            "governance:events".to_string(),
         );
 
         assert_eq!(publisher.redis_url, "redis://localhost:6379");
@@ -338,7 +338,7 @@ mod tests {
     fn test_redis_publisher_new() {
         let publisher = RedisPublisher::new(
             "redis://localhost:6379".to_string(),
-            "custom:stream:key".to_string()
+            "custom:stream:key".to_string(),
         );
 
         assert_eq!(publisher.redis_url, "redis://localhost:6379");
@@ -366,7 +366,7 @@ mod tests {
     async fn test_create_redis_publisher() {
         let (tx, _handle) = create_redis_publisher(
             "redis://localhost:6379".to_string(),
-            "my:custom:stream".to_string()
+            "my:custom:stream".to_string(),
         );
 
         assert!(tx.is_closed() == false);
@@ -390,48 +390,48 @@ mod tests {
                 unit_type: UnitType::Company,
                 tenant_id: tenant_id.clone(),
                 parent_id: None,
-                timestamp: 1234567890
+                timestamp: 1234567890,
             },
             GovernanceEvent::UnitUpdated {
                 unit_id: "unit-1".to_string(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567891
+                timestamp: 1234567891,
             },
             GovernanceEvent::UnitDeleted {
                 unit_id: "unit-1".to_string(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567892
+                timestamp: 1234567892,
             },
             GovernanceEvent::PolicyUpdated {
                 policy_id: "policy-1".to_string(),
                 layer: KnowledgeLayer::Company,
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567893
+                timestamp: 1234567893,
             },
             GovernanceEvent::PolicyDeleted {
                 policy_id: "policy-1".to_string(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567894
+                timestamp: 1234567894,
             },
             GovernanceEvent::RoleAssigned {
                 user_id: user_id.clone(),
                 unit_id: "unit-1".to_string(),
                 role: Role::Admin,
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567895
+                timestamp: 1234567895,
             },
             GovernanceEvent::RoleRemoved {
                 user_id: user_id.clone(),
                 unit_id: "unit-1".to_string(),
                 role: Role::Admin,
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567896
+                timestamp: 1234567896,
             },
             GovernanceEvent::DriftDetected {
                 project_id: "project-1".to_string(),
                 tenant_id: tenant_id.clone(),
                 drift_score: 0.5,
-                timestamp: 1234567897
+                timestamp: 1234567897,
             },
         ];
 
@@ -448,7 +448,7 @@ mod tests {
                 GovernanceEvent::ConfigUpdated { tenant_id, .. } => tenant_id,
                 GovernanceEvent::RequestCreated { tenant_id, .. } => tenant_id,
                 GovernanceEvent::RequestApproved { tenant_id, .. } => tenant_id,
-                GovernanceEvent::RequestRejected { tenant_id, .. } => tenant_id
+                GovernanceEvent::RequestRejected { tenant_id, .. } => tenant_id,
             };
             assert_eq!(extracted_tenant_id, &tenant_id);
         }
@@ -493,7 +493,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: 1234567890
+            timestamp: 1234567890,
         };
 
         let json = serde_json::to_string(&event).unwrap();
@@ -513,7 +513,7 @@ mod tests {
                 assert_eq!(unit_id, "unit-1");
                 assert_eq!(tid, tenant_id);
             }
-            _ => panic!("Expected UnitCreated variant")
+            _ => panic!("Expected UnitCreated variant"),
         }
     }
 
@@ -525,7 +525,7 @@ mod tests {
             unit_type: UnitType::Project,
             tenant_id,
             parent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         let publisher =
@@ -551,7 +551,7 @@ mod tests {
                 unit_type: unit_type.clone(),
                 tenant_id: tenant_id.clone(),
                 parent_id: None,
-                timestamp: 1234567890
+                timestamp: 1234567890,
             };
 
             let json = serde_json::to_string(&event).unwrap();
@@ -561,7 +561,7 @@ mod tests {
                 GovernanceEvent::UnitCreated { unit_type: ut, .. } => {
                     assert_eq!(ut, unit_type);
                 }
-                _ => panic!("Expected UnitCreated variant")
+                _ => panic!("Expected UnitCreated variant"),
             }
         }
     }
@@ -585,7 +585,7 @@ mod tests {
                 unit_id: "unit-1".to_string(),
                 role: role.clone(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567890
+                timestamp: 1234567890,
             };
 
             let json = serde_json::to_string(&event).unwrap();
@@ -595,7 +595,7 @@ mod tests {
                 GovernanceEvent::RoleAssigned { role: r, .. } => {
                     assert_eq!(r, role);
                 }
-                _ => panic!("Expected RoleAssigned variant")
+                _ => panic!("Expected RoleAssigned variant"),
             }
         }
     }
@@ -616,7 +616,7 @@ mod tests {
                 policy_id: "policy-1".to_string(),
                 layer: layer.clone(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 1234567890
+                timestamp: 1234567890,
             };
 
             let json = serde_json::to_string(&event).unwrap();
@@ -626,7 +626,7 @@ mod tests {
                 GovernanceEvent::PolicyUpdated { layer: l, .. } => {
                     assert_eq!(l, layer);
                 }
-                _ => panic!("Expected PolicyUpdated variant")
+                _ => panic!("Expected PolicyUpdated variant"),
             }
         }
     }
@@ -639,7 +639,7 @@ mod tests {
             project_id: "project-123".to_string(),
             tenant_id: tenant_id.clone(),
             drift_score: 0.75,
-            timestamp: 1234567890
+            timestamp: 1234567890,
         };
 
         let json = serde_json::to_string(&event).unwrap();
@@ -658,7 +658,7 @@ mod tests {
                 assert_eq!(project_id, "project-123");
                 assert!((drift_score - 0.75).abs() < 0.001);
             }
-            _ => panic!("Expected DriftDetected variant")
+            _ => panic!("Expected DriftDetected variant"),
         }
     }
 }

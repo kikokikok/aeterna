@@ -10,7 +10,7 @@ pub trait ReasoningCacheBackend: Send + Sync {
         &self,
         key: &str,
         value: &CachedReasoning,
-        ttl_seconds: u64
+        ttl_seconds: u64,
     ) -> Result<(), CacheError>;
     async fn delete(&self, key: &str) -> Result<(), CacheError>;
 }
@@ -18,7 +18,9 @@ pub trait ReasoningCacheBackend: Send + Sync {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CachedReasoning {
     pub trace: ReasoningTrace,
-    pub cached_at: i64
+    pub cached_at: i64,
+    pub access_count: u64,
+    pub last_accessed_at: i64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -28,14 +30,54 @@ pub enum CacheError {
     #[error("Cache serialization error: {0}")]
     SerializationError(String),
     #[error("Cache operation error: {0}")]
-    OperationError(String)
+    OperationError(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct ReasoningDecayConfig {
+    pub recency_weight: f64,
+    pub frequency_weight: f64,
+    pub age_weight: f64,
+    pub eviction_threshold: f64,
+}
+
+impl Default for ReasoningDecayConfig {
+    fn default() -> Self {
+        Self {
+            recency_weight: 0.4,
+            frequency_weight: 0.4,
+            age_weight: 0.2,
+            eviction_threshold: 0.1,
+        }
+    }
+}
+
+pub fn compute_reasoning_decay_score(
+    now: i64,
+    cached: &CachedReasoning,
+    ttl_seconds: u64,
+    config: &ReasoningDecayConfig,
+) -> f64 {
+    let seconds_since_access = (now - cached.last_accessed_at).max(0) as f64;
+    let recency_norm = 1.0 / (1.0 + seconds_since_access / 3600.0);
+
+    let freq_norm = (cached.access_count as f64 / 10.0).min(1.0);
+
+    let age_seconds = (now - cached.cached_at).max(0) as f64;
+    let ttl = ttl_seconds.max(1) as f64;
+    let age_norm = 1.0 / (1.0 + age_seconds / ttl);
+
+    config.recency_weight * recency_norm
+        + config.frequency_weight * freq_norm
+        + config.age_weight * age_norm
 }
 
 pub struct ReasoningCache<B: ReasoningCacheBackend> {
     backend: Arc<B>,
     ttl_seconds: u64,
     enabled: bool,
-    telemetry: Arc<crate::telemetry::MemoryTelemetry>
+    telemetry: Arc<crate::telemetry::MemoryTelemetry>,
+    decay_config: ReasoningDecayConfig,
 }
 
 impl<B: ReasoningCacheBackend> ReasoningCache<B> {
@@ -43,14 +85,27 @@ impl<B: ReasoningCacheBackend> ReasoningCache<B> {
         backend: Arc<B>,
         ttl_seconds: u64,
         enabled: bool,
-        telemetry: Arc<crate::telemetry::MemoryTelemetry>
+        telemetry: Arc<crate::telemetry::MemoryTelemetry>,
     ) -> Self {
         Self {
             backend,
             ttl_seconds,
             enabled,
-            telemetry
+            telemetry,
+            decay_config: ReasoningDecayConfig::default(),
         }
+    }
+
+    pub fn with_decay_config(mut self, config: ReasoningDecayConfig) -> Self {
+        self.decay_config = config;
+        self
+    }
+
+    fn should_evict(&self, cached: &CachedReasoning) -> bool {
+        let now = chrono::Utc::now().timestamp();
+        let score =
+            compute_reasoning_decay_score(now, cached, self.ttl_seconds, &self.decay_config);
+        score < self.decay_config.eviction_threshold
     }
 
     pub fn generate_cache_key(ctx: &TenantContext, query: &str) -> String {
@@ -74,7 +129,7 @@ impl<B: ReasoningCacheBackend> ReasoningCache<B> {
     pub async fn get(
         &self,
         ctx: &TenantContext,
-        query: &str
+        query: &str,
     ) -> Result<Option<ReasoningTrace>, CacheError> {
         if !self.enabled {
             return Ok(None);
@@ -83,8 +138,15 @@ impl<B: ReasoningCacheBackend> ReasoningCache<B> {
         let key = Self::generate_cache_key(ctx, query);
         match self.backend.get(&key).await {
             Ok(Some(cached)) => {
-                self.telemetry.record_reasoning_cache_hit();
-                Ok(Some(cached.trace))
+                if self.should_evict(&cached) {
+                    // Entry has decayed below threshold — treat as miss and remove
+                    let _ = self.backend.delete(&key).await;
+                    self.telemetry.record_reasoning_cache_miss();
+                    Ok(None)
+                } else {
+                    self.telemetry.record_reasoning_cache_hit();
+                    Ok(Some(cached.trace))
+                }
             }
             Ok(None) => {
                 self.telemetry.record_reasoning_cache_miss();
@@ -102,16 +164,19 @@ impl<B: ReasoningCacheBackend> ReasoningCache<B> {
         &self,
         ctx: &TenantContext,
         query: &str,
-        trace: &ReasoningTrace
+        trace: &ReasoningTrace,
     ) -> Result<(), CacheError> {
         if !self.enabled {
             return Ok(());
         }
 
         let key = Self::generate_cache_key(ctx, query);
+        let now = chrono::Utc::now().timestamp();
         let cached = CachedReasoning {
             trace: trace.clone(),
-            cached_at: chrono::Utc::now().timestamp()
+            cached_at: now,
+            access_count: 1,
+            last_accessed_at: now,
         };
 
         match self.backend.set(&key, &cached, self.ttl_seconds).await {
@@ -134,7 +199,7 @@ impl<B: ReasoningCacheBackend> ReasoningCache<B> {
 }
 
 pub struct RedisReasoningCacheBackend {
-    connection_manager: redis::aio::ConnectionManager
+    connection_manager: redis::aio::ConnectionManager,
 }
 
 impl RedisReasoningCacheBackend {
@@ -168,7 +233,7 @@ impl ReasoningCacheBackend for RedisReasoningCacheBackend {
                     .map_err(|e| CacheError::SerializationError(e.to_string()))?;
                 Ok(Some(cached))
             }
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -176,7 +241,7 @@ impl ReasoningCacheBackend for RedisReasoningCacheBackend {
         &self,
         key: &str,
         value: &CachedReasoning,
-        ttl_seconds: u64
+        ttl_seconds: u64,
     ) -> Result<(), CacheError> {
         use redis::AsyncCommands;
         let mut conn = self.connection_manager.clone();
@@ -208,7 +273,7 @@ impl ReasoningCacheBackend for RedisReasoningCacheBackend {
 pub struct InMemoryReasoningCacheBackend {
     cache: tokio::sync::RwLock<std::collections::HashMap<String, (CachedReasoning, i64)>>,
     access_order: tokio::sync::RwLock<std::collections::VecDeque<String>>,
-    max_entries: usize
+    max_entries: usize,
 }
 
 impl InMemoryReasoningCacheBackend {
@@ -220,7 +285,7 @@ impl InMemoryReasoningCacheBackend {
         Self {
             cache: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             access_order: tokio::sync::RwLock::new(std::collections::VecDeque::new()),
-            max_entries
+            max_entries,
         }
     }
 
@@ -234,9 +299,27 @@ impl InMemoryReasoningCacheBackend {
         let mut cache = self.cache.write().await;
         let mut access_order = self.access_order.write().await;
 
+        let now = chrono::Utc::now().timestamp();
+        let default_decay = ReasoningDecayConfig::default();
+
         while cache.len() >= self.max_entries {
-            if let Some(oldest_key) = access_order.pop_front() {
-                cache.remove(&oldest_key);
+            let mut worst_key: Option<String> = None;
+            let mut worst_score: f64 = f64::MAX;
+
+            // Iterate over access_order from oldest to newest to naturally break ties by LRU
+            for key in access_order.iter() {
+                if let Some((cached, _)) = cache.get(key) {
+                    let score = compute_reasoning_decay_score(now, cached, 3600, &default_decay);
+                    if score < worst_score {
+                        worst_score = score;
+                        worst_key = Some(key.clone());
+                    }
+                }
+            }
+
+            if let Some(key) = worst_key {
+                cache.remove(&key);
+                access_order.retain(|k| k != &key);
             } else {
                 break;
             }
@@ -259,14 +342,16 @@ impl Default for InMemoryReasoningCacheBackend {
 #[async_trait]
 impl ReasoningCacheBackend for InMemoryReasoningCacheBackend {
     async fn get(&self, key: &str) -> Result<Option<CachedReasoning>, CacheError> {
+        let now = chrono::Utc::now().timestamp();
         let cache = self.cache.read().await;
         if let Some((_, expires_at)) = cache.get(key) {
-            let now = chrono::Utc::now().timestamp();
             if now < *expires_at {
                 drop(cache);
                 self.update_access_order(key).await;
-                let cache = self.cache.read().await;
-                if let Some((cached, _)) = cache.get(key) {
+                let mut cache = self.cache.write().await;
+                if let Some((cached, _)) = cache.get_mut(key) {
+                    cached.access_count += 1;
+                    cached.last_accessed_at = now;
                     return Ok(Some(cached.clone()));
                 }
             }
@@ -278,7 +363,7 @@ impl ReasoningCacheBackend for InMemoryReasoningCacheBackend {
         &self,
         key: &str,
         value: &CachedReasoning,
-        ttl_seconds: u64
+        ttl_seconds: u64,
     ) -> Result<(), CacheError> {
         self.evict_lru_if_needed().await;
 
@@ -310,7 +395,7 @@ mod tests {
     fn test_ctx() -> TenantContext {
         TenantContext::new(
             TenantId::new("test-tenant".to_string()).unwrap(),
-            UserId::new("test-user".to_string()).unwrap()
+            UserId::new("test-user".to_string()).unwrap(),
         )
     }
 
@@ -323,7 +408,7 @@ mod tests {
             end_time: chrono::Utc::now(),
             timed_out: false,
             duration_ms: 100,
-            metadata: std::collections::HashMap::new()
+            metadata: std::collections::HashMap::new(),
         }
     }
 
@@ -336,7 +421,7 @@ mod tests {
             ReasoningCache::<InMemoryReasoningCacheBackend>::generate_cache_key(&ctx, "TEST QUERY");
         let key3 = ReasoningCache::<InMemoryReasoningCacheBackend>::generate_cache_key(
             &ctx,
-            "  test   query  "
+            "  test   query  ",
         );
 
         assert_eq!(key1, key2, "Keys should be case-insensitive");
@@ -348,20 +433,20 @@ mod tests {
     fn test_different_tenants_different_keys() {
         let ctx1 = TenantContext::new(
             TenantId::new("tenant-1".to_string()).unwrap(),
-            UserId::new("user".to_string()).unwrap()
+            UserId::new("user".to_string()).unwrap(),
         );
         let ctx2 = TenantContext::new(
             TenantId::new("tenant-2".to_string()).unwrap(),
-            UserId::new("user".to_string()).unwrap()
+            UserId::new("user".to_string()).unwrap(),
         );
 
         let key1 = ReasoningCache::<InMemoryReasoningCacheBackend>::generate_cache_key(
             &ctx1,
-            "same query"
+            "same query",
         );
         let key2 = ReasoningCache::<InMemoryReasoningCacheBackend>::generate_cache_key(
             &ctx2,
-            "same query"
+            "same query",
         );
 
         assert_ne!(key1, key2, "Different tenants should have different keys");
@@ -450,7 +535,9 @@ mod tests {
     fn test_cached_reasoning_serialization() {
         let cached = CachedReasoning {
             trace: test_trace(),
-            cached_at: 1704067200
+            cached_at: 1704067200,
+            access_count: 1,
+            last_accessed_at: 1704067200,
         };
 
         let json = serde_json::to_string(&cached).unwrap();
@@ -458,6 +545,8 @@ mod tests {
 
         assert_eq!(parsed.cached_at, cached.cached_at);
         assert_eq!(parsed.trace.strategy, cached.trace.strategy);
+        assert_eq!(parsed.access_count, 1);
+        assert_eq!(parsed.last_accessed_at, 1704067200);
     }
 
     #[tokio::test]

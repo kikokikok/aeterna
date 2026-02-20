@@ -3,7 +3,7 @@
 //! MCP tools for policy management: propose, approve, reject, list.
 
 use crate::policy_translator::{
-    DraftStatus, PolicyDraft, PolicyScope, PolicySeverity, StructuredIntent
+    DraftStatus, PolicyDraft, PolicyScope, PolicySeverity, StructuredIntent,
 };
 use crate::tools::Tool;
 use async_trait::async_trait;
@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use storage::approval_workflow::{
     ApprovalEvent, ApprovalModeKind, ApprovalWorkflow, ApprovalWorkflowContext, RiskLevelKind,
-    WorkflowState
+    WorkflowState,
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -34,38 +34,38 @@ pub struct PolicyProposal {
     pub proposed_at: DateTime<Utc>,
     pub workflow: ApprovalWorkflow,
     pub notified_approvers: Vec<String>,
-    pub expires_at: DateTime<Utc>
+    pub expires_at: DateTime<Utc>,
 }
 
 pub trait PolicyProposalStorage: Send + Sync {
     fn store_proposal(
         &self,
-        proposal: PolicyProposal
+        proposal: PolicyProposal,
     ) -> impl std::future::Future<Output = Result<(), PolicyToolError>> + Send;
 
     fn get_proposal(
         &self,
-        proposal_id: &str
+        proposal_id: &str,
     ) -> impl std::future::Future<Output = Result<Option<PolicyProposal>, PolicyToolError>> + Send;
 
     fn get_proposal_by_draft(
         &self,
-        draft_id: &str
+        draft_id: &str,
     ) -> impl std::future::Future<Output = Result<Option<PolicyProposal>, PolicyToolError>> + Send;
 
     fn update_proposal(
         &self,
-        proposal: PolicyProposal
+        proposal: PolicyProposal,
     ) -> impl std::future::Future<Output = Result<(), PolicyToolError>> + Send;
 
     fn list_pending(
         &self,
-        scope: Option<PolicyScope>
+        scope: Option<PolicyScope>,
     ) -> impl std::future::Future<Output = Result<Vec<PolicyProposal>, PolicyToolError>> + Send;
 
     fn get_draft(
         &self,
-        draft_id: &str
+        draft_id: &str,
     ) -> impl std::future::Future<Output = Result<Option<PolicyDraft>, PolicyToolError>> + Send;
 }
 
@@ -96,25 +96,25 @@ pub enum PolicyToolError {
     NotificationError(String),
 
     #[error("Unauthorized: {0}")]
-    Unauthorized(String)
+    Unauthorized(String),
 }
 
 pub trait ApproverResolver: Send + Sync {
     fn get_approvers(
         &self,
         scope: &PolicyScope,
-        severity: &PolicySeverity
+        severity: &PolicySeverity,
     ) -> impl std::future::Future<Output = Result<Vec<String>, PolicyToolError>> + Send;
 
     fn get_required_approvals(
         &self,
         scope: &PolicyScope,
-        severity: &PolicySeverity
+        severity: &PolicySeverity,
     ) -> impl std::future::Future<Output = Result<u32, PolicyToolError>> + Send;
 
     fn get_approval_timeout_hours(
         &self,
-        scope: &PolicyScope
+        scope: &PolicyScope,
     ) -> impl std::future::Future<Output = Result<u32, PolicyToolError>> + Send;
 }
 
@@ -122,7 +122,7 @@ pub trait NotificationService: Send + Sync {
     fn notify_approvers(
         &self,
         approvers: &[String],
-        proposal: &PolicyProposal
+        proposal: &PolicyProposal,
     ) -> impl std::future::Future<Output = Result<(), PolicyToolError>> + Send;
 
     fn notify_proposer(
@@ -130,7 +130,7 @@ pub trait NotificationService: Send + Sync {
         proposer: &str,
         proposal: &PolicyProposal,
         status: &str,
-        comment: Option<&str>
+        comment: Option<&str>,
     ) -> impl std::future::Future<Output = Result<(), PolicyToolError>> + Send;
 }
 
@@ -138,24 +138,24 @@ pub struct PolicyProposeTool<S, R, N>
 where
     S: PolicyProposalStorage,
     R: ApproverResolver,
-    N: NotificationService
+    N: NotificationService,
 {
     storage: Arc<S>,
     approver_resolver: Arc<R>,
-    notification_service: Arc<N>
+    notification_service: Arc<N>,
 }
 
 impl<S, R, N> PolicyProposeTool<S, R, N>
 where
     S: PolicyProposalStorage,
     R: ApproverResolver,
-    N: NotificationService
+    N: NotificationService,
 {
     pub fn new(storage: Arc<S>, approver_resolver: Arc<R>, notification_service: Arc<N>) -> Self {
         Self {
             storage,
             approver_resolver,
-            notification_service
+            notification_service,
         }
     }
 
@@ -164,7 +164,7 @@ where
         draft_id: &str,
         justification: Option<String>,
         notify: Vec<String>,
-        proposed_by: &str
+        proposed_by: &str,
     ) -> Result<PolicyProposal, PolicyToolError> {
         let draft = self
             .storage
@@ -215,13 +215,13 @@ where
         let risk_level = match severity {
             PolicySeverity::Block => RiskLevelKind::High,
             PolicySeverity::Warn => RiskLevelKind::Medium,
-            PolicySeverity::Info => RiskLevelKind::Low
+            PolicySeverity::Info => RiskLevelKind::Low,
         };
 
         let approval_mode = match scope {
             PolicyScope::Company => ApprovalModeKind::Unanimous,
             PolicyScope::Org => ApprovalModeKind::Quorum,
-            _ => ApprovalModeKind::Single
+            _ => ApprovalModeKind::Single,
         };
 
         let workflow_ctx = ApprovalWorkflowContext {
@@ -232,14 +232,14 @@ where
             approval_mode,
             timeout_hours: timeout_hours as i32,
             auto_approve_low_risk: false,
-            risk_level
+            risk_level,
         };
 
         let mut workflow = ApprovalWorkflow::new(workflow_ctx);
         workflow
             .handle(ApprovalEvent::Submit {
                 requestor_id: Uuid::new_v4(),
-                submitted_at: now
+                submitted_at: now,
             })
             .map_err(|e| PolicyToolError::InvalidStateTransition(e.to_string()))?;
 
@@ -256,7 +256,7 @@ where
             proposed_at: now,
             workflow,
             notified_approvers: approvers.clone(),
-            expires_at
+            expires_at,
         };
 
         self.storage.store_proposal(proposal.clone()).await?;
@@ -288,7 +288,7 @@ impl<S, R, N> Tool for PolicyProposeTool<S, R, N>
 where
     S: PolicyProposalStorage + 'static,
     R: ApproverResolver + 'static,
-    N: NotificationService + 'static
+    N: NotificationService + 'static,
 {
     fn name(&self) -> &str {
         "aeterna_policy_propose"
@@ -332,7 +332,7 @@ where
             justification: Option<String>,
             #[serde(default)]
             notify: Vec<String>,
-            proposed_by: String
+            proposed_by: String,
         }
 
         let p: ProposeParams = serde_json::from_value(params)?;
@@ -354,9 +354,9 @@ where
 
 pub struct PolicyListPendingTool<S>
 where
-    S: PolicyProposalStorage
+    S: PolicyProposalStorage,
 {
-    storage: Arc<S>
+    storage: Arc<S>,
 }
 
 impl<S: PolicyProposalStorage> PolicyListPendingTool<S> {
@@ -368,7 +368,7 @@ impl<S: PolicyProposalStorage> PolicyListPendingTool<S> {
 #[async_trait]
 impl<S> Tool for PolicyListPendingTool<S>
 where
-    S: PolicyProposalStorage + 'static
+    S: PolicyProposalStorage + 'static,
 {
     fn name(&self) -> &str {
         "aeterna_policy_list_pending"
@@ -394,7 +394,7 @@ where
     async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         #[derive(Deserialize)]
         struct ListParams {
-            scope: Option<String>
+            scope: Option<String>,
         }
 
         let p: ListParams = serde_json::from_value(params)?;
@@ -428,14 +428,14 @@ where
 
 pub struct InMemoryPolicyStorage {
     proposals: RwLock<HashMap<String, PolicyProposal>>,
-    drafts: RwLock<HashMap<String, PolicyDraft>>
+    drafts: RwLock<HashMap<String, PolicyDraft>>,
 }
 
 impl InMemoryPolicyStorage {
     pub fn new() -> Self {
         Self {
             proposals: RwLock::new(HashMap::new()),
-            drafts: RwLock::new(HashMap::new())
+            drafts: RwLock::new(HashMap::new()),
         }
     }
 
@@ -460,7 +460,7 @@ impl PolicyProposalStorage for InMemoryPolicyStorage {
 
     async fn get_proposal(
         &self,
-        proposal_id: &str
+        proposal_id: &str,
     ) -> Result<Option<PolicyProposal>, PolicyToolError> {
         let proposals = self.proposals.read().await;
         Ok(proposals.get(proposal_id).cloned())
@@ -468,7 +468,7 @@ impl PolicyProposalStorage for InMemoryPolicyStorage {
 
     async fn get_proposal_by_draft(
         &self,
-        draft_id: &str
+        draft_id: &str,
     ) -> Result<Option<PolicyProposal>, PolicyToolError> {
         let proposals = self.proposals.read().await;
         Ok(proposals.values().find(|p| p.draft_id == draft_id).cloned())
@@ -482,7 +482,7 @@ impl PolicyProposalStorage for InMemoryPolicyStorage {
 
     async fn list_pending(
         &self,
-        scope: Option<PolicyScope>
+        scope: Option<PolicyScope>,
     ) -> Result<Vec<PolicyProposal>, PolicyToolError> {
         let proposals = self.proposals.read().await;
         let pending: Vec<_> = proposals
@@ -503,7 +503,7 @@ impl PolicyProposalStorage for InMemoryPolicyStorage {
 }
 
 pub struct DefaultApproverResolver {
-    approvers_by_scope: HashMap<PolicyScope, Vec<String>>
+    approvers_by_scope: HashMap<PolicyScope, Vec<String>>,
 }
 
 impl DefaultApproverResolver {
@@ -514,11 +514,11 @@ impl DefaultApproverResolver {
         approvers.insert(PolicyScope::Team, vec!["tech-lead@company.com".to_string()]);
         approvers.insert(
             PolicyScope::Project,
-            vec!["tech-lead@company.com".to_string()]
+            vec!["tech-lead@company.com".to_string()],
         );
 
         Self {
-            approvers_by_scope: approvers
+            approvers_by_scope: approvers,
         }
     }
 
@@ -538,7 +538,7 @@ impl ApproverResolver for DefaultApproverResolver {
     async fn get_approvers(
         &self,
         scope: &PolicyScope,
-        _severity: &PolicySeverity
+        _severity: &PolicySeverity,
     ) -> Result<Vec<String>, PolicyToolError> {
         Ok(self
             .approvers_by_scope
@@ -550,18 +550,18 @@ impl ApproverResolver for DefaultApproverResolver {
     async fn get_required_approvals(
         &self,
         scope: &PolicyScope,
-        severity: &PolicySeverity
+        severity: &PolicySeverity,
     ) -> Result<u32, PolicyToolError> {
         let base = match scope {
             PolicyScope::Company => 2,
             PolicyScope::Org => 2,
             PolicyScope::Team => 1,
-            PolicyScope::Project => 1
+            PolicyScope::Project => 1,
         };
 
         let severity_bonus = match severity {
             PolicySeverity::Block => 1,
-            _ => 0
+            _ => 0,
         };
 
         Ok(base + severity_bonus)
@@ -569,13 +569,13 @@ impl ApproverResolver for DefaultApproverResolver {
 
     async fn get_approval_timeout_hours(
         &self,
-        scope: &PolicyScope
+        scope: &PolicyScope,
     ) -> Result<u32, PolicyToolError> {
         Ok(match scope {
             PolicyScope::Company => 72,
             PolicyScope::Org => 48,
             PolicyScope::Team => 24,
-            PolicyScope::Project => 24
+            PolicyScope::Project => 24,
         })
     }
 }
@@ -586,7 +586,7 @@ impl NotificationService for NoOpNotificationService {
     async fn notify_approvers(
         &self,
         _approvers: &[String],
-        _proposal: &PolicyProposal
+        _proposal: &PolicyProposal,
     ) -> Result<(), PolicyToolError> {
         Ok(())
     }
@@ -596,7 +596,7 @@ impl NotificationService for NoOpNotificationService {
         _proposer: &str,
         _proposal: &PolicyProposal,
         _status: &str,
-        _comment: Option<&str>
+        _comment: Option<&str>,
     ) -> Result<(), PolicyToolError> {
         Ok(())
     }
@@ -620,13 +620,13 @@ mod tests {
                 operator: ConstraintOperator::MustNotUse,
                 value: serde_json::Value::String("test".to_string()),
                 severity: ConstraintSeverity::Warn,
-                message: "Test dependency blocked".to_string()
+                message: "Test dependency blocked".to_string(),
             }],
             explanation: "Test policy".to_string(),
             validation: ValidationResult {
                 is_valid: true,
                 errors: vec![],
-                warnings: vec![]
+                warnings: vec![],
             },
             intent: StructuredIntent {
                 original: "Block test".to_string(),
@@ -636,8 +636,8 @@ mod tests {
                 target_value: "test".to_string(),
                 condition: None,
                 severity: PolicySeverity::Warn,
-                confidence: 0.9
-            }
+                confidence: 0.9,
+            },
         }
     }
 
@@ -657,7 +657,7 @@ mod tests {
                 "draft-123",
                 Some("Testing".to_string()),
                 vec![],
-                "user@test.com"
+                "user@test.com",
             )
             .await
             .unwrap();
@@ -741,7 +741,7 @@ mod tests {
                 "draft-456",
                 None,
                 vec!["extra@approver.com".to_string()],
-                "user@test.com"
+                "user@test.com",
             )
             .await
             .unwrap();
@@ -834,7 +834,7 @@ mod tests {
             operator: ConstraintOperator::MustNotUse,
             value: serde_json::Value::String("test".to_string()),
             severity: ConstraintSeverity::Block,
-            message: "Company-wide block".to_string()
+            message: "Company-wide block".to_string(),
         }];
         assert_eq!(
             tool.extract_scope_from_rules(&company_rules),
@@ -848,7 +848,7 @@ mod tests {
             operator: ConstraintOperator::MustNotUse,
             value: serde_json::Value::String("test".to_string()),
             severity: ConstraintSeverity::Warn,
-            message: "Org standard".to_string()
+            message: "Org standard".to_string(),
         }];
         assert_eq!(tool.extract_scope_from_rules(&org_rules), PolicyScope::Org);
 
@@ -859,7 +859,7 @@ mod tests {
             operator: ConstraintOperator::MustExist,
             value: serde_json::Value::String("README.md".to_string()),
             severity: ConstraintSeverity::Info,
-            message: "Team requires README".to_string()
+            message: "Team requires README".to_string(),
         }];
         assert_eq!(
             tool.extract_scope_from_rules(&team_rules),
@@ -873,7 +873,7 @@ mod tests {
             operator: ConstraintOperator::MustNotMatch,
             value: serde_json::Value::String("console.log".to_string()),
             severity: ConstraintSeverity::Warn,
-            message: "No console.log".to_string()
+            message: "No console.log".to_string(),
         }];
         assert_eq!(
             tool.extract_scope_from_rules(&project_rules),

@@ -5,7 +5,6 @@
 ///! - Semantic similarity search using RediSearch (if available)
 ///! - TTL management
 ///! - Per-tenant isolation
-
 use crate::embedding_cache::{CacheError, CachedEmbedding, EmbeddingCacheBackend};
 use async_trait::async_trait;
 use mk_core::types::TenantContext;
@@ -62,9 +61,10 @@ impl EmbeddingCacheBackend for RedisEmbeddingCacheBackend {
     async fn get_exact(&self, key: &str) -> Result<Option<CachedEmbedding>, CacheError> {
         let mut conn = self.connection_manager.clone();
 
-        let data: Option<String> = conn.get(key).await.map_err(|e| {
-            CacheError::OperationError(format!("Redis GET failed: {}", e))
-        })?;
+        let data: Option<String> = conn
+            .get(key)
+            .await
+            .map_err(|e| CacheError::OperationError(format!("Redis GET failed: {}", e)))?;
 
         match data {
             Some(json_str) => {
@@ -85,11 +85,11 @@ impl EmbeddingCacheBackend for RedisEmbeddingCacheBackend {
     ) -> Result<(), CacheError> {
         let mut conn = self.connection_manager.clone();
 
-        let json_str = serde_json::to_string(value).map_err(|e| {
-            CacheError::SerializationError(format!("Failed to serialize: {}", e))
-        })?;
+        let json_str = serde_json::to_string(value)
+            .map_err(|e| CacheError::SerializationError(format!("Failed to serialize: {}", e)))?;
 
-        let _: () = conn.set_ex(key, json_str, ttl_seconds)
+        let _: () = conn
+            .set_ex(key, json_str, ttl_seconds)
             .await
             .map_err(|e| CacheError::OperationError(format!("Redis SET failed: {}", e)))?;
 
@@ -136,11 +136,10 @@ impl EmbeddingCacheBackend for RedisEmbeddingCacheBackend {
             CacheError::SerializationError(format!("Failed to serialize embedding: {}", e))
         })?;
 
-        let _: () = conn.set_ex(key, embedding_json, ttl_seconds)
+        let _: () = conn
+            .set_ex(key, embedding_json, ttl_seconds)
             .await
-            .map_err(|e| {
-                CacheError::OperationError(format!("Failed to store vector: {}", e))
-            })?;
+            .map_err(|e| CacheError::OperationError(format!("Failed to store vector: {}", e)))?;
 
         debug!("Stored embedding vector for content hash: {}", content_hash);
 
@@ -165,6 +164,8 @@ mod tests {
             model: "text-embedding-ada-002".to_string(),
             cached_at: chrono::Utc::now().timestamp(),
             tenant_id: "test-tenant".to_string(),
+            access_count: 1,
+            last_accessed_at: chrono::Utc::now().timestamp(),
         };
 
         // Test set and get
@@ -173,10 +174,7 @@ mod tests {
             .await
             .expect("Failed to set");
 
-        let retrieved = backend
-            .get_exact("test:key")
-            .await
-            .expect("Failed to get");
+        let retrieved = backend.get_exact("test:key").await.expect("Failed to get");
 
         assert!(retrieved.is_some());
         let retrieved = retrieved.unwrap();

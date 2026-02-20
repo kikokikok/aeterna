@@ -2,8 +2,8 @@
 //!
 //! Trigger re-indexing for a repository.
 
-use clap::Args;
 use crate::output;
+use clap::Args;
 
 #[derive(Args)]
 pub struct IndexArgs {
@@ -26,14 +26,28 @@ pub struct IndexArgs {
 
 pub async fn handle(args: IndexArgs) -> anyhow::Result<()> {
     output::header("Code Search Indexing");
-    
-    let strategy = if args.incremental { "incremental" } else { "full" };
+
+    let strategy = if args.incremental {
+        "incremental"
+    } else {
+        "full"
+    };
     println!("  Target Repository: {}", args.repo);
     println!("  Strategy:          {}", strategy);
-    println!("  Mode:              {}", if args.r#async { "Asynchronous" } else { "Synchronous" });
+    println!(
+        "  Mode:              {}",
+        if args.r#async {
+            "Asynchronous"
+        } else {
+            "Synchronous"
+        }
+    );
     println!();
 
-    output::info(&format!("Triggering {} index for '{}'...", strategy, args.repo));
+    output::info(&format!(
+        "Triggering {} index for '{}'...",
+        strategy, args.repo
+    ));
 
     // Mock implementation for now
     if args.r#async {
