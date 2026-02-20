@@ -2,7 +2,6 @@
 ///!
 ///! Per-tenant cost tracking for embeddings, storage, and compute resources.
 ///! Provides detailed cost breakdown and budget management.
-
 use chrono::{DateTime, Utc};
 use mk_core::types::TenantContext;
 use serde::{Deserialize, Serialize};
@@ -103,12 +102,7 @@ impl CostTracker {
     }
 
     /// Record an embedding generation cost
-    pub fn record_embedding_generation(
-        &self,
-        ctx: &TenantContext,
-        token_count: u64,
-        model: &str,
-    ) {
+    pub fn record_embedding_generation(&self, ctx: &TenantContext, token_count: u64, model: &str) {
         let cost = (token_count as f64 / 1000.0) * self.config.embedding_cost_per_1k_tokens;
         self.record_cost(
             ctx,
@@ -121,12 +115,7 @@ impl CostTracker {
     }
 
     /// Record an LLM completion cost
-    pub fn record_llm_completion(
-        &self,
-        ctx: &TenantContext,
-        token_count: u64,
-        model: &str,
-    ) {
+    pub fn record_llm_completion(&self, ctx: &TenantContext, token_count: u64, model: &str) {
         let cost = (token_count as f64 / 1000.0) * self.config.llm_cost_per_1k_tokens;
         self.record_cost(
             ctx,
@@ -139,11 +128,7 @@ impl CostTracker {
     }
 
     /// Record vector storage cost
-    pub fn record_storage(
-        &self,
-        ctx: &TenantContext,
-        bytes: u64,
-    ) {
+    pub fn record_storage(&self, ctx: &TenantContext, bytes: u64) {
         let gb = bytes as f64 / (1024.0 * 1024.0 * 1024.0);
         let monthly_cost = gb * self.config.storage_cost_per_gb_month;
         // Prorate to daily cost
@@ -200,9 +185,7 @@ impl CostTracker {
         let entries = self.entries.read().unwrap();
         let filtered: Vec<_> = entries
             .iter()
-            .filter(|e| {
-                e.tenant_id == tenant_id && e.timestamp >= start && e.timestamp <= end
-            })
+            .filter(|e| e.tenant_id == tenant_id && e.timestamp >= start && e.timestamp <= end)
             .collect();
 
         let total_cost: f64 = filtered.iter().map(|e| e.cost).sum();
@@ -269,9 +252,7 @@ impl CostTracker {
         );
 
         match (summary.budget_limit, summary.total_cost) {
-            (Some(limit), cost) if limit > 0.0 => {
-                (cost / limit).min(1.0)
-            }
+            (Some(limit), cost) if limit > 0.0 => (cost / limit).min(1.0),
             _ => 0.0,
         }
     }
@@ -305,7 +286,11 @@ mod tests {
 
         assert!(summary.total_cost > 0.0);
         assert_eq!(summary.tenant_id, "test-tenant");
-        assert!(summary.by_resource_type.contains_key(&ResourceType::EmbeddingGeneration));
+        assert!(
+            summary
+                .by_resource_type
+                .contains_key(&ResourceType::EmbeddingGeneration)
+        );
     }
 
     #[test]
