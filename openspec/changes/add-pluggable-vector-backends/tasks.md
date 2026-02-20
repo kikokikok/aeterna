@@ -26,8 +26,8 @@
 - [x] 3.5 Implement semantic search with score threshold
 - [x] 3.6 Implement delete by ID
 - [x] 3.7 Add Pinecone-specific error handling (rate limits, quota)
-- [ ] 3.8 Write integration tests (requires Pinecone account)
-- [ ] 3.9 Document Pinecone setup and configuration
+- [x] 3.8 Write integration tests (requires Pinecone account)
+- [x] 3.9 Document Pinecone setup and configuration
 
 ## 4. pgvector Backend
 
@@ -38,8 +38,8 @@
 - [x] 4.5 Implement HNSW index creation and management
 - [x] 4.6 Implement upsert with ON CONFLICT handling
 - [x] 4.7 Implement semantic search using `<=>` (cosine), `<->` (L2), or `<#>` (inner product)
-- [ ] 4.8 Write integration tests (requires PostgreSQL with pgvector)
-- [ ] 4.9 Document pgvector setup and configuration
+- [x] 4.8 Write integration tests (requires PostgreSQL with pgvector)
+- [x] 4.9 Document pgvector setup and configuration
 
 ## 5. Vertex AI Vector Search Backend
 
@@ -51,8 +51,8 @@
 - [x] 5.6 Implement batch upsert
 - [x] 5.7 Implement semantic search with neighbor count and distance threshold
 - [x] 5.8 Handle Vertex AI specific errors (authentication, API errors)
-- [ ] 5.9 Write integration tests (requires GCP project)
-- [ ] 5.10 Document Vertex AI setup (index creation, endpoint, IAM)
+- [x] 5.9 Write integration tests (requires GCP project)
+- [x] 5.10 Document Vertex AI setup (index creation, endpoint, IAM)
 
 ## 6. Databricks Vector Search Backend
 
@@ -64,8 +64,8 @@
 - [x] 6.6 Implement semantic search with queryIndex endpoint
 - [x] 6.7 Implement delete via deleteDataVectorIndex endpoint
 - [x] 6.8 Handle Databricks specific errors (rate limits, auth)
-- [ ] 6.9 Write integration tests (requires Databricks workspace)
-- [ ] 6.10 Document Databricks setup (workspace, Unity Catalog, endpoint)
+- [x] 6.9 Write integration tests (requires Databricks workspace)
+- [x] 6.10 Document Databricks setup (workspace, Unity Catalog, endpoint)
 
 ## 7. Weaviate Backend
 
@@ -77,8 +77,8 @@
 - [x] 7.6 Implement hybrid search (BM25 + vector with alpha tuning) - capability advertised
 - [x] 7.7 Implement semantic search via GraphQL
 - [x] 7.8 Handle Weaviate specific errors
-- [ ] 7.9 Write integration tests (requires Weaviate instance)
-- [ ] 7.10 Document Weaviate setup and configuration
+- [x] 7.9 Write integration tests (requires Weaviate instance)
+- [x] 7.10 Document Weaviate setup and configuration
 
 ## 8. MongoDB Atlas Vector Search Backend
 
@@ -90,8 +90,8 @@
 - [x] 8.6 Implement vector search via aggregation pipeline ($vectorSearch)
 - [x] 8.7 Implement hybrid queries (vector + filter)
 - [x] 8.8 Handle MongoDB specific errors
-- [ ] 8.9 Write integration tests (requires MongoDB Atlas)
-- [ ] 8.10 Document MongoDB Atlas setup (cluster, vector index)
+- [x] 8.9 Write integration tests (requires MongoDB Atlas)
+- [x] 8.10 Document MongoDB Atlas setup (cluster, vector index)
 
 ## 9. Observability and Health
 
@@ -99,7 +99,7 @@
 - [x] 9.2 Add health check endpoint per backend (InstrumentedBackend wraps health_check)
 - [x] 9.3 Add capability discovery endpoint (capabilities() method)
 - [x] 9.4 Implement circuit breaker for backend failures
-- [ ] 9.5 Add distributed tracing spans for backend operations
+- [x] 9.5 Add distributed tracing spans for backend operations
 - [x] 9.6 Write observability integration tests (CircuitBreaker unit tests)
 
 ## 10. Documentation and Testing
