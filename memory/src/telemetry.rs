@@ -3,7 +3,7 @@ use tracing::{Level, Span, instrument, span};
 
 #[derive(Debug)]
 pub struct MemoryTelemetry {
-    _phantom: std::marker::PhantomData<()>
+    _phantom: std::marker::PhantomData<()>,
 }
 
 impl Default for MemoryTelemetry {
@@ -15,19 +15,19 @@ impl Default for MemoryTelemetry {
 impl MemoryTelemetry {
     pub fn new() -> Self {
         Self {
-            _phantom: std::marker::PhantomData
+            _phantom: std::marker::PhantomData,
         }
     }
 
     pub fn with_tracer(_tracer: ()) -> Self {
         Self {
-            _phantom: std::marker::PhantomData
+            _phantom: std::marker::PhantomData,
         }
     }
 
     pub fn with_meter(_meter: ()) -> Self {
         Self {
-            _phantom: std::marker::PhantomData
+            _phantom: std::marker::PhantomData,
         }
     }
 
@@ -45,13 +45,13 @@ impl MemoryTelemetry {
         let counter_labels = [
             ("operation", operation.to_string()),
             ("layer", layer.to_string()),
-            ("status", "success".to_string())
+            ("status", "success".to_string()),
         ];
         counter!("memory_operations_total", &counter_labels).increment(1);
 
         let histogram_labels = [
             ("operation", operation.to_string()),
-            ("layer", layer.to_string())
+            ("layer", layer.to_string()),
         ];
         histogram!("memory_operation_duration_seconds", &histogram_labels)
             .record(duration_ms / 1000.0);
@@ -62,14 +62,14 @@ impl MemoryTelemetry {
             ("operation", operation.to_string()),
             ("layer", layer.to_string()),
             ("status", "failure".to_string()),
-            ("error", error.to_string())
+            ("error", error.to_string()),
         ];
         counter!("memory_operations_total", &counter_labels).increment(1);
 
         let error_counter_labels = [
             ("operation", operation.to_string()),
             ("layer", layer.to_string()),
-            ("error_type", error.to_string())
+            ("error_type", error.to_string()),
         ];
         counter!("memory_operation_errors_total", &error_counter_labels).increment(1);
     }
@@ -237,7 +237,7 @@ pub fn init_telemetry() -> Result<MemoryTelemetry, Box<dyn std::error::Error + S
 }
 
 pub fn init_telemetry_with_endpoint(
-    endpoint: std::net::SocketAddr
+    endpoint: std::net::SocketAddr,
 ) -> Result<MemoryTelemetry, Box<dyn std::error::Error + Send + Sync>> {
     let telemetry = MemoryTelemetry::new();
 

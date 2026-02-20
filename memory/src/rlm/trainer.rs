@@ -19,21 +19,21 @@ pub enum TrainingOutcome {
     /// The user refined the query (partial success).
     QueryRefined { new_query: String },
     /// No signal available (neutral outcome).
-    NoSignal
+    NoSignal,
 }
 
 /// Reward configuration for trajectory evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RewardConfig {
     pub success_weight: f32,
-    pub efficiency_weight: f32
+    pub efficiency_weight: f32,
 }
 
 impl Default for RewardConfig {
     fn default() -> Self {
         Self {
             success_weight: 1.0,
-            efficiency_weight: 0.3
+            efficiency_weight: 0.3,
         }
     }
 }
@@ -45,7 +45,7 @@ impl RewardConfig {
             Some(TrainingOutcome::ResultUsed { quality_score }) => *quality_score,
             Some(TrainingOutcome::QueryRefined { .. }) => 0.3,
             Some(TrainingOutcome::ResultIgnored) => -0.5,
-            Some(TrainingOutcome::NoSignal) | None => 0.0
+            Some(TrainingOutcome::NoSignal) | None => 0.0,
         };
 
         let efficiency = 1.0 - (trajectory.tokens_used as f32 / 100_000.0).min(1.0);
@@ -59,7 +59,7 @@ impl RewardConfig {
 pub struct TimestampedAction {
     pub action: crate::rlm::strategy::DecompositionAction,
     pub timestamp: DateTime<Utc>,
-    pub intermediate_reward: f32
+    pub intermediate_reward: f32,
 }
 
 /// Internal decomposition trajectory for training.
@@ -83,7 +83,7 @@ pub struct DecompositionTrajectory {
     pub max_depth: u8,
 
     // Computed reward (after outcome known)
-    pub reward: Option<f32>
+    pub reward: Option<f32>,
 }
 
 impl DecompositionTrajectory {
@@ -99,7 +99,7 @@ impl DecompositionTrajectory {
             outcome: None,
             tokens_used: 0,
             max_depth: 0,
-            reward: None
+            reward: None,
         }
     }
 
@@ -112,7 +112,7 @@ impl DecompositionTrajectory {
             .map(|step| TimestampedAction {
                 action: step.action.clone(),
                 timestamp: started_at,
-                intermediate_reward: step.reward
+                intermediate_reward: step.reward,
             })
             .collect();
 
@@ -127,7 +127,7 @@ impl DecompositionTrajectory {
             outcome: None,
             tokens_used: 0, // Would be tracked during actual execution
             max_depth: 0,   // Would be tracked during actual execution
-            reward: None
+            reward: None,
         }
     }
 
@@ -143,7 +143,7 @@ impl DecompositionTrajectory {
         self.actions.push(TimestampedAction {
             action,
             timestamp: Utc::now(),
-            intermediate_reward: reward
+            intermediate_reward: reward,
         });
         self.max_depth = self.max_depth.max(self.actions.len() as u8);
     }
@@ -162,7 +162,7 @@ pub struct PolicyState {
     /// Exploration rate (epsilon).
     pub epsilon: f32,
     /// Number of training steps.
-    pub step_count: usize
+    pub step_count: usize,
 }
 
 impl Default for PolicyState {
@@ -170,7 +170,7 @@ impl Default for PolicyState {
         Self {
             action_weights: HashMap::new(),
             epsilon: 0.1,
-            step_count: 0
+            step_count: 0,
         }
     }
 }
@@ -201,7 +201,7 @@ pub struct DecompositionTrainer {
     gamma: f32,
     #[allow(dead_code)]
     reward_config: RewardConfig,
-    policy_state: PolicyState
+    policy_state: PolicyState,
 }
 
 impl DecompositionTrainer {
@@ -210,7 +210,7 @@ impl DecompositionTrainer {
             learning_rate: 0.001,
             gamma: 0.95,
             reward_config,
-            policy_state: PolicyState::default()
+            policy_state: PolicyState::default(),
         }
     }
 
@@ -219,7 +219,7 @@ impl DecompositionTrainer {
             learning_rate,
             gamma,
             reward_config,
-            policy_state: PolicyState::default()
+            policy_state: PolicyState::default(),
         }
     }
 
@@ -254,7 +254,7 @@ impl DecompositionTrainer {
     /// Compute discounted returns for each step.
     pub fn compute_returns(
         &self,
-        trajectory: &DecompositionTrajectory
+        trajectory: &DecompositionTrajectory,
     ) -> anyhow::Result<Vec<f32>> {
         let mut returns = Vec::with_capacity(trajectory.actions.len());
         let mut running_return = 0.0;
@@ -272,7 +272,7 @@ impl DecompositionTrainer {
     async fn update_policy(
         &mut self,
         trajectory: &DecompositionTrajectory,
-        returns: &[f32]
+        returns: &[f32],
     ) -> anyhow::Result<()> {
         for (action, &return_val) in trajectory.actions.iter().zip(returns.iter()) {
             let action_type = format!("{:?}", action.action);
@@ -289,7 +289,7 @@ impl DecompositionTrainer {
     /// Select action with exploration/exploitation (epsilon-greedy).
     pub fn select_action<'a>(
         &'a self,
-        available_actions: &'a [crate::rlm::strategy::DecompositionAction]
+        available_actions: &'a [crate::rlm::strategy::DecompositionAction],
     ) -> &'a crate::rlm::strategy::DecompositionAction {
         if available_actions.is_empty() {
             panic!("No actions available for selection");
@@ -366,7 +366,7 @@ mod tests {
                 text: "test query".to_string(),
                 ..Default::default()
             },
-            TenantContext::default()
+            TenantContext::default(),
         );
         trajectory.tokens_used = 10_000;
         trajectory.record_outcome(TrainingOutcome::ResultUsed { quality_score: 0.8 }, &config);
@@ -383,7 +383,7 @@ mod tests {
                 text: "test query".to_string(),
                 ..Default::default()
             },
-            TenantContext::default()
+            TenantContext::default(),
         );
         trajectory.tokens_used = 50_000;
         trajectory.record_outcome(TrainingOutcome::ResultIgnored, &config);
@@ -401,13 +401,13 @@ mod tests {
             steps: vec![TrajectoryStep {
                 action: crate::rlm::strategy::DecompositionAction::SearchLayer {
                     layer: MemoryLayer::Project,
-                    query: "subquery".to_string()
+                    query: "subquery".to_string(),
                 },
                 observation: "result".to_string(),
                 reward: 0.5,
-                involved_memory_ids: vec!["id1".to_string()]
+                involved_memory_ids: vec!["id1".to_string()],
             }],
-            total_reward: 0.5
+            total_reward: 0.5,
         };
 
         let traj = DecompositionTrajectory::from_rlm_trajectory(rlm_traj, TenantContext::default());
@@ -424,21 +424,21 @@ mod tests {
                 text: "test".to_string(),
                 ..Default::default()
             },
-            TenantContext::default()
+            TenantContext::default(),
         );
         trajectory.add_action(
             crate::rlm::strategy::DecompositionAction::SearchLayer {
                 layer: MemoryLayer::Project,
-                query: "q1".to_string()
+                query: "q1".to_string(),
             },
-            1.0
+            1.0,
         );
         trajectory.add_action(
             crate::rlm::strategy::DecompositionAction::Aggregate {
                 strategy: crate::rlm::strategy::AggregationStrategy::Summary,
-                results: vec![]
+                results: vec![],
             },
-            0.5
+            0.5,
         );
 
         let returns = trainer.compute_returns(&trajectory).unwrap();
@@ -490,11 +490,11 @@ mod tests {
 
         let action1 = crate::rlm::strategy::DecompositionAction::SearchLayer {
             layer: MemoryLayer::Project,
-            query: "q1".to_string()
+            query: "q1".to_string(),
         };
         let action2 = crate::rlm::strategy::DecompositionAction::SearchLayer {
             layer: MemoryLayer::Team,
-            query: "q2".to_string()
+            query: "q2".to_string(),
         };
 
         let actions = vec![action1, action2];

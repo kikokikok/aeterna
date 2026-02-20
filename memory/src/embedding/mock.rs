@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use mk_core::traits::EmbeddingService;
 
 pub struct MockEmbeddingService {
-    dimension: usize
+    dimension: usize,
 }
 
 impl MockEmbeddingService {

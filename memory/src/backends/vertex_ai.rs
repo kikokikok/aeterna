@@ -3,7 +3,7 @@
 use super::factory::VertexAiConfig;
 use super::{
     BackendCapabilities, BackendError, DeleteResult, DistanceMetric, HealthStatus, SearchQuery,
-    SearchResult, UpsertResult, VectorBackend, VectorRecord
+    SearchResult, UpsertResult, VectorBackend, VectorRecord,
 };
 use async_trait::async_trait;
 use reqwest::Client;
@@ -14,17 +14,17 @@ use std::time::Instant;
 pub struct VertexAiBackend {
     client: Client,
     config: VertexAiConfig,
-    access_token: tokio::sync::RwLock<Option<CachedToken>>
+    access_token: tokio::sync::RwLock<Option<CachedToken>>,
 }
 
 struct CachedToken {
     token: String,
-    expires_at: std::time::Instant
+    expires_at: std::time::Instant,
 }
 
 #[derive(Debug, Serialize)]
 struct UpsertRequest {
-    datapoints: Vec<Datapoint>
+    datapoints: Vec<Datapoint>,
 }
 
 #[derive(Debug, Serialize)]
@@ -32,31 +32,31 @@ struct Datapoint {
     datapoint_id: String,
     feature_vector: Vec<f32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    restricts: Vec<Restrict>
+    restricts: Vec<Restrict>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Restrict {
     namespace: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    allow_list: Vec<String>
+    allow_list: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct RemoveRequest {
-    datapoint_ids: Vec<String>
+    datapoint_ids: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct FindNeighborsRequest {
     deployed_index_id: String,
-    queries: Vec<QueryRequest>
+    queries: Vec<QueryRequest>,
 }
 
 #[derive(Debug, Serialize)]
 struct QueryRequest {
     datapoint: QueryDatapoint,
-    neighbor_count: usize
+    neighbor_count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -64,36 +64,36 @@ struct QueryDatapoint {
     datapoint_id: String,
     feature_vector: Vec<f32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    restricts: Vec<Restrict>
+    restricts: Vec<Restrict>,
 }
 
 #[derive(Debug, Deserialize)]
 struct FindNeighborsResponse {
-    nearest_neighbors: Option<Vec<NearestNeighborResult>>
+    nearest_neighbors: Option<Vec<NearestNeighborResult>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct NearestNeighborResult {
-    neighbors: Option<Vec<Neighbor>>
+    neighbors: Option<Vec<Neighbor>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Neighbor {
     datapoint: Option<NeighborDatapoint>,
-    distance: Option<f64>
+    distance: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
 struct NeighborDatapoint {
     datapoint_id: String,
-    feature_vector: Option<Vec<f32>>
+    feature_vector: Option<Vec<f32>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct MetadataTokenResponse {
     access_token: String,
     #[allow(dead_code)]
-    expires_in: u64
+    expires_in: u64,
 }
 
 impl VertexAiBackend {
@@ -106,7 +106,7 @@ impl VertexAiBackend {
         let backend = Self {
             client,
             config,
-            access_token: tokio::sync::RwLock::new(None)
+            access_token: tokio::sync::RwLock::new(None),
         };
 
         backend.refresh_token().await?;
@@ -130,7 +130,7 @@ impl VertexAiBackend {
             let mut cached = self.access_token.write().await;
             *cached = Some(CachedToken {
                 token: token.clone(),
-                expires_at: std::time::Instant::now() + std::time::Duration::from_secs(3500)
+                expires_at: std::time::Instant::now() + std::time::Duration::from_secs(3500),
             });
         }
 
@@ -138,8 +138,7 @@ impl VertexAiBackend {
     }
 
     async fn fetch_access_token(&self) -> Result<String, BackendError> {
-        let metadata_url =
-            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
+        let metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
 
         let resp = self
             .client
@@ -165,7 +164,7 @@ impl VertexAiBackend {
                     return Ok(token);
                 }
                 Err(BackendError::AuthenticationFailed(
-                    "Not running on GCP and GOOGLE_ACCESS_TOKEN not set".into()
+                    "Not running on GCP and GOOGLE_ACCESS_TOKEN not set".into(),
                 ))
             }
         }
@@ -194,7 +193,7 @@ impl VertexAiBackend {
     fn tenant_restrict(tenant_id: &str) -> Restrict {
         Restrict {
             namespace: "tenant".to_string(),
-            allow_list: vec![tenant_id.to_string()]
+            allow_list: vec![tenant_id.to_string()],
         }
     }
 }
@@ -209,7 +208,7 @@ impl VectorBackend for VertexAiBackend {
                 let latency = start.elapsed().as_millis() as u64;
                 Ok(HealthStatus::healthy("vertex_ai").with_latency(latency))
             }
-            Err(e) => Ok(HealthStatus::unhealthy("vertex_ai", e.to_string()))
+            Err(e) => Ok(HealthStatus::unhealthy("vertex_ai", e.to_string())),
         }
     }
 
@@ -226,14 +225,14 @@ impl VectorBackend for VertexAiBackend {
                 DistanceMetric::DotProduct,
             ],
             max_batch_size: 100,
-            supports_delete_by_filter: false
+            supports_delete_by_filter: false,
         }
     }
 
     async fn upsert(
         &self,
         tenant_id: &str,
-        vectors: Vec<VectorRecord>
+        vectors: Vec<VectorRecord>,
     ) -> Result<UpsertResult, BackendError> {
         let token = self.refresh_token().await?;
         let url = format!("{}:upsertDatapoints", self.index_url());
@@ -244,7 +243,7 @@ impl VectorBackend for VertexAiBackend {
             .map(|r| Datapoint {
                 datapoint_id: r.id,
                 feature_vector: r.vector,
-                restricts: vec![Self::tenant_restrict(tenant_id)]
+                restricts: vec![Self::tenant_restrict(tenant_id)],
             })
             .collect();
 
@@ -274,7 +273,7 @@ impl VectorBackend for VertexAiBackend {
     async fn search(
         &self,
         tenant_id: &str,
-        query: SearchQuery
+        query: SearchQuery,
     ) -> Result<Vec<SearchResult>, BackendError> {
         let token = self.refresh_token().await?;
         let url = format!("{}:findNeighbors", self.endpoint_url());
@@ -285,10 +284,10 @@ impl VectorBackend for VertexAiBackend {
                 datapoint: QueryDatapoint {
                     datapoint_id: uuid::Uuid::new_v4().to_string(),
                     feature_vector: query.vector,
-                    restricts: vec![Self::tenant_restrict(tenant_id)]
+                    restricts: vec![Self::tenant_restrict(tenant_id)],
                 },
-                neighbor_count: query.limit
-            }]
+                neighbor_count: query.limit,
+            }],
         };
 
         let resp = self
@@ -340,7 +339,7 @@ impl VectorBackend for VertexAiBackend {
                     } else {
                         None
                     },
-                    metadata: HashMap::new()
+                    metadata: HashMap::new(),
                 })
             })
             .collect())
@@ -349,7 +348,7 @@ impl VectorBackend for VertexAiBackend {
     async fn delete(
         &self,
         _tenant_id: &str,
-        ids: Vec<String>
+        ids: Vec<String>,
     ) -> Result<DeleteResult, BackendError> {
         let token = self.refresh_token().await?;
         let url = format!("{}:removeDatapoints", self.index_url());
@@ -391,7 +390,7 @@ impl VectorBackend for VertexAiBackend {
             .map(|r| VectorRecord {
                 id: r.id,
                 vector: r.vector.unwrap_or_default(),
-                metadata: r.metadata
+                metadata: r.metadata,
             }))
     }
 
@@ -416,7 +415,7 @@ mod tests {
         let dp = Datapoint {
             datapoint_id: "test-id".to_string(),
             feature_vector: vec![0.1, 0.2, 0.3],
-            restricts: vec![VertexAiBackend::tenant_restrict("tenant-1")]
+            restricts: vec![VertexAiBackend::tenant_restrict("tenant-1")],
         };
 
         let json = serde_json::to_string(&dp).unwrap();
