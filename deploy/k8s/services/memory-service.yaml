@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aeterna-memory
+  namespace: aeterna
+  labels:
+    app: aeterna-memory
+    component: memory
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: aeterna-memory
+  template:
+    metadata:
+      labels:
+        app: aeterna-memory
+        component: memory
+        version: v1
+    spec:
+      serviceAccountName: aeterna-memory
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: memory
+          image: ghcr.io/kikokikok/aeterna-memory:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+            - name: metrics
+              containerPort: 9091
+              protocol: TCP
+          env:
+            - name: AETERNA_SERVICE
+              value: memory
+            - name: AETERNA_PORT
+              value: "8081"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: aeterna-memory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aeterna-memory
+  namespace: aeterna
+  labels:
+    app: aeterna-memory
+spec:
+  selector:
+    app: aeterna-memory
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http
+    - name: metrics
+      port: 9091
+      targetPort: metrics
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aeterna-memory
+  namespace: aeterna
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aeterna-memory-pdb
+  namespace: aeterna
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: aeterna-memory

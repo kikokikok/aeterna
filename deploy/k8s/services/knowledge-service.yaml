@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aeterna-knowledge
+  namespace: aeterna
+  labels:
+    app: aeterna-knowledge
+    component: knowledge
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aeterna-knowledge
+  template:
+    metadata:
+      labels:
+        app: aeterna-knowledge
+        component: knowledge
+        version: v1
+    spec:
+      serviceAccountName: aeterna-knowledge
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: knowledge
+          image: ghcr.io/kikokikok/aeterna-knowledge:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8082
+              protocol: TCP
+            - name: metrics
+              containerPort: 9092
+              protocol: TCP
+          env:
+            - name: AETERNA_SERVICE
+              value: knowledge
+            - name: AETERNA_PORT
+              value: "8082"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: aeterna-knowledge
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aeterna-knowledge
+  namespace: aeterna
+  labels:
+    app: aeterna-knowledge
+spec:
+  selector:
+    app: aeterna-knowledge
+  ports:
+    - name: http
+      port: 8082
+      targetPort: http
+    - name: metrics
+      port: 9092
+      targetPort: metrics
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aeterna-knowledge
+  namespace: aeterna
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aeterna-knowledge-pdb
+  namespace: aeterna
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aeterna-knowledge
