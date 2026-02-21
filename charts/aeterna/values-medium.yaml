@@ -1,0 +1,88 @@
+# Medium deployment - HA-ready (< 100k memories)
+deploymentMode: local
+
+aeterna:
+  enabled: true
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+cnpg:
+  enabled: true
+  postgresql:
+    parameters:
+      max_connections: "200"
+  instances: 2
+  storage:
+    size: 20Gi
+
+postgresql:
+  bundled: false
+
+qdrant:
+  enabled: true
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+  persistence:
+    enabled: true
+    size: 20Gi
+
+vectorBackend:
+  type: qdrant
+
+dragonfly:
+  enabled: true
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+cache:
+  type: dragonfly
+
+opal:
+  enabled: true
+  server:
+    replicaCount: 2
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+backup:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+
+verticalPodAutoscaler:
+  enabled: false
+
+serviceMonitor:
+  enabled: false

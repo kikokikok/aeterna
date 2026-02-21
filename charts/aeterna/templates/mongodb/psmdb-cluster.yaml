@@ -1,0 +1,66 @@
+{{- if and (eq .Values.vectorBackend.type "mongodb") .Values.vectorBackend.mongodb.enabled }}
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: {{ include "aeterna.fullname" . }}-mongodb
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+spec:
+  crVersion: {{ .Chart.AppVersion | quote }}
+  image: percona/percona-server-mongodb:7.0
+  imagePullPolicy: IfNotPresent
+
+  replsets:
+    - name: rs0
+      size: 3
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/name
+                      operator: In
+                      values:
+                        - {{ include "aeterna.name" . }}
+                topologyKey: kubernetes.io/hostname
+      {{- with .Values.vectorBackend.mongodb.resources }}
+      resources:
+        {{- include "aeterna.resources.calculate" (dict "resources" .) | nindent 8 }}
+      {{- end }}
+      volumeSpec:
+        persistentVolumeClaim:
+          storageClassName: {{ .Values.vectorBackend.mongodb.storage.storageClass | default "standard" | quote }}
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: {{ .Values.vectorBackend.mongodb.storage.size | default "10Gi" | quote }}
+
+  secrets:
+    users: {{ include "aeterna.fullname" . }}-mongodb-users
+
+  pmm:
+    enabled: false
+
+  backup:
+    enabled: {{ .Values.vectorBackend.mongodb.backup.enabled | default false }}
+    {{- if .Values.vectorBackend.mongodb.backup.enabled }}
+    pitr:
+      enabled: true
+      oplogOnly: true
+      compressionType: snappy
+    {{- end }}
+
+  {{- if .Values.vectorBackend.mongodb.searchIndex.enabled }}
+  enterpriseFeatures:
+    enabled: true
+    secretsKey: enterprise-license
+  {{- end }}
+
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+{{- end }}

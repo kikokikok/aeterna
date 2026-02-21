@@ -1,0 +1,212 @@
+{{- if and .Values.opal.enabled .Values.networkPolicy.enabled }}
+---
+# Network Policy for OPAL Server
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "aeterna.fullname" . }}-opal-server
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+    {{- include "aeterna.opal.server.selectorLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "aeterna.opal.server.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from OPAL Fetcher within namespace
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 7002
+        - protocol: TCP
+          port: 7003
+    # Allow from Cedar Agent within namespace
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "aeterna.opal.cedarAgent.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 7002
+        - protocol: TCP
+          port: 7003
+    # Allow from Aeterna pods within namespace
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "aeterna.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 7002
+        - protocol: TCP
+          port: 7003
+  egress:
+    # Allow to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "aeterna.postgresql.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow to Redis/Dragonfly
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: dragonfly
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: valkey
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow to Qdrant
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "aeterna.qdrant.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 6333
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow to external APIs (for policy updates)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+---
+# Network Policy for Cedar Agent
+{{- if .Values.opal.cedarAgent.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "aeterna.fullname" . }}-cedar-agent
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+    {{- include "aeterna.opal.cedarAgent.selectorLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "aeterna.opal.cedarAgent.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from Aeterna pods
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "aeterna.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 8180
+  egress:
+    # Allow to OPAL Server
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "aeterna.opal.server.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 7002
+        - protocol: TCP
+          port: 7003
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow to external APIs
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}
+
+---
+# Network Policy for OPAL Fetcher
+{{- if .Values.opal.fetcher.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "aeterna.fullname" . }}-opal-fetcher
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+    {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from OPAL Server
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "aeterna.opal.server.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 7000
+  egress:
+    # Allow to OPAL Server
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "aeterna.opal.server.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 7002
+        - protocol: TCP
+          port: 7003
+    # Allow to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "aeterna.postgresql.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow to external APIs
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}
+{{- end }}

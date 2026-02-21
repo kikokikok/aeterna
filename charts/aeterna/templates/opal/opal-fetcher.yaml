@@ -7,7 +7,7 @@ metadata:
     {{- include "aeterna.opal.labels" . | nindent 4 }}
     {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.opal.fetcher.replicaCount | default 1 }}
   selector:
     matchLabels:
       {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 6 }}
@@ -97,6 +97,17 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+      {{- if gt (int (.Values.opal.fetcher.replicaCount | default 1)) 1 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 20 }}
+                topologyKey: topology.kubernetes.io/zone
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -114,4 +125,19 @@ spec:
       name: http
   selector:
     {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 4 }}
+---
+{{- if gt (int (.Values.opal.fetcher.replicaCount | default 1)) 1 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aeterna.fullname" . }}-opal-fetcher
+  labels:
+    {{- include "aeterna.opal.labels" . | nindent 4 }}
+    {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "aeterna.opal.fetcher.selectorLabels" . | nindent 6 }}
+{{- end }}
 {{- end }}

@@ -1,0 +1,86 @@
+# CI: Remote mode — all local storage disabled, thin client
+# Usage: helm lint --values charts/aeterna/ci/remote-values.yaml charts/aeterna
+
+deploymentMode: remote
+
+central:
+  url: "https://aeterna-central.ci.example.com"
+  auth: apiKey
+  existingSecret: "aeterna-central-credentials"
+  secretKey: "api-key"
+
+aeterna:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/kikokikok/aeterna
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  features:
+    cca: false
+    radkit: false
+    rlm: false
+    reflective: false
+
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: false
+    external:
+      host: ""
+
+cache:
+  type: external
+  dragonfly:
+    enabled: false
+  external:
+    enabled: false
+
+postgresql:
+  bundled: false
+  external:
+    host: ""
+
+opal:
+  enabled: false
+
+llm:
+  provider: none
+
+observability:
+  serviceMonitor:
+    enabled: false
+  tracing:
+    enabled: false
+  logging:
+    level: info
+    format: json
+
+networkPolicy:
+  enabled: false
+
+cnpg:
+  enabled: false
+
+dragonfly:
+  enabled: false
+
+qdrant:
+  enabled: false
+
+weaviate:
+  enabled: false
+
+mongodb:
+  enabled: false

@@ -1,0 +1,27 @@
+{{- if and .Values.aeterna.enabled ((.Values.aeterna.autoscaling).vpa).enabled }}
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ include "aeterna.fullname" . }}
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "aeterna.fullname" . }}
+  updatePolicy:
+    updateMode: {{ (.Values.aeterna.autoscaling.vpa).updateMode | default "Auto" | quote }}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: aeterna
+        minAllowed:
+          cpu: {{ (.Values.aeterna.autoscaling.vpa).minAllowed.cpu | default "50m" | quote }}
+          memory: {{ (.Values.aeterna.autoscaling.vpa).minAllowed.memory | default "128Mi" | quote }}
+        maxAllowed:
+          cpu: {{ (.Values.aeterna.autoscaling.vpa).maxAllowed.cpu | default "4000m" | quote }}
+          memory: {{ (.Values.aeterna.autoscaling.vpa).maxAllowed.memory | default "8Gi" | quote }}
+        controlledResources:
+          - cpu
+          - memory
+{{- end }}

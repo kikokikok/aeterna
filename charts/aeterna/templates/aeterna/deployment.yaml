@@ -1,3 +1,4 @@
+{{- include "aeterna.validateConfig" . -}}
 {{- if .Values.aeterna.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -147,6 +148,20 @@ spec:
                   key: api-key
                   optional: true
             {{- end }}
+            {{- if .Values.observability.tracing.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.observability.tracing.endpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: "aeterna"
+            - name: OTEL_TRACES_SAMPLER
+              value: "parentbased_traceidratio"
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: {{ .Values.observability.tracing.samplingRatio | default "1.0" | quote }}
+            {{- end }}
+            - name: RUST_LOG
+              value: {{ .Values.observability.logging.level | default "info" | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.observability.logging.format | default "json" | quote }}
           livenessProbe:
             {{- toYaml .Values.aeterna.livenessProbe | nindent 12 }}
           readinessProbe:

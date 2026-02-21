@@ -1,0 +1,34 @@
+{{- if .Values.cache.dragonfly.enabled }}
+apiVersion: dragonflydb.io/v1alpha1
+kind: Dragonfly
+metadata:
+  name: {{ include "aeterna.fullname" . }}-dragonfly
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.cache.dragonfly.replicas | default 1 }}
+
+  resources:
+    {{- include "aeterna.resources.calculate" (dict "resources" .Values.cache.dragonfly.resources) | nindent 4 }}
+
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+
+  {{- if .Values.cache.dragonfly.authentication }}
+  authentication:
+    {{- if .Values.cache.dragonfly.authentication.acl }}
+    acl:
+      {{- if .Values.cache.dragonfly.authentication.acl.secretRef }}
+      secretRef:
+        name: {{ .Values.cache.dragonfly.authentication.acl.secretRef | quote }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+
+  {{- if gt (int (.Values.cache.dragonfly.replicas | default 1)) 1 }}
+  replication:
+    enabled: true
+  {{- end }}
+{{- end }}
