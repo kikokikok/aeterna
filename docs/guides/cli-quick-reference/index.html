@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-guides/cli-quick-reference" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.9.2">
+<title data-rh="true">Aeterna CLI Quick Reference | Aeterna</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://kikokikok.github.io/aeterna/docs/guides/cli-quick-reference"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Aeterna CLI Quick Reference | Aeterna"><meta data-rh="true" name="description" content="Fast command lookup for the Aeterna governance platform"><meta data-rh="true" property="og:description" content="Fast command lookup for the Aeterna governance platform"><link data-rh="true" rel="icon" href="/aeterna/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://kikokikok.github.io/aeterna/docs/guides/cli-quick-reference"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/guides/cli-quick-reference" hreflang="en"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/guides/cli-quick-reference" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Aeterna CLI Quick Reference","item":"https://kikokikok.github.io/aeterna/docs/guides/cli-quick-reference"}]}</script><link rel="stylesheet" href="/aeterna/assets/css/styles.9ec36079.css">
+<script src="/aeterna/assets/js/runtime~main.7b7cf05c.js" defer="defer"></script>
+<script src="/aeterna/assets/js/main.2421dfb6.js" defer="defer"></script>
+</head>
+<body class="navigation-with-keyboard">
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||"light"),document.documentElement.setAttribute("data-theme-choice",t||"light")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/aeterna/"><b class="navbar__title text--truncate">Aeterna</b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/aeterna/docs/">Documentation</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/aeterna/docs/"><span title="Introduction to Aeterna" class="linkLabel_WmDU">Introduction to Aeterna</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/aeterna/docs/helm/quickstart-local"><span title="Getting Started" class="categoryLinkLabel_W154">Getting Started</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-local"><span title="Local Mode Quick Start" class="linkLabel_WmDU">Local Mode Quick Start</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-hybrid"><span title="Hybrid Mode Deployment Guide" class="linkLabel_WmDU">Hybrid Mode Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-remote"><span title="Remote Mode Deployment Guide" class="linkLabel_WmDU">Remote Mode Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/aeterna/docs/guides/cli-quick-reference"><span title="Aeterna CLI Quick Reference" class="linkLabel_WmDU">Aeterna CLI Quick Reference</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/overview"><span title="Concepts" class="categoryLinkLabel_W154">Concepts</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/memory-system"><span title="Memory System" class="categoryLinkLabel_W154">Memory System</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/knowledge-repository"><span title="Knowledge Repository" class="categoryLinkLabel_W154">Knowledge Repository</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/governance/policy-model"><span title="Governance" class="categoryLinkLabel_W154">Governance</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/cca/overview"><span title="CCA — Confucius Code Agent" class="categoryLinkLabel_W154">CCA — Confucius Code Agent</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/integrations/mcp-server"><span title="Integrations" class="categoryLinkLabel_W154">Integrations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/security/rbac-matrix"><span title="Security" class="categoryLinkLabel_W154">Security</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/helm/architecture"><span title="Helm Deployment" class="categoryLinkLabel_W154">Helm Deployment</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/guides/ha-deployment"><span title="Operations" class="categoryLinkLabel_W154">Operations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/examples/strangler-fig-migration"><span title="Examples" class="categoryLinkLabel_W154">Examples</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/tool-interface"><span title="Reference" class="categoryLinkLabel_W154">Reference</span></a></div></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/aeterna/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Getting Started</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">Aeterna CLI Quick Reference</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Aeterna CLI Quick Reference</h1></header>
+<p><strong>Fast command lookup for the Aeterna governance platform</strong></p>
+<p>This is a concise cheat sheet. For detailed explanations and workflows, see <a class="" href="/aeterna/docs/guides/ux-first-governance">UX-First Governance Guide</a>.</p>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="installation">Installation<a href="#installation" class="hash-link" aria-label="Direct link to Installation" title="Direct link to Installation" translate="no">​</a></h2>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># From source</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token function" style="color:#d73a49">git</span><span class="token plain"> clone https://github.com/kikokikok/aeterna.git</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">cd</span><span class="token plain"> aeterna</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token function" style="color:#d73a49">cargo</span><span class="token plain"> build </span><span class="token parameter variable" style="color:#36acaa">--release</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Add to PATH</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable environment constant" style="color:#36acaa">PATH</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&quot;</span><span class="token string environment constant" style="color:#36acaa">$PATH</span><span class="token string" style="color:#e3116c">:</span><span class="token string variable" style="color:#36acaa">$(</span><span class="token string variable builtin class-name" style="color:#36acaa">pwd</span><span class="token string variable" style="color:#36acaa">)</span><span class="token string" style="color:#e3116c">/target/release&quot;</span><br></span></code></pre></div></div>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="getting-started">Getting Started<a href="#getting-started" class="hash-link" aria-label="Direct link to Getting Started" title="Direct link to Getting Started" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna init</code></td><td>Initialize company (interactive)</td></tr><tr><td><code>aeterna init --company &quot;Name&quot; --admin email@example.com</code></td><td>Initialize with defaults</td></tr><tr><td><code>aeterna status</code></td><td>Show current context and status</td></tr><tr><td><code>aeterna whoami</code></td><td>Show current user identity</td></tr><tr><td><code>aeterna check</code></td><td>Quick health check</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="context-management">Context Management<a href="#context-management" class="hash-link" aria-label="Direct link to Context Management" title="Direct link to Context Management" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna context show</code></td><td>Display current context</td></tr><tr><td><code>aeterna context set --team TEAM</code></td><td>Switch to team context</td></tr><tr><td><code>aeterna context set --org ORG</code></td><td>Switch to org context</td></tr><tr><td><code>aeterna context clear</code></td><td>Clear context overrides</td></tr></tbody></table>
+<p><strong>Note</strong>: Context auto-resolves from git config when available.</p>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="memory-operations">Memory Operations<a href="#memory-operations" class="hash-link" aria-label="Direct link to Memory Operations" title="Direct link to Memory Operations" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="search-and-browse">Search and Browse<a href="#search-and-browse" class="hash-link" aria-label="Direct link to Search and Browse" title="Direct link to Search and Browse" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna memory search &quot;QUERY&quot;</code></td><td>Semantic search across layers</td></tr><tr><td><code>aeterna memory search &quot;QUERY&quot; --layer team</code></td><td>Search specific layer</td></tr><tr><td><code>aeterna memory search &quot;QUERY&quot; --last 30d</code></td><td>Search recent memories</td></tr><tr><td><code>aeterna memory search &quot;QUERY&quot; --min-relevance 0.8</code></td><td>High-relevance only</td></tr><tr><td><code>aeterna memory browse --layer team</code></td><td>Browse team memories</td></tr><tr><td><code>aeterna memory browse --layer team --category decisions</code></td><td>Browse by category</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="add-and-manage">Add and Manage<a href="#add-and-manage" class="hash-link" aria-label="Direct link to Add and Manage" title="Direct link to Add and Manage" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna memory add &quot;TEXT&quot; --layer project</code></td><td>Add project memory</td></tr><tr><td><code>aeterna memory add &quot;TEXT&quot; --layer team --tags &quot;tag1,tag2&quot;</code></td><td>Add with tags</td></tr><tr><td><code>aeterna memory promote ID --to team</code></td><td>Promote to team layer</td></tr><tr><td><code>aeterna memory promote ID --to team --reason &quot;Why&quot;</code></td><td>Promote with justification</td></tr><tr><td><code>aeterna memory where ID</code></td><td>Show memory provenance</td></tr><tr><td><code>aeterna memory attribution ID</code></td><td>Show memory attribution</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="feedback">Feedback<a href="#feedback" class="hash-link" aria-label="Direct link to Feedback" title="Direct link to Feedback" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna memory feedback ID --type helpful --score 0.9</code></td><td>Positive feedback</td></tr><tr><td><code>aeterna memory feedback ID --type not-helpful --score 0.2</code></td><td>Negative feedback</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="knowledge-operations">Knowledge Operations<a href="#knowledge-operations" class="hash-link" aria-label="Direct link to Knowledge Operations" title="Direct link to Knowledge Operations" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="search-and-browse-1">Search and Browse<a href="#search-and-browse-1" class="hash-link" aria-label="Direct link to Search and Browse" title="Direct link to Search and Browse" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna knowledge search &quot;QUERY&quot;</code></td><td>Search knowledge base</td></tr><tr><td><code>aeterna knowledge search &quot;QUERY&quot; --type adr</code></td><td>Search ADRs only</td></tr><tr><td><code>aeterna knowledge search &quot;QUERY&quot; --layers company,org</code></td><td>Search specific layers</td></tr><tr><td><code>aeterna knowledge browse --type adr</code></td><td>Browse all ADRs</td></tr><tr><td><code>aeterna knowledge browse --type pattern --layer team</code></td><td>Browse team patterns</td></tr><tr><td><code>aeterna knowledge browse --type policy</code></td><td>Browse policies</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="retrieve-and-explain">Retrieve and Explain<a href="#retrieve-and-explain" class="hash-link" aria-label="Direct link to Retrieve and Explain" title="Direct link to Retrieve and Explain" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna knowledge get PATH</code></td><td>Get knowledge item by path</td></tr><tr><td><code>aeterna knowledge explain ID</code></td><td>Explain knowledge item</td></tr><tr><td><code>aeterna knowledge explain ID --verbose</code></td><td>Detailed explanation</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="propose">Propose<a href="#propose" class="hash-link" aria-label="Direct link to Propose" title="Direct link to Propose" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna knowledge propose &quot;TEXT&quot; --type adr</code></td><td>Propose ADR</td></tr><tr><td><code>aeterna knowledge propose &quot;TEXT&quot; --type pattern</code></td><td>Propose pattern</td></tr><tr><td><code>aeterna knowledge check</code></td><td>Validate knowledge constraints</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="policy-management">Policy Management<a href="#policy-management" class="hash-link" aria-label="Direct link to Policy Management" title="Direct link to Policy Management" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="create-and-draft">Create and Draft<a href="#create-and-draft" class="hash-link" aria-label="Direct link to Create and Draft" title="Direct link to Create and Draft" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna policy create</code></td><td>Create policy (interactive)</td></tr><tr><td><code>aeterna policy create --interactive</code></td><td>Same as above</td></tr><tr><td><code>aeterna policy create &quot;DESC&quot; --scope project --severity block</code></td><td>Create blocking policy</td></tr><tr><td><code>aeterna policy create &quot;DESC&quot; --scope team --severity warn</code></td><td>Create warning policy</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="list-and-explain">List and Explain<a href="#list-and-explain" class="hash-link" aria-label="Direct link to List and Explain" title="Direct link to List and Explain" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna policy list</code></td><td>List all active policies</td></tr><tr><td><code>aeterna policy list --scope team</code></td><td>List team policies</td></tr><tr><td><code>aeterna policy list --scope org --include-inherited</code></td><td>Include inherited</td></tr><tr><td><code>aeterna policy list --severity block</code></td><td>Show blocking policies</td></tr><tr><td><code>aeterna policy list --format json</code></td><td>JSON output</td></tr><tr><td><code>aeterna policy explain ID</code></td><td>Explain policy</td></tr><tr><td><code>aeterna policy explain ID --verbose</code></td><td>Detailed explanation</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="simulate-and-draft">Simulate and Draft<a href="#simulate-and-draft" class="hash-link" aria-label="Direct link to Simulate and Draft" title="Direct link to Simulate and Draft" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna policy simulate DRAFT_ID</code></td><td>Test policy draft</td></tr><tr><td><code>aeterna policy simulate DRAFT_ID --scenario &#x27;JSON&#x27;</code></td><td>Test with scenario</td></tr><tr><td><code>aeterna policy simulate DRAFT_ID --live</code></td><td>Test against live project</td></tr><tr><td><code>aeterna policy draft show DRAFT_ID</code></td><td>View draft details</td></tr><tr><td><code>aeterna policy draft list</code></td><td>List all drafts</td></tr><tr><td><code>aeterna policy draft submit DRAFT_ID</code></td><td>Submit for approval</td></tr><tr><td><code>aeterna policy draft submit DRAFT_ID --justification &quot;Reason&quot;</code></td><td>Submit with reason</td></tr><tr><td><code>aeterna policy draft delete DRAFT_ID</code></td><td>Delete draft</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="governance">Governance<a href="#governance" class="hash-link" aria-label="Direct link to Governance" title="Direct link to Governance" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="configure">Configure<a href="#configure" class="hash-link" aria-label="Direct link to Configure" title="Direct link to Configure" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna govern configure --scope org --interactive</code></td><td>Configure governance (interactive)</td></tr><tr><td><code>aeterna govern configure --scope team --policy-approvers ROLES</code></td><td>Set approvers</td></tr><tr><td><code>aeterna govern configure --scope org --approval-count N</code></td><td>Set approval count</td></tr><tr><td><code>aeterna govern configure --scope org --review-period HOURS</code></td><td>Set review period</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="status-and-roles">Status and Roles<a href="#status-and-roles" class="hash-link" aria-label="Direct link to Status and Roles" title="Direct link to Status and Roles" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna govern status</code></td><td>Show governance status</td></tr><tr><td><code>aeterna govern status --scope company</code></td><td>Company-wide status</td></tr><tr><td><code>aeterna govern roles list</code></td><td>List all roles</td></tr><tr><td><code>aeterna govern roles list --scope team</code></td><td>Team roles</td></tr><tr><td><code>aeterna govern roles assign USER ROLE --scope SCOPE</code></td><td>Assign role</td></tr><tr><td><code>aeterna govern roles revoke USER ROLE --scope SCOPE</code></td><td>Revoke role</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="approvals">Approvals<a href="#approvals" class="hash-link" aria-label="Direct link to Approvals" title="Direct link to Approvals" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna govern pending</code></td><td>Show pending approvals</td></tr><tr><td><code>aeterna govern pending --scope org</code></td><td>Org-level pending</td></tr><tr><td><code>aeterna govern approve PROPOSAL_ID</code></td><td>Approve proposal</td></tr><tr><td><code>aeterna govern approve PROPOSAL_ID --comment &quot;Comment&quot;</code></td><td>Approve with comment</td></tr><tr><td><code>aeterna govern reject PROPOSAL_ID --reason &quot;Reason&quot;</code></td><td>Reject proposal</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="audit">Audit<a href="#audit" class="hash-link" aria-label="Direct link to Audit" title="Direct link to Audit" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna govern audit --last 7d</code></td><td>Last 7 days</td></tr><tr><td><code>aeterna govern audit --scope company --from DATE --to DATE</code></td><td>Date range</td></tr><tr><td><code>aeterna govern audit --scope org --event-type TYPE</code></td><td>Filter by event type</td></tr><tr><td><code>aeterna govern audit --format csv</code></td><td>CSV output</td></tr><tr><td><code>aeterna govern audit --format json</code></td><td>JSON output</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="organization-management">Organization Management<a href="#organization-management" class="hash-link" aria-label="Direct link to Organization Management" title="Direct link to Organization Management" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="organization">Organization<a href="#organization" class="hash-link" aria-label="Direct link to Organization" title="Direct link to Organization" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna org create &quot;NAME&quot;</code></td><td>Create organization</td></tr><tr><td><code>aeterna org create &quot;NAME&quot; --inherit-from ORG</code></td><td>Create with inheritance</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="team">Team<a href="#team" class="hash-link" aria-label="Direct link to Team" title="Direct link to Team" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna team create &quot;NAME&quot; --org ORG</code></td><td>Create team</td></tr><tr><td><code>aeterna team create &quot;NAME&quot; --org ORG --lead EMAIL</code></td><td>Create with lead</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="project">Project<a href="#project" class="hash-link" aria-label="Direct link to Project" title="Direct link to Project" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna project init</code></td><td>Initialize project (auto-detect)</td></tr><tr><td><code>aeterna project init --team TEAM</code></td><td>Initialize with team</td></tr><tr><td><code>aeterna project init --path PATH</code></td><td>Initialize at path</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="users">Users<a href="#users" class="hash-link" aria-label="Direct link to Users" title="Direct link to Users" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna user register --email EMAIL</code></td><td>Register user</td></tr><tr><td><code>aeterna user register --email EMAIL --teams T1,T2 --role ROLE</code></td><td>Register with details</td></tr><tr><td><code>aeterna user list</code></td><td>List all users</td></tr><tr><td><code>aeterna user list --team TEAM</code></td><td>List team users</td></tr><tr><td><code>aeterna user whoami</code></td><td>Show current user</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="agents">Agents<a href="#agents" class="hash-link" aria-label="Direct link to Agents" title="Direct link to Agents" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna agent register --name NAME --delegated-by EMAIL</code></td><td>Register agent</td></tr><tr><td><code>aeterna agent register --agent-id ID --scope SCOPE</code></td><td>Register with scope</td></tr><tr><td><code>aeterna agent register --agent-id ID --max-severity LEVEL</code></td><td>Limit severity</td></tr><tr><td><code>aeterna agent list</code></td><td>List all agents</td></tr><tr><td><code>aeterna agent list --user EMAIL</code></td><td>List user&#x27;s agents</td></tr><tr><td><code>aeterna agent revoke AGENT_ID</code></td><td>Revoke agent</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="administration">Administration<a href="#administration" class="hash-link" aria-label="Direct link to Administration" title="Direct link to Administration" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="health-and-validation">Health and Validation<a href="#health-and-validation" class="hash-link" aria-label="Direct link to Health and Validation" title="Direct link to Health and Validation" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna admin health</code></td><td>System health check</td></tr><tr><td><code>aeterna admin health --verbose</code></td><td>Detailed health check</td></tr><tr><td><code>aeterna admin validate --all</code></td><td>Validate all</td></tr><tr><td><code>aeterna admin validate --scope SCOPE</code></td><td>Validate scope</td></tr><tr><td><code>aeterna admin validate --policy ID</code></td><td>Validate policy</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="migration">Migration<a href="#migration" class="hash-link" aria-label="Direct link to Migration" title="Direct link to Migration" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna admin migrate --from v1 --to v2 --dry-run</code></td><td>Preview migration</td></tr><tr><td><code>aeterna admin migrate --from v1 --to v2 --execute</code></td><td>Execute migration</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="export-and-import">Export and Import<a href="#export-and-import" class="hash-link" aria-label="Direct link to Export and Import" title="Direct link to Export and Import" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna admin export policies --scope SCOPE</code></td><td>Export policies</td></tr><tr><td><code>aeterna admin export policies --format yaml</code></td><td>Export as YAML</td></tr><tr><td><code>aeterna admin import policies &lt; FILE</code></td><td>Import policies</td></tr><tr><td><code>aeterna admin import knowledge --from PATH</code></td><td>Import knowledge</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="drift-detection">Drift Detection<a href="#drift-detection" class="hash-link" aria-label="Direct link to Drift Detection" title="Direct link to Drift Detection" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna admin drift --scope SCOPE</code></td><td>Detect drift</td></tr><tr><td><code>aeterna admin drift --threshold N</code></td><td>Set drift threshold</td></tr><tr><td><code>aeterna admin drift --all</code></td><td>Check all scopes</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="sync">Sync<a href="#sync" class="hash-link" aria-label="Direct link to Sync" title="Direct link to Sync" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody><tr><td><code>aeterna sync</code></td><td>Sync memory and knowledge</td></tr><tr><td><code>aeterna sync --force</code></td><td>Force sync</td></tr><tr><td><code>aeterna sync --memory-knowledge</code></td><td>Sync specific bridge</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="common-workflows">Common Workflows<a href="#common-workflows" class="hash-link" aria-label="Direct link to Common Workflows" title="Direct link to Common Workflows" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="developer-daily-workflow">Developer Daily Workflow<a href="#developer-daily-workflow" class="hash-link" aria-label="Direct link to Developer Daily Workflow" title="Direct link to Developer Daily Workflow" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># Morning: Check status</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna status</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Search for relevant knowledge</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna knowledge search </span><span class="token string" style="color:#e3116c">&quot;authentication patterns&quot;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Check if dependency is allowed</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna check dependency mysql</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Add project memory</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna memory </span><span class="token function" style="color:#d73a49">add</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;Decided to use bcrypt for password hashing&quot;</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">--layer</span><span class="token plain"> project</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Propose team policy</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna policy create </span><span class="token string" style="color:#e3116c">&quot;Require 2FA for admin endpoints&quot;</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">--scope</span><span class="token plain"> project</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="tech-lead-approval-workflow">Tech Lead Approval Workflow<a href="#tech-lead-approval-workflow" class="hash-link" aria-label="Direct link to Tech Lead Approval Workflow" title="Direct link to Tech Lead Approval Workflow" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># Check pending approvals</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna govern pending</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Review policy draft</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna policy draft show draft_abc123</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Simulate policy</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna policy simulate draft_abc123 </span><span class="token parameter variable" style="color:#36acaa">--live</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Approve proposal</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna govern approve prop_abc123 </span><span class="token parameter variable" style="color:#36acaa">--comment</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;LGTM&quot;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Promote high-value memory</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna memory promote mem_xyz789 </span><span class="token parameter variable" style="color:#36acaa">--to</span><span class="token plain"> team </span><span class="token parameter variable" style="color:#36acaa">--reason</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;Team-wide gotcha&quot;</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="admin-onboarding-workflow">Admin Onboarding Workflow<a href="#admin-onboarding-workflow" class="hash-link" aria-label="Direct link to Admin Onboarding Workflow" title="Direct link to Admin Onboarding Workflow" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># Initialize company</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna init </span><span class="token parameter variable" style="color:#36acaa">--company</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;Acme Corp&quot;</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">--admin</span><span class="token plain"> admin@acme.com</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Create org structure</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna org create </span><span class="token string" style="color:#e3116c">&quot;Engineering&quot;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna team create </span><span class="token string" style="color:#e3116c">&quot;Backend&quot;</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">--org</span><span class="token plain"> engineering </span><span class="token parameter variable" style="color:#36acaa">--lead</span><span class="token plain"> alice@acme.com</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Register users</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna user register </span><span class="token parameter variable" style="color:#36acaa">--email</span><span class="token plain"> bob@acme.com </span><span class="token parameter variable" style="color:#36acaa">--teams</span><span class="token plain"> backend </span><span class="token parameter variable" style="color:#36acaa">--role</span><span class="token plain"> developer</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Register AI agent</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna agent register </span><span class="token parameter variable" style="color:#36acaa">--name</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;code-assistant&quot;</span><span class="token plain"> --delegated-by alice@acme.com</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Check system health</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">aeterna admin health </span><span class="token parameter variable" style="color:#36acaa">--verbose</span><br></span></code></pre></div></div>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="common-flags">Common Flags<a href="#common-flags" class="hash-link" aria-label="Direct link to Common Flags" title="Direct link to Common Flags" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Flag</th><th>Description</th></tr></thead><tbody><tr><td><code>--help, -h</code></td><td>Show help</td></tr><tr><td><code>--version, -v</code></td><td>Show version</td></tr><tr><td><code>--json</code></td><td>JSON output</td></tr><tr><td><code>--verbose</code></td><td>Verbose output</td></tr><tr><td><code>--dry-run</code></td><td>Preview without changes</td></tr><tr><td><code>--scope SCOPE</code></td><td>Target scope (company/org/team/project)</td></tr><tr><td><code>--layer LAYER</code></td><td>Memory layer (agent/user/session/project/team/org/company)</td></tr><tr><td><code>--format FORMAT</code></td><td>Output format (json/yaml/csv)</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="scope-format">Scope Format<a href="#scope-format" class="hash-link" aria-label="Direct link to Scope Format" title="Direct link to Scope Format" translate="no">​</a></h2>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">company:acme-corp</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">org:acme-corp:engineering</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">team:engineering:backend</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">project:backend:payments-service</span><br></span></code></pre></div></div>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="layer-hierarchy">Layer Hierarchy<a href="#layer-hierarchy" class="hash-link" aria-label="Direct link to Layer Hierarchy" title="Direct link to Layer Hierarchy" translate="no">​</a></h2>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">agent       (most specific)</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">user</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">session</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">project</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">team</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">org</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">company     (least specific)</span><br></span></code></pre></div></div>
+<p>Search precedence: agent → user → session → project → team → org → company</p>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="policy-severity-levels">Policy Severity Levels<a href="#policy-severity-levels" class="hash-link" aria-label="Direct link to Policy Severity Levels" title="Direct link to Policy Severity Levels" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Level</th><th>Effect</th></tr></thead><tbody><tr><td><code>info</code></td><td>Informational only</td></tr><tr><td><code>warn</code></td><td>Warning (allows action)</td></tr><tr><td><code>block</code></td><td>Blocking (prevents action)</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="knowledge-types">Knowledge Types<a href="#knowledge-types" class="hash-link" aria-label="Direct link to Knowledge Types" title="Direct link to Knowledge Types" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>adr</code></td><td>Architecture Decision Records</td></tr><tr><td><code>pattern</code></td><td>Reusable patterns</td></tr><tr><td><code>policy</code></td><td>Governance policies</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="role-hierarchy">Role Hierarchy<a href="#role-hierarchy" class="hash-link" aria-label="Direct link to Role Hierarchy" title="Direct link to Role Hierarchy" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Role</th><th>Precedence</th><th>Capabilities</th></tr></thead><tbody><tr><td><code>admin</code></td><td>4</td><td>Full system access</td></tr><tr><td><code>architect</code></td><td>3</td><td>Design policies, manage knowledge</td></tr><tr><td><code>tech_lead</code></td><td>2</td><td>Manage team resources, approve proposals</td></tr><tr><td><code>developer</code></td><td>1</td><td>Standard development, propose changes</td></tr><tr><td><code>agent</code></td><td>0</td><td>Delegated permissions only</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="environment-variables">Environment Variables<a href="#environment-variables" class="hash-link" aria-label="Direct link to Environment Variables" title="Direct link to Environment Variables" translate="no">​</a></h2>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">AETERNA_CONFIG_PATH</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">/path/to/config.toml</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">AETERNA_AGENT_ID</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">agent:opencode-alice</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">AETERNA_AGENT_TOKEN</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">aeterna_agent_abc123xyz</span><br></span></code></pre></div></div>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="quick-troubleshooting">Quick Troubleshooting<a href="#quick-troubleshooting" class="hash-link" aria-label="Direct link to Quick Troubleshooting" title="Direct link to Quick Troubleshooting" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Problem</th><th>Solution</th></tr></thead><tbody><tr><td>Context not detected</td><td>Run <code>aeterna project init</code> in project root</td></tr><tr><td>Permission denied</td><td>Check role with <code>aeterna govern roles list</code></td></tr><tr><td>Policy not syncing</td><td>Run <code>aeterna sync --force</code></td></tr><tr><td>Health check fails</td><td>Run <code>aeterna admin health --verbose</code></td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="further-reading">Further Reading<a href="#further-reading" class="hash-link" aria-label="Direct link to Further Reading" title="Direct link to Further Reading" translate="no">​</a></h2>
+<ul>
+<li class=""><a class="" href="/aeterna/docs/guides/ux-first-governance">UX-First Governance Guide</a> - Complete guide with workflows</li>
+<li class=""><a class="" href="/aeterna/docs/examples/strangler-fig-migration">Strangler Fig Migration</a> - Real-world example</li>
+<li class=""><a class="" href="/aeterna/README.md">Architecture Overview</a> - System architecture</li>
+</ul>
+<hr>
+<p><strong>Quick Links:</strong></p>
+<ul>
+<li class="">GitHub: <a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="">https://github.com/kikokikok/aeterna</a></li>
+<li class="">Issues: <a href="https://github.com/kikokikok/aeterna/issues" target="_blank" rel="noopener noreferrer" class="">https://github.com/kikokikok/aeterna/issues</a></li>
+<li class="">License: Apache 2.0</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/kikokikok/aeterna/tree/main/website/docs/guides/cli-quick-reference.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/aeterna/docs/helm/quickstart-remote"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Remote Mode Deployment Guide</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/aeterna/docs/specs/overview"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Memory-Knowledge System Specification</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#installation" class="table-of-contents__link toc-highlight">Installation</a></li><li><a href="#getting-started" class="table-of-contents__link toc-highlight">Getting Started</a></li><li><a href="#context-management" class="table-of-contents__link toc-highlight">Context Management</a></li><li><a href="#memory-operations" class="table-of-contents__link toc-highlight">Memory Operations</a><ul><li><a href="#search-and-browse" class="table-of-contents__link toc-highlight">Search and Browse</a></li><li><a href="#add-and-manage" class="table-of-contents__link toc-highlight">Add and Manage</a></li><li><a href="#feedback" class="table-of-contents__link toc-highlight">Feedback</a></li></ul></li><li><a href="#knowledge-operations" class="table-of-contents__link toc-highlight">Knowledge Operations</a><ul><li><a href="#search-and-browse-1" class="table-of-contents__link toc-highlight">Search and Browse</a></li><li><a href="#retrieve-and-explain" class="table-of-contents__link toc-highlight">Retrieve and Explain</a></li><li><a href="#propose" class="table-of-contents__link toc-highlight">Propose</a></li></ul></li><li><a href="#policy-management" class="table-of-contents__link toc-highlight">Policy Management</a><ul><li><a href="#create-and-draft" class="table-of-contents__link toc-highlight">Create and Draft</a></li><li><a href="#list-and-explain" class="table-of-contents__link toc-highlight">List and Explain</a></li><li><a href="#simulate-and-draft" class="table-of-contents__link toc-highlight">Simulate and Draft</a></li></ul></li><li><a href="#governance" class="table-of-contents__link toc-highlight">Governance</a><ul><li><a href="#configure" class="table-of-contents__link toc-highlight">Configure</a></li><li><a href="#status-and-roles" class="table-of-contents__link toc-highlight">Status and Roles</a></li><li><a href="#approvals" class="table-of-contents__link toc-highlight">Approvals</a></li><li><a href="#audit" class="table-of-contents__link toc-highlight">Audit</a></li></ul></li><li><a href="#organization-management" class="table-of-contents__link toc-highlight">Organization Management</a><ul><li><a href="#organization" class="table-of-contents__link toc-highlight">Organization</a></li><li><a href="#team" class="table-of-contents__link toc-highlight">Team</a></li><li><a href="#project" class="table-of-contents__link toc-highlight">Project</a></li><li><a href="#users" class="table-of-contents__link toc-highlight">Users</a></li><li><a href="#agents" class="table-of-contents__link toc-highlight">Agents</a></li></ul></li><li><a href="#administration" class="table-of-contents__link toc-highlight">Administration</a><ul><li><a href="#health-and-validation" class="table-of-contents__link toc-highlight">Health and Validation</a></li><li><a href="#migration" class="table-of-contents__link toc-highlight">Migration</a></li><li><a href="#export-and-import" class="table-of-contents__link toc-highlight">Export and Import</a></li><li><a href="#drift-detection" class="table-of-contents__link toc-highlight">Drift Detection</a></li><li><a href="#sync" class="table-of-contents__link toc-highlight">Sync</a></li></ul></li><li><a href="#common-workflows" class="table-of-contents__link toc-highlight">Common Workflows</a><ul><li><a href="#developer-daily-workflow" class="table-of-contents__link toc-highlight">Developer Daily Workflow</a></li><li><a href="#tech-lead-approval-workflow" class="table-of-contents__link toc-highlight">Tech Lead Approval Workflow</a></li><li><a href="#admin-onboarding-workflow" class="table-of-contents__link toc-highlight">Admin Onboarding Workflow</a></li></ul></li><li><a href="#common-flags" class="table-of-contents__link toc-highlight">Common Flags</a></li><li><a href="#scope-format" class="table-of-contents__link toc-highlight">Scope Format</a></li><li><a href="#layer-hierarchy" class="table-of-contents__link toc-highlight">Layer Hierarchy</a></li><li><a href="#policy-severity-levels" class="table-of-contents__link toc-highlight">Policy Severity Levels</a></li><li><a href="#knowledge-types" class="table-of-contents__link toc-highlight">Knowledge Types</a></li><li><a href="#role-hierarchy" class="table-of-contents__link toc-highlight">Role Hierarchy</a></li><li><a href="#environment-variables" class="table-of-contents__link toc-highlight">Environment Variables</a></li><li><a href="#quick-troubleshooting" class="table-of-contents__link toc-highlight">Quick Troubleshooting</a></li><li><a href="#further-reading" class="table-of-contents__link toc-highlight">Further Reading</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Docs</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/aeterna/docs/">Getting Started</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Community</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div></div><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2026 Aeterna Contributors.</div></div></div></footer></div>
+</body>
+</html>

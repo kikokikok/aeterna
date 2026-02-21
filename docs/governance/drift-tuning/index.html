@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-governance/drift-tuning" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.9.2">
+<title data-rh="true">Drift Detection Tuning Guide | Aeterna</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://kikokikok.github.io/aeterna/docs/governance/drift-tuning"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Drift Detection Tuning Guide | Aeterna"><meta data-rh="true" name="description" content="This guide explains how to configure and tune drift detection in the Aeterna governance system for optimal accuracy and reduced noise."><meta data-rh="true" property="og:description" content="This guide explains how to configure and tune drift detection in the Aeterna governance system for optimal accuracy and reduced noise."><link data-rh="true" rel="icon" href="/aeterna/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://kikokikok.github.io/aeterna/docs/governance/drift-tuning"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/governance/drift-tuning" hreflang="en"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/governance/drift-tuning" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Drift Detection Tuning Guide","item":"https://kikokikok.github.io/aeterna/docs/governance/drift-tuning"}]}</script><link rel="stylesheet" href="/aeterna/assets/css/styles.9ec36079.css">
+<script src="/aeterna/assets/js/runtime~main.7b7cf05c.js" defer="defer"></script>
+<script src="/aeterna/assets/js/main.2421dfb6.js" defer="defer"></script>
+</head>
+<body class="navigation-with-keyboard">
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||"light"),document.documentElement.setAttribute("data-theme-choice",t||"light")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/aeterna/"><b class="navbar__title text--truncate">Aeterna</b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/aeterna/docs/">Documentation</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/aeterna/docs/"><span title="Introduction to Aeterna" class="linkLabel_WmDU">Introduction to Aeterna</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/aeterna/docs/helm/quickstart-local"><span title="Getting Started" class="categoryLinkLabel_W154">Getting Started</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-local"><span title="Local Mode Quick Start" class="linkLabel_WmDU">Local Mode Quick Start</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-hybrid"><span title="Hybrid Mode Deployment Guide" class="linkLabel_WmDU">Hybrid Mode Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-remote"><span title="Remote Mode Deployment Guide" class="linkLabel_WmDU">Remote Mode Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/guides/cli-quick-reference"><span title="Aeterna CLI Quick Reference" class="linkLabel_WmDU">Aeterna CLI Quick Reference</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/overview"><span title="Concepts" class="categoryLinkLabel_W154">Concepts</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/memory-system"><span title="Memory System" class="categoryLinkLabel_W154">Memory System</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/knowledge-repository"><span title="Knowledge Repository" class="categoryLinkLabel_W154">Knowledge Repository</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/aeterna/docs/governance/policy-model"><span title="Governance" class="categoryLinkLabel_W154">Governance</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/governance/policy-model"><span title="Policy Model Documentation" class="linkLabel_WmDU">Policy Model Documentation</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/governance/api-reference"><span title="Governance System API Reference" class="linkLabel_WmDU">Governance System API Reference</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/governance/deployment-guide"><span title="Governance Deployment Guide" class="linkLabel_WmDU">Governance Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/aeterna/docs/governance/drift-tuning"><span title="Drift Detection Tuning Guide" class="linkLabel_WmDU">Drift Detection Tuning Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/governance/troubleshooting"><span title="Governance System Troubleshooting Guide" class="linkLabel_WmDU">Governance System Troubleshooting Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/guides/ux-first-governance"><span title="UX-First Governance: Natural Language Policy Management" class="linkLabel_WmDU">UX-First Governance: Natural Language Policy Management</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/guides/agent-governance-integration"><span title="Agent Developer Guide: Governance Integration" class="linkLabel_WmDU">Agent Developer Guide: Governance Integration</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/cca/overview"><span title="CCA — Confucius Code Agent" class="categoryLinkLabel_W154">CCA — Confucius Code Agent</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/integrations/mcp-server"><span title="Integrations" class="categoryLinkLabel_W154">Integrations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/security/rbac-matrix"><span title="Security" class="categoryLinkLabel_W154">Security</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/helm/architecture"><span title="Helm Deployment" class="categoryLinkLabel_W154">Helm Deployment</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/guides/ha-deployment"><span title="Operations" class="categoryLinkLabel_W154">Operations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/examples/strangler-fig-migration"><span title="Examples" class="categoryLinkLabel_W154">Examples</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/tool-interface"><span title="Reference" class="categoryLinkLabel_W154">Reference</span></a></div></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/aeterna/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Governance</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">Drift Detection Tuning Guide</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Drift Detection Tuning Guide</h1></header>
+<p>This guide explains how to configure and tune drift detection in the Aeterna governance system for optimal accuracy and reduced noise.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="overview">Overview<a href="#overview" class="hash-link" aria-label="Direct link to Overview" title="Direct link to Overview" translate="no">​</a></h2>
+<p>Drift detection identifies when project code or configurations deviate from established policies. However, not all detected drifts are actionable—some are false positives, expected exceptions, or low-confidence results that require manual review.</p>
+<p>The drift tuning system provides:</p>
+<ul>
+<li class=""><strong>Suppression rules</strong> to filter out known exceptions</li>
+<li class=""><strong>Confidence scoring</strong> to identify uncertain detections</li>
+<li class=""><strong>Configurable thresholds</strong> per project</li>
+<li class=""><strong>Manual review flagging</strong> for ambiguous cases</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="concepts">Concepts<a href="#concepts" class="hash-link" aria-label="Direct link to Concepts" title="Direct link to Concepts" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="drift-score">Drift Score<a href="#drift-score" class="hash-link" aria-label="Direct link to Drift Score" title="Direct link to Drift Score" translate="no">​</a></h3>
+<p>A value between 0.0 and 1.0 indicating the degree of policy deviation:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Score Range</th><th>Interpretation</th></tr></thead><tbody><tr><td>0.0 - 0.2</td><td>No significant drift</td></tr><tr><td>0.2 - 0.5</td><td>Minor drift, review recommended</td></tr><tr><td>0.5 - 0.8</td><td>Moderate drift, action needed</td></tr><tr><td>0.8 - 1.0</td><td>Severe drift, immediate attention</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="confidence-score">Confidence Score<a href="#confidence-score" class="hash-link" aria-label="Direct link to Confidence Score" title="Direct link to Confidence Score" translate="no">​</a></h3>
+<p>A value between 0.0 and 1.0 indicating how certain the system is about the drift detection:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Score Range</th><th>Interpretation</th></tr></thead><tbody><tr><td>0.9 - 1.0</td><td>High confidence (rule-based detection)</td></tr><tr><td>0.75 - 0.9</td><td>Medium confidence (semantic analysis)</td></tr><tr><td>0.0 - 0.75</td><td>Low confidence (requires manual review)</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="suppression-rules">Suppression Rules<a href="#suppression-rules" class="hash-link" aria-label="Direct link to Suppression Rules" title="Direct link to Suppression Rules" translate="no">​</a></h3>
+<p>Rules that filter out expected or known violations from drift reports. Useful for:</p>
+<ul>
+<li class="">Legacy code with approved exceptions</li>
+<li class="">Third-party dependencies with known patterns</li>
+<li class="">Environment-specific configurations</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="configuration">Configuration<a href="#configuration" class="hash-link" aria-label="Direct link to Configuration" title="Direct link to Configuration" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="per-project-drift-threshold">Per-Project Drift Threshold<a href="#per-project-drift-threshold" class="hash-link" aria-label="Direct link to Per-Project Drift Threshold" title="Direct link to Per-Project Drift Threshold" translate="no">​</a></h3>
+<p>Configure the drift threshold for each project:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># Set drift threshold via API</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token function" style="color:#d73a49">curl</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">-X</span><span class="token plain"> PUT </span><span class="token string" style="color:#e3116c">&quot;http://localhost:8080/api/v1/governance/drift-config/my-project&quot;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-H</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;Content-Type: application/json&quot;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-H</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;X-Tenant-Id: acme-corp&quot;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-d</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&#x27;{</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    &quot;threshold&quot;: 0.3,</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    &quot;auto_suppress_info&quot;: true</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">  }&#x27;</span><br></span></code></pre></div></div>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="configuration-options">Configuration Options<a href="#configuration-options" class="hash-link" aria-label="Direct link to Configuration Options" title="Direct link to Configuration Options" translate="no">​</a></h4>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody><tr><td><code>threshold</code></td><td>f32</td><td>0.2</td><td>Drift score threshold for alerts</td></tr><tr><td><code>auto_suppress_info</code></td><td>bool</td><td>false</td><td>Automatically suppress INFO severity violations</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="suppression-rules-1">Suppression Rules<a href="#suppression-rules-1" class="hash-link" aria-label="Direct link to Suppression Rules" title="Direct link to Suppression Rules" translate="no">​</a></h3>
+<p>Create suppression rules to filter known exceptions:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># Create a suppression rule</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token function" style="color:#d73a49">curl</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">-X</span><span class="token plain"> POST </span><span class="token string" style="color:#e3116c">&quot;http://localhost:8080/api/v1/governance/suppressions&quot;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-H</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;Content-Type: application/json&quot;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-H</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;X-Tenant-Id: acme-corp&quot;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-d</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&#x27;{</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    &quot;project_id&quot;: &quot;my-project&quot;,</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    &quot;policy_id&quot;: &quot;security-policy&quot;,</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    &quot;rule_pattern&quot;: &quot;lodash.*version&quot;,</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    &quot;reason&quot;: &quot;Legacy dependency approved in ADR-042&quot;,</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    &quot;expires_at&quot;: 1735689600</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">  }&#x27;</span><br></span></code></pre></div></div>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="suppression-rule-fields">Suppression Rule Fields<a href="#suppression-rule-fields" class="hash-link" aria-label="Direct link to Suppression Rule Fields" title="Direct link to Suppression Rule Fields" translate="no">​</a></h4>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>project_id</code></td><td>String</td><td>Yes</td><td>Project to apply suppression to</td></tr><tr><td><code>policy_id</code></td><td>String</td><td>Yes</td><td>Policy ID whose violations to suppress</td></tr><tr><td><code>rule_pattern</code></td><td>String</td><td>No</td><td>Regex pattern to match violation messages</td></tr><tr><td><code>reason</code></td><td>String</td><td>Yes</td><td>Explanation for the suppression</td></tr><tr><td><code>expires_at</code></td><td>i64</td><td>No</td><td>Unix timestamp when suppression expires</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="list-suppressions">List Suppressions<a href="#list-suppressions" class="hash-link" aria-label="Direct link to List Suppressions" title="Direct link to List Suppressions" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># List all suppressions for a project</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token function" style="color:#d73a49">curl</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;http://localhost:8080/api/v1/governance/suppressions/my-project&quot;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-H</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;X-Tenant-Id: acme-corp&quot;</span><br></span></code></pre></div></div>
+<p>Response:</p>
+<div class="language-json codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-json codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token property" style="color:#36acaa">&quot;suppressions&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token property" style="color:#36acaa">&quot;id&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;sup-123&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token property" style="color:#36acaa">&quot;project_id&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;my-project&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token property" style="color:#36acaa">&quot;policy_id&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;security-policy&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token property" style="color:#36acaa">&quot;rule_pattern&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;lodash.*version&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token property" style="color:#36acaa">&quot;reason&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;Legacy dependency approved in ADR-042&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token property" style="color:#36acaa">&quot;created_at&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">1704067200</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token property" style="color:#36acaa">&quot;expires_at&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">1735689600</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="delete-suppression">Delete Suppression<a href="#delete-suppression" class="hash-link" aria-label="Direct link to Delete Suppression" title="Direct link to Delete Suppression" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token function" style="color:#d73a49">curl</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">-X</span><span class="token plain"> DELETE </span><span class="token string" style="color:#e3116c">&quot;http://localhost:8080/api/v1/governance/suppressions/sup-123&quot;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-H</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;X-Tenant-Id: acme-corp&quot;</span><br></span></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="confidence-scoring">Confidence Scoring<a href="#confidence-scoring" class="hash-link" aria-label="Direct link to Confidence Scoring" title="Direct link to Confidence Scoring" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="how-confidence-is-calculated">How Confidence is Calculated<a href="#how-confidence-is-calculated" class="hash-link" aria-label="Direct link to How Confidence is Calculated" title="Direct link to How Confidence is Calculated" translate="no">​</a></h3>
+<p>The drift detection system assigns confidence scores based on the detection method:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Detection Method</th><th>Base Confidence</th><th>Rationale</th></tr></thead><tbody><tr><td>Rule-based (exact match)</td><td>1.0</td><td>Deterministic pattern matching</td></tr><tr><td>Semantic (embedding similarity)</td><td>0.85</td><td>Vector similarity may have false positives</td></tr><tr><td>LLM-based (reasoning)</td><td>0.75</td><td>Model interpretation can vary</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="low-confidence-handling">Low Confidence Handling<a href="#low-confidence-handling" class="hash-link" aria-label="Direct link to Low Confidence Handling" title="Direct link to Low Confidence Handling" translate="no">​</a></h3>
+<p>When confidence drops below 0.7, the drift result is flagged for manual review:</p>
+<div class="language-rust codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-rust codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">struct</span><span class="token plain"> </span><span class="token type-definition class-name">DriftResult</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> project_id</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">String</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> drift_score</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">f32</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> confidence</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">f32</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain">               </span><span class="token comment" style="color:#999988;font-style:italic">// 0.0 - 1.0</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> violations</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">Vec</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">PolicyViolation</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> suppressed_violations</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">Vec</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">PolicyViolation</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> requires_manual_review</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">bool</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain">  </span><span class="token comment" style="color:#999988;font-style:italic">// true if confidence &lt; 0.7</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> timestamp</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">i64</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="manual-review-workflow">Manual Review Workflow<a href="#manual-review-workflow" class="hash-link" aria-label="Direct link to Manual Review Workflow" title="Direct link to Manual Review Workflow" translate="no">​</a></h3>
+<ol>
+<li class="">Weekly drift reports identify items requiring manual review</li>
+<li class="">Reviewers assess flagged violations</li>
+<li class="">Legitimate violations are addressed; false positives become suppression rules</li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="drift-reports">Drift Reports<a href="#drift-reports" class="hash-link" aria-label="Direct link to Drift Reports" title="Direct link to Drift Reports" translate="no">​</a></h2>
+<p>Weekly drift reports now include tuning information:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">Weekly Governance Report - 2025-01-15</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">=====================================</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">Summary:</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">- Total Projects Analyzed: 42</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">- Active Violations: 15</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">- Suppressed Violations: 8</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">- Manual Review Required: 3</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">Projects Requiring Attention:</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">- payments-service: drift=0.45, confidence=0.92, violations=5</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">- auth-service: drift=0.32, confidence=0.68 (REVIEW)</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">- gateway-api: drift=0.28, confidence=0.95, violations=2</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="report-fields">Report Fields<a href="#report-fields" class="hash-link" aria-label="Direct link to Report Fields" title="Direct link to Report Fields" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Field</th><th>Description</th></tr></thead><tbody><tr><td><code>active_violation_count</code></td><td>Violations not suppressed</td></tr><tr><td><code>suppressed_violation_count</code></td><td>Violations filtered by suppression rules</td></tr><tr><td><code>manual_review_required</code></td><td>Count of low-confidence results needing review</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="api-reference">API Reference<a href="#api-reference" class="hash-link" aria-label="Direct link to API Reference" title="Direct link to API Reference" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="endpoints">Endpoints<a href="#endpoints" class="hash-link" aria-label="Direct link to Endpoints" title="Direct link to Endpoints" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/api/v1/governance/suppressions</code></td><td>Create suppression rule</td></tr><tr><td><code>GET</code></td><td><code>/api/v1/governance/suppressions/{project_id}</code></td><td>List suppressions</td></tr><tr><td><code>DELETE</code></td><td><code>/api/v1/governance/suppressions/{suppression_id}</code></td><td>Delete suppression</td></tr><tr><td><code>GET</code></td><td><code>/api/v1/governance/drift-config/{project_id}</code></td><td>Get drift config</td></tr><tr><td><code>PUT</code></td><td><code>/api/v1/governance/drift-config/{project_id}</code></td><td>Update drift config</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="data-types">Data Types<a href="#data-types" class="hash-link" aria-label="Direct link to Data Types" title="Direct link to Data Types" translate="no">​</a></h3>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="driftconfig">DriftConfig<a href="#driftconfig" class="hash-link" aria-label="Direct link to DriftConfig" title="Direct link to DriftConfig" translate="no">​</a></h4>
+<div class="language-rust codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-rust codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">struct</span><span class="token plain"> </span><span class="token type-definition class-name">DriftConfig</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> project_id</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">String</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> threshold</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">f32</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain">          </span><span class="token comment" style="color:#999988;font-style:italic">// Default: 0.2</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> auto_suppress_info</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">bool</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token comment" style="color:#999988;font-style:italic">// Default: false</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><br></span></code></pre></div></div>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="driftsuppression">DriftSuppression<a href="#driftsuppression" class="hash-link" aria-label="Direct link to DriftSuppression" title="Direct link to DriftSuppression" translate="no">​</a></h4>
+<div class="language-rust codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-rust codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">struct</span><span class="token plain"> </span><span class="token type-definition class-name">DriftSuppression</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> id</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">String</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> project_id</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">String</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> tenant_id</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">TenantId</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> policy_id</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">String</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> rule_pattern</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">Option</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">String</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> reason</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">String</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> created_at</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">i64</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> expires_at</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">Option</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token keyword" style="color:#00009f">i64</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><br></span></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="best-practices">Best Practices<a href="#best-practices" class="hash-link" aria-label="Direct link to Best Practices" title="Direct link to Best Practices" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="1-start-with-conservative-thresholds">1. Start with Conservative Thresholds<a href="#1-start-with-conservative-thresholds" class="hash-link" aria-label="Direct link to 1. Start with Conservative Thresholds" title="Direct link to 1. Start with Conservative Thresholds" translate="no">​</a></h3>
+<p>Begin with the default threshold (0.2) and adjust based on:</p>
+<ul>
+<li class="">Volume of alerts</li>
+<li class="">Team capacity to review</li>
+<li class="">Historical drift patterns</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="2-document-suppression-reasons">2. Document Suppression Reasons<a href="#2-document-suppression-reasons" class="hash-link" aria-label="Direct link to 2. Document Suppression Reasons" title="Direct link to 2. Document Suppression Reasons" translate="no">​</a></h3>
+<p>Always provide clear reasons for suppressions linking to:</p>
+<ul>
+<li class="">ADR approving the exception</li>
+<li class="">Ticket tracking the remediation</li>
+<li class="">Timeline for addressing the drift</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="3-set-expiration-dates">3. Set Expiration Dates<a href="#3-set-expiration-dates" class="hash-link" aria-label="Direct link to 3. Set Expiration Dates" title="Direct link to 3. Set Expiration Dates" translate="no">​</a></h3>
+<p>Don&#x27;t create permanent suppressions. Set expiration dates to force periodic review:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># Suppression expires in 90 days</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token string" style="color:#e3116c">&quot;expires_at&quot;</span><span class="token builtin class-name">:</span><span class="token plain"> </span><span class="token variable" style="color:#36acaa">$(</span><span class="token variable function" style="color:#d73a49">date</span><span class="token variable" style="color:#36acaa"> </span><span class="token variable parameter variable" style="color:#36acaa">-d</span><span class="token variable" style="color:#36acaa"> </span><span class="token variable string" style="color:#e3116c">&quot;+90 days&quot;</span><span class="token variable" style="color:#36acaa"> +%s</span><span class="token variable" style="color:#36acaa">)</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="4-review-low-confidence-results">4. Review Low-Confidence Results<a href="#4-review-low-confidence-results" class="hash-link" aria-label="Direct link to 4. Review Low-Confidence Results" title="Direct link to 4. Review Low-Confidence Results" translate="no">​</a></h3>
+<p>Establish a weekly review process for items flagged as <code>requires_manual_review</code>:</p>
+<ul>
+<li class="">True positives: Create tickets to address</li>
+<li class="">False positives: Create suppression rules with patterns</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="5-monitor-suppression-growth">5. Monitor Suppression Growth<a href="#5-monitor-suppression-growth" class="hash-link" aria-label="Direct link to 5. Monitor Suppression Growth" title="Direct link to 5. Monitor Suppression Growth" translate="no">​</a></h3>
+<p>Track the ratio of suppressed to active violations. High suppression counts may indicate:</p>
+<ul>
+<li class="">Policies too strict for the codebase</li>
+<li class="">Technical debt accumulation</li>
+<li class="">Need for policy refinement</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="troubleshooting">Troubleshooting<a href="#troubleshooting" class="hash-link" aria-label="Direct link to Troubleshooting" title="Direct link to Troubleshooting" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="high-false-positive-rate">High False Positive Rate<a href="#high-false-positive-rate" class="hash-link" aria-label="Direct link to High False Positive Rate" title="Direct link to High False Positive Rate" translate="no">​</a></h3>
+<p><strong>Symptoms</strong>: Many violations that aren&#x27;t actionable</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li class="">Review policy rule specificity</li>
+<li class="">Add targeted suppression rules with patterns</li>
+<li class="">Adjust semantic similarity thresholds</li>
+<li class="">Enable <code>auto_suppress_info</code> for informational violations</li>
+</ol>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="low-confidence-scores">Low Confidence Scores<a href="#low-confidence-scores" class="hash-link" aria-label="Direct link to Low Confidence Scores" title="Direct link to Low Confidence Scores" translate="no">​</a></h3>
+<p><strong>Symptoms</strong>: Many results requiring manual review</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li class="">Improve policy rule definitions (more specific patterns)</li>
+<li class="">Review embedding model quality</li>
+<li class="">Consider rule-based detection for critical policies</li>
+</ol>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="suppression-rules-not-matching">Suppression Rules Not Matching<a href="#suppression-rules-not-matching" class="hash-link" aria-label="Direct link to Suppression Rules Not Matching" title="Direct link to Suppression Rules Not Matching" translate="no">​</a></h3>
+<p><strong>Symptoms</strong>: Violations not being suppressed despite rules</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li class="">Check regex pattern syntax</li>
+<li class="">Verify <code>policy_id</code> matches exactly</li>
+<li class="">Check suppression hasn&#x27;t expired</li>
+<li class="">Ensure <code>project_id</code> matches</li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="migration-from-previous-versions">Migration from Previous Versions<a href="#migration-from-previous-versions" class="hash-link" aria-label="Direct link to Migration from Previous Versions" title="Direct link to Migration from Previous Versions" translate="no">​</a></h2>
+<p>If upgrading from a version without drift tuning:</p>
+<ol>
+<li class="">
+<p>Run migration <code>005_drift_tuning.sql</code>:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">psql </span><span class="token parameter variable" style="color:#36acaa">-d</span><span class="token plain"> aeterna </span><span class="token parameter variable" style="color:#36acaa">-f</span><span class="token plain"> storage/migrations/005_drift_tuning.sql</span><br></span></code></pre></div></div>
+</li>
+<li class="">
+<p>Existing drift results will have:</p>
+<ul>
+<li class=""><code>confidence = 1.0</code> (assumed high confidence)</li>
+<li class=""><code>suppressed_violations = []</code> (no suppressions)</li>
+<li class=""><code>requires_manual_review = false</code></li>
+</ul>
+</li>
+<li class="">
+<p>Create suppression rules for known exceptions</p>
+</li>
+<li class="">
+<p>Adjust thresholds based on current drift levels</p>
+</li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="related-documentation">Related Documentation<a href="#related-documentation" class="hash-link" aria-label="Direct link to Related Documentation" title="Direct link to Related Documentation" translate="no">​</a></h2>
+<ul>
+<li class=""><a class="" href="/aeterna/docs/governance/api-reference">API Reference</a> - Full governance API documentation</li>
+<li class=""><a class="" href="/aeterna/docs/governance/policy-model">Policy Model</a> - Understanding policies and rules</li>
+<li class=""><a class="" href="/aeterna/docs/governance/troubleshooting">Troubleshooting</a> - Common issues and solutions</li>
+<li class=""><a class="" href="/aeterna/docs/governance/deployment-guide">Deployment Guide</a> - Production deployment</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/kikokikok/aeterna/tree/main/website/docs/governance/drift-tuning.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/aeterna/docs/governance/deployment-guide"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Governance Deployment Guide</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/aeterna/docs/governance/troubleshooting"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Governance System Troubleshooting Guide</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#overview" class="table-of-contents__link toc-highlight">Overview</a></li><li><a href="#concepts" class="table-of-contents__link toc-highlight">Concepts</a><ul><li><a href="#drift-score" class="table-of-contents__link toc-highlight">Drift Score</a></li><li><a href="#confidence-score" class="table-of-contents__link toc-highlight">Confidence Score</a></li><li><a href="#suppression-rules" class="table-of-contents__link toc-highlight">Suppression Rules</a></li></ul></li><li><a href="#configuration" class="table-of-contents__link toc-highlight">Configuration</a><ul><li><a href="#per-project-drift-threshold" class="table-of-contents__link toc-highlight">Per-Project Drift Threshold</a></li><li><a href="#suppression-rules-1" class="table-of-contents__link toc-highlight">Suppression Rules</a></li><li><a href="#list-suppressions" class="table-of-contents__link toc-highlight">List Suppressions</a></li><li><a href="#delete-suppression" class="table-of-contents__link toc-highlight">Delete Suppression</a></li></ul></li><li><a href="#confidence-scoring" class="table-of-contents__link toc-highlight">Confidence Scoring</a><ul><li><a href="#how-confidence-is-calculated" class="table-of-contents__link toc-highlight">How Confidence is Calculated</a></li><li><a href="#low-confidence-handling" class="table-of-contents__link toc-highlight">Low Confidence Handling</a></li><li><a href="#manual-review-workflow" class="table-of-contents__link toc-highlight">Manual Review Workflow</a></li></ul></li><li><a href="#drift-reports" class="table-of-contents__link toc-highlight">Drift Reports</a><ul><li><a href="#report-fields" class="table-of-contents__link toc-highlight">Report Fields</a></li></ul></li><li><a href="#api-reference" class="table-of-contents__link toc-highlight">API Reference</a><ul><li><a href="#endpoints" class="table-of-contents__link toc-highlight">Endpoints</a></li><li><a href="#data-types" class="table-of-contents__link toc-highlight">Data Types</a></li></ul></li><li><a href="#best-practices" class="table-of-contents__link toc-highlight">Best Practices</a><ul><li><a href="#1-start-with-conservative-thresholds" class="table-of-contents__link toc-highlight">1. Start with Conservative Thresholds</a></li><li><a href="#2-document-suppression-reasons" class="table-of-contents__link toc-highlight">2. Document Suppression Reasons</a></li><li><a href="#3-set-expiration-dates" class="table-of-contents__link toc-highlight">3. Set Expiration Dates</a></li><li><a href="#4-review-low-confidence-results" class="table-of-contents__link toc-highlight">4. Review Low-Confidence Results</a></li><li><a href="#5-monitor-suppression-growth" class="table-of-contents__link toc-highlight">5. Monitor Suppression Growth</a></li></ul></li><li><a href="#troubleshooting" class="table-of-contents__link toc-highlight">Troubleshooting</a><ul><li><a href="#high-false-positive-rate" class="table-of-contents__link toc-highlight">High False Positive Rate</a></li><li><a href="#low-confidence-scores" class="table-of-contents__link toc-highlight">Low Confidence Scores</a></li><li><a href="#suppression-rules-not-matching" class="table-of-contents__link toc-highlight">Suppression Rules Not Matching</a></li></ul></li><li><a href="#migration-from-previous-versions" class="table-of-contents__link toc-highlight">Migration from Previous Versions</a></li><li><a href="#related-documentation" class="table-of-contents__link toc-highlight">Related Documentation</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Docs</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/aeterna/docs/">Getting Started</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Community</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div></div><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2026 Aeterna Contributors.</div></div></div></footer></div>
+</body>
+</html>

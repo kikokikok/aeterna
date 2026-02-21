@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-specs/overview" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.9.2">
+<title data-rh="true">Memory-Knowledge System Specification | Aeterna</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://kikokikok.github.io/aeterna/docs/specs/overview"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Memory-Knowledge System Specification | Aeterna"><meta data-rh="true" name="description" content="Executive Summary"><meta data-rh="true" property="og:description" content="Executive Summary"><link data-rh="true" rel="icon" href="/aeterna/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://kikokikok.github.io/aeterna/docs/specs/overview"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/specs/overview" hreflang="en"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/specs/overview" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Memory-Knowledge System Specification","item":"https://kikokikok.github.io/aeterna/docs/specs/overview"}]}</script><link rel="stylesheet" href="/aeterna/assets/css/styles.9ec36079.css">
+<script src="/aeterna/assets/js/runtime~main.7b7cf05c.js" defer="defer"></script>
+<script src="/aeterna/assets/js/main.2421dfb6.js" defer="defer"></script>
+</head>
+<body class="navigation-with-keyboard">
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||"light"),document.documentElement.setAttribute("data-theme-choice",t||"light")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/aeterna/"><b class="navbar__title text--truncate">Aeterna</b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/aeterna/docs/">Documentation</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/aeterna/docs/"><span title="Introduction to Aeterna" class="linkLabel_WmDU">Introduction to Aeterna</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/aeterna/docs/helm/quickstart-local"><span title="Getting Started" class="categoryLinkLabel_W154">Getting Started</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-local"><span title="Local Mode Quick Start" class="linkLabel_WmDU">Local Mode Quick Start</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-hybrid"><span title="Hybrid Mode Deployment Guide" class="linkLabel_WmDU">Hybrid Mode Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-remote"><span title="Remote Mode Deployment Guide" class="linkLabel_WmDU">Remote Mode Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/guides/cli-quick-reference"><span title="Aeterna CLI Quick Reference" class="linkLabel_WmDU">Aeterna CLI Quick Reference</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/aeterna/docs/specs/overview"><span title="Concepts" class="categoryLinkLabel_W154">Concepts</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/aeterna/docs/specs/overview"><span title="Memory-Knowledge System Specification" class="linkLabel_WmDU">Memory-Knowledge System Specification</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/specs/core-concepts"><span title="Core Concepts and Terminology" class="linkLabel_WmDU">Core Concepts and Terminology</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/architecture-overview"><span title="Architecture: Memory-Knowledge System" class="linkLabel_WmDU">Architecture: Memory-Knowledge System</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/sequence-diagrams"><span title="Aeterna: Complete Sequence Diagrams" class="linkLabel_WmDU">Aeterna: Complete Sequence Diagrams</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/comprehensive-ux-dx-guide"><span title="Aeterna: Comprehensive UX/DX Guide" class="linkLabel_WmDU">Aeterna: Comprehensive UX/DX Guide</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/memory-system"><span title="Memory System" class="categoryLinkLabel_W154">Memory System</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/knowledge-repository"><span title="Knowledge Repository" class="categoryLinkLabel_W154">Knowledge Repository</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/governance/policy-model"><span title="Governance" class="categoryLinkLabel_W154">Governance</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/cca/overview"><span title="CCA — Confucius Code Agent" class="categoryLinkLabel_W154">CCA — Confucius Code Agent</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/integrations/mcp-server"><span title="Integrations" class="categoryLinkLabel_W154">Integrations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/security/rbac-matrix"><span title="Security" class="categoryLinkLabel_W154">Security</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/helm/architecture"><span title="Helm Deployment" class="categoryLinkLabel_W154">Helm Deployment</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/guides/ha-deployment"><span title="Operations" class="categoryLinkLabel_W154">Operations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/examples/strangler-fig-migration"><span title="Examples" class="categoryLinkLabel_W154">Examples</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/tool-interface"><span title="Reference" class="categoryLinkLabel_W154">Reference</span></a></div></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/aeterna/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Concepts</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">Memory-Knowledge System Specification</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Memory-Knowledge System Specification</h1></header>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="executive-summary">Executive Summary<a href="#executive-summary" class="hash-link" aria-label="Direct link to Executive Summary" title="Direct link to Executive Summary" translate="no">​</a></h2>
+<p>This specification defines a <strong>universal framework</strong> for managing memory and knowledge in AI agent systems. It is designed to be:</p>
+<ul>
+<li class=""><strong>Implementation-agnostic</strong>: Works with any AI agent framework</li>
+<li class=""><strong>Provider-flexible</strong>: Supports multiple storage backends via adapters</li>
+<li class=""><strong>Ecosystem-extensible</strong>: Integrates with LangChain, AutoGen, CrewAI, OpenCode, and others</li>
+</ul>
+<p>The framework addresses a fundamental challenge: <strong>AI agents need both short-term contextual memory and long-term structured knowledge</strong>, and these two systems must work together seamlessly.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="problem-statement">Problem Statement<a href="#problem-statement" class="hash-link" aria-label="Direct link to Problem Statement" title="Direct link to Problem Statement" translate="no">​</a></h2>
+<p>Modern AI agent systems face several memory and knowledge challenges:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Challenge</th><th>Impact</th></tr></thead><tbody><tr><td><strong>Context window limits</strong></td><td>Agents forget previous interactions</td></tr><tr><td><strong>Knowledge fragmentation</strong></td><td>Organizational knowledge scattered across systems</td></tr><tr><td><strong>No memory hierarchy</strong></td><td>All information treated equally regardless of scope</td></tr><tr><td><strong>Vendor lock-in</strong></td><td>Switching memory providers requires rewriting code</td></tr><tr><td><strong>Knowledge drift</strong></td><td>No versioning or audit trail for decisions</td></tr><tr><td><strong>Siloed ecosystems</strong></td><td>Memory from one framework incompatible with others</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="solution-overview">Solution Overview<a href="#solution-overview" class="hash-link" aria-label="Direct link to Solution Overview" title="Direct link to Solution Overview" translate="no">​</a></h2>
+<p>This specification defines two complementary systems:</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="1-memory-system">1. Memory System<a href="#1-memory-system" class="hash-link" aria-label="Direct link to 1. Memory System" title="Direct link to 1. Memory System" translate="no">​</a></h3>
+<p>Semantic, searchable storage for agent experiences and learnings.</p>
+<ul>
+<li class=""><strong>Hierarchical layers</strong>: agent → user → session → project → team → org → company</li>
+<li class=""><strong>Vector-based retrieval</strong>: Natural language search across memories</li>
+<li class=""><strong>Provider abstraction</strong>: Mem0, Letta, Chroma, Pinecone, etc.</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="2-knowledge-repository">2. Knowledge Repository<a href="#2-knowledge-repository" class="hash-link" aria-label="Direct link to 2. Knowledge Repository" title="Direct link to 2. Knowledge Repository" translate="no">​</a></h3>
+<p>Structured, versioned storage for organizational decisions and policies.</p>
+<ul>
+<li class=""><strong>Git-based versioning</strong>: Full audit trail, branching, merging</li>
+<li class=""><strong>Constraint enforcement</strong>: Policies that guide agent behavior</li>
+<li class=""><strong>Multi-tenant federation</strong>: Company → Org → Team → Project layers</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="3-sync-bridge">3. Sync Bridge<a href="#3-sync-bridge" class="hash-link" aria-label="Direct link to 3. Sync Bridge" title="Direct link to 3. Sync Bridge" translate="no">​</a></h3>
+<p>Bidirectional synchronization keeping memory and knowledge aligned.</p>
+<ul>
+<li class=""><strong>Pointer architecture</strong>: Memory stores summaries, knowledge stores full content</li>
+<li class=""><strong>Delta sync</strong>: Efficient change detection via content hashing</li>
+<li class=""><strong>Conflict resolution</strong>: Deterministic merge strategies</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="architecture">Architecture<a href="#architecture" class="hash-link" aria-label="Direct link to Architecture" title="Direct link to Architecture" translate="no">​</a></h2>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">┌─────────────────────────────────────────────────────────────────────────┐</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│                        AI AGENT SYSTEM                                   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  LangChain  │  │   AutoGen   │  │   CrewAI    │  │  OpenCode   │    │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘    │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│         │                │                │                │            │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│         └────────────────┴────────────────┴────────────────┘            │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│                                   │                                      │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│                                   ▼                                      │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  ┌─────────────────────────────────────────────────────────────────┐   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │                    UNIFIED TOOL INTERFACE                        │   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  │ memory_add   │  │ memory_search│  │ knowledge_query      │   │   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  │ memory_get   │  │ memory_delete│  │ knowledge_check      │   │   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  └──────────────┘  └──────────────┘  └──────────────────────┘   │   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  └─────────────────────────────────────────────────────────────────┘   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">└─────────────────────────────────────────────────────────────────────────┘</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                                   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                                   ▼</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">┌─────────────────────────────────────────────────────────────────────────┐</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│                      MEMORY-KNOWLEDGE CORE                               │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│                                                                          │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  ┌─────────────────────────┐       ┌─────────────────────────┐         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │     MEMORY SYSTEM       │       │   KNOWLEDGE REPOSITORY   │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │                         │       │                          │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  ┌───────────────────┐  │       │  ┌────────────────────┐  │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  │   Memory Manager  │  │◄─────►│  │  Knowledge Manager │  │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  └─────────┬─────────┘  │ Sync  │  └─────────┬──────────┘  │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │            │            │ Bridge│            │             │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  ┌─────────▼─────────┐  │       │  ┌─────────▼──────────┐  │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  │  Layer Resolver   │  │       │  │ Constraint Engine  │  │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  │  (7-layer hierarchy)│  │       │  │ (DSL evaluation)   │  │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  └─────────┬─────────┘  │       │  └─────────┬──────────┘  │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │            │            │       │            │             │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  ┌─────────▼─────────┐  │       │  ┌─────────▼──────────┐  │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  │ Provider Adapter  │  │       │  │   Git Backend      │  │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  └───────────────────┘  │       │  └────────────────────┘  │         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  └─────────────────────────┘       └─────────────────────────┘         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">└─────────────────────────────────────────────────────────────────────────┘</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                                   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                                   ▼</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">┌─────────────────────────────────────────────────────────────────────────┐</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│                       PROVIDER ADAPTERS                                  │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│                                                                          │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  Mem0   │ │  Letta  │ │ Chroma  │ │Pinecone │ │ Qdrant  │           │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘           │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│                                                                          │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  │  Redis  │ │PostgreSQL│ │ SQLite  │ │   S3    │ │  Git    │           │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘           │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">└─────────────────────────────────────────────────────────────────────────┘</span><br></span></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="design-goals">Design Goals<a href="#design-goals" class="hash-link" aria-label="Direct link to Design Goals" title="Direct link to Design Goals" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="must-have-p0">Must Have (P0)<a href="#must-have-p0" class="hash-link" aria-label="Direct link to Must Have (P0)" title="Direct link to Must Have (P0)" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Goal</th><th>Description</th></tr></thead><tbody><tr><td><strong>Provider Agnostic</strong></td><td>Switch between Mem0, Letta, Chroma without code changes</td></tr><tr><td><strong>Ecosystem Agnostic</strong></td><td>Work with LangChain, AutoGen, CrewAI, OpenCode equally</td></tr><tr><td><strong>Hierarchical Memory</strong></td><td>7-layer precedence (agent → company)</td></tr><tr><td><strong>Versioned Knowledge</strong></td><td>Git-based immutable commits</td></tr><tr><td><strong>Constraint DSL</strong></td><td>Declarative policy enforcement</td></tr><tr><td><strong>Offline-First</strong></td><td>Work without network, sync when available</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="should-have-p1">Should Have (P1)<a href="#should-have-p1" class="hash-link" aria-label="Direct link to Should Have (P1)" title="Direct link to Should Have (P1)" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Goal</th><th>Description</th></tr></thead><tbody><tr><td><strong>Delta Sync</strong></td><td>Efficient change propagation</td></tr><tr><td><strong>Conflict Resolution</strong></td><td>Deterministic merge strategies</td></tr><tr><td><strong>Multi-Tenant</strong></td><td>Company → Org → Team → Project isolation</td></tr><tr><td><strong>Audit Trail</strong></td><td>Full history of all changes</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="nice-to-have-p2">Nice to Have (P2)<a href="#nice-to-have-p2" class="hash-link" aria-label="Direct link to Nice to Have (P2)" title="Direct link to Nice to Have (P2)" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Goal</th><th>Description</th></tr></thead><tbody><tr><td><strong>Real-time Sync</strong></td><td>WebSocket-based live updates</td></tr><tr><td><strong>Semantic Deduplication</strong></td><td>Automatic memory consolidation</td></tr><tr><td><strong>Cross-Ecosystem Sync</strong></td><td>Share memory between frameworks</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="non-goals">Non-Goals<a href="#non-goals" class="hash-link" aria-label="Direct link to Non-Goals" title="Direct link to Non-Goals" translate="no">​</a></h2>
+<p>This specification explicitly does <strong>not</strong> cover:</p>
+<ul>
+<li class=""><strong>Agent orchestration</strong>: How agents are scheduled or coordinated</li>
+<li class=""><strong>LLM selection</strong>: Which models to use for embeddings or generation</li>
+<li class=""><strong>UI/UX</strong>: User interfaces for managing memory or knowledge</li>
+<li class=""><strong>Authentication</strong>: How users or agents authenticate (delegated to ecosystem)</li>
+<li class=""><strong>Billing</strong>: Metering or cost allocation for storage</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="specification-index">Specification Index<a href="#specification-index" class="hash-link" aria-label="Direct link to Specification Index" title="Direct link to Specification Index" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>#</th><th>Document</th><th>Description</th></tr></thead><tbody><tr><td>00</td><td><a class="" href="/aeterna/docs/specs/overview">Overview</a></td><td>This document</td></tr><tr><td>01</td><td><a class="" href="/aeterna/docs/specs/core-concepts">Core Concepts</a></td><td>Glossary, mental model, design principles</td></tr><tr><td>02</td><td><a class="" href="/aeterna/docs/specs/memory-system">Memory System</a></td><td>Layer hierarchy, operations, interfaces</td></tr><tr><td>03</td><td><a class="" href="/aeterna/docs/specs/knowledge-repository">Knowledge Repository</a></td><td>Schema, constraints DSL, versioning</td></tr><tr><td>04</td><td><a class="" href="/aeterna/docs/specs/memory-knowledge-sync">Memory-Knowledge Sync</a></td><td>Pointer architecture, delta sync</td></tr><tr><td>05</td><td><a class="" href="/aeterna/docs/specs/adapter-architecture">Adapter Architecture</a></td><td>Provider abstraction, ecosystem adapters</td></tr><tr><td>06</td><td><a class="" href="/aeterna/docs/specs/tool-interface">Tool Interface</a></td><td>Generic tool contracts</td></tr><tr><td>07</td><td><a class="" href="/aeterna/docs/specs/configuration">Configuration</a></td><td>Config schema, environment abstraction</td></tr><tr><td>08</td><td><a class="" href="/aeterna/docs/specs/deployment">Deployment</a></td><td>Self-hosted vs cloud patterns</td></tr><tr><td>09</td><td><a class="" href="/aeterna/docs/specs/migration">Migration</a></td><td>Data portability, import/export</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="ecosystem-adapters">Ecosystem Adapters<a href="#ecosystem-adapters" class="hash-link" aria-label="Direct link to Ecosystem Adapters" title="Direct link to Ecosystem Adapters" translate="no">​</a></h2>
+<p>Adapters bridge this specification to specific AI agent frameworks:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Ecosystem</th><th>Adapter Location</th><th>Status</th></tr></thead><tbody><tr><td>OpenCode</td><td><a class="" href="/aeterna/docs/adapters/opencode/"><code>adapters/opencode/</code></a></td><td>Planned</td></tr><tr><td>LangChain</td><td><a class="" href="/aeterna/docs/adapters/langchain/"><code>adapters/langchain/</code></a></td><td>Planned</td></tr><tr><td>AutoGen</td><td><a class="" href="/aeterna/docs/adapters/autogen/"><code>adapters/autogen/</code></a></td><td>Planned</td></tr><tr><td>CrewAI</td><td><a class="" href="/aeterna/docs/adapters/crewai/"><code>adapters/crewai/</code></a></td><td>Planned</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="quick-start">Quick Start<a href="#quick-start" class="hash-link" aria-label="Direct link to Quick Start" title="Direct link to Quick Start" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="for-specification-readers">For Specification Readers<a href="#for-specification-readers" class="hash-link" aria-label="Direct link to For Specification Readers" title="Direct link to For Specification Readers" translate="no">​</a></h3>
+<ol>
+<li class="">Start with <a class="" href="/aeterna/docs/specs/core-concepts">01-core-concepts.md</a> for terminology</li>
+<li class="">Read <a class="" href="/aeterna/docs/specs/memory-system">02-memory-system.md</a> for the memory model</li>
+<li class="">Read <a class="" href="/aeterna/docs/specs/knowledge-repository">03-knowledge-repository.md</a> for knowledge management</li>
+<li class="">See <a class="" href="/aeterna/docs/specs/adapter-architecture">05-adapter-architecture.md</a> for integration patterns</li>
+</ol>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="for-implementers">For Implementers<a href="#for-implementers" class="hash-link" aria-label="Direct link to For Implementers" title="Direct link to For Implementers" translate="no">​</a></h3>
+<ol>
+<li class="">Review <a class="" href="/aeterna/docs/specs/tool-interface">06-tool-interface.md</a> for required tool contracts</li>
+<li class="">Check <a class="" href="/aeterna/docs/specs/configuration">07-configuration.md</a> for configuration schema</li>
+<li class="">See <a class="" href="/aeterna/docs/schemas/"><code>schemas/</code></a> for JSON Schema definitions</li>
+<li class="">Reference <a class="" href="/aeterna/docs/examples/"><code>examples/</code></a> for implementation examples</li>
+</ol>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="for-ecosystem-integrators">For Ecosystem Integrators<a href="#for-ecosystem-integrators" class="hash-link" aria-label="Direct link to For Ecosystem Integrators" title="Direct link to For Ecosystem Integrators" translate="no">​</a></h3>
+<ol>
+<li class="">Read <a class="" href="/aeterna/docs/specs/adapter-architecture">05-adapter-architecture.md</a> for adapter interface</li>
+<li class="">Check existing adapters in <a class="" href="/aeterna/docs/adapters/"><code>adapters/</code></a> for patterns</li>
+<li class="">Implement the <code>EcosystemAdapter</code> interface for your framework</li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="versioning">Versioning<a href="#versioning" class="hash-link" aria-label="Direct link to Versioning" title="Direct link to Versioning" translate="no">​</a></h2>
+<p>This specification follows <a href="https://semver.org/" target="_blank" rel="noopener noreferrer" class="">Semantic Versioning</a>:</p>
+<ul>
+<li class=""><strong>MAJOR</strong>: Breaking changes to core interfaces</li>
+<li class=""><strong>MINOR</strong>: New features, backward compatible</li>
+<li class=""><strong>PATCH</strong>: Clarifications, typo fixes</li>
+</ul>
+<p>Current version: <strong>0.1.0</strong> (Draft)</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="contributing">Contributing<a href="#contributing" class="hash-link" aria-label="Direct link to Contributing" title="Direct link to Contributing" translate="no">​</a></h2>
+<p>Contributions welcome via:</p>
+<ol>
+<li class="">Issues for clarifications or suggestions</li>
+<li class="">Pull requests for specification improvements</li>
+<li class="">Adapter implementations for new ecosystems</li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="license">License<a href="#license" class="hash-link" aria-label="Direct link to License" title="Direct link to License" translate="no">​</a></h2>
+<p>Apache License 2.0 - See <a class="" href="/aeterna/docs/LICENSE">LICENSE</a> for details.</p>
+<hr>
+<p><strong>Next</strong>: <a class="" href="/aeterna/docs/specs/core-concepts">01-core-concepts.md</a> - Core Concepts and Terminology</p></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/kikokikok/aeterna/tree/main/website/docs/specs/00-overview.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/aeterna/docs/guides/cli-quick-reference"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Aeterna CLI Quick Reference</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/aeterna/docs/specs/core-concepts"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Core Concepts and Terminology</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#executive-summary" class="table-of-contents__link toc-highlight">Executive Summary</a></li><li><a href="#problem-statement" class="table-of-contents__link toc-highlight">Problem Statement</a></li><li><a href="#solution-overview" class="table-of-contents__link toc-highlight">Solution Overview</a><ul><li><a href="#1-memory-system" class="table-of-contents__link toc-highlight">1. Memory System</a></li><li><a href="#2-knowledge-repository" class="table-of-contents__link toc-highlight">2. Knowledge Repository</a></li><li><a href="#3-sync-bridge" class="table-of-contents__link toc-highlight">3. Sync Bridge</a></li></ul></li><li><a href="#architecture" class="table-of-contents__link toc-highlight">Architecture</a></li><li><a href="#design-goals" class="table-of-contents__link toc-highlight">Design Goals</a><ul><li><a href="#must-have-p0" class="table-of-contents__link toc-highlight">Must Have (P0)</a></li><li><a href="#should-have-p1" class="table-of-contents__link toc-highlight">Should Have (P1)</a></li><li><a href="#nice-to-have-p2" class="table-of-contents__link toc-highlight">Nice to Have (P2)</a></li></ul></li><li><a href="#non-goals" class="table-of-contents__link toc-highlight">Non-Goals</a></li><li><a href="#specification-index" class="table-of-contents__link toc-highlight">Specification Index</a></li><li><a href="#ecosystem-adapters" class="table-of-contents__link toc-highlight">Ecosystem Adapters</a></li><li><a href="#quick-start" class="table-of-contents__link toc-highlight">Quick Start</a><ul><li><a href="#for-specification-readers" class="table-of-contents__link toc-highlight">For Specification Readers</a></li><li><a href="#for-implementers" class="table-of-contents__link toc-highlight">For Implementers</a></li><li><a href="#for-ecosystem-integrators" class="table-of-contents__link toc-highlight">For Ecosystem Integrators</a></li></ul></li><li><a href="#versioning" class="table-of-contents__link toc-highlight">Versioning</a></li><li><a href="#contributing" class="table-of-contents__link toc-highlight">Contributing</a></li><li><a href="#license" class="table-of-contents__link toc-highlight">License</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Docs</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/aeterna/docs/">Getting Started</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Community</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div></div><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2026 Aeterna Contributors.</div></div></div></footer></div>
+</body>
+</html>

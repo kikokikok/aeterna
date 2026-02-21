@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-cca/overview" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.9.2">
+<title data-rh="true">CCA: Confucius Code Agent Capabilities | Aeterna</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://kikokikok.github.io/aeterna/docs/cca/overview"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="CCA: Confucius Code Agent Capabilities | Aeterna"><meta data-rh="true" name="description" content="Overview"><meta data-rh="true" property="og:description" content="Overview"><link data-rh="true" rel="icon" href="/aeterna/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://kikokikok.github.io/aeterna/docs/cca/overview"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/cca/overview" hreflang="en"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/cca/overview" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"CCA: Confucius Code Agent Capabilities","item":"https://kikokikok.github.io/aeterna/docs/cca/overview"}]}</script><link rel="stylesheet" href="/aeterna/assets/css/styles.9ec36079.css">
+<script src="/aeterna/assets/js/runtime~main.7b7cf05c.js" defer="defer"></script>
+<script src="/aeterna/assets/js/main.2421dfb6.js" defer="defer"></script>
+</head>
+<body class="navigation-with-keyboard">
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||"light"),document.documentElement.setAttribute("data-theme-choice",t||"light")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/aeterna/"><b class="navbar__title text--truncate">Aeterna</b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/aeterna/docs/">Documentation</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/aeterna/docs/"><span title="Introduction to Aeterna" class="linkLabel_WmDU">Introduction to Aeterna</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/aeterna/docs/helm/quickstart-local"><span title="Getting Started" class="categoryLinkLabel_W154">Getting Started</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-local"><span title="Local Mode Quick Start" class="linkLabel_WmDU">Local Mode Quick Start</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-hybrid"><span title="Hybrid Mode Deployment Guide" class="linkLabel_WmDU">Hybrid Mode Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-remote"><span title="Remote Mode Deployment Guide" class="linkLabel_WmDU">Remote Mode Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/guides/cli-quick-reference"><span title="Aeterna CLI Quick Reference" class="linkLabel_WmDU">Aeterna CLI Quick Reference</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/overview"><span title="Concepts" class="categoryLinkLabel_W154">Concepts</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/memory-system"><span title="Memory System" class="categoryLinkLabel_W154">Memory System</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/knowledge-repository"><span title="Knowledge Repository" class="categoryLinkLabel_W154">Knowledge Repository</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/governance/policy-model"><span title="Governance" class="categoryLinkLabel_W154">Governance</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/aeterna/docs/cca/overview"><span title="CCA — Confucius Code Agent" class="categoryLinkLabel_W154">CCA — Confucius Code Agent</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/aeterna/docs/cca/overview"><span title="CCA: Confucius Code Agent Capabilities" class="linkLabel_WmDU">CCA: Confucius Code Agent Capabilities</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/cca/architecture"><span title="CCA Architecture" class="linkLabel_WmDU">CCA Architecture</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/cca/configuration"><span title="CCA Configuration" class="linkLabel_WmDU">CCA Configuration</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/cca/api-reference"><span title="CCA API Reference" class="linkLabel_WmDU">CCA API Reference</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/cca/extension-guide"><span title="CCA Extension Development Guide" class="linkLabel_WmDU">CCA Extension Development Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/cca/redis-schema"><span title="CCA Redis Schema Documentation" class="linkLabel_WmDU">CCA Redis Schema Documentation</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/cca/migrations"><span title="CCA Database Migrations" class="linkLabel_WmDU">CCA Database Migrations</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/integrations/mcp-server"><span title="Integrations" class="categoryLinkLabel_W154">Integrations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/security/rbac-matrix"><span title="Security" class="categoryLinkLabel_W154">Security</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/helm/architecture"><span title="Helm Deployment" class="categoryLinkLabel_W154">Helm Deployment</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/guides/ha-deployment"><span title="Operations" class="categoryLinkLabel_W154">Operations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/examples/strangler-fig-migration"><span title="Examples" class="categoryLinkLabel_W154">Examples</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/tool-interface"><span title="Reference" class="categoryLinkLabel_W154">Reference</span></a></div></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/aeterna/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">CCA — Confucius Code Agent</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">CCA: Confucius Code Agent Capabilities</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>CCA: Confucius Code Agent Capabilities</h1></header>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="overview">Overview<a href="#overview" class="hash-link" aria-label="Direct link to Overview" title="Direct link to Overview" translate="no">​</a></h2>
+<p>The Confucius Code Agent (CCA) capabilities in Aeterna implement advanced agent intelligence based on research from Meta AI and Harvard University. CCA provides production-ready implementations of four specialized agents that work together to create a self-improving AI system with hierarchical memory, trajectory learning, error pattern recognition, and autonomous refinement loops.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="research-foundation">Research Foundation<a href="#research-foundation" class="hash-link" aria-label="Direct link to Research Foundation" title="Direct link to Research Foundation" translate="no">​</a></h2>
+<p>CCA is based on the paper &quot;Confucius: Iterative Tool Learning from Introspection Feedback by Easy-to-Difficult Curriculum&quot; (arxiv.org/html/2512.10398v5). The research demonstrates that specialized agent capabilities working in concert can achieve significant performance improvements:</p>
+<ul>
+<li class=""><strong>+7.6% improvement</strong> from rich tool handling and semantic context compression</li>
+<li class=""><strong>Hierarchical working memory</strong> enables efficient context management within token budgets</li>
+<li class=""><strong>Trajectory distillation</strong> captures agent learnings as reusable knowledge</li>
+<li class=""><strong>Error pattern recognition</strong> prevents repeated failures across sessions</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-four-core-components">The Four Core Components<a href="#the-four-core-components" class="hash-link" aria-label="Direct link to The Four Core Components" title="Direct link to The Four Core Components" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="1-context-architect">1. Context Architect<a href="#1-context-architect" class="hash-link" aria-label="Direct link to 1. Context Architect" title="Direct link to 1. Context Architect" translate="no">​</a></h3>
+<p>The Context Architect compresses hierarchical memory into efficient context summaries that fit within token budgets. It queries multiple memory layers simultaneously and intelligently prioritizes the most relevant information.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li class="">Hierarchical compression across 7 memory layers (Company → Org → Team → Project → Session → User → Agent)</li>
+<li class="">Token budget management with configurable limits (100-32,000 tokens)</li>
+<li class="">Relevance scoring with semantic deduplication</li>
+<li class="">Parallel layer queries with early termination</li>
+<li class="">Caching with staleness validation</li>
+</ul>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li class="">Assembling context for LLM prompts without exceeding token limits</li>
+<li class="">Prioritizing recent session context over historical organizational knowledge</li>
+<li class="">Balancing breadth (many layers) vs depth (detailed single-layer information)</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="2-note-taking-agent">2. Note-Taking Agent<a href="#2-note-taking-agent" class="hash-link" aria-label="Direct link to 2. Note-Taking Agent" title="Direct link to 2. Note-Taking Agent" translate="no">​</a></h3>
+<p>The Note-Taking Agent captures trajectory events during agent execution and distills them into Markdown documentation. This enables agents to learn from their own behavior and share successful patterns with other agents.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li class="">Automatic trajectory capture for tool calls and decisions</li>
+<li class="">Configurable sampling rates to control overhead (1-100%)</li>
+<li class="">Batch processing with async queue (default: 1000 events, 10 batch size)</li>
+<li class="">Sensitive pattern detection and redaction</li>
+<li class="">Manual trigger support for critical events</li>
+<li class="">Distillation to structured Markdown notes</li>
+</ul>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li class="">Recording successful problem-solving approaches</li>
+<li class="">Documenting tool usage patterns that worked</li>
+<li class="">Creating knowledge artifacts from agent sessions</li>
+<li class="">Building organizational memory from individual learnings</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="3-hindsight-learning">3. Hindsight Learning<a href="#3-hindsight-learning" class="hash-link" aria-label="Direct link to 3. Hindsight Learning" title="Direct link to 3. Hindsight Learning" translate="no">​</a></h3>
+<p>Hindsight Learning captures errors and failed attempts, analyzes patterns semantically, and suggests resolutions based on past successful recoveries. This creates a growing knowledge base of how to handle errors.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li class="">Semantic error signature matching (type, message, context patterns)</li>
+<li class="">Resolution tracking with success rates</li>
+<li class="">Auto-capture of all errors or manual selective capture</li>
+<li class="">Promotion threshold (default 0.8) for elevating working solutions</li>
+<li class="">Vector-based similarity search for related error patterns</li>
+</ul>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li class="">Finding solutions to recurring error types</li>
+<li class="">Learning from failed build/test attempts</li>
+<li class="">Sharing error resolutions across teams</li>
+<li class="">Reducing repeated debugging of similar issues</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="4-meta-agent">4. Meta-Agent<a href="#4-meta-agent" class="hash-link" aria-label="Direct link to 4. Meta-Agent" title="Direct link to 4. Meta-Agent" translate="no">​</a></h3>
+<p>The Meta-Agent implements build-test-improve loops for autonomous agent refinement. It runs multiple iterations of task execution, evaluates outcomes, and adjusts strategies based on feedback.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li class="">Configurable iteration limits (default: 3 iterations)</li>
+<li class="">Per-phase timeouts (build: 120s, test: 60s, iteration: 300s)</li>
+<li class="">Automatic escalation on repeated failures</li>
+<li class="">Integration with Note-Taking and Hindsight for learning</li>
+<li class="">State tracking across iterations</li>
+</ul>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li class="">Self-correcting code generation with automated testing</li>
+<li class="">Iterative improvement of tool call sequences</li>
+<li class="">Autonomous debugging with multiple attempted fixes</li>
+<li class="">Quality gates before promoting solutions to production</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="production-readiness-features">Production Readiness Features<a href="#production-readiness-features" class="hash-link" aria-label="Direct link to Production Readiness Features" title="Direct link to Production Readiness Features" translate="no">​</a></h2>
+<p>Unlike research prototypes, Aeterna&#x27;s CCA implementation includes critical production requirements:</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="cost-control">Cost Control<a href="#cost-control" class="hash-link" aria-label="Direct link to Cost Control" title="Direct link to Cost Control" translate="no">​</a></h3>
+<ul>
+<li class="">Token budget enforcement at every context assembly</li>
+<li class="">Configurable overhead budgets for Note-Taking (default: 5ms per event)</li>
+<li class="">Sampling modes to reduce capture volume in high-throughput scenarios</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="time-budgets">Time Budgets<a href="#time-budgets" class="hash-link" aria-label="Direct link to Time Budgets" title="Direct link to Time Budgets" translate="no">​</a></h3>
+<ul>
+<li class="">Assembly timeout for Context Architect (default: 100ms)</li>
+<li class="">Per-phase timeouts for Meta-Agent loops</li>
+<li class="">Callback timeouts for extension execution (default: 5s)</li>
+<li class="">Early termination when token budgets are satisfied</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="staleness-validation">Staleness Validation<a href="#staleness-validation" class="hash-link" aria-label="Direct link to Staleness Validation" title="Direct link to Staleness Validation" translate="no">​</a></h3>
+<ul>
+<li class="">Cache TTL enforcement (default: 300 seconds)</li>
+<li class="">Three staleness policies: ServeStaleWarn, RegenerateBlocking, RegenerateAsync</li>
+<li class="">Automatic invalidation on memory updates</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="deduplication">Deduplication<a href="#deduplication" class="hash-link" aria-label="Direct link to Deduplication" title="Direct link to Deduplication" translate="no">​</a></h3>
+<ul>
+<li class="">Semantic similarity detection during context assembly</li>
+<li class="">Relevance threshold filtering (default: 0.3)</li>
+<li class="">Error signature matching to avoid duplicate capture</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="latency-control">Latency Control<a href="#latency-control" class="hash-link" aria-label="Direct link to Latency Control" title="Direct link to Latency Control" translate="no">​</a></h3>
+<ul>
+<li class="">Parallel layer queries by default (configurable)</li>
+<li class="">Batch flush intervals for Note-Taking (default: 100ms)</li>
+<li class="">Queue-based async processing to avoid blocking</li>
+<li class="">LRU eviction for extension state (default: 1MB limit)</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="hybrid-execution-model">Hybrid Execution Model<a href="#hybrid-execution-model" class="hash-link" aria-label="Direct link to Hybrid Execution Model" title="Direct link to Hybrid Execution Model" translate="no">​</a></h2>
+<p>CCA capabilities operate across two execution contexts:</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="client-side-opencode-plugin">Client-Side (OpenCode Plugin)<a href="#client-side-opencode-plugin" class="hash-link" aria-label="Direct link to Client-Side (OpenCode Plugin)" title="Direct link to Client-Side (OpenCode Plugin)" translate="no">​</a></h3>
+<ul>
+<li class="">Extension system for customizing agent behavior</li>
+<li class="">Prompt additions and tool configuration</li>
+<li class="">State management with compression (zstd)</li>
+<li class="">Callback hooks for input/output transformation</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="server-side-aeterna-core">Server-Side (Aeterna Core)<a href="#server-side-aeterna-core" class="hash-link" aria-label="Direct link to Server-Side (Aeterna Core)" title="Direct link to Server-Side (Aeterna Core)" translate="no">​</a></h3>
+<ul>
+<li class="">Memory layer storage and retrieval</li>
+<li class="">Context assembly and compression logic</li>
+<li class="">Trajectory capture and distillation</li>
+<li class="">Hindsight query engine and Meta-Agent loops</li>
+</ul>
+<p>This hybrid model enables:</p>
+<ul>
+<li class="">Low-latency client-side processing for real-time needs</li>
+<li class="">Heavy computation on server for memory operations</li>
+<li class="">Flexible deployment (client-only, server-only, or both)</li>
+<li class="">Clear separation of concerns for testing and scaling</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="integration-with-aeterna-memory-system">Integration with Aeterna Memory System<a href="#integration-with-aeterna-memory-system" class="hash-link" aria-label="Direct link to Integration with Aeterna Memory System" title="Direct link to Integration with Aeterna Memory System" translate="no">​</a></h2>
+<p>CCA capabilities are deeply integrated with Aeterna&#x27;s 7-layer memory hierarchy:</p>
+<ol>
+<li class=""><strong>Context Architect</strong> queries all layers and respects layer priorities</li>
+<li class=""><strong>Note-Taking</strong> stores distilled notes as Project/Team/Org layer memories</li>
+<li class=""><strong>Hindsight</strong> promotes successful resolutions from Agent layer to Team/Org layers</li>
+<li class=""><strong>Meta-Agent</strong> leverages full memory context for each iteration</li>
+</ol>
+<p>This integration means CCA benefits from:</p>
+<ul>
+<li class="">Multi-tenant isolation at the Company level</li>
+<li class="">Memory-R1 reward signals for promoting valuable learnings</li>
+<li class="">Graph layer for discovering related memories and error patterns</li>
+<li class="">Policy enforcement to prevent invalid knowledge capture</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="performance-characteristics">Performance Characteristics<a href="#performance-characteristics" class="hash-link" aria-label="Direct link to Performance Characteristics" title="Direct link to Performance Characteristics" translate="no">​</a></h2>
+<p>Based on the research and Aeterna&#x27;s implementation:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Component</th><th>Operation</th><th>Typical Latency</th><th>Scalability</th></tr></thead><tbody><tr><td>Context Architect</td><td>Assemble 4000 tokens</td><td>&lt;100ms</td><td>Parallel queries across layers</td></tr><tr><td>Note-Taking</td><td>Capture event</td><td>&lt;5ms</td><td>Async queue, 1000 events/buffer</td></tr><tr><td>Hindsight</td><td>Query errors</td><td>&lt;50ms</td><td>Vector search, cached signatures</td></tr><tr><td>Meta-Agent</td><td>Single iteration</td><td>60-300s</td><td>Per-loop isolation</td></tr></tbody></table>
+<p>Performance tuning options:</p>
+<ul>
+<li class="">Adjust token budgets based on model context windows</li>
+<li class="">Configure sampling rates for high-traffic scenarios</li>
+<li class="">Enable/disable parallel queries based on infrastructure</li>
+<li class="">Tune batch sizes and flush intervals for throughput vs latency</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="comparison-to-research-prototype">Comparison to Research Prototype<a href="#comparison-to-research-prototype" class="hash-link" aria-label="Direct link to Comparison to Research Prototype" title="Direct link to Comparison to Research Prototype" translate="no">​</a></h2>
+<p>Aeterna&#x27;s CCA implementation extends the original research:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Feature</th><th>Research Prototype</th><th>Aeterna Implementation</th></tr></thead><tbody><tr><td>Context Compression</td><td>Yes</td><td>Yes, with hierarchical layers</td></tr><tr><td>Note-Taking</td><td>Yes</td><td>Yes, with async batching</td></tr><tr><td>Hindsight Learning</td><td>Yes</td><td>Yes, with semantic promotion</td></tr><tr><td>Meta-Agent</td><td>Yes</td><td>Yes, with timeout controls</td></tr><tr><td>Production Controls</td><td>No</td><td>Cost, time, staleness, latency</td></tr><tr><td>Multi-Tenancy</td><td>No</td><td>Company/Org/Team isolation</td></tr><tr><td>Extension System</td><td>No</td><td>Client-side customization</td></tr><tr><td>State Management</td><td>No</td><td>LRU caching with compression</td></tr><tr><td>Policy Integration</td><td>No</td><td>Cedar/Permit.io enforcement</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="getting-started">Getting Started<a href="#getting-started" class="hash-link" aria-label="Direct link to Getting Started" title="Direct link to Getting Started" translate="no">​</a></h2>
+<p>To enable CCA capabilities in your Aeterna deployment:</p>
+<ol>
+<li class="">Configure CCA in <code>config/aeterna.toml</code> (see <a class="" href="/aeterna/docs/cca/configuration">Configuration Guide</a>)</li>
+<li class="">Use the 4 MCP tools to interact with CCA components (see <a class="" href="/aeterna/docs/cca/api-reference">API Reference</a>)</li>
+<li class="">Optionally create custom extensions (see <a class="" href="/aeterna/docs/cca/extension-guide">Extension Guide</a>)</li>
+<li class="">Review the architecture for deployment considerations (see <a class="" href="/aeterna/docs/cca/architecture">Architecture</a>)</li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="next-steps">Next Steps<a href="#next-steps" class="hash-link" aria-label="Direct link to Next Steps" title="Direct link to Next Steps" translate="no">​</a></h2>
+<ul>
+<li class=""><a class="" href="/aeterna/docs/cca/architecture">Architecture</a> - Understand the hybrid execution model and data flows</li>
+<li class=""><a class="" href="/aeterna/docs/cca/configuration">Configuration</a> - Learn all configuration options with examples</li>
+<li class=""><a class="" href="/aeterna/docs/cca/api-reference">API Reference</a> - Explore the 4 MCP tools for CCA</li>
+<li class=""><a class="" href="/aeterna/docs/cca/extension-guide">Extension Guide</a> - Build custom extensions for specialized behavior</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/kikokikok/aeterna/tree/main/website/docs/cca/overview.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/aeterna/docs/guides/agent-governance-integration"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Agent Developer Guide: Governance Integration</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/aeterna/docs/cca/architecture"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">CCA Architecture</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#overview" class="table-of-contents__link toc-highlight">Overview</a></li><li><a href="#research-foundation" class="table-of-contents__link toc-highlight">Research Foundation</a></li><li><a href="#the-four-core-components" class="table-of-contents__link toc-highlight">The Four Core Components</a><ul><li><a href="#1-context-architect" class="table-of-contents__link toc-highlight">1. Context Architect</a></li><li><a href="#2-note-taking-agent" class="table-of-contents__link toc-highlight">2. Note-Taking Agent</a></li><li><a href="#3-hindsight-learning" class="table-of-contents__link toc-highlight">3. Hindsight Learning</a></li><li><a href="#4-meta-agent" class="table-of-contents__link toc-highlight">4. Meta-Agent</a></li></ul></li><li><a href="#production-readiness-features" class="table-of-contents__link toc-highlight">Production Readiness Features</a><ul><li><a href="#cost-control" class="table-of-contents__link toc-highlight">Cost Control</a></li><li><a href="#time-budgets" class="table-of-contents__link toc-highlight">Time Budgets</a></li><li><a href="#staleness-validation" class="table-of-contents__link toc-highlight">Staleness Validation</a></li><li><a href="#deduplication" class="table-of-contents__link toc-highlight">Deduplication</a></li><li><a href="#latency-control" class="table-of-contents__link toc-highlight">Latency Control</a></li></ul></li><li><a href="#hybrid-execution-model" class="table-of-contents__link toc-highlight">Hybrid Execution Model</a><ul><li><a href="#client-side-opencode-plugin" class="table-of-contents__link toc-highlight">Client-Side (OpenCode Plugin)</a></li><li><a href="#server-side-aeterna-core" class="table-of-contents__link toc-highlight">Server-Side (Aeterna Core)</a></li></ul></li><li><a href="#integration-with-aeterna-memory-system" class="table-of-contents__link toc-highlight">Integration with Aeterna Memory System</a></li><li><a href="#performance-characteristics" class="table-of-contents__link toc-highlight">Performance Characteristics</a></li><li><a href="#comparison-to-research-prototype" class="table-of-contents__link toc-highlight">Comparison to Research Prototype</a></li><li><a href="#getting-started" class="table-of-contents__link toc-highlight">Getting Started</a></li><li><a href="#next-steps" class="table-of-contents__link toc-highlight">Next Steps</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Docs</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/aeterna/docs/">Getting Started</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Community</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div></div><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2026 Aeterna Contributors.</div></div></div></footer></div>
+</body>
+</html>
