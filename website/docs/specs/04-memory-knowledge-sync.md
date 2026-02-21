@@ -1,0 +1,1 @@
+../../../specs/04-memory-knowledge-sync.md
