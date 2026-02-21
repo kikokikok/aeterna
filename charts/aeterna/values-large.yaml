@@ -1,0 +1,142 @@
+# Large deployment - full HA, production-hardened (> 100k memories)
+deploymentMode: local
+
+aeterna:
+  enabled: true
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - aeterna
+            topologyKey: topology.kubernetes.io/zone
+
+cnpg:
+  enabled: true
+  postgresql:
+    parameters:
+      max_connections: "500"
+  instances: 3
+  storage:
+    size: 100Gi
+
+postgresql:
+  bundled: true
+  cluster:
+    instances: 3
+    storage:
+      size: 100Gi
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 8Gi
+      requests:
+        cpu: 500m
+        memory: 2Gi
+    backup:
+      enabled: true
+      schedule: "0 2 * * *"
+      retentionPolicy: "30d"
+
+qdrant:
+  enabled: true
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+    requests:
+      cpu: 500m
+      memory: 2Gi
+  persistence:
+    enabled: true
+    size: 50Gi
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - qdrant
+            topologyKey: topology.kubernetes.io/zone
+
+vectorBackend:
+  type: qdrant
+
+dragonfly:
+  enabled: true
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+cache:
+  type: dragonfly
+
+opal:
+  enabled: true
+  server:
+    replicaCount: 3
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - opal-server
+              topologyKey: topology.kubernetes.io/zone
+
+backup:
+  enabled: true
+  schedule: "0 2 * * *"
+  retention: 30
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+
+verticalPodAutoscaler:
+  enabled: true
+  updateMode: "auto"
+
+serviceMonitor:
+  enabled: true

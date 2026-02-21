@@ -1,0 +1,1 @@
+../../../charts/aeterna/docs/external-secrets.md

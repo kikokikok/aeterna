@@ -1,0 +1,1 @@
+../../../charts/aeterna/docs/quickstart-local.md

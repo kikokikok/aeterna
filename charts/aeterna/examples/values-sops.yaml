@@ -1,0 +1,28 @@
+# Example values file for use with SOPS encryption (helm-secrets plugin)
+# Encrypt this file: sops --encrypt --age <age-public-key> values-sops.yaml > values-sops.enc.yaml
+# Usage: helm secrets install aeterna ./charts/aeterna -f values-sops.enc.yaml
+
+secrets:
+  provider: sops
+
+llm:
+  provider: openai
+  openai:
+    apiKey: "sk-REPLACE-WITH-YOUR-KEY"
+    model: "gpt-4o"
+    embeddingModel: "text-embedding-3-small"
+
+central:
+  apiKey: "REPLACE-WITH-CENTRAL-API-KEY"
+
+cache:
+  external:
+    password: "REPLACE-WITH-REDIS-PASSWORD"
+
+postgresql:
+  external:
+    password: "REPLACE-WITH-POSTGRES-PASSWORD"
+
+opal:
+  server:
+    masterToken: "REPLACE-WITH-OPAL-MASTER-TOKEN"

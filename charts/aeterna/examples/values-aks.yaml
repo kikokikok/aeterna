@@ -1,0 +1,144 @@
+# Aeterna AKS Values
+# Production deployment on Azure Kubernetes Service
+# Usage: helm install aeterna ./charts/aeterna -f charts/aeterna/examples/values-aks.yaml
+
+deploymentMode: local
+
+aeterna:
+  replicaCount: 3
+
+  serviceAccount:
+    annotations:
+      azure.workload.identity/client-id: "00000000-0000-0000-0000-000000000000"
+
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+  pdb:
+    enabled: true
+    minAvailable: 2
+
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: aeterna
+
+  ingress:
+    enabled: true
+    className: "azure/application-gateway"
+    annotations:
+      appgw.ingress.kubernetes.io/ssl-redirect: "true"
+      appgw.ingress.kubernetes.io/backend-protocol: "HTTP"
+    hosts:
+      - host: aeterna.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+
+# Vector Backend configuration
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: true
+
+# Cache configuration
+cache:
+  type: dragonfly
+  dragonfly:
+    enabled: true
+    replicas: 3
+  # External Azure Cache for Redis configuration (commented out alternative)
+  # type: external
+  # external:
+  #   enabled: true
+  #   host: "aeterna-cache.redis.cache.windows.net"
+  #   port: 6380
+  #   existingSecret: "aeterna-cache-credentials"
+
+# PostgreSQL configuration
+postgresql:
+  bundled: true
+  cloudnativepg:
+    instances: 3
+    storage:
+      size: 100Gi
+      storageClass: "managed-premium"
+    backup:
+      enabled: true
+      provider: "azure"
+      destinationPath: "azure://aeterna-backups/postgresql"
+  # External Azure Database for PostgreSQL configuration (commented out alternative)
+  # bundled: false
+  # external:
+  #   enabled: true
+  #   host: "aeterna-db.postgres.database.azure.com"
+  #   database: "aeterna"
+  #   existingSecret: "aeterna-db-credentials"
+
+# Backup configuration
+backup:
+  enabled: true
+  destination:
+    type: azure
+    azure:
+      container: "aeterna-backups"
+      storageAccountSecret: "aeterna-azure-storage-credentials"
+
+# Secrets management (Azure Key Vault via External Secrets Operator)
+# secrets:
+#   provider: external-secrets
+#   externalSecrets:
+#     enabled: true
+#     secretStoreRef:
+#       name: azure-keyvault
+#       kind: ClusterSecretStore
+
+# OPAL stack
+opal:
+  enabled: true
+  server:
+    replicaCount: 3
+
+# Observability
+observability:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: prometheus
+  tracing:
+    enabled: true
+    endpoint: "http://jaeger-collector.monitoring.svc:4317"
+    samplingRatio: 0.1
+
+# Security
+networkPolicy:
+  enabled: true
+
+# Subcharts
+qdrant:
+  enabled: true
+  replicaCount: 3
+  persistence:
+    size: 100Gi
+    storageClass: "managed-premium"
+
+dragonfly:
+  enabled: true
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi

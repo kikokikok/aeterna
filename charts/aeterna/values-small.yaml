@@ -1,0 +1,84 @@
+# Small deployment - single replicas, minimal resources (< 1,000 memories)
+deploymentMode: local
+
+aeterna:
+  enabled: true
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  autoscaling:
+    enabled: false
+
+cnpg:
+  enabled: true
+  postgresql:
+    parameters:
+      max_connections: "100"
+  instances: 1
+  storage:
+    size: 5Gi
+
+postgresql:
+  bundled: false
+
+qdrant:
+  enabled: true
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  persistence:
+    enabled: true
+    size: 5Gi
+
+vectorBackend:
+  type: qdrant
+
+dragonfly:
+  enabled: true
+  resources:
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+cache:
+  type: dragonfly
+
+opal:
+  enabled: true
+  server:
+    replicaCount: 1
+    resources:
+      limits:
+        cpu: 250m
+        memory: 256Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+
+backup:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: false
+
+networkPolicy:
+  enabled: false
+
+verticalPodAutoscaler:
+  enabled: false
+
+serviceMonitor:
+  enabled: false

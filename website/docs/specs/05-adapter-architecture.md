@@ -1,0 +1,1 @@
+../../../specs/05-adapter-architecture.md
