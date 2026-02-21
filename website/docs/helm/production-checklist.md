@@ -1,0 +1,1 @@
+../../../charts/aeterna/docs/production-checklist.md

@@ -1,0 +1,1 @@
+../../../charts/aeterna/docs/restore.md
