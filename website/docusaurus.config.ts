@@ -6,9 +6,9 @@ const config: Config = {
   title: 'Aeterna',
   tagline: 'Universal Memory & Knowledge Framework for AI Agents',
   favicon: 'img/favicon.ico',
-  url: 'https://your-org.github.io',
+  url: 'https://kikokikok.github.io',
   baseUrl: '/aeterna/',
-  organizationName: 'your-org',
+  organizationName: 'kikokikok',
   projectName: 'aeterna',
   onBrokenLinks: 'warn',
   i18n: {
@@ -42,7 +42,7 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           routeBasePath: 'docs',
           editUrl:
-            'https://github.com/your-org/aeterna/tree/main/website/',
+            'https://github.com/kikokikok/aeterna/tree/main/website/',
         },
         blog: false,
         theme: {
@@ -63,7 +63,7 @@ const config: Config = {
           label: 'Documentation',
         },
         {
-          href: 'https://github.com/your-org/aeterna',
+          href: 'https://github.com/kikokikok/aeterna',
           label: 'GitHub',
           position: 'right',
         },
@@ -86,7 +86,7 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/your-org/aeterna',
+              href: 'https://github.com/kikokikok/aeterna',
             },
           ],
         },
