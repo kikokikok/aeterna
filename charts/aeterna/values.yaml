@@ -152,6 +152,22 @@ aeterna:
     ## @param aeterna.autoscaling.targetMemoryUtilizationPercentage Target memory utilization
     targetMemoryUtilizationPercentage: 80
 
+  ## Vertical Pod Autoscaler (VPA) configuration
+  ## Requires VPA controller to be installed in the cluster
+    vpa:
+      ## @param aeterna.autoscaling.vpa.enabled Enable VPA
+      enabled: false
+      ## @param aeterna.autoscaling.vpa.updateMode VPA update mode: Auto, Recreate, Initial, Off
+      updateMode: "Auto"
+      ## @param aeterna.autoscaling.vpa.minAllowed Minimum allowed resources
+      minAllowed:
+        cpu: "50m"
+        memory: "128Mi"
+      ## @param aeterna.autoscaling.vpa.maxAllowed Maximum allowed resources
+      maxAllowed:
+        cpu: "4000m"
+        memory: "8Gi"
+
   ## Pod disruption budget
   pdb:
     ## @param aeterna.pdb.enabled Enable PDB
@@ -170,6 +186,35 @@ aeterna:
 
   ## @param aeterna.topologySpreadConstraints Topology spread constraints
   topologySpreadConstraints: []
+
+  ## Metrics configuration
+  metrics:
+    ## @param aeterna.metrics.enabled Enable Prometheus metrics endpoint
+    enabled: true
+    ## @param aeterna.metrics.port Metrics port
+    port: 9090
+    ## @param aeterna.metrics.path Metrics endpoint path
+    path: /metrics
+    ## @param aeterna.metrics.scrapeInterval Prometheus scrape interval
+    scrapeInterval: "30s"
+    ## @param aeterna.metrics.scrapeTimeout Prometheus scrape timeout
+    scrapeTimeout: "10s"
+
+  ## OpenTelemetry tracing configuration
+  otel:
+    ## @param aeterna.otel.enabled Enable OpenTelemetry tracing
+    enabled: false
+    ## @param aeterna.otel.endpoint OTLP exporter endpoint (e.g. http://jaeger-collector:4317)
+    endpoint: ""
+    ## @param aeterna.otel.samplingRate Trace sampling rate (0.0–1.0)
+    samplingRate: "0.1"
+
+  ## Logging configuration
+  logging:
+    ## @param aeterna.logging.format Log output format: json or text
+    format: json
+    ## @param aeterna.logging.level Log level: debug, info, warn, error
+    level: info
 
   ## Feature flags
   features:
@@ -272,6 +317,11 @@ vectorBackend:
     ## @param vectorBackend.databricks.existingSecret Secret containing Databricks token
     existingSecret: ""
 
+## Database migration configuration
+migration:
+  ## @param migration.ttlSecondsAfterFinished TTL for completed migration jobs (seconds)
+  ttlSecondsAfterFinished: 300
+
 ## Cache configuration
 cache:
   ## @param cache.type Cache type: dragonfly, valkey, external
@@ -281,11 +331,21 @@ cache:
   dragonfly:
     ## @param cache.dragonfly.enabled Enable bundled Dragonfly
     enabled: true
+    ## @param cache.dragonfly.replicas Number of Dragonfly replicas (1 standalone, 3+ for HA)
+    replicas: 1
+    ## @param cache.dragonfly.args Additional Dragonfly arguments
+    args: []
+    #  - --cache_mode=true
+    #  - --memcache_port=11211
 
   ## Valkey configuration (Redis fork)
   valkey:
     ## @param cache.valkey.enabled Enable bundled Valkey
     enabled: false
+    ## @param cache.valkey.maxmemory Maximum memory for Valkey (e.g., "256mb")
+    maxmemory: "256mb"
+    ## @param cache.valkey.maxmemoryPolicy Eviction policy: allkeys-lru, volatile-lru, noeviction, etc.
+    maxmemoryPolicy: "allkeys-lru"
 
   ## External Redis configuration
   external:
@@ -308,14 +368,18 @@ postgresql:
   bundled: true
 
   ## CloudNativePG cluster configuration (when bundled=true)
-  cluster:
-    ## @param postgresql.cluster.instances Number of PostgreSQL instances
+  cloudnativepg:
+    ## @param postgresql.cloudnativepg.enabled Enable CloudNativePG cluster creation
+    enabled: true
+    ## @param postgresql.cloudnativepg.instances Number of PostgreSQL instances
     instances: 1
-    ## @param postgresql.cluster.storage.size Storage size
+    ## @param postgresql.cloudnativepg.imageName PostgreSQL image (leave empty for operator default)
+    imageName: ""
     storage:
+      ## @param postgresql.cloudnativepg.storage.size Storage size per instance
       size: 10Gi
+      ## @param postgresql.cloudnativepg.storage.storageClass Storage class (empty = cluster default)
       storageClass: ""
-    ## @param postgresql.cluster.resources Resource limits
     resources:
       limits:
         cpu: 1000m
@@ -323,9 +387,60 @@ postgresql:
       requests:
         cpu: 100m
         memory: 256Mi
+    ## PostgreSQL engine parameters
+    postgresql:
+      ## @param postgresql.cloudnativepg.postgresql.parameters Extra PostgreSQL parameters
+      parameters:
+        shared_preload_libraries: "vector"
+      ## @param postgresql.cloudnativepg.postgresql.pg_hba Custom pg_hba entries
+      pg_hba: []
+    ## Bootstrap configuration
+    bootstrap:
+      initdb:
+        database: "aeterna"
+        owner: "aeterna"
+    ## pgvector extension support
+    pgvector:
+      ## @param postgresql.cloudnativepg.pgvector.enabled Install pgvector extension on bootstrap
+      enabled: true
+    ## Backup configuration (CloudNativePG native)
+    backup:
+      ## @param postgresql.cloudnativepg.backup.enabled Enable CNPG native backup
+      enabled: false
+      ## @param postgresql.cloudnativepg.backup.schedule Backup cron schedule
+      schedule: "0 2 * * *"
+      ## @param postgresql.cloudnativepg.backup.retentionPolicy Backup retention policy
+      retentionPolicy: "30d"
+      ## @param postgresql.cloudnativepg.backup.provider Backup provider: s3, gcs, azure
+      provider: "s3"
+      ## @param postgresql.cloudnativepg.backup.destinationPath Full backup destination path (e.g., s3://bucket/path)
+      destinationPath: ""
+      ## @param postgresql.cloudnativepg.backup.endpointURL Custom S3-compatible endpoint URL
+      endpointURL: ""
+      s3Credentials:
+        ## @param postgresql.cloudnativepg.backup.s3Credentials.accessKeyId S3 access key secret reference
+        accessKeyId:
+          name: ""
+          key: "ACCESS_KEY_ID"
+        secretAccessKey:
+          name: ""
+          key: "ACCESS_SECRET_KEY"
+      googleCredentials:
+        applicationCredentials:
+          name: ""
+          key: "gcs-credentials"
+      azureCredentials:
+        storageAccount:
+          name: ""
+          key: "AZURE_STORAGE_ACCOUNT"
+        storageKey:
+          name: ""
+          key: "AZURE_STORAGE_KEY"
 
   ## External PostgreSQL configuration (when bundled=false)
   external:
+    ## @param postgresql.external.enabled Enable external PostgreSQL
+    enabled: false
     ## @param postgresql.external.host External PostgreSQL host
     host: ""
     ## @param postgresql.external.port External PostgreSQL port
@@ -352,6 +467,8 @@ opal:
   server:
     ## @param opal.server.replicaCount Number of OPAL Server replicas (>=2 for HA)
     replicaCount: 3
+    ## @param opal.server.logLevel Log level for OPAL Server: DEBUG, INFO, WARNING, ERROR
+    logLevel: INFO
     image:
       repository: permitio/opal-server
       tag: "0.8.0"
@@ -450,6 +567,10 @@ observability:
     scrapeTimeout: 10s
     ## @param observability.serviceMonitor.labels Additional labels
     labels: {}
+    ## @param observability.serviceMonitor.metricRelabelings Metric relabeling rules
+    metricRelabelings: []
+    ## @param observability.serviceMonitor.relabelings Relabeling rules
+    relabelings: []
 
   ## Tracing configuration
   tracing:
@@ -548,6 +669,85 @@ global:
   ## @param global.storageClass Global storage class
   storageClass: ""
 
+## Secrets management configuration
+secrets:
+  ## @param secrets.provider Secrets provider: helm (default), sops, external-secrets
+  provider: helm
+
+  ## External Secrets Operator configuration
+  externalSecrets:
+    ## @param secrets.externalSecrets.enabled Enable ExternalSecret resources
+    enabled: false
+    ## @param secrets.externalSecrets.refreshInterval Secret refresh interval
+    refreshInterval: "1h"
+    ## @param secrets.externalSecrets.secretStoreRef.name SecretStore or ClusterSecretStore name
+    ## @param secrets.externalSecrets.secretStoreRef.kind SecretStore kind: SecretStore or ClusterSecretStore
+    secretStoreRef:
+      name: ""
+      kind: ClusterSecretStore
+    ## @param secrets.externalSecrets.remoteRefs Key mappings from external provider
+    remoteRefs:
+      postgresqlPassword: ""
+      redisPassword: ""
+      opalMasterToken: ""
+      llmApiKey: ""
+
+## Sync configuration (hybrid mode)
+## In hybrid mode, Aeterna syncs memory layers between the local cache and central server.
+## Memory tiers: Working (ephemeral) → Session (conversation) → Episodic (long-term).
+## Working and Session sync by default; Episodic sync is opt-in as it involves larger data volumes.
+sync:
+  ## @param sync.enabled Enable sync service (auto-enabled in hybrid mode)
+  enabled: false
+  ## @param sync.interval Sync interval for memory layer synchronization
+  interval: "30s"
+  ## @param sync.batchSize Number of memories to sync per batch
+  batchSize: 100
+  ## @param sync.retryAttempts Number of retry attempts on sync failure
+  retryAttempts: 3
+  ## @param sync.retryDelay Delay between retry attempts
+  retryDelay: "5s"
+  ## Memory layer sync configuration
+  ## Working memory: short-lived, per-request context — synced frequently
+  ## Session memory: per-conversation context — synced at conversation boundaries
+  ## Episodic memory: long-term learnings — synced less frequently, larger payloads
+  memoryLayers:
+    ## @param sync.memoryLayers.working Enable working memory sync
+    working: true
+    ## @param sync.memoryLayers.session Enable session memory sync
+    session: true
+    ## @param sync.memoryLayers.episodic Enable episodic memory sync (large payloads, set false for bandwidth-constrained)
+    episodic: false
+
+## Backup configuration
+backup:
+  ## @param backup.enabled Enable automated backups
+  enabled: false
+  ## @param backup.schedule Cron schedule for backups
+  schedule: "0 2 * * *"
+  ## @param backup.retentionDays Number of days to retain backups
+  retentionDays: 30
+  ## @param backup.destination.type Backup destination: s3, gcs, azure
+  destination:
+    type: s3
+    s3:
+      bucket: ""
+      region: "us-east-1"
+      endpoint: ""
+      existingSecret: ""
+      secretKey: "aws-secret-access-key"
+      accessKeyId: ""
+    gcs:
+      bucket: ""
+      serviceAccountSecret: ""
+    azure:
+      container: ""
+      storageAccountSecret: ""
+  ## @param backup.verify.enabled Enable backup verification job
+  verify:
+    enabled: false
+    schedule: "0 6 * * *"
+
 ## Subchart configuration overrides
 
 ## CloudNativePG subchart (aliased as cnpg)
@@ -578,11 +778,60 @@ qdrant:
     requests:
       cpu: 50m
       memory: 256Mi
+  ## Qdrant snapshot/backup configuration
+  ## Snapshots create point-in-time backups of collections.
+  ## For production, enable snapshots and configure an S3/GCS destination.
+  snapshots:
+    ## @param qdrant.snapshots.enabled Enable periodic snapshot creation
+    enabled: false
+    ## @param qdrant.snapshots.schedule Cron schedule for snapshots
+    schedule: "0 3 * * *"
+    ## @param qdrant.snapshots.destination Snapshot upload destination (s3://bucket/path or gs://bucket/path)
+    destination: ""
 
 ## Weaviate subchart (disabled by default)
 weaviate:
   enabled: false
+  ## @param weaviate.multiTenancy.enabled Enable Weaviate multi-tenancy (isolates data per tenant)
+  multiTenancy:
+    enabled: false
 
 ## MongoDB Percona operator subchart (disabled by default)
 mongodb:
   enabled: false
+  ## Percona Server for MongoDB configuration (passed to psmdb-operator subchart)
+  percona:
+    ## @param mongodb.percona.enabled Enable PerconaServerMongoDB CRD creation
+    enabled: false
+    ## @param mongodb.percona.image Percona MongoDB image
+    image: "percona/percona-server-mongodb:7.0"
+    replsets:
+      ## @param mongodb.percona.replsets.members Number of replica set members (3 for HA)
+      members: 3
+    mongod:
+      storage:
+        engine: wiredTiger
+      net:
+        port: 27017
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+## Valkey subchart (alternative to Dragonfly)
+valkey:
+  enabled: false
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi

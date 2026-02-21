@@ -117,7 +117,7 @@ pub struct SetupArgs {
     pub hpa: Option<bool>,
 
     #[arg(long, help = "Enable PodDisruptionBudget")]
-    pub pdb: Option<bool>
+    pub pdb: Option<bool>,
 }
 
 pub async fn run(args: SetupArgs) -> Result<()> {
@@ -248,7 +248,17 @@ fn run_non_interactive(args: &SetupArgs) -> Result<SetupConfig> {
         central_url: args.central_url.clone(),
         central_auth: args.central_auth.unwrap_or(AuthMethod::ApiKey),
         api_key: args.api_key.clone(),
+        hybrid: if matches!(mode, DeploymentMode::Hybrid) {
+            Some(HybridConfig::default())
+        } else {
+            None
+        },
         vector_backend,
+        pinecone: None,
+        weaviate: None,
+        mongodb: None,
+        vertex_ai: None,
+        databricks: None,
         cache,
         redis_external: if matches!(cache, CacheType::External) {
             Some(ExternalRedisConfig {
@@ -257,7 +267,7 @@ fn run_non_interactive(args: &SetupArgs) -> Result<SetupConfig> {
                     .clone()
                     .unwrap_or_else(|| "localhost".to_string()),
                 port: args.redis_port,
-                password: None
+                password: None,
             })
         } else {
             None
@@ -272,7 +282,7 @@ fn run_non_interactive(args: &SetupArgs) -> Result<SetupConfig> {
                 port: args.pg_port,
                 database: args.pg_database.clone(),
                 username: None,
-                password: None
+                password: None,
             })
         } else {
             None
@@ -288,7 +298,7 @@ fn run_non_interactive(args: &SetupArgs) -> Result<SetupConfig> {
         service_monitor_enabled: args.service_monitor.unwrap_or(false),
         network_policy_enabled: args.network_policy.unwrap_or(false),
         hpa_enabled: args.hpa.unwrap_or(false),
-        pdb_enabled: args.pdb.unwrap_or(false)
+        pdb_enabled: args.pdb.unwrap_or(false),
     })
 }
 
@@ -298,11 +308,11 @@ fn mask_sensitive_values(content: &str) -> String {
     let patterns = [
         (
             r#"api[_-]?key\s*=\s*"[^"]+""#,
-            r#"api_key = "***MASKED***""#
+            r#"api_key = "***MASKED***""#,
         ),
         (r#"password\s*=\s*"[^"]+""#, r#"password = "***MASKED***""#),
         (r#"token\s*=\s*"[^"]+""#, r#"token = "***MASKED***""#),
-        (r#"secret\s*=\s*"[^"]+""#, r#"secret = "***MASKED***""#)
+        (r#"secret\s*=\s*"[^"]+""#, r#"secret = "***MASKED***""#),
     ];
 
     for (pattern, replacement) in patterns {
@@ -312,4 +322,357 @@ fn mask_sensitive_values(content: &str) -> String {
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::Cli;
+    use clap::Parser;
+
+    #[test]
+    fn test_setup_defaults() {
+        let cli = Cli::try_parse_from(["aeterna", "setup"]).expect("parse setup");
+        match cli.command {
+            crate::commands::Commands::Setup(args) => {
+                assert!(!args.non_interactive);
+                assert!(!args.reconfigure);
+                assert!(!args.validate);
+                assert!(!args.show);
+                assert_eq!(args.output, std::path::PathBuf::from("."));
+                assert!(args.target.is_none());
+                assert!(args.mode.is_none());
+                assert!(args.central_url.is_none());
+                assert!(args.central_auth.is_none());
+                assert!(args.api_key.is_none());
+                assert!(args.vector_backend.is_none());
+                assert!(args.cache.is_none());
+                assert_eq!(args.redis_port, 6379);
+                assert_eq!(args.pg_port, 5432);
+                assert_eq!(args.pg_database, "aeterna");
+                assert!(args.opal.is_none());
+                assert!(args.llm.is_none());
+                assert_eq!(args.ollama_host, "http://localhost:11434");
+            }
+            _ => panic!("expected Setup command"),
+        }
+    }
+
+    #[test]
+    fn test_setup_non_interactive_local() {
+        let cli = Cli::try_parse_from([
+            "aeterna",
+            "setup",
+            "--non-interactive",
+            "--target",
+            "docker-compose",
+            "--mode",
+            "local",
+        ])
+        .expect("parse non-interactive local");
+        match cli.command {
+            crate::commands::Commands::Setup(args) => {
+                assert!(args.non_interactive);
+                assert_eq!(args.target, Some(DeploymentTarget::DockerCompose));
+                assert_eq!(args.mode, Some(DeploymentMode::Local));
+            }
+            _ => panic!("expected Setup command"),
+        }
+    }
+
+    #[test]
+    fn test_setup_non_interactive_kubernetes() {
+        let cli = Cli::try_parse_from([
+            "aeterna",
+            "setup",
+            "--non-interactive",
+            "--target",
+            "kubernetes",
+            "--mode",
+            "hybrid",
+            "--central-url",
+            "https://central.example.com",
+        ])
+        .expect("parse non-interactive kubernetes hybrid");
+        match cli.command {
+            crate::commands::Commands::Setup(args) => {
+                assert!(args.non_interactive);
+                assert_eq!(args.target, Some(DeploymentTarget::Kubernetes));
+                assert_eq!(args.mode, Some(DeploymentMode::Hybrid));
+                assert_eq!(
+                    args.central_url.as_deref(),
+                    Some("https://central.example.com")
+                );
+            }
+            _ => panic!("expected Setup command"),
+        }
+    }
+
+    #[test]
+    fn test_setup_output_flag() {
+        let cli =
+            Cli::try_parse_from(["aeterna", "setup", "-o", "/tmp/out"]).expect("parse -o flag");
+        match cli.command {
+            crate::commands::Commands::Setup(args) => {
+                assert_eq!(args.output, std::path::PathBuf::from("/tmp/out"));
+            }
+            _ => panic!("expected Setup command"),
+        }
+    }
+
+    #[test]
+    fn test_setup_reconfigure_and_validate() {
+        let cli =
+            Cli::try_parse_from(["aeterna", "setup", "--reconfigure"]).expect("parse reconfigure");
+        match cli.command {
+            crate::commands::Commands::Setup(args) => {
+                assert!(args.reconfigure);
+            }
+            _ => panic!("expected Setup command"),
+        }
+
+        let cli = Cli::try_parse_from(["aeterna", "setup", "--validate"]).expect("parse validate");
+        match cli.command {
+            crate::commands::Commands::Setup(args) => {
+                assert!(args.validate);
+            }
+            _ => panic!("expected Setup command"),
+        }
+
+        let cli = Cli::try_parse_from(["aeterna", "setup", "--show"]).expect("parse show");
+        match cli.command {
+            crate::commands::Commands::Setup(args) => {
+                assert!(args.show);
+            }
+            _ => panic!("expected Setup command"),
+        }
+    }
+
+    #[test]
+    fn test_setup_all_vector_backends() {
+        for backend in [
+            "qdrant",
+            "pgvector",
+            "pinecone",
+            "weaviate",
+            "mongodb",
+            "vertex-ai",
+            "databricks",
+        ] {
+            let cli = Cli::try_parse_from(["aeterna", "setup", "--vector-backend", backend])
+                .unwrap_or_else(|e| panic!("parse --vector-backend {backend}: {e}"));
+            match cli.command {
+                crate::commands::Commands::Setup(args) => {
+                    assert!(args.vector_backend.is_some(), "backend {backend} parsed");
+                }
+                _ => panic!("expected Setup command"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_setup_all_cache_types() {
+        for cache in ["dragonfly", "valkey", "external"] {
+            let cli = Cli::try_parse_from(["aeterna", "setup", "--cache", cache])
+                .unwrap_or_else(|e| panic!("parse --cache {cache}: {e}"));
+            match cli.command {
+                crate::commands::Commands::Setup(args) => {
+                    assert!(args.cache.is_some(), "cache {cache} parsed");
+                }
+                _ => panic!("expected Setup command"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_setup_all_deployment_modes() {
+        for mode in ["local", "hybrid", "remote"] {
+            let cli = Cli::try_parse_from(["aeterna", "setup", "--mode", mode])
+                .unwrap_or_else(|e| panic!("parse --mode {mode}: {e}"));
+            match cli.command {
+                crate::commands::Commands::Setup(args) => {
+                    assert!(args.mode.is_some(), "mode {mode} parsed");
+                }
+                _ => panic!("expected Setup command"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_setup_kubernetes_options() {
+        let cli = Cli::try_parse_from([
+            "aeterna",
+            "setup",
+            "--ingress",
+            "true",
+            "--ingress-host",
+            "aeterna.example.com",
+            "--service-monitor",
+            "true",
+            "--network-policy",
+            "true",
+            "--hpa",
+            "true",
+            "--pdb",
+            "true",
+        ])
+        .expect("parse k8s options");
+        match cli.command {
+            crate::commands::Commands::Setup(args) => {
+                assert_eq!(args.ingress, Some(true));
+                assert_eq!(args.ingress_host.as_deref(), Some("aeterna.example.com"));
+                assert_eq!(args.service_monitor, Some(true));
+                assert_eq!(args.network_policy, Some(true));
+                assert_eq!(args.hpa, Some(true));
+                assert_eq!(args.pdb, Some(true));
+            }
+            _ => panic!("expected Setup command"),
+        }
+    }
+
+    #[test]
+    fn test_run_non_interactive_local() {
+        let args = SetupArgs {
+            non_interactive: true,
+            reconfigure: false,
+            validate: false,
+            show: false,
+            output: std::path::PathBuf::from("."),
+            target: Some(DeploymentTarget::DockerCompose),
+            mode: Some(DeploymentMode::Local),
+            central_url: None,
+            central_auth: None,
+            api_key: None,
+            vector_backend: None,
+            cache: None,
+            redis_host: None,
+            redis_port: 6379,
+            postgresql: None,
+            pg_host: None,
+            pg_port: 5432,
+            pg_database: "aeterna".to_string(),
+            opal: None,
+            llm: None,
+            openai_api_key: None,
+            anthropic_api_key: None,
+            ollama_host: "http://localhost:11434".to_string(),
+            opencode: None,
+            ingress: None,
+            ingress_host: None,
+            service_monitor: None,
+            network_policy: None,
+            hpa: None,
+            pdb: None,
+        };
+        let config = run_non_interactive(&args).expect("build config");
+        assert_eq!(config.target, DeploymentTarget::DockerCompose);
+        assert_eq!(config.mode, DeploymentMode::Local);
+        assert_eq!(config.vector_backend, VectorBackend::Qdrant);
+        assert_eq!(config.cache, CacheType::Dragonfly);
+    }
+
+    #[test]
+    fn test_run_non_interactive_requires_target() {
+        let args = SetupArgs {
+            non_interactive: true,
+            reconfigure: false,
+            validate: false,
+            show: false,
+            output: std::path::PathBuf::from("."),
+            target: None,
+            mode: Some(DeploymentMode::Local),
+            central_url: None,
+            central_auth: None,
+            api_key: None,
+            vector_backend: None,
+            cache: None,
+            redis_host: None,
+            redis_port: 6379,
+            postgresql: None,
+            pg_host: None,
+            pg_port: 5432,
+            pg_database: "aeterna".to_string(),
+            opal: None,
+            llm: None,
+            openai_api_key: None,
+            anthropic_api_key: None,
+            ollama_host: "http://localhost:11434".to_string(),
+            opencode: None,
+            ingress: None,
+            ingress_host: None,
+            service_monitor: None,
+            network_policy: None,
+            hpa: None,
+            pdb: None,
+        };
+        let result = run_non_interactive(&args);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("--target is required")
+        );
+    }
+
+    #[test]
+    fn test_run_non_interactive_hybrid_requires_central_url() {
+        let args = SetupArgs {
+            non_interactive: true,
+            reconfigure: false,
+            validate: false,
+            show: false,
+            output: std::path::PathBuf::from("."),
+            target: Some(DeploymentTarget::Kubernetes),
+            mode: Some(DeploymentMode::Hybrid),
+            central_url: None,
+            central_auth: None,
+            api_key: None,
+            vector_backend: None,
+            cache: None,
+            redis_host: None,
+            redis_port: 6379,
+            postgresql: None,
+            pg_host: None,
+            pg_port: 5432,
+            pg_database: "aeterna".to_string(),
+            opal: None,
+            llm: None,
+            openai_api_key: None,
+            anthropic_api_key: None,
+            ollama_host: "http://localhost:11434".to_string(),
+            opencode: None,
+            ingress: None,
+            ingress_host: None,
+            service_monitor: None,
+            network_policy: None,
+            hpa: None,
+            pdb: None,
+        };
+        let result = run_non_interactive(&args);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("--central-url is required")
+        );
+    }
+
+    #[test]
+    fn test_mask_sensitive_values() {
+        let content = r#"api_key = "sk-1234"
+password = "mysecret"
+token = "tok-abc"
+secret = "s3cret"
+normal = "visible"
+"#;
+        let masked = mask_sensitive_values(content);
+        assert!(masked.contains("***MASKED***"));
+        assert!(!masked.contains("sk-1234"));
+        assert!(!masked.contains("mysecret"));
+        assert!(!masked.contains("tok-abc"));
+        assert!(!masked.contains("s3cret"));
+        assert!(masked.contains("visible"));
+    }
 }

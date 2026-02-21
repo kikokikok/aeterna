@@ -1,0 +1,111 @@
+{{- if and .Values.postgresql.bundled .Values.postgresql.cloudnativepg.enabled }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "aeterna.fullname" . }}-cnpg
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+spec:
+  instances: {{ .Values.postgresql.cloudnativepg.instances }}
+
+  {{- if .Values.postgresql.cloudnativepg.imageName }}
+  imageName: {{ .Values.postgresql.cloudnativepg.imageName | quote }}
+  {{- end }}
+
+  bootstrap:
+    initdb:
+      database: {{ .Values.postgresql.cloudnativepg.bootstrap.initdb.database | quote }}
+      owner: {{ .Values.postgresql.cloudnativepg.bootstrap.initdb.owner | quote }}
+      {{- if or .Values.postgresql.cloudnativepg.pgvector.enabled (eq 1 1) }}
+      postInitSQL:
+        {{- if .Values.postgresql.cloudnativepg.pgvector.enabled }}
+        - "CREATE EXTENSION IF NOT EXISTS vector;"
+        {{- end }}
+      {{- end }}
+
+  postgresql:
+    {{- with .Values.postgresql.cloudnativepg.postgresql.parameters }}
+    parameters:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.postgresql.cloudnativepg.postgresql.pg_hba }}
+    pg_hba:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+
+  storage:
+    size: {{ .Values.postgresql.cloudnativepg.storage.size }}
+    {{- if .Values.postgresql.cloudnativepg.storage.storageClass }}
+    storageClassName: {{ .Values.postgresql.cloudnativepg.storage.storageClass | quote }}
+    {{- end }}
+
+  resources:
+    {{- include "aeterna.resources.calculate" (dict "resources" .Values.postgresql.cloudnativepg.resources) | nindent 4 }}
+
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+
+  {{- if .Values.postgresql.cloudnativepg.backup.enabled }}
+  backup:
+    barmanObjectStore:
+      destinationPath: {{ .Values.postgresql.cloudnativepg.backup.destinationPath | quote }}
+      {{- if eq .Values.postgresql.cloudnativepg.backup.provider "s3" }}
+      s3Credentials:
+        accessKeyId:
+          {{- with .Values.postgresql.cloudnativepg.backup.s3Credentials.accessKeyId }}
+          name: {{ .name | quote }}
+          key: {{ .key | quote }}
+          {{- end }}
+        secretAccessKey:
+          {{- with .Values.postgresql.cloudnativepg.backup.s3Credentials.secretAccessKey }}
+          name: {{ .name | quote }}
+          key: {{ .key | quote }}
+          {{- end }}
+      s3:
+        bucket: {{ .Values.postgresql.cloudnativepg.backup.destinationPath | splitList "/" | index 2 | quote }}
+        {{- if .Values.postgresql.cloudnativepg.backup.endpointURL }}
+        endpoint: {{ .Values.postgresql.cloudnativepg.backup.endpointURL | quote }}
+        {{- end }}
+      {{- else if eq .Values.postgresql.cloudnativepg.backup.provider "gcs" }}
+      googleCredentials:
+        {{- with .Values.postgresql.cloudnativepg.backup.googleCredentials.applicationCredentials }}
+        applicationCredentials:
+          name: {{ .name | quote }}
+          key: {{ .key | quote }}
+        {{- end }}
+      {{- else if eq .Values.postgresql.cloudnativepg.backup.provider "azure" }}
+      azureCredentials:
+        {{- with .Values.postgresql.cloudnativepg.backup.azureCredentials.storageAccount }}
+        storageAccount:
+          name: {{ .name | quote }}
+          key: {{ .key | quote }}
+        {{- end }}
+        {{- with .Values.postgresql.cloudnativepg.backup.azureCredentials.storageKey }}
+        storageKey:
+          name: {{ .name | quote }}
+          key: {{ .key | quote }}
+        {{- end }}
+      {{- end }}
+    retentionPolicy: {{ .Values.postgresql.cloudnativepg.backup.retentionPolicy | quote }}
+  {{- end }}
+
+{{- if .Values.postgresql.cloudnativepg.backup.enabled }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ include "aeterna.fullname" . }}-cnpg-backup
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.postgresql.cloudnativepg.backup.schedule | quote }}
+  backupOwnerReference: cluster
+  cluster:
+    name: {{ include "aeterna.fullname" . }}-cnpg
+{{- end }}
+
+{{- end }}

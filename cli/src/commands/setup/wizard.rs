@@ -9,7 +9,7 @@ pub struct SetupWizard {
     term: Term,
     theme: ColorfulTheme,
     reconfigure: bool,
-    config: SetupConfig
+    config: SetupConfig,
 }
 
 impl SetupWizard {
@@ -18,7 +18,7 @@ impl SetupWizard {
             term: Term::stderr(),
             theme: ColorfulTheme::default(),
             reconfigure,
-            config: SetupConfig::default()
+            config: SetupConfig::default(),
         }
     }
 
@@ -35,11 +35,16 @@ impl SetupWizard {
             self.configure_central_server()?;
         }
 
+        if matches!(self.config.mode, DeploymentMode::Hybrid) {
+            self.configure_hybrid_mode()?;
+        }
+
         if matches!(
             self.config.mode,
             DeploymentMode::Local | DeploymentMode::Hybrid
         ) {
             self.select_vector_backend()?;
+            self.configure_vector_backend_details()?;
             self.select_cache()?;
             self.select_postgresql()?;
         }
@@ -79,7 +84,7 @@ impl SetupWizard {
             0 => DeploymentTarget::DockerCompose,
             1 => DeploymentTarget::Kubernetes,
             2 => DeploymentTarget::OpencodeOnly,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         Ok(())
@@ -102,7 +107,7 @@ impl SetupWizard {
             0 => DeploymentMode::Local,
             1 => DeploymentMode::Hybrid,
             2 => DeploymentMode::Remote,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         Ok(())
@@ -120,6 +125,38 @@ impl SetupWizard {
             })
             .interact_text()?;
 
+        {
+            let url_clone = url.clone();
+            match tokio::runtime::Runtime::new() {
+                Ok(rt) => match rt.block_on(validate_server_connectivity(&url_clone, 5)) {
+                    Ok(()) => {
+                        println!(
+                            "{}",
+                            format!("Successfully connected to {url_clone}").dimmed()
+                        );
+                    }
+                    Err(err) => {
+                        eprintln!(
+                                "{}",
+                                format!(
+                                    "Warning: Could not connect to {url_clone}: {err}. Proceeding anyway."
+                                )
+                                .yellow()
+                            );
+                    }
+                },
+                Err(err) => {
+                    eprintln!(
+                        "{}",
+                        format!(
+                            "Warning: Could not validate connectivity: {err}. Proceeding anyway."
+                        )
+                        .yellow()
+                    );
+                }
+            }
+        }
+
         self.config.central_url = Some(url);
 
         let auth_options = vec!["API Key", "OAuth2 / SSO", "Service Account"];
@@ -134,7 +171,7 @@ impl SetupWizard {
             0 => AuthMethod::ApiKey,
             1 => AuthMethod::Oauth2,
             2 => AuthMethod::ServiceAccount,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         if matches!(self.config.central_auth, AuthMethod::ApiKey) {
@@ -148,6 +185,45 @@ impl SetupWizard {
                 self.config.api_key = Some(key);
             }
         }
+
+        Ok(())
+    }
+
+    fn configure_hybrid_mode(&mut self) -> Result<()> {
+        let mut hybrid = HybridConfig::default();
+
+        let cache_size: u32 = Input::with_theme(&self.theme)
+            .with_prompt("Local cache size (MB)")
+            .default(512)
+            .validate_with(|input: &u32| -> Result<(), &str> {
+                if *input >= 64 {
+                    Ok(())
+                } else {
+                    Err("Minimum cache size is 64 MB")
+                }
+            })
+            .interact_text()?;
+        hybrid.local_cache_size_mb = cache_size;
+
+        hybrid.offline_cedar = Confirm::with_theme(&self.theme)
+            .with_prompt("Enable offline Cedar Agent? (local policy evaluation when disconnected)")
+            .default(true)
+            .interact()?;
+
+        let sync_interval: u64 = Input::with_theme(&self.theme)
+            .with_prompt("Sync interval (seconds)")
+            .default(300)
+            .validate_with(|input: &u64| -> Result<(), &str> {
+                if *input >= 10 {
+                    Ok(())
+                } else {
+                    Err("Minimum sync interval is 10 seconds")
+                }
+            })
+            .interact_text()?;
+        hybrid.sync_interval_secs = sync_interval;
+
+        self.config.hybrid = Some(hybrid);
 
         Ok(())
     }
@@ -177,8 +253,155 @@ impl SetupWizard {
             4 => VectorBackend::Mongodb,
             5 => VectorBackend::VertexAi,
             6 => VectorBackend::Databricks,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
+
+        Ok(())
+    }
+
+    fn configure_vector_backend_details(&mut self) -> Result<()> {
+        match self.config.vector_backend {
+            VectorBackend::Pinecone => self.configure_pinecone(),
+            VectorBackend::Weaviate => self.configure_weaviate(),
+            VectorBackend::Mongodb => self.configure_mongodb(),
+            VectorBackend::VertexAi => self.configure_vertex_ai(),
+            VectorBackend::Databricks => self.configure_databricks(),
+            _ => Ok(()),
+        }
+    }
+
+    fn configure_pinecone(&mut self) -> Result<()> {
+        let api_key: String = if let Ok(key) = std::env::var("PINECONE_API_KEY") {
+            println!("{}", "Using API key from PINECONE_API_KEY".dimmed());
+            key
+        } else {
+            Input::with_theme(&self.theme)
+                .with_prompt("Pinecone API key")
+                .interact_text()?
+        };
+
+        let environment: String = Input::with_theme(&self.theme)
+            .with_prompt("Pinecone environment (e.g. us-east1-gcp)")
+            .interact_text()?;
+
+        let index_name: String = Input::with_theme(&self.theme)
+            .with_prompt("Pinecone index name")
+            .default("aeterna".to_string())
+            .interact_text()?;
+
+        self.config.pinecone = Some(PineconeConfig {
+            api_key,
+            environment,
+            index_name,
+        });
+
+        Ok(())
+    }
+
+    fn configure_weaviate(&mut self) -> Result<()> {
+        let host: String = Input::with_theme(&self.theme)
+            .with_prompt("Weaviate host URL")
+            .default("http://localhost:8080".to_string())
+            .interact_text()?;
+
+        let api_key: String = Input::with_theme(&self.theme)
+            .with_prompt("Weaviate API key (leave empty for none)")
+            .allow_empty(true)
+            .interact_text()?;
+
+        self.config.weaviate = Some(WeaviateConfig {
+            host,
+            api_key: if api_key.is_empty() {
+                None
+            } else {
+                Some(api_key)
+            },
+        });
+
+        Ok(())
+    }
+
+    fn configure_mongodb(&mut self) -> Result<()> {
+        let connection_uri: String = Input::with_theme(&self.theme)
+            .with_prompt("MongoDB Atlas connection URI")
+            .validate_with(|input: &String| -> Result<(), &str> {
+                if input.starts_with("mongodb://") || input.starts_with("mongodb+srv://") {
+                    Ok(())
+                } else {
+                    Err("URI must start with mongodb:// or mongodb+srv://")
+                }
+            })
+            .interact_text()?;
+
+        self.config.mongodb = Some(MongodbConfig { connection_uri });
+
+        Ok(())
+    }
+
+    fn configure_vertex_ai(&mut self) -> Result<()> {
+        let project_id: String = Input::with_theme(&self.theme)
+            .with_prompt("Google Cloud project ID")
+            .interact_text()?;
+
+        let region: String = Input::with_theme(&self.theme)
+            .with_prompt("Region (e.g. us-central1)")
+            .default("us-central1".to_string())
+            .interact_text()?;
+
+        let endpoint_url: String = Input::with_theme(&self.theme)
+            .with_prompt("Vertex AI endpoint URL")
+            .interact_text()?;
+
+        let sa_json: String = Input::with_theme(&self.theme)
+            .with_prompt("Service account JSON path (leave empty for ADC)")
+            .allow_empty(true)
+            .interact_text()?;
+
+        self.config.vertex_ai = Some(VertexAiConfig {
+            project_id,
+            region,
+            endpoint_url,
+            service_account_json: if sa_json.is_empty() {
+                None
+            } else {
+                Some(sa_json)
+            },
+        });
+
+        Ok(())
+    }
+
+    fn configure_databricks(&mut self) -> Result<()> {
+        let workspace_url: String = Input::with_theme(&self.theme)
+            .with_prompt("Databricks workspace URL")
+            .validate_with(|input: &String| -> Result<(), &str> {
+                if input.starts_with("https://") {
+                    Ok(())
+                } else {
+                    Err("Workspace URL must start with https://")
+                }
+            })
+            .interact_text()?;
+
+        let token: String = if let Ok(t) = std::env::var("DATABRICKS_TOKEN") {
+            println!("{}", "Using token from DATABRICKS_TOKEN".dimmed());
+            t
+        } else {
+            Input::with_theme(&self.theme)
+                .with_prompt("Databricks access token")
+                .interact_text()?
+        };
+
+        let catalog: String = Input::with_theme(&self.theme)
+            .with_prompt("Unity Catalog name")
+            .default("main".to_string())
+            .interact_text()?;
+
+        self.config.databricks = Some(DatabricksConfig {
+            workspace_url,
+            token,
+            catalog,
+        });
 
         Ok(())
     }
@@ -200,7 +423,7 @@ impl SetupWizard {
             0 => CacheType::Dragonfly,
             1 => CacheType::Valkey,
             2 => CacheType::External,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         if matches!(self.config.cache, CacheType::External) {
@@ -226,7 +449,7 @@ impl SetupWizard {
                     None
                 } else {
                     Some(password)
-                }
+                },
             });
         }
 
@@ -248,7 +471,7 @@ impl SetupWizard {
         self.config.postgresql = match selection {
             0 => PostgresqlType::CloudNativePg,
             1 => PostgresqlType::External,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         if matches!(self.config.postgresql, PostgresqlType::External) {
@@ -281,7 +504,7 @@ impl SetupWizard {
                 port,
                 database,
                 username: Some(username),
-                password: Some(password)
+                password: Some(password),
             });
         }
 
@@ -316,7 +539,7 @@ impl SetupWizard {
             1 => LlmProvider::Anthropic,
             2 => LlmProvider::Ollama,
             3 => LlmProvider::None,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         match self.config.llm_provider {
@@ -410,5 +633,170 @@ impl SetupWizard {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_wizard_new_creates_default_config() {
+        let wizard = SetupWizard::new(false);
+        assert!(!wizard.reconfigure);
+        assert_eq!(wizard.config.target, DeploymentTarget::DockerCompose);
+        assert_eq!(wizard.config.mode, DeploymentMode::Local);
+        assert_eq!(wizard.config.vector_backend, VectorBackend::Qdrant);
+        assert_eq!(wizard.config.cache, CacheType::Dragonfly);
+        assert!(wizard.config.opal_enabled);
+        assert!(!wizard.config.opencode_enabled);
+        assert!(wizard.config.central_url.is_none());
+        assert!(wizard.config.hybrid.is_none());
+        assert!(wizard.config.pinecone.is_none());
+        assert!(wizard.config.weaviate.is_none());
+        assert!(wizard.config.mongodb.is_none());
+        assert!(wizard.config.vertex_ai.is_none());
+        assert!(wizard.config.databricks.is_none());
+    }
+
+    #[test]
+    fn test_wizard_new_reconfigure_flag() {
+        let wizard = SetupWizard::new(true);
+        assert!(wizard.reconfigure);
+    }
+
+    #[test]
+    fn test_wizard_config_is_clonable() {
+        let wizard = SetupWizard::new(false);
+        let config = wizard.config.clone();
+        assert_eq!(config.target, DeploymentTarget::DockerCompose);
+    }
+
+    #[test]
+    fn test_wizard_default_config_matches_setup_config_default() {
+        let wizard = SetupWizard::new(false);
+        let default_config = SetupConfig::default();
+        assert_eq!(wizard.config.target, default_config.target);
+        assert_eq!(wizard.config.mode, default_config.mode);
+        assert_eq!(wizard.config.vector_backend, default_config.vector_backend);
+        assert_eq!(wizard.config.cache, default_config.cache);
+        assert_eq!(wizard.config.postgresql, default_config.postgresql);
+        assert_eq!(wizard.config.opal_enabled, default_config.opal_enabled);
+        assert_eq!(wizard.config.llm_provider, default_config.llm_provider);
+        assert_eq!(
+            wizard.config.opencode_enabled,
+            default_config.opencode_enabled
+        );
+        assert_eq!(
+            wizard.config.ingress_enabled,
+            default_config.ingress_enabled
+        );
+        assert_eq!(
+            wizard.config.service_monitor_enabled,
+            default_config.service_monitor_enabled
+        );
+        assert_eq!(
+            wizard.config.network_policy_enabled,
+            default_config.network_policy_enabled
+        );
+        assert_eq!(wizard.config.hpa_enabled, default_config.hpa_enabled);
+        assert_eq!(wizard.config.pdb_enabled, default_config.pdb_enabled);
+    }
+
+    #[test]
+    fn test_wizard_config_can_be_mutated_for_hybrid() {
+        let mut wizard = SetupWizard::new(false);
+        wizard.config.mode = DeploymentMode::Hybrid;
+        wizard.config.central_url = Some("https://central.example.com".to_string());
+        wizard.config.hybrid = Some(HybridConfig {
+            local_cache_size_mb: 1024,
+            offline_cedar: true,
+            sync_interval_secs: 120,
+        });
+        assert_eq!(wizard.config.mode, DeploymentMode::Hybrid);
+        assert!(wizard.config.central_url.is_some());
+        let hybrid = wizard.config.hybrid.as_ref().expect("hybrid should be set");
+        assert_eq!(hybrid.local_cache_size_mb, 1024);
+        assert!(hybrid.offline_cedar);
+        assert_eq!(hybrid.sync_interval_secs, 120);
+    }
+
+    #[test]
+    fn test_wizard_config_can_be_mutated_for_pinecone() {
+        let mut wizard = SetupWizard::new(false);
+        wizard.config.vector_backend = VectorBackend::Pinecone;
+        wizard.config.pinecone = Some(PineconeConfig {
+            api_key: "pk-test".to_string(),
+            environment: "us-east1-gcp".to_string(),
+            index_name: "test-idx".to_string(),
+        });
+        assert_eq!(wizard.config.vector_backend, VectorBackend::Pinecone);
+        let pc = wizard.config.pinecone.as_ref().expect("pinecone config");
+        assert_eq!(pc.api_key, "pk-test");
+    }
+
+    #[test]
+    fn test_wizard_config_can_be_mutated_for_weaviate() {
+        let mut wizard = SetupWizard::new(false);
+        wizard.config.vector_backend = VectorBackend::Weaviate;
+        wizard.config.weaviate = Some(WeaviateConfig {
+            host: "http://weaviate:8080".to_string(),
+            api_key: Some("wk-test".to_string()),
+        });
+        assert_eq!(wizard.config.vector_backend, VectorBackend::Weaviate);
+        let wc = wizard.config.weaviate.as_ref().expect("weaviate config");
+        assert_eq!(wc.host, "http://weaviate:8080");
+    }
+
+    #[test]
+    fn test_wizard_config_can_be_mutated_for_mongodb() {
+        let mut wizard = SetupWizard::new(false);
+        wizard.config.vector_backend = VectorBackend::Mongodb;
+        wizard.config.mongodb = Some(MongodbConfig {
+            connection_uri: "mongodb+srv://user:pass@cluster.mongodb.net/db".to_string(),
+        });
+        assert_eq!(wizard.config.vector_backend, VectorBackend::Mongodb);
+    }
+
+    #[test]
+    fn test_wizard_config_can_be_mutated_for_vertex_ai() {
+        let mut wizard = SetupWizard::new(false);
+        wizard.config.vector_backend = VectorBackend::VertexAi;
+        wizard.config.vertex_ai = Some(VertexAiConfig {
+            project_id: "proj".to_string(),
+            region: "us-central1".to_string(),
+            endpoint_url: "https://endpoint".to_string(),
+            service_account_json: None,
+        });
+        assert_eq!(wizard.config.vector_backend, VectorBackend::VertexAi);
+    }
+
+    #[test]
+    fn test_wizard_config_can_be_mutated_for_databricks() {
+        let mut wizard = SetupWizard::new(false);
+        wizard.config.vector_backend = VectorBackend::Databricks;
+        wizard.config.databricks = Some(DatabricksConfig {
+            workspace_url: "https://adb.databricks.net".to_string(),
+            token: "dapi-tok".to_string(),
+            catalog: "main".to_string(),
+        });
+        assert_eq!(wizard.config.vector_backend, VectorBackend::Databricks);
+    }
+
+    #[test]
+    fn test_wizard_config_advanced_k8s_options() {
+        let mut wizard = SetupWizard::new(false);
+        wizard.config.target = DeploymentTarget::Kubernetes;
+        wizard.config.ingress_enabled = true;
+        wizard.config.ingress_host = Some("aeterna.example.com".to_string());
+        wizard.config.service_monitor_enabled = true;
+        wizard.config.network_policy_enabled = true;
+        wizard.config.hpa_enabled = true;
+        wizard.config.pdb_enabled = true;
+        assert!(wizard.config.ingress_enabled);
+        assert!(wizard.config.service_monitor_enabled);
+        assert!(wizard.config.network_policy_enabled);
+        assert!(wizard.config.hpa_enabled);
+        assert!(wizard.config.pdb_enabled);
     }
 }

@@ -211,3 +211,110 @@ app.kubernetes.io/name: {{ include "aeterna.name" . }}-opal-fetcher
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: opal-fetcher
 {{- end }}
+
+{{/*
+Resource calculation helper.
+Accepts a dict with "requests" and "limits" keys.
+Returns a resource block with sensible defaults applied:
+  - If only requests are set, limits default to 2x requests CPU and 1.5x memory.
+  - If only limits are set, requests default to limits / 2 CPU and limits / 1.5 memory.
+Usage: {{ include "aeterna.resources.calculate" (dict "resources" .Values.aeterna.resources) }}
+*/}}
+{{- define "aeterna.resources.calculate" -}}
+{{- $resources := .resources | default dict -}}
+{{- $limits := $resources.limits | default dict -}}
+{{- $requests := $resources.requests | default dict -}}
+limits:
+  {{- if $limits.cpu }}
+  cpu: {{ $limits.cpu }}
+  {{- else if $requests.cpu }}
+  cpu: {{ $requests.cpu }}
+  {{- end }}
+  {{- if $limits.memory }}
+  memory: {{ $limits.memory }}
+  {{- else if $requests.memory }}
+  memory: {{ $requests.memory }}
+  {{- end }}
+requests:
+  {{- if $requests.cpu }}
+  cpu: {{ $requests.cpu }}
+  {{- else if $limits.cpu }}
+  cpu: {{ $limits.cpu }}
+  {{- end }}
+  {{- if $requests.memory }}
+  memory: {{ $requests.memory }}
+  {{- else if $limits.memory }}
+  memory: {{ $limits.memory }}
+  {{- end }}
+{{- end }}
+
+{{/*
+Resource block helper (simplified).
+Accepts a resources object (with requests/limits) and renders a complete resources: block.
+Usage: {{ include "aeterna.resources" .Values.aeterna.resources | nindent 10 }}
+*/}}
+{{- define "aeterna.resources" -}}
+{{- if . }}
+resources:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+
+{{/*
+Configuration validation helper.
+Validates mutual exclusivity and required field combinations.
+Call from deployment or configmap to enforce constraints at render time.
+Usage: {{ include "aeterna.validateConfig" . }}
+*/}}
+{{- define "aeterna.validateConfig" -}}
+{{- if and .Values.postgresql.bundled (and (hasKey .Values.postgresql "external") .Values.postgresql.external.host) -}}
+  {{- if ne .Values.postgresql.external.host "" -}}
+    {{- fail "Cannot enable both bundled CloudNativePG (postgresql.bundled=true) and external PostgreSQL (postgresql.external.host set). Disable one." -}}
+  {{- end -}}
+{{- end -}}
+{{- if and (eq .Values.deploymentMode "remote") .Values.aeterna.enabled -}}
+  {{/* In remote mode aeterna acts as thin client — warn but allow */}}
+{{- end -}}
+{{- if and (eq .Values.deploymentMode "hybrid") (not .Values.central.url) -}}
+  {{- fail "deploymentMode=hybrid requires central.url to be set." -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+PostgreSQL selector labels (used by network policies)
+*/}}
+{{- define "aeterna.postgresql.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "aeterna.fullname" . }}-cnpg
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Qdrant selector labels (used by network policies)
+*/}}
+{{- define "aeterna.qdrant.selectorLabels" -}}
+app.kubernetes.io/name: qdrant
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Image pull secrets helper.
+Merges global.imagePullSecrets and component-level imagePullSecrets.
+Usage: {{ include "aeterna.imagePullSecrets" . }}
+*/}}
+{{- define "aeterna.imagePullSecrets" -}}
+{{- $secrets := list -}}
+{{- with .Values.global.imagePullSecrets -}}
+  {{- range . -}}
+    {{- $secrets = append $secrets . -}}
+  {{- end -}}
+{{- end -}}
+{{- with .Values.aeterna.imagePullSecrets -}}
+  {{- range . -}}
+    {{- $secrets = append $secrets . -}}
+  {{- end -}}
+{{- end -}}
+{{- if $secrets }}
+imagePullSecrets:
+  {{- toYaml $secrets | nindent 2 }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,106 @@
+# CI: External dependencies only — all bundled components disabled
+# Usage: helm lint --values charts/aeterna/ci/external-deps-values.yaml charts/aeterna
+
+deploymentMode: local
+
+aeterna:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/kikokikok/aeterna
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  features:
+    cca: true
+    radkit: false
+    rlm: true
+    reflective: true
+
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: false
+    external:
+      host: "qdrant.ci.example.com"
+      port: 6333
+      existingSecret: "qdrant-credentials"
+
+cache:
+  type: external
+  dragonfly:
+    enabled: false
+  external:
+    enabled: true
+    host: "redis.ci.example.com"
+    port: 6379
+    existingSecret: "redis-credentials"
+    secretKey: "redis-password"
+
+postgresql:
+  bundled: false
+  external:
+    host: "postgres.ci.example.com"
+    port: 5432
+    database: "aeterna"
+    username: "aeterna"
+    existingSecret: "postgres-credentials"
+    secretKey: "postgres-password"
+    sslMode: "require"
+
+opal:
+  enabled: true
+  server:
+    replicaCount: 1
+  cedarAgent:
+    enabled: true
+  fetcher:
+    enabled: true
+
+llm:
+  provider: openai
+  openai:
+    existingSecret: "openai-credentials"
+    model: "gpt-4o"
+    embeddingModel: "text-embedding-3-small"
+
+observability:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+  tracing:
+    enabled: true
+    endpoint: "http://jaeger-collector.ci.svc:4317"
+    samplingRatio: 1.0
+  logging:
+    level: info
+    format: json
+
+networkPolicy:
+  enabled: false
+
+cnpg:
+  enabled: false
+
+dragonfly:
+  enabled: false
+
+qdrant:
+  enabled: false
+
+weaviate:
+  enabled: false
+
+mongodb:
+  enabled: false

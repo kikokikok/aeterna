@@ -1,0 +1,99 @@
+# CI: Hybrid mode — local Cedar Agent, central server placeholder
+# Usage: helm lint --values charts/aeterna/ci/hybrid-values.yaml charts/aeterna
+
+deploymentMode: hybrid
+
+central:
+  url: "https://aeterna-central.ci.example.com"
+  auth: apiKey
+  existingSecret: "aeterna-central-credentials"
+  secretKey: "api-key"
+
+aeterna:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/kikokikok/aeterna
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  features:
+    cca: true
+    radkit: false
+    rlm: true
+    reflective: true
+
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: true
+
+cache:
+  type: dragonfly
+  dragonfly:
+    enabled: true
+
+postgresql:
+  bundled: false
+  external:
+    host: ""
+
+opal:
+  enabled: true
+  server:
+    replicaCount: 1
+  cedarAgent:
+    enabled: true
+  fetcher:
+    enabled: false
+
+llm:
+  provider: none
+
+observability:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+  tracing:
+    enabled: false
+  logging:
+    level: info
+    format: json
+
+networkPolicy:
+  enabled: false
+
+cnpg:
+  enabled: false
+
+dragonfly:
+  enabled: true
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+qdrant:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    size: 1Gi
+
+weaviate:
+  enabled: false
+
+mongodb:
+  enabled: false
