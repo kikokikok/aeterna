@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-specs/testing-requirements/spec" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.9.2">
+<title data-rh="true">Testing Requirements Specification | Aeterna</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://kikokikok.github.io/aeterna/docs/specs/testing-requirements/spec"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Testing Requirements Specification | Aeterna"><meta data-rh="true" name="description" content="Purpose"><meta data-rh="true" property="og:description" content="Purpose"><link data-rh="true" rel="icon" href="/aeterna/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://kikokikok.github.io/aeterna/docs/specs/testing-requirements/spec"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/specs/testing-requirements/spec" hreflang="en"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/specs/testing-requirements/spec" hreflang="x-default"><link rel="stylesheet" href="/aeterna/assets/css/styles.9ec36079.css">
+<script src="/aeterna/assets/js/runtime~main.7b7cf05c.js" defer="defer"></script>
+<script src="/aeterna/assets/js/main.2421dfb6.js" defer="defer"></script>
+</head>
+<body class="navigation-with-keyboard">
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||"light"),document.documentElement.setAttribute("data-theme-choice",t||"light")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/aeterna/"><b class="navbar__title text--truncate">Aeterna</b></a><a class="navbar__item navbar__link" href="/aeterna/docs/">Documentation</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><main class="docMainContainer_TBSr docMainContainerEnhanced_lQrH"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Testing Requirements Specification</h1></header>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="purpose">Purpose<a href="#purpose" class="hash-link" aria-label="Direct link to Purpose" title="Direct link to Purpose" translate="no">​</a></h2>
+<p>Define testing requirements and quality standards for OpenSpec Knowledge Provider implementations. Testing is not optional - it is a requirement for compliance.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="goals">Goals<a href="#goals" class="hash-link" aria-label="Direct link to Goals" title="Direct link to Goals" translate="no">​</a></h3>
+<ol>
+<li class=""><strong>Testing is Mandatory</strong>: No implementation can claim OpenSpec compliance without meeting testing requirements</li>
+<li class=""><strong>Coverage is Safety</strong>: Minimum 80% coverage for all components (85%+ for core logic)</li>
+<li class=""><strong>Test-Driven Development</strong>: TDD/BDD must be followed (test before code)</li>
+<li class=""><strong>Quality Gates</strong>: CI/CD must fail if coverage or quality thresholds not met</li>
+<li class=""><strong>Mockability</strong>: All external dependencies must be behind traits for easy testing</li>
+<li class=""><strong>Test Fixtures</strong>: All external service responses must have test fixtures</li>
+<li class=""><strong>Property-Based Testing</strong>: Critical algorithms must be tested with property-based frameworks</li>
+<li class=""><strong>Mutation Testing</strong>: 90%+ mutants must be killed for critical code</li>
+</ol>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="requirements">Requirements<a href="#requirements" class="hash-link" aria-label="Direct link to Requirements" title="Direct link to Requirements" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="requirement-test-coverage-standards">Requirement: Test Coverage Standards<a href="#requirement-test-coverage-standards" class="hash-link" aria-label="Direct link to Requirement: Test Coverage Standards" title="Direct link to Requirement: Test Coverage Standards" translate="no">​</a></h3>
+<p>The system SHALL achieve minimum coverage thresholds across all components.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="scenario-unit-test-coverage">Scenario: Unit test coverage<a href="#scenario-unit-test-coverage" class="hash-link" aria-label="Direct link to Scenario: Unit test coverage" title="Direct link to Scenario: Unit test coverage" translate="no">​</a></h4>
+<p><strong>WHEN</strong> business logic components are implemented
+<strong>THEN</strong> unit test coverage SHALL be &gt;= 85%
+<strong>AND</strong> SHALL be measured with tarpaulin or equivalent tool
+<strong>AND</strong> SHALL be enforced in CI/CD pipeline</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="scenario-integration-test-coverage">Scenario: Integration test coverage<a href="#scenario-integration-test-coverage" class="hash-link" aria-label="Direct link to Scenario: Integration test coverage" title="Direct link to Scenario: Integration test coverage" translate="no">​</a></h4>
+<p><strong>WHEN</strong> API endpoints are implemented
+<strong>THEN</strong> integration test coverage SHALL be &gt;= 80%
+<strong>AND</strong> SHALL test with both mock and real dependencies
+<strong>AND</strong> SHALL be enforced in CI/CD pipeline</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="requirement-testability-architecture">Requirement: Testability Architecture<a href="#requirement-testability-architecture" class="hash-link" aria-label="Direct link to Requirement: Testability Architecture" title="Direct link to Requirement: Testability Architecture" translate="no">​</a></h3>
+<p>All external dependencies SHALL be behind trait abstractions to enable easy mocking and testing.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="scenario-dependency-injection">Scenario: Dependency injection<a href="#scenario-dependency-injection" class="hash-link" aria-label="Direct link to Scenario: Dependency injection" title="Direct link to Scenario: Dependency injection" translate="no">​</a></h4>
+<ul>
+<li class=""><strong>WHEN</strong> external services are integrated (database, vector store, LLM providers)</li>
+<li class=""><strong>THEN</strong> dependencies SHALL be behind trait abstractions</li>
+<li class=""><strong>AND</strong> test implementations SHALL be provided</li>
+<li class=""><strong>AND</strong> constructor dependency injection SHALL be supported</li>
+<li class=""><strong>AND</strong> mocking SHALL be possible without modifying production code</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="requirement-property-based-testing">Requirement: Property-Based Testing<a href="#requirement-property-based-testing" class="hash-link" aria-label="Direct link to Requirement: Property-Based Testing" title="Direct link to Requirement: Property-Based Testing" translate="no">​</a></h3>
+<p>All critical algorithms SHALL be tested with property-based testing frameworks.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="scenario-property-testing-implementation">Scenario: Property testing implementation<a href="#scenario-property-testing-implementation" class="hash-link" aria-label="Direct link to Scenario: Property testing implementation" title="Direct link to Scenario: Property testing implementation" translate="no">​</a></h4>
+<ul>
+<li class=""><strong>WHEN</strong> critical algorithms are implemented (promotion scoring, similarity metrics)</li>
+<li class=""><strong>THEN</strong> property-based tests SHALL be written using proptest framework</li>
+<li class=""><strong>AND</strong> SHALL include minimum 10,000 test cases per property</li>
+<li class=""><strong>AND</strong> SHALL verify invariants (bounds, constraints, edge cases)</li>
+<li class=""><strong>AND</strong> SHALL achieve 90%+ coverage for property-based tests</li>
+</ul>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-abstract">📋 Abstract<a href="#-abstract" class="hash-link" aria-label="Direct link to 📋 Abstract" title="Direct link to 📋 Abstract" translate="no">​</a></h2>
+<p>This document defines <strong>testing requirements</strong> and <strong>quality standards</strong> that all OpenSpec-compliant knowledge providers must implement. Testing is not optional - it is a <strong>requirement for compliance</strong>.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="core-principles">Core Principles<a href="#core-principles" class="hash-link" aria-label="Direct link to Core Principles" title="Direct link to Core Principles" translate="no">​</a></h3>
+<ol>
+<li class=""><strong>Testing is Mandatory</strong>: No implementation can claim OpenSpec compliance without meeting testing requirements</li>
+<li class=""><strong>Coverage is Safety</strong>: Minimum 80% coverage for all components (85%+ for core logic)</li>
+<li class=""><strong>Test-Driven Development</strong>: TDD/BDD must be followed (test before code)</li>
+<li class=""><strong>Quality Gates</strong>: CI/CD must fail if coverage or quality thresholds not met</li>
+<li class=""><strong>Mockability</strong>: All external dependencies must be behind traits for easy testing</li>
+<li class=""><strong>Test Fixtures</strong>: All external service responses must have test fixtures</li>
+<li class=""><strong>Property-Based Testing</strong>: Critical algorithms must be tested with property-based frameworks</li>
+<li class=""><strong>Mutation Testing</strong>: 90%+ mutants must be killed for critical code</li>
+</ol>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="️-testing-architecture">🏗️ Testing Architecture<a href="#️-testing-architecture" class="hash-link" aria-label="Direct link to 🏗️ Testing Architecture" title="Direct link to 🏗️ Testing Architecture" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="test-pyramid">Test Pyramid<a href="#test-pyramid" class="hash-link" aria-label="Direct link to Test Pyramid" title="Direct link to Test Pyramid" translate="no">​</a></h3>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">                ┌─────────────────────────────────────────────────────┐</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                │     E2E Tests (BDD Scenarios)        │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                │  • 10-20 scenarios                      │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                │  • Slow (10s - 5min)                     │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                │  • High-level user workflows                   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                │  • Test as documentation                        │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                └─────────────────────────────────────────────────────┘</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                                    │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                                    ▼</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    ┌─────────────────────────────────────────────────────┐</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │     Integration Tests                        │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • 100-500 tests                         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • Medium speed (100ms - 5s)              │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • API endpoints, providers                 │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • Real dependencies (PostgreSQL, Qdrant)      │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    └─────────────────────────────────────────────────────┘</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                                    │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                                    ▼</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    ┌─────────────────────────────────────────────────────┐</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │     Unit Tests (TDD Tests)                │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • 1000-5000 tests                        │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • Fast (&lt; 100ms)                         │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • 85%+ coverage target                   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • Test fixtures, mock implementations           │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • Property-based testing (proptest)             │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • Mutation testing (cargo-mutants)          │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • Dependency injection for testability          │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    └─────────────────────────────────────────────────────┘</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                                    │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                                    ▼</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    ┌─────────────────────────────────────────────────────┐</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │     Property-Based Tests                    │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • 50-100 properties                      │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • Critical algorithms                     │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • 90%+ coverage target                   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    │  • Invariant verification                   │</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                    └─────────────────────────────────────────────────────┘</span><br></span></code></pre></div></div>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-coverage-requirements">📊 Coverage Requirements<a href="#-coverage-requirements" class="hash-link" aria-label="Direct link to 📊 Coverage Requirements" title="Direct link to 📊 Coverage Requirements" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="coverage-targets-by-component-type">Coverage Targets by Component Type<a href="#coverage-targets-by-component-type" class="hash-link" aria-label="Direct link to Coverage Targets by Component Type" title="Direct link to Coverage Targets by Component Type" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Component Type</th><th>Unit Test Target</th><th>Integration Target</th><th>Overall Target</th><th>Tool</th></tr></thead><tbody><tr><td><strong>Business Logic</strong></td><td>90%+</td><td>85%+</td><td>85%+</td><td>tarpaulin</td></tr><tr><td><strong>Data Models</strong></td><td>95%+</td><td>N/A</td><td>95%+</td><td>tarpaulin</td></tr><tr><td><strong>API Endpoints</strong></td><td>85%+</td><td>85%+</td><td>85%+</td><td>tarpaulin</td></tr><tr><td><strong>Database Layer</strong></td><td>85%+</td><td>80%+</td><td>80%+</td><td>tarpaulin</td></tr><tr><td><strong>Vector DB Layer</strong></td><td>85%+</td><td>80%+</td><td>80%+</td><td>tarpaulin</td></tr><tr><td><strong>Provider Integration</strong></td><td>85%+</td><td>80%+</td><td>80%+</td><td>tarpaulin</td></tr><tr><td><strong>Query Engine</strong></td><td>90%+</td><td>85%+</td><td>85%+</td><td>tarpaulin</td></tr><tr><td><strong>Embedding Service</strong></td><td>90%+</td><td>85%+</td><td>85%+</td><td>tarpaulin</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="minimum-coverage-thresholds">Minimum Coverage Thresholds<a href="#minimum-coverage-thresholds" class="hash-link" aria-label="Direct link to Minimum Coverage Thresholds" title="Direct link to Minimum Coverage Thresholds" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Coverage Type</th><th>Minimum Threshold</th><th>Enforcement</th></tr></thead><tbody><tr><td><strong>Unit Tests</strong></td><td>85%</td><td>Must be &gt;= 85%</td></tr><tr><td><strong>Integration Tests</strong></td><td>80%</td><td>Must be &gt;= 80%</td></tr><tr><td><strong>E2E Tests</strong></td><td>75%</td><td>Must be &gt;= 75%</td></tr><tr><td><strong>Property-Based Tests</strong></td><td>90%</td><td>Must be &gt;= 90%</td></tr><tr><td><strong>Mutation Tests</strong></td><td>90%</td><td>Must be &gt;= 90% mutants killed</td></tr><tr><td><strong>Overall Project</strong></td><td>80%</td><td>Must be &gt;= 80%</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="coverage-exclusions">Coverage Exclusions<a href="#coverage-exclusions" class="hash-link" aria-label="Direct link to Coverage Exclusions" title="Direct link to Coverage Exclusions" translate="no">​</a></h3>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain"># Files and patterns excluded from coverage calculations</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">*/tests/*                    # Test files themselves</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">*/test_fixtures/*            # Test fixture files</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">*/tests/*_fixtures.rs       # Test fixture modules</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">*/examples/*                # Example code</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">*/bench/*.rs                 # Benchmark files</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">*/tests/*.mock.rs            # Mock implementations</span><br></span></code></pre></div></div>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-testability-requirements">🎨 Testability Requirements<a href="#-testability-requirements" class="hash-link" aria-label="Direct link to 🎨 Testability Requirements" title="Direct link to 🎨 Testability Requirements" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="dependency-injection-for-testability">Dependency Injection for Testability<a href="#dependency-injection-for-testability" class="hash-link" aria-label="Direct link to Dependency Injection for Testability" title="Direct link to Dependency Injection for Testability" translate="no">​</a></h3>
+<p><strong>Requirement</strong>: All external dependencies must be behind trait abstractions to enable easy mocking and testing.</p>
+<p><strong>Example</strong>:</p>
+<div class="language-rust codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-rust codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token attribute attr-name" style="color:#00a4db">#[async_trait]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">trait</span><span class="token plain"> </span><span class="token type-definition class-name">EmbeddingProvider</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">Send</span><span class="token plain"> </span><span class="token operator" style="color:#393A34">+</span><span class="token plain"> </span><span class="token class-name">Sync</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">async</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">fn</span><span class="token plain"> </span><span class="token function-definition function" style="color:#d73a49">embed</span><span class="token punctuation" style="color:#393A34">(</span><span class="token operator" style="color:#393A34">&amp;</span><span class="token keyword" style="color:#00009f">self</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> text</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token operator" style="color:#393A34">&amp;</span><span class="token keyword" style="color:#00009f">str</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">-&gt;</span><span class="token plain"> </span><span class="token class-name">Result</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">Vec</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token keyword" style="color:#00009f">f32</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token class-name">Error</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">async</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">fn</span><span class="token plain"> </span><span class="token function-definition function" style="color:#d73a49">embed_batch</span><span class="token punctuation" style="color:#393A34">(</span><span class="token operator" style="color:#393A34">&amp;</span><span class="token keyword" style="color:#00009f">self</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> texts</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">Vec</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token operator" style="color:#393A34">&amp;</span><span class="token keyword" style="color:#00009f">str</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">-&gt;</span><span class="token plain"> </span><span class="token class-name">Result</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">Vec</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">Vec</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token keyword" style="color:#00009f">f32</span><span class="token operator" style="color:#393A34">&gt;&gt;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token class-name">Error</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">// Production implementation</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">struct</span><span class="token plain"> </span><span class="token type-definition class-name">GenaiEmbeddingProvider</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    client</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token namespace" style="opacity:0.7">genai</span><span class="token namespace punctuation" style="opacity:0.7;color:#393A34">::</span><span class="token class-name">Client</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token attribute attr-name" style="color:#00a4db">#[async_trait]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">impl</span><span class="token plain"> </span><span class="token class-name">EmbeddingProvider</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">for</span><span class="token plain"> </span><span class="token class-name">GenaiEmbeddingProvider</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">async</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">fn</span><span class="token plain"> </span><span class="token function-definition function" style="color:#d73a49">embed</span><span class="token punctuation" style="color:#393A34">(</span><span class="token operator" style="color:#393A34">&amp;</span><span class="token keyword" style="color:#00009f">self</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> text</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token operator" style="color:#393A34">&amp;</span><span class="token keyword" style="color:#00009f">str</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">-&gt;</span><span class="token plain"> </span><span class="token class-name">Result</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">Vec</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token keyword" style="color:#00009f">f32</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token class-name">Error</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token keyword" style="color:#00009f">self</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">client</span><span class="token punctuation" style="color:#393A34">.</span><span class="token function" style="color:#d73a49">exec_embed</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string" style="color:#e3116c">&quot;text-embedding-3-small&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token macro property" style="color:#36acaa">vec!</span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">text</span><span class="token punctuation" style="color:#393A34">]</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token class-name">None</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">.</span><span class="token keyword" style="color:#00009f">await</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">// Test mock implementation</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token attribute attr-name" style="color:#00a4db">#[cfg(test)]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">struct</span><span class="token plain"> </span><span class="token type-definition class-name">MockEmbeddingProvider</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    responses</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token class-name">Arc</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">Mutex</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">Vec</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">Result</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">Vec</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token keyword" style="color:#00009f">f32</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token class-name">Error</span><span class="token operator" style="color:#393A34">&gt;&gt;</span><span class="token operator" style="color:#393A34">&gt;&gt;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token attribute attr-name" style="color:#00a4db">#[cfg(test)]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token attribute attr-name" style="color:#00a4db">#[async_trait]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">impl</span><span class="token plain"> </span><span class="token class-name">EmbeddingProvider</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">for</span><span class="token plain"> </span><span class="token class-name">MockEmbeddingProvider</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">async</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">fn</span><span class="token plain"> </span><span class="token function-definition function" style="color:#d73a49">embed</span><span class="token punctuation" style="color:#393A34">(</span><span class="token operator" style="color:#393A34">&amp;</span><span class="token keyword" style="color:#00009f">self</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> _text</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token operator" style="color:#393A34">&amp;</span><span class="token keyword" style="color:#00009f">str</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">-&gt;</span><span class="token plain"> </span><span class="token class-name">Result</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token class-name">Vec</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token keyword" style="color:#00009f">f32</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token class-name">Error</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token keyword" style="color:#00009f">self</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">responses</span><span class="token punctuation" style="color:#393A34">.</span><span class="token function" style="color:#d73a49">lock</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">.</span><span class="token keyword" style="color:#00009f">await</span><span class="token punctuation" style="color:#393A34">.</span><span class="token function" style="color:#d73a49">pop</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">.</span><span class="token function" style="color:#d73a49">unwrap</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><br></span></code></pre></div></div>
+<p><strong>Compliance Checklist</strong>:</p>
+<ul class="contains-task-list containsTaskList_mC6p">
+<li class="task-list-item"><input type="checkbox" disabled=""> All database layers implement swappable traits</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> All provider integrations implement swappable traits</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> All external services have trait abstractions</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Test implementations are provided for all traits</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Constructor dependency injection for all components</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="test-fixtures">Test Fixtures<a href="#test-fixtures" class="hash-link" aria-label="Direct link to Test Fixtures" title="Direct link to Test Fixtures" translate="no">​</a></h3>
+<p><strong>Requirement</strong>: All external service responses must have deterministic test fixtures.</p>
+<p><strong>Example</strong>:</p>
+<div class="language-rust codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-rust codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic">// tests/fixtures/git_api.rs</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">use</span><span class="token plain"> </span><span class="token namespace" style="opacity:0.7">serde_json</span><span class="token namespace punctuation" style="opacity:0.7;color:#393A34">::</span><span class="token plain">json</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">fn</span><span class="token plain"> </span><span class="token function-definition function" style="color:#d73a49">github_commit_response</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">-&gt;</span><span class="token plain"> </span><span class="token namespace" style="opacity:0.7">serde_json</span><span class="token namespace punctuation" style="opacity:0.7;color:#393A34">::</span><span class="token class-name">Value</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token macro property" style="color:#36acaa">json!</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token string" style="color:#e3116c">&quot;sha&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;abc123&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token string" style="color:#e3116c">&quot;commit&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            </span><span class="token string" style="color:#e3116c">&quot;message&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;Test commit message&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            </span><span class="token string" style="color:#e3116c">&quot;author&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                </span><span class="token string" style="color:#e3116c">&quot;name&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;Test User&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                </span><span class="token string" style="color:#e3116c">&quot;email&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;test@example.com&quot;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            </span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token punctuation" style="color:#393A34">}</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">pub</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">fn</span><span class="token plain"> </span><span class="token function-definition function" style="color:#d73a49">github_tree_response</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">-&gt;</span><span class="token plain"> </span><span class="token namespace" style="opacity:0.7">serde_json</span><span class="token namespace punctuation" style="opacity:0.7;color:#393A34">::</span><span class="token class-name">Value</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token macro property" style="color:#36acaa">json!</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token string" style="color:#e3116c">&quot;tree&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                </span><span class="token string" style="color:#e3116c">&quot;path&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;README.md&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                </span><span class="token string" style="color:#e3116c">&quot;mode&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;100644&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                </span><span class="token string" style="color:#e3116c">&quot;type&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;blob&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                </span><span class="token string" style="color:#e3116c">&quot;sha&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;def456&quot;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            </span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token punctuation" style="color:#393A34">}</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">// Usage in tests</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token attribute attr-name" style="color:#00a4db">#[cfg(test)]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">mod</span><span class="token plain"> </span><span class="token module-declaration namespace" style="opacity:0.7">tests</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">use</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">super</span><span class="token module-declaration namespace punctuation" style="opacity:0.7;color:#393A34">::</span><span class="token module-declaration namespace" style="opacity:0.7">fixtures</span><span class="token module-declaration namespace punctuation" style="opacity:0.7;color:#393A34">::</span><span class="token operator" style="color:#393A34">*</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token attribute attr-name" style="color:#00a4db">#[tokio::test]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">async</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">fn</span><span class="token plain"> </span><span class="token function-definition function" style="color:#d73a49">test_git_provider_parse_commit</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token keyword" style="color:#00009f">let</span><span class="token plain"> mock_server </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> </span><span class="token class-name">MockServer</span><span class="token punctuation" style="color:#393A34">::</span><span class="token function" style="color:#d73a49">new</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            </span><span class="token punctuation" style="color:#393A34">.</span><span class="token function" style="color:#d73a49">with_response</span><span class="token punctuation" style="color:#393A34">(</span><span class="token function" style="color:#d73a49">github_commit_response</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token keyword" style="color:#00009f">let</span><span class="token plain"> provider </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> </span><span class="token class-name">GitProvider</span><span class="token punctuation" style="color:#393A34">::</span><span class="token function" style="color:#d73a49">new</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain">mock_server</span><span class="token punctuation" style="color:#393A34">.</span><span class="token function" style="color:#d73a49">url</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token keyword" style="color:#00009f">let</span><span class="token plain"> commit </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> provider</span><span class="token punctuation" style="color:#393A34">.</span><span class="token function" style="color:#d73a49">get_commit</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string" style="color:#e3116c">&quot;abc123&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">.</span><span class="token keyword" style="color:#00009f">await</span><span class="token punctuation" style="color:#393A34">.</span><span class="token function" style="color:#d73a49">unwrap</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token macro property" style="color:#36acaa">assert_eq!</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain">commit</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">message</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;Test commit message&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token macro property" style="color:#36acaa">assert_eq!</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain">commit</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">author</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">name</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;Test User&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><br></span></code></pre></div></div>
+<p><strong>Fixture Requirements</strong>:</p>
+<ul class="contains-task-list containsTaskList_mC6p">
+<li class="task-list-item"><input type="checkbox" disabled=""> All API responses have test fixtures</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Fixtures are deterministic (no random values)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Fixtures cover success and error cases</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Fixtures are versioned with API versions</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Fixtures are documented with examples</li>
+</ul>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-property-based-testing-requirements">🧪 Property-Based Testing Requirements<a href="#-property-based-testing-requirements" class="hash-link" aria-label="Direct link to 🧪 Property-Based Testing Requirements" title="Direct link to 🧪 Property-Based Testing Requirements" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="critical-algorithms">Critical Algorithms<a href="#critical-algorithms" class="hash-link" aria-label="Direct link to Critical Algorithms" title="Direct link to Critical Algorithms" translate="no">​</a></h3>
+<p><strong>Requirement</strong>: All critical algorithms MUST be tested with property-based testing frameworks.</p>
+<p><strong>Critical Algorithms List</strong>:</p>
+<ol>
+<li class="">Promotion Score Calculation</li>
+<li class="">Cross-Layer Query Result Ordering</li>
+<li class="">Embedding Similarity Metrics</li>
+<li class="">Confidence Aggregation</li>
+<li class="">Conflict Resolution</li>
+<li class="">Version Merging</li>
+<li class="">Access Policy Evaluation</li>
+<li class="">Search Result Ranking</li>
+</ol>
+<p><strong>Example</strong>:</p>
+<div class="language-rust codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-rust codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">use</span><span class="token plain"> </span><span class="token namespace" style="opacity:0.7">proptest</span><span class="token namespace punctuation" style="opacity:0.7;color:#393A34">::</span><span class="token namespace" style="opacity:0.7">prelude</span><span class="token namespace punctuation" style="opacity:0.7;color:#393A34">::</span><span class="token operator" style="color:#393A34">*</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token attribute attr-name" style="color:#00a4db">#[cfg(test)]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">mod</span><span class="token plain"> </span><span class="token module-declaration namespace" style="opacity:0.7">tests</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">use</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">super</span><span class="token punctuation" style="color:#393A34">::</span><span class="token operator" style="color:#393A34">*</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token comment" style="color:#999988;font-style:italic">// Property 1: Promotion score is always in [0.0, 1.0]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token macro property" style="color:#36acaa">proptest!</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token attribute attr-name" style="color:#00a4db">#[test]</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token keyword" style="color:#00009f">fn</span><span class="token plain"> </span><span class="token function-definition function" style="color:#d73a49">prop_promotion_score_bounds</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            access_count </span><span class="token keyword" style="color:#00009f">in</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">0usize</span><span class="token punctuation" style="color:#393A34">..</span><span class="token number" style="color:#36acaa">10000</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            time_elapsed_hours </span><span class="token keyword" style="color:#00009f">in</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">0u64</span><span class="token punctuation" style="color:#393A34">..</span><span class="token number" style="color:#36acaa">8760u64</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain">  </span><span class="token comment" style="color:#999988;font-style:italic">// 1 year</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            base_score </span><span class="token keyword" style="color:#00009f">in</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">0.0f32</span><span class="token punctuation" style="color:#393A34">..</span><span class="token number" style="color:#36acaa">1.0f32</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            importance </span><span class="token keyword" style="color:#00009f">in</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">0.0f32</span><span class="token punctuation" style="color:#393A34">..</span><span class="token number" style="color:#36acaa">1.0f32</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            </span><span class="token keyword" style="color:#00009f">let</span><span class="token plain"> entry </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> </span><span class="token class-name">MemoryEntry</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                access_count</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                time_elapsed_hours</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                importance_score</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> base_score</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                importance</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">                </span><span class="token punctuation" style="color:#393A34">..</span><span class="token class-name">Default</span><span class="token punctuation" style="color:#393A34">::</span><span class="token function" style="color:#d73a49">default</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            </span><span class="token punctuation" style="color:#393A34">}</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            </span><span class="token keyword" style="color:#00009f">let</span><span class="token plain"> score </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> entry</span><span class="token punctuation" style="color:#393A34">.</span><span class="token function" style="color:#d73a49">calculate_promotion_score</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            </span><span class="token macro property" style="color:#36acaa">assert!</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain">score </span><span class="token operator" style="color:#393A34">&gt;=</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">0.0</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">            </span><span class="token macro property" style="color:#36acaa">assert!</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain">score </span><span class="token operator" style="color:#393A34">&lt;=</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">1.0</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><br></span></code></pre></div></div>
+<p><strong>Property Testing Requirements</strong>:</p>
+<ul class="contains-task-list containsTaskList_mC6p">
+<li class="task-list-item"><input type="checkbox" disabled=""> All critical algorithms have property-based tests</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Minimum 10,000 test cases per property</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Coverage of invariants (bounds, constraints)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Coverage of edge cases (empty, max values, null)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Deterministic test execution</li>
+</ul>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-mutation-testing-requirements">🧬 Mutation Testing Requirements<a href="#-mutation-testing-requirements" class="hash-link" aria-label="Direct link to 🧬 Mutation Testing Requirements" title="Direct link to 🧬 Mutation Testing Requirements" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="mutation-testing-configuration">Mutation Testing Configuration<a href="#mutation-testing-configuration" class="hash-link" aria-label="Direct link to Mutation Testing Configuration" title="Direct link to Mutation Testing Configuration" translate="no">​</a></h3>
+<p><strong>Requirement</strong>: Critical code paths MUST achieve 90%+ mutation score (90%+ mutants killed).</p>
+<p><strong>Critical Code Paths</strong>:</p>
+<ol>
+<li class="">Memory Models (all layers)</li>
+<li class="">Promotion Score Calculation</li>
+<li class="">Query Engine (semantic, keyword, hybrid)</li>
+<li class="">Embedding Generation</li>
+<li class="">Provider Integration (Git, NotebookLM, etc.)</li>
+<li class="">Query result aggregation</li>
+<li class="">Access policy evaluation</li>
+<li class="">Metadata operations</li>
+</ol>
+<p><strong>Mutation Testing Requirements</strong>:</p>
+<ul class="contains-task-list containsTaskList_mC6p">
+<li class="task-list-item"><input type="checkbox" disabled=""> All critical code paths have mutation tests</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Mutation score &gt;= 90% (90%+ mutants killed)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Mutants configured: &quot;all&quot; (not subset)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> CI/CD runs mutation tests on every PR</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Mutation coverage report uploaded with PR</li>
+</ul>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-integration-testing-requirements">🔌 Integration Testing Requirements<a href="#-integration-testing-requirements" class="hash-link" aria-label="Direct link to 🔌 Integration Testing Requirements" title="Direct link to 🔌 Integration Testing Requirements" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="api-endpoint-tests">API Endpoint Tests<a href="#api-endpoint-tests" class="hash-link" aria-label="Direct link to API Endpoint Tests" title="Direct link to API Endpoint Tests" translate="no">​</a></h3>
+<p><strong>Requirement</strong>: All OpenSpec endpoints must have integration tests with real and mock dependencies.</p>
+<p><strong>Required Tests</strong>:</p>
+<ol>
+<li class="">Discovery endpoint (<code>GET /openspec/v1/knowledge</code>)</li>
+<li class="">Query endpoint (<code>POST /openspec/v1/knowledge/query</code>)</li>
+<li class="">Create endpoint (<code>POST /openspec/v1/knowledge/create</code>)</li>
+<li class="">Update endpoint (<code>PUT /openspec/v1/knowledge/{id}</code>)</li>
+<li class="">Delete endpoint (<code>DELETE /openspec/v1/knowledge/{id}</code>)</li>
+<li class="">Batch operations endpoint (<code>POST /openspec/v1/knowledge/batch</code>)</li>
+<li class="">Streaming endpoint (<code>GET /openspec/v1/knowledge/stream</code>)</li>
+<li class="">Metadata operations (<code>GET /openspec/v1/knowledge/{id}/metadata</code>)</li>
+</ol>
+<p><strong>Integration Test Requirements</strong>:</p>
+<ul class="contains-task-list containsTaskList_mC6p">
+<li class="task-list-item"><input type="checkbox" disabled=""> All 8 OpenSpec endpoints have integration tests</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Tests with mock dependencies (fast, deterministic)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Tests with real dependencies (PostgreSQL, Qdrant, Redis)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Error handling tests (4xx, 5xx errors)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Authentication/authorization tests</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Rate limiting tests</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Streaming response tests</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Batch operation tests</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="database-integration-tests">Database Integration Tests<a href="#database-integration-tests" class="hash-link" aria-label="Direct link to Database Integration Tests" title="Direct link to Database Integration Tests" translate="no">​</a></h3>
+<p><strong>Requirement</strong>: All database layers (PostgreSQL, Qdrant, Redis) must have integration tests.</p>
+<p><strong>Database Integration Test Requirements</strong>:</p>
+<ul class="contains-task-list containsTaskList_mC6p">
+<li class="task-list-item"><input type="checkbox" disabled=""> All memory layers have database integration tests</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Tests use appropriate frameworks (SQLx, qdrant-client, redis-rs)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Transactions are tested (commit/rollback)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Concurrency is tested (race conditions)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Performance tested (1000+ entries)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Error handling tested (connection failures, timeouts)</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="provider-integration-tests">Provider Integration Tests<a href="#provider-integration-tests" class="hash-link" aria-label="Direct link to Provider Integration Tests" title="Direct link to Provider Integration Tests" translate="no">​</a></h3>
+<p><strong>Requirement</strong>: All knowledge providers must have integration tests with mock and real implementations.</p>
+<p><strong>Provider Integration Test Requirements</strong>:</p>
+<ul class="contains-task-list containsTaskList_mC6p">
+<li class="task-list-item"><input type="checkbox" disabled=""> All knowledge providers have integration tests</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Tests with mock API responses (deterministic)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Tests with real provider implementations (Git repos, APIs)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Error handling tested (network errors, timeouts)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Performance tested (1000+ operations)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Fixture-based tests for all external APIs</li>
+</ul>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-end-to-end-testing-bdd-requirements">🎭 End-to-End Testing (BDD) Requirements<a href="#-end-to-end-testing-bdd-requirements" class="hash-link" aria-label="Direct link to 🎭 End-to-End Testing (BDD) Requirements" title="Direct link to 🎭 End-to-End Testing (BDD) Requirements" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="bdd-scenarios">BDD Scenarios<a href="#bdd-scenarios" class="hash-link" aria-label="Direct link to BDD Scenarios" title="Direct link to BDD Scenarios" translate="no">​</a></h3>
+<p><strong>Requirement</strong>: All critical user workflows must be tested with BDD scenarios (Given-When-Then).</p>
+<p><strong>Required Scenarios</strong>:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Scenario</th><th>Priority</th><th>Complexity</th><th>Test Time</th><th>Status</th></tr></thead><tbody><tr><td>Basic knowledge query</td><td>P0</td><td>Low</td><td>10s</td><td>Required</td></tr><tr><td>Cross-layer query</td><td>P0</td><td>Medium</td><td>30s</td><td>Required</td></tr><tr><td>Memory promotion (auto)</td><td>P0</td><td>Medium</td><td>30s</td><td>Required</td></tr><tr><td>Memory promotion (manual with approval)</td><td>P1</td><td>High</td><td>60s</td><td>Required</td></tr><tr><td>Query with governance approval</td><td>P1</td><td>High</td><td>60s</td><td>Required</td></tr><tr><td>Batch operations</td><td>P0</td><td>High</td><td>90s</td><td>Required</td></tr><tr><td>Knowledge source integration</td><td>P0</td><td>High</td><td>120s</td><td>Required</td></tr><tr><td>Streaming updates</td><td>P0</td><td>High</td><td>120s</td><td>Required</td></tr></tbody></table>
+<p><strong>Example</strong>:</p>
+<div class="language-gherkin codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-gherkin codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">Feature: Multi-Layered Memory Queries</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">#### Scenario: Query across working and session memory</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**WHEN** I have stored data in working memory</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**AND** I have stored data in session memory</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**AND** I query for information with &quot;test query&quot;</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**THEN** results should come from both working and session layers</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**AND** results should be ordered by relevance score</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**AND** total execution time should be less than 100ms</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">#### Scenario: Promote entry from working to session memory</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**WHEN** I have a working memory entry accessed 100 times</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**AND** entry has high importance score</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**AND** I trigger promotion to session memory</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**THEN** entry should be promoted to session memory</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**AND** entry should be removed from working memory</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">**AND** promotion should be logged in audit log</span><br></span></code></pre></div></div>
+<p><strong>BDD Requirements</strong>:</p>
+<ul class="contains-task-list containsTaskList_mC6p">
+<li class="task-list-item"><input type="checkbox" disabled=""> All 10-20 critical scenarios implemented</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Scenarios written in Gherkin syntax</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Each scenario has clear Given-When-Then structure</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Scenarios cover happy paths and error cases</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Scenarios test business rules and invariants</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Scenarios are versioned with OpenSpec version</li>
+</ul>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-cicd-testing-pipeline">📏 CI/CD Testing Pipeline<a href="#-cicd-testing-pipeline" class="hash-link" aria-label="Direct link to 📏 CI/CD Testing Pipeline" title="Direct link to 📏 CI/CD Testing Pipeline" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="github-actions-workflow">GitHub Actions Workflow<a href="#github-actions-workflow" class="hash-link" aria-label="Direct link to GitHub Actions Workflow" title="Direct link to GitHub Actions Workflow" translate="no">​</a></h3>
+<p><strong>Requirement</strong>: CI/CD pipeline must run all test types and enforce coverage thresholds.</p>
+<p><strong>Required Jobs</strong>:</p>
+<ol>
+<li class="">Unit tests with coverage (tarpaulin)</li>
+<li class="">Integration tests with real dependencies (PostgreSQL, Qdrant, Redis)</li>
+<li class="">E2E BDD tests</li>
+<li class="">Coverage enforcement (fail if &lt; 80%)</li>
+<li class="">Mutation tests with cargo-mutants</li>
+<li class="">Quality checks (clippy, fmt)</li>
+</ol>
+<p><strong>CI/CD Requirements</strong>:</p>
+<ul class="contains-task-list containsTaskList_mC6p">
+<li class="task-list-item"><input type="checkbox" disabled=""> All 4 job types implemented (unit, integration, E2E, coverage)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Coverage reports merged and uploaded</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Pipeline fails if coverage &lt; 80%</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Quality checks (clippy, fmt) run</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Mutants tested on every PR</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Test database isolated from production</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> All artifacts retained for debugging</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="docker-compose-for-testing">Docker Compose for Testing<a href="#docker-compose-for-testing" class="hash-link" aria-label="Direct link to Docker Compose for Testing" title="Direct link to Docker Compose for Testing" translate="no">​</a></h3>
+<div class="language-yaml codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-yaml codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># docker-compose.test.yml</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token key atrule" style="color:#00a4db">version</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&#x27;3.8&#x27;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token key atrule" style="color:#00a4db">services</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token key atrule" style="color:#00a4db">postgres-test</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">image</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> postgres</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain">16</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">alpine</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">environment</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token key atrule" style="color:#00a4db">POSTGRES_DB</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> provider_test</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token key atrule" style="color:#00a4db">POSTGRES_USER</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> test_user</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token key atrule" style="color:#00a4db">POSTGRES_PASSWORD</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> test_password</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">ports</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;5432:5432&quot;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">volumes</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain"> ./init/test</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">db.sql</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain">/docker</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">entrypoint</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">initdb.d</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token key atrule" style="color:#00a4db">qdrant-test</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">image</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> qdrant/qdrant</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain">v1.12</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">ports</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;6333:6333&quot;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">volumes</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain"> qdrant_data</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain">/qdrant/storage</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token key atrule" style="color:#00a4db">redis-test</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">image</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> redis</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain">7</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">alpine</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">ports</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;6379:6379&quot;</span><br></span></code></pre></div></div>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-quality-gates">📋 Quality Gates<a href="#-quality-gates" class="hash-link" aria-label="Direct link to 📋 Quality Gates" title="Direct link to 📋 Quality Gates" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="pre-commit-hooks">Pre-Commit Hooks<a href="#pre-commit-hooks" class="hash-link" aria-label="Direct link to Pre-Commit Hooks" title="Direct link to Pre-Commit Hooks" translate="no">​</a></h3>
+<p><strong>Requirement</strong>: All commits must pass pre-commit hooks for code quality.</p>
+<p><strong>Required Hooks</strong>:</p>
+<ol>
+<li class=""><code>cargo fmt</code> - Code formatting</li>
+<li class=""><code>cargo clippy</code> - Linting with warnings</li>
+<li class=""><code>cargo test</code> - Run tests locally</li>
+<li class=""><code>check-json</code> - Validate JSON files</li>
+<li class=""><code>typos</code> - Check for typos</li>
+</ol>
+<p><strong>Pre-Commit Requirements</strong>:</p>
+<ul class="contains-task-list containsTaskList_mC6p">
+<li class="task-list-item"><input type="checkbox" disabled=""> All 5 hooks installed</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> All commits pass pre-commit checks</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> CI/CD runs same checks</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Hooks are fast (&lt; 5s total)</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> No new warnings in clippy</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> All JSON files valid</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="quality-metrics">Quality Metrics<a href="#quality-metrics" class="hash-link" aria-label="Direct link to Quality Metrics" title="Direct link to Quality Metrics" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric</th><th>Target</th><th>Measurement</th><th>Enforcement</th></tr></thead><tbody><tr><td>Code Formatting</td><td>100%</td><td><code>cargo fmt --check</code></td><td>CI gate</td></tr><tr><td>Clippy Warnings</td><td>0 warnings</td><td><code>cargo clippy -- -D warnings</code></td><td>CI gate</td></tr><tr><td>Test Coverage</td><td>80%+</td><td><code>cargo tarpaulin</code></td><td>CI gate</td></tr><tr><td>Mutation Score</td><td>90%+</td><td><code>cargo-mutants</code></td><td>CI gate</td></tr><tr><td>Test Flakiness</td><td>&lt; 1%</td><td>Historical analysis</td><td>Monitoring</td></tr><tr><td>Documentation Coverage</td><td>100%</td><td>Manual review</td><td>CI gate</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-non-compliance-consequences">🔑 Non-Compliance Consequences<a href="#-non-compliance-consequences" class="hash-link" aria-label="Direct link to 🔑 Non-Compliance Consequences" title="Direct link to 🔑 Non-Compliance Consequences" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="cicd-failures">CI/CD Failures<a href="#cicd-failures" class="hash-link" aria-label="Direct link to CI/CD Failures" title="Direct link to CI/CD Failures" translate="no">​</a></h3>
+<p><strong>Consequence</strong>: CI/CD pipeline will fail if testing requirements are not met.</p>
+<p><strong>Failure Scenarios</strong>:</p>
+<ul>
+<li class="">Coverage &lt; 80%: Pipeline fails, PR cannot be merged</li>
+<li class="">Pre-commit hooks fail: Commit blocked, must fix issues</li>
+<li class="">Clippy warnings: Pipeline fails, must fix before merge</li>
+<li class="">Missing tests: Pipeline fails, must add tests before merge</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="pr-rejection-criteria">PR Rejection Criteria<a href="#pr-rejection-criteria" class="hash-link" aria-label="Direct link to PR Rejection Criteria" title="Direct link to PR Rejection Criteria" translate="no">​</a></h3>
+<p><strong>Consequence</strong>: PRs will be rejected if testing requirements are not met.</p>
+<p><strong>Rejection Criteria</strong>:</p>
+<ul>
+<li class="">No test coverage report</li>
+<li class="">Coverage &lt; 80%</li>
+<li class="">Failing tests in CI/CD</li>
+<li class="">Missing test fixtures</li>
+<li class="">No mutation tests for critical paths</li>
+<li class="">No property-based tests for critical algorithms</li>
+<li class="">Missing BDD scenarios for critical workflows</li>
+<li class="">Failing pre-commit checks</li>
+</ul>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-success-metrics">📊 Success Metrics<a href="#-success-metrics" class="hash-link" aria-label="Direct link to 📊 Success Metrics" title="Direct link to 📊 Success Metrics" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="coverage-metrics">Coverage Metrics<a href="#coverage-metrics" class="hash-link" aria-label="Direct link to Coverage Metrics" title="Direct link to Coverage Metrics" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric</th><th>Target</th><th>Measurement</th><th>Status</th></tr></thead><tbody><tr><td><strong>Unit Test Coverage</strong></td><td>85%+</td><td>Line coverage</td><td>✅ Required</td></tr><tr><td><strong>Integration Test Coverage</strong></td><td>80%+</td><td>Line coverage</td><td>✅ Required</td></tr><tr><td><strong>E2E Test Coverage</strong></td><td>75%+</td><td>Scenario coverage</td><td>✅ Required</td></tr><tr><td><strong>Property-Based Test Coverage</strong></td><td>90%+</td><td>Mutants killed</td><td>✅ Required</td></tr><tr><td><strong>Mutation Test Coverage</strong></td><td>90%+</td><td>Mutants killed</td><td>✅ Required</td></tr><tr><td><strong>Overall Project Coverage</strong></td><td>80%+</td><td>Combined coverage</td><td>✅ Required</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="quality-metrics-1">Quality Metrics<a href="#quality-metrics-1" class="hash-link" aria-label="Direct link to Quality Metrics" title="Direct link to Quality Metrics" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric</th><th>Target</th><th>Measurement</th><th>Enforcement</th></tr></thead><tbody><tr><td><strong>Test Execution Time</strong></td><td>&lt; 5s</td><td>CI runtime</td><td>✅ Required</td></tr><tr><td><strong>Test Flakiness</strong></td><td>&lt; 1%</td><td>Flaky test rate</td><td>✅ Required</td></tr><tr><td><strong>Code Review Coverage</strong></td><td>100%</td><td>All PRs reviewed</td><td>✅ Required</td></tr><tr><td><strong>Pre-Commit Hook Compliance</strong></td><td>100%</td><td>All code formatted</td><td>✅ Required</td></tr><tr><td><strong>Coverage Upload Rate</strong></td><td>100%</td><td>All PRs have reports</td><td>✅ Required</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-documentation-requirements">📚 Documentation Requirements<a href="#-documentation-requirements" class="hash-link" aria-label="Direct link to 📚 Documentation Requirements" title="Direct link to 📚 Documentation Requirements" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="test-documentation">Test Documentation<a href="#test-documentation" class="hash-link" aria-label="Direct link to Test Documentation" title="Direct link to Test Documentation" translate="no">​</a></h3>
+<p><strong>Requirement</strong>: All tests must have module-level documentation.</p>
+<p><strong>Required Documentation</strong>:</p>
+<div class="language-rust codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-rust codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic">/// Tests for working memory layer</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">///</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">/// ## Test Coverage</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">/// - Memory entry creation and retrieval</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">/// - Memory size limits</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">/// - TTL (time-to-live) expiration</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">/// - Concurrent access</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">///</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">/// ## Test Strategy</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">/// - Property-based testing for invariants</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">/// - Edge cases (empty content, large content)</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic">/// - Concurrency tests</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">mod</span><span class="token plain"> </span><span class="token module-declaration namespace" style="opacity:0.7">tests</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token comment" style="color:#999988;font-style:italic">// ...</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><br></span></code></pre></div></div>
+<p><strong>Documentation Requirements</strong>:</p>
+<ul class="contains-task-list containsTaskList_mC6p">
+<li class="task-list-item"><input type="checkbox" disabled=""> Each test module has module documentation</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Coverage sections documented</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Test strategies documented</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> Fixture usage documented</li>
+<li class="task-list-item"><input type="checkbox" disabled=""> BDD scenarios documented in Gherkin syntax</li>
+</ul>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-implementation-timeline">🎯 Implementation Timeline<a href="#-implementation-timeline" class="hash-link" aria-label="Direct link to 🎯 Implementation Timeline" title="Direct link to 🎯 Implementation Timeline" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="phase-0-testing-infrastructure-weeks-1-2">Phase 0: Testing Infrastructure (Weeks 1-2)<a href="#phase-0-testing-infrastructure-weeks-1-2" class="hash-link" aria-label="Direct link to Phase 0: Testing Infrastructure (Weeks 1-2)" title="Direct link to Phase 0: Testing Infrastructure (Weeks 1-2)" translate="no">​</a></h3>
+<p><strong>Before any code is written</strong>:</p>
+<ol>
+<li class="">Set up GitHub Actions workflows</li>
+<li class="">Configure cargo-tarpaulin for coverage</li>
+<li class="">Create test database setup</li>
+<li class="">Create Docker compose for dependencies</li>
+<li class="">Write test utilities and helpers</li>
+<li class="">Configure pre-commit hooks</li>
+<li class="">Set up mutation testing with cargo-mutants</li>
+<li class="">Create test fixtures and generators</li>
+</ol>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="phase-1-foundation-testing-weeks-1-4">Phase 1: Foundation Testing (Weeks 1-4)<a href="#phase-1-foundation-testing-weeks-1-4" class="hash-link" aria-label="Direct link to Phase 1: Foundation Testing (Weeks 1-4)" title="Direct link to Phase 1: Foundation Testing (Weeks 1-4)" translate="no">​</a></h3>
+<p><strong>For each feature</strong>:</p>
+<ol>
+<li class="">Write BDD scenarios (Given/When/Then)</li>
+<li class="">Write failing unit test (TDD - RED)</li>
+<li class="">Run test to confirm failure</li>
+<li class="">Write minimal implementation</li>
+<li class="">Run test to confirm passing (TDD - GREEN)</li>
+<li class="">Refactor code</li>
+<li class="">Write property-based tests</li>
+<li class="">Run mutation tests</li>
+<li class="">Verify coverage &gt;= 80%</li>
+<li class="">Update documentation</li>
+</ol>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="phase-2-integration-testing-weeks-5-8">Phase 2: Integration Testing (Weeks 5-8)<a href="#phase-2-integration-testing-weeks-5-8" class="hash-link" aria-label="Direct link to Phase 2: Integration Testing (Weeks 5-8)" title="Direct link to Phase 2: Integration Testing (Weeks 5-8)" translate="no">​</a></h3>
+<p><strong>For each API endpoint</strong>:</p>
+<ol>
+<li class="">Write integration test</li>
+<li class="">Test with mock dependencies</li>
+<li class="">Test with real dependencies (PostgreSQL, Qdrant, Redis)</li>
+<li class="">Test error handling</li>
+<li class="">Test authentication/authorization</li>
+<li class="">Test streaming responses</li>
+<li class="">Verify coverage &gt;= 80%</li>
+<li class="">Update API documentation</li>
+</ol>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-compliance-checklist">📋 Compliance Checklist<a href="#-compliance-checklist" class="hash-link" aria-label="Direct link to 📋 Compliance Checklist" title="Direct link to 📋 Compliance Checklist" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="testing-compliance-requirements">Testing Compliance Requirements<a href="#testing-compliance-requirements" class="hash-link" aria-label="Direct link to Testing Compliance Requirements" title="Direct link to Testing Compliance Requirements" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Requirement</th><th>Status</th><th>Notes</th></tr></thead><tbody><tr><td><strong>Test-Driven Development</strong></td><td>✅ Required</td><td>TDD/BDD from Day 1</td></tr><tr><td><strong>Coverage Thresholds</strong></td><td>✅ Required</td><td>80%+ overall enforced</td></tr><tr><td><strong>Property-Based Testing</strong></td><td>✅ Required</td><td>Critical algorithms</td></tr><tr><td><strong>Mutation Testing</strong></td><td>✅ Required</td><td>90%+ mutants killed</td></tr><tr><td><strong>Testability</strong></td><td>✅ Required</td><td>Dependency injection + traits</td></tr><tr><td><strong>Test Fixtures</strong></td><td>✅ Required</td><td>All external APIs have fixtures</td></tr><tr><td><strong>Integration Tests</strong></td><td>✅ Required</td><td>All endpoints + providers</td></tr><tr><td><strong>E2E Tests</strong></td><td>✅ Required</td><td>10-20 BDD scenarios</td></tr><tr><td><strong>CI/CD Pipeline</strong></td><td>✅ Required</td><td>4 job types + quality gates</td></tr><tr><td><strong>Pre-Commit Hooks</strong></td><td>✅ Required</td><td>5 hooks configured</td></tr><tr><td><strong>Quality Gates</strong></td><td>✅ Required</td><td>Coverage + linting enforced</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="-license">📜 License<a href="#-license" class="hash-link" aria-label="Direct link to 📜 License" title="Direct link to 📜 License" translate="no">​</a></h2>
+<p>This OpenSpec testing requirements specification is licensed under <strong>MIT License</strong>.</p>
+<p>Copyright © 2026 Velluma</p>
+<p>Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the &quot;Software&quot;), to deal in Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of Software, and to permit persons to whom Software is furnished to do so, subject to the following conditions:</p>
+<p>The above copyright notice and this permission notice shall be included in all copies or substantial portions of Software.</p>
+<p>THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</p>
+<hr>
+<p><em>Testing Requirements Specification v1.0.0</em>
+<em>Last Updated: 2026-01-07</em>
+<em>OpenSpec-Compliant</em></p></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/kikokikok/aeterna/tree/main/website/docs/specs/testing-requirements/spec.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#purpose" class="table-of-contents__link toc-highlight">Purpose</a><ul><li><a href="#goals" class="table-of-contents__link toc-highlight">Goals</a></li></ul></li><li><a href="#requirements" class="table-of-contents__link toc-highlight">Requirements</a><ul><li><a href="#requirement-test-coverage-standards" class="table-of-contents__link toc-highlight">Requirement: Test Coverage Standards</a></li><li><a href="#requirement-testability-architecture" class="table-of-contents__link toc-highlight">Requirement: Testability Architecture</a></li><li><a href="#requirement-property-based-testing" class="table-of-contents__link toc-highlight">Requirement: Property-Based Testing</a></li></ul></li><li><a href="#-abstract" class="table-of-contents__link toc-highlight">📋 Abstract</a><ul><li><a href="#core-principles" class="table-of-contents__link toc-highlight">Core Principles</a></li></ul></li><li><a href="#️-testing-architecture" class="table-of-contents__link toc-highlight">🏗️ Testing Architecture</a><ul><li><a href="#test-pyramid" class="table-of-contents__link toc-highlight">Test Pyramid</a></li></ul></li><li><a href="#-coverage-requirements" class="table-of-contents__link toc-highlight">📊 Coverage Requirements</a><ul><li><a href="#coverage-targets-by-component-type" class="table-of-contents__link toc-highlight">Coverage Targets by Component Type</a></li><li><a href="#minimum-coverage-thresholds" class="table-of-contents__link toc-highlight">Minimum Coverage Thresholds</a></li><li><a href="#coverage-exclusions" class="table-of-contents__link toc-highlight">Coverage Exclusions</a></li></ul></li><li><a href="#-testability-requirements" class="table-of-contents__link toc-highlight">🎨 Testability Requirements</a><ul><li><a href="#dependency-injection-for-testability" class="table-of-contents__link toc-highlight">Dependency Injection for Testability</a></li><li><a href="#test-fixtures" class="table-of-contents__link toc-highlight">Test Fixtures</a></li></ul></li><li><a href="#-property-based-testing-requirements" class="table-of-contents__link toc-highlight">🧪 Property-Based Testing Requirements</a><ul><li><a href="#critical-algorithms" class="table-of-contents__link toc-highlight">Critical Algorithms</a></li></ul></li><li><a href="#-mutation-testing-requirements" class="table-of-contents__link toc-highlight">🧬 Mutation Testing Requirements</a><ul><li><a href="#mutation-testing-configuration" class="table-of-contents__link toc-highlight">Mutation Testing Configuration</a></li></ul></li><li><a href="#-integration-testing-requirements" class="table-of-contents__link toc-highlight">🔌 Integration Testing Requirements</a><ul><li><a href="#api-endpoint-tests" class="table-of-contents__link toc-highlight">API Endpoint Tests</a></li><li><a href="#database-integration-tests" class="table-of-contents__link toc-highlight">Database Integration Tests</a></li><li><a href="#provider-integration-tests" class="table-of-contents__link toc-highlight">Provider Integration Tests</a></li></ul></li><li><a href="#-end-to-end-testing-bdd-requirements" class="table-of-contents__link toc-highlight">🎭 End-to-End Testing (BDD) Requirements</a><ul><li><a href="#bdd-scenarios" class="table-of-contents__link toc-highlight">BDD Scenarios</a></li></ul></li><li><a href="#-cicd-testing-pipeline" class="table-of-contents__link toc-highlight">📏 CI/CD Testing Pipeline</a><ul><li><a href="#github-actions-workflow" class="table-of-contents__link toc-highlight">GitHub Actions Workflow</a></li><li><a href="#docker-compose-for-testing" class="table-of-contents__link toc-highlight">Docker Compose for Testing</a></li></ul></li><li><a href="#-quality-gates" class="table-of-contents__link toc-highlight">📋 Quality Gates</a><ul><li><a href="#pre-commit-hooks" class="table-of-contents__link toc-highlight">Pre-Commit Hooks</a></li><li><a href="#quality-metrics" class="table-of-contents__link toc-highlight">Quality Metrics</a></li></ul></li><li><a href="#-non-compliance-consequences" class="table-of-contents__link toc-highlight">🔑 Non-Compliance Consequences</a><ul><li><a href="#cicd-failures" class="table-of-contents__link toc-highlight">CI/CD Failures</a></li><li><a href="#pr-rejection-criteria" class="table-of-contents__link toc-highlight">PR Rejection Criteria</a></li></ul></li><li><a href="#-success-metrics" class="table-of-contents__link toc-highlight">📊 Success Metrics</a><ul><li><a href="#coverage-metrics" class="table-of-contents__link toc-highlight">Coverage Metrics</a></li><li><a href="#quality-metrics-1" class="table-of-contents__link toc-highlight">Quality Metrics</a></li></ul></li><li><a href="#-documentation-requirements" class="table-of-contents__link toc-highlight">📚 Documentation Requirements</a><ul><li><a href="#test-documentation" class="table-of-contents__link toc-highlight">Test Documentation</a></li></ul></li><li><a href="#-implementation-timeline" class="table-of-contents__link toc-highlight">🎯 Implementation Timeline</a><ul><li><a href="#phase-0-testing-infrastructure-weeks-1-2" class="table-of-contents__link toc-highlight">Phase 0: Testing Infrastructure (Weeks 1-2)</a></li><li><a href="#phase-1-foundation-testing-weeks-1-4" class="table-of-contents__link toc-highlight">Phase 1: Foundation Testing (Weeks 1-4)</a></li><li><a href="#phase-2-integration-testing-weeks-5-8" class="table-of-contents__link toc-highlight">Phase 2: Integration Testing (Weeks 5-8)</a></li></ul></li><li><a href="#-compliance-checklist" class="table-of-contents__link toc-highlight">📋 Compliance Checklist</a><ul><li><a href="#testing-compliance-requirements" class="table-of-contents__link toc-highlight">Testing Compliance Requirements</a></li></ul></li><li><a href="#-license" class="table-of-contents__link toc-highlight">📜 License</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Docs</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/aeterna/docs/">Getting Started</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Community</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div></div><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2026 Aeterna Contributors.</div></div></div></footer></div>
+</body>
+</html>
