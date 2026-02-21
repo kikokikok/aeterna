@@ -1,0 +1,55 @@
+# Remote mode thin client - all local storage disabled, connects to central server
+deploymentMode: remote
+
+central:
+  url: ""
+  auth: apiKey
+  existingSecret: "aeterna-central-credentials"
+  secretKey: "api-key"
+
+aeterna:
+  enabled: true
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+cnpg:
+  enabled: false
+
+postgresql:
+  bundled: false
+  external:
+    host: ""
+
+qdrant:
+  enabled: false
+
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: false
+    external:
+      host: ""
+
+dragonfly:
+  enabled: false
+
+cache:
+  type: external
+  dragonfly:
+    enabled: false
+  valkey:
+    enabled: false
+  external:
+    enabled: false
+
+opal:
+  enabled: false
+
+backup:
+  enabled: false

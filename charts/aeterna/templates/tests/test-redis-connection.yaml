@@ -1,0 +1,54 @@
+{{- if or .Values.cache.dragonfly.enabled .Values.cache.valkey.enabled .Values.cache.external.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "aeterna.fullname" . }}-test-redis"
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: test-redis
+      image: redis:7-alpine
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Testing Redis/Dragonfly connection..."
+          {{- if .Values.cache.external.enabled }}
+          HOST="{{ .Values.cache.external.host }}"
+          PORT="{{ .Values.cache.external.port | default 6379 }}"
+          {{- else if .Values.cache.dragonfly.enabled }}
+          HOST="{{ include "aeterna.fullname" . }}-dragonfly"
+          PORT="6379"
+          {{- else if .Values.cache.valkey.enabled }}
+          HOST="{{ include "aeterna.fullname" . }}-valkey"
+          PORT="6379"
+          {{- end }}
+          redis-cli -h "$HOST" -p "$PORT" ping | grep -q PONG
+          echo "Redis/Dragonfly connection successful!"
+      {{- if and .Values.cache.external.enabled .Values.cache.external.existingSecret }}
+      env:
+        - name: REDISCLI_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.cache.external.existingSecret }}
+              key: {{ .Values.cache.external.secretKey | default "redis-password" }}
+      {{- end }}
+{{- end }}

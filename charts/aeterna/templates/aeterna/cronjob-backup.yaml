@@ -1,0 +1,146 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "aeterna.fullname" . }}-backup
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            {{- include "aeterna.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: OnFailure
+          {{- with .Values.aeterna.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.global.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              image: postgres:16-alpine
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  BACKUP_FILE="/tmp/backup-$(date +%Y%m%d-%H%M%S).sql"
+                  echo "Starting PostgreSQL backup to ${BACKUP_FILE}..."
+                  pg_dump \
+                    --host={{ include "aeterna.postgresql.host" . }} \
+                    --port={{ include "aeterna.postgresql.port" . }} \
+                    --username=$POSTGRES_USER \
+                    --dbname={{ include "aeterna.postgresql.database" . }} \
+                    --format=custom \
+                    --verbose \
+                    > $BACKUP_FILE
+                  
+                  echo "Backup completed: $BACKUP_FILE ($(du -h $BACKUP_FILE | cut -f1))"
+                  
+                  {{- if eq .Values.backup.destination.type "s3" }}
+                  echo "Uploading to S3..."
+                  aws s3 cp $BACKUP_FILE s3://{{ .Values.backup.destination.bucket }}/aeterna/$(date +%Y/%m/%d)/$(basename $BACKUP_FILE)
+                  {{- else if eq .Values.backup.destination.type "gcs" }}
+                  echo "Uploading to GCS..."
+                  gsutil cp $BACKUP_FILE gs://{{ .Values.backup.destination.bucket }}/aeterna/$(date +%Y/%m/%d)/$(basename $BACKUP_FILE)
+                  {{- else if eq .Values.backup.destination.type "azure" }}
+                  echo "Uploading to Azure..."
+                  az storage blob upload --account-name {{ .Values.backup.destination.storageAccount }} --container-name {{ .Values.backup.destination.container }} --name aeterna/$(date +%Y/%m/%d)/$(basename $BACKUP_FILE) --file $BACKUP_FILE
+                  {{- end }}
+                  
+                  rm $BACKUP_FILE
+                  echo "Backup process completed successfully"
+              env:
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "aeterna.postgresql.secretName" . }}
+                      key: username
+                      optional: true
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "aeterna.postgresql.secretName" . }}
+                      key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+                {{- if eq .Values.backup.destination.type "s3" }}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.destination.credentialsSecret | quote }}
+                      key: access-key
+                      optional: true
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.destination.credentialsSecret | quote }}
+                      key: secret-key
+                      optional: true
+                {{- else if eq .Values.backup.destination.type "gcs" }}
+                - name: GOOGLE_APPLICATION_CREDENTIALS
+                  value: /var/secrets/gcs/key.json
+                {{- else if eq .Values.backup.destination.type "azure" }}
+                - name: AZURE_STORAGE_ACCOUNT_NAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.destination.credentialsSecret | quote }}
+                      key: storage-account
+                      optional: true
+                - name: AZURE_STORAGE_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.destination.credentialsSecret | quote }}
+                      key: storage-key
+                      optional: true
+                {{- end }}
+              {{- if eq .Values.backup.destination.type "gcs" }}
+              volumeMounts:
+                - name: gcs-credentials
+                  mountPath: /var/secrets/gcs
+                  readOnly: true
+              {{- end }}
+              resources:
+                limits:
+                  cpu: 1000m
+                  memory: 512Mi
+                requests:
+                  cpu: 500m
+                  memory: 256Mi
+          {{- if eq .Values.backup.destination.type "gcs" }}
+          volumes:
+            - name: gcs-credentials
+              secret:
+                secretName: {{ .Values.backup.destination.credentialsSecret | quote }}
+          {{- end }}
+          {{- with .Values.aeterna.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.aeterna.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

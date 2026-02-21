@@ -1,0 +1,136 @@
+# Aeterna GKE Values
+# Production deployment on Google Kubernetes Engine
+# Usage: helm install aeterna ./charts/aeterna -f charts/aeterna/examples/values-gke.yaml
+
+deploymentMode: local
+
+aeterna:
+  replicaCount: 3
+
+  serviceAccount:
+    annotations:
+      iam.gke.io/gcp-service-account: "aeterna@project-id.iam.gserviceaccount.com"
+
+  # GKE Autopilot compatible resources
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+  pdb:
+    enabled: true
+    minAvailable: 2
+
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: aeterna
+
+  ingress:
+    enabled: true
+    className: "gce"
+    annotations:
+      kubernetes.io/ingress.global-static-ip-name: "aeterna-ip"
+      networking.gke.io/managed-certificates: "aeterna-cert"
+    hosts:
+      - host: aeterna.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+
+# Vector Backend configuration
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: true
+
+# Cache configuration
+cache:
+  type: dragonfly
+  dragonfly:
+    enabled: true
+    replicas: 3
+  # External Memorystore Redis configuration (commented out alternative)
+  # type: external
+  # external:
+  #   enabled: true
+  #   host: "10.0.0.3"
+  #   port: 6379
+  #   existingSecret: "aeterna-cache-credentials"
+
+# PostgreSQL configuration
+postgresql:
+  bundled: true
+  cloudnativepg:
+    instances: 3
+    storage:
+      size: 100Gi
+      storageClass: "standard-rwo"
+    backup:
+      enabled: true
+      provider: "gcs"
+      destinationPath: "gs://aeterna-backups-gcs/postgresql"
+  # External Cloud SQL configuration (commented out alternative)
+  # bundled: false
+  # external:
+  #   enabled: true
+  #   host: "/cloudsql/project:region:instance"
+  #   database: "aeterna"
+  #   existingSecret: "aeterna-db-credentials"
+
+# Backup configuration
+backup:
+  enabled: true
+  destination:
+    type: gcs
+    gcs:
+      bucket: "aeterna-backups-gcs"
+      serviceAccountSecret: "aeterna-gcs-credentials"
+
+# OPAL stack
+opal:
+  enabled: true
+  server:
+    replicaCount: 3
+
+# Observability
+observability:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: prometheus
+  tracing:
+    enabled: true
+    endpoint: "http://jaeger-collector.monitoring.svc:4317"
+    samplingRatio: 0.1
+
+# Security
+networkPolicy:
+  enabled: true
+
+# Subcharts
+qdrant:
+  enabled: true
+  replicaCount: 3
+  persistence:
+    size: 100Gi
+    storageClass: "standard-rwo"
+
+dragonfly:
+  enabled: true
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
