@@ -26,7 +26,7 @@ pub enum ConfigFileError {
     NoExtension,
 
     #[error("Unsupported config file format: {0}")]
-    UnsupportedFormat(String)
+    UnsupportedFormat(String),
 }
 
 /// Load configuration from TOML file.
@@ -41,7 +41,7 @@ pub enum ConfigFileError {
 /// use config::load_from_toml;
 /// use std::path::Path;
 ///
-/// fn main() -> Result<(), anyhow::Result<()>> {
+/// fn main() -> Result<(), anyhow::Error> {
 ///     let config = load_from_toml(Path::new("config.toml"))?;
 ///     println!("PostgreSQL host: {}", config.providers.postgres.host);
 ///     Ok(())
@@ -75,7 +75,7 @@ pub fn load_from_toml(path: &Path) -> Result<Config, ConfigFileError> {
 /// use config::load_from_yaml;
 /// use std::path::Path;
 ///
-/// fn main() -> Result<(), anyhow::Result<()>> {
+/// fn main() -> Result<(), anyhow::Error> {
 ///     let config = load_from_yaml(Path::new("config.yaml"))?;
 ///     println!("PostgreSQL host: {}", config.providers.postgres.host);
 ///     Ok(())
@@ -115,7 +115,7 @@ pub fn load_from_yaml(path: &Path) -> Result<Config, ConfigFileError> {
 /// use config::load_from_file;
 /// use std::path::Path;
 ///
-/// fn main() -> Result<(), anyhow::Result<()>> {
+/// fn main() -> Result<(), anyhow::Error> {
 ///     let config = load_from_file(Path::new("config.yaml"))?;
 ///     Ok(())
 /// }
@@ -135,7 +135,7 @@ pub fn load_from_file(path: &Path) -> Result<Config, ConfigFileError> {
     match extension.to_lowercase().as_str() {
         "toml" => load_from_toml(path),
         "yaml" | "yml" => load_from_yaml(path),
-        other => Err(ConfigFileError::UnsupportedFormat(other.to_string()))
+        other => Err(ConfigFileError::UnsupportedFormat(other.to_string())),
     }
 }
 
