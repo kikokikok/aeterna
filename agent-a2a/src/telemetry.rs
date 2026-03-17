@@ -24,14 +24,14 @@ impl Telemetry {
 
 pub struct RequestTimer {
     start: Instant,
-    skill: String
+    skill: String,
 }
 
 impl RequestTimer {
     pub fn new(skill: &str) -> Self {
         Self {
             start: Instant::now(),
-            skill: skill.to_string()
+            skill: skill.to_string(),
         }
     }
 

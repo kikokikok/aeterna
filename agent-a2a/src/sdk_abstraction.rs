@@ -6,12 +6,12 @@ pub trait RadkitAdapter: Send + Sync {
     fn register_skill(
         &self,
         runtime: &mut dyn RadkitRuntime,
-        skill: Box<dyn Skill>
+        skill: Box<dyn Skill>,
     ) -> Result<(), String>;
     fn start_server(
         &self,
         runtime: Box<dyn RadkitRuntime>,
-        addr: std::net::SocketAddr
+        addr: std::net::SocketAddr,
     ) -> Result<(), String>;
 }
 
@@ -46,7 +46,7 @@ impl RadkitAdapter for RadkitV0Adapter {
     fn register_skill(
         &self,
         runtime: &mut dyn RadkitRuntime,
-        skill: Box<dyn Skill>
+        skill: Box<dyn Skill>,
     ) -> Result<(), String> {
         runtime.add_skill(skill);
         Ok(())
@@ -55,14 +55,14 @@ impl RadkitAdapter for RadkitV0Adapter {
     fn start_server(
         &self,
         _runtime: Box<dyn RadkitRuntime>,
-        _addr: std::net::SocketAddr
+        _addr: std::net::SocketAddr,
     ) -> Result<(), String> {
         Ok(())
     }
 }
 
 pub struct RadkitV0Runtime {
-    skills: Vec<Box<dyn Skill>>
+    skills: Vec<Box<dyn Skill>>,
 }
 
 impl RadkitV0Runtime {

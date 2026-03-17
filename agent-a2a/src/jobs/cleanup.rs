@@ -6,14 +6,14 @@ use crate::persistence::ThreadRepository;
 
 pub struct CleanupJob {
     repository: Arc<ThreadRepository>,
-    interval: Duration
+    interval: Duration,
 }
 
 impl CleanupJob {
     pub fn new(repository: Arc<ThreadRepository>, interval_secs: u64) -> Self {
         Self {
             repository,
-            interval: Duration::from_secs(interval_secs)
+            interval: Duration::from_secs(interval_secs),
         }
     }
 
