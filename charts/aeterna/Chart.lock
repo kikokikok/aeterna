@@ -1,0 +1,21 @@
+dependencies:
+- name: cloudnative-pg
+  repository: https://cloudnative-pg.github.io/charts
+  version: 0.23.2
+- name: dragonfly
+  repository: oci://ghcr.io/dragonflydb/dragonfly/helm
+  version: v1.37.0
+- name: qdrant
+  repository: https://qdrant.github.io/qdrant-helm
+  version: 0.10.1
+- name: weaviate
+  repository: https://weaviate.github.io/weaviate-helm
+  version: 17.7.1
+- name: psmdb-operator
+  repository: https://percona.github.io/percona-helm-charts
+  version: 1.21.3
+- name: valkey
+  repository: https://valkey.io/valkey-helm/
+  version: 0.9.3
+digest: sha256:542ca9f6f1b8dd67cf9daf670e0b4c696101c058bef680ef913b08ad772ea40a
+generated: "2026-03-16T17:55:18.156661+01:00"

@@ -35,7 +35,7 @@ dependencies:
     alias: cnpg
 
   - name: dragonfly
-    version: "1.*"
+    version: "v1.37.0"
     repository: oci://ghcr.io/dragonflydb/dragonfly/helm
     condition: dragonfly.enabled
     alias: dragonfly
@@ -59,7 +59,7 @@ dependencies:
     alias: mongodb
 
   - name: valkey
-    version: "1.*"
+    version: "0.9.*"
     repository: https://valkey.io/valkey-helm/
     condition: valkey.enabled
     alias: valkey
