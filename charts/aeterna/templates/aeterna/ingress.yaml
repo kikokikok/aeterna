@@ -1,13 +1,29 @@
 {{- if and .Values.aeterna.enabled .Values.aeterna.ingress.enabled }}
+{{- $authUrl := printf "http://%s-okta-proxy:%v%s/auth" (include "aeterna.fullname" .) .Values.okta.service.port .Values.okta.proxyPrefix -}}
+{{- $authSignin := printf "https://$host%s/start?rd=$escaped_request_uri" .Values.okta.proxyPrefix -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ include "aeterna.fullname" . }}
   labels:
     {{- include "aeterna.labels" . | nindent 4 }}
-  {{- with .Values.aeterna.ingress.annotations }}
+  {{- if or .Values.okta.enabled .Values.aeterna.ingress.annotations }}
   annotations:
+    {{- if .Values.okta.enabled }}
+    nginx.ingress.kubernetes.io/auth-url: {{ $authUrl | quote }}
+    nginx.ingress.kubernetes.io/auth-signin: {{ $authSignin | quote }}
+    nginx.ingress.kubernetes.io/auth-response-headers: {{ join ", " .Values.okta.authResponseHeaders | quote }}
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Auth-Request-User "";
+      proxy_set_header X-Auth-Request-Email "";
+      proxy_set_header X-Auth-Request-Groups "";
+      proxy_set_header X-Auth-Request-Preferred-Username "";
+      proxy_set_header X-Forwarded-User "";
+      proxy_set_header X-Forwarded-Email "";
+    {{- end }}
+    {{- with .Values.aeterna.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
+    {{- end }}
   {{- end }}
 spec:
   {{- if .Values.aeterna.ingress.className }}
@@ -37,5 +53,31 @@ spec:
                 port:
                   number: {{ $.Values.aeterna.service.port }}
           {{- end }}
+    {{- end }}
+{{- end }}
+{{- if and .Values.aeterna.enabled .Values.aeterna.ingress.enabled .Values.okta.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "aeterna.fullname" . }}-okta-proxy
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.aeterna.ingress.className }}
+  ingressClassName: {{ .Values.aeterna.ingress.className }}
+  {{- end }}
+  rules:
+    {{- range .Values.aeterna.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: {{ $.Values.okta.proxyPrefix }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "aeterna.fullname" $ }}-okta-proxy
+                port:
+                  number: {{ $.Values.okta.service.port }}
     {{- end }}
 {{- end }}
