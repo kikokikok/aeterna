@@ -1,5 +1,7 @@
 use clap::{Args, Subcommand};
 
+use crate::ux_error;
+
 #[derive(Args)]
 pub struct RepoArgs {
     #[command(subcommand)]
@@ -126,34 +128,43 @@ async fn handle_request(args: RequestArgs) -> anyhow::Result<()> {
     println!();
 
     output::info("Submitting request to backend...");
-    // TODO: Call storage layer or API
-    output::success(&format!(
-        "Request submitted for repository '{}'.",
-        args.name
-    ));
-    output::hint("An administrator must approve this request before indexing starts.");
-    Ok(())
+    ux_error::server_not_connected().display();
+    anyhow::bail!(
+        "Repository request submission is not available without a live Aeterna backend. \
+         Set AETERNA_SERVER_URL and ensure the server is running."
+    )
 }
 
-async fn handle_list(_args: ListArgs) -> anyhow::Result<()> {
+async fn handle_list(args: ListArgs) -> anyhow::Result<()> {
     use crate::output;
-    output::header("Tracked Repositories");
-    println!();
-    // Placeholder for table output
-    println!(
-        "{:<20} {:<10} {:<15} {:<20}",
-        "NAME", "TYPE", "STATUS", "LAST INDEXED"
-    );
-    println!("{:-<70}", "");
-    output::info("No repositories currently tracked for this tenant.");
-    Ok(())
+
+    if args.json {
+        let output = serde_json::json!({
+            "success": false,
+            "error": "server_not_connected",
+            "message": "Repository listing requires a live Aeterna backend"
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        output::header("Tracked Repositories");
+        println!();
+        ux_error::server_not_connected().display();
+    }
+
+    anyhow::bail!(
+        "Repository listing is not available without a live Aeterna backend. \
+         Set AETERNA_SERVER_URL and ensure the server is running."
+    )
 }
 
 async fn handle_approve(args: ApproveArgs) -> anyhow::Result<()> {
     use crate::output;
     output::info(&format!("Approving request {}...", args.id));
-    output::success("Request approved. Cloning will start in the background.");
-    Ok(())
+    ux_error::server_not_connected().display();
+    anyhow::bail!(
+        "Repository approval is not available without a live Aeterna backend. \
+         Set AETERNA_SERVER_URL and ensure the server is running."
+    )
 }
 
 async fn handle_reject(args: RejectArgs) -> anyhow::Result<()> {
@@ -162,8 +173,11 @@ async fn handle_reject(args: RejectArgs) -> anyhow::Result<()> {
         "Rejecting request {} for reason: {}",
         args.id, args.reason
     ));
-    output::success("Request rejected.");
-    Ok(())
+    ux_error::server_not_connected().display();
+    anyhow::bail!(
+        "Repository rejection is not available without a live Aeterna backend. \
+         Set AETERNA_SERVER_URL and ensure the server is running."
+    )
 }
 
 async fn handle_identity(args: IdentityArgs) -> anyhow::Result<()> {
@@ -171,21 +185,20 @@ async fn handle_identity(args: IdentityArgs) -> anyhow::Result<()> {
     match args.command {
         IdentitySubcommand::Add(add) => {
             output::info(&format!("Adding Git identity '{}'...", add.name));
-            output::success(&format!(
-                "Identity '{}' registered with {} provider.",
-                add.name, add.secret_provider
-            ));
+            ux_error::server_not_connected().display();
+            anyhow::bail!(
+                "Git identity registration is not available without a live Aeterna backend. \
+                 Set AETERNA_SERVER_URL and ensure the server is running."
+            );
         }
         IdentitySubcommand::List => {
             output::header("Git Identities");
             println!();
-            println!(
-                "{:<20} {:<10} {:<20} {:<20}",
-                "NAME", "PROVIDER", "SECRET ID", "TYPE"
+            ux_error::server_not_connected().display();
+            anyhow::bail!(
+                "Git identity listing is not available without a live Aeterna backend. \
+                 Set AETERNA_SERVER_URL and ensure the server is running."
             );
-            println!("{:-<75}", "");
-            output::info("No identities found.");
         }
     }
-    Ok(())
 }

@@ -35,6 +35,7 @@ async fn main() -> Result<()> {
         Commands::Admin(cmd) => commands::admin::run(cmd).await,
         Commands::CodeSearch(cmd) => commands::search::handle_command(cmd).await,
         Commands::Completion(args) => commands::completion::run(args),
-        Commands::Setup(args) => commands::setup::run(args).await
+        Commands::Setup(args) => commands::setup::run(args).await,
+        Commands::Serve(args) => commands::serve::run(args)
     }
 }

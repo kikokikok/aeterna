@@ -65,128 +65,37 @@ pub async fn run(args: SyncArgs) -> Result<()> {
     );
     println!();
 
-    // Simulated sync analysis
-    let sync_state = analyze_sync_state(&args);
-
-    if args.verbose {
-        println!("{}", "  Analysis Details:".bold());
-        println!(
-            "    {} memories pending promotion",
-            sync_state.memories_pending.to_string().yellow()
-        );
-        println!(
-            "    {} knowledge items with stale pointers",
-            sync_state.stale_pointers.to_string().yellow()
-        );
-        println!(
-            "    {} cache entries expired",
-            sync_state.cache_expired.to_string().yellow()
-        );
-        println!();
-    }
-
-    if sync_state.is_synced() && !args.force {
-        println!("{}", "  ✓ Already in sync".green());
-        output::hint("Use --force to re-sync anyway");
-        return Ok(());
-    }
-
-    // Phase 2: Execute sync
-    if args.dry_run {
-        output::subheader("Dry run - changes that would be made:");
-        println!();
-        print_planned_changes(&sync_state);
-        output::hint("Remove --dry-run to apply changes");
-        return Ok(());
-    }
-
-    output::subheader("Syncing...");
-    println!();
-
-    // Simulated sync operations
-    let results = execute_sync(&args, &sync_state);
-
-    // Phase 3: Report results
-    println!();
-    output::subheader("Sync Results");
-    println!();
-
-    println!(
-        "  {} {} memories promoted to knowledge",
-        "✓".green(),
-        results.memories_promoted
-    );
-    println!(
-        "  {} {} stale pointers refreshed",
-        "✓".green(),
-        results.pointers_refreshed
-    );
-    println!(
-        "  {} {} cache entries updated",
-        "✓".green(),
-        results.cache_updated
-    );
-
-    if results.errors > 0 {
-        println!(
-            "  {} {} errors occurred",
-            "✗".red(),
-            results.errors.to_string().red()
-        );
-    }
-
-    println!();
-
-    if results.errors == 0 {
-        output::success("Sync completed successfully");
-    } else {
-        output::warn(&format!("Sync completed with {} errors", results.errors));
-    }
-
-    Ok(())
+    // Sync requires a live backend connection for state analysis and execution.
+    // We cannot accurately report "Already in sync" or "no planned changes"
+    // without querying the real backend — always surface the not-connected state.
+    eprintln!();
+    eprintln!("{} {}", "error:".red().bold(), "Cannot connect to Aeterna server".white().bold());
+    eprintln!("       {}", "The memory/knowledge backend is not running or unreachable".dimmed());
+    eprintln!();
+    eprintln!("{}", "How to fix:".yellow().bold());
+    eprintln!("  1. Start the Aeterna server");
+    eprintln!("  2. Check your network connection");
+    eprintln!("  3. Verify server URL in .aeterna/context.toml");
+    eprintln!();
+    Err(server_not_connected_error())
 }
 
 async fn run_json(args: SyncArgs, ctx: &context::ResolvedContext) -> Result<()> {
-    let sync_state = analyze_sync_state(&args);
-
-    if args.dry_run {
-        let output = serde_json::json!({
-            "dry_run": true,
-            "context": {
-                "tenant_id": ctx.tenant_id.value,
-                "project_id": ctx.project_id.as_ref().map(|p| &p.value),
-            },
-            "direction": args.direction,
-            "planned_changes": {
-                "memories_to_promote": sync_state.memories_pending,
-                "pointers_to_refresh": sync_state.stale_pointers,
-                "cache_to_update": sync_state.cache_expired,
-            },
-            "already_synced": sync_state.is_synced(),
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-        return Ok(());
-    }
-
-    let results = execute_sync(&args, &sync_state);
-
-    let output = serde_json::json!({
-        "success": results.errors == 0,
+    // All sync operations (including dry-run) require a live backend connection.
+    // Without a real connection we cannot report accurate planned changes or sync state.
+    let err_output = serde_json::json!({
+        "success": false,
+        "error": "server_not_connected",
         "context": {
             "tenant_id": ctx.tenant_id.value,
             "project_id": ctx.project_id.as_ref().map(|p| &p.value),
         },
         "direction": args.direction,
-        "results": {
-            "memories_promoted": results.memories_promoted,
-            "pointers_refreshed": results.pointers_refreshed,
-            "cache_updated": results.cache_updated,
-            "errors": results.errors,
-        }
+        "dry_run": args.dry_run,
+        "message": "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running."
     });
-    println!("{}", serde_json::to_string_pretty(&output)?);
-
-    Ok(())
+    println!("{}", serde_json::to_string_pretty(&err_output)?);
+    Err(server_not_connected_error())
 }
 
 struct SyncState {
@@ -201,6 +110,7 @@ impl SyncState {
     }
 }
 
+#[derive(Debug)]
 struct SyncResults {
     memories_promoted: u32,
     pointers_refreshed: u32,
@@ -209,8 +119,8 @@ struct SyncResults {
 }
 
 fn analyze_sync_state(_args: &SyncArgs) -> SyncState {
-    // TODO: Replace with actual sync analysis when backend is implemented
-    // This simulates finding items that need syncing
+    // Server not connected: returns zeros as a structural sentinel.
+    // Callers MUST NOT use is_synced() on this result to gate real sync decisions.
     SyncState {
         memories_pending: 0,
         stale_pointers: 0,
@@ -218,14 +128,16 @@ fn analyze_sync_state(_args: &SyncArgs) -> SyncState {
     }
 }
 
-fn execute_sync(_args: &SyncArgs, state: &SyncState) -> SyncResults {
-    // TODO: Replace with actual sync operations when backend is implemented
-    SyncResults {
-        memories_promoted: state.memories_pending,
-        pointers_refreshed: state.stale_pointers,
-        cache_updated: state.cache_expired,
-        errors: 0
-    }
+fn server_not_connected_error() -> anyhow::Error {
+    anyhow::anyhow!(
+        "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running.\n         Use --dry-run to preview sync changes without a server connection."
+    )
+}
+
+fn execute_sync(_args: &SyncArgs, _state: &SyncState) -> anyhow::Result<SyncResults> {
+    // Non-dry-run sync requires a live backend connection.
+    // Return an error instead of silently reporting zero changes.
+    Err(server_not_connected_error())
 }
 
 fn print_planned_changes(state: &SyncState) {
@@ -277,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn test_analyze_sync_state() {
+    fn test_analyze_sync_state_returns_sentinel() {
         let args = SyncArgs {
             json: false,
             dry_run: false,
@@ -285,13 +197,17 @@ mod tests {
             direction: "all".to_string(),
             verbose: false
         };
+        // analyze_sync_state returns a zero-valued sentinel (server not connected).
+        // The caller must NOT interpret this as "already in sync" —
+        // it only means no real data was fetched from the backend.
         let state = analyze_sync_state(&args);
-        // Currently returns empty state
-        assert!(state.is_synced());
+        assert_eq!(state.memories_pending, 0);
+        assert_eq!(state.stale_pointers, 0);
+        assert_eq!(state.cache_expired, 0);
     }
 
     #[test]
-    fn test_execute_sync() {
+    fn test_execute_sync_returns_error_when_not_connected() {
         let args = SyncArgs {
             json: false,
             dry_run: false,
@@ -304,10 +220,9 @@ mod tests {
             stale_pointers: 3,
             cache_expired: 2
         };
-        let results = execute_sync(&args, &state);
-        assert_eq!(results.memories_promoted, 5);
-        assert_eq!(results.pointers_refreshed, 3);
-        assert_eq!(results.cache_updated, 2);
-        assert_eq!(results.errors, 0);
+        let result = execute_sync(&args, &state);
+        assert!(result.is_err(), "execute_sync must fail when server not connected");
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("not connected"), "error message should mention not connected");
     }
 }

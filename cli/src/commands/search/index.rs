@@ -3,6 +3,7 @@
 //! Trigger re-indexing for a repository.
 
 use crate::output;
+use crate::ux_error;
 use clap::Args;
 
 #[derive(Args)]
@@ -49,14 +50,9 @@ pub async fn handle(args: IndexArgs) -> anyhow::Result<()> {
         strategy, args.repo
     ));
 
-    // Mock implementation for now
-    if args.r#async {
-        output::success("Indexing job submitted to background worker.");
-    } else {
-        output::info("Calculating deltas...");
-        // TODO: Call RepoManager::reindex_repository
-        output::success("Indexing completed successfully.");
-    }
-
-    Ok(())
+    ux_error::server_not_connected().display();
+    anyhow::bail!(
+        "Code Search indexing is not available without a live Aeterna backend. \
+         Set AETERNA_SERVER_URL and ensure the server is running."
+    )
 }

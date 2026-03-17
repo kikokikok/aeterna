@@ -504,13 +504,15 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
                     if args.dry_run {
                         output::hint("Remove --dry-run to apply migrations");
                     } else {
-                        // Simulate migration
-                        println!("  Applying migrations...");
-                        for migration in &to_apply {
-                            println!("    ✓ Applied {}", migration.version);
-                        }
-                        println!();
-                        println!("  ✓ All migrations applied successfully");
+                        // Non-dry-run migration requires a live database connection.
+                        ux_error::UxError::new("Cannot apply migrations: database not connected")
+                            .why("The Aeterna server and database must be running to apply migrations")
+                            .fix("Start the Aeterna server: aeterna serve")
+                            .fix("Ensure DATABASE_URL is set and the database is reachable")
+                            .fix("Use --dry-run to preview migrations without connecting")
+                            .suggest("aeterna admin migrate --dry-run")
+                            .display();
+                        std::process::exit(1);
                     }
                 }
             }
@@ -528,6 +530,15 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
                 println!("  ← Rolling back to {target_version}");
                 if args.dry_run {
                     output::hint("Remove --dry-run to execute rollback");
+                } else {
+                    // Non-dry-run rollback requires a live database connection.
+                    ux_error::UxError::new("Cannot rollback migrations: database not connected")
+                        .why("The Aeterna server and database must be running to roll back migrations")
+                        .fix("Start the Aeterna server: aeterna serve")
+                        .fix("Ensure DATABASE_URL is set and the database is reachable")
+                        .suggest("aeterna admin migrate down --dry-run --force")
+                        .display();
+                    std::process::exit(1);
                 }
             }
             _ => {
@@ -643,7 +654,7 @@ async fn run_export(args: AdminExportArgs) -> anyhow::Result<()> {
     let resolver = ContextResolver::new();
     let _ctx = resolver.resolve()?;
 
-    let output_path = args.output.unwrap_or_else(|| {
+    let _output_path = args.output.unwrap_or_else(|| {
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let ext = match args.format {
             ExportFormat::Json => "json",
@@ -654,74 +665,25 @@ async fn run_export(args: AdminExportArgs) -> anyhow::Result<()> {
         PathBuf::from(format!("aeterna_export_{timestamp}.{ext}{suffix}"))
     });
 
-    // Simulated export statistics
-    let stats = ExportStats {
-        memories: 1247,
-        knowledge_items: 89,
-        policies: 23,
-        config_files: 4,
-        audit_entries: if args.include_audit { 15420 } else { 0 }
-    };
-
+    // Export requires a live backend connection to read actual data.
     if args.json {
-        let output = json!({
-            "success": true,
-            "output_path": output_path.to_string_lossy(),
-            "format": format!("{:?}", args.format).to_lowercase(),
-            "compressed": args.compress,
-            "layer_filter": args.layer,
-            "include_audit": args.include_audit,
-            "statistics": {
-                "memories": stats.memories,
-                "knowledge_items": stats.knowledge_items,
-                "policies": stats.policies,
-                "config_files": stats.config_files,
-                "audit_entries": stats.audit_entries,
-            },
+        let err_output = json!({
+            "success": false,
+            "error": "server_not_connected",
+            "message": "Export requires a live Aeterna server connection. Set AETERNA_SERVER_URL and ensure the server is running."
         });
-        println!("{}", serde_json::to_string_pretty(&output)?);
+        println!("{}", serde_json::to_string_pretty(&err_output)?);
     } else {
-        output::header("Data Export");
-        println!();
-
-        println!("  Target:      {}", args.target);
-        println!("  Output:      {}", output_path.display());
-        println!("  Format:      {:?}", args.format);
-        if args.compress {
-            println!("  Compression: gzip");
-        }
-        if let Some(layer) = &args.layer {
-            println!("  Layer:       {layer}");
-        }
-        println!();
-
-        output::subheader("Export Statistics");
-        println!("  Memories:        {:>6}", stats.memories);
-        println!("  Knowledge Items: {:>6}", stats.knowledge_items);
-        println!("  Policies:        {:>6}", stats.policies);
-        println!("  Config Files:    {:>6}", stats.config_files);
-        if args.include_audit {
-            println!("  Audit Entries:   {:>6}", stats.audit_entries);
-        }
-        println!();
-
-        // Simulate export progress
-        println!("  Exporting...");
-        println!("    ✓ Memories exported");
-        println!("    ✓ Knowledge exported");
-        println!("    ✓ Policies exported");
-        println!("    ✓ Config exported");
-        if args.include_audit {
-            println!("    ✓ Audit log exported");
-        }
-        println!();
-
-        println!("  ✓ Export complete: {}", output_path.display());
-        println!();
-        output::hint("Use 'aeterna admin import' to restore this backup");
+        ux_error::UxError::new("Cannot export: server not connected")
+            .why("Export reads live data from the memory and knowledge backends")
+            .fix("Start the Aeterna server: aeterna serve")
+            .fix("Ensure AETERNA_SERVER_URL is set and the server is reachable")
+            .suggest("aeterna serve")
+            .display();
     }
-
-    Ok(())
+    anyhow::bail!(
+        "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running."
+    )
 }
 
 async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
@@ -823,25 +785,18 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
 
         if args.dry_run {
             output::hint("Remove --dry-run to execute import");
-        } else if !args.skip_validation {
-            // Simulate import progress
-            println!("  Importing...");
-            println!("    ✓ Validated import file");
-            println!("    ✓ Imported {} memories", analysis.memories);
-            println!(
-                "    ✓ Imported {} knowledge items",
-                analysis.knowledge_items
-            );
-            println!("    ✓ Imported {} policies", analysis.policies);
-            if !analysis.conflicts.is_empty() {
-                println!(
-                    "    ℹ {} conflicts resolved using {:?} mode",
-                    analysis.conflicts.len(),
-                    args.mode
-                );
-            }
-            println!();
-            println!("  ✓ Import complete");
+        } else {
+            // Non-dry-run import requires a live backend connection.
+            ux_error::UxError::new("Cannot import: server not connected")
+                .why("Import writes to the live memory and knowledge backends")
+                .fix("Start the Aeterna server: aeterna serve")
+                .fix("Ensure AETERNA_SERVER_URL is set and the server is reachable")
+                .fix("Use --dry-run to validate the import file without connecting")
+                .suggest("aeterna admin import --dry-run")
+                .display();
+            return Err(anyhow::anyhow!(
+                "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running."
+            ));
         }
     }
 
@@ -859,54 +814,17 @@ struct HealthCheck {
 }
 
 async fn check_component_health(component: &str, _timeout: u64) -> HealthCheck {
-    // Simulated health check - in real implementation, this would
-    // actually ping the various services
-    let mut details = std::collections::HashMap::new();
-
+    // Not connected to live backend: report honest "not_connected" status.
+    // Real implementation would ping each service endpoint via AETERNA_SERVER_URL.
+    let details = std::collections::HashMap::new();
     match component {
-        "memory" => {
-            details.insert("backend".to_string(), "qdrant".to_string());
-            details.insert("vectors".to_string(), "1247".to_string());
-            HealthCheck {
-                component: "memory".to_string(),
-                status: "healthy".to_string(),
-                latency_ms: 12,
-                message: "Vector store responding".to_string(),
-                details
-            }
-        }
-        "knowledge" => {
-            details.insert("backend".to_string(), "git".to_string());
-            details.insert("items".to_string(), "89".to_string());
-            HealthCheck {
-                component: "knowledge".to_string(),
-                status: "healthy".to_string(),
-                latency_ms: 5,
-                message: "Repository accessible".to_string(),
-                details
-            }
-        }
-        "policy" => {
-            details.insert("engine".to_string(), "cedar".to_string());
-            details.insert("policies".to_string(), "23".to_string());
-            HealthCheck {
-                component: "policy".to_string(),
-                status: "healthy".to_string(),
-                latency_ms: 8,
-                message: "Cedar agent responding".to_string(),
-                details
-            }
-        }
-        "context" => {
-            details.insert("resolver".to_string(), "auto".to_string());
-            HealthCheck {
-                component: "context".to_string(),
-                status: "healthy".to_string(),
-                latency_ms: 1,
-                message: "Context resolution working".to_string(),
-                details
-            }
-        }
+        "memory" | "knowledge" | "policy" | "context" => HealthCheck {
+            component: component.to_string(),
+            status: "not_connected".to_string(),
+            latency_ms: 0,
+            message: "Server not connected — set AETERNA_SERVER_URL to enable health checks".to_string(),
+            details
+        },
         _ => HealthCheck {
             component: component.to_string(),
             status: "unknown".to_string(),
@@ -1013,18 +931,19 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_health_check_all_components() {
-        let memory = check_component_health("memory", 30).await;
-        assert_eq!(memory.status, "healthy");
-
-        let knowledge = check_component_health("knowledge", 30).await;
-        assert_eq!(knowledge.status, "healthy");
-
-        let policy = check_component_health("policy", 30).await;
-        assert_eq!(policy.status, "healthy");
-
-        let context = check_component_health("context", 30).await;
-        assert_eq!(context.status, "healthy");
+    async fn test_health_check_all_components_not_connected() {
+        // When server is not connected, all known components report "not_connected".
+        for component in &["memory", "knowledge", "policy", "context"] {
+            let check = check_component_health(component, 30).await;
+            assert_eq!(
+                check.status, "not_connected",
+                "component '{}' should report not_connected when server is absent", component
+            );
+            assert!(
+                check.message.contains("not connected") || check.message.contains("AETERNA_SERVER_URL"),
+                "message should explain the not-connected state"
+            );
+        }
     }
 
     #[tokio::test]
@@ -1478,30 +1397,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_health_check_memory_details() {
-        let check = check_component_health("memory", 30).await;
-        assert_eq!(check.details.get("backend"), Some(&"qdrant".to_string()));
-        assert!(check.details.contains_key("vectors"));
-    }
-
-    #[tokio::test]
-    async fn test_health_check_knowledge_details() {
-        let check = check_component_health("knowledge", 30).await;
-        assert_eq!(check.details.get("backend"), Some(&"git".to_string()));
-        assert!(check.details.contains_key("items"));
-    }
-
-    #[tokio::test]
-    async fn test_health_check_policy_details() {
-        let check = check_component_health("policy", 30).await;
-        assert_eq!(check.details.get("engine"), Some(&"cedar".to_string()));
-        assert!(check.details.contains_key("policies"));
-    }
-
-    #[tokio::test]
-    async fn test_health_check_context_details() {
-        let check = check_component_health("context", 30).await;
-        assert_eq!(check.details.get("resolver"), Some(&"auto".to_string()));
+    async fn test_health_check_not_connected_has_no_fake_details() {
+        // When not connected, no fake detail values (vector counts, etc.) should appear.
+        for component in &["memory", "knowledge", "policy", "context"] {
+            let check = check_component_health(component, 30).await;
+            assert!(check.details.is_empty(), "component '{}' must not have fake details when disconnected", component);
+        }
     }
 
     #[tokio::test]

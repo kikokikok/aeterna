@@ -19,11 +19,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
         uses: actions/cache@v3
@@ -55,11 +51,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
         uses: actions/cache@v3
@@ -76,6 +68,41 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
+  shipped-smoke:
+    name: Shipped Path Smoke Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run shipped CLI entrypoint smoke tests
+        run: cargo test -p aeterna --test cli_e2e_test serve_and_migration_entrypoints -- --nocapture
+
+      - name: Run shipped CLI fail-closed smoke tests
+        run: |
+          cargo test -p aeterna --test cli_e2e_test check_subcommand -- --nocapture
+          cargo test -p aeterna --test cli_e2e_test sync_subcommand -- --nocapture
+          cargo test -p aeterna --test cli_e2e_test codesearch_runtime_subcommand -- --nocapture
+
+      - name: Run agent-a2a runtime smoke tests
+        run: cargo test -p agent-a2a --test a2a_test -- --nocapture
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
@@ -85,11 +112,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
           components: clippy
 
       - name: Cache cargo
@@ -116,11 +140,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
         uses: actions/cache@v3
@@ -131,14 +151,19 @@ jobs:
       - name: Install tarpaulin
         run: cargo install cargo-tarpaulin
 
-      - name: Run tarpaulin
-        run: cargo tarpaulin --out Html --timeout 300 --workspace
+      # Minimum 80% line coverage enforced. The --fail-under flag exits non-zero
+      # if the measured coverage is below the threshold, failing the CI job.
+      - name: Run tarpaulin with coverage gate
+        run: cargo tarpaulin --out Html --out Json --timeout 300 --workspace --fail-under 80
 
-      - name: Upload coverage
+      - name: Upload coverage report
+        if: always()
         uses: actions/upload-artifact@v3
         with:
           name: coverage-report
-          path: tarpaulin-report.html
+          path: |
+            tarpaulin-report.html
+            tarpaulin-report.json
 
   mutation-testing:
     name: Mutation Testing
@@ -149,11 +174,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
         uses: actions/cache@v3
