@@ -35,6 +35,52 @@ impl OpenAIEmbeddingService {
         }
     }
 
+    /// Create with a custom OpenAI-compatible API base URL.
+    pub fn with_base_url(api_key: String, base_url: &str, model: &str, dimension: usize) -> Self {
+        let config = async_openai::config::OpenAIConfig::new()
+            .with_api_key(api_key)
+            .with_api_base(base_url);
+        let client = async_openai::Client::with_config(config);
+
+        Self {
+            client,
+            model: model.to_string(),
+            dimension,
+            cache: Arc::new(RwLock::new(lru::LruCache::new(
+                std::num::NonZeroUsize::new(1000).unwrap(),
+            ))),
+            redis: None,
+        }
+    }
+
+    /// Create from environment variables for easy local development:
+    /// - `EMBEDDING_API_BASE` (default: https://api.openai.com/v1)
+    /// - `EMBEDDING_API_KEY` or `OPENAI_API_KEY` (default: "not-needed")
+    /// - `EMBEDDING_MODEL` (default: text-embedding-ada-002)
+    /// - `EMBEDDING_DIMENSION` (default: 1536)
+    pub fn from_env() -> Self {
+        let api_key = std::env::var("EMBEDDING_API_KEY")
+            .or_else(|_| std::env::var("OPENAI_API_KEY"))
+            .unwrap_or_else(|_| "not-needed".to_string());
+
+        let base_url = std::env::var("EMBEDDING_API_BASE")
+            .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+
+        let model = std::env::var("EMBEDDING_MODEL")
+            .unwrap_or_else(|_| "text-embedding-ada-002".to_string());
+
+        let dimension: usize = std::env::var("EMBEDDING_DIMENSION")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1536);
+
+        if base_url != "https://api.openai.com/v1" {
+            Self::with_base_url(api_key, &base_url, &model, dimension)
+        } else {
+            Self::new(api_key, &model)
+        }
+    }
+
     pub fn with_redis(mut self, redis: Arc<RwLock<RedisStorage>>) -> Self {
         self.redis = Some(redis);
         self
@@ -220,6 +266,54 @@ mod tests {
 
         let cached = cache.get("nonexistent_text");
         assert!(cached.is_none(), "Should return None for nonexistent key");
+    }
+
+    #[test]
+    fn test_with_base_url() {
+        let service = OpenAIEmbeddingService::with_base_url(
+            "not-needed".to_string(),
+            "http://localhost:8080/v1",
+            "text-embedding-nomic-embed-text-v1.5",
+            768,
+        );
+        assert_eq!(service.dimension(), 768);
+        assert_eq!(service.model, "text-embedding-nomic-embed-text-v1.5");
+    }
+
+    #[test]
+    fn test_from_env_defaults() {
+        // Temporarily clear env vars that from_env() reads so we get true defaults
+        let saved_vars: Vec<(String, Option<String>)> = [
+            "EMBEDDING_API_KEY",
+            "OPENAI_API_KEY",
+            "EMBEDDING_API_BASE",
+            "EMBEDDING_MODEL",
+            "EMBEDDING_DIMENSION",
+        ]
+        .iter()
+        .map(|k| (k.to_string(), std::env::var(k).ok()))
+        .collect();
+        // SAFETY: This test is single-threaded and restores vars before returning
+        unsafe {
+            for (k, _) in &saved_vars {
+                std::env::remove_var(k);
+            }
+        }
+
+        let service = OpenAIEmbeddingService::from_env();
+        // Default dimension is 1536 for text-embedding-ada-002
+        assert_eq!(service.dimension(), 1536);
+
+        // Restore env vars
+        // SAFETY: This test is single-threaded and restores vars before returning
+        unsafe {
+            for (k, v) in saved_vars {
+                match v {
+                    Some(val) => std::env::set_var(&k, val),
+                    None => std::env::remove_var(&k),
+                }
+            }
+        }
     }
 
     #[test]

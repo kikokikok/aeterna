@@ -122,6 +122,7 @@ pub struct IndexMetadata {
 pub struct RepoRequest {
     pub id: Uuid,
     pub repository_id: Uuid,
+    pub tenant_id: String,
     pub requester_id: String,
     pub status: RepoRequestStatus,
     pub policy_result: Option<serde_json::Value>,
@@ -155,6 +156,7 @@ pub struct CreateIdentity {
 
 pub struct CreateRequest {
     pub repository_id: Uuid,
+    pub tenant_id: String,
     pub requester_id: String,
 }
 
@@ -314,12 +316,13 @@ impl RepoStorage {
     pub async fn create_request(&self, req: &CreateRequest) -> Result<RepoRequest, sqlx::Error> {
         let row: RepoRequest = sqlx::query_as(
             r#"
-            INSERT INTO codesearch_requests (repository_id, requester_id)
-            VALUES ($1, $2)
+            INSERT INTO codesearch_requests (repository_id, tenant_id, requester_id)
+            VALUES ($1, $2, $3)
             RETURNING *
             "#,
         )
         .bind(req.repository_id)
+        .bind(&req.tenant_id)
         .bind(&req.requester_id)
         .fetch_one(&self.pool)
         .await?;
@@ -555,6 +558,7 @@ impl RepoManager {
             self.storage
                 .create_request(&CreateRequest {
                     repository_id: repo.id,
+                    tenant_id: tenant_id.to_string(),
                     requester_id: requester_id.to_string(),
                 })
                 .await

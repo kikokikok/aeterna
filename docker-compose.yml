@@ -1,17 +1,17 @@
-# Docker Compose configuration for Aeterna Memory-Knowledge System
+# Docker Compose configuration for Aeterna local development dependencies.
 #
-# Local development environment with all required services including:
+# This file starts supporting infrastructure only:
 # - Core storage (PostgreSQL, Qdrant, Redis)
-# - OPAL stack (OPAL Server, Cedar Agent via OPAL Client)
-# - Custom data fetcher (opal-fetcher)
+# - Optional OPAL stack (OPAL Server, Cedar Agent via OPAL Client)
+# - Optional local admin tools and OPAL fetcher
+#
+# It does not start the main Aeterna application runtime.
+# Use the `aeterna` CLI locally for the currently verified repository workflow.
 #
 # Usage:
-#   docker compose up -d                    # Start all services
-#   docker compose up -d postgres redis     # Start only core storage
-#   docker compose --profile opal up -d     # Start with OPAL stack
-#
-# Generate OPAL keys before first run:
-#   cd scripts && ./generate-opal-keys.sh
+#   docker compose up -d postgres qdrant redis  # Start recommended core deps
+#   docker compose up -d                        # Start all services
+#   docker compose --profile opal up -d         # Start with OPAL stack
 
 services:
   # ==========================================================================
@@ -39,7 +39,7 @@ services:
 
   # Qdrant vector database
   qdrant:
-    image: qdrant/qdrant:v1.12.0
+    image: qdrant/qdrant:v1.16.2
     container_name: aeterna-qdrant
     ports:
       - "6333:6333"
@@ -47,7 +47,7 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/localhost/6333' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

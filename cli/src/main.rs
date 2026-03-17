@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
+mod backend;
 mod commands;
 mod output;
 pub mod ux_error;
@@ -35,6 +36,6 @@ async fn main() -> Result<()> {
         Commands::Admin(cmd) => commands::admin::run(cmd).await,
         Commands::CodeSearch(cmd) => commands::search::handle_command(cmd).await,
         Commands::Completion(args) => commands::completion::run(args),
-        Commands::Setup(args) => commands::setup::run(args).await
+        Commands::Setup(args) => commands::setup::run(args).await,
     }
 }

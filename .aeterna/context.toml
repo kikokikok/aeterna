@@ -1,0 +1,6 @@
+tenant-id = "local-tenant"
+user-id = "local-user"
+project-id = "kikokikok/aeterna"
+
+[hints]
+preset = "standard"

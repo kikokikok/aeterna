@@ -28,6 +28,21 @@ impl OpenAILlmService {
             cache: Arc::new(RwLock::new(cache)),
         }
     }
+
+    /// Create with a custom OpenAI-compatible API base URL.
+    pub fn with_base_url(api_key: String, base_url: &str, model: String) -> Self {
+        let config = async_openai::config::OpenAIConfig::new()
+            .with_api_key(api_key)
+            .with_api_base(base_url);
+        let client = async_openai::Client::with_config(config);
+        let cache = lru::LruCache::new(NonZeroUsize::new(100).unwrap());
+
+        Self {
+            client,
+            model,
+            cache: Arc::new(RwLock::new(cache)),
+        }
+    }
 }
 
 #[async_trait]

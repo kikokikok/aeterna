@@ -704,28 +704,22 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires running codesearch sidecar and kind cluster"]
     async fn test_sidecar_deployment_in_kind_cluster() {
-        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
-            base_url: "http://localhost:9090".to_string(),
-            ..CodeSearchConfig::default()
-        }));
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig::default()));
         let tool = CodeSearchTool::new(client);
         let params = serde_json::json!({ "query": "authentication" });
-        let result = tool.execute(params).await;
+        let result = tool.call(params).await;
         assert!(result.is_ok(), "sidecar must respond: {:?}", result.err());
     }
 
     #[tokio::test]
     #[ignore = "requires shared Qdrant backend (localhost:6333)"]
     async fn test_shared_qdrant_backend() {
-        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
-            base_url: "http://localhost:9090".to_string(),
-            ..CodeSearchConfig::default()
-        }));
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig::default()));
         let tool = CodeSearchTool::new(client);
         let params = serde_json::json!({ "query": "vector storage", "limit": 3 });
-        let result = tool.execute(params).await;
+        let result = tool.call(params).await;
         assert!(result.is_ok());
-        let val: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap_or_default();
+        let val = result.unwrap();
         assert!(
             val.get("results").is_some(),
             "response must contain results"
@@ -735,13 +729,10 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires shared PostgreSQL backend (localhost:5432)"]
     async fn test_shared_postgres_backend() {
-        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
-            base_url: "http://localhost:9090".to_string(),
-            ..CodeSearchConfig::default()
-        }));
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig::default()));
         let tool = CodeIndexStatusTool::new(client);
         let params = serde_json::json!({});
-        let result = tool.execute(params).await;
+        let result = tool.call(params).await;
         assert!(
             result.is_ok(),
             "index status must work with postgres backend"
@@ -751,13 +742,10 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires MCP inter-container communication to be configured"]
     async fn test_mcp_communication_between_containers() {
-        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
-            base_url: "http://aeterna-codesearch:9090".to_string(),
-            ..CodeSearchConfig::default()
-        }));
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig::default()));
         let trace_tool = CodeTraceCallersTool::new(client);
         let params = serde_json::json!({ "symbol": "main" });
-        let result = trace_tool.execute(params).await;
+        let result = trace_tool.call(params).await;
         assert!(
             result.is_ok(),
             "MCP proxy must relay trace calls to sidecar"
@@ -767,20 +755,17 @@ mod tests {
     #[tokio::test]
     #[ignore = "e2e: requires full stack (codesearch binary, Qdrant, PostgreSQL, indexed codebase)"]
     async fn test_e2e_index_search_trace_memory_link() {
-        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
-            base_url: "http://localhost:9090".to_string(),
-            ..CodeSearchConfig::default()
-        }));
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig::default()));
         let search_tool = CodeSearchTool::new(client.clone());
         let trace_tool = CodeTraceCallersTool::new(client);
 
         let search_result = search_tool
-            .execute(serde_json::json!({ "query": "memory add", "limit": 5 }))
+            .call(serde_json::json!({ "query": "memory add", "limit": 5 }))
             .await;
         assert!(search_result.is_ok(), "search step failed");
 
         let trace_result = trace_tool
-            .execute(serde_json::json!({ "symbol": "memory_add" }))
+            .call(serde_json::json!({ "symbol": "memory_add" }))
             .await;
         assert!(trace_result.is_ok(), "trace step failed");
     }
@@ -788,20 +773,17 @@ mod tests {
     #[tokio::test]
     #[ignore = "e2e: requires Aeterna codebase to be indexed in Code Search"]
     async fn test_e2e_with_aeterna_codebase() {
-        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig {
-            base_url: "http://localhost:9090".to_string(),
-            ..CodeSearchConfig::default()
-        }));
+        let client = Arc::new(CodeSearchClient::new(CodeSearchConfig::default()));
         let tool = CodeSearchTool::new(client);
         let result = tool
-            .execute(serde_json::json!({
+            .call(serde_json::json!({
                 "query": "MemoryManager",
                 "language": "rust",
                 "limit": 10
             }))
             .await;
         assert!(result.is_ok());
-        let val: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap_or_default();
+        let val = result.unwrap();
         let results = val["results"].as_array().cloned().unwrap_or_default();
         assert!(
             !results.is_empty(),

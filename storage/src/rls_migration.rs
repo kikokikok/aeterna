@@ -1,6 +1,6 @@
 use sqlx::{AssertSqlSafe, PgPool};
 
-const TENANT_TABLES: [&str; 3] = ["sync_states", "memory_entries", "knowledge_items"];
+const TENANT_TABLES: [&str; 3] = ["sync_state", "memory_entries", "knowledge_items"];
 
 pub async fn run_rls_migration(pool: &PgPool) -> Result<(), sqlx::Error> {
     for table in TENANT_TABLES {

@@ -1,0 +1,82 @@
+# values-dev.yaml — Dependencies-only deployment for local development
+#
+# Use this when running aeterna services on bare metal (cargo run)
+# while keeping infrastructure (PostgreSQL, Qdrant, Dragonfly) in K8s.
+#
+# Usage:
+#   helm install aeterna charts/aeterna -f charts/aeterna/examples/values-dev.yaml -n aeterna --create-namespace
+
+deploymentMode: local
+
+# Disable aeterna server — we'll run it via cargo run
+aeterna:
+  enabled: false
+
+# --- Infrastructure dependencies ---
+
+postgresql:
+  bundled: true
+  cnpg:
+    instances: 1
+    storage:
+      size: 5Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: true
+    replicas: 1
+    storage:
+      size: 5Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+cache:
+  type: dragonfly
+  dragonfly:
+    bundled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+# Disable OPAL for simple dev setup
+opal:
+  enabled: false
+
+# No LLM bundled — configure your own OpenAI-compatible endpoint
+llm:
+  provider: none
+
+# No ingress needed — use port-forward
+ingress:
+  enabled: false
+
+# No monitoring for dev
+observability:
+  serviceMonitor:
+    enabled: false
+  tracing:
+    enabled: false
+
+logging:
+  level: debug
+  format: pretty
+
+networkPolicy:
+  enabled: false

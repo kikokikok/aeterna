@@ -1,0 +1,132 @@
+# Aeterna Local Development Values
+# Full K8s deployment for local testing via Rancher Desktop / k3s
+
+deploymentMode: local
+
+aeterna:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: agent-a2a
+    tag: local
+    pullPolicy: Never
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+  # Override probes to match our actual /health endpoint
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  startupProbe:
+    httpGet:
+      path: /health
+      port: http
+    failureThreshold: 30
+    periodSeconds: 5
+
+  # Expose via NodePort for easy local access
+  service:
+    type: NodePort
+    port: 8080
+    nodePort: 30080
+
+  # Disable HA features for local
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+
+  # No ingress needed locally (use NodePort)
+  ingress:
+    enabled: false
+
+  features:
+    cca: true
+    radkit: false
+    rlm: true
+    reflective: true
+
+# Use bundled Qdrant
+vectorBackend:
+  type: qdrant
+  qdrant:
+    bundled: true
+
+# No cache needed for local (skills are stubs)
+cache:
+  type: valkey
+  dragonfly:
+    enabled: false
+  valkey:
+    bundled: false
+
+# Use bundled PostgreSQL via CloudNativePG
+postgresql:
+  bundled: true
+  cloudnativepg:
+    enabled: true
+    instances: 1
+    storage:
+      size: 5Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+# Disable OPAL for local testing
+opal:
+  enabled: false
+
+# No LLM by default (configure via env override)
+llm:
+  provider: none
+
+# Minimal observability
+observability:
+  serviceMonitor:
+    enabled: false
+  tracing:
+    enabled: false
+  logging:
+    level: debug
+    format: pretty
+
+# No network policies for local
+networkPolicy:
+  enabled: false
+
+# CNPG operator installed separately (not as subchart)
+cnpg:
+  enabled: false
+
+qdrant:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    size: 5Gi
+  resources:
+    limits:
+      cpu: 200m
+      memory: 512Mi
+    requests:
+      cpu: 50m
+      memory: 256Mi

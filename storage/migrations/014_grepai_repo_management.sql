@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS codesearch_index_metadata (
 CREATE TABLE IF NOT EXISTS codesearch_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     repository_id UUID NOT NULL REFERENCES codesearch_repositories(id) ON DELETE CASCADE,
+    tenant_id TEXT NOT NULL,
     requester_id TEXT NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'requested' CHECK (status IN ('requested', 'pending', 'approved', 'rejected')),
     policy_result JSONB,

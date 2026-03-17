@@ -1,0 +1,12 @@
+target/
+.git/
+.gitignore
+*.md
+docs/
+website/
+openspec/
+deploy/
+test_pid
+.aeterna/
+.opencode/
+opencode.jsonc

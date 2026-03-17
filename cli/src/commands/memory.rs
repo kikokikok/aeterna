@@ -1,10 +1,15 @@
 use clap::{Args, Subcommand};
 use context::ContextResolver;
 use mk_core::hints::{HintPreset, OperationHints};
+use mk_core::types::{TenantContext, TenantId, UserId};
 use serde_json::json;
+use std::collections::HashMap;
 
+use crate::backend;
 use crate::output;
 use crate::ux_error;
+
+use std::str::FromStr;
 
 #[derive(Subcommand)]
 pub enum MemoryCommand {
@@ -27,7 +32,7 @@ pub enum MemoryCommand {
     Feedback(MemoryFeedbackArgs),
 
     #[command(about = "Promote a memory to a broader layer")]
-    Promote(MemoryPromoteArgs)
+    Promote(MemoryPromoteArgs),
 }
 
 #[derive(Args)]
@@ -65,7 +70,7 @@ pub struct MemorySearchArgs {
 
     /// Dry run - don't actually search, just show what would happen
     #[arg(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 #[derive(Args)]
@@ -95,7 +100,7 @@ pub struct MemoryAddArgs {
 
     /// Dry run - don't actually store, just show what would happen
     #[arg(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 #[derive(Args)]
@@ -113,7 +118,7 @@ pub struct MemoryDeleteArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -128,7 +133,7 @@ pub struct MemoryListArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -138,7 +143,7 @@ pub struct MemoryShowArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -164,7 +169,7 @@ pub struct MemoryFeedbackArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -198,7 +203,7 @@ pub struct MemoryPromoteArgs {
 
     /// Dry run - don't actually promote, just show what would happen
     #[arg(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 pub async fn run(cmd: MemoryCommand) -> anyhow::Result<()> {
@@ -209,7 +214,7 @@ pub async fn run(cmd: MemoryCommand) -> anyhow::Result<()> {
         MemoryCommand::List(args) => run_list(args).await,
         MemoryCommand::Show(args) => run_show(args).await,
         MemoryCommand::Feedback(args) => run_feedback(args).await,
-        MemoryCommand::Promote(args) => run_promote(args).await
+        MemoryCommand::Promote(args) => run_promote(args).await,
     }
 }
 
@@ -321,10 +326,116 @@ async fn run_search(args: MemorySearchArgs) -> anyhow::Result<()> {
     }
 
     // TODO: Actually perform the search when connected to backend
-    // For now, show a helpful message about what would happen
-    let err = ux_error::server_not_connected();
-    err.display();
-    output::info("Run with --dry-run to see what would happen.");
+    // Try direct backend connection
+    match try_search_direct(&resolved, &args, hints.reasoning).await {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            output::warn(&format!("Backend connection failed: {}", e));
+            let err = ux_error::server_not_connected();
+            err.display();
+            output::info("Run with --dry-run to see what would happen.");
+            Ok(())
+        }
+    }
+}
+
+async fn try_search_direct(
+    resolved: &context::ResolvedContext,
+    args: &MemorySearchArgs,
+    enable_reasoning: bool,
+) -> anyhow::Result<()> {
+    let manager = backend::create_memory_manager(enable_reasoning)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    let ctx = TenantContext::new(
+        TenantId::from_str(&resolved.tenant_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+        UserId::from_str(&resolved.user_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+    );
+
+    let filters: HashMap<String, serde_json::Value> = if let Some(layer_str) = &args.layer {
+        let mut f = HashMap::new();
+        f.insert("layer".to_string(), json!(layer_str));
+        f
+    } else {
+        HashMap::new()
+    };
+
+    let (results, reasoning_trace) = if enable_reasoning {
+        manager
+            .search_text_with_reasoning(ctx, &args.query, args.limit, args.threshold, filters, None)
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))?
+    } else {
+        (
+            manager
+                .search(ctx, &args.query, args.limit, args.threshold, filters)
+                .await
+                .map_err(|e| anyhow::anyhow!("{}", e))?,
+            None,
+        )
+    };
+
+    if args.json {
+        let entries: Vec<serde_json::Value> = results
+            .iter()
+            .map(|entry| {
+                json!({
+                    "id": entry.id,
+                    "content": entry.content,
+                    "layer": format!("{:?}", entry.layer),
+                    "score": entry.metadata.get("score"),
+                    "importanceScore": entry.importance_score,
+                    "createdAt": entry.created_at,
+                })
+            })
+            .collect();
+        let output = json!({
+            "operation": "memory_search",
+            "query": args.query,
+            "reasoningEnabled": enable_reasoning,
+            "reasoningTrace": reasoning_trace,
+            "resultCount": results.len(),
+            "results": entries,
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        output::header("Memory Search Results");
+        println!();
+        if results.is_empty() {
+            output::info("No matching memories found.");
+        } else {
+            if let Some(trace) = &reasoning_trace {
+                output::header("Reasoning Trace");
+                println!("  Strategy:      {}", trace.strategy);
+                println!(
+                    "  Refined query: {}",
+                    trace.refined_query.as_deref().unwrap_or("<unchanged>")
+                );
+                println!("  Trace:         {}", trace.thought_process);
+                println!();
+            }
+            println!("  Found {} result(s):", results.len());
+            println!();
+            for (i, entry) in results.iter().enumerate() {
+                let score = entry
+                    .metadata
+                    .get("score")
+                    .and_then(|v| v.as_f64())
+                    .map(|s| format!("{:.4}", s))
+                    .unwrap_or_else(|| "N/A".to_string());
+                let content_preview = if entry.content.len() > 80 {
+                    format!("{}...", &entry.content[..77])
+                } else {
+                    entry.content.clone()
+                };
+                println!("  {}. [{}] (score: {})", i + 1, entry.id, score);
+                println!("     Layer: {:?}", entry.layer);
+                println!("     {}", content_preview);
+                println!();
+            }
+        }
+    }
 
     Ok(())
 }
@@ -336,7 +447,7 @@ async fn run_add(args: MemoryAddArgs) -> anyhow::Result<()> {
     // Validate layer
     let layer = args.layer.to_lowercase();
     let valid_layers = [
-        "agent", "user", "session", "project", "team", "org", "company"
+        "agent", "user", "session", "project", "team", "org", "company",
     ];
     if !valid_layers.contains(&layer.as_str()) {
         let err = ux_error::invalid_layer(&layer, &valid_layers);
@@ -438,18 +549,67 @@ async fn run_add(args: MemoryAddArgs) -> anyhow::Result<()> {
     }
 
     // TODO: Actually store the memory when connected to backend
-    let err = ux_error::server_not_connected();
-    err.display();
-    output::info("Run with --dry-run to see what would happen.");
+    // Try direct backend connection
+    match try_add_direct(&resolved, &args.content, &layer).await {
+        Ok(id) => {
+            if args.json {
+                let output = json!({
+                    "operation": "memory_add",
+                    "status": "success",
+                    "memoryId": id,
+                    "layer": layer,
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                output::header("Memory Added");
+                println!();
+                println!("  Memory ID: {}", id);
+                println!("  Layer:     {}", layer);
+                println!("  Content:   {}", truncate(&args.content, 60));
+                println!();
+                output::info("Memory stored successfully.");
+            }
+            Ok(())
+        }
+        Err(e) => {
+            output::warn(&format!("Backend connection failed: {}", e));
+            let err = ux_error::server_not_connected();
+            err.display();
+            output::info("Run with --dry-run to see what would happen.");
+            Ok(())
+        }
+    }
+}
 
-    Ok(())
+async fn try_add_direct(
+    resolved: &context::ResolvedContext,
+    content: &str,
+    layer_str: &str,
+) -> anyhow::Result<String> {
+    let manager = backend::create_memory_manager(false)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    let ctx = TenantContext::new(
+        TenantId::from_str(&resolved.tenant_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+        UserId::from_str(&resolved.user_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+    );
+
+    let layer = backend::parse_layer(layer_str).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    let id = manager
+        .add(ctx, content, layer)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    Ok(id)
 }
 
 async fn run_delete(args: MemoryDeleteArgs) -> anyhow::Result<()> {
     // Validate layer
     let layer = args.layer.to_lowercase();
     let valid_layers = [
-        "agent", "user", "session", "project", "team", "org", "company"
+        "agent", "user", "session", "project", "team", "org", "company",
     ];
     if !valid_layers.contains(&layer.as_str()) {
         let err = ux_error::invalid_layer(&layer, &valid_layers);
@@ -467,18 +627,66 @@ async fn run_delete(args: MemoryDeleteArgs) -> anyhow::Result<()> {
     }
 
     if args.json {
-        let output = json!({
-            "operation": "memory_delete",
-            "memoryId": args.memory_id,
-            "layer": layer,
-            "status": "not_connected",
-            "message": "Memory backend not connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
+        match try_delete_direct(&args.memory_id, &layer).await {
+            Ok(()) => {
+                let output = json!({
+                    "operation": "memory_delete",
+                    "memoryId": args.memory_id,
+                    "layer": layer,
+                    "status": "deleted",
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            }
+            Err(e) => {
+                let output = json!({
+                    "operation": "memory_delete",
+                    "memoryId": args.memory_id,
+                    "layer": layer,
+                    "status": "error",
+                    "message": format!("{}", e)
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            }
+        }
     } else {
-        let err = ux_error::server_not_connected();
-        err.display();
+        match try_delete_direct(&args.memory_id, &layer).await {
+            Ok(()) => {
+                output::header("Memory Deleted");
+                println!();
+                println!("  Memory ID: {}", args.memory_id);
+                println!("  Layer:     {}", layer);
+                println!();
+                output::info("Memory deleted successfully.");
+            }
+            Err(e) => {
+                output::warn(&format!("Backend connection failed: {}", e));
+                let err = ux_error::server_not_connected();
+                err.display();
+            }
+        }
     }
+
+    Ok(())
+}
+
+async fn try_delete_direct(memory_id: &str, layer_str: &str) -> anyhow::Result<()> {
+    let resolver = ContextResolver::new();
+    let resolved = resolver.resolve()?;
+    let manager = backend::create_memory_manager(false)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    let ctx = TenantContext::new(
+        TenantId::from_str(&resolved.tenant_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+        UserId::from_str(&resolved.user_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+    );
+
+    let layer = backend::parse_layer(layer_str).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    manager
+        .delete_from_layer(ctx, layer, memory_id)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     Ok(())
 }
@@ -490,7 +698,7 @@ async fn run_list(args: MemoryListArgs) -> anyhow::Result<()> {
     // Validate layer
     let layer = args.layer.to_lowercase();
     let valid_layers = [
-        "agent", "user", "session", "project", "team", "org", "company"
+        "agent", "user", "session", "project", "team", "org", "company",
     ];
     if !valid_layers.contains(&layer.as_str()) {
         let err = ux_error::invalid_layer(&layer, &valid_layers);
@@ -499,53 +707,209 @@ async fn run_list(args: MemoryListArgs) -> anyhow::Result<()> {
     }
 
     if args.json {
-        let output = json!({
-            "operation": "memory_list",
-            "layer": layer,
-            "limit": args.limit,
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-                "userId": resolved.user_id.value,
-                "projectId": resolved.project_id.as_ref().map(|v| &v.value),
-            },
-            "status": "not_connected",
-            "message": "Memory backend not connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
+        match try_list_direct(&resolved, &layer, args.limit).await {
+            Ok(entries) => {
+                let items: Vec<serde_json::Value> = entries
+                    .iter()
+                    .map(|e| {
+                        json!({
+                            "id": e.id,
+                            "content": e.content,
+                            "layer": format!("{:?}", e.layer),
+                            "createdAt": e.created_at,
+                            "updatedAt": e.updated_at,
+                        })
+                    })
+                    .collect();
+                let output = json!({
+                    "operation": "memory_list",
+                    "layer": layer,
+                    "count": entries.len(),
+                    "entries": items,
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            }
+            Err(e) => {
+                let output = json!({
+                    "operation": "memory_list",
+                    "layer": layer,
+                    "status": "error",
+                    "message": format!("{}", e)
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            }
+        }
     } else {
-        output::header(&format!("Memories in '{layer}' layer"));
+        output::header(&format!("Memories in '{}' layer", layer));
         println!();
-        let err = ux_error::server_not_connected();
-        err.display();
+        match try_list_direct(&resolved, &layer, args.limit).await {
+            Ok(entries) => {
+                if entries.is_empty() {
+                    output::info("No memories found in this layer.");
+                } else {
+                    println!(
+                        "  Found {} memor{}:",
+                        entries.len(),
+                        if entries.len() == 1 { "y" } else { "ies" }
+                    );
+                    println!();
+                    for (i, entry) in entries.iter().enumerate() {
+                        let content_preview = if entry.content.len() > 70 {
+                            format!("{}...", &entry.content[..67])
+                        } else {
+                            entry.content.clone()
+                        };
+                        println!("  {}. [{}]", i + 1, entry.id);
+                        println!("     {}", content_preview);
+                        println!();
+                    }
+                }
+            }
+            Err(e) => {
+                output::warn(&format!("Backend connection failed: {}", e));
+                let err = ux_error::server_not_connected();
+                err.display();
+            }
+        }
     }
 
     Ok(())
 }
 
+async fn try_list_direct(
+    resolved: &context::ResolvedContext,
+    layer_str: &str,
+    limit: usize,
+) -> anyhow::Result<Vec<mk_core::types::MemoryEntry>> {
+    let manager = backend::create_memory_manager(false)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    let ctx = TenantContext::new(
+        TenantId::from_str(&resolved.tenant_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+        UserId::from_str(&resolved.user_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+    );
+
+    let layer = backend::parse_layer(layer_str).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    let mut entries = manager
+        .list_all_from_layer(ctx, layer)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    entries.truncate(limit);
+    Ok(entries)
+}
+
 async fn run_show(args: MemoryShowArgs) -> anyhow::Result<()> {
-    if args.json {
-        let output = json!({
-            "operation": "memory_show",
-            "memoryId": args.memory_id,
-            "status": "not_connected",
-            "message": "Memory backend not connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header(&format!("Memory: {}", args.memory_id));
-        println!();
-        let err = ux_error::server_not_connected();
-        err.display();
+    match try_show_direct(&args.memory_id).await {
+        Ok(Some(entry)) => {
+            if args.json {
+                let output = json!({
+                    "operation": "memory_show",
+                    "memoryId": entry.id,
+                    "content": entry.content,
+                    "layer": format!("{:?}", entry.layer),
+                    "createdAt": entry.created_at,
+                    "updatedAt": entry.updated_at,
+                    "metadata": entry.metadata,
+                    "importanceScore": entry.importance_score,
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                output::header(&format!("Memory: {}", entry.id));
+                println!();
+                println!("  Layer:      {:?}", entry.layer);
+                println!("  Created:    {}", entry.created_at);
+                println!("  Updated:    {}", entry.updated_at);
+                if let Some(score) = entry.importance_score {
+                    println!("  Importance: {:.4}", score);
+                }
+                println!();
+                println!("  Content:");
+                println!("  {}", entry.content);
+                println!();
+                if !entry.metadata.is_empty() {
+                    output::header("Metadata");
+                    for (key, value) in &entry.metadata {
+                        if key != "score" && key != "tenant_id" && key != "user_id" {
+                            println!("  {}: {}", key, value);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(None) => {
+            if args.json {
+                let output = json!({
+                    "operation": "memory_show",
+                    "memoryId": args.memory_id,
+                    "status": "not_found",
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                output::header(&format!("Memory: {}", args.memory_id));
+                println!();
+                output::warn("Memory not found.");
+            }
+        }
+        Err(e) => {
+            if args.json {
+                let output = json!({
+                    "operation": "memory_show",
+                    "memoryId": args.memory_id,
+                    "status": "error",
+                    "message": format!("{}", e)
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                output::header(&format!("Memory: {}", args.memory_id));
+                println!();
+                output::warn(&format!("Backend connection failed: {}", e));
+                let err = ux_error::server_not_connected();
+                err.display();
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn try_show_direct(memory_id: &str) -> anyhow::Result<Option<mk_core::types::MemoryEntry>> {
+    let resolver = ContextResolver::new();
+    let resolved = resolver.resolve()?;
+    let manager = backend::create_memory_manager(false)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    let ctx = TenantContext::new(
+        TenantId::from_str(&resolved.tenant_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+        UserId::from_str(&resolved.user_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+    );
+
+    // Try all layers to find the memory
+    let layers = [
+        mk_core::types::MemoryLayer::Agent,
+        mk_core::types::MemoryLayer::User,
+        mk_core::types::MemoryLayer::Session,
+        mk_core::types::MemoryLayer::Project,
+        mk_core::types::MemoryLayer::Team,
+        mk_core::types::MemoryLayer::Org,
+        mk_core::types::MemoryLayer::Company,
+    ];
+
+    for layer in layers {
+        if let Ok(Some(entry)) = manager.get_from_layer(ctx.clone(), layer, memory_id).await {
+            return Ok(Some(entry));
+        }
     }
 
-    Ok(())
+    Ok(None)
 }
 
 async fn run_feedback(args: MemoryFeedbackArgs) -> anyhow::Result<()> {
     // Validate layer
     let layer = args.layer.to_lowercase();
     let valid_layers = [
-        "agent", "user", "session", "project", "team", "org", "company"
+        "agent", "user", "session", "project", "team", "org", "company",
     ];
     if !valid_layers.contains(&layer.as_str()) {
         let err = ux_error::invalid_layer(&layer, &valid_layers);
@@ -560,7 +924,7 @@ async fn run_feedback(args: MemoryFeedbackArgs) -> anyhow::Result<()> {
         "irrelevant",
         "outdated",
         "inaccurate",
-        "duplicate"
+        "duplicate",
     ];
     if !valid_types.contains(&feedback_type.as_str()) {
         let err = ux_error::invalid_feedback_type(&feedback_type);
@@ -576,17 +940,41 @@ async fn run_feedback(args: MemoryFeedbackArgs) -> anyhow::Result<()> {
     }
 
     if args.json {
-        let output = json!({
-            "operation": "memory_feedback",
-            "memoryId": args.memory_id,
-            "layer": layer,
-            "feedbackType": feedback_type,
-            "score": args.score,
-            "reasoning": args.reasoning,
-            "status": "not_connected",
-            "message": "Memory backend not connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
+        match try_feedback_direct(
+            &args.memory_id,
+            &layer,
+            &feedback_type,
+            args.score,
+            args.reasoning.clone(),
+        )
+        .await
+        {
+            Ok(()) => {
+                let output = json!({
+                    "operation": "memory_feedback",
+                    "memoryId": args.memory_id,
+                    "layer": layer,
+                    "feedbackType": feedback_type,
+                    "score": args.score,
+                    "reasoning": args.reasoning,
+                    "status": "recorded",
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            }
+            Err(e) => {
+                let output = json!({
+                    "operation": "memory_feedback",
+                    "memoryId": args.memory_id,
+                    "layer": layer,
+                    "feedbackType": feedback_type,
+                    "score": args.score,
+                    "reasoning": args.reasoning,
+                    "status": "error",
+                    "message": format!("{}", e)
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            }
+        }
     } else {
         output::header("Memory Feedback");
         println!();
@@ -598,9 +986,70 @@ async fn run_feedback(args: MemoryFeedbackArgs) -> anyhow::Result<()> {
             println!("  Reasoning: {reasoning}");
         }
         println!();
-        let err = ux_error::server_not_connected();
-        err.display();
+        match try_feedback_direct(
+            &args.memory_id,
+            &layer,
+            &feedback_type,
+            args.score,
+            args.reasoning.clone(),
+        )
+        .await
+        {
+            Ok(()) => {
+                output::info("Feedback recorded successfully.");
+            }
+            Err(e) => {
+                output::warn(&format!("Backend connection failed: {}", e));
+                let err = ux_error::server_not_connected();
+                err.display();
+            }
+        }
     }
+
+    Ok(())
+}
+
+async fn try_feedback_direct(
+    memory_id: &str,
+    layer_str: &str,
+    feedback_type: &str,
+    score: f32,
+    reasoning: Option<String>,
+) -> anyhow::Result<()> {
+    let resolver = ContextResolver::new();
+    let resolved = resolver.resolve()?;
+    let manager = backend::create_memory_manager(false)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    let ctx = TenantContext::new(
+        TenantId::from_str(&resolved.tenant_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+        UserId::from_str(&resolved.user_id.value).map_err(|e| anyhow::anyhow!("{}", e))?,
+    );
+
+    let layer = backend::parse_layer(layer_str).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    let reward_type = match feedback_type {
+        "helpful" => mk_core::types::RewardType::Helpful,
+        "irrelevant" => mk_core::types::RewardType::Irrelevant,
+        "outdated" => mk_core::types::RewardType::Outdated,
+        "inaccurate" => mk_core::types::RewardType::Inaccurate,
+        "duplicate" => mk_core::types::RewardType::Duplicate,
+        _ => anyhow::bail!("Unsupported feedback type: {}", feedback_type),
+    };
+
+    let reward = mk_core::types::RewardSignal {
+        reward_type,
+        score,
+        reasoning,
+        agent_id: None,
+        timestamp: chrono::Utc::now().timestamp(),
+    };
+
+    manager
+        .record_reward(ctx, layer, memory_id, reward)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     Ok(())
 }
@@ -630,7 +1079,7 @@ fn layer_order(l: &str) -> usize {
         "team" => 4,
         "org" => 5,
         "company" => 6,
-        _ => 0
+        _ => 0,
     }
 }
 
@@ -641,7 +1090,7 @@ async fn run_promote(args: MemoryPromoteArgs) -> anyhow::Result<()> {
     let from_layer = args.from_layer.to_lowercase();
     let to_layer = args.to_layer.to_lowercase();
     let valid_layers = [
-        "agent", "user", "session", "project", "team", "org", "company"
+        "agent", "user", "session", "project", "team", "org", "company",
     ];
 
     if !valid_layers.contains(&from_layer.as_str()) {
@@ -730,8 +1179,8 @@ async fn run_promote(args: MemoryPromoteArgs) -> anyhow::Result<()> {
             "fromLayer": from_layer,
             "toLayer": to_layer,
             "reason": args.reason,
-            "status": "not_connected",
-            "message": "Memory backend not connected"
+            "status": "not_implemented",
+            "message": "Promote requires governance service which is not available in local mode"
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
@@ -744,8 +1193,10 @@ async fn run_promote(args: MemoryPromoteArgs) -> anyhow::Result<()> {
             println!("  Reason:      {reason}");
         }
         println!();
-        let err = ux_error::server_not_connected();
-        err.display();
+        output::warn(
+            "Promote requires the governance service, which is not available in local mode.",
+        );
+        output::info("Use --dry-run to see what would happen.");
     }
 
     Ok(())

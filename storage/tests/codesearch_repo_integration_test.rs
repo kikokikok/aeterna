@@ -138,6 +138,7 @@ fn make_test_request(repo_id: Uuid) -> RepoRequest {
     RepoRequest {
         id: Uuid::new_v4(),
         repository_id: repo_id,
+        tenant_id: "test-tenant".to_string(),
         requester_id: "user-1".to_string(),
         status: RepoRequestStatus::Requested,
         policy_result: None,
@@ -702,8 +703,12 @@ fn test_create_identity_no_scopes() {
 #[tokio::test]
 #[ignore = "requires live Postgres"]
 async fn test_request_local_repository_auto_approves() {
-    let fixture = postgres().await.expect("Postgres pool required for this test");
-    let pool = Pool::<Postgres>::connect(fixture.url()).await.expect("Failed to connect to Postgres");
+    let fixture = postgres()
+        .await
+        .expect("Postgres pool required for this test");
+    let pool = Pool::<Postgres>::connect(fixture.url())
+        .await
+        .expect("Failed to connect to Postgres");
     let storage = RepoStorage::new(pool.clone());
     let secret_provider: Arc<dyn SecretProvider> =
         Arc::new(LocalSecretProvider::new(HashMap::new()));
@@ -747,8 +752,12 @@ async fn test_request_local_repository_auto_approves() {
 #[tokio::test]
 #[ignore = "requires live Postgres"]
 async fn test_request_remote_repository_creates_request() {
-    let fixture = postgres().await.expect("Postgres pool required for this test");
-    let pool = Pool::<Postgres>::connect(fixture.url()).await.expect("Failed to connect to Postgres");
+    let fixture = postgres()
+        .await
+        .expect("Postgres pool required for this test");
+    let pool = Pool::<Postgres>::connect(fixture.url())
+        .await
+        .expect("Failed to connect to Postgres");
     let storage = RepoStorage::new(pool.clone());
     let secret_provider: Arc<dyn SecretProvider> =
         Arc::new(LocalSecretProvider::new(HashMap::new()));
@@ -792,8 +801,12 @@ async fn test_request_remote_repository_creates_request() {
 #[tokio::test]
 #[ignore = "requires live Postgres"]
 async fn test_request_repository_policy_denied() {
-    let fixture = postgres().await.expect("Postgres pool required for this test");
-    let pool = Pool::<Postgres>::connect(fixture.url()).await.expect("Failed to connect to Postgres");
+    let fixture = postgres()
+        .await
+        .expect("Postgres pool required for this test");
+    let pool = Pool::<Postgres>::connect(fixture.url())
+        .await
+        .expect("Failed to connect to Postgres");
     let storage = RepoStorage::new(pool.clone());
     let secret_provider: Arc<dyn SecretProvider> =
         Arc::new(LocalSecretProvider::new(HashMap::new()));
@@ -841,8 +854,12 @@ async fn test_request_repository_policy_denied() {
 #[tokio::test]
 #[ignore = "requires live Postgres"]
 async fn test_duplicate_repository_rejected() {
-    let fixture = postgres().await.expect("Postgres pool required for this test");
-    let pool = Pool::<Postgres>::connect(fixture.url()).await.expect("Failed to connect to Postgres");
+    let fixture = postgres()
+        .await
+        .expect("Postgres pool required for this test");
+    let pool = Pool::<Postgres>::connect(fixture.url())
+        .await
+        .expect("Failed to connect to Postgres");
     let storage = RepoStorage::new(pool.clone());
     let secret_provider: Arc<dyn SecretProvider> =
         Arc::new(LocalSecretProvider::new(HashMap::new()));
@@ -894,8 +911,12 @@ async fn test_duplicate_repository_rejected() {
 #[tokio::test]
 #[ignore = "requires live Postgres"]
 async fn test_list_repositories() {
-    let fixture = postgres().await.expect("Postgres pool required for this test");
-    let pool = Pool::<Postgres>::connect(fixture.url()).await.expect("Failed to connect to Postgres");
+    let fixture = postgres()
+        .await
+        .expect("Postgres pool required for this test");
+    let pool = Pool::<Postgres>::connect(fixture.url())
+        .await
+        .expect("Failed to connect to Postgres");
     let storage = RepoStorage::new(pool.clone());
     let secret_provider: Arc<dyn SecretProvider> =
         Arc::new(LocalSecretProvider::new(HashMap::new()));
@@ -935,8 +956,12 @@ async fn test_list_repositories() {
 #[tokio::test]
 #[ignore = "requires live Postgres"]
 async fn test_create_and_retrieve_identity() {
-    let fixture = postgres().await.expect("Postgres pool required for this test");
-    let pool = Pool::<Postgres>::connect(fixture.url()).await.expect("Failed to connect to Postgres");
+    let fixture = postgres()
+        .await
+        .expect("Postgres pool required for this test");
+    let pool = Pool::<Postgres>::connect(fixture.url())
+        .await
+        .expect("Failed to connect to Postgres");
     let storage = RepoStorage::new(pool.clone());
     let secret_provider: Arc<dyn SecretProvider> =
         Arc::new(LocalSecretProvider::new(HashMap::new()));

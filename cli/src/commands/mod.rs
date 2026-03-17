@@ -31,7 +31,7 @@ use clap::{Parser, Subcommand};
 )]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands
+    pub command: Commands,
 }
 
 #[derive(Subcommand)]
@@ -81,12 +81,16 @@ pub enum Commands {
     #[command(subcommand, about = "System administration (health, migrate, export)")]
     Admin(admin::AdminCommand),
 
-    #[command(name = "code-search", subcommand, about = "Code search and call graph analysis")]
+    #[command(
+        name = "code-search",
+        subcommand,
+        about = "Code search and call graph analysis"
+    )]
     CodeSearch(search::CodeSearchCommand),
 
     #[command(about = "Generate shell completions")]
     Completion(completion::CompletionArgs),
 
     #[command(about = "Interactive setup wizard for deployment configuration")]
-    Setup(setup::SetupArgs)
+    Setup(setup::SetupArgs),
 }

@@ -1,23 +1,58 @@
-ARG RUST_VERSION=1.83
+# syntax=docker/dockerfile:1
 
-FROM rust:${RUST_VERSION}-bookworm AS chef
-RUN cargo install cargo-chef
+# ── Arguments ───────────────────────────────────────────────
+ARG RUST_VERSION=1.83
+ARG PACKAGE=aeterna
+
+# ── Base: tooling layer (cached across builds) ──────────────
+FROM rust:${RUST_VERSION}-bookworm AS base
+
+RUN rustup default nightly
+
+# Install system dependencies needed to compile native crates (openssl-sys, libgit2-sys, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install cargo-chef and sccache via pre-built binaries (seconds, not minutes)
+RUN curl -L --proto '=https' --tlsv1.2 -sSf \
+      https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
+    && cargo binstall --no-confirm cargo-chef sccache
+
+ENV CARGO_INCREMENTAL=0
+ENV RUSTC_WRAPPER=sccache
+ENV SCCACHE_DIR=/sccache
+
 WORKDIR /app
 
-FROM chef AS planner
+# ── Planner: extract dependency recipe ──────────────────────
+FROM base AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM chef AS builder
-ARG BUILD_DATE
-ARG VCS_REF
+# ── Builder: compile deps, then source ──────────────────────
+FROM base AS builder
 
+ARG PACKAGE=aeterna
+
+# 1) Cook dependencies only — this layer is cached until Cargo.toml/Cargo.lock change
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/sccache,sharing=locked \
+    cargo chef cook --release --recipe-path recipe.json
 
+# 2) Build the application (only your source code recompiles)
 COPY . .
-RUN cargo build --release --package aeterna
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/sccache,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
+    cargo build --release --package ${PACKAGE} \
+    && cp ./target/release/${PACKAGE} /usr/local/bin/app
 
+# ── Runtime: minimal production image ───────────────────────
 FROM debian:bookworm-slim AS runtime
 
 ARG BUILD_DATE
@@ -30,16 +65,16 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.revision="${VCS_REF}"
 
+RUN useradd -m -u 1000 -s /bin/bash aeterna
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd -m -u 1000 -s /bin/bash aeterna
-
 WORKDIR /app
 
-COPY --from=builder /app/target/release/aeterna /usr/local/bin/aeterna
+COPY --from=builder /usr/local/bin/app /usr/local/bin/app
 
 RUN chown -R aeterna:aeterna /app
 
@@ -52,7 +87,6 @@ EXPOSE 8080
 EXPOSE 9090
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/usr/local/bin/aeterna", "status"] || exit 1
+    CMD ["/usr/local/bin/app", "status"]
 
-ENTRYPOINT ["/usr/local/bin/aeterna"]
-CMD ["serve"]
+ENTRYPOINT ["/usr/local/bin/app"]

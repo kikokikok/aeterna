@@ -17,6 +17,18 @@ pub struct QdrantProvider {
     client: Arc<Qdrant>,
     collection_name: String,
     embedding_dimension: usize,
+    layer_scope: Option<MemoryLayer>,
+}
+
+impl Clone for QdrantProvider {
+    fn clone(&self) -> Self {
+        Self {
+            client: Arc::clone(&self.client),
+            collection_name: self.collection_name.clone(),
+            embedding_dimension: self.embedding_dimension,
+            layer_scope: self.layer_scope,
+        }
+    }
 }
 
 impl QdrantProvider {
@@ -25,7 +37,14 @@ impl QdrantProvider {
             client: Arc::new(client),
             collection_name,
             embedding_dimension,
+            layer_scope: None,
         }
+    }
+
+    /// Return a new provider scoped to a specific memory layer.
+    pub fn with_layer_scope(mut self, layer: MemoryLayer) -> Self {
+        self.layer_scope = Some(layer);
+        self
     }
 
     pub async fn ensure_collection(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -50,6 +69,101 @@ impl QdrantProvider {
         }
 
         Ok(())
+    }
+
+    fn payload_layer_value(
+        layer: MemoryLayer,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(serde_json::to_string(&layer)?)
+    }
+
+    fn parse_layer_filter(value: &Value) -> Option<MemoryLayer> {
+        let layer = value.as_str()?.to_lowercase();
+        match layer.as_str() {
+            "agent" => Some(MemoryLayer::Agent),
+            "user" => Some(MemoryLayer::User),
+            "session" => Some(MemoryLayer::Session),
+            "project" => Some(MemoryLayer::Project),
+            "team" => Some(MemoryLayer::Team),
+            "org" => Some(MemoryLayer::Org),
+            "company" => Some(MemoryLayer::Company),
+            _ => None,
+        }
+    }
+
+    fn entry_visible(&self, ctx: &mk_core::types::TenantContext, entry: &MemoryEntry) -> bool {
+        let tenant_matches = entry.metadata.get("tenant_id").and_then(|t| t.as_str())
+            == Some(ctx.tenant_id.as_str());
+        let layer_matches = self.layer_scope.is_none_or(|layer| layer == entry.layer);
+        tenant_matches && layer_matches
+    }
+
+    fn search_filter(
+        &self,
+        ctx: &mk_core::types::TenantContext,
+        filters: &HashMap<String, Value>,
+    ) -> Result<Option<qdrant_client::qdrant::Filter>, Box<dyn std::error::Error + Send + Sync>>
+    {
+        use qdrant_client::qdrant::{Condition, Filter};
+
+        let mut conditions = vec![Condition::matches(
+            "tenant_id",
+            ctx.tenant_id.as_str().to_string(),
+        )];
+
+        if let Some(scope_layer) = self.layer_scope {
+            conditions.push(Condition::matches(
+                "layer",
+                Self::payload_layer_value(scope_layer)?,
+            ));
+        }
+
+        if let Some(layer_value) = filters.get("layer") {
+            let requested_layer = Self::parse_layer_filter(layer_value)
+                .ok_or_else(|| format!("Invalid layer filter: {layer_value}"))?;
+
+            if let Some(scope_layer) = self.layer_scope {
+                if scope_layer != requested_layer {
+                    return Ok(None);
+                }
+            } else {
+                conditions.push(Condition::matches(
+                    "layer",
+                    Self::payload_layer_value(requested_layer)?,
+                ));
+            }
+        }
+
+        for (key, value) in filters {
+            if key == "layer" {
+                continue;
+            }
+            if let Some(text) = value.as_str() {
+                conditions.push(Condition::matches(key.as_str(), text.to_string()));
+            }
+        }
+
+        Ok(Some(Filter::all(conditions)))
+    }
+
+    fn list_filter(
+        &self,
+        ctx: &mk_core::types::TenantContext,
+        layer: MemoryLayer,
+    ) -> Result<Option<qdrant_client::qdrant::Filter>, Box<dyn std::error::Error + Send + Sync>>
+    {
+        use qdrant_client::qdrant::{Condition, Filter};
+
+        if let Some(scope_layer) = self.layer_scope
+            && scope_layer != layer
+        {
+            return Ok(None);
+        }
+
+        Ok(Some(Filter::all(vec![
+            Condition::matches("tenant_id", ctx.tenant_id.as_str().to_string()),
+            Condition::matches("layer", Self::payload_layer_value(layer)?),
+        ])))
     }
 
     fn entry_to_point(
@@ -167,7 +281,7 @@ impl QdrantProvider {
         Ok(MemoryEntry {
             summaries: std::collections::HashMap::new(),
             context_vector: None,
-            importance_score: None,
+            importance_score: Some(point.score),
             id,
             content,
             embedding: Some(vector),
@@ -216,15 +330,14 @@ impl MemoryProviderAdapter for QdrantProvider {
         ctx: mk_core::types::TenantContext,
         query_vector: Vec<f32>,
         limit: usize,
-        _filters: HashMap<String, Value>,
+        filters: HashMap<String, Value>,
     ) -> Result<Vec<MemoryEntry>, Self::Error> {
         self.ensure_collection().await?;
-        use qdrant_client::qdrant::{Condition, Filter, SearchPointsBuilder};
+        use qdrant_client::qdrant::SearchPointsBuilder;
 
-        let filter = Filter::all(vec![Condition::matches(
-            "tenant_id",
-            ctx.tenant_id.as_str().to_string(),
-        )]);
+        let Some(filter) = self.search_filter(&ctx, &filters)? else {
+            return Ok(Vec::new());
+        };
 
         let request =
             SearchPointsBuilder::new(self.collection_name.clone(), query_vector, limit as u64)
@@ -237,6 +350,12 @@ impl MemoryProviderAdapter for QdrantProvider {
             .result
             .into_iter()
             .map(|p| self.point_to_entry(p))
+            .filter(|entry| {
+                entry
+                    .as_ref()
+                    .map(|entry| self.entry_visible(&ctx, entry))
+                    .unwrap_or(true)
+            })
             .collect()
     }
 
@@ -269,9 +388,7 @@ impl MemoryProviderAdapter for QdrantProvider {
                 shard_key: None,
             })?;
 
-            if entry.metadata.get("tenant_id").and_then(|t| t.as_str())
-                != Some(ctx.tenant_id.as_str())
-            {
+            if !self.entry_visible(&ctx, &entry) {
                 return Ok(None);
             }
 
@@ -313,7 +430,7 @@ impl MemoryProviderAdapter for QdrantProvider {
     async fn list(
         &self,
         ctx: mk_core::types::TenantContext,
-        _layer: MemoryLayer,
+        layer: MemoryLayer,
         limit: usize,
         cursor: Option<String>,
     ) -> Result<(Vec<MemoryEntry>, Option<String>), Self::Error> {
@@ -321,11 +438,9 @@ impl MemoryProviderAdapter for QdrantProvider {
 
         tracing::debug!(tenant_id = %ctx.tenant_id, "Qdrant list points");
 
-        use qdrant_client::qdrant::{Condition, Filter};
-        let filter = Filter::all(vec![Condition::matches(
-            "tenant_id",
-            ctx.tenant_id.as_str().to_string(),
-        )]);
+        let Some(filter) = self.list_filter(&ctx, layer)? else {
+            return Ok((Vec::new(), None));
+        };
 
         let scroll_request = qdrant_client::qdrant::ScrollPoints {
             collection_name: self.collection_name.clone(),
@@ -351,6 +466,12 @@ impl MemoryProviderAdapter for QdrantProvider {
                     order_value: None,
                     shard_key: None,
                 })
+            })
+            .filter(|entry| {
+                entry
+                    .as_ref()
+                    .map(|entry| self.entry_visible(&ctx, entry) && entry.layer == layer)
+                    .unwrap_or(true)
             })
             .collect();
 
@@ -419,6 +540,7 @@ mod tests {
         assert_eq!(entry.id, "test-id");
         assert_eq!(entry.content, "test content");
         assert_eq!(entry.layer, MemoryLayer::Agent);
+        assert_eq!(entry.importance_score, Some(0.95));
         assert_eq!(entry.created_at, 1000);
         assert_eq!(entry.updated_at, 2000);
         assert_eq!(entry.embedding, Some(vec![0.1, 0.2, 0.3]));
@@ -468,12 +590,56 @@ mod tests {
         assert_eq!(entry.content, "test content");
         assert_eq!(entry.embedding.unwrap(), vec![0.1, 0.2, 0.3]);
         assert_eq!(entry.layer, MemoryLayer::Agent);
+        assert_eq!(entry.importance_score, Some(0.95));
         assert_eq!(entry.metadata.get("key").unwrap(), &json!("value"));
         // Use approx comparison for floating point
         let score_value = entry.metadata.get("score").unwrap().as_f64().unwrap();
         assert!((score_value - 0.95).abs() < 0.0001);
         assert_eq!(entry.created_at, 1000);
         assert_eq!(entry.updated_at, 2000);
+    }
+
+    #[test]
+    fn test_entry_visible_respects_tenant_and_layer_scope() {
+        let provider = setup_provider().with_layer_scope(MemoryLayer::Project);
+        let ctx = mk_core::types::TenantContext::new(
+            mk_core::types::TenantId::new("tenant-1".to_string()).unwrap(),
+            mk_core::types::UserId::new("user-1".to_string()).unwrap(),
+        );
+
+        let matching = MemoryEntry {
+            id: "memory-1".to_string(),
+            content: "test".to_string(),
+            layer: MemoryLayer::Project,
+            metadata: HashMap::from([("tenant_id".to_string(), json!("tenant-1"))]),
+            ..Default::default()
+        };
+        assert!(provider.entry_visible(&ctx, &matching));
+
+        let wrong_layer = MemoryEntry {
+            layer: MemoryLayer::Team,
+            ..matching.clone()
+        };
+        assert!(!provider.entry_visible(&ctx, &wrong_layer));
+
+        let wrong_tenant = MemoryEntry {
+            metadata: HashMap::from([("tenant_id".to_string(), json!("tenant-2"))]),
+            ..matching
+        };
+        assert!(!provider.entry_visible(&ctx, &wrong_tenant));
+    }
+
+    #[test]
+    fn test_search_filter_returns_none_for_mismatched_layer_request() {
+        let provider = setup_provider().with_layer_scope(MemoryLayer::Project);
+        let ctx = mk_core::types::TenantContext::new(
+            mk_core::types::TenantId::new("tenant-1".to_string()).unwrap(),
+            mk_core::types::UserId::new("user-1".to_string()).unwrap(),
+        );
+        let filters = HashMap::from([("layer".to_string(), json!("team"))]);
+
+        let filter = provider.search_filter(&ctx, &filters).unwrap();
+        assert!(filter.is_none());
     }
 
     #[test]

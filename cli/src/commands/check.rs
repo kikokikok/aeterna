@@ -33,14 +33,14 @@ pub struct CheckArgs {
 
     /// Specific files or paths to check (defaults to current directory)
     #[arg(value_name = "PATH")]
-    pub paths: Vec<String>
+    pub paths: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 enum Severity {
     Error,
     Warning,
-    Info
+    Info,
 }
 
 impl Severity {
@@ -48,7 +48,7 @@ impl Severity {
         match self {
             Severity::Error => "error",
             Severity::Warning => "warning",
-            Severity::Info => "info"
+            Severity::Info => "info",
         }
     }
 }
@@ -61,7 +61,7 @@ struct CheckResult {
     message: String,
     file: Option<String>,
     line: Option<u32>,
-    suggestion: Option<String>
+    suggestion: Option<String>,
 }
 
 pub async fn run(args: CheckArgs) -> Result<()> {
@@ -269,13 +269,13 @@ fn print_result(result: &CheckResult) {
     let severity_icon = match result.severity {
         Severity::Error => "✗".red(),
         Severity::Warning => "⚠".yellow(),
-        Severity::Info => "ℹ".blue()
+        Severity::Info => "ℹ".blue(),
     };
 
     let location = match (&result.file, result.line) {
         (Some(file), Some(line)) => format!("{file}:{line}"),
         (Some(file), None) => file.clone(),
-        _ => String::new()
+        _ => String::new(),
     };
 
     if location.is_empty() {
@@ -320,7 +320,7 @@ mod tests {
             target: "policies".to_string(),
             strict: false,
             violations_only: false,
-            paths: vec![]
+            paths: vec![],
         };
         let results = check_policies(&args);
         assert!(results.is_empty());
@@ -333,7 +333,7 @@ mod tests {
             target: "dependencies".to_string(),
             strict: false,
             violations_only: false,
-            paths: vec![]
+            paths: vec![],
         };
         let results = check_dependencies(&args);
         assert!(results.is_empty());
@@ -346,7 +346,7 @@ mod tests {
             target: "architecture".to_string(),
             strict: false,
             violations_only: false,
-            paths: vec![]
+            paths: vec![],
         };
         let results = check_architecture(&args);
         assert!(results.is_empty());
@@ -359,7 +359,7 @@ mod tests {
             target: "security".to_string(),
             strict: false,
             violations_only: false,
-            paths: vec![]
+            paths: vec![],
         };
         let results = check_security(&args);
         assert!(results.is_empty());

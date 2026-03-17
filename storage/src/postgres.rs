@@ -128,6 +128,36 @@ impl PostgresBackend {
         .await?;
 
         sqlx::query(
+            "CREATE TABLE IF NOT EXISTS drift_suppressions (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                policy_id TEXT NOT NULL,
+                rule_pattern TEXT,
+                reason TEXT NOT NULL,
+                created_by TEXT NOT NULL,
+                expires_at BIGINT,
+                created_at BIGINT NOT NULL
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_drift_suppressions_project
+             ON drift_suppressions(tenant_id, project_id)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_drift_suppressions_policy
+             ON drift_suppressions(tenant_id, policy_id)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
             "CREATE TABLE IF NOT EXISTS drift_configs (
                 project_id TEXT NOT NULL,
                 tenant_id TEXT NOT NULL,

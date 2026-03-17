@@ -83,7 +83,7 @@ validator = { version = "0.20.0", features = ["derive"] }
 schemars = { version = "1.2.0", features = ["chrono04"] }
 async-trait = "0.1"
 wiremock = "0.6"
-git2 = "0.20.3"
+git2 = { version = "0.20.3", features = ["vendored-openssl"] }
 walkdir = "2.4"
 strum = { version = "0.27.2", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -98,7 +98,7 @@ metrics = { version = "0.24.3" }
 metrics-exporter-prometheus = { version = "0.18.1" }
 metrics-util = { version = "0.20.1" }
 metrics-opentelemetry = { version = "0.18.0" }
-sqlx = { version = "0.9.0-alpha.1", features = ["postgres", "runtime-tokio", "tls-native-tls", "json", "uuid", "chrono"] }
+sqlx = { version = "0.9.0-alpha.1", features = ["postgres", "runtime-tokio", "tls-rustls", "json", "uuid", "chrono"] }
 distributed-lock = { version = "0.2", features = ["redis", "postgres"] }
 xxhash-rust = { version = "0.8", features = ["xxh64"] }
 dashmap = "6.1"
@@ -109,7 +109,7 @@ statig = { version = "0.4.1", features = ["async"] }
 radkit = "=0.0.4"
 a2a-types = "0.1"
 parking_lot = "0.12"
-tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 
 [workspace.metadata.tarpaulin]
