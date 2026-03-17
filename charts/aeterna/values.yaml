@@ -114,7 +114,7 @@ aeterna:
   ## Probes configuration
   livenessProbe:
     httpGet:
-      path: /health/live
+      path: /health
       port: http
     initialDelaySeconds: 30
     periodSeconds: 10
@@ -123,7 +123,7 @@ aeterna:
 
   readinessProbe:
     httpGet:
-      path: /health/ready
+      path: /health
       port: http
     initialDelaySeconds: 5
     periodSeconds: 5
@@ -132,7 +132,7 @@ aeterna:
 
   startupProbe:
     httpGet:
-      path: /health/startup
+      path: /health
       port: http
     initialDelaySeconds: 10
     periodSeconds: 5
@@ -521,6 +521,71 @@ opal:
         cpu: 20m
         memory: 64Mi
 
+## Okta-backed interactive authentication boundary
+okta:
+  ## @param okta.enabled Enable Okta-backed oauth2-proxy auth boundary for interactive access
+  enabled: false
+  ## @param okta.provider OAuth provider name for oauth2-proxy
+  provider: oidc
+  ## @param okta.issuerUrl Okta issuer URL
+  issuerUrl: ""
+  ## @param okta.clientId Okta OIDC client ID
+  clientId: ""
+  ## @param okta.clientSecret Okta OIDC client secret
+  clientSecret: ""
+  ## @param okta.existingSecret Existing secret containing oauth2-proxy credentials
+  existingSecret: ""
+  ## @param okta.clientSecretKey Secret key containing the Okta client secret
+  clientSecretKey: client-secret
+  ## @param okta.cookieSecretKey Secret key containing the oauth2-proxy cookie secret
+  cookieSecretKey: cookie-secret
+  ## @param okta.cookieSecret Raw oauth2-proxy cookie secret (generated if omitted and no existingSecret is provided)
+  cookieSecret: ""
+  ## @param okta.redirectUrl Public redirect URL for the auth callback
+  redirectUrl: ""
+  ## @param okta.emailDomains Allowed email domains for login
+  emailDomains:
+    - "*"
+  ## @param okta.allowedGroups Optional allowed Okta groups enforced by oauth2-proxy
+  allowedGroups: []
+  ## @param okta.scope Requested OIDC scopes
+  scope: "openid profile email groups"
+  ## @param okta.cookieSecure Require secure cookies
+  cookieSecure: true
+  ## @param okta.cookieDomains Cookie domain list
+  cookieDomains: []
+  ## @param okta.whitelistDomains Optional redirect whitelist domains
+  whitelistDomains: []
+  ## @param okta.authResponseHeaders Identity headers forwarded from oauth2-proxy to Aeterna ingress
+  authResponseHeaders:
+    - X-Auth-Request-User
+    - X-Auth-Request-Email
+    - X-Auth-Request-Groups
+    - X-Auth-Request-Preferred-Username
+    - X-Forwarded-User
+    - X-Forwarded-Email
+    - Authorization
+  ## @param okta.proxyPrefix oauth2-proxy route prefix
+  proxyPrefix: /oauth2
+  image:
+    ## @param okta.image.repository oauth2-proxy image repository
+    repository: quay.io/oauth2-proxy/oauth2-proxy
+    ## @param okta.image.tag oauth2-proxy image tag
+    tag: "v7.8.1"
+    ## @param okta.image.pullPolicy oauth2-proxy image pull policy
+    pullPolicy: IfNotPresent
+  service:
+    ## @param okta.service.port oauth2-proxy service port
+    port: 4180
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  extraArgs: []
+
 ## LLM provider configuration
 llm:
   ## @param llm.provider LLM provider: openai, anthropic, ollama, none
@@ -598,8 +663,8 @@ codesearch:
   ## @param codesearch.enabled Enable Code Search sidecar for semantic code search
   enabled: false
   
-  ## @param codesearch.mcpServerUrl MCP server URL (defaults to localhost:9090 for sidecar)
-  mcpServerUrl: "http://localhost:9090"
+  ## @param codesearch.mcpServerUrl MCP server URL (defaults to localhost:9091 for sidecar)
+  mcpServerUrl: "http://localhost:9091"
   
   ## Code Search container configuration
   image:
