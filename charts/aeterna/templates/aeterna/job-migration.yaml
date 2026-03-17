@@ -35,13 +35,15 @@ spec:
             {{- toYaml .Values.aeterna.securityContext | nindent 12 }}
           image: {{ include "aeterna.image" . | quote }}
           imagePullPolicy: {{ .Values.aeterna.image.pullPolicy }}
+          # 'aeterna admin migrate up' is the supported migration command.
+          # The command validates environment, then runs pending migrations.
+          # It exits non-zero on any failure, causing the Job to retry up to
+          # backoffLimit times before marking the release as failed.
           command:
-            - /bin/sh
-            - -c
-            - |
-              echo "Running database migrations..."
-              aeterna migrate --yes
-              echo "Migrations completed successfully"
+            - /usr/local/bin/aeterna
+            - admin
+            - migrate
+            - up
           env:
             - name: AETERNA_POSTGRESQL_HOST
               value: {{ include "aeterna.postgresql.host" . | quote }}
