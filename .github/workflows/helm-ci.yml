@@ -27,8 +27,22 @@ jobs:
         with:
           version: v3.14.0
 
-      - name: Helm Lint
+      - name: Helm Lint default chart
         run: helm lint charts/aeterna
+
+      - name: Helm Lint hardened fixtures
+        run: |
+          helm lint charts/aeterna -f charts/aeterna/examples/values-production.yaml
+          helm lint charts/aeterna -f charts/aeterna/examples/values-sops.yaml
+          helm lint charts/aeterna -f charts/aeterna/values-small.yaml
+          helm lint charts/aeterna -f charts/aeterna/values-medium.yaml
+          helm lint charts/aeterna -f charts/aeterna/values-large.yaml
+          helm lint charts/aeterna -f charts/aeterna/ci/okta-values.yaml
+          helm lint charts/aeterna -f charts/aeterna/ci/hybrid-values.yaml
+          helm lint charts/aeterna -f charts/aeterna/ci/remote-values.yaml
+          helm lint charts/aeterna -f charts/aeterna/ci/external-deps-values.yaml
+          helm lint charts/aeterna -f charts/aeterna/ci/chart-managed-external-secrets-values.yaml
+          ! helm lint charts/aeterna -f charts/aeterna/ci/okta-invalid-values.yaml
 
   template:
     name: Template Validation
@@ -38,8 +52,15 @@ jobs:
         values:
           - default
           - local
+          - ci-okta
+          - ci-hybrid
+          - ci-remote
+          - remote
           - production
           - hybrid
+          - large
+          - ci-external-deps
+          - ci-chart-managed-external-secrets
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,8 +75,29 @@ jobs:
         run: helm template aeterna charts/aeterna --debug
 
       - name: Template with example values
-        if: matrix.values != 'default'
+        if: contains(fromJson('["local","production","hybrid"]'), matrix.values)
         run: helm template aeterna charts/aeterna -f charts/aeterna/examples/values-${{ matrix.values }}.yaml --debug
+
+      - name: Template with supported preset values
+        if: contains(fromJson('["remote","large"]'), matrix.values)
+        run: helm template aeterna charts/aeterna -f charts/aeterna/values-${{ matrix.values }}.yaml --debug
+
+      - name: Template with CI mode fixtures
+        if: contains(fromJson('["ci-okta","ci-hybrid","ci-remote"]'), matrix.values)
+        run: |
+          case "${{ matrix.values }}" in
+            ci-okta) helm template aeterna charts/aeterna -f charts/aeterna/ci/okta-values.yaml --debug ;;
+            ci-hybrid) helm template aeterna charts/aeterna -f charts/aeterna/ci/hybrid-values.yaml --debug ;;
+            ci-remote) helm template aeterna charts/aeterna -f charts/aeterna/ci/remote-values.yaml --debug ;;
+          esac
+
+      - name: Template with CI fixture values
+        if: matrix.values == 'ci-external-deps'
+        run: helm template aeterna charts/aeterna -f charts/aeterna/ci/external-deps-values.yaml --debug
+
+      - name: Template with chart-managed secret fixture
+        if: matrix.values == 'ci-chart-managed-external-secrets'
+        run: helm template aeterna charts/aeterna -f charts/aeterna/ci/chart-managed-external-secrets-values.yaml --debug
 
   kubeconform:
     name: Kubernetes Schema Validation
