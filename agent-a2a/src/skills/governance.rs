@@ -6,7 +6,7 @@ use serde_json::Value;
 use std::sync::Arc;
 
 pub struct GovernanceSkill {
-    engine: Arc<dyn GovernanceEngine>
+    engine: Arc<dyn GovernanceEngine>,
 }
 
 #[async_trait::async_trait]
@@ -18,12 +18,12 @@ pub trait GovernanceEngine: Send + Sync {
 pub struct ValidationResult {
     pub valid: bool,
     pub errors: Vec<String>,
-    pub warnings: Vec<String>
+    pub warnings: Vec<String>,
 }
 
 pub struct DriftResult {
     pub has_drift: bool,
-    pub violations: Vec<String>
+    pub violations: Vec<String>,
 }
 
 impl GovernanceSkill {
@@ -34,7 +34,7 @@ impl GovernanceSkill {
     pub async fn governance_validate(
         &self,
         tenant: &TenantContext,
-        policy: String
+        policy: String,
     ) -> A2AResult<Value> {
         let result = self
             .engine
@@ -69,13 +69,12 @@ impl Skill for GovernanceSkill {
         "governance"
     }
 
-    async fn invoke(&self, tool: &str, params: Value) -> Result<Value, String> {
-        let tenant = TenantContext {
-            tenant_id: "default".to_string(),
-            user_id: None,
-            agent_id: None
-        };
-
+    async fn invoke(
+        &self,
+        tool: &str,
+        params: Value,
+        tenant: &TenantContext,
+    ) -> Result<Value, String> {
         match tool {
             "governance_validate" => {
                 let policy = params["policy"]
@@ -83,15 +82,15 @@ impl Skill for GovernanceSkill {
                     .ok_or("Missing policy")?
                     .to_string();
 
-                self.governance_validate(&tenant, policy)
+                self.governance_validate(tenant, policy)
                     .await
                     .map_err(|e| e.to_string())
             }
             "governance_drift_check" => self
-                .governance_drift_check(&tenant)
+                .governance_drift_check(tenant)
                 .await
                 .map_err(|e| e.to_string()),
-            _ => Err(format!("Unknown tool: {}", tool))
+            _ => Err(format!("Unknown tool: {}", tool)),
         }
     }
 }
@@ -104,14 +103,90 @@ impl GovernanceEngine for MockGovernanceEngine {
         Ok(ValidationResult {
             valid: true,
             errors: vec![],
-            warnings: vec![]
+            warnings: vec![],
         })
     }
 
     async fn check_drift(&self, _tenant_id: &str) -> Result<DriftResult, String> {
         Ok(DriftResult {
             has_drift: false,
-            violations: vec![]
+            violations: vec![],
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::TenantContext;
+    use std::sync::Arc;
+
+    fn tenant(tenant_id: &str, roles: Vec<&str>) -> TenantContext {
+        TenantContext {
+            tenant_id: tenant_id.to_string(),
+            user_id: Some("user-1".to_string()),
+            agent_id: None,
+            user_email: Some("alice@example.com".to_string()),
+            groups: vec!["aeterna-users".to_string()],
+            roles: roles.into_iter().map(ToString::to_string).collect(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_governance_validate_uses_tenant_context() {
+        let skill = GovernanceSkill::new(Arc::new(MockGovernanceEngine));
+        let ctx = tenant("acme-corp", vec!["developer"]);
+
+        let result = skill
+            .invoke(
+                "governance_validate",
+                serde_json::json!({ "policy": "permit everything;" }),
+                &ctx,
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let val = result.unwrap();
+        assert_eq!(val["valid"], true);
+    }
+
+    #[tokio::test]
+    async fn test_governance_drift_check_uses_tenant_context() {
+        let skill = GovernanceSkill::new(Arc::new(MockGovernanceEngine));
+        let ctx = tenant("acme-corp", vec!["architect"]);
+
+        let result = skill
+            .invoke("governance_drift_check", serde_json::json!({}), &ctx)
+            .await;
+
+        assert!(result.is_ok());
+        let val = result.unwrap();
+        assert_eq!(val["has_drift"], false);
+    }
+
+    #[tokio::test]
+    async fn test_governance_validate_rejects_missing_policy_param() {
+        let skill = GovernanceSkill::new(Arc::new(MockGovernanceEngine));
+        let ctx = tenant("acme-corp", vec!["admin"]);
+
+        let result = skill
+            .invoke("governance_validate", serde_json::json!({}), &ctx)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Missing policy"));
+    }
+
+    #[tokio::test]
+    async fn test_governance_invoke_unknown_tool_returns_error() {
+        let skill = GovernanceSkill::new(Arc::new(MockGovernanceEngine));
+        let ctx = tenant("acme-corp", vec!["viewer"]);
+
+        let result = skill
+            .invoke("governance_nonexistent", serde_json::json!({}), &ctx)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown tool"));
     }
 }
