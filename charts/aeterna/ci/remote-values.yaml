@@ -38,7 +38,7 @@ vectorBackend:
   qdrant:
     bundled: false
     external:
-      host: ""
+      host: "central-qdrant.ci.example.com"
 
 cache:
   type: external
@@ -50,7 +50,7 @@ cache:
 postgresql:
   bundled: false
   external:
-    host: ""
+    host: "central-postgres.ci.example.com"
 
 opal:
   enabled: false

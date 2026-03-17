@@ -63,7 +63,7 @@ cache:
 postgresql:
   bundled: false
   external:
-    host: ""  # Not needed in hybrid mode
+    host: ""
 
 # Enable local Cedar Agent for offline policy evaluation
 opal:

@@ -1,0 +1,58 @@
+global:
+  imageRegistry: artifactory.kod.kyriba.com
+  imagePullSecrets: []
+
+aeterna:
+  image:
+    repository: ghcrio/kikokikok/aeterna
+
+codesearch:
+  image:
+    repository: artifactory.kod.kyriba.com/ghcrio/kikokikok/codesearch
+
+opal:
+  server:
+    image:
+      repository: artifactory.kod.kyriba.com/dockerhub/permitio/opal-server
+  cedarAgent:
+    image:
+      repository: artifactory.kod.kyriba.com/dockerhub/permitio/cedar-agent
+  fetcher:
+    image:
+      repository: artifactory.kod.kyriba.com/dockerhub/permitio/opal-client
+
+cache:
+  type: valkey
+  dragonfly:
+    enabled: false
+  valkey:
+    enabled: true
+
+cnpg:
+  image:
+    repository: artifactory.kod.kyriba.com/ghcrio/cloudnative-pg/cloudnative-pg
+
+qdrant:
+  image:
+    repository: artifactory.kod.kyriba.com/dockerhub/qdrant/qdrant
+
+valkey:
+  enabled: true
+  auth:
+    enabled: false
+  image:
+    registry: artifactory.kod.kyriba.com
+    repository: dockerhub/valkey/valkey
+  metrics:
+    enabled: false
+
+weaviate:
+  enabled: false
+
+mongodb:
+  enabled: false
+
+backup:
+  enabled: false
+  verify:
+    enabled: false

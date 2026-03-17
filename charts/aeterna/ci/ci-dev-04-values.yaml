@@ -1,0 +1,74 @@
+deploymentMode: local
+
+aeterna:
+  replicaCount: 1
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: cidev04-letsencrypt-prod
+      kubernetes.io/tls-acme: "true"
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    hosts:
+      - host: aeterna.ci-dev-04.dev.kyriba.io
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: aeterna-tls
+        hosts:
+          - aeterna.ci-dev-04.dev.kyriba.io
+
+cache:
+  type: valkey
+  dragonfly:
+    enabled: false
+  valkey:
+    enabled: true
+
+postgresql:
+  bundled: true
+  cloudnativepg:
+    enabled: true
+    instances: 1
+    storage:
+      size: 10Gi
+      storageClass: gp3
+
+opal:
+  server:
+    replicaCount: 1
+
+observability:
+  serviceMonitor:
+    enabled: false
+
+networkPolicy:
+  enabled: false
+
+global:
+  storageClass: gp3
+
+cnpg:
+  enabled: false
+
+dragonfly:
+  enabled: false
+
+valkey:
+  enabled: true
+  auth:
+    enabled: false
+  metrics:
+    enabled: false
+  dataStorage:
+    enabled: true
+    requestedSize: 10Gi
+    className: gp3
+
+qdrant:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    size: 10Gi
+    storageClass: gp3

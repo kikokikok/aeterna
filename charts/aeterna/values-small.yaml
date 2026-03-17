@@ -13,18 +13,23 @@ aeterna:
       memory: 128Mi
   autoscaling:
     enabled: false
+    vpa:
+      enabled: false
+  pdb:
+    enabled: false
 
 cnpg:
   enabled: true
-  postgresql:
-    parameters:
-      max_connections: "100"
   instances: 1
   storage:
     size: 5Gi
 
 postgresql:
-  bundled: false
+  bundled: true
+  cloudnativepg:
+    instances: 1
+    storage:
+      size: 5Gi
 
 qdrant:
   enabled: true
@@ -71,14 +76,9 @@ opal:
 backup:
   enabled: false
 
-podDisruptionBudget:
-  enabled: false
-
 networkPolicy:
   enabled: false
 
-verticalPodAutoscaler:
-  enabled: false
-
-serviceMonitor:
-  enabled: false
+observability:
+  serviceMonitor:
+    enabled: false
