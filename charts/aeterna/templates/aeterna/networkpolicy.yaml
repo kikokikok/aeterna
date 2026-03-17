@@ -13,16 +13,66 @@ spec:
     - Ingress
     - Egress
   ingress:
+    {{- /* Allow ingress only from the ingress controller, not from all pods in the namespace */}}
     - from:
-        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
       ports:
         - protocol: TCP
           port: 8080
         - protocol: TCP
           port: 9090
+    {{- /* Allow Prometheus scraping from monitoring namespace */}}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
   egress:
+    {{- /* Allow egress to PostgreSQL */}}
     - to:
-        - podSelector: {}
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "aeterna.fullname" . }}-cnpg
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- /* Allow egress to Qdrant */}}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qdrant
+      ports:
+        - protocol: TCP
+          port: 6333
+        - protocol: TCP
+          port: 6334
+    {{- /* Allow egress to Dragonfly/Redis cache */}}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: dragonfly
+      ports:
+        - protocol: TCP
+          port: 6379
+    {{- /* Allow egress to OPAL server */}}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "aeterna.opal.server.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 7002
+    {{- /* Allow DNS resolution */}}
     - to:
         - namespaceSelector: {}
           podSelector:
@@ -30,5 +80,7 @@ spec:
               k8s-app: kube-dns
       ports:
         - protocol: UDP
+          port: 53
+        - protocol: TCP
           port: 53
 {{- end }}

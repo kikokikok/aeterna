@@ -17,7 +17,7 @@ spec:
       protocol: TCP
       name: metrics
     {{- if .Values.codesearch.enabled }}
-    - port: 9090
+    - port: 9091
       targetPort: mcp
       protocol: TCP
       name: mcp
