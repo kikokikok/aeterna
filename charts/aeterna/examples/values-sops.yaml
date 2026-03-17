@@ -17,12 +17,16 @@ central:
 
 cache:
   external:
+    enabled: true
+    host: "redis.example.com"
+    port: 6379
     password: "REPLACE-WITH-REDIS-PASSWORD"
 
 postgresql:
+  bundled: false
   external:
+    host: "postgres.example.com"
+    port: 5432
+    database: "aeterna"
+    username: "aeterna"
     password: "REPLACE-WITH-POSTGRES-PASSWORD"
-
-opal:
-  server:
-    masterToken: "REPLACE-WITH-OPAL-MASTER-TOKEN"
