@@ -12,6 +12,7 @@ use colored::Colorize;
 use context::ContextResolver;
 
 use crate::output;
+use crate::ux_error;
 
 #[derive(Args)]
 pub struct CheckArgs {
@@ -33,14 +34,14 @@ pub struct CheckArgs {
 
     /// Specific files or paths to check (defaults to current directory)
     #[arg(value_name = "PATH")]
-    pub paths: Vec<String>
+    pub paths: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 enum Severity {
     Error,
     Warning,
-    Info
+    Info,
 }
 
 impl Severity {
@@ -48,7 +49,7 @@ impl Severity {
         match self {
             Severity::Error => "error",
             Severity::Warning => "warning",
-            Severity::Info => "info"
+            Severity::Info => "info",
         }
     }
 }
@@ -61,7 +62,7 @@ struct CheckResult {
     message: String,
     file: Option<String>,
     line: Option<u32>,
-    suggestion: Option<String>
+    suggestion: Option<String>,
 }
 
 pub async fn run(args: CheckArgs) -> Result<()> {
@@ -156,11 +157,23 @@ pub async fn run(args: CheckArgs) -> Result<()> {
     println!("  {} {} info", "ℹ".blue(), infos.len());
     println!();
 
+    let server_connection_warnings = results
+        .iter()
+        .filter(|r| r.rule == "server-connection")
+        .count();
+
     // Determine exit status
-    let has_violations = !errors.is_empty() || (args.strict && !warnings.is_empty());
+    let has_violations = !errors.is_empty()
+        || (args.strict && !warnings.is_empty())
+        || server_connection_warnings == results.len();
 
     if has_violations {
-        if errors.is_empty() {
+        if server_connection_warnings == results.len() {
+            ux_error::server_not_connected().display();
+            output::error(
+                "Validation could not run because all checks require a live Aeterna server",
+            );
+        } else if errors.is_empty() {
             output::warn("Validation failed (strict mode) with warnings");
         } else {
             output::error("Validation failed with errors");
@@ -185,10 +198,22 @@ async fn run_json(args: CheckArgs, ctx: &context::ResolvedContext) -> Result<()>
         .filter(|r| matches!(r.severity, Severity::Warning))
         .collect();
 
-    let has_violations = !errors.is_empty() || (args.strict && !warnings.is_empty());
+    let server_connection_warnings = results
+        .iter()
+        .filter(|r| r.rule == "server-connection")
+        .count();
+
+    let has_violations = !errors.is_empty()
+        || (args.strict && !warnings.is_empty())
+        || server_connection_warnings == results.len();
 
     let output = serde_json::json!({
         "success": !has_violations,
+        "error": if server_connection_warnings == results.len() {
+            Some("server_not_connected")
+        } else {
+            None::<&str>
+        },
         "context": {
             "tenant_id": ctx.tenant_id.value,
             "project_id": ctx.project_id.as_ref().map(|p| &p.value),
@@ -241,41 +266,49 @@ fn run_checks(args: &CheckArgs, _ctx: &context::ResolvedContext) -> Vec<CheckRes
     results
 }
 
+fn not_connected_result(category: &str) -> CheckResult {
+    CheckResult {
+        category: category.to_string(),
+        rule: "server-connection".to_string(),
+        severity: Severity::Warning,
+        message: "Check requires a live Aeterna server connection (AETERNA_SERVER_URL not set or unreachable)".to_string(),
+        file: None,
+        line: None,
+        suggestion: Some("Run 'aeterna serve' or set AETERNA_SERVER_URL, then retry".to_string())
+    }
+}
+
 fn check_policies(_args: &CheckArgs) -> Vec<CheckResult> {
-    // TODO: Replace with actual policy checks when backend is implemented
-    // Currently returns empty (all passing)
-    vec![]
+    // Server not connected: report as warning so callers know checks were skipped.
+    vec![not_connected_result("policies")]
 }
 
 fn check_dependencies(_args: &CheckArgs) -> Vec<CheckResult> {
-    // TODO: Replace with actual dependency checks when backend is implemented
-    // Currently returns empty (all passing)
-    vec![]
+    // Server not connected: report as warning so callers know checks were skipped.
+    vec![not_connected_result("dependencies")]
 }
 
 fn check_architecture(_args: &CheckArgs) -> Vec<CheckResult> {
-    // TODO: Replace with actual architecture checks when backend is implemented
-    // Currently returns empty (all passing)
-    vec![]
+    // Server not connected: report as warning so callers know checks were skipped.
+    vec![not_connected_result("architecture")]
 }
 
 fn check_security(_args: &CheckArgs) -> Vec<CheckResult> {
-    // TODO: Replace with actual security checks when backend is implemented
-    // Currently returns empty (all passing)
-    vec![]
+    // Server not connected: report as warning so callers know checks were skipped.
+    vec![not_connected_result("security")]
 }
 
 fn print_result(result: &CheckResult) {
     let severity_icon = match result.severity {
         Severity::Error => "✗".red(),
         Severity::Warning => "⚠".yellow(),
-        Severity::Info => "ℹ".blue()
+        Severity::Info => "ℹ".blue(),
     };
 
     let location = match (&result.file, result.line) {
         (Some(file), Some(line)) => format!("{file}:{line}"),
         (Some(file), None) => file.clone(),
-        _ => String::new()
+        _ => String::new(),
     };
 
     if location.is_empty() {
@@ -314,54 +347,66 @@ mod tests {
     }
 
     #[test]
-    fn test_check_policies_empty() {
+    fn test_check_policies_not_connected_warning() {
         let args = CheckArgs {
             json: false,
             target: "policies".to_string(),
             strict: false,
             violations_only: false,
-            paths: vec![]
+            paths: vec![],
         };
         let results = check_policies(&args);
-        assert!(results.is_empty());
+        assert_eq!(results.len(), 1, "must emit one not-connected warning");
+        assert!(matches!(results[0].severity, Severity::Warning));
+        assert_eq!(results[0].category, "policies");
+        assert!(
+            results[0].message.contains("not connected")
+                || results[0].message.contains("server connection")
+        );
     }
 
     #[test]
-    fn test_check_dependencies_empty() {
+    fn test_check_dependencies_not_connected_warning() {
         let args = CheckArgs {
             json: false,
             target: "dependencies".to_string(),
             strict: false,
             violations_only: false,
-            paths: vec![]
+            paths: vec![],
         };
         let results = check_dependencies(&args);
-        assert!(results.is_empty());
+        assert_eq!(results.len(), 1, "must emit one not-connected warning");
+        assert!(matches!(results[0].severity, Severity::Warning));
+        assert_eq!(results[0].category, "dependencies");
     }
 
     #[test]
-    fn test_check_architecture_empty() {
+    fn test_check_architecture_not_connected_warning() {
         let args = CheckArgs {
             json: false,
             target: "architecture".to_string(),
             strict: false,
             violations_only: false,
-            paths: vec![]
+            paths: vec![],
         };
         let results = check_architecture(&args);
-        assert!(results.is_empty());
+        assert_eq!(results.len(), 1, "must emit one not-connected warning");
+        assert!(matches!(results[0].severity, Severity::Warning));
+        assert_eq!(results[0].category, "architecture");
     }
 
     #[test]
-    fn test_check_security_empty() {
+    fn test_check_security_not_connected_warning() {
         let args = CheckArgs {
             json: false,
             target: "security".to_string(),
             strict: false,
             violations_only: false,
-            paths: vec![]
+            paths: vec![],
         };
         let results = check_security(&args);
-        assert!(results.is_empty());
+        assert_eq!(results.len(), 1, "must emit one not-connected warning");
+        assert!(matches!(results[0].severity, Severity::Warning));
+        assert_eq!(results[0].category, "security");
     }
 }
