@@ -107,6 +107,13 @@ opal:
   server:
     replicaCount: 3
 
+llm:
+  provider: bedrock
+  bedrock:
+    region: "us-east-1"
+    model: "amazon.nova-micro-v1:0"
+    embeddingModel: "amazon.titan-embed-text-v2:0"
+
 # Observability
 observability:
   serviceMonitor:

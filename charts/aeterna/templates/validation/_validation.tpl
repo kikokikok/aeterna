@@ -49,6 +49,33 @@ Validate PostgreSQL configuration.
 {{- end -}}
 
 {{/*
+Validate LLM provider configuration.
+*/}}
+{{- define "aeterna.validate.llm" -}}
+{{- if and (eq .Values.llm.provider "google") (not .Values.llm.google.projectId) -}}
+{{- fail "Invalid configuration: llm.provider=google requires llm.google.projectId to be set." -}}
+{{- end -}}
+{{- if and (eq .Values.llm.provider "google") (not .Values.llm.google.location) -}}
+{{- fail "Invalid configuration: llm.provider=google requires llm.google.location to be set." -}}
+{{- end -}}
+{{- if and (eq .Values.llm.provider "google") (not .Values.llm.google.model) -}}
+{{- fail "Invalid configuration: llm.provider=google requires llm.google.model to be set." -}}
+{{- end -}}
+{{- if and (eq .Values.llm.provider "google") (not .Values.llm.google.embeddingModel) -}}
+{{- fail "Invalid configuration: llm.provider=google requires llm.google.embeddingModel to be set." -}}
+{{- end -}}
+{{- if and (eq .Values.llm.provider "bedrock") (not .Values.llm.bedrock.region) -}}
+{{- fail "Invalid configuration: llm.provider=bedrock requires llm.bedrock.region to be set." -}}
+{{- end -}}
+{{- if and (eq .Values.llm.provider "bedrock") (not .Values.llm.bedrock.model) -}}
+{{- fail "Invalid configuration: llm.provider=bedrock requires llm.bedrock.model to be set." -}}
+{{- end -}}
+{{- if and (eq .Values.llm.provider "bedrock") (not .Values.llm.bedrock.embeddingModel) -}}
+{{- fail "Invalid configuration: llm.provider=bedrock requires llm.bedrock.embeddingModel to be set." -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Validate Code Search image support.
 The default repository is not built by this repo's image workflow, so operators
 must supply an explicit published mirror/repository when enabling the sidecar.
@@ -106,6 +133,7 @@ Run all validations. Include this once in a rendered resource.
 {{- include "aeterna.validate.deploymentMode" . -}}
 {{- include "aeterna.validate.vectorBackend" . -}}
 {{- include "aeterna.validate.postgresql" . -}}
+{{- include "aeterna.validate.llm" . -}}
 {{- include "aeterna.validate.codesearch" . -}}
 {{- include "aeterna.validate.secrets" . -}}
 {{- include "aeterna.validate.okta" . -}}

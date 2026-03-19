@@ -105,6 +105,14 @@ opal:
   server:
     replicaCount: 3
 
+llm:
+  provider: google
+  google:
+    projectId: "project-id"
+    location: "us-central1"
+    model: "gemini-2.5-flash"
+    embeddingModel: "text-embedding-005"
+
 # Observability
 observability:
   serviceMonitor:
