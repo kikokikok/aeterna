@@ -17,6 +17,108 @@ The rest of this file remains focused on Code Search repository management deplo
 
 ---
 
+## Server-Side LLM Provider Deployment
+
+Aeterna can construct server-side LLM and embedding services at startup from deployment configuration. The runtime currently supports these provider values through `AETERNA_LLM_PROVIDER`:
+
+- `openai`
+- `google`
+- `bedrock`
+- `none`
+
+### Common Runtime Selection
+
+Set the provider explicitly:
+
+```bash
+export AETERNA_LLM_PROVIDER=openai
+```
+
+If you set `AETERNA_LLM_PROVIDER=none`, provider-dependent memory and reasoning operations fail closed instead of silently falling back.
+
+### OpenAI
+
+```bash
+export AETERNA_LLM_PROVIDER=openai
+export OPENAI_API_KEY=your-api-key
+export AETERNA_OPENAI_MODEL=gpt-4.1-mini
+export AETERNA_OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+### Google Cloud (Vertex AI / Gemini)
+
+Required runtime settings:
+
+```bash
+export AETERNA_LLM_PROVIDER=google
+export AETERNA_GOOGLE_PROJECT_ID=my-gcp-project
+export AETERNA_GOOGLE_LOCATION=global
+export AETERNA_GOOGLE_MODEL=gemini-2.5-flash
+export AETERNA_GOOGLE_EMBEDDING_MODEL=text-embedding-005
+```
+
+Authentication is resolved in this order:
+
+1. `GOOGLE_ACCESS_TOKEN`
+2. Application Default Credentials via `GOOGLE_APPLICATION_CREDENTIALS`
+3. Ambient ADC in GCP runtimes such as GKE Workload Identity
+
+Example with a service-account key file:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/var/run/secrets/google/service-account.json
+```
+
+Operational notes:
+
+- the configured service account needs Vertex AI access in the configured project
+- the selected location and model identifiers must match enabled Vertex AI resources
+- missing project, location, or model configuration fails closed during provider construction
+
+### AWS Bedrock
+
+Required runtime settings:
+
+```bash
+export AETERNA_LLM_PROVIDER=bedrock
+export AETERNA_BEDROCK_REGION=eu-west-1
+export AETERNA_BEDROCK_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0
+export AETERNA_BEDROCK_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0
+```
+
+Authentication uses the normal AWS credential chain, including:
+
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+- `AWS_SESSION_TOKEN`
+- IAM roles for service accounts or instance profiles
+- shared AWS config/credential files
+
+Operational notes:
+
+- the runtime region must be a Bedrock-enabled region for the selected models
+- the workload identity must have permission to invoke the selected Bedrock models
+- missing region or model configuration fails closed during provider construction
+
+### Helm / Setup CLI Alignment
+
+The setup wizard and Helm chart emit the exact environment variables consumed by the runtime:
+
+- `AETERNA_LLM_PROVIDER`
+- `AETERNA_GOOGLE_PROJECT_ID`
+- `AETERNA_GOOGLE_LOCATION`
+- `AETERNA_GOOGLE_MODEL`
+- `AETERNA_GOOGLE_EMBEDDING_MODEL`
+- `AETERNA_BEDROCK_REGION`
+- `AETERNA_BEDROCK_MODEL`
+- `AETERNA_BEDROCK_EMBEDDING_MODEL`
+
+Use the chart examples for cloud deployments:
+
+- `charts/aeterna/examples/values-gke.yaml`
+- `charts/aeterna/examples/values-aws.yaml`
+
+---
+
 ## 🏗 System Architecture
 
 The Code Search Repository Management system follows a distributed, multi-tenant architecture designed for Kubernetes:
