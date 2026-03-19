@@ -126,6 +126,10 @@ spec:
                   name: {{ .Values.llm.anthropic.existingSecret | default (printf "%s-anthropic" (include "aeterna.fullname" .)) }}
                   key: api-key
             {{- end }}
+            {{- if and (eq .Values.llm.provider "google") .Values.llm.google.existingSecret }}
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /var/run/aeterna/google/{{ .Values.llm.google.secretKey }}
+            {{- end }}
             {{- if and (eq .Values.vectorBackend.type "pinecone") }}
             - name: AETERNA_PINECONE_API_KEY
               valueFrom:
@@ -168,6 +172,11 @@ spec:
               mountPath: /tmp
             - name: cache
               mountPath: /home/aeterna/.cache
+            {{- if and (eq .Values.llm.provider "google") .Values.llm.google.existingSecret }}
+            - name: google-application-credentials
+              mountPath: /var/run/aeterna/google
+              readOnly: true
+            {{- end }}
         {{- if .Values.codesearch.enabled }}
         - name: codesearch
           image: {{ .Values.codesearch.image.repository }}:{{ .Values.codesearch.image.tag }}
@@ -231,6 +240,11 @@ spec:
           emptyDir: {}
         - name: cache
           emptyDir: {}
+        {{- if and (eq .Values.llm.provider "google") .Values.llm.google.existingSecret }}
+        - name: google-application-credentials
+          secret:
+            secretName: {{ .Values.llm.google.existingSecret }}
+        {{- end }}
         {{- if .Values.codesearch.enabled }}
         - name: codesearch-config
           configMap:

@@ -394,7 +394,7 @@
       "type": "object",
       "description": "LLM provider configuration",
       "properties": {
-        "provider": { "type": "string", "enum": ["openai", "anthropic", "ollama", "none"], "default": "none" },
+        "provider": { "type": "string", "enum": ["openai", "anthropic", "ollama", "google", "bedrock", "none"], "default": "none" },
         "openai": {
           "type": "object",
           "properties": {
@@ -418,6 +418,25 @@
             "host": { "type": "string", "default": "http://localhost:11434" },
             "model": { "type": "string", "default": "llama3.2" },
             "embeddingModel": { "type": "string", "default": "nomic-embed-text" }
+          }
+        },
+        "google": {
+          "type": "object",
+          "properties": {
+            "projectId": { "type": "string", "default": "" },
+            "location": { "type": "string", "default": "us-central1" },
+            "model": { "type": "string", "default": "gemini-2.5-flash" },
+            "embeddingModel": { "type": "string", "default": "text-embedding-005" },
+            "existingSecret": { "type": "string", "default": "" },
+            "secretKey": { "type": "string", "default": "credentials.json" }
+          }
+        },
+        "bedrock": {
+          "type": "object",
+          "properties": {
+            "region": { "type": "string", "default": "us-east-1" },
+            "model": { "type": "string", "default": "amazon.nova-micro-v1:0" },
+            "embeddingModel": { "type": "string", "default": "amazon.titan-embed-text-v2:0" }
           }
         }
       }
