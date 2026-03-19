@@ -231,6 +231,7 @@ Location: `docs/examples/policies/`
 - README.md (Quick start section)
 - Comprehensive UX/DX Guide (DX1: Setup & Installation)
 - specs/08-deployment.md (Full deployment guide)
+- docs/guides/okta-auth-deployment.md (Okta-backed interactive auth)
 ```
 
 ### Integration Guides
@@ -329,6 +330,7 @@ Location: `docs/security/`
 | Local Development | README.md + UX/DX Guide | ✅ Complete |
 | Docker Compose | docker-compose.yml + docs | ✅ Complete |
 | Kubernetes (Helm) | charts/ + specs/08-deployment.md | 🚧 In Progress |
+| Okta-backed interactive auth | docs/guides/okta-auth-deployment.md | ✅ Complete |
 | Production | Gap Analysis (HA/DR section) | 📝 Planned |
 
 ### Monitoring & Observability

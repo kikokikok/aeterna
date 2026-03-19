@@ -318,3 +318,14 @@ imagePullSecrets:
   {{- toYaml $secrets | nindent 2 }}
 {{- end }}
 {{- end }}
+
+{{/*
+Return Okta auth secret name.
+*/}}
+{{- define "aeterna.okta.secretName" -}}
+{{- if .Values.okta.existingSecret }}
+{{- .Values.okta.existingSecret }}
+{{- else }}
+{{- printf "%s-okta-auth" (include "aeterna.fullname" .) }}
+{{- end }}
+{{- end }}

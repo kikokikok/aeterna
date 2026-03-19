@@ -99,7 +99,7 @@ mod memory_subcommand {
                 "add",
                 "Test memory content",
                 "--dry-run",
-                "--json"
+                "--json",
             ])
             .assert()
             .success()
@@ -116,7 +116,7 @@ mod memory_subcommand {
                 "Project specific memory",
                 "--layer",
                 "project",
-                "--dry-run"
+                "--dry-run",
             ])
             .assert()
             .success()
@@ -170,6 +170,36 @@ mod memory_subcommand {
     }
 
     #[test]
+    fn test_memory_delete_requires_confirmation() {
+        aeterna()
+            .args(["memory", "delete", "mem-123", "--layer", "project"])
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("skip this confirmation"));
+    }
+
+    #[test]
+    fn test_memory_delete_invalid_layer() {
+        aeterna()
+            .args(["memory", "delete", "mem-123", "--layer", "invalid", "--yes"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid").or(predicate::str::contains("Invalid")));
+    }
+
+    #[test]
+    fn test_memory_delete_yes_without_server_fails() {
+        aeterna()
+            .args(["memory", "delete", "mem-123", "--layer", "project", "--yes"])
+            .assert()
+            .failure()
+            .stderr(
+                predicate::str::contains("not connected")
+                    .or(predicate::str::contains("AETERNA_SERVER_URL")),
+            );
+    }
+
+    #[test]
     fn test_memory_feedback_help() {
         aeterna()
             .args(["memory", "feedback", "--help"])
@@ -179,12 +209,131 @@ mod memory_subcommand {
     }
 
     #[test]
+    fn test_memory_feedback_invalid_type() {
+        aeterna()
+            .args([
+                "memory",
+                "feedback",
+                "mem-123",
+                "--layer",
+                "project",
+                "--feedback-type",
+                "amazing",
+                "--score",
+                "0.5",
+            ])
+            .assert()
+            .failure()
+            .stderr(
+                predicate::str::contains("Invalid feedback")
+                    .or(predicate::str::contains("invalid")),
+            );
+    }
+
+    #[test]
+    fn test_memory_feedback_invalid_score() {
+        aeterna()
+            .args([
+                "memory",
+                "feedback",
+                "mem-123",
+                "--layer",
+                "project",
+                "--feedback-type",
+                "helpful",
+                "--score",
+                "1.5",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("score").or(predicate::str::contains("Invalid")));
+    }
+
+    #[test]
+    fn test_memory_feedback_valid_input_without_server_fails() {
+        aeterna()
+            .args([
+                "memory",
+                "feedback",
+                "mem-123",
+                "--layer",
+                "project",
+                "--feedback-type",
+                "helpful",
+                "--score",
+                "0.5",
+            ])
+            .assert()
+            .failure()
+            .stderr(
+                predicate::str::contains("not connected")
+                    .or(predicate::str::contains("AETERNA_SERVER_URL")),
+            );
+    }
+
+    #[test]
     fn test_memory_promote_help() {
         aeterna()
             .args(["memory", "promote", "--help"])
             .assert()
             .success()
             .stdout(predicate::str::contains("Promote"));
+    }
+
+    #[test]
+    fn test_memory_promote_invalid_target_layer() {
+        aeterna()
+            .args([
+                "memory",
+                "promote",
+                "mem-123",
+                "--from-layer",
+                "project",
+                "--to-layer",
+                "invalid",
+                "--dry-run",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid").or(predicate::str::contains("Invalid")));
+    }
+
+    #[test]
+    fn test_memory_promote_rejects_narrower_layer() {
+        aeterna()
+            .args([
+                "memory",
+                "promote",
+                "mem-123",
+                "--from-layer",
+                "team",
+                "--to-layer",
+                "project",
+                "--dry-run",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("promote").or(predicate::str::contains("narrower")));
+    }
+
+    #[test]
+    fn test_memory_promote_dry_run_json() {
+        aeterna()
+            .args([
+                "memory",
+                "promote",
+                "mem-123",
+                "--from-layer",
+                "project",
+                "--to-layer",
+                "team",
+                "--dry-run",
+                "--json",
+            ])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("\"dryRun\""))
+            .stdout(predicate::str::contains("\"memoryId\""));
     }
 }
 
@@ -232,12 +381,114 @@ mod knowledge_subcommand {
     }
 
     #[test]
+    fn test_knowledge_get_invalid_layer() {
+        aeterna()
+            .args(["knowledge", "get", "adrs/adr-001.md", "--layer", "invalid"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid").or(predicate::str::contains("Invalid")));
+    }
+
+    #[test]
+    fn test_knowledge_get_json_not_connected() {
+        aeterna()
+            .args(["knowledge", "get", "adrs/adr-001.md", "--json"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("\"status\""))
+            .stdout(predicate::str::contains("not_connected"));
+    }
+
+    #[test]
+    fn test_knowledge_list_invalid_layer() {
+        aeterna()
+            .args(["knowledge", "list", "--layer", "invalid"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid").or(predicate::str::contains("Invalid")));
+    }
+
+    #[test]
     fn test_knowledge_check_help() {
         aeterna()
             .args(["knowledge", "check", "--help"])
             .assert()
             .success()
             .stdout(predicate::str::contains("Check"));
+    }
+
+    #[test]
+    fn test_knowledge_check_dry_run_json() {
+        aeterna()
+            .args([
+                "knowledge",
+                "check",
+                "--dependency",
+                "openssl",
+                "--dry-run",
+                "--json",
+            ])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("\"dryRun\""))
+            .stdout(predicate::str::contains("knowledge_check"));
+    }
+
+    #[test]
+    fn test_knowledge_propose_invalid_type() {
+        aeterna()
+            .args([
+                "knowledge",
+                "propose",
+                "Use PostgreSQL for primary data",
+                "--knowledge-type",
+                "memo",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid").or(predicate::str::contains("Invalid")));
+    }
+
+    #[test]
+    fn test_knowledge_propose_invalid_layer() {
+        aeterna()
+            .args([
+                "knowledge",
+                "propose",
+                "Use PostgreSQL for primary data",
+                "--layer",
+                "session",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid").or(predicate::str::contains("Invalid")));
+    }
+
+    #[test]
+    fn test_knowledge_propose_requires_confirmation() {
+        aeterna()
+            .args(["knowledge", "propose", "Use PostgreSQL for primary data"])
+            .assert()
+            .success()
+            .stderr(predicate::str::contains(
+                "Use --yes to skip this confirmation",
+            ));
+    }
+
+    #[test]
+    fn test_knowledge_propose_yes_json_not_connected() {
+        aeterna()
+            .args([
+                "knowledge",
+                "propose",
+                "Use PostgreSQL for primary data",
+                "--yes",
+                "--json",
+            ])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("\"status\""))
+            .stdout(predicate::str::contains("not_connected"));
     }
 
     #[test]
@@ -322,6 +573,74 @@ mod user_subcommand {
     }
 
     #[test]
+    fn test_user_roles_invalid_grant_role() {
+        aeterna()
+            .args([
+                "user",
+                "roles",
+                "--user",
+                "alice@example.com",
+                "--grant",
+                "superuser",
+            ])
+            .assert()
+            .failure()
+            .stderr(
+                predicate::str::contains("Invalid role").or(predicate::str::contains("invalid")),
+            );
+    }
+
+    #[test]
+    fn test_user_roles_grant_json() {
+        aeterna()
+            .args([
+                "user",
+                "roles",
+                "--user",
+                "alice@example.com",
+                "--grant",
+                "developer",
+                "--scope",
+                "team",
+                "--json",
+            ])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("user_role_grant"))
+            .stdout(predicate::str::contains("alice@example.com"));
+    }
+
+    #[test]
+    fn test_user_roles_revoke_json() {
+        aeterna()
+            .args([
+                "user",
+                "roles",
+                "--user",
+                "alice@example.com",
+                "--revoke",
+                "developer",
+                "--scope",
+                "team",
+                "--json",
+            ])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("user_role_revoke"))
+            .stdout(predicate::str::contains("alice@example.com"));
+    }
+
+    #[test]
+    fn test_user_roles_list_json() {
+        aeterna()
+            .args(["user", "roles", "--json"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("user_roles_list"))
+            .stdout(predicate::str::contains("not_connected"));
+    }
+
+    #[test]
     fn test_user_invite_help() {
         aeterna()
             .args(["user", "invite", "--help"])
@@ -339,12 +658,12 @@ mod user_subcommand {
                 "not-an-email",
                 "--org",
                 "test-org",
-                "--yes"
+                "--yes",
             ])
             .assert()
             .failure()
             .stderr(
-                predicate::str::contains("Invalid email").or(predicate::str::contains("invalid"))
+                predicate::str::contains("Invalid email").or(predicate::str::contains("invalid")),
             );
     }
 
@@ -359,12 +678,12 @@ mod user_subcommand {
                 "test-org",
                 "--role",
                 "superuser",
-                "--yes"
+                "--yes",
             ])
             .assert()
             .failure()
             .stderr(
-                predicate::str::contains("Invalid role").or(predicate::str::contains("invalid"))
+                predicate::str::contains("Invalid role").or(predicate::str::contains("invalid")),
             );
     }
 }
@@ -407,6 +726,31 @@ mod admin_subcommand {
     }
 
     #[test]
+    fn test_admin_validate_json_success_for_config() {
+        let output = aeterna()
+            .args(["admin", "validate", "--target", "config", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json.get("valid").and_then(|v| v.as_bool()), Some(true));
+    }
+
+    #[test]
+    fn test_admin_validate_strict_fails_for_policies() {
+        aeterna()
+            .args(["admin", "validate", "--target", "policies", "--strict"])
+            .assert()
+            .success()
+            .stdout(
+                predicate::str::contains("INVALID")
+                    .or(predicate::str::contains("warnings treated as errors")),
+            );
+    }
+
+    #[test]
     fn test_admin_migrate_help() {
         aeterna()
             .args(["admin", "migrate", "--help"])
@@ -436,6 +780,29 @@ mod admin_subcommand {
     }
 
     #[test]
+    fn test_admin_drift_fix() {
+        aeterna()
+            .args(["admin", "drift", "--fix"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Applying fixes"))
+            .stdout(predicate::str::contains("Fixed"));
+    }
+
+    #[test]
+    fn test_admin_drift_json() {
+        let output = aeterna()
+            .args(["admin", "drift", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert!(json.get("drifts").is_some());
+    }
+
+    #[test]
     fn test_admin_export_help() {
         aeterna()
             .args(["admin", "export", "--help"])
@@ -446,6 +813,17 @@ mod admin_subcommand {
     }
 
     #[test]
+    fn test_admin_export_json_fails_without_server() {
+        let output = aeterna()
+            .args(["admin", "export", "--json"])
+            .output()
+            .expect("process ran");
+        assert!(!output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("server_not_connected") || stdout.contains("not connected"));
+    }
+
+    #[test]
     fn test_admin_import_help() {
         aeterna()
             .args(["admin", "import", "--help"])
@@ -453,6 +831,18 @@ mod admin_subcommand {
             .success()
             .stdout(predicate::str::contains("Import"))
             .stdout(predicate::str::contains("--mode"));
+    }
+
+    #[test]
+    fn test_admin_import_missing_file_fails() {
+        aeterna()
+            .args(["admin", "import", "/definitely/missing/aeterna-import.json"])
+            .assert()
+            .failure()
+            .stderr(
+                predicate::str::contains("Import file not found")
+                    .or(predicate::str::contains("does not exist")),
+            );
     }
 }
 
@@ -492,7 +882,7 @@ mod policy_subcommand {
                 "create",
                 "--description",
                 "Block critical CVEs",
-                "--dry-run"
+                "--dry-run",
             ])
             .assert()
             .success()
@@ -507,7 +897,7 @@ mod policy_subcommand {
                 "create",
                 "--template",
                 "security-baseline",
-                "--dry-run"
+                "--dry-run",
             ])
             .assert()
             .success()
@@ -522,7 +912,7 @@ mod policy_subcommand {
             .assert()
             .failure()
             .stderr(
-                predicate::str::contains("description").or(predicate::str::contains("template"))
+                predicate::str::contains("description").or(predicate::str::contains("template")),
             );
     }
 
@@ -535,7 +925,7 @@ mod policy_subcommand {
                 "--description",
                 "Test",
                 "--layer",
-                "invalid"
+                "invalid",
             ])
             .assert()
             .failure()
@@ -551,7 +941,7 @@ mod policy_subcommand {
                 "--description",
                 "Test",
                 "--mode",
-                "required"
+                "required",
             ])
             .assert()
             .failure()
@@ -567,7 +957,7 @@ mod policy_subcommand {
                 "--description",
                 "Test",
                 "--severity",
-                "critical"
+                "critical",
             ])
             .assert()
             .failure()
@@ -605,6 +995,65 @@ mod policy_subcommand {
     }
 
     #[test]
+    fn test_policy_simulate_invalid_scenario() {
+        aeterna()
+            .args([
+                "policy",
+                "simulate",
+                "policy-1",
+                "--scenario",
+                "deploy-app",
+                "--input",
+                "foo",
+            ])
+            .assert()
+            .failure()
+            .stderr(
+                predicate::str::contains("Invalid scenario")
+                    .or(predicate::str::contains("invalid")),
+            );
+    }
+
+    #[test]
+    fn test_policy_simulate_dry_run_json() {
+        aeterna()
+            .args([
+                "policy",
+                "simulate",
+                "policy-1",
+                "--scenario",
+                "dependency-add",
+                "--input",
+                "openssl",
+                "--dry-run",
+                "--json",
+            ])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("\"dryRun\""))
+            .stdout(predicate::str::contains("policy_simulate"));
+    }
+
+    #[test]
+    fn test_policy_simulate_json_not_connected() {
+        aeterna()
+            .args([
+                "policy",
+                "simulate",
+                "policy-1",
+                "--scenario",
+                "dependency-add",
+                "--input",
+                "openssl",
+                "--json",
+            ])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("not_connected"))
+            .stdout(predicate::str::contains("policy_simulate"));
+    }
+
+    #[test]
     fn test_policy_validate_help() {
         aeterna()
             .args(["policy", "validate", "--help"])
@@ -622,6 +1071,38 @@ mod policy_subcommand {
             .success()
             .stdout(predicate::str::contains("draft"))
             .stdout(predicate::str::contains("--list"));
+    }
+
+    #[test]
+    fn test_policy_draft_list_json() {
+        aeterna()
+            .args(["policy", "draft", "--list", "--json"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("policy_draft_list"))
+            .stdout(predicate::str::contains("not_connected"));
+    }
+
+    #[test]
+    fn test_policy_draft_submit_json() {
+        aeterna()
+            .args(["policy", "draft", "--submit", "draft-123", "--json"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("policy_draft_submit"))
+            .stdout(predicate::str::contains("draft-123"));
+    }
+
+    #[test]
+    fn test_policy_draft_missing_args_fails() {
+        aeterna()
+            .args(["policy", "draft"])
+            .assert()
+            .failure()
+            .stderr(
+                predicate::str::contains("No draft ID or action specified")
+                    .or(predicate::str::contains("draft")),
+            );
     }
 }
 
@@ -827,7 +1308,7 @@ mod govern_subcommand {
                 "req_test123",
                 "--yes",
                 "--comment",
-                "LGTM"
+                "LGTM",
             ])
             .assert()
             .success()
@@ -844,7 +1325,7 @@ mod govern_subcommand {
                 "req_test123",
                 "--reason",
                 "Needs security review",
-                "--yes"
+                "--yes",
             ])
             .assert()
             .success()
@@ -862,7 +1343,7 @@ mod govern_subcommand {
                 "--reason",
                 "Needs review",
                 "--yes",
-                "--json"
+                "--json",
             ])
             .assert()
             .success()
@@ -990,7 +1471,7 @@ mod govern_subcommand {
                 "govern",
                 "configure",
                 "--escalation-contact",
-                "security-team@example.com"
+                "security-team@example.com",
             ])
             .assert()
             .success()
@@ -1044,7 +1525,7 @@ mod govern_subcommand {
                 "--role",
                 "approver",
                 "--scope",
-                "org"
+                "org",
             ])
             .assert()
             .success()
@@ -1063,7 +1544,7 @@ mod govern_subcommand {
                 "--role",
                 "approver",
                 "--scope",
-                "org"
+                "org",
             ])
             .assert()
             .success()
@@ -1083,7 +1564,7 @@ mod govern_subcommand {
                 "admin",
                 "--scope",
                 "company",
-                "--json"
+                "--json",
             ])
             .assert()
             .success()
@@ -1238,7 +1719,7 @@ mod agent_subcommand {
                 "test-agent",
                 "--dry-run",
                 "--description",
-                "Test agent for CI"
+                "Test agent for CI",
             ])
             .assert()
             .success()
@@ -1255,7 +1736,7 @@ mod agent_subcommand {
                 "opencode-agent",
                 "--dry-run",
                 "--agent-type",
-                "opencode"
+                "opencode",
             ])
             .assert()
             .success()
@@ -1270,7 +1751,7 @@ mod agent_subcommand {
                 "register",
                 "test-agent",
                 "--agent-type",
-                "invalid-type"
+                "invalid-type",
             ])
             .assert()
             .failure();
@@ -1285,7 +1766,7 @@ mod agent_subcommand {
                 "my-agent",
                 "--dry-run",
                 "--delegated-by",
-                "alice@acme.com"
+                "alice@acme.com",
             ])
             .assert()
             .success()
@@ -1436,7 +1917,7 @@ mod agent_subcommand {
                 "permissions",
                 "agent-test-123",
                 "--grant",
-                "memory:read"
+                "memory:read",
             ])
             .assert()
             .success()
@@ -1452,7 +1933,7 @@ mod agent_subcommand {
                 "agent-test-123",
                 "--grant",
                 "memory:write",
-                "--json"
+                "--json",
             ])
             .assert()
             .success()
@@ -1476,7 +1957,7 @@ mod agent_subcommand {
                 "--grant",
                 "knowledge:read",
                 "--scope",
-                "org"
+                "org",
             ])
             .assert()
             .success()
@@ -1491,7 +1972,7 @@ mod agent_subcommand {
                 "permissions",
                 "agent-test-123",
                 "--grant",
-                "invalid:permission"
+                "invalid:permission",
             ])
             .assert()
             .failure();
@@ -1505,7 +1986,7 @@ mod agent_subcommand {
                 "permissions",
                 "agent-test-123",
                 "--revoke",
-                "memory:write"
+                "memory:write",
             ])
             .assert()
             .success()
@@ -1521,7 +2002,7 @@ mod agent_subcommand {
                 "agent-test-123",
                 "--revoke",
                 "memory:write",
-                "--json"
+                "--json",
             ])
             .assert()
             .success()
@@ -1638,7 +2119,7 @@ mod org_subcommand {
                 "product-eng",
                 "--dry-run",
                 "--description",
-                "Product Engineering team"
+                "Product Engineering team",
             ])
             .assert()
             .success()
@@ -1655,7 +2136,7 @@ mod org_subcommand {
                 "security",
                 "--dry-run",
                 "--company",
-                "acme-corp"
+                "acme-corp",
             ])
             .assert()
             .success()
@@ -1832,7 +2313,7 @@ mod org_subcommand {
                 "--add",
                 "carol@acme.com",
                 "--role",
-                "techlead"
+                "techlead",
             ])
             .assert()
             .success()
@@ -1848,7 +2329,7 @@ mod org_subcommand {
                 "--add",
                 "dave@acme.com",
                 "--role",
-                "invalid-role"
+                "invalid-role",
             ])
             .assert()
             .failure();
@@ -1863,7 +2344,7 @@ mod org_subcommand {
                 "--org",
                 "platform-eng",
                 "--add",
-                "eve@acme.com"
+                "eve@acme.com",
             ])
             .assert()
             .success()
@@ -1904,7 +2385,7 @@ mod org_subcommand {
                 "--set-role",
                 "alice@acme.com",
                 "--role",
-                "architect"
+                "architect",
             ])
             .assert()
             .success()
@@ -1921,7 +2402,7 @@ mod org_subcommand {
                 "bob@acme.com",
                 "--role",
                 "admin",
-                "--json"
+                "--json",
             ])
             .assert()
             .success()
@@ -2025,7 +2506,7 @@ mod team_subcommand {
                 "api-team",
                 "--description",
                 "API development team",
-                "--dry-run"
+                "--dry-run",
             ])
             .assert()
             .success()
@@ -2042,7 +2523,7 @@ mod team_subcommand {
                 "api-team",
                 "--org",
                 "platform-eng",
-                "--dry-run"
+                "--dry-run",
             ])
             .assert()
             .success()
@@ -2060,7 +2541,7 @@ mod team_subcommand {
                 "--org",
                 "platform-eng",
                 "--dry-run",
-                "--json"
+                "--json",
             ])
             .assert()
             .success()
@@ -2276,7 +2757,7 @@ mod team_subcommand {
                 "--add",
                 "alice@example.com",
                 "--role",
-                "techlead"
+                "techlead",
             ])
             .assert()
             .success()
@@ -2292,7 +2773,7 @@ mod team_subcommand {
                 "--team",
                 "api-team",
                 "--add",
-                "alice@example.com"
+                "alice@example.com",
             ])
             .assert()
             .success()
@@ -2309,7 +2790,7 @@ mod team_subcommand {
                 "--add",
                 "alice@example.com",
                 "--role",
-                "superuser"
+                "superuser",
             ])
             .assert()
             .failure()
@@ -2351,7 +2832,7 @@ mod team_subcommand {
                 "--set-role",
                 "alice@example.com",
                 "--role",
-                "architect"
+                "architect",
             ])
             .assert()
             .success()
@@ -2370,7 +2851,7 @@ mod team_subcommand {
                 "alice@example.com",
                 "--role",
                 "techlead",
-                "--json"
+                "--json",
             ])
             .assert()
             .success()
@@ -2438,7 +2919,7 @@ mod context_subcommand {
             .stdout(
                 predicate::str::contains("tenant")
                     .or(predicate::str::contains("Tenant"))
-                    .or(predicate::str::contains("Context"))
+                    .or(predicate::str::contains("Context")),
             );
     }
 
@@ -2569,7 +3050,7 @@ mod layer_validation {
     #[test]
     fn test_memory_add_valid_layers() {
         let valid_layers = [
-            "agent", "user", "session", "project", "team", "org", "company"
+            "agent", "user", "session", "project", "team", "org", "company",
         ];
         for layer in valid_layers {
             aeterna()
@@ -2591,7 +3072,7 @@ mod layer_validation {
                     "Test",
                     "--layer",
                     layer,
-                    "--dry-run"
+                    "--dry-run",
                 ])
                 .assert()
                 .success();
@@ -2601,6 +3082,7 @@ mod layer_validation {
 
 mod check_subcommand {
     use super::*;
+    use predicates::prelude::PredicateBooleanExt;
     use predicates::prelude::predicate;
 
     #[test]
@@ -2616,78 +3098,118 @@ mod check_subcommand {
 
     #[test]
     fn test_check_default() {
-        aeterna()
-            .args(["check"])
-            .assert()
-            .success()
-            .stdout(predicate::str::contains("Constraint Validation"))
-            .stdout(predicate::str::contains("Summary"));
+        let output = aeterna().args(["check"]).output().expect("process ran");
+        assert!(
+            !output.status.success(),
+            "check without a live backend must exit non-zero"
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let combined = format!("{stderr}{stdout}");
+
+        assert!(combined.contains("Constraint Validation"));
+        assert!(
+            combined.contains("Cannot connect to Aeterna server")
+                || combined.contains("live Aeterna server")
+        );
     }
 
     #[test]
     fn test_check_json() {
         let output = aeterna()
             .args(["check", "--json"])
-            .assert()
-            .success()
-            .get_output()
-            .stdout
-            .clone();
+            .output()
+            .expect("process ran");
 
-        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert!(!output.status.success());
+
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("Valid JSON");
         assert!(json.get("success").is_some());
         assert!(json.get("context").is_some());
         assert!(json.get("summary").is_some());
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "server_not_connected");
     }
 
     #[test]
     fn test_check_target_policies() {
-        aeterna()
+        let output = aeterna()
             .args(["check", "--target", "policies"])
-            .assert()
-            .success()
-            .stdout(predicate::str::contains("POLICIES"));
+            .output()
+            .expect("process ran");
+        assert!(!output.status.success());
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert!(combined.contains("POLICIES"));
     }
 
     #[test]
     fn test_check_target_dependencies() {
-        aeterna()
+        let output = aeterna()
             .args(["check", "--target", "dependencies"])
-            .assert()
-            .success()
-            .stdout(predicate::str::contains("DEPENDENCIES"));
+            .output()
+            .expect("process ran");
+        assert!(!output.status.success());
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert!(combined.contains("DEPENDENCIES"));
     }
 
     #[test]
     fn test_check_target_architecture() {
-        aeterna()
+        let output = aeterna()
             .args(["check", "--target", "architecture"])
-            .assert()
-            .success()
-            .stdout(predicate::str::contains("ARCHITECTURE"));
+            .output()
+            .expect("process ran");
+        assert!(!output.status.success());
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert!(combined.contains("ARCHITECTURE"));
     }
 
     #[test]
     fn test_check_target_security() {
-        aeterna()
+        let output = aeterna()
             .args(["check", "--target", "security"])
-            .assert()
-            .success()
-            .stdout(predicate::str::contains("SECURITY"));
+            .output()
+            .expect("process ran");
+        assert!(!output.status.success());
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert!(combined.contains("SECURITY"));
     }
 
     #[test]
     fn test_check_target_all() {
-        aeterna()
+        let output = aeterna()
             .args(["check", "--target", "all"])
-            .assert()
-            .success()
-            .stdout(predicate::str::contains("ALL"));
+            .output()
+            .expect("process ran");
+        assert!(!output.status.success());
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert!(combined.contains("ALL"));
     }
 
     #[test]
     fn test_check_strict() {
-        aeterna().args(["check", "--strict"]).assert().success();
+        aeterna().args(["check", "--strict"]).assert().failure();
     }
 
     #[test]
@@ -2695,20 +3217,19 @@ mod check_subcommand {
         aeterna()
             .args(["check", "--violations-only"])
             .assert()
-            .success();
+            .failure();
     }
 
     #[test]
     fn test_check_json_with_target() {
         let output = aeterna()
             .args(["check", "--json", "--target", "security"])
-            .assert()
-            .success()
-            .get_output()
-            .stdout
-            .clone();
+            .output()
+            .expect("process ran");
 
-        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert!(!output.status.success());
+
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("Valid JSON");
         assert_eq!(json["target"], "security");
     }
 
@@ -2716,19 +3237,18 @@ mod check_subcommand {
     fn test_check_json_strict_flag() {
         let output = aeterna()
             .args(["check", "--json", "--strict"])
-            .assert()
-            .success()
-            .get_output()
-            .stdout
-            .clone();
+            .output()
+            .expect("process ran");
 
-        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert!(!output.status.success());
+
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("Valid JSON");
         assert_eq!(json["strict"], true);
     }
 
     #[test]
     fn test_check_with_path() {
-        aeterna().args(["check", "."]).assert().success();
+        aeterna().args(["check", "."]).assert().failure();
     }
 }
 
@@ -2753,7 +3273,7 @@ mod sync_subcommand {
         aeterna()
             .args(["sync"])
             .assert()
-            .success()
+            .failure()
             .stdout(predicate::str::contains("Memory-Knowledge Sync"));
     }
 
@@ -2762,11 +3282,11 @@ mod sync_subcommand {
         aeterna()
             .args(["sync", "--dry-run"])
             .assert()
-            .success()
+            .failure()
             .stdout(
                 predicate::str::contains("Sync")
                     .or(predicate::str::contains("sync"))
-                    .or(predicate::str::contains("Analyzing"))
+                    .or(predicate::str::contains("Analyzing")),
             );
     }
 
@@ -2774,27 +3294,26 @@ mod sync_subcommand {
     fn test_sync_json() {
         let output = aeterna()
             .args(["sync", "--json"])
-            .assert()
-            .success()
-            .get_output()
-            .stdout
-            .clone();
+            .output()
+            .expect("process ran");
 
-        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert!(json.get("success").is_some() || json.get("results").is_some());
+        assert!(!output.status.success());
+
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("Valid JSON");
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "server_not_connected");
     }
 
     #[test]
     fn test_sync_json_dry_run() {
         let output = aeterna()
             .args(["sync", "--json", "--dry-run"])
-            .assert()
-            .success()
-            .get_output()
-            .stdout
-            .clone();
+            .output()
+            .expect("process ran");
 
-        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert!(!output.status.success());
+
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("Valid JSON");
         assert_eq!(json["dry_run"], true);
     }
 
@@ -2803,7 +3322,7 @@ mod sync_subcommand {
         aeterna()
             .args(["sync", "--direction", "all"])
             .assert()
-            .success()
+            .failure()
             .stdout(predicate::str::contains("ALL"));
     }
 
@@ -2812,7 +3331,7 @@ mod sync_subcommand {
         aeterna()
             .args(["sync", "--direction", "memory-to-knowledge"])
             .assert()
-            .success()
+            .failure()
             .stdout(predicate::str::contains("MEMORY-TO-KNOWLEDGE"));
     }
 
@@ -2821,13 +3340,113 @@ mod sync_subcommand {
         aeterna()
             .args(["sync", "--verbose"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Analysis Details"));
+            .failure()
+            .stdout(predicate::str::contains("Analyzing sync state"));
     }
 
     #[test]
     fn test_sync_force() {
-        aeterna().args(["sync", "--force"]).assert().success();
+        aeterna().args(["sync", "--force"]).assert().failure();
+    }
+}
+
+mod codesearch_runtime_subcommand {
+    use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
+
+    #[test]
+    fn test_codesearch_help() {
+        aeterna()
+            .args(["code-search", "--help"])
+            .assert()
+            .success()
+            .stdout(
+                predicate::str::contains("code search").or(predicate::str::contains("Search code")),
+            );
+    }
+
+    #[test]
+    fn test_codesearch_repo_request_fails_without_backend() {
+        let output = aeterna()
+            .args([
+                "code-search",
+                "repo",
+                "request",
+                "--name",
+                "aeterna",
+                "--type",
+                "remote",
+                "--url",
+                "https://example.com/aeterna.git",
+            ])
+            .output()
+            .expect("process ran");
+
+        assert!(!output.status.success());
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert!(combined.contains("Repository Request") || combined.contains("Submitting request"));
+        assert!(
+            combined.contains("Cannot connect to Aeterna server")
+                || combined.contains("live Aeterna backend")
+        );
+    }
+
+    #[test]
+    fn test_codesearch_repo_list_json_fails_without_backend() {
+        let output = aeterna()
+            .args(["code-search", "repo", "list", "--json"])
+            .output()
+            .expect("process ran");
+
+        assert!(!output.status.success());
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("Valid JSON");
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "server_not_connected");
+    }
+
+    #[test]
+    fn test_codesearch_repo_approve_fails_without_backend() {
+        let output = aeterna()
+            .args(["code-search", "repo", "approve", "req-123"])
+            .output()
+            .expect("process ran");
+
+        assert!(!output.status.success());
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert!(combined.contains("Approving request req-123"));
+        assert!(
+            combined.contains("Cannot connect to Aeterna server")
+                || combined.contains("live Aeterna backend")
+        );
+    }
+
+    #[test]
+    fn test_codesearch_index_fails_without_backend() {
+        let output = aeterna()
+            .args(["code-search", "index", "--repo", "aeterna"])
+            .output()
+            .expect("process ran");
+
+        assert!(!output.status.success());
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert!(combined.contains("Code Search Indexing"));
+        assert!(
+            combined.contains("Cannot connect to Aeterna server")
+                || combined.contains("live Aeterna backend")
+        );
     }
 }
 
@@ -2850,7 +3469,7 @@ mod status_subcommand {
         aeterna().args(["status"]).assert().success().stdout(
             predicate::str::contains("Status")
                 .or(predicate::str::contains("status"))
-                .or(predicate::str::contains("Connection"))
+                .or(predicate::str::contains("Connection")),
         );
     }
 
@@ -2930,7 +3549,7 @@ mod hints_subcommand {
         aeterna().args(["hints", "list"]).assert().success().stdout(
             predicate::str::contains("Available Presets")
                 .or(predicate::str::contains("minimal"))
-                .or(predicate::str::contains("standard"))
+                .or(predicate::str::contains("standard")),
         );
     }
 
@@ -2957,7 +3576,7 @@ mod hints_subcommand {
             .stdout(
                 predicate::str::contains("Preset")
                     .or(predicate::str::contains("minimal"))
-                    .or(predicate::str::contains("Hints"))
+                    .or(predicate::str::contains("Hints")),
             );
     }
 
@@ -2984,7 +3603,7 @@ mod hints_subcommand {
             .stdout(
                 predicate::str::contains("Parsed")
                     .or(predicate::str::contains("fast"))
-                    .or(predicate::str::contains("Hints"))
+                    .or(predicate::str::contains("Hints")),
             );
     }
 
@@ -3043,5 +3662,161 @@ mod completion_subcommand {
             .assert()
             .success()
             .stdout(predicate::str::contains("complete"));
+    }
+}
+
+/// Task 1.3 — Tests for exact shipped entrypoint and migration commands.
+///
+/// These tests validate that:
+/// - `aeterna serve` is a registered, reachable subcommand (not "unrecognized").
+/// - `aeterna serve --help` exits 0 and shows expected flags.
+/// - `aeterna admin migrate --help` exits 0 and shows expected flags.
+/// - `aeterna admin migrate up` exits non-zero when PostgreSQL is unavailable
+///   (production correctness: no silent stub success).
+/// - The `--help` output for `serve` contains `--port` and `--bind` so operators
+///   can verify the container entrypoint flags.
+mod serve_and_migration_entrypoints {
+    use super::*;
+    use predicates::prelude::PredicateBooleanExt;
+    use predicates::prelude::predicate;
+
+    /// The container `CMD ["serve"]` must not fail with "unrecognized subcommand".
+    /// It should exit with an error (because deps are unavailable in CI), but
+    /// the error must come from our code, not from clap's unknown-command path.
+    #[test]
+    fn test_serve_is_a_registered_subcommand() {
+        // `serve` without config/env will fail because PostgreSQL is not
+        // available in CI; we only care that it is *not* an unrecognized subcommand.
+        let output = aeterna().arg("serve").output().expect("process ran");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("unrecognized subcommand"),
+            "'serve' must be a registered subcommand but got: {stderr}"
+        );
+        assert!(
+            !stderr.contains("error: 'serve' is not a"),
+            "'serve' must be a registered subcommand but got: {stderr}"
+        );
+    }
+
+    #[test]
+    fn test_serve_help_exits_success() {
+        aeterna()
+            .args(["serve", "--help"])
+            .assert()
+            .success()
+            .stdout(
+                predicate::str::contains("HTTP API server").or(predicate::str::contains("serve")),
+            );
+    }
+
+    #[test]
+    fn test_serve_help_shows_port_flag() {
+        aeterna()
+            .args(["serve", "--help"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("--port"));
+    }
+
+    #[test]
+    fn test_serve_help_shows_bind_flag() {
+        aeterna()
+            .args(["serve", "--help"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("--bind"));
+    }
+
+    #[test]
+    fn test_serve_help_shows_config_flag() {
+        aeterna()
+            .args(["serve", "--help"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("--config").or(predicate::str::contains("config")));
+    }
+
+    /// The Helm migration job runs `aeterna admin migrate up`.
+    /// Verify the command is reachable and `--help` exits 0.
+    #[test]
+    fn test_admin_migrate_help_exits_success() {
+        aeterna()
+            .args(["admin", "migrate", "--help"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("migration").or(predicate::str::contains("migrate")));
+    }
+
+    #[test]
+    fn test_admin_migrate_up_help_shows_dry_run_flag() {
+        aeterna()
+            .args(["admin", "migrate", "--help"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("--dry-run"));
+    }
+
+    #[test]
+    fn test_admin_migrate_up_fails_clearly_when_database_is_unavailable() {
+        let output = aeterna()
+            .args(["admin", "migrate", "up"])
+            .output()
+            .expect("process ran");
+
+        assert!(
+            !output.status.success(),
+            "admin migrate up without database must exit non-zero"
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let combined = format!("{stderr}{stdout}");
+
+        assert!(
+            combined.contains("Database Migration") || combined.contains("migration"),
+            "Expected migration output, got: {combined}"
+        );
+        assert!(
+            combined.contains("database not connected")
+                || combined.contains("DATABASE_URL")
+                || combined.contains("dry-run"),
+            "Expected clear database-unavailable guidance, got: {combined}"
+        );
+    }
+
+    /// `aeterna admin migrate status` should run cleanly.
+    #[test]
+    fn test_admin_migrate_status_runs() {
+        aeterna()
+            .args(["admin", "migrate", "status"])
+            .assert()
+            .success()
+            .stdout(
+                predicate::str::contains("Migration").or(predicate::str::contains("migration")),
+            );
+    }
+
+    /// The serve command without a valid config directory must exit non-zero
+    /// with a clear human-readable message (not a panic or "unrecognized subcommand").
+    #[test]
+    fn test_serve_without_config_exits_nonzero_with_clear_message() {
+        let output = aeterna()
+            .args(["serve", "--config", "/nonexistent/path/aeterna/config"])
+            .output()
+            .expect("process ran");
+        assert!(
+            !output.status.success(),
+            "serve with missing config must exit non-zero"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let combined = format!("{stderr}{stdout}");
+        assert!(
+            combined.contains("Configuration")
+                || combined.contains("config")
+                || combined.contains("not found"),
+            "Expected a clear config-not-found message, got: {combined}"
+        );
     }
 }

@@ -11,11 +11,11 @@ pub struct Thread {
     pub updated_at: DateTime<Utc>,
     pub context_json: serde_json::Value,
     pub state: serde_json::Value,
-    pub ttl_seconds: i32
+    pub ttl_seconds: i32,
 }
 
 pub struct ThreadRepository {
-    _pool: Pool
+    _pool: Pool,
 }
 
 impl ThreadRepository {
@@ -26,40 +26,80 @@ impl ThreadRepository {
 
     pub async fn create_thread(
         &self,
-        tenant_id: &str,
-        context: serde_json::Value,
-        ttl_seconds: i32
+        _tenant_id: &str,
+        _context: serde_json::Value,
+        _ttl_seconds: i32,
     ) -> Result<Thread, anyhow::Error> {
-        let thread = Thread {
-            thread_id: Uuid::new_v4(),
-            tenant_id: tenant_id.to_string(),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            context_json: context,
-            state: serde_json::json!({}),
-            ttl_seconds
-        };
-
-        Ok(thread)
+        anyhow::bail!("Thread persistence is not yet implemented")
     }
 
     pub async fn get_thread(&self, _thread_id: Uuid) -> Result<Option<Thread>, anyhow::Error> {
-        Ok(None)
+        anyhow::bail!("Thread persistence is not yet implemented")
     }
 
     pub async fn update_thread(
         &self,
         _thread_id: Uuid,
-        _state: serde_json::Value
+        _state: serde_json::Value,
     ) -> Result<(), anyhow::Error> {
-        Ok(())
+        anyhow::bail!("Thread persistence is not yet implemented")
     }
 
     pub async fn list_threads(&self, _tenant_id: &str) -> Result<Vec<Thread>, anyhow::Error> {
-        Ok(vec![])
+        anyhow::bail!("Thread persistence is not yet implemented")
     }
 
     pub async fn delete_expired_threads(&self) -> Result<u64, anyhow::Error> {
-        Ok(0)
+        anyhow::bail!("Thread persistence is not yet implemented")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_create_thread_fails_when_persistence_is_unimplemented() {
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://localhost/aeterna")
+            .expect("lazy pool");
+        let repository = ThreadRepository::new(pool);
+
+        let err = repository
+            .create_thread("tenant-1", serde_json::json!({"scope": "test"}), 3600)
+            .await
+            .expect_err("create_thread must fail until persistence is wired");
+
+        assert!(err.to_string().contains("not yet implemented"));
+    }
+
+    #[tokio::test]
+    async fn test_get_thread_fails_when_persistence_is_unimplemented() {
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://localhost/aeterna")
+            .expect("lazy pool");
+        let repository = ThreadRepository::new(pool);
+
+        let err = repository
+            .get_thread(Uuid::new_v4())
+            .await
+            .expect_err("get_thread must fail until persistence is wired");
+
+        assert!(err.to_string().contains("not yet implemented"));
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_fails_when_persistence_is_unimplemented() {
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://localhost/aeterna")
+            .expect("lazy pool");
+        let repository = ThreadRepository::new(pool);
+
+        let err = repository
+            .delete_expired_threads()
+            .await
+            .expect_err("cleanup must fail until persistence is wired");
+
+        assert!(err.to_string().contains("not yet implemented"));
     }
 }

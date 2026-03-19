@@ -65,7 +65,7 @@ spec:
           key: {{ .key | quote }}
           {{- end }}
       s3:
-        bucket: {{ .Values.postgresql.cloudnativepg.backup.destinationPath | splitList "/" | index 2 | quote }}
+        bucket: {{ index (.Values.postgresql.cloudnativepg.backup.destinationPath | splitList "/") 2 | quote }}
         {{- if .Values.postgresql.cloudnativepg.backup.endpointURL }}
         endpoint: {{ .Values.postgresql.cloudnativepg.backup.endpointURL | quote }}
         {{- end }}

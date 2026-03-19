@@ -2,7 +2,7 @@ use axum::{
     extract::{Request, State},
     http::StatusCode,
     middleware::Next,
-    response::Response
+    response::Response,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,11 +12,11 @@ use tokio::sync::RwLock;
 pub struct RateLimiter {
     limits: Arc<RwLock<HashMap<String, RateLimitState>>>,
     max_requests: u32,
-    window: Duration
+    window: Duration,
 }
 
 struct RateLimitState {
-    requests: Vec<Instant>
+    requests: Vec<Instant>,
 }
 
 impl RateLimiter {
@@ -24,7 +24,7 @@ impl RateLimiter {
         Self {
             limits: Arc::new(RwLock::new(HashMap::new())),
             max_requests,
-            window: Duration::from_secs(window_seconds)
+            window: Duration::from_secs(window_seconds),
         }
     }
 
@@ -35,7 +35,7 @@ impl RateLimiter {
         let state = limits
             .entry(key.to_string())
             .or_insert_with(|| RateLimitState {
-                requests: Vec::new()
+                requests: Vec::new(),
             });
 
         state
@@ -71,7 +71,7 @@ impl RateLimiter {
 pub async fn rate_limit_middleware(
     State(limiter): State<Arc<RateLimiter>>,
     request: Request,
-    next: Next
+    next: Next,
 ) -> Result<Response, StatusCode> {
     let key = request
         .headers()
@@ -85,7 +85,7 @@ pub async fn rate_limit_middleware(
         let remaining = limiter.remaining(&key).await;
         response.headers_mut().insert(
             "x-ratelimit-remaining",
-            remaining.to_string().parse().unwrap()
+            remaining.to_string().parse().unwrap(),
         );
         Ok(response)
     } else {

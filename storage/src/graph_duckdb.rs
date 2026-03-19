@@ -641,6 +641,7 @@ impl DuckDbGraphStore {
         };
 
         let _ = conn.execute_batch("LOAD json;");
+        let _ = Self::enable_parquet_support(&conn);
 
         let store = Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -675,6 +676,14 @@ impl DuckDbGraphStore {
 
         info!("DuckDB graph store initialized successfully");
         Ok(store)
+    }
+
+    fn enable_parquet_support(conn: &Connection) -> Result<(), GraphError> {
+        conn.execute_batch(
+            "SET autoinstall_known_extensions=1; SET autoload_known_extensions=1; INSTALL parquet; LOAD parquet;",
+        )
+        .or_else(|_| conn.execute_batch("LOAD parquet;"))?;
+        Ok(())
     }
 
     async fn create_s3_client(&self) -> Result<aws_sdk_s3::Client, GraphError> {
@@ -1664,6 +1673,7 @@ impl DuckDbGraphStore {
         Self::validate_tenant_id_format(tenant_id)?;
 
         let conn = self.conn.lock();
+        Self::enable_parquet_support(&conn)?;
 
         let export_sql = r#"
             COPY (
@@ -1700,6 +1710,7 @@ impl DuckDbGraphStore {
         Self::validate_tenant_id_format(tenant_id)?;
 
         let conn = self.conn.lock();
+        Self::enable_parquet_support(&conn)?;
 
         let temp_path = format!("/tmp/graph_import_{}.parquet", Uuid::new_v4());
         std::fs::write(&temp_path, data)?;
@@ -2902,8 +2913,26 @@ fn leiden_detect(
 ) -> Vec<Community> {
     use std::collections::{HashMap, HashSet};
 
-    if node_ids.is_empty() || total_edge_weight == 0.0 {
+    if node_ids.is_empty() {
         return vec![];
+    }
+
+    if total_edge_weight == 0.0 {
+        if min_community_size > 1 {
+            return vec![];
+        }
+
+        return node_ids
+            .iter()
+            .map(|node_id| Community {
+                id: Uuid::new_v4().to_string(),
+                member_node_ids: vec![node_id.clone()],
+                density: 0.0,
+                level: 0,
+                modularity: 0.0,
+                parent_community_id: None,
+            })
+            .collect();
     }
 
     let two_m = 2.0 * total_edge_weight;

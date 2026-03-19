@@ -11,6 +11,7 @@ pub mod memory;
 pub mod org;
 pub mod policy;
 pub mod search;
+pub mod serve;
 pub mod setup;
 pub mod status;
 pub mod sync;
@@ -88,5 +89,8 @@ pub enum Commands {
     Completion(completion::CompletionArgs),
 
     #[command(about = "Interactive setup wizard for deployment configuration")]
-    Setup(setup::SetupArgs)
+    Setup(setup::SetupArgs),
+
+    #[command(about = "Start the Aeterna HTTP API server")]
+    Serve(serve::ServeArgs)
 }

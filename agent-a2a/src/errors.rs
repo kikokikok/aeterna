@@ -1,7 +1,7 @@
 use axum::{
     Json,
     http::StatusCode,
-    response::{IntoResponse, Response}
+    response::{IntoResponse, Response},
 };
 use serde_json::json;
 use thiserror::Error;
@@ -27,7 +27,7 @@ pub enum A2AError {
     SkillNotFound(String),
 
     #[error("Tool execution failed: {0}")]
-    ToolExecutionFailed(String)
+    ToolExecutionFailed(String),
 }
 
 impl A2AError {
@@ -39,7 +39,7 @@ impl A2AError {
             A2AError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             A2AError::RateLimitExceeded => StatusCode::TOO_MANY_REQUESTS,
             A2AError::SkillNotFound(_) => StatusCode::NOT_FOUND,
-            A2AError::ToolExecutionFailed(_) => StatusCode::INTERNAL_SERVER_ERROR
+            A2AError::ToolExecutionFailed(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -51,7 +51,7 @@ impl A2AError {
             A2AError::InternalError(_) => "INTERNAL_ERROR",
             A2AError::RateLimitExceeded => "RATE_LIMIT_EXCEEDED",
             A2AError::SkillNotFound(_) => "SKILL_NOT_FOUND",
-            A2AError::ToolExecutionFailed(_) => "TOOL_EXECUTION_FAILED"
+            A2AError::ToolExecutionFailed(_) => "TOOL_EXECUTION_FAILED",
         }
         .to_string()
     }

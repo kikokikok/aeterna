@@ -14,6 +14,18 @@ Cargo.lock
 # Testing
 /.cargo/
 .cargo/coverage
+tarpaulin-report.html
+tarpaulin-report.json
+
+# OpenSpec local metadata
+openspec/changes/**/.openspec.yaml
+
+# Local scratch media
+docs-intro.png
+helm-quickstart.png
+landing-page.png
+sequence-diagrams.png
+tool-interface.png
 
 # Environment
 .env

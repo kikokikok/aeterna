@@ -257,6 +257,33 @@ when {
 };
 ```
 
+### Okta-Backed Interactive Access
+
+Aeterna now supports a **documented Okta-backed interactive access path** for browser users:
+
+- Okta is the identity authority
+- Google/GitHub are supported only when federated into Okta upstream
+- oauth2-proxy terminates the browser login flow at ingress
+- API-key auth remains the supported path for service-to-service and automation clients
+
+For deployment and operator details, see:
+
+- [`docs/guides/okta-auth-deployment.md`](docs/guides/okta-auth-deployment.md)
+
+Testing and coverage compliance live in:
+
+- `specs/testing-requirements/spec.md`
+- `.github/workflows/ci.yml`
+- `Cargo.toml`
+- `tarpaulin.toml`
+
+Important operational truth:
+
+- **permissions are not stored in OPAL**
+- **Cedar files store authorization rules**
+- **Postgres-backed Aeterna data stores hold memberships, assignments, and hierarchy**
+- **OPAL + Cedar Agent synchronize and evaluate authorization data at runtime**
+
 ---
 
 ## Memory-R1: Autonomous Optimization

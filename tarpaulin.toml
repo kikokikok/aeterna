@@ -4,3 +4,4 @@ workspace = true
 timeout = "1200s"
 out = ["Html", "Json"]
 exclude-files = ["*/tests/*", "tests/*"]
+fail-under = 80

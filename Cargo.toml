@@ -118,6 +118,7 @@ workspace = true
 timeout = "120"
 out = ["Html", "Json"]
 exclude-files = ["tests/*", "**/tests/*", "**/tests.rs"]
+fail-under = 80
 
 [workspace.metadata.mutants]
 timeout = 30

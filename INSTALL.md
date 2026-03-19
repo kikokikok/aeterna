@@ -1,6 +1,19 @@
-# Code Search Repository Management: Installation & Deployment Guide
+# Installation & Deployment Guide
 
-This guide provides a comprehensive walkthrough for deploying the Code Search Repository Management system, including scaling, governance, and security configurations.
+This file currently focuses on Code Search deployment details. If you are deploying Aeterna for interactive user access with federated authentication, start with the dedicated Okta deployment guide:
+
+- [`docs/guides/okta-auth-deployment.md`](docs/guides/okta-auth-deployment.md)
+
+That guide documents:
+
+- Okta-backed interactive login
+- oauth2-proxy ingress setup
+- required claims/groups and callback URLs
+- secret handling
+- why OPAL/Cedar must still be deployed for the supported production authorization path
+- where permissions are stored versus synchronized
+
+The rest of this file remains focused on Code Search repository management deployment.
 
 ---
 

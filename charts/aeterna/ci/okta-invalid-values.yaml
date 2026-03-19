@@ -1,0 +1,18 @@
+deploymentMode: local
+
+aeterna:
+  enabled: true
+  ingress:
+    enabled: true
+    hosts:
+      - host: aeterna.invalid.local
+        paths:
+          - path: /
+            pathType: Prefix
+
+okta:
+  enabled: true
+  issuerUrl: ""
+  clientId: aeterna-okta-invalid
+  clientSecret: still-invalid
+  redirectUrl: https://aeterna.invalid.local/oauth2/callback

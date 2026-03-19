@@ -2,7 +2,7 @@
 deploymentMode: remote
 
 central:
-  url: ""
+  url: "https://aeterna-central.example.com"
   auth: apiKey
   existingSecret: "aeterna-central-credentials"
   secretKey: "api-key"
@@ -24,7 +24,8 @@ cnpg:
 postgresql:
   bundled: false
   external:
-    host: ""
+    enabled: true
+    host: "central-postgres.example.com"
 
 qdrant:
   enabled: false
@@ -34,7 +35,7 @@ vectorBackend:
   qdrant:
     bundled: false
     external:
-      host: ""
+      host: "central-qdrant.example.com"
 
 dragonfly:
   enabled: false

@@ -290,6 +290,7 @@ impl Default for PresenceTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
 
     fn make_client_id() -> ClientId {
         Uuid::new_v4()

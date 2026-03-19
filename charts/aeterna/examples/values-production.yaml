@@ -6,6 +6,11 @@ deploymentMode: local
 aeterna:
   enabled: true
   replicaCount: 3
+  features:
+    cca: true
+    radkit: true
+    rlm: true
+    reflective: true
 
   resources:
     limits:
@@ -53,11 +58,18 @@ aeterna:
         hosts:
           - aeterna.example.com
 
-  features:
-    cca: true
-    radkit: true
-    rlm: true
-    reflective: true
+okta:
+  enabled: true
+  issuerUrl: "https://example.okta.com/oauth2/default"
+  clientId: "aeterna-production"
+  existingSecret: "aeterna-okta-auth"
+  redirectUrl: "https://aeterna.example.com/oauth2/callback"
+  cookieDomains:
+    - ".example.com"
+  whitelistDomains:
+    - ".example.com"
+  allowedGroups:
+    - "aeterna-users"
 
 # Use bundled Qdrant with HA
 vectorBackend:
@@ -74,7 +86,7 @@ cache:
 # Use bundled PostgreSQL with HA
 postgresql:
   bundled: true
-  cluster:
+  cloudnativepg:
     instances: 3
     storage:
       size: 100Gi
@@ -125,8 +137,6 @@ observability:
     enabled: true
     interval: 30s
     scrapeTimeout: 10s
-    labels:
-      release: prometheus
 
   tracing:
     enabled: true

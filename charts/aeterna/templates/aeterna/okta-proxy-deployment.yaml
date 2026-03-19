@@ -1,0 +1,75 @@
+{{- if and .Values.aeterna.enabled .Values.okta.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aeterna.fullname" . }}-okta-proxy
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+    app.kubernetes.io/component: okta-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "aeterna.name" . }}-okta-proxy
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        checksum/okta-config: {{ include (print $.Template.BasePath "/aeterna/okta-proxy-configmap.yaml") . | sha256sum }}
+        checksum/okta-secret: {{ include (print $.Template.BasePath "/aeterna/secret.yaml") . | sha256sum }}
+      labels:
+        app.kubernetes.io/name: {{ include "aeterna.name" . }}-okta-proxy
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: okta-proxy
+    spec:
+      {{- include "aeterna.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "aeterna.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.aeterna.podSecurityContext | nindent 8 }}
+      containers:
+        - name: oauth2-proxy
+          image: {{ printf "%s:%s" .Values.okta.image.repository .Values.okta.image.tag | quote }}
+          imagePullPolicy: {{ .Values.okta.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.aeterna.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.okta.service.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "aeterna.fullname" . }}-okta-proxy
+          env:
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.okta.secretName" . }}
+                  key: {{ .Values.okta.clientSecretKey }}
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.okta.secretName" . }}
+                  key: {{ .Values.okta.cookieSecretKey }}
+          args:
+            {{- range .Values.okta.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.okta.resources | nindent 12 }}
+{{- end }}

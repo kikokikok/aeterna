@@ -83,7 +83,16 @@
             "minReplicas": { "type": "integer", "default": 1 },
             "maxReplicas": { "type": "integer", "default": 10 },
             "targetCPUUtilizationPercentage": { "type": "integer", "default": 80 },
-            "targetMemoryUtilizationPercentage": { "type": "integer", "default": 80 }
+            "targetMemoryUtilizationPercentage": { "type": "integer", "default": 80 },
+            "vpa": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "updateMode": { "type": "string", "default": "Auto" },
+                "minAllowed": { "type": "object" },
+                "maxAllowed": { "type": "object" }
+              }
+            }
           }
         },
         "pdb": {
@@ -233,10 +242,12 @@
       "description": "PostgreSQL configuration",
       "properties": {
         "bundled": { "type": "boolean", "default": true },
-        "cluster": {
+        "cloudnativepg": {
           "type": "object",
           "properties": {
+            "enabled": { "type": "boolean", "default": true },
             "instances": { "type": "integer", "default": 1 },
+            "imageName": { "type": "string", "default": "" },
             "storage": {
               "type": "object",
               "properties": {
@@ -244,12 +255,52 @@
                 "storageClass": { "type": "string" }
               }
             },
-            "resources": { "type": "object" }
+            "resources": { "type": "object" },
+            "postgresql": {
+              "type": "object",
+              "properties": {
+                "parameters": { "type": "object" },
+                "pg_hba": { "type": "array", "items": { "type": "string" }, "default": [] }
+              }
+            },
+            "bootstrap": {
+              "type": "object",
+              "properties": {
+                "initdb": {
+                  "type": "object",
+                  "properties": {
+                    "database": { "type": "string", "default": "aeterna" },
+                    "owner": { "type": "string", "default": "aeterna" }
+                  }
+                }
+              }
+            },
+            "pgvector": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean", "default": true }
+              }
+            },
+            "backup": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "schedule": { "type": "string", "default": "0 2 * * *" },
+                "retentionPolicy": { "type": "string", "default": "30d" },
+                "provider": { "type": "string", "default": "s3" },
+                "destinationPath": { "type": "string", "default": "" },
+                "endpointURL": { "type": "string", "default": "" },
+                "s3Credentials": { "type": "object" },
+                "googleCredentials": { "type": "object" },
+                "azureCredentials": { "type": "object" }
+              }
+            }
           }
         },
         "external": {
           "type": "object",
           "properties": {
+            "enabled": { "type": "boolean", "default": false },
             "host": { "type": "string" },
             "port": { "type": "integer", "default": 5432 },
             "database": { "type": "string", "default": "aeterna" },
@@ -291,6 +342,52 @@
             "resources": { "type": "object" }
           }
         }
+      }
+    },
+    "okta": {
+      "type": "object",
+      "description": "Okta-backed oauth2-proxy authentication boundary",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "provider": { "type": "string", "default": "oidc" },
+        "issuerUrl": { "type": "string", "default": "" },
+        "clientId": { "type": "string", "default": "" },
+        "clientSecret": { "type": "string", "default": "" },
+        "existingSecret": { "type": "string", "default": "" },
+        "clientSecretKey": { "type": "string", "default": "client-secret" },
+        "cookieSecretKey": { "type": "string", "default": "cookie-secret" },
+        "cookieSecret": { "type": "string", "default": "" },
+        "redirectUrl": { "type": "string", "default": "" },
+        "emailDomains": { "type": "array", "items": { "type": "string" }, "default": ["*"] },
+        "allowedGroups": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "scope": { "type": "string", "default": "openid profile email groups" },
+        "cookieSecure": { "type": "boolean", "default": true },
+        "cookieDomains": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "whitelistDomains": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "authResponseHeaders": { "type": "array", "items": { "type": "string" } },
+        "proxyPrefix": { "type": "string", "default": "/oauth2" },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "default": "quay.io/oauth2-proxy/oauth2-proxy" },
+            "tag": { "type": "string", "default": "v7.8.1" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"], "default": "IfNotPresent" }
+          }
+        },
+        "service": {
+          "type": "object",
+          "properties": {
+            "port": { "type": "integer", "default": 4180 }
+          }
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "limits": { "type": "object" },
+            "requests": { "type": "object" }
+          }
+        },
+        "extraArgs": { "type": "array", "items": { "type": "string" }, "default": [] }
       }
     },
     "llm": {
@@ -360,16 +457,28 @@
         "enabled": { "type": "boolean", "default": false }
       }
     },
+    "migration": {
+      "type": "object"
+    },
+    "sync": {
+      "type": "object"
+    },
+    "backup": {
+      "type": "object"
+    },
+    "secrets": {
+      "type": "object"
+    },
     "codesearch": {
       "type": "object",
       "description": "Code Search integration configuration",
       "properties": {
         "enabled": { "type": "boolean", "default": false, "description": "Enable Code Search sidecar" },
-        "mcpServerUrl": { "type": "string", "default": "http://localhost:9090", "description": "MCP server URL" },
+        "mcpServerUrl": { "type": "string", "default": "http://localhost:9091", "description": "MCP server URL" },
         "image": {
           "type": "object",
           "properties": {
-            "repository": { "type": "string", "default": "ghcr.io/codesearch/codesearch" },
+            "repository": { "type": "string", "default": "ghcr.io/kikokikok/codesearch" },
             "tag": { "type": "string", "default": "latest" },
             "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"], "default": "IfNotPresent" }
           }
@@ -439,6 +548,24 @@
           }
         }
       }
+    },
+    "cnpg": {
+      "type": "object"
+    },
+    "dragonfly": {
+      "type": "object"
+    },
+    "qdrant": {
+      "type": "object"
+    },
+    "weaviate": {
+      "type": "object"
+    },
+    "mongodb": {
+      "type": "object"
+    },
+    "valkey": {
+      "type": "object"
     },
     "global": {
       "type": "object",
