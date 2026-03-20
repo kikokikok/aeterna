@@ -147,7 +147,7 @@ jobs:
         id: inspect
         run: |
           tag=$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
-          digest=$(docker buildx imagetools inspect "$tag" --format '{{.Manifest.Digest}}')
+          digest=$(docker buildx imagetools inspect "$tag" --raw | jq -r '.manifests[0].digest // .digest')
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
   scan:
