@@ -634,6 +634,10 @@ llm:
     existingSecret: ""
     ## @param llm.google.secretKey Secret key containing the credential file payload
     secretKey: "credentials.json"
+    ## @param llm.google.wifTokenAudience Audience for projected Kubernetes service account token used by external WIF ADC
+    wifTokenAudience: ""
+    ## @param llm.google.wifTokenFile Path for projected Kubernetes service account token used by external WIF ADC
+    wifTokenFile: "/var/run/secrets/tokens/gcp-token"
 
   ## AWS Bedrock configuration
   bedrock:
