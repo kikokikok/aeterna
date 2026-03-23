@@ -119,6 +119,49 @@ Use the chart examples for cloud deployments:
 
 ---
 
+## Helm Chart Deployment
+
+### Public Artifacts
+
+The Aeterna container image and Helm chart are publicly available:
+
+| Artifact | Location |
+|----------|----------|
+| Container image | `ghcr.io/kikokikok/aeterna` |
+| Helm chart (OCI) | `oci://ghcr.io/kikokikok/charts/aeterna` |
+
+No authentication is required to pull either artifact.
+
+### Quick Install
+
+```bash
+helm install aeterna oci://ghcr.io/kikokikok/charts/aeterna \
+  --version 0.1.0 \
+  -n aeterna --create-namespace \
+  -f your-values.yaml
+```
+
+### Example Values
+
+See `charts/aeterna/examples/` for cloud-specific examples:
+
+- `values-gke.yaml` — Google Kubernetes Engine with Vertex AI
+- `values-aws.yaml` — AWS EKS with Bedrock
+- `values-aks.yaml` — Azure AKS
+- `values-production.yaml` — Production-hardened HA deployment
+
+For sizing presets:
+
+- `values-small.yaml` — Single replicas, minimal resources
+- `values-medium.yaml` — 2 replicas, moderate resources
+- `values-large.yaml` — 3+ replicas, full HA
+
+### Environment-Specific Values
+
+Keep environment-specific deployment values (project IDs, secret references, cluster-specific config) in a **separate private repository** to avoid leaking internal infrastructure details. The public chart and examples provide the structure; your private repo provides the overrides.
+
+---
+
 ## 🏗 System Architecture
 
 The Code Search Repository Management system follows a distributed, multi-tenant architecture designed for Kubernetes:
