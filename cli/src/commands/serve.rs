@@ -1,4 +1,10 @@
 use clap::Args;
+use std::sync::Arc;
+
+use memory::embedding::create_embedding_service_from_env;
+use memory::llm::create_llm_service_from_env;
+use memory::manager::MemoryManager;
+use memory::reasoning::{DefaultReflectiveReasoner, ReflectiveReasoner};
 
 #[derive(Args)]
 pub struct ServeArgs {
@@ -20,7 +26,36 @@ pub struct ServeArgs {
 
     /// Log level (trace, debug, info, warn, error)
     #[arg(long, default_value = "info")]
-    pub log_level: String
+    pub log_level: String,
+}
+
+struct RuntimeProviderServices {
+    memory_manager: Arc<MemoryManager>,
+    reasoner: Option<Arc<dyn ReflectiveReasoner>>,
+}
+
+fn bootstrap_runtime_provider_services() -> anyhow::Result<RuntimeProviderServices> {
+    let mut manager = MemoryManager::new();
+
+    if let Some(embedding_service) = create_embedding_service_from_env()? {
+        manager = manager.with_embedding_service(embedding_service);
+    }
+
+    let reasoner = if let Some(llm_service) = create_llm_service_from_env()? {
+        let reasoner: Arc<dyn ReflectiveReasoner> =
+            Arc::new(DefaultReflectiveReasoner::new(llm_service.clone()));
+        manager = manager
+            .with_llm_service(llm_service)
+            .with_reasoner(reasoner.clone());
+        Some(reasoner)
+    } else {
+        None
+    };
+
+    Ok(RuntimeProviderServices {
+        memory_manager: Arc::new(manager),
+        reasoner,
+    })
 }
 
 pub fn run(args: ServeArgs) -> anyhow::Result<()> {
@@ -69,7 +104,19 @@ pub fn run(args: ServeArgs) -> anyhow::Result<()> {
     // will be wired in when the server crate is integrated.
     let addr = format!("{}:{}", args.bind, args.port);
     tracing::info!("Aeterna API server starting on http://{}", addr);
-    tracing::info!("Metrics endpoint on http://{}:{}/metrics", args.bind, args.metrics_port);
+    tracing::info!(
+        "Metrics endpoint on http://{}:{}/metrics",
+        args.bind,
+        args.metrics_port
+    );
+
+    let runtime = bootstrap_runtime_provider_services()?;
+    tracing::info!(
+        llm_enabled = runtime.reasoner.is_some(),
+        provider_backed_memory_manager = true,
+        "Runtime provider services initialized"
+    );
+    let _ = runtime.memory_manager;
 
     // Runtime is already provided by the #[tokio::main] in main.rs.
     // This function is synchronous; the actual async server loop will be
@@ -87,6 +134,29 @@ pub fn run(args: ServeArgs) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+
+    fn set_base_runtime_env() {
+        unsafe {
+            std::env::set_var("AETERNA_POSTGRESQL_HOST", "localhost");
+            std::env::set_var("AETERNA_POSTGRESQL_DATABASE", "aeterna");
+            std::env::set_var("AETERNA_LLM_PROVIDER", "none");
+            std::env::remove_var("OPENAI_API_KEY");
+            std::env::remove_var("AETERNA_OPENAI_MODEL");
+            std::env::remove_var("AETERNA_OPENAI_EMBEDDING_MODEL");
+        }
+    }
+
+    fn clear_runtime_env() {
+        unsafe {
+            std::env::remove_var("AETERNA_POSTGRESQL_HOST");
+            std::env::remove_var("AETERNA_POSTGRESQL_DATABASE");
+            std::env::remove_var("AETERNA_LLM_PROVIDER");
+            std::env::remove_var("OPENAI_API_KEY");
+            std::env::remove_var("AETERNA_OPENAI_MODEL");
+            std::env::remove_var("AETERNA_OPENAI_EMBEDDING_MODEL");
+        }
+    }
 
     #[test]
     fn test_serve_args_defaults() {
@@ -95,7 +165,7 @@ mod tests {
             port: 8080,
             metrics_port: 9090,
             config: None,
-            log_level: "info".to_string()
+            log_level: "info".to_string(),
         };
         assert_eq!(args.bind, "0.0.0.0");
         assert_eq!(args.port, 8080);
@@ -111,7 +181,7 @@ mod tests {
             port: 3000,
             metrics_port: 3001,
             config: Some(std::path::PathBuf::from("/etc/aeterna")),
-            log_level: "debug".to_string()
+            log_level: "debug".to_string(),
         };
         assert_eq!(args.port, 3000);
         assert_eq!(args.metrics_port, 3001);
@@ -126,8 +196,10 @@ mod tests {
             bind: "0.0.0.0".to_string(),
             port: 8080,
             metrics_port: 9090,
-            config: Some(std::path::PathBuf::from("/nonexistent/path/that/does/not/exist")),
-            log_level: "info".to_string()
+            config: Some(std::path::PathBuf::from(
+                "/nonexistent/path/that/does/not/exist",
+            )),
+            log_level: "info".to_string(),
         };
         let result = run(args);
         assert!(result.is_err());
@@ -139,6 +211,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_serve_missing_env_vars_with_existing_config_path() {
         // Use a path that exists ("/tmp") so we pass the config check and hit
         // the environment variable check.
@@ -147,6 +220,8 @@ mod tests {
         unsafe {
             std::env::remove_var("AETERNA_POSTGRESQL_HOST");
             std::env::remove_var("AETERNA_POSTGRESQL_DATABASE");
+            std::env::set_var("AETERNA_LLM_PROVIDER", "none");
+            std::env::remove_var("OPENAI_API_KEY");
         }
 
         let args = ServeArgs {
@@ -154,7 +229,7 @@ mod tests {
             port: 8080,
             metrics_port: 9090,
             config: Some(std::path::PathBuf::from("/tmp")),
-            log_level: "info".to_string()
+            log_level: "info".to_string(),
         };
         let result = run(args);
         assert!(result.is_err());
@@ -164,5 +239,60 @@ mod tests {
             msg.contains("AETERNA_POSTGRESQL") || msg.contains("not yet integrated"),
             "Expected AETERNA_POSTGRESQL or not-yet-integrated error, got: {msg}"
         );
+
+        clear_runtime_env();
+    }
+
+    #[test]
+    #[serial]
+    fn test_bootstrap_runtime_provider_services_allows_none_provider() {
+        set_base_runtime_env();
+
+        let services = bootstrap_runtime_provider_services().expect("bootstrap should succeed");
+        assert!(services.reasoner.is_none());
+
+        clear_runtime_env();
+    }
+
+    #[test]
+    #[serial]
+    fn test_bootstrap_runtime_provider_services_requires_openai_key() {
+        set_base_runtime_env();
+        unsafe {
+            std::env::set_var("AETERNA_LLM_PROVIDER", "openai");
+        }
+
+        let err = match bootstrap_runtime_provider_services() {
+            Ok(_) => panic!("expected openai provider bootstrap to fail without key"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("OPENAI_API_KEY"));
+
+        clear_runtime_env();
+    }
+
+    #[test]
+    #[serial]
+    fn test_serve_surfaces_provider_bootstrap_failure_before_not_integrated() {
+        unsafe {
+            std::env::set_var("AETERNA_POSTGRESQL_HOST", "localhost");
+            std::env::set_var("AETERNA_POSTGRESQL_DATABASE", "aeterna");
+            std::env::set_var("AETERNA_LLM_PROVIDER", "openai");
+            std::env::remove_var("OPENAI_API_KEY");
+        }
+
+        let args = ServeArgs {
+            bind: "0.0.0.0".to_string(),
+            port: 8080,
+            metrics_port: 9090,
+            config: Some(std::path::PathBuf::from("/tmp")),
+            log_level: "info".to_string(),
+        };
+        let result = run(args);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("OPENAI_API_KEY"), "unexpected error: {msg}");
+
+        clear_runtime_env();
     }
 }

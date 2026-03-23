@@ -10,5 +10,5 @@
 //! cleaned up when the process exits.
 
 mod fixtures;
-
+pub mod mock_storage;
 pub use fixtures::*;

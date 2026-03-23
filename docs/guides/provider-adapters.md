@@ -6,6 +6,93 @@ Aeterna uses a **pluggable backend architecture** built around the `VectorBacken
 
 This guide explains how the adapter system works and how to add a new provider.
 
+## Runtime Model Provider Adapters
+
+Vector backends are only one side of the provider story. Aeterna also supports runtime-selected server-side model providers for:
+
+- text generation via `mk_core::traits::LlmService`
+- embeddings via `mk_core::traits::EmbeddingService`
+
+These services are constructed through dedicated runtime factories:
+
+- `memory/src/llm/factory.rs`
+- `memory/src/embedding/factory.rs`
+
+The server startup path wires those factories from deployment configuration in `cli/src/commands/serve.rs`.
+
+### Supported Runtime LLM Providers
+
+`AETERNA_LLM_PROVIDER` currently supports:
+
+- `openai`
+- `google`
+- `bedrock`
+- `none`
+
+Provider construction is fail-closed. Unsupported providers or incomplete provider-specific configuration return an error instead of falling back implicitly.
+
+### OpenAI Runtime Configuration
+
+```bash
+export AETERNA_LLM_PROVIDER=openai
+export OPENAI_API_KEY=your-api-key
+export AETERNA_OPENAI_MODEL=gpt-4.1-mini
+export AETERNA_OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+### Google Cloud Runtime Configuration
+
+```bash
+export AETERNA_LLM_PROVIDER=google
+export AETERNA_GOOGLE_PROJECT_ID=my-project
+export AETERNA_GOOGLE_LOCATION=global
+export AETERNA_GOOGLE_MODEL=gemini-2.5-flash
+export AETERNA_GOOGLE_EMBEDDING_MODEL=text-embedding-005
+```
+
+Authentication behavior:
+
+1. Use `GOOGLE_ACCESS_TOKEN` when explicitly provided
+2. Otherwise use ADC via `GOOGLE_APPLICATION_CREDENTIALS`
+3. Otherwise use ambient ADC available in Google Cloud runtimes
+
+The Google adapters target Vertex AI / Gemini server-side APIs, not browser-user federation.
+
+### AWS Bedrock Runtime Configuration
+
+```bash
+export AETERNA_LLM_PROVIDER=bedrock
+export AETERNA_BEDROCK_REGION=us-east-1
+export AETERNA_BEDROCK_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0
+export AETERNA_BEDROCK_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0
+```
+
+Authentication uses the AWS SDK credential chain. In Kubernetes this normally means IAM roles for service accounts or another workload identity path rather than long-lived static credentials.
+
+### Adapter Design Notes
+
+- provider-specific request and response shapes stay inside adapter modules
+- factories normalize provider selection and missing-config validation
+- `MemoryManager` continues using injected trait implementations rather than provider-specific logic
+- `none` is an explicit mode for deployments that do not want server-side provider construction
+
+### Testing Expectations for Runtime Providers
+
+Provider adapters should include:
+
+- factory tests for provider parsing and fail-closed validation
+- request/response adaptation tests for each provider module
+- setup/deployment validation for emitted runtime environment
+
+The current Google and Bedrock implementations are covered in:
+
+- `memory/src/llm/google.rs`
+- `memory/src/embedding/google.rs`
+- `memory/src/llm/bedrock.rs`
+- `memory/src/embedding/bedrock.rs`
+- `cli/src/commands/setup/`
+- `charts/aeterna/`
+
 ## Architecture
 
 ```

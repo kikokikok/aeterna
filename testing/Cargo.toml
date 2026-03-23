@@ -11,3 +11,7 @@ tracing = { workspace = true }
 redis = { workspace = true }
 reqwest = { workspace = true }
 anyhow = { workspace = true }
+mk_core = { workspace = true }
+async-trait = { workspace = true }
+dashmap = { workspace = true }
+storage = { workspace = true }

@@ -98,6 +98,47 @@ pub struct SetupArgs {
     )]
     pub ollama_host: String,
 
+    #[arg(long, help = "Google Cloud project ID for Vertex AI")]
+    pub google_project_id: Option<String>,
+
+    #[arg(
+        long,
+        default_value = "us-central1",
+        help = "Google Cloud location for Vertex AI"
+    )]
+    pub google_location: String,
+
+    #[arg(
+        long,
+        default_value = "gemini-2.5-flash",
+        help = "Google generation model"
+    )]
+    pub google_model: String,
+
+    #[arg(
+        long,
+        default_value = "text-embedding-005",
+        help = "Google embedding model"
+    )]
+    pub google_embedding_model: String,
+
+    #[arg(long, help = "AWS Bedrock region")]
+    pub bedrock_region: Option<String>,
+
+    #[arg(
+        long,
+        default_value = "amazon.nova-micro-v1:0",
+        help = "AWS Bedrock generation model"
+    )]
+    pub bedrock_model: String,
+
+    #[arg(
+        long,
+        default_value = "amazon.titan-embed-text-v2:0",
+        help = "AWS Bedrock embedding model"
+    )]
+    pub bedrock_embedding_model: String,
+
     #[arg(long, help = "Enable OpenCode integration")]
     pub opencode: Option<bool>,
 
@@ -292,6 +333,29 @@ fn run_non_interactive(args: &SetupArgs) -> Result<SetupConfig> {
         openai_api_key: args.openai_api_key.clone(),
         anthropic_api_key: args.anthropic_api_key.clone(),
         ollama_host: Some(args.ollama_host.clone()),
+        google_llm: if matches!(args.llm, Some(LlmProvider::Google)) {
+            Some(GoogleLlmConfig {
+                project_id: args.google_project_id.clone().ok_or_else(|| {
+                    anyhow::anyhow!("--google-project-id is required when --llm google")
+                })?,
+                location: args.google_location.clone(),
+                model: args.google_model.clone(),
+                embedding_model: args.google_embedding_model.clone(),
+            })
+        } else {
+            None
+        },
+        bedrock_llm: if matches!(args.llm, Some(LlmProvider::Bedrock)) {
+            Some(BedrockLlmConfig {
+                region: args.bedrock_region.clone().ok_or_else(|| {
+                    anyhow::anyhow!("--bedrock-region is required when --llm bedrock")
+                })?,
+                model: args.bedrock_model.clone(),
+                embedding_model: args.bedrock_embedding_model.clone(),
+            })
+        } else {
+            None
+        },
         opencode_enabled: args.opencode.unwrap_or(false),
         ingress_enabled: args.ingress.unwrap_or(false),
         ingress_host: args.ingress_host.clone(),
@@ -353,6 +417,11 @@ mod tests {
                 assert!(args.opal.is_none());
                 assert!(args.llm.is_none());
                 assert_eq!(args.ollama_host, "http://localhost:11434");
+                assert_eq!(args.google_location, "us-central1");
+                assert_eq!(args.google_model, "gemini-2.5-flash");
+                assert_eq!(args.google_embedding_model, "text-embedding-005");
+                assert_eq!(args.bedrock_model, "amazon.nova-micro-v1:0");
+                assert_eq!(args.bedrock_embedding_model, "amazon.titan-embed-text-v2:0");
             }
             _ => panic!("expected Setup command"),
         }
@@ -556,6 +625,13 @@ mod tests {
             openai_api_key: None,
             anthropic_api_key: None,
             ollama_host: "http://localhost:11434".to_string(),
+            google_project_id: None,
+            google_location: "us-central1".to_string(),
+            google_model: "gemini-2.5-flash".to_string(),
+            google_embedding_model: "text-embedding-005".to_string(),
+            bedrock_region: None,
+            bedrock_model: "amazon.nova-micro-v1:0".to_string(),
+            bedrock_embedding_model: "amazon.titan-embed-text-v2:0".to_string(),
             opencode: None,
             ingress: None,
             ingress_host: None,
@@ -597,6 +673,13 @@ mod tests {
             openai_api_key: None,
             anthropic_api_key: None,
             ollama_host: "http://localhost:11434".to_string(),
+            google_project_id: None,
+            google_location: "us-central1".to_string(),
+            google_model: "gemini-2.5-flash".to_string(),
+            google_embedding_model: "text-embedding-005".to_string(),
+            bedrock_region: None,
+            bedrock_model: "amazon.nova-micro-v1:0".to_string(),
+            bedrock_embedding_model: "amazon.titan-embed-text-v2:0".to_string(),
             opencode: None,
             ingress: None,
             ingress_host: None,
@@ -641,6 +724,13 @@ mod tests {
             openai_api_key: None,
             anthropic_api_key: None,
             ollama_host: "http://localhost:11434".to_string(),
+            google_project_id: None,
+            google_location: "us-central1".to_string(),
+            google_model: "gemini-2.5-flash".to_string(),
+            google_embedding_model: "text-embedding-005".to_string(),
+            bedrock_region: None,
+            bedrock_model: "amazon.nova-micro-v1:0".to_string(),
+            bedrock_embedding_model: "amazon.titan-embed-text-v2:0".to_string(),
             opencode: None,
             ingress: None,
             ingress_host: None,
@@ -674,5 +764,102 @@ normal = "visible"
         assert!(!masked.contains("tok-abc"));
         assert!(!masked.contains("s3cret"));
         assert!(masked.contains("visible"));
+    }
+
+    #[test]
+    fn test_run_non_interactive_google_requires_project() {
+        let args = SetupArgs {
+            non_interactive: true,
+            reconfigure: false,
+            validate: false,
+            show: false,
+            output: std::path::PathBuf::from("."),
+            target: Some(DeploymentTarget::DockerCompose),
+            mode: Some(DeploymentMode::Local),
+            central_url: None,
+            central_auth: None,
+            api_key: None,
+            vector_backend: None,
+            cache: None,
+            redis_host: None,
+            redis_port: 6379,
+            postgresql: None,
+            pg_host: None,
+            pg_port: 5432,
+            pg_database: "aeterna".to_string(),
+            opal: None,
+            llm: Some(LlmProvider::Google),
+            openai_api_key: None,
+            anthropic_api_key: None,
+            ollama_host: "http://localhost:11434".to_string(),
+            google_project_id: None,
+            google_location: "us-central1".to_string(),
+            google_model: "gemini-2.5-flash".to_string(),
+            google_embedding_model: "text-embedding-005".to_string(),
+            bedrock_region: None,
+            bedrock_model: "amazon.nova-micro-v1:0".to_string(),
+            bedrock_embedding_model: "amazon.titan-embed-text-v2:0".to_string(),
+            opencode: None,
+            ingress: None,
+            ingress_host: None,
+            service_monitor: None,
+            network_policy: None,
+            hpa: None,
+            pdb: None,
+        };
+        let result = run_non_interactive(&args);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("--google-project-id")
+        );
+    }
+
+    #[test]
+    fn test_run_non_interactive_bedrock_requires_region() {
+        let args = SetupArgs {
+            non_interactive: true,
+            reconfigure: false,
+            validate: false,
+            show: false,
+            output: std::path::PathBuf::from("."),
+            target: Some(DeploymentTarget::DockerCompose),
+            mode: Some(DeploymentMode::Local),
+            central_url: None,
+            central_auth: None,
+            api_key: None,
+            vector_backend: None,
+            cache: None,
+            redis_host: None,
+            redis_port: 6379,
+            postgresql: None,
+            pg_host: None,
+            pg_port: 5432,
+            pg_database: "aeterna".to_string(),
+            opal: None,
+            llm: Some(LlmProvider::Bedrock),
+            openai_api_key: None,
+            anthropic_api_key: None,
+            ollama_host: "http://localhost:11434".to_string(),
+            google_project_id: None,
+            google_location: "us-central1".to_string(),
+            google_model: "gemini-2.5-flash".to_string(),
+            google_embedding_model: "text-embedding-005".to_string(),
+            bedrock_region: None,
+            bedrock_model: "amazon.nova-micro-v1:0".to_string(),
+            bedrock_embedding_model: "amazon.titan-embed-text-v2:0".to_string(),
+            opencode: None,
+            ingress: None,
+            ingress_host: None,
+            service_monitor: None,
+            network_policy: None,
+            hpa: None,
+            pdb: None,
+        };
+        let result = run_non_interactive(&args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("--bedrock-region"));
     }
 }

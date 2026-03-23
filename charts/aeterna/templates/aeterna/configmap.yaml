@@ -66,6 +66,17 @@ data:
   AETERNA_OLLAMA_MODEL: {{ .Values.llm.ollama.model | quote }}
   AETERNA_OLLAMA_EMBEDDING_MODEL: {{ .Values.llm.ollama.embeddingModel | quote }}
   {{- end }}
+  {{- if eq .Values.llm.provider "google" }}
+  AETERNA_GOOGLE_PROJECT_ID: {{ .Values.llm.google.projectId | quote }}
+  AETERNA_GOOGLE_LOCATION: {{ .Values.llm.google.location | quote }}
+  AETERNA_GOOGLE_MODEL: {{ .Values.llm.google.model | quote }}
+  AETERNA_GOOGLE_EMBEDDING_MODEL: {{ .Values.llm.google.embeddingModel | quote }}
+  {{- end }}
+  {{- if eq .Values.llm.provider "bedrock" }}
+  AETERNA_BEDROCK_REGION: {{ .Values.llm.bedrock.region | quote }}
+  AETERNA_BEDROCK_MODEL: {{ .Values.llm.bedrock.model | quote }}
+  AETERNA_BEDROCK_EMBEDDING_MODEL: {{ .Values.llm.bedrock.embeddingModel | quote }}
+  {{- end }}
   {{- end }}
   {{- if .Values.observability.tracing.enabled }}
   OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.observability.tracing.endpoint | quote }}

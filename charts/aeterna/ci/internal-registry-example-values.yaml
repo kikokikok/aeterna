@@ -1,0 +1,70 @@
+# Example: Internal registry mirror overlay
+#
+# Use this when your cluster requires pulling images through
+# a corporate registry mirror / proxy (e.g. Artifactory, Nexus, Harbor).
+#
+# Usage:
+#   cp internal-registry-example-values.yaml my-registry-values.yaml
+#   # Edit with your registry URL
+#   helm upgrade --install aeterna ./charts/aeterna \
+#     -f deployment-example-values.yaml \
+#     -f my-registry-values.yaml
+
+global:
+  imageRegistry: "${INTERNAL_REGISTRY}"                      # e.g. registry.corp.example.com
+  imagePullSecrets: []
+
+aeterna:
+  image:
+    repository: ghcrio/kikokikok/aeterna
+
+codesearch:
+  image:
+    repository: "${INTERNAL_REGISTRY}/ghcrio/kikokikok/codesearch"
+
+opal:
+  server:
+    image:
+      repository: "${INTERNAL_REGISTRY}/dockerhub/permitio/opal-server"
+  cedarAgent:
+    image:
+      repository: "${INTERNAL_REGISTRY}/dockerhub/permitio/cedar-agent"
+  fetcher:
+    image:
+      repository: "${INTERNAL_REGISTRY}/dockerhub/permitio/opal-client"
+
+cache:
+  type: valkey
+  dragonfly:
+    enabled: false
+  valkey:
+    enabled: true
+
+cnpg:
+  image:
+    repository: "${INTERNAL_REGISTRY}/ghcrio/cloudnative-pg/cloudnative-pg"
+
+qdrant:
+  image:
+    repository: "${INTERNAL_REGISTRY}/dockerhub/qdrant/qdrant"
+
+valkey:
+  enabled: true
+  auth:
+    enabled: false
+  image:
+    registry: "${INTERNAL_REGISTRY}"
+    repository: dockerhub/valkey/valkey
+  metrics:
+    enabled: false
+
+weaviate:
+  enabled: false
+
+mongodb:
+  enabled: false
+
+backup:
+  enabled: false
+  verify:
+    enabled: false
