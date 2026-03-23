@@ -61,6 +61,7 @@ jobs:
           helm repo add qdrant https://qdrant.github.io/qdrant-helm
           helm repo add weaviate https://weaviate.github.io/weaviate-helm/
           helm repo add percona https://percona.github.io/percona-helm-charts/
+          helm repo add valkey https://valkey.io/valkey-helm/
           helm repo update
 
       - name: Build dependencies
