@@ -509,3 +509,291 @@ pub enum MigrationError {
     #[error("Validation error: {0}")]
     ValidationError(String)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    // ---------------------------------------------------------------------------
+    // MigrationConfig — Default values
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn test_migration_config_default_values() {
+        let cfg = MigrationConfig::default();
+        assert!(!cfg.parallel_resolution_enabled);
+        assert!(cfg.comparison_logging_enabled);
+        assert_eq!(cfg.primary_mode, ResolutionMode::Heuristic);
+        assert!(cfg.audit_mode);
+        assert_eq!(cfg.circuit_breaker_threshold, 5);
+        assert!(cfg.fallback_enabled);
+    }
+
+    // ---------------------------------------------------------------------------
+    // MigrationConfig — from_env (reads env vars, falls back to defaults when absent)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn test_migration_config_from_env_defaults_when_no_env() {
+        // Make sure none of the env vars are set in this test
+        std::env::remove_var("AETERNA_PARALLEL_RESOLUTION");
+        std::env::remove_var("AETERNA_COMPARISON_LOGGING");
+        std::env::remove_var("AETERNA_PRIMARY_MODE");
+        std::env::remove_var("AETERNA_CEDAR_AUDIT_MODE");
+        std::env::remove_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD");
+        std::env::remove_var("AETERNA_CEDAR_FALLBACK");
+
+        let cfg = MigrationConfig::from_env();
+        assert!(!cfg.parallel_resolution_enabled);
+        assert!(cfg.comparison_logging_enabled);
+        assert_eq!(cfg.primary_mode, ResolutionMode::Heuristic);
+        assert!(cfg.audit_mode);
+        assert_eq!(cfg.circuit_breaker_threshold, 5);
+        assert!(cfg.fallback_enabled);
+    }
+
+    #[test]
+    fn test_migration_config_from_env_parallel_resolution_true() {
+        std::env::set_var("AETERNA_PARALLEL_RESOLUTION", "true");
+        let cfg = MigrationConfig::from_env();
+        assert!(cfg.parallel_resolution_enabled);
+        std::env::remove_var("AETERNA_PARALLEL_RESOLUTION");
+    }
+
+    #[test]
+    fn test_migration_config_from_env_comparison_logging_false() {
+        std::env::set_var("AETERNA_COMPARISON_LOGGING", "false");
+        let cfg = MigrationConfig::from_env();
+        assert!(!cfg.comparison_logging_enabled);
+        std::env::remove_var("AETERNA_COMPARISON_LOGGING");
+    }
+
+    #[test]
+    fn test_migration_config_from_env_primary_mode_cedar() {
+        std::env::set_var("AETERNA_PRIMARY_MODE", "cedar");
+        let cfg = MigrationConfig::from_env();
+        assert_eq!(cfg.primary_mode, ResolutionMode::Cedar);
+        std::env::remove_var("AETERNA_PRIMARY_MODE");
+    }
+
+    #[test]
+    fn test_migration_config_from_env_primary_mode_parallel() {
+        std::env::set_var("AETERNA_PRIMARY_MODE", "parallel");
+        let cfg = MigrationConfig::from_env();
+        assert_eq!(cfg.primary_mode, ResolutionMode::Parallel);
+        std::env::remove_var("AETERNA_PRIMARY_MODE");
+    }
+
+    #[test]
+    fn test_migration_config_from_env_primary_mode_unknown_falls_back_to_heuristic() {
+        std::env::set_var("AETERNA_PRIMARY_MODE", "something_weird");
+        let cfg = MigrationConfig::from_env();
+        assert_eq!(cfg.primary_mode, ResolutionMode::Heuristic);
+        std::env::remove_var("AETERNA_PRIMARY_MODE");
+    }
+
+    #[test]
+    fn test_migration_config_from_env_circuit_breaker_threshold() {
+        std::env::set_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD", "10");
+        let cfg = MigrationConfig::from_env();
+        assert_eq!(cfg.circuit_breaker_threshold, 10);
+        std::env::remove_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD");
+    }
+
+    #[test]
+    fn test_migration_config_from_env_circuit_breaker_invalid_falls_back_to_5() {
+        std::env::set_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD", "not-a-number");
+        let cfg = MigrationConfig::from_env();
+        assert_eq!(cfg.circuit_breaker_threshold, 5);
+        std::env::remove_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD");
+    }
+
+    #[test]
+    fn test_migration_config_from_env_audit_mode_false() {
+        std::env::set_var("AETERNA_CEDAR_AUDIT_MODE", "false");
+        let cfg = MigrationConfig::from_env();
+        assert!(!cfg.audit_mode);
+        std::env::remove_var("AETERNA_CEDAR_AUDIT_MODE");
+    }
+
+    #[test]
+    fn test_migration_config_from_env_fallback_disabled() {
+        std::env::set_var("AETERNA_CEDAR_FALLBACK", "false");
+        let cfg = MigrationConfig::from_env();
+        assert!(!cfg.fallback_enabled);
+        std::env::remove_var("AETERNA_CEDAR_FALLBACK");
+    }
+
+    // ---------------------------------------------------------------------------
+    // MigrationConfig — serde round-trip
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn test_migration_config_serde_round_trip() {
+        let cfg = MigrationConfig {
+            parallel_resolution_enabled: true,
+            comparison_logging_enabled: false,
+            primary_mode: ResolutionMode::Cedar,
+            audit_mode: false,
+            circuit_breaker_threshold: 3,
+            fallback_enabled: false,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let back: MigrationConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.primary_mode, ResolutionMode::Cedar);
+        assert!(!back.audit_mode);
+        assert_eq!(back.circuit_breaker_threshold, 3);
+    }
+
+    // ---------------------------------------------------------------------------
+    // ResolutionMode
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn test_resolution_mode_equality() {
+        assert_eq!(ResolutionMode::Heuristic, ResolutionMode::Heuristic);
+        assert_ne!(ResolutionMode::Heuristic, ResolutionMode::Cedar);
+        assert_ne!(ResolutionMode::Cedar, ResolutionMode::Parallel);
+    }
+
+    #[test]
+    fn test_resolution_mode_serde_round_trip() {
+        for mode in [ResolutionMode::Heuristic, ResolutionMode::Cedar, ResolutionMode::Parallel] {
+            let json = serde_json::to_string(&mode).unwrap();
+            let back: ResolutionMode = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, mode);
+        }
+    }
+
+    #[test]
+    fn test_resolution_mode_copy() {
+        let m = ResolutionMode::Parallel;
+        let m2 = m; // Copy
+        assert_eq!(m, m2);
+    }
+
+    // ---------------------------------------------------------------------------
+    // MatchStatus
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn test_match_status_serde_round_trip() {
+        for status in [
+            MatchStatus::Match,
+            MatchStatus::Mismatch,
+            MatchStatus::Partial,
+            MatchStatus::BothFailed,
+        ] {
+            let json = serde_json::to_string(&status).unwrap();
+            let back: MatchStatus = serde_json::from_str(&json).unwrap();
+            // Verify they serialise to the expected variant name strings
+            let s = format!("{:?}", back);
+            let orig = format!("{:?}", status);
+            assert_eq!(s, orig);
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // AuditDecision
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn test_audit_decision_serde() {
+        let allow_json = serde_json::to_string(&AuditDecision::Allow).unwrap();
+        let deny_json = serde_json::to_string(&AuditDecision::Deny).unwrap();
+        assert!(allow_json.contains("Allow"), "Expected 'Allow' in JSON: {allow_json}");
+        assert!(deny_json.contains("Deny"), "Expected 'Deny' in JSON: {deny_json}");
+    }
+
+    // ---------------------------------------------------------------------------
+    // ContextError — Display
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn test_context_error_display_heuristic() {
+        let e = ContextError::HeuristicError("resolver failed".to_string());
+        assert!(e.to_string().contains("resolver failed"));
+    }
+
+    #[test]
+    fn test_context_error_display_cedar() {
+        let e = ContextError::CedarError("connection refused".to_string());
+        assert!(e.to_string().contains("connection refused"));
+    }
+
+    #[test]
+    fn test_context_error_display_parallel() {
+        let e = ContextError::ParallelError("both failed".to_string());
+        assert!(e.to_string().contains("both failed"));
+    }
+
+    #[test]
+    fn test_context_error_display_config() {
+        let e = ContextError::ConfigError("bad config".to_string());
+        assert!(e.to_string().contains("bad config"));
+    }
+
+    // ---------------------------------------------------------------------------
+    // MigrationError — Display
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn test_migration_error_display_database() {
+        let e = MigrationError::DatabaseError("conn refused".to_string());
+        assert!(e.to_string().contains("conn refused"));
+    }
+
+    #[test]
+    fn test_migration_error_display_validation() {
+        let e = MigrationError::ValidationError("integrity check failed".to_string());
+        assert!(e.to_string().contains("integrity check failed"));
+    }
+
+    // ---------------------------------------------------------------------------
+    // MigrationReport / ValidationReport — construction & serde
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn test_migration_report_serde() {
+        let report = MigrationReport {
+            timestamp: Utc::now(),
+            companies_migrated: 2,
+            orgs_migrated: 5,
+            teams_migrated: 10,
+            projects_migrated: 20,
+            users_migrated: 300,
+            agents_migrated: 0,
+            errors: vec!["skipped orphan".to_string()],
+        };
+        let json = serde_json::to_string(&report).unwrap();
+        let back: MigrationReport = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.companies_migrated, 2);
+        assert_eq!(back.users_migrated, 300);
+        assert_eq!(back.errors.len(), 1);
+    }
+
+    #[test]
+    fn test_validation_report_serde() {
+        let report = ValidationReport {
+            timestamp: Utc::now(),
+            valid: false,
+            issues: vec!["missing tenant link".to_string()],
+        };
+        let json = serde_json::to_string(&report).unwrap();
+        let back: ValidationReport = serde_json::from_str(&json).unwrap();
+        assert!(!back.valid);
+        assert_eq!(back.issues[0], "missing tenant link");
+    }
+
+    #[test]
+    fn test_validation_report_valid() {
+        let report = ValidationReport {
+            timestamp: Utc::now(),
+            valid: true,
+            issues: vec![],
+        };
+        assert!(report.valid);
+        assert!(report.issues.is_empty());
+    }
+}

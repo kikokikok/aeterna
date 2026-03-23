@@ -1592,3 +1592,451 @@ impl Tool for GovernanceRoleListTool {
         }))
     }
 }
+
+// =============================================================================
+// Unit tests for governance tools
+// =============================================================================
+//
+// These tests cover:
+//   1. Pure methods (`name`, `description`, `input_schema`) — no I/O.
+//   2. Full `call()` round-trips for the 5 StorageBackend-backed tools using
+//      MockStorageBackend so no Postgres instance is required.
+//
+// The GovernanceStorage-backed tools (GovernanceConfigure*, GovernanceRequest*,
+// etc.) require a live PgPool and are tested separately as integration tests.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mk_core::traits::StorageBackend;
+    use std::sync::Arc;
+    use testing::mock_storage::MockStorageBackend;
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    fn make_engine() -> Arc<GovernanceEngine> {
+        Arc::new(GovernanceEngine::new())
+    }
+
+    fn make_backend() -> Arc<MockStorageBackend> {
+        MockStorageBackend::arc()
+    }
+
+    fn tenant_ctx_json(tenant: &str, user: &str) -> Value {
+        serde_json::json!({
+            "tenant_id": tenant,
+            "user_id": user
+        })
+    }
+
+    // -------------------------------------------------------------------------
+    // UnitCreateTool
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_unit_create_tool_pure_methods() {
+        let tool = UnitCreateTool::new(make_backend(), make_engine());
+        assert_eq!(tool.name(), "governance_unit_create");
+        assert!(!tool.description().is_empty());
+        let schema = tool.input_schema();
+        assert_eq!(schema["type"], "object");
+        let required = schema["required"].as_array().unwrap();
+        assert!(required.iter().any(|v| v == "name"));
+        assert!(required.iter().any(|v| v == "unit_type"));
+    }
+
+    #[tokio::test]
+    async fn test_unit_create_tool_call_succeeds() {
+        let backend = make_backend();
+        let tool = UnitCreateTool::new(backend.clone(), make_engine());
+
+        let result = tool
+            .call(serde_json::json!({
+                "name": "Acme Platform",
+                "unit_type": "company",
+                "tenantContext": tenant_ctx_json("acme", "user-1")
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(result["success"], true);
+        let unit_id = result["unit_id"].as_str().unwrap();
+        assert!(!unit_id.is_empty());
+
+        // Confirm the unit was actually stored
+        let units = backend.list_all_units().await.unwrap();
+        assert_eq!(units.len(), 1);
+        assert_eq!(units[0].name, "Acme Platform");
+    }
+
+    #[tokio::test]
+    async fn test_unit_create_tool_with_parent_id() {
+        let backend = make_backend();
+        let tool = UnitCreateTool::new(backend.clone(), make_engine());
+
+        // Create parent first
+        tool.call(serde_json::json!({
+            "name": "Parent Corp",
+            "unit_type": "company",
+            "tenantContext": tenant_ctx_json("t", "u")
+        }))
+        .await
+        .unwrap();
+
+        let parent_id = backend.list_all_units().await.unwrap()[0].id.clone();
+
+        // Create child referencing parent
+        let result = tool
+            .call(serde_json::json!({
+                "name": "Platform Eng",
+                "unit_type": "organization",
+                "parent_id": parent_id,
+                "tenantContext": tenant_ctx_json("t", "u")
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(result["success"], true);
+        let units = backend.list_all_units().await.unwrap();
+        assert_eq!(units.len(), 2);
+        let child = units.iter().find(|u| u.name == "Platform Eng").unwrap();
+        assert_eq!(child.parent_id.as_deref(), Some(parent_id.as_str()));
+    }
+
+    #[tokio::test]
+    async fn test_unit_create_tool_invalid_unit_type_returns_error() {
+        let tool = UnitCreateTool::new(make_backend(), make_engine());
+        let err = tool
+            .call(serde_json::json!({
+                "name": "X",
+                "unit_type": "INVALID_TYPE",
+                "tenantContext": tenant_ctx_json("t", "u")
+            }))
+            .await;
+        assert!(err.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_unit_create_tool_missing_tenant_context_returns_error() {
+        let tool = UnitCreateTool::new(make_backend(), make_engine());
+        let err = tool
+            .call(serde_json::json!({
+                "name": "X",
+                "unit_type": "team"
+                // no tenantContext
+            }))
+            .await;
+        assert!(err.is_err());
+    }
+
+    // -------------------------------------------------------------------------
+    // UnitPolicyAddTool
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_unit_policy_add_tool_pure_methods() {
+        let tool = UnitPolicyAddTool::new(make_backend(), make_engine());
+        assert_eq!(tool.name(), "governance_policy_add");
+        assert!(!tool.description().is_empty());
+        let schema = tool.input_schema();
+        assert_eq!(schema["type"], "object");
+        let required = schema["required"].as_array().unwrap();
+        assert!(required.iter().any(|v| v == "unit_id"));
+        assert!(required.iter().any(|v| v == "policy"));
+    }
+
+    #[tokio::test]
+    async fn test_unit_policy_add_tool_call_succeeds() {
+        let backend = make_backend();
+        let tool = UnitPolicyAddTool::new(backend.clone(), make_engine());
+
+        let result = tool
+            .call(serde_json::json!({
+                "unit_id": "unit-abc",
+                "policy": {
+                    "id": "pol-1",
+                    "name": "Test Policy",
+                    "layer": "team",
+                    "mode": "mandatory",
+                    "merge_strategy": "merge",
+                    "rules": [],
+                    "metadata": {}
+                },
+                "tenantContext": tenant_ctx_json("t", "u")
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["policy_id"], "pol-1");
+
+        // Confirm stored
+        let ctx = mk_core::types::TenantContext {
+            tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
+            user_id: mk_core::types::UserId::new("u".to_string()).unwrap(),
+            agent_id: None,
+        };
+        let stored = backend.get_unit_policies(ctx, "unit-abc").await.unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].id, "pol-1");
+    }
+
+    // -------------------------------------------------------------------------
+    // UserRoleAssignTool
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_user_role_assign_tool_pure_methods() {
+        let tool = UserRoleAssignTool::new(make_backend(), make_engine());
+        assert_eq!(tool.name(), "governance_role_assign");
+        assert!(!tool.description().is_empty());
+        let schema = tool.input_schema();
+        assert_eq!(schema["type"], "object");
+        let required = schema["required"].as_array().unwrap();
+        assert!(required.iter().any(|v| v == "user_id"));
+        assert!(required.iter().any(|v| v == "unit_id"));
+        assert!(required.iter().any(|v| v == "role"));
+    }
+
+    #[tokio::test]
+    async fn test_user_role_assign_tool_call_succeeds() {
+        let backend = make_backend();
+        let tool = UserRoleAssignTool::new(backend.clone(), make_engine());
+
+        let result = tool
+            .call(serde_json::json!({
+                "user_id": "alice",
+                "unit_id": "unit-x",
+                "role": "developer",
+                "tenantContext": tenant_ctx_json("t1", "alice")
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(result["success"], true);
+
+        // Confirm role stored
+        let key = "alice:t1:unit-x";
+        let roles = backend.roles.get(key).unwrap();
+        assert!(roles.contains(&mk_core::types::Role::Developer));
+    }
+
+    #[tokio::test]
+    async fn test_user_role_assign_tool_invalid_role_returns_error() {
+        let tool = UserRoleAssignTool::new(make_backend(), make_engine());
+        let err = tool
+            .call(serde_json::json!({
+                "user_id": "alice",
+                "unit_id": "unit-x",
+                "role": "SUPER_ADMIN",
+                "tenantContext": tenant_ctx_json("t1", "alice")
+            }))
+            .await;
+        assert!(err.is_err());
+    }
+
+    // -------------------------------------------------------------------------
+    // UserRoleRemoveTool
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_user_role_remove_tool_pure_methods() {
+        let tool = UserRoleRemoveTool::new(make_backend(), make_engine());
+        assert_eq!(tool.name(), "governance_role_remove");
+        assert!(!tool.description().is_empty());
+        let schema = tool.input_schema();
+        assert_eq!(schema["type"], "object");
+        let required = schema["required"].as_array().unwrap();
+        assert!(required.iter().any(|v| v == "user_id"));
+        assert!(required.iter().any(|v| v == "role"));
+    }
+
+    #[tokio::test]
+    async fn test_user_role_remove_tool_call_removes_role() {
+        let backend = make_backend();
+        let assign_tool = UserRoleAssignTool::new(backend.clone(), make_engine());
+        let remove_tool = UserRoleRemoveTool::new(backend.clone(), make_engine());
+
+        // First assign
+        assign_tool
+            .call(serde_json::json!({
+                "user_id": "bob",
+                "unit_id": "unit-y",
+                "role": "techlead",
+                "tenantContext": tenant_ctx_json("t1", "bob")
+            }))
+            .await
+            .unwrap();
+
+        let key = "bob:t1:unit-y";
+        assert!(backend.roles.get(key).unwrap().contains(&mk_core::types::Role::TechLead));
+
+        // Then remove
+        let result = remove_tool
+            .call(serde_json::json!({
+                "user_id": "bob",
+                "unit_id": "unit-y",
+                "role": "techlead",
+                "tenantContext": tenant_ctx_json("t1", "bob")
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(result["success"], true);
+        assert!(backend.roles.get(key).unwrap().is_empty());
+    }
+
+    // -------------------------------------------------------------------------
+    // HierarchyNavigateTool
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_hierarchy_navigate_tool_pure_methods() {
+        let tool = HierarchyNavigateTool::new(make_backend());
+        assert_eq!(tool.name(), "governance_hierarchy_navigate");
+        assert!(!tool.description().is_empty());
+        let schema = tool.input_schema();
+        assert_eq!(schema["type"], "object");
+        let required = schema["required"].as_array().unwrap();
+        assert!(required.iter().any(|v| v == "unit_id"));
+        assert!(required.iter().any(|v| v == "direction"));
+        // Verify direction enum values
+        let direction_enum = schema["properties"]["direction"]["enum"].as_array().unwrap();
+        assert!(direction_enum.iter().any(|v| v == "ancestors"));
+        assert!(direction_enum.iter().any(|v| v == "descendants"));
+    }
+
+    #[tokio::test]
+    async fn test_hierarchy_navigate_tool_ancestors() {
+        let backend = make_backend();
+
+        // Seed: gp -> parent -> child
+        let gp = mk_core::types::OrganizationalUnit {
+            id: "gp".to_string(),
+            name: "GrandParent".to_string(),
+            unit_type: mk_core::types::UnitType::Company,
+            parent_id: None,
+            tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
+            metadata: std::collections::HashMap::new(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        let parent = mk_core::types::OrganizationalUnit {
+            id: "parent".to_string(),
+            name: "Parent".to_string(),
+            unit_type: mk_core::types::UnitType::Organization,
+            parent_id: Some("gp".to_string()),
+            tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
+            metadata: std::collections::HashMap::new(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        let child = mk_core::types::OrganizationalUnit {
+            id: "child".to_string(),
+            name: "Child".to_string(),
+            unit_type: mk_core::types::UnitType::Team,
+            parent_id: Some("parent".to_string()),
+            tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
+            metadata: std::collections::HashMap::new(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        backend.create_unit(&gp).await.unwrap();
+        backend.create_unit(&parent).await.unwrap();
+        backend.create_unit(&child).await.unwrap();
+
+        let tool = HierarchyNavigateTool::new(backend.clone());
+        let result = tool
+            .call(serde_json::json!({
+                "unit_id": "child",
+                "direction": "ancestors",
+                "tenantContext": tenant_ctx_json("t", "u")
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(result["success"], true);
+        let units = result["units"].as_array().unwrap();
+        let ids: Vec<&str> = units
+            .iter()
+            .map(|u| u["id"].as_str().unwrap())
+            .collect();
+        assert!(ids.contains(&"child"));
+        assert!(ids.contains(&"parent"));
+        assert!(ids.contains(&"gp"));
+    }
+
+    #[tokio::test]
+    async fn test_hierarchy_navigate_tool_descendants() {
+        let backend = make_backend();
+
+        let root = mk_core::types::OrganizationalUnit {
+            id: "root".to_string(),
+            name: "Root".to_string(),
+            unit_type: mk_core::types::UnitType::Company,
+            parent_id: None,
+            tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
+            metadata: std::collections::HashMap::new(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        let child1 = mk_core::types::OrganizationalUnit {
+            id: "c1".to_string(),
+            name: "Child1".to_string(),
+            unit_type: mk_core::types::UnitType::Team,
+            parent_id: Some("root".to_string()),
+            tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
+            metadata: std::collections::HashMap::new(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        let child2 = mk_core::types::OrganizationalUnit {
+            id: "c2".to_string(),
+            name: "Child2".to_string(),
+            unit_type: mk_core::types::UnitType::Team,
+            parent_id: Some("root".to_string()),
+            tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
+            metadata: std::collections::HashMap::new(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        backend.create_unit(&root).await.unwrap();
+        backend.create_unit(&child1).await.unwrap();
+        backend.create_unit(&child2).await.unwrap();
+
+        let tool = HierarchyNavigateTool::new(backend.clone());
+        let result = tool
+            .call(serde_json::json!({
+                "unit_id": "root",
+                "direction": "descendants",
+                "tenantContext": tenant_ctx_json("t", "u")
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(result["success"], true);
+        let units = result["units"].as_array().unwrap();
+        assert_eq!(units.len(), 2);
+        let ids: Vec<&str> = units
+            .iter()
+            .map(|u| u["id"].as_str().unwrap())
+            .collect();
+        assert!(ids.contains(&"c1"));
+        assert!(ids.contains(&"c2"));
+    }
+
+    #[tokio::test]
+    async fn test_hierarchy_navigate_tool_invalid_direction_returns_error() {
+        let tool = HierarchyNavigateTool::new(make_backend());
+        let err = tool
+            .call(serde_json::json!({
+                "unit_id": "some-id",
+                "direction": "sideways",
+                "tenantContext": tenant_ctx_json("t", "u")
+            }))
+            .await;
+        assert!(err.is_err());
+    }
+}

@@ -184,7 +184,7 @@ cnpg:
 
 ```yaml
 llm:
-  provider: openai  # Options: openai, anthropic, ollama, none
+  provider: openai  # Options: openai, anthropic, ollama, google, bedrock, none
 
   openai:
     existingSecret: "openai-credentials"
@@ -201,6 +201,21 @@ llm:
     host: "http://ollama.default.svc:11434"
     model: "llama3.2"
     embeddingModel: "nomic-embed-text"
+
+  # Or Google Cloud Vertex AI / Gemini
+  google:
+    projectId: "my-gcp-project"
+    location: "us-central1"
+    model: "gemini-2.5-flash"
+    embeddingModel: "text-embedding-005"
+    # Optional: mount ADC credential JSON from an existing secret
+    existingSecret: "aeterna-google-llm"
+
+  # Or AWS Bedrock
+  bedrock:
+    region: "us-east-1"
+    model: "amazon.nova-micro-v1:0"
+    embeddingModel: "amazon.titan-embed-text-v2:0"
 ```
 
 ## OPAL Authorization Stack

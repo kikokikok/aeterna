@@ -1,4 +1,4 @@
-ARG RUST_VERSION=1.83
+ARG RUST_VERSION=1.93
 
 FROM rust:${RUST_VERSION}-bookworm AS chef
 RUN cargo install cargo-chef

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
 use super::types::*;
 
@@ -145,6 +145,23 @@ pub fn generate_config_toml(config: &SetupConfig) -> String {
     content.push_str(&format!("provider = \"{:?}\"\n", config.llm_provider).to_lowercase());
     if let Some(host) = &config.ollama_host {
         content.push_str(&format!("ollama_host = \"{}\"\n", host));
+    }
+    if let Some(google) = &config.google_llm {
+        content.push_str(&format!("google_project_id = \"{}\"\n", google.project_id));
+        content.push_str(&format!("google_location = \"{}\"\n", google.location));
+        content.push_str(&format!("google_model = \"{}\"\n", google.model));
+        content.push_str(&format!(
+            "google_embedding_model = \"{}\"\n",
+            google.embedding_model
+        ));
+    }
+    if let Some(bedrock) = &config.bedrock_llm {
+        content.push_str(&format!("bedrock_region = \"{}\"\n", bedrock.region));
+        content.push_str(&format!("bedrock_model = \"{}\"\n", bedrock.model));
+        content.push_str(&format!(
+            "bedrock_embedding_model = \"{}\"\n",
+            bedrock.embedding_model
+        ));
     }
     content.push('\n');
 
@@ -396,6 +413,25 @@ pub fn generate_helm_values(config: &SetupConfig) -> String {
 
     content.push_str("llm:\n");
     content.push_str(&format!("  provider: {:?}\n", config.llm_provider).to_lowercase());
+    if let Some(google) = &config.google_llm {
+        content.push_str("  google:\n");
+        content.push_str(&format!("    projectId: \"{}\"\n", google.project_id));
+        content.push_str(&format!("    location: \"{}\"\n", google.location));
+        content.push_str(&format!("    model: \"{}\"\n", google.model));
+        content.push_str(&format!(
+            "    embeddingModel: \"{}\"\n",
+            google.embedding_model
+        ));
+    }
+    if let Some(bedrock) = &config.bedrock_llm {
+        content.push_str("  bedrock:\n");
+        content.push_str(&format!("    region: \"{}\"\n", bedrock.region));
+        content.push_str(&format!("    model: \"{}\"\n", bedrock.model));
+        content.push_str(&format!(
+            "    embeddingModel: \"{}\"\n",
+            bedrock.embedding_model
+        ));
+    }
     content.push('\n');
 
     content.push_str("ingress:\n");

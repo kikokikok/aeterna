@@ -1,0 +1,105 @@
+# Example: Full deployment overlay
+#
+# Copy this file and fill in the placeholders for your environment.
+# Usage:
+#   cp deployment-example-values.yaml my-env-values.yaml
+#   # Edit my-env-values.yaml with your real values
+#   helm upgrade --install aeterna ./charts/aeterna -f my-env-values.yaml
+#
+# IMPORTANT: Never commit environment-specific values to the repository.
+# Add your file to .gitignore or keep it outside the repo.
+
+deploymentMode: local
+
+aeterna:
+  replicaCount: 1
+  image:
+    # tag: "latest"                       # Image tag to deploy
+    pullPolicy: Always
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: "${CLUSTER_ISSUER}"    # e.g. letsencrypt-prod
+      kubernetes.io/tls-acme: "true"
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    hosts:
+      - host: "${INGRESS_HOST}"                              # e.g. aeterna.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: aeterna-tls
+        hosts:
+          - "${INGRESS_HOST}"
+  imagePullSecrets: []
+  # imagePullSecrets:
+  #   - name: ghcr-pull-secret
+
+cache:
+  type: valkey
+  dragonfly:
+    enabled: false
+  valkey:
+    enabled: true
+
+postgresql:
+  bundled: true
+  cloudnativepg:
+    enabled: true
+    instances: 1
+    storage:
+      size: 10Gi
+      storageClass: "${STORAGE_CLASS}"                       # e.g. gp3, standard, fast-ssd
+
+opal:
+  server:
+    replicaCount: 1
+
+observability:
+  serviceMonitor:
+    enabled: false
+
+networkPolicy:
+  enabled: false
+
+global:
+  storageClass: "${STORAGE_CLASS}"
+
+cnpg:
+  enabled: false
+
+dragonfly:
+  enabled: false
+
+valkey:
+  enabled: true
+  auth:
+    enabled: false
+  metrics:
+    enabled: false
+  dataStorage:
+    enabled: true
+    requestedSize: 10Gi
+    className: "${STORAGE_CLASS}"
+
+qdrant:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    size: 10Gi
+    storageClass: "${STORAGE_CLASS}"
+
+# --- LLM Provider Configuration ---
+# Uncomment and configure the provider you want to use.
+llm:
+  provider: google                                           # google | bedrock | openai | anthropic | ollama | none
+  google:
+    projectId: "${GCP_PROJECT_ID}"                           # e.g. my-gcp-project
+    location: "${GCP_LOCATION}"                              # e.g. us-central1
+    model: "gemini-2.5-flash"
+    embeddingModel: "text-embedding-005"
+    existingSecret: "${GOOGLE_CREDENTIALS_SECRET}"           # K8s secret name holding credentials.json
+    secretKey: "credentials.json"
+    wifTokenAudience: "${WIF_AUDIENCE}"                      # //iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL/providers/PROVIDER
+    wifTokenFile: "/var/run/secrets/tokens/gcp-token"

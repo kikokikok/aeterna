@@ -3,5 +3,16 @@ all-features = true
 workspace = true
 timeout = "1200s"
 out = ["Html", "Json"]
-exclude-files = ["*/tests/*", "tests/*"]
+exclude-files = [
+    "*/tests/*",
+    "tests/*",
+    # Binary entrypoints — no runnable logic inside
+    "*/src/main.rs",
+    # CLI search commands — all code paths shell out to the `codesearch` binary via
+    # std::process::Command; there is no in-process logic to unit-test here.
+    "cli/src/commands/search/init.rs",
+    "cli/src/commands/search/search.rs",
+    "cli/src/commands/search/status.rs",
+    "cli/src/commands/search/trace.rs",
+]
 fail-under = 80

@@ -525,6 +525,8 @@ impl SetupWizard {
             "OpenAI (text-embedding-3-small, gpt-4o)",
             "Anthropic (claude-3-haiku)",
             "Ollama (local, no API key)",
+            "Google Cloud Vertex AI / Gemini",
+            "AWS Bedrock",
             "Skip (configure later)",
         ];
 
@@ -538,7 +540,9 @@ impl SetupWizard {
             0 => LlmProvider::Openai,
             1 => LlmProvider::Anthropic,
             2 => LlmProvider::Ollama,
-            3 => LlmProvider::None,
+            3 => LlmProvider::Google,
+            4 => LlmProvider::Bedrock,
+            5 => LlmProvider::None,
             _ => unreachable!(),
         };
 
@@ -572,8 +576,77 @@ impl SetupWizard {
                     .interact_text()?;
                 self.config.ollama_host = Some(host);
             }
+            LlmProvider::Google => self.configure_google_llm()?,
+            LlmProvider::Bedrock => self.configure_bedrock_llm()?,
             LlmProvider::None => {}
         }
+
+        Ok(())
+    }
+
+    fn configure_google_llm(&mut self) -> Result<()> {
+        let project_id: String = Input::with_theme(&self.theme)
+            .with_prompt("Google Cloud project ID")
+            .interact_text()?;
+
+        let location: String = Input::with_theme(&self.theme)
+            .with_prompt("Vertex AI location")
+            .default("us-central1".to_string())
+            .interact_text()?;
+
+        let model: String = Input::with_theme(&self.theme)
+            .with_prompt("Google generation model")
+            .default("gemini-2.5-flash".to_string())
+            .interact_text()?;
+
+        let embedding_model: String = Input::with_theme(&self.theme)
+            .with_prompt("Google embedding model")
+            .default("text-embedding-005".to_string())
+            .interact_text()?;
+
+        println!(
+            "{}",
+            "Authentication uses GOOGLE_ACCESS_TOKEN or ADC / GOOGLE_APPLICATION_CREDENTIALS at runtime."
+                .dimmed()
+        );
+
+        self.config.google_llm = Some(GoogleLlmConfig {
+            project_id,
+            location,
+            model,
+            embedding_model,
+        });
+
+        Ok(())
+    }
+
+    fn configure_bedrock_llm(&mut self) -> Result<()> {
+        let region: String = Input::with_theme(&self.theme)
+            .with_prompt("AWS Bedrock region")
+            .default("us-east-1".to_string())
+            .interact_text()?;
+
+        let model: String = Input::with_theme(&self.theme)
+            .with_prompt("Bedrock generation model")
+            .default("amazon.nova-micro-v1:0".to_string())
+            .interact_text()?;
+
+        let embedding_model: String = Input::with_theme(&self.theme)
+            .with_prompt("Bedrock embedding model")
+            .default("amazon.titan-embed-text-v2:0".to_string())
+            .interact_text()?;
+
+        println!(
+            "{}",
+            "Authentication uses the standard AWS credential chain (IRSA, instance profile, profile, or env vars)."
+                .dimmed()
+        );
+
+        self.config.bedrock_llm = Some(BedrockLlmConfig {
+            region,
+            model,
+            embedding_model,
+        });
 
         Ok(())
     }

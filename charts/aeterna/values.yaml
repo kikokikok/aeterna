@@ -588,7 +588,7 @@ okta:
 
 ## LLM provider configuration
 llm:
-  ## @param llm.provider LLM provider: openai, anthropic, ollama, none
+  ## @param llm.provider LLM provider: openai, anthropic, ollama, google, bedrock, none
   provider: none
 
   ## OpenAI configuration
@@ -619,6 +619,34 @@ llm:
     model: "llama3.2"
     ## @param llm.ollama.embeddingModel Embedding model name
     embeddingModel: "nomic-embed-text"
+
+  ## Google Cloud Vertex AI / Gemini configuration
+  google:
+    ## @param llm.google.projectId Google Cloud project ID
+    projectId: ""
+    ## @param llm.google.location Vertex AI location
+    location: "us-central1"
+    ## @param llm.google.model Google generation model
+    model: "gemini-2.5-flash"
+    ## @param llm.google.embeddingModel Google embedding model
+    embeddingModel: "text-embedding-005"
+    ## @param llm.google.existingSecret Existing secret containing ADC credential file
+    existingSecret: ""
+    ## @param llm.google.secretKey Secret key containing the credential file payload
+    secretKey: "credentials.json"
+    ## @param llm.google.wifTokenAudience Audience for projected Kubernetes service account token used by external WIF ADC
+    wifTokenAudience: ""
+    ## @param llm.google.wifTokenFile Path for projected Kubernetes service account token used by external WIF ADC
+    wifTokenFile: "/var/run/secrets/tokens/gcp-token"
+
+  ## AWS Bedrock configuration
+  bedrock:
+    ## @param llm.bedrock.region AWS region
+    region: "us-east-1"
+    ## @param llm.bedrock.model Bedrock generation model ID
+    model: "amazon.nova-micro-v1:0"
+    ## @param llm.bedrock.embeddingModel Bedrock embedding model ID
+    embeddingModel: "amazon.titan-embed-text-v2:0"
 
 ## Observability configuration
 observability:

@@ -51,6 +51,8 @@ pub enum LlmProvider {
     Openai,
     Anthropic,
     Ollama,
+    Google,
+    Bedrock,
     None,
 }
 
@@ -103,6 +105,21 @@ pub struct DatabricksConfig {
     pub catalog: String,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GoogleLlmConfig {
+    pub project_id: String,
+    pub location: String,
+    pub model: String,
+    pub embedding_model: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BedrockLlmConfig {
+    pub region: String,
+    pub model: String,
+    pub embedding_model: String,
+}
+
 /// Hybrid mode: `local_cache_size_mb` is in MB, `sync_interval_secs` is in seconds.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HybridConfig {
@@ -152,6 +169,8 @@ pub struct SetupConfig {
     pub openai_api_key: Option<String>,
     pub anthropic_api_key: Option<String>,
     pub ollama_host: Option<String>,
+    pub google_llm: Option<GoogleLlmConfig>,
+    pub bedrock_llm: Option<BedrockLlmConfig>,
 
     pub opencode_enabled: bool,
 
@@ -187,6 +206,8 @@ impl Default for SetupConfig {
             openai_api_key: None,
             anthropic_api_key: None,
             ollama_host: None,
+            google_llm: None,
+            bedrock_llm: None,
             opencode_enabled: false,
             ingress_enabled: false,
             ingress_host: None,
@@ -311,6 +332,29 @@ mod tests {
             catalog: "main".into(),
         };
         assert_eq!(dc.catalog, "main");
+    }
+
+    #[test]
+    fn test_google_llm_config() {
+        let gc = GoogleLlmConfig {
+            project_id: "my-project".into(),
+            location: "us-central1".into(),
+            model: "gemini-2.5-flash".into(),
+            embedding_model: "text-embedding-005".into(),
+        };
+        assert_eq!(gc.project_id, "my-project");
+        assert_eq!(gc.location, "us-central1");
+    }
+
+    #[test]
+    fn test_bedrock_llm_config() {
+        let bc = BedrockLlmConfig {
+            region: "us-east-1".into(),
+            model: "amazon.nova-micro-v1:0".into(),
+            embedding_model: "amazon.titan-embed-text-v2:0".into(),
+        };
+        assert_eq!(bc.region, "us-east-1");
+        assert_eq!(bc.model, "amazon.nova-micro-v1:0");
     }
 
     #[test]
@@ -460,6 +504,17 @@ mod tests {
                 token: "dapi-tok".into(),
                 catalog: "main".into(),
             }),
+            google_llm: Some(GoogleLlmConfig {
+                project_id: "proj".into(),
+                location: "us-central1".into(),
+                model: "gemini-2.5-flash".into(),
+                embedding_model: "text-embedding-005".into(),
+            }),
+            bedrock_llm: Some(BedrockLlmConfig {
+                region: "us-east-1".into(),
+                model: "amazon.nova-micro-v1:0".into(),
+                embedding_model: "amazon.titan-embed-text-v2:0".into(),
+            }),
             ..SetupConfig::default()
         };
         let json = serde_json::to_string(&cfg).expect("serialize");
@@ -469,5 +524,7 @@ mod tests {
         assert!(d.mongodb.is_some());
         assert!(d.vertex_ai.is_some());
         assert!(d.databricks.is_some());
+        assert!(d.google_llm.is_some());
+        assert!(d.bedrock_llm.is_some());
     }
 }
