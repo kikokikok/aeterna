@@ -8,5 +8,7 @@ pub mod webhook;
 
 pub use config::IdpSyncConfig;
 pub use error::{IdpSyncError, IdpSyncResult};
+pub use okta::IdpClient;
 pub use scheduler::SyncScheduler;
 pub use sync::{IdpSyncService, SyncReport};
+pub use webhook::router as webhook_router;

@@ -9,7 +9,7 @@ use tracing::{error, info};
 pub struct SyncScheduler {
     scheduler: JobScheduler,
     sync_service: Arc<IdpSyncService>,
-    last_report: Arc<RwLock<Option<SyncReport>>>
+    last_report: Arc<RwLock<Option<SyncReport>>>,
 }
 
 impl SyncScheduler {
@@ -57,7 +57,7 @@ impl SyncScheduler {
         Ok(Self {
             scheduler,
             sync_service,
-            last_report
+            last_report,
         })
     }
 

@@ -12,7 +12,7 @@ use uuid::Uuid;
 pub struct IdpSyncService {
     config: IdpSyncConfig,
     client: Arc<dyn IdpClient>,
-    db_pool: PgPool
+    db_pool: PgPool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -25,7 +25,7 @@ pub struct SyncReport {
     pub groups_synced: u32,
     pub memberships_added: u32,
     pub memberships_removed: u32,
-    pub errors: Vec<SyncError>
+    pub errors: Vec<SyncError>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,7 +33,7 @@ pub struct SyncError {
     pub entity_type: String,
     pub entity_id: String,
     pub error: String,
-    pub timestamp: DateTime<Utc>
+    pub timestamp: DateTime<Utc>,
 }
 
 impl SyncReport {
@@ -57,7 +57,7 @@ impl SyncReport {
             entity_type: entity_type.to_string(),
             entity_id: entity_id.to_string(),
             error: error.to_string(),
-            timestamp: Utc::now()
+            timestamp: Utc::now(),
         });
     }
 }
@@ -67,7 +67,7 @@ impl IdpSyncService {
         Self {
             config,
             client,
-            db_pool
+            db_pool,
         }
     }
 
@@ -179,7 +179,7 @@ impl IdpSyncService {
     async fn sync_groups_and_memberships(
         &self,
         groups: &[IdpGroup],
-        report: &mut SyncReport
+        report: &mut SyncReport,
     ) -> IdpSyncResult<()> {
         let group_to_team_mapping = self.get_group_to_team_mapping().await?;
 
@@ -217,7 +217,7 @@ impl IdpSyncService {
         &self,
         team_id: Uuid,
         members: &[IdpUser],
-        report: &mut SyncReport
+        report: &mut SyncReport,
     ) -> IdpSyncResult<()> {
         let existing_memberships = self.get_team_memberships(team_id).await?;
         let mut expected_user_ids: HashSet<Uuid> = HashSet::new();
@@ -251,7 +251,7 @@ impl IdpSyncService {
     fn get_provider_name(&self) -> String {
         match &self.config.provider {
             IdpProvider::Okta(_) => "okta".to_string(),
-            IdpProvider::AzureAd(_) => "azure_ad".to_string()
+            IdpProvider::AzureAd(_) => "azure_ad".to_string(),
         }
     }
 
@@ -265,14 +265,14 @@ impl IdpSyncService {
 
     async fn get_existing_users_by_idp(
         &self,
-        provider: &str
+        provider: &str,
     ) -> IdpSyncResult<HashMap<String, ExistingUser>> {
         let rows = sqlx::query_as::<_, ExistingUser>(
             r#"
             SELECT id, email, first_name, last_name, display_name, idp_subject, is_active
             FROM users
             WHERE idp_provider = $1
-            "#
+            "#,
         )
         .bind(provider)
         .fetch_all(&self.db_pool)
@@ -331,7 +331,7 @@ impl IdpSyncService {
             r#"
             UPDATE users SET is_active = false, deactivated_at = NOW(), updated_at = NOW()
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(user_id)
         .execute(&self.db_pool)
@@ -346,7 +346,7 @@ impl IdpSyncService {
             SELECT idp_group_id, team_id
             FROM idp_group_mappings
             WHERE idp_group_id IS NOT NULL
-            "#
+            "#,
         )
         .fetch_all(&self.db_pool)
         .await?;
@@ -358,7 +358,7 @@ impl IdpSyncService {
         let rows = sqlx::query_as::<_, (Uuid,)>(
             r#"
             SELECT user_id FROM memberships WHERE team_id = $1
-            "#
+            "#,
         )
         .bind(team_id)
         .fetch_all(&self.db_pool)
@@ -371,7 +371,7 @@ impl IdpSyncService {
         let row = sqlx::query_as::<_, (Uuid,)>(
             r#"
             SELECT id FROM users WHERE idp_subject = $1
-            "#
+            "#,
         )
         .bind(idp_subject)
         .fetch_optional(&self.db_pool)
@@ -384,14 +384,14 @@ impl IdpSyncService {
         &self,
         team_id: Uuid,
         user_id: Uuid,
-        role: &str
+        role: &str,
     ) -> IdpSyncResult<()> {
         sqlx::query(
             r#"
             INSERT INTO memberships (id, team_id, user_id, role, created_at, updated_at)
             VALUES ($1, $2, $3, $4, NOW(), NOW())
             ON CONFLICT (team_id, user_id) DO NOTHING
-            "#
+            "#,
         )
         .bind(Uuid::new_v4())
         .bind(team_id)
@@ -407,7 +407,7 @@ impl IdpSyncService {
         sqlx::query(
             r#"
             DELETE FROM memberships WHERE team_id = $1 AND user_id = $2
-            "#
+            "#,
         )
         .bind(team_id)
         .bind(user_id)
@@ -426,7 +426,7 @@ struct ExistingUser {
     last_name: Option<String>,
     display_name: Option<String>,
     idp_subject: String,
-    is_active: bool
+    is_active: bool,
 }
 
 #[cfg(test)]
@@ -452,7 +452,7 @@ mod tests {
             entity_type: "user".to_string(),
             entity_id: "123".to_string(),
             error: "test".to_string(),
-            timestamp: Utc::now()
+            timestamp: Utc::now(),
         };
 
         let json = serde_json::to_string(&error).unwrap();
