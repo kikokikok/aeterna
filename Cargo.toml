@@ -63,6 +63,9 @@ utils = { path = "./utils" }
 errors = { path = "./errors" }
 context = { path = "./context" }
 opal-fetcher = { path = "./opal-fetcher" }
+agent-a2a = { path = "./agent-a2a" }
+idp-sync = { path = "./idp-sync" }
+observability = { path = "./observability" }
 testing = { path = "./testing" }
 
 # Shared dependencies across all crates
@@ -111,6 +114,11 @@ a2a-types = "0.1"
 parking_lot = "0.12"
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
 futures-util = "0.3"
+# HTTP framework
+axum = { version = "0.8", features = ["macros", "ws"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "request-id"] }
+hyper = { version = "1.6", features = ["full"] }
 
 [workspace.metadata.tarpaulin]
 all-features = true

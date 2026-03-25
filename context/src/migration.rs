@@ -296,7 +296,7 @@ pub struct ResolutionComparison {
 }
 
 /// Match status between two resolution methods.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MatchStatus {
     Match,
     Mismatch,
@@ -480,7 +480,7 @@ impl DataMigration {
 }
 
 /// Migration report.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MigrationReport {
     pub timestamp: chrono::DateTime<Utc>,
     pub companies_migrated: u64,
@@ -493,7 +493,7 @@ pub struct MigrationReport {
 }
 
 /// Validation report.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationReport {
     pub timestamp: chrono::DateTime<Utc>,
     pub valid: bool,
@@ -537,12 +537,12 @@ mod tests {
     #[test]
     fn test_migration_config_from_env_defaults_when_no_env() {
         // Make sure none of the env vars are set in this test
-        std::env::remove_var("AETERNA_PARALLEL_RESOLUTION");
-        std::env::remove_var("AETERNA_COMPARISON_LOGGING");
-        std::env::remove_var("AETERNA_PRIMARY_MODE");
-        std::env::remove_var("AETERNA_CEDAR_AUDIT_MODE");
-        std::env::remove_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD");
-        std::env::remove_var("AETERNA_CEDAR_FALLBACK");
+        unsafe { std::env::remove_var("AETERNA_PARALLEL_RESOLUTION") }
+        unsafe { std::env::remove_var("AETERNA_COMPARISON_LOGGING") }
+        unsafe { std::env::remove_var("AETERNA_PRIMARY_MODE") }
+        unsafe { std::env::remove_var("AETERNA_CEDAR_AUDIT_MODE") }
+        unsafe { std::env::remove_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD") }
+        unsafe { std::env::remove_var("AETERNA_CEDAR_FALLBACK") }
 
         let cfg = MigrationConfig::from_env();
         assert!(!cfg.parallel_resolution_enabled);
@@ -555,74 +555,74 @@ mod tests {
 
     #[test]
     fn test_migration_config_from_env_parallel_resolution_true() {
-        std::env::set_var("AETERNA_PARALLEL_RESOLUTION", "true");
+        unsafe { std::env::set_var("AETERNA_PARALLEL_RESOLUTION", "true") }
         let cfg = MigrationConfig::from_env();
         assert!(cfg.parallel_resolution_enabled);
-        std::env::remove_var("AETERNA_PARALLEL_RESOLUTION");
+        unsafe { std::env::remove_var("AETERNA_PARALLEL_RESOLUTION") }
     }
 
     #[test]
     fn test_migration_config_from_env_comparison_logging_false() {
-        std::env::set_var("AETERNA_COMPARISON_LOGGING", "false");
+        unsafe { std::env::set_var("AETERNA_COMPARISON_LOGGING", "false") }
         let cfg = MigrationConfig::from_env();
         assert!(!cfg.comparison_logging_enabled);
-        std::env::remove_var("AETERNA_COMPARISON_LOGGING");
+        unsafe { std::env::remove_var("AETERNA_COMPARISON_LOGGING") }
     }
 
     #[test]
     fn test_migration_config_from_env_primary_mode_cedar() {
-        std::env::set_var("AETERNA_PRIMARY_MODE", "cedar");
+        unsafe { std::env::set_var("AETERNA_PRIMARY_MODE", "cedar") }
         let cfg = MigrationConfig::from_env();
         assert_eq!(cfg.primary_mode, ResolutionMode::Cedar);
-        std::env::remove_var("AETERNA_PRIMARY_MODE");
+        unsafe { std::env::remove_var("AETERNA_PRIMARY_MODE") }
     }
 
     #[test]
     fn test_migration_config_from_env_primary_mode_parallel() {
-        std::env::set_var("AETERNA_PRIMARY_MODE", "parallel");
+        unsafe { std::env::set_var("AETERNA_PRIMARY_MODE", "parallel") }
         let cfg = MigrationConfig::from_env();
         assert_eq!(cfg.primary_mode, ResolutionMode::Parallel);
-        std::env::remove_var("AETERNA_PRIMARY_MODE");
+        unsafe { std::env::remove_var("AETERNA_PRIMARY_MODE") }
     }
 
     #[test]
     fn test_migration_config_from_env_primary_mode_unknown_falls_back_to_heuristic() {
-        std::env::set_var("AETERNA_PRIMARY_MODE", "something_weird");
+        unsafe { std::env::set_var("AETERNA_PRIMARY_MODE", "something_weird") }
         let cfg = MigrationConfig::from_env();
         assert_eq!(cfg.primary_mode, ResolutionMode::Heuristic);
-        std::env::remove_var("AETERNA_PRIMARY_MODE");
+        unsafe { std::env::remove_var("AETERNA_PRIMARY_MODE") }
     }
 
     #[test]
     fn test_migration_config_from_env_circuit_breaker_threshold() {
-        std::env::set_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD", "10");
+        unsafe { std::env::set_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD", "10") }
         let cfg = MigrationConfig::from_env();
         assert_eq!(cfg.circuit_breaker_threshold, 10);
-        std::env::remove_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD");
+        unsafe { std::env::remove_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD") }
     }
 
     #[test]
     fn test_migration_config_from_env_circuit_breaker_invalid_falls_back_to_5() {
-        std::env::set_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD", "not-a-number");
+        unsafe { std::env::set_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD", "not-a-number") }
         let cfg = MigrationConfig::from_env();
         assert_eq!(cfg.circuit_breaker_threshold, 5);
-        std::env::remove_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD");
+        unsafe { std::env::remove_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD") }
     }
 
     #[test]
     fn test_migration_config_from_env_audit_mode_false() {
-        std::env::set_var("AETERNA_CEDAR_AUDIT_MODE", "false");
+        unsafe { std::env::set_var("AETERNA_CEDAR_AUDIT_MODE", "false") }
         let cfg = MigrationConfig::from_env();
         assert!(!cfg.audit_mode);
-        std::env::remove_var("AETERNA_CEDAR_AUDIT_MODE");
+        unsafe { std::env::remove_var("AETERNA_CEDAR_AUDIT_MODE") }
     }
 
     #[test]
     fn test_migration_config_from_env_fallback_disabled() {
-        std::env::set_var("AETERNA_CEDAR_FALLBACK", "false");
+        unsafe { std::env::set_var("AETERNA_CEDAR_FALLBACK", "false") }
         let cfg = MigrationConfig::from_env();
         assert!(!cfg.fallback_enabled);
-        std::env::remove_var("AETERNA_CEDAR_FALLBACK");
+        unsafe { std::env::remove_var("AETERNA_CEDAR_FALLBACK") }
     }
 
     // ---------------------------------------------------------------------------
