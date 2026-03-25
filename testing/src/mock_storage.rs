@@ -560,6 +560,8 @@ mod tests {
         let ctx = tenant_ctx("t");
         let policy = Policy {
             id: "p1".to_string(),
+            name: "Test Policy".to_string(),
+            description: None,
             layer: KnowledgeLayer::Team,
             mode: PolicyMode::Mandatory,
             merge_strategy: RuleMergeStrategy::Merge,
@@ -605,17 +607,23 @@ mod tests {
 
         let event = PersistentEvent {
             id: "evt-1".to_string(),
-            tenant_id: "t".to_string(),
+            event_id: "evt-1".to_string(),
+            event_type: "ConfigUpdated".to_string(),
+            tenant_id: TenantId::new("t".to_string()).unwrap(),
             payload: GovernanceEvent::ConfigUpdated {
                 config_id: "cfg-1".to_string(),
                 scope: "company".to_string(),
-                tenant_id: "t".to_string(),
+                tenant_id: TenantId::new("t".to_string()).unwrap(),
                 timestamp: 0,
             },
             status: EventStatus::Pending,
             created_at: 0,
             retry_count: 0,
+            max_retries: 3,
             last_error: None,
+            published_at: None,
+            acknowledged_at: None,
+            dead_lettered_at: None,
             idempotency_key: "key-1".to_string(),
         };
 
@@ -633,17 +641,23 @@ mod tests {
 
         let event = PersistentEvent {
             id: "evt-2".to_string(),
-            tenant_id: "t".to_string(),
+            event_id: "evt-2".to_string(),
+            event_type: "ConfigUpdated".to_string(),
+            tenant_id: TenantId::new("t".to_string()).unwrap(),
             payload: GovernanceEvent::ConfigUpdated {
                 config_id: "cfg-2".to_string(),
                 scope: "org".to_string(),
-                tenant_id: "t".to_string(),
+                tenant_id: TenantId::new("t".to_string()).unwrap(),
                 timestamp: 0,
             },
             status: EventStatus::Pending,
             created_at: 0,
             retry_count: 0,
+            max_retries: 3,
             last_error: None,
+            published_at: None,
+            acknowledged_at: None,
+            dead_lettered_at: None,
             idempotency_key: "key-2".to_string(),
         };
 

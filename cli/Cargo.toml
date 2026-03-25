@@ -20,6 +20,19 @@ config.workspace = true
 errors.workspace = true
 storage.workspace = true
 memory = { workspace = true, features = ["llm-integration", "embedding-integration", "google-provider", "bedrock-provider"] }
+knowledge.workspace = true
+tools.workspace = true
+sync.workspace = true
+observability.workspace = true
+agent-a2a.workspace = true
+idp-sync.workspace = true
+adapters.workspace = true
+
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+hyper = { workspace = true }
+sqlx.workspace = true
 
 clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4.5"
@@ -33,6 +46,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
+async-trait.workspace = true
+uuid.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+futures-util.workspace = true
 
 colored = "3.0"
 console = "0.15"
@@ -46,3 +64,4 @@ tempfile.workspace = true
 serial_test.workspace = true
 assert_cmd = "2.0"
 predicates = "3.1"
+testing.workspace = true
