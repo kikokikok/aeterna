@@ -32,6 +32,7 @@ LABEL org.opencontainers.image.revision="${VCS_REF}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    curl \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -51,11 +52,8 @@ ENV AETERNA_CONFIG_PATH=/app/config
 EXPOSE 8080
 EXPOSE 9090
 
-# Health check: 'admin health --json' exits 0 only when context resolution succeeds
-# and required environment variables are present.  The full connectivity probe will
-# be upgraded to an HTTP call once the server crate is integrated.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/usr/local/bin/aeterna", "admin", "health", "--json"] || exit 1
+    CMD ["curl", "--fail", "--silent", "http://localhost:8080/health"] || exit 1
 
 ENTRYPOINT ["/usr/local/bin/aeterna"]
 CMD ["serve"]

@@ -176,6 +176,8 @@ spec:
               mountPath: /tmp
             - name: cache
               mountPath: /home/aeterna/.cache
+            - name: app-config
+              mountPath: /app/config
             {{- if and (eq .Values.llm.provider "google") .Values.llm.google.existingSecret }}
             - name: google-application-credentials
               mountPath: /var/run/aeterna/google
@@ -248,6 +250,8 @@ spec:
         - name: tmp
           emptyDir: {}
         - name: cache
+          emptyDir: {}
+        - name: app-config
           emptyDir: {}
         {{- if and (eq .Values.llm.provider "google") .Values.llm.google.existingSecret }}
         - name: google-application-credentials
