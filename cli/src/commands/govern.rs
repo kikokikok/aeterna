@@ -26,7 +26,7 @@ pub enum GovernCommand {
     Roles(GovernRolesArgs),
 
     #[command(about = "View governance audit trail")]
-    Audit(GovernAuditArgs)
+    Audit(GovernAuditArgs),
 }
 
 #[derive(Args)]
@@ -37,7 +37,7 @@ pub struct GovernStatusArgs {
 
     /// Include detailed metrics
     #[arg(short, long)]
-    pub verbose: bool
+    pub verbose: bool,
 }
 
 #[derive(Args)]
@@ -60,7 +60,7 @@ pub struct GovernPendingArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -78,7 +78,7 @@ pub struct GovernApproveArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -96,7 +96,7 @@ pub struct GovernRejectArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -135,7 +135,7 @@ pub struct GovernConfigureArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -158,7 +158,7 @@ pub struct GovernRolesArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -193,28 +193,28 @@ pub struct GovernAuditArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Clone, ValueEnum)]
 pub enum ApprovalMode {
     Single,
     Quorum,
-    Unanimous
+    Unanimous,
 }
 
 #[derive(Clone, ValueEnum)]
 pub enum ExportFormat {
     Json,
     Csv,
-    None
+    None,
 }
 
 #[derive(Clone, ValueEnum)]
 pub enum GovernanceTemplate {
     Standard,
     Strict,
-    Permissive
+    Permissive,
 }
 
 pub async fn run(cmd: GovernCommand) -> anyhow::Result<()> {
@@ -225,7 +225,7 @@ pub async fn run(cmd: GovernCommand) -> anyhow::Result<()> {
         GovernCommand::Reject(args) => run_reject(args).await,
         GovernCommand::Configure(args) => run_configure(args).await,
         GovernCommand::Roles(args) => run_roles(args).await,
-        GovernCommand::Audit(args) => run_audit(args).await
+        GovernCommand::Audit(args) => run_audit(args).await,
     }
 }
 
@@ -243,7 +243,7 @@ async fn run_status(args: GovernStatusArgs) -> anyhow::Result<()> {
         approved_today: 7,
         rejected_today: 1,
         escalated: 0,
-        your_pending_approvals: 2
+        your_pending_approvals: 2,
     };
 
     if args.json {
@@ -327,7 +327,7 @@ async fn run_pending(args: GovernPendingArgs) -> anyhow::Result<()> {
             created_at: "2024-01-15T10:30:00Z".to_string(),
             approvals: 1,
             required_approvals: 2,
-            status: "pending".to_string()
+            status: "pending".to_string(),
         },
         PendingRequest {
             id: "req_def456".to_string(),
@@ -338,7 +338,7 @@ async fn run_pending(args: GovernPendingArgs) -> anyhow::Result<()> {
             created_at: "2024-01-15T08:15:00Z".to_string(),
             approvals: 0,
             required_approvals: 2,
-            status: "pending".to_string()
+            status: "pending".to_string(),
         },
         PendingRequest {
             id: "req_ghi789".to_string(),
@@ -349,8 +349,8 @@ async fn run_pending(args: GovernPendingArgs) -> anyhow::Result<()> {
             created_at: "2024-01-15T06:00:00Z".to_string(),
             approvals: 1,
             required_approvals: 1,
-            status: "ready".to_string()
-        }
+            status: "ready".to_string(),
+        },
     ];
 
     // Apply filters
@@ -393,7 +393,7 @@ async fn run_pending(args: GovernPendingArgs) -> anyhow::Result<()> {
                 let status_icon = match req.status.as_str() {
                     "ready" => "✓",
                     "pending" => "○",
-                    _ => "?"
+                    _ => "?",
                 };
 
                 println!(
@@ -409,7 +409,7 @@ async fn run_pending(args: GovernPendingArgs) -> anyhow::Result<()> {
             }
 
             output::hint(
-                "Use 'aeterna govern approve <id>' or 'aeterna govern reject <id>' to act"
+                "Use 'aeterna govern approve <id>' or 'aeterna govern reject <id>' to act",
             );
         }
     }
@@ -431,7 +431,7 @@ async fn run_approve(args: GovernApproveArgs) -> anyhow::Result<()> {
         created_at: "2024-01-15T10:30:00Z".to_string(),
         approvals: 1,
         required_approvals: 2,
-        status: "pending".to_string()
+        status: "pending".to_string(),
     };
 
     if args.json {
@@ -516,7 +516,7 @@ async fn run_reject(args: GovernRejectArgs) -> anyhow::Result<()> {
         created_at: "2024-01-15T10:30:00Z".to_string(),
         approvals: 1,
         required_approvals: 2,
-        status: "pending".to_string()
+        status: "pending".to_string(),
     };
 
     if args.json {
@@ -565,7 +565,7 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
                 "quorum",
                 2u32,
                 72u32,
-                false
+                false,
             ),
             (
                 "strict",
@@ -574,7 +574,7 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
                 "unanimous",
                 3,
                 24,
-                false
+                false,
             ),
             (
                 "permissive",
@@ -582,8 +582,8 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
                 "single",
                 1,
                 168,
-                true
-            )
+                true,
+            ),
         ];
 
         if args.json {
@@ -629,7 +629,7 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
         min_approvers: 2,
         timeout_hours: 72,
         auto_approve_enabled: true,
-        escalation_contact: Some("security-team@acme.com".to_string())
+        escalation_contact: Some("security-team@acme.com".to_string()),
     };
 
     if let Some(ref cli_template) = args.template {
@@ -705,7 +705,7 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
         let mode_str = match mode {
             ApprovalMode::Single => "single",
             ApprovalMode::Quorum => "quorum",
-            ApprovalMode::Unanimous => "unanimous"
+            ApprovalMode::Unanimous => "unanimous",
         };
         changes.push(format!(
             "approval_mode: {} → {}",
@@ -786,25 +786,25 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
                     principal: "alice".to_string(),
                     principal_type: "user".to_string(),
                     role: "admin".to_string(),
-                    scope: "company:acme".to_string()
+                    scope: "company:acme".to_string(),
                 },
                 RoleAssignment {
                     principal: "bob".to_string(),
                     principal_type: "user".to_string(),
                     role: "architect".to_string(),
-                    scope: "org:platform".to_string()
+                    scope: "org:platform".to_string(),
                 },
                 RoleAssignment {
                     principal: "charlie".to_string(),
                     principal_type: "user".to_string(),
                     role: "techlead".to_string(),
-                    scope: "team:api".to_string()
+                    scope: "team:api".to_string(),
                 },
                 RoleAssignment {
                     principal: "agent_codex".to_string(),
                     principal_type: "agent".to_string(),
                     role: "developer".to_string(),
-                    scope: "project:payments".to_string()
+                    scope: "project:payments".to_string(),
                 },
             ];
 
@@ -835,7 +835,7 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
 
                 output::hint(
                     "Use 'aeterna govern roles assign --principal <id> --role <role> --scope \
-                     <scope>'"
+                     <scope>'",
                 );
             }
         }
@@ -916,7 +916,7 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
             actor: "alice".to_string(),
             target_type: "policy".to_string(),
             target_id: "req_abc123".to_string(),
-            details: "Approved security-baseline policy".to_string()
+            details: "Approved security-baseline policy".to_string(),
         },
         AuditEntry {
             id: "aud_002".to_string(),
@@ -925,7 +925,7 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
             actor: "bob".to_string(),
             target_type: "knowledge".to_string(),
             target_id: "req_xyz789".to_string(),
-            details: "Rejected: needs more context".to_string()
+            details: "Rejected: needs more context".to_string(),
         },
         AuditEntry {
             id: "aud_003".to_string(),
@@ -934,7 +934,7 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
             actor: "system".to_string(),
             target_type: "memory".to_string(),
             target_id: "req_auto001".to_string(),
-            details: "Auto-approved low-risk memory feedback".to_string()
+            details: "Auto-approved low-risk memory feedback".to_string(),
         },
         AuditEntry {
             id: "aud_004".to_string(),
@@ -943,8 +943,8 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
             actor: "system".to_string(),
             target_type: "policy".to_string(),
             target_id: "req_esc001".to_string(),
-            details: "Escalated due to timeout (72h)".to_string()
-        }
+            details: "Escalated due to timeout (72h)".to_string(),
+        },
     ];
 
     // Apply filters
@@ -990,7 +990,7 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
                             "reject" => "✗",
                             "escalate" => "↑",
                             "expire" => "⏱",
-                            _ => "•"
+                            _ => "•",
                         };
 
                         println!(
@@ -1071,7 +1071,7 @@ struct GovernanceStatus {
     approved_today: u32,
     rejected_today: u32,
     escalated: u32,
-    your_pending_approvals: u32
+    your_pending_approvals: u32,
 }
 
 struct PendingRequest {
@@ -1083,7 +1083,7 @@ struct PendingRequest {
     created_at: String,
     approvals: u32,
     required_approvals: u32,
-    status: String
+    status: String,
 }
 
 struct GovernanceConfig {
@@ -1091,14 +1091,14 @@ struct GovernanceConfig {
     min_approvers: u32,
     timeout_hours: u32,
     auto_approve_enabled: bool,
-    escalation_contact: Option<String>
+    escalation_contact: Option<String>,
 }
 
 struct RoleAssignment {
     principal: String,
     principal_type: String,
     role: String,
-    scope: String
+    scope: String,
 }
 
 struct AuditEntry {
@@ -1108,7 +1108,7 @@ struct AuditEntry {
     actor: String,
     target_type: String,
     target_id: String,
-    details: String
+    details: String,
 }
 
 #[cfg(test)]
@@ -1147,7 +1147,7 @@ mod tests {
             created_at: "2024-01-15T10:00:00Z".to_string(),
             approvals: 1,
             required_approvals: 2,
-            status: "pending".to_string()
+            status: "pending".to_string(),
         };
         assert_eq!(req.id, "req_123");
         assert!(req.approvals < req.required_approvals);
@@ -1164,7 +1164,7 @@ mod tests {
             created_at: "2024-01-15T10:00:00Z".to_string(),
             approvals: 2,
             required_approvals: 2,
-            status: "ready".to_string()
+            status: "ready".to_string(),
         };
         assert_eq!(req.approvals, req.required_approvals);
         assert_eq!(req.status, "ready");
@@ -1181,7 +1181,7 @@ mod tests {
             created_at: "2024-01-15T10:00:00Z".to_string(),
             approvals: 0,
             required_approvals: 1,
-            status: "pending".to_string()
+            status: "pending".to_string(),
         };
 
         let knowledge_req = PendingRequest {
@@ -1193,7 +1193,7 @@ mod tests {
             created_at: "2024-01-15T10:00:00Z".to_string(),
             approvals: 0,
             required_approvals: 2,
-            status: "pending".to_string()
+            status: "pending".to_string(),
         };
 
         let memory_req = PendingRequest {
@@ -1205,7 +1205,7 @@ mod tests {
             created_at: "2024-01-15T10:00:00Z".to_string(),
             approvals: 0,
             required_approvals: 1,
-            status: "pending".to_string()
+            status: "pending".to_string(),
         };
 
         assert_eq!(policy_req.request_type, "policy");
@@ -1219,7 +1219,7 @@ mod tests {
             principal: "alice".to_string(),
             principal_type: "user".to_string(),
             role: "admin".to_string(),
-            scope: "company:acme".to_string()
+            scope: "company:acme".to_string(),
         };
         assert_eq!(role.role, "admin");
     }
@@ -1230,7 +1230,7 @@ mod tests {
             principal: "agent_codex".to_string(),
             principal_type: "agent".to_string(),
             role: "developer".to_string(),
-            scope: "project:payments".to_string()
+            scope: "project:payments".to_string(),
         };
         assert_eq!(role.principal_type, "agent");
         assert_eq!(role.role, "developer");
@@ -1244,7 +1244,7 @@ mod tests {
                 principal: "user".to_string(),
                 principal_type: "user".to_string(),
                 role: role_name.to_string(),
-                scope: "company:test".to_string()
+                scope: "company:test".to_string(),
             };
             assert_eq!(role.role, role_name);
         }
@@ -1256,14 +1256,14 @@ mod tests {
             "company:acme",
             "org:platform",
             "team:api",
-            "project:payments"
+            "project:payments",
         ];
         for scope in scopes {
             let role = RoleAssignment {
                 principal: "alice".to_string(),
                 principal_type: "user".to_string(),
                 role: "developer".to_string(),
-                scope: scope.to_string()
+                scope: scope.to_string(),
             };
             assert_eq!(role.scope, scope);
         }
@@ -1278,7 +1278,7 @@ mod tests {
             actor: "alice".to_string(),
             target_type: "policy".to_string(),
             target_id: "req_123".to_string(),
-            details: "Approved".to_string()
+            details: "Approved".to_string(),
         };
         assert_eq!(entry.action, "approve");
     }
@@ -1294,7 +1294,7 @@ mod tests {
                 actor: "system".to_string(),
                 target_type: "policy".to_string(),
                 target_id: "req_123".to_string(),
-                details: format!("Action: {}", action)
+                details: format!("Action: {}", action),
             };
             assert_eq!(entry.action, action);
         }
@@ -1311,7 +1311,7 @@ mod tests {
                 actor: "alice".to_string(),
                 target_type: target_type.to_string(),
                 target_id: "req_123".to_string(),
-                details: "Approved".to_string()
+                details: "Approved".to_string(),
             };
             assert_eq!(entry.target_type, target_type);
         }
@@ -1328,7 +1328,7 @@ mod tests {
             approved_today: 7,
             rejected_today: 1,
             escalated: 0,
-            your_pending_approvals: 2
+            your_pending_approvals: 2,
         };
         assert_eq!(status.approval_mode, "quorum");
         assert_eq!(status.min_approvers, 2);
@@ -1346,7 +1346,7 @@ mod tests {
             approved_today: 2,
             rejected_today: 3,
             escalated: 1,
-            your_pending_approvals: 4
+            your_pending_approvals: 4,
         };
         assert_eq!(status.approval_mode, "unanimous");
         assert!(!status.auto_approve_enabled);
@@ -1360,7 +1360,7 @@ mod tests {
             min_approvers: 2,
             timeout_hours: 72,
             auto_approve_enabled: true,
-            escalation_contact: Some("security-team@acme.com".to_string())
+            escalation_contact: Some("security-team@acme.com".to_string()),
         };
         assert_eq!(config.approval_mode, "quorum");
         assert!(config.escalation_contact.is_some());
@@ -1373,7 +1373,7 @@ mod tests {
             min_approvers: 1,
             timeout_hours: 168,
             auto_approve_enabled: true,
-            escalation_contact: None
+            escalation_contact: None,
         };
         assert!(config.escalation_contact.is_none());
     }
@@ -1382,7 +1382,7 @@ mod tests {
     fn test_govern_status_args_defaults() {
         let args = GovernStatusArgs {
             json: false,
-            verbose: false
+            verbose: false,
         };
         assert!(!args.json);
         assert!(!args.verbose);
@@ -1395,7 +1395,7 @@ mod tests {
             layer: None,
             requestor: None,
             mine: false,
-            json: false
+            json: false,
         };
         assert_eq!(args.request_type, "all");
         assert!(args.layer.is_none());
@@ -1408,7 +1408,7 @@ mod tests {
             layer: Some("org".to_string()),
             requestor: Some("alice".to_string()),
             mine: true,
-            json: true
+            json: true,
         };
         assert_eq!(args.request_type, "policy");
         assert_eq!(args.layer.as_deref(), Some("org"));
@@ -1421,7 +1421,7 @@ mod tests {
             request_id: "req_123".to_string(),
             comment: Some("LGTM".to_string()),
             yes: true,
-            json: false
+            json: false,
         };
         assert_eq!(args.request_id, "req_123");
         assert!(args.comment.is_some());
@@ -1434,7 +1434,7 @@ mod tests {
             request_id: "req_456".to_string(),
             reason: "Security concerns".to_string(),
             yes: false,
-            json: true
+            json: true,
         };
         assert_eq!(args.request_id, "req_456");
         assert!(!args.reason.is_empty());
@@ -1451,7 +1451,7 @@ mod tests {
             timeout_hours: None,
             auto_approve: None,
             escalation_contact: None,
-            json: false
+            json: false,
         };
         assert!(args.show);
         assert!(args.template.is_none());
@@ -1468,7 +1468,7 @@ mod tests {
             timeout_hours: None,
             auto_approve: None,
             escalation_contact: None,
-            json: false
+            json: false,
         };
         assert!(args.template.is_some());
     }
@@ -1484,7 +1484,7 @@ mod tests {
             timeout_hours: Some(48),
             auto_approve: Some(false),
             escalation_contact: Some("ops@example.com".to_string()),
-            json: false
+            json: false,
         };
         assert!(args.approval_mode.is_some());
         assert_eq!(args.min_approvers, Some(3));
@@ -1497,7 +1497,7 @@ mod tests {
             principal: None,
             role: None,
             scope: None,
-            json: false
+            json: false,
         };
         assert_eq!(args.action, "list");
     }
@@ -1509,7 +1509,7 @@ mod tests {
             principal: Some("alice".to_string()),
             role: Some("admin".to_string()),
             scope: Some("company:acme".to_string()),
-            json: false
+            json: false,
         };
         assert_eq!(args.action, "assign");
         assert!(args.principal.is_some());
@@ -1523,7 +1523,7 @@ mod tests {
             principal: Some("bob".to_string()),
             role: Some("developer".to_string()),
             scope: None,
-            json: true
+            json: true,
         };
         assert_eq!(args.action, "revoke");
         assert!(args.json);
@@ -1539,7 +1539,7 @@ mod tests {
             limit: 50,
             export: ExportFormat::None,
             output: None,
-            json: false
+            json: false,
         };
         assert_eq!(args.action, "all");
         assert_eq!(args.since, "7d");
@@ -1556,7 +1556,7 @@ mod tests {
             limit: 100,
             export: ExportFormat::Json,
             output: Some("audit.json".to_string()),
-            json: false
+            json: false,
         };
         assert_eq!(args.action, "approve");
         assert!(args.actor.is_some());
@@ -1572,7 +1572,7 @@ mod tests {
             limit: 1000,
             export: ExportFormat::Csv,
             output: Some("audit.csv".to_string()),
-            json: false
+            json: false,
         };
         matches!(args.export, ExportFormat::Csv);
         assert!(args.output.is_some());
@@ -1590,7 +1590,7 @@ mod tests {
                 created_at: "2024-01-15T10:00:00Z".to_string(),
                 approvals: 0,
                 required_approvals: 2,
-                status: "pending".to_string()
+                status: "pending".to_string(),
             },
             PendingRequest {
                 id: "req_2".to_string(),
@@ -1601,7 +1601,7 @@ mod tests {
                 created_at: "2024-01-15T08:00:00Z".to_string(),
                 approvals: 0,
                 required_approvals: 2,
-                status: "pending".to_string()
+                status: "pending".to_string(),
             },
         ];
 
@@ -1625,7 +1625,7 @@ mod tests {
                 created_at: "2024-01-15T10:00:00Z".to_string(),
                 approvals: 0,
                 required_approvals: 2,
-                status: "pending".to_string()
+                status: "pending".to_string(),
             },
             PendingRequest {
                 id: "req_2".to_string(),
@@ -1636,7 +1636,7 @@ mod tests {
                 created_at: "2024-01-15T08:00:00Z".to_string(),
                 approvals: 0,
                 required_approvals: 2,
-                status: "pending".to_string()
+                status: "pending".to_string(),
             },
         ];
 
@@ -1659,7 +1659,7 @@ mod tests {
                 actor: "alice".to_string(),
                 target_type: "policy".to_string(),
                 target_id: "req_1".to_string(),
-                details: "Approved".to_string()
+                details: "Approved".to_string(),
             },
             AuditEntry {
                 id: "aud_2".to_string(),
@@ -1668,7 +1668,7 @@ mod tests {
                 actor: "bob".to_string(),
                 target_type: "knowledge".to_string(),
                 target_id: "req_2".to_string(),
-                details: "Rejected".to_string()
+                details: "Rejected".to_string(),
             },
         ];
 
@@ -1691,7 +1691,7 @@ mod tests {
                 actor: "alice".to_string(),
                 target_type: "policy".to_string(),
                 target_id: "req_1".to_string(),
-                details: "Approved".to_string()
+                details: "Approved".to_string(),
             },
             AuditEntry {
                 id: "aud_2".to_string(),
@@ -1700,7 +1700,7 @@ mod tests {
                 actor: "bob".to_string(),
                 target_type: "knowledge".to_string(),
                 target_id: "req_2".to_string(),
-                details: "Approved".to_string()
+                details: "Approved".to_string(),
             },
         ];
 
@@ -1724,7 +1724,7 @@ mod tests {
             created_at: "2024-01-15T10:00:00Z".to_string(),
             approvals: 1,
             required_approvals: 2,
-            status: "pending".to_string()
+            status: "pending".to_string(),
         };
 
         assert!(req.approvals < req.required_approvals);

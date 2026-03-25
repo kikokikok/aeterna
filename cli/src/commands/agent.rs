@@ -20,7 +20,7 @@ pub enum AgentCommand {
     Permissions(AgentPermissionsArgs),
 
     #[command(about = "Revoke an agent's access")]
-    Revoke(AgentRevokeArgs)
+    Revoke(AgentRevokeArgs),
 }
 
 #[derive(Args)]
@@ -46,7 +46,7 @@ pub struct AgentRegisterArgs {
 
     /// Dry run - show what would be created
     #[arg(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 #[derive(Args)]
@@ -65,7 +65,7 @@ pub struct AgentListArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -79,7 +79,7 @@ pub struct AgentShowArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -106,7 +106,7 @@ pub struct AgentPermissionsArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -120,7 +120,7 @@ pub struct AgentRevokeArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 pub async fn run(cmd: AgentCommand) -> anyhow::Result<()> {
@@ -129,7 +129,7 @@ pub async fn run(cmd: AgentCommand) -> anyhow::Result<()> {
         AgentCommand::List(args) => run_list(args).await,
         AgentCommand::Show(args) => run_show(args).await,
         AgentCommand::Permissions(args) => run_permissions(args).await,
-        AgentCommand::Revoke(args) => run_revoke(args).await
+        AgentCommand::Revoke(args) => run_revoke(args).await,
     }
 }
 
@@ -338,7 +338,7 @@ async fn run_permissions(args: AgentPermissionsArgs) -> anyhow::Result<()> {
         "policy:read",
         "policy:propose",
         "graph:read",
-        "graph:write"
+        "graph:write",
     ];
 
     if let Some(ref perm_to_grant) = args.grant {

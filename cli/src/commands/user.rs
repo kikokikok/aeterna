@@ -23,7 +23,7 @@ pub enum UserCommand {
     Whoami(UserWhoamiArgs),
 
     #[command(about = "Invite a user to join organization/team")]
-    Invite(UserInviteArgs)
+    Invite(UserInviteArgs),
 }
 
 #[derive(Args)]
@@ -44,7 +44,7 @@ pub struct UserRegisterArgs {
     pub json: bool,
 
     #[arg(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 #[derive(Args)]
@@ -62,7 +62,7 @@ pub struct UserListArgs {
     pub all: bool,
 
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -73,7 +73,7 @@ pub struct UserShowArgs {
     pub verbose: bool,
 
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -94,13 +94,13 @@ pub struct UserRolesArgs {
     pub scope: Option<String>,
 
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
 pub struct UserWhoamiArgs {
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -126,7 +126,7 @@ pub struct UserInviteArgs {
     pub json: bool,
 
     #[arg(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 pub async fn run(cmd: UserCommand) -> anyhow::Result<()> {
@@ -136,7 +136,7 @@ pub async fn run(cmd: UserCommand) -> anyhow::Result<()> {
         UserCommand::Show(args) => run_show(args).await,
         UserCommand::Roles(args) => run_roles(args).await,
         UserCommand::Whoami(args) => run_whoami(args).await,
-        UserCommand::Invite(args) => run_invite(args).await
+        UserCommand::Invite(args) => run_invite(args).await,
     }
 }
 
@@ -160,7 +160,7 @@ async fn run_register(args: UserRegisterArgs) -> anyhow::Result<()> {
                 let mut chars = w.chars();
                 match chars.next() {
                     None => String::new(),
-                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str()
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
                 }
             })
             .collect::<Vec<_>>()
@@ -743,7 +743,7 @@ mod tests {
             org: None,
             team: None,
             json: false,
-            dry_run: false
+            dry_run: false,
         };
         assert!(args.email.is_none());
         assert!(args.name.is_none());
@@ -761,7 +761,7 @@ mod tests {
             org: Some("platform-eng".to_string()),
             team: Some("api-team".to_string()),
             json: true,
-            dry_run: true
+            dry_run: true,
         };
         assert_eq!(args.email, Some("alice@example.com".to_string()));
         assert_eq!(args.name, Some("Alice Smith".to_string()));
@@ -778,7 +778,7 @@ mod tests {
             team: None,
             role: None,
             all: false,
-            json: false
+            json: false,
         };
         assert!(args.org.is_none());
         assert!(args.team.is_none());
@@ -794,7 +794,7 @@ mod tests {
             team: Some("backend".to_string()),
             role: Some("developer".to_string()),
             all: true,
-            json: true
+            json: true,
         };
         assert_eq!(args.org, Some("engineering".to_string()));
         assert_eq!(args.team, Some("backend".to_string()));
@@ -807,7 +807,7 @@ mod tests {
         let args = UserShowArgs {
             user_id: None,
             verbose: false,
-            json: false
+            json: false,
         };
         assert!(args.user_id.is_none());
         assert!(!args.verbose);
@@ -819,7 +819,7 @@ mod tests {
         let args = UserShowArgs {
             user_id: Some("alice@example.com".to_string()),
             verbose: true,
-            json: true
+            json: true,
         };
         assert_eq!(args.user_id, Some("alice@example.com".to_string()));
         assert!(args.verbose);
@@ -833,7 +833,7 @@ mod tests {
             grant: None,
             revoke: None,
             scope: None,
-            json: false
+            json: false,
         };
         assert!(args.list);
         assert!(args.grant.is_none());
@@ -848,7 +848,7 @@ mod tests {
             grant: Some("techlead".to_string()),
             revoke: None,
             scope: Some("api-team".to_string()),
-            json: true
+            json: true,
         };
         assert_eq!(args.user, Some("bob@example.com".to_string()));
         assert_eq!(args.grant, Some("techlead".to_string()));
@@ -863,7 +863,7 @@ mod tests {
             grant: None,
             revoke: Some("admin".to_string()),
             scope: Some("company".to_string()),
-            json: false
+            json: false,
         };
         assert_eq!(args.revoke, Some("admin".to_string()));
     }
@@ -887,7 +887,7 @@ mod tests {
             message: None,
             yes: false,
             json: false,
-            dry_run: false
+            dry_run: false,
         };
         assert_eq!(args.email, "newuser@example.com");
         assert_eq!(args.role, "developer");
@@ -905,7 +905,7 @@ mod tests {
             message: Some("Welcome to the team!".to_string()),
             yes: true,
             json: true,
-            dry_run: true
+            dry_run: true,
         };
         assert_eq!(args.email, "carol@example.com");
         assert_eq!(args.org, Some("product-eng".to_string()));
@@ -937,7 +937,7 @@ mod tests {
         let valid_emails = [
             "user@example.com",
             "alice.smith@company.org",
-            "bob+tag@domain.co.uk"
+            "bob+tag@domain.co.uk",
         ];
         for email in valid_emails {
             assert!(
@@ -997,7 +997,7 @@ mod tests {
             org: None,
             team: None,
             json: false,
-            dry_run: false
+            dry_run: false,
         };
         assert!(args.email.is_some());
         assert!(args.name.is_none());
@@ -1010,7 +1010,7 @@ mod tests {
             team: None,
             role: None,
             all: true,
-            json: false
+            json: false,
         };
         assert!(args.all);
     }
@@ -1023,7 +1023,7 @@ mod tests {
             grant: None,
             revoke: None,
             scope: None,
-            json: false
+            json: false,
         };
         assert!(!args.list);
         assert!(args.grant.is_none());
@@ -1040,7 +1040,7 @@ mod tests {
                 grant: Some("developer".to_string()),
                 revoke: None,
                 scope: Some(scope.to_string()),
-                json: false
+                json: false,
             };
             assert_eq!(args.scope, Some(scope.to_string()));
         }
@@ -1058,7 +1058,7 @@ mod tests {
                 message: None,
                 yes: true,
                 json: false,
-                dry_run: false
+                dry_run: false,
             };
             assert_eq!(args.role, role);
         }
@@ -1074,7 +1074,7 @@ mod tests {
             message: Some("Please join our team for the Q1 project".to_string()),
             yes: false,
             json: false,
-            dry_run: false
+            dry_run: false,
         };
         assert!(args.message.is_some());
         assert!(args.message.unwrap().len() > 10);
@@ -1085,7 +1085,7 @@ mod tests {
         let args = UserShowArgs {
             user_id: Some("detailed-user@example.com".to_string()),
             verbose: true,
-            json: false
+            json: false,
         };
         assert!(args.verbose);
         assert!(!args.json);
@@ -1098,7 +1098,7 @@ mod tests {
             team: None,
             role: None,
             all: false,
-            json: false
+            json: false,
         };
         assert!(args.org.is_some());
         assert!(args.team.is_none());
@@ -1112,7 +1112,7 @@ mod tests {
             team: Some("frontend".to_string()),
             role: None,
             all: false,
-            json: false
+            json: false,
         };
         assert!(args.team.is_some());
         assert!(args.org.is_none());
@@ -1125,7 +1125,7 @@ mod tests {
             team: None,
             role: Some("admin".to_string()),
             all: false,
-            json: true
+            json: true,
         };
         assert!(args.role.is_some());
         assert!(args.json);
