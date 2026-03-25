@@ -32,7 +32,7 @@ use clap::{Parser, Subcommand};
 )]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands
+    pub command: Commands,
 }
 
 #[derive(Subcommand)]
@@ -82,7 +82,11 @@ pub enum Commands {
     #[command(subcommand, about = "System administration (health, migrate, export)")]
     Admin(admin::AdminCommand),
 
-    #[command(name = "code-search", subcommand, about = "Code search and call graph analysis")]
+    #[command(
+        name = "code-search",
+        subcommand,
+        about = "Code search and call graph analysis"
+    )]
     CodeSearch(search::CodeSearchCommand),
 
     #[command(about = "Generate shell completions")]
@@ -92,5 +96,5 @@ pub enum Commands {
     Setup(setup::SetupArgs),
 
     #[command(about = "Start the Aeterna HTTP API server")]
-    Serve(serve::ServeArgs)
+    Serve(serve::ServeArgs),
 }
