@@ -46,8 +46,24 @@ spec:
               containerPort: 7003
               protocol: TCP
           env:
+            {{- if and (gt (int .Values.opal.server.replicaCount) 1) .Values.opal.server.redis.enabled }}
+            ## HA mode: broadcast via Redis/Dragonfly pubsub
+            - name: OPAL_BROADCAST_URI
+              {{- if .Values.opal.server.redis.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.opal.server.redis.existingSecret }}
+                  key: pubsub-uri
+              {{- else }}
+              value: {{ .Values.opal.server.redis.pubsubUri | quote }}
+              {{- end }}
+            {{- else }}
+            ## Single-replica mode: broadcast via peer HTTP
             - name: OPAL_BROADCAST_URI
               value: "http://{{ include "aeterna.fullname" . }}-opal-server:7003"
+            {{- end }}
+            - name: OPAL_BROADCAST_CONN_LOSS_BUGFIX_EXPERIMENT_ENABLED
+              value: "false"
             - name: OPAL_DATA_CONFIG_SOURCES
               valueFrom:
                 configMapKeyRef:
@@ -76,19 +92,6 @@ spec:
                   name: {{ include "aeterna.fullname" . }}-opal
                   key: private-key
                   optional: true
-            {{- if and (gt (int .Values.opal.server.replicaCount) 1) .Values.opal.server.redis.enabled }}
-            - name: OPAL_BROADCAST_CHANNEL_BACKEND
-              value: "redis"
-            - name: OPAL_BROADCAST_CHANNEL_REDIS_URL
-              {{- if .Values.opal.server.redis.existingSecret }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.opal.server.redis.existingSecret }}
-                  key: pubsub-uri
-              {{- else }}
-              value: {{ .Values.opal.server.redis.pubsubUri | quote }}
-              {{- end }}
-            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthcheck
@@ -110,8 +113,12 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: jwks-dir
+              mountPath: /opal/jwks_dir
       volumes:
         - name: tmp
+          emptyDir: {}
+        - name: jwks-dir
           emptyDir: {}
       {{- if gt (int .Values.opal.server.replicaCount) 1 }}
       affinity:

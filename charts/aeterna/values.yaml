@@ -489,13 +489,15 @@ opal:
       ## @param opal.server.redis.existingSecret Existing secret containing Redis URI (key: pubsub-uri)
       existingSecret: ""
 
-  ## Cedar Agent configuration
+  ## Cedar Agent configuration (uses opal-client-cedar: OPAL client with embedded Cedar engine)
   cedarAgent:
     ## @param opal.cedarAgent.enabled Enable Cedar Agent
     enabled: true
+    ## @param opal.cedarAgent.replicaCount Number of Cedar Agent replicas (runs as Deployment, namespace-scoped)
+    replicaCount: 1
     image:
-      repository: permitio/cedar-agent
-      tag: "0.4.0"
+      repository: permitio/opal-client-cedar
+      tag: "0.9.3"
       pullPolicy: IfNotPresent
     resources:
       limits:

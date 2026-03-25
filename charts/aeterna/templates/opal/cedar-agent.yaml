@@ -1,12 +1,13 @@
 {{- if and .Values.opal.enabled .Values.opal.cedarAgent.enabled }}
 apiVersion: apps/v1
-kind: DaemonSet
+kind: Deployment
 metadata:
   name: {{ include "aeterna.fullname" . }}-cedar-agent
   labels:
     {{- include "aeterna.opal.labels" . | nindent 4 }}
     {{- include "aeterna.opal.cedarAgent.selectorLabels" . | nindent 4 }}
 spec:
+  replicas: {{ .Values.opal.cedarAgent.replicaCount }}
   selector:
     matchLabels:
       {{- include "aeterna.opal.cedarAgent.selectorLabels" . | nindent 6 }}
@@ -26,15 +27,8 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
-      tolerations:
-        - key: node-role.kubernetes.io/control-plane
-          operator: Exists
-          effect: NoSchedule
-        - key: node-role.kubernetes.io/master
-          operator: Exists
-          effect: NoSchedule
       containers:
-        - name: cedar-agent
+        - name: opal-client-cedar
           image: "{{ .Values.opal.cedarAgent.image.repository }}:{{ .Values.opal.cedarAgent.image.tag }}"
           imagePullPolicy: {{ .Values.opal.cedarAgent.image.pullPolicy }}
           securityContext:
@@ -44,12 +38,13 @@ spec:
               drop:
                 - ALL
           ports:
-            - name: http
+            - name: opal-client
+              containerPort: 7000
+              protocol: TCP
+            - name: cedar
               containerPort: 8180
               protocol: TCP
           env:
-            - name: CEDAR_AGENT_ADDR
-              value: "0.0.0.0:8180"
             - name: OPAL_SERVER_URL
               value: "http://{{ include "aeterna.fullname" . }}-opal-server:7002"
             - name: OPAL_CLIENT_TOKEN
@@ -57,22 +52,28 @@ spec:
                 secretKeyRef:
                   name: {{ include "aeterna.fullname" . }}-opal
                   key: client-token
+            - name: OPAL_INLINE_CEDAR_ENABLED
+              value: "true"
+            - name: OPAL_INLINE_CEDAR_CONFIG
+              value: '{"addr": "0.0.0.0", "port": 8180}'
+            - name: OPAL_LOG_LEVEL
+              value: "INFO"
           livenessProbe:
             httpGet:
               path: /health
-              port: http
-            initialDelaySeconds: 10
+              port: cedar
+            initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 3
+            failureThreshold: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: http
-            initialDelaySeconds: 5
+              port: cedar
+            initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 3
-            failureThreshold: 3
+            failureThreshold: 10
           resources:
             {{- toYaml .Values.opal.cedarAgent.resources | nindent 12 }}
           volumeMounts:
@@ -96,10 +97,14 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 8180
-      targetPort: http
+    - port: 7000
+      targetPort: opal-client
       protocol: TCP
-      name: http
+      name: opal-client
+    - port: 8180
+      targetPort: cedar
+      protocol: TCP
+      name: cedar
   selector:
     {{- include "aeterna.opal.cedarAgent.selectorLabels" . | nindent 4 }}
 {{- end }}
