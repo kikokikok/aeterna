@@ -488,6 +488,13 @@ opal:
       pubsubUri: "redis://aeterna-redis:6379/0"
       ## @param opal.server.redis.existingSecret Existing secret containing Redis URI (key: pubsub-uri)
       existingSecret: ""
+    ## @param opal.server.policyRepoUrl Git repository URL for Cedar policies (set via private values for auth repos)
+    policyRepoUrl: ""
+    ## Policy repository SSH key configuration
+    policyRepo:
+      sshKey:
+        ## @param opal.server.policyRepo.sshKey.existingSecret Existing secret containing SSH deploy key (key: ssh-key)
+        existingSecret: ""
 
   ## Cedar Agent configuration (uses opal-client-cedar: OPAL client with embedded Cedar engine)
   cedarAgent:

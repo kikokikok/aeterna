@@ -12,14 +12,14 @@ data:
         "entries": [
           {{- if .Values.aeterna.enabled }}
           {
-            "url": "http://{{ include "aeterna.fullname" . }}:{{ .Values.aeterna.service.port }}/policy-data",
+            "url": "http://{{ include "aeterna.fullname" . }}-cedar-agent:8180/v1/data",
             "topics": ["policy_data"],
-            "dst_path": "/aeterna"
+            "dst_path": ""
           }
           {{- end }}
         ]
       }
     }
-  policy-repo-url: ""
+  policy-repo-url: {{ .Values.opal.server.policyRepoUrl | default "" | quote }}
   log-level: {{ .Values.observability.logging.level | default "info" | quote }}
 {{- end }}

@@ -75,6 +75,16 @@ spec:
                   name: {{ include "aeterna.fullname" . }}-opal
                   key: policy-repo-url
                   optional: true
+            {{- if .Values.opal.server.policyRepo.sshKey.existingSecret }}
+            - name: OPAL_POLICY_REPO_SSH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.opal.server.policyRepo.sshKey.existingSecret }}
+                  key: ssh-key
+            {{- end }}
+            ## Clone path must be on a writable volume (readOnlyRootFilesystem)
+            - name: OPAL_POLICY_REPO_CLONE_PATH
+              value: "/tmp/opal-repo"
             - name: OPAL_AUTH_MASTER_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -115,10 +125,14 @@ spec:
               mountPath: /tmp
             - name: jwks-dir
               mountPath: /opal/jwks_dir
+            - name: ssh-dir
+              mountPath: /opal/.ssh
       volumes:
         - name: tmp
           emptyDir: {}
         - name: jwks-dir
+          emptyDir: {}
+        - name: ssh-dir
           emptyDir: {}
       {{- if gt (int .Values.opal.server.replicaCount) 1 }}
       affinity:

@@ -87,13 +87,38 @@ spec:
             - configMapRef:
                 name: {{ include "aeterna.fullname" . }}
           env:
+            - name: PG_HOST
+              value: {{ include "aeterna.postgresql.host" . | quote }}
+            - name: PG_PORT
+              value: {{ include "aeterna.postgresql.port" . | quote }}
+            - name: PG_DATABASE
+              value: {{ include "aeterna.postgresql.database" . | quote }}
+            - name: RD_HOST
+              value: {{ include "aeterna.redis.host" . | quote }}
+            - name: RD_PORT
+              value: {{ include "aeterna.redis.port" . | quote }}
+            - name: QD_HOST
+              value: {{ include "aeterna.qdrant.host" . | quote }}
+            - name: QD_PORT
+              value: {{ include "aeterna.qdrant.port" . | quote }}
             - name: AETERNA_POSTGRESQL_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: {{ include "aeterna.postgresql.secretName" . }}
                   key: username
                   optional: true
+            - name: PG_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.postgresql.secretName" . }}
+                  key: username
+                  optional: true
             - name: AETERNA_POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.postgresql.secretName" . }}
+                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+            - name: PG_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "aeterna.postgresql.secretName" . }}
@@ -163,6 +188,8 @@ spec:
               value: {{ .Values.observability.logging.level | default "info" | quote }}
             - name: LOG_FORMAT
               value: {{ .Values.observability.logging.format | default "json" | quote }}
+            - name: AETERNA_KNOWLEDGE_REPO_PATH
+              value: /tmp/knowledge-repo
           livenessProbe:
             {{- toYaml .Values.aeterna.livenessProbe | nindent 12 }}
           readinessProbe:

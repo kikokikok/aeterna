@@ -51,6 +51,8 @@ spec:
                   key: client-token
             - name: OPAL_INLINE_OPA_ENABLED
               value: "false"
+            - name: OPAL_INLINE_CEDAR_ENABLED
+              value: "false"
             - name: OPAL_POLICY_STORE_URL
               value: "http://{{ include "aeterna.fullname" . }}-cedar-agent:8180"
             - name: OPAL_POLICY_STORE_TYPE
