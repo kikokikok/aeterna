@@ -84,18 +84,18 @@
 - [x] 9.1 Create GitHub repo `kyriba-eng/aeterna-knowledge` (private, empty)
 - [x] 9.2 Generate SSH deploy key (read-write) and add to the repo
 - [x] 9.3 Create K8s secret `aeterna-knowledge-repo-key` with SSH private key
-- [ ] 9.4 Generate GitHub personal access token (or App token) for octocrab API calls
-- [ ] 9.5 Create K8s secret `aeterna-github-token` with the token
+- [x] 9.4 Create GitHub App on kyriba-eng org, install on aeterna-knowledge repo
+- [x] 9.5 Create K8s secret `aeterna-github-app-pem` with App private key PEM
 - [x] 9.6 Generate webhook secret, create K8s secret `aeterna-webhook-secret`
-- [ ] 9.7 Configure GitHub webhook on `aeterna-knowledge` repo → `https://aeterna.ci-dev-04.dev.kyriba.io/api/v1/webhooks/github`
+- [x] 9.7 Configure GitHub webhook on `aeterna-knowledge` repo → `https://aeterna.ci-dev-04.dev.kyriba.io/api/v1/webhooks/github`
 - [x] 9.8 Update Kyriba deployment values in `aeterna-kyriba-deployment/environments/ci-dev-04/values.yaml`
 
 ## 10. Build, Deploy & Validate
 
 - [x] 10.1 Run `cargo check -p aeterna` — verify compilation
 - [x] 10.2 Run `cargo test -p knowledge` — verify unit tests pass
-- [ ] 10.3 Commit and push code to `kikokikok/aeterna` on `feat/server-runtime-deploy`
-- [ ] 10.4 Trigger GitHub Actions build → new Docker image
+- [x] 10.3 Commit and push code to `kikokikok/aeterna` on `feat/server-runtime-deploy`
+- [x] 10.4 Trigger GitHub Actions build → new Docker image
 - [ ] 10.5 Helm upgrade with new image tag and knowledge repo config
 - [ ] 10.6 Patch Dragonfly service selector (recurring workaround)
 - [ ] 10.7 Verify all pods Running and healthy
