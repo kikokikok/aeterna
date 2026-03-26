@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 ARG RUST_VERSION=1.93
 
 FROM rust:${RUST_VERSION}-bookworm AS chef
@@ -13,10 +14,17 @@ ARG BUILD_DATE
 ARG VCS_REF
 
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=cargo-git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=cargo-target,target=/app/target \
+    cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
-RUN cargo build --release --package aeterna
+RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=cargo-git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=cargo-target,target=/app/target \
+    cargo build --release --package aeterna \
+    && cp /app/target/release/aeterna /app/aeterna-bin
 
 FROM debian:bookworm-slim AS runtime
 
@@ -40,7 +48,7 @@ RUN useradd -m -u 1000 -s /bin/bash aeterna
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/aeterna /usr/local/bin/aeterna
+COPY --from=builder /app/aeterna-bin /usr/local/bin/aeterna
 
 RUN chown -R aeterna:aeterna /app
 
