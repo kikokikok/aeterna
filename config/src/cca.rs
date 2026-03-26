@@ -7,7 +7,7 @@ pub enum StalenessPolicy {
     #[default]
     ServeStaleWarn,
     RegenerateBlocking,
-    RegenerateAsync
+    RegenerateAsync,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -17,7 +17,7 @@ pub enum CaptureMode {
     All,
     Sampled,
     ErrorsOnly,
-    Disabled
+    Disabled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
@@ -35,7 +35,7 @@ pub struct CcaConfig {
     pub hindsight: HindsightConfig,
 
     #[serde(default)]
-    pub meta_agent: MetaAgentConfig
+    pub meta_agent: MetaAgentConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
@@ -68,7 +68,7 @@ pub struct ContextArchitectConfig {
     pub enable_parallel_queries: bool,
 
     #[serde(default = "default_enable_early_termination")]
-    pub enable_early_termination: bool
+    pub enable_early_termination: bool,
 }
 
 fn default_cache_ttl_secs() -> u64 {
@@ -105,7 +105,7 @@ impl Default for ContextArchitectConfig {
             staleness_policy: StalenessPolicy::default(),
             assembly_timeout_ms: default_assembly_timeout_ms(),
             enable_parallel_queries: default_enable_parallel_queries(),
-            enable_early_termination: default_enable_early_termination()
+            enable_early_termination: default_enable_early_termination(),
         }
     }
 }
@@ -140,7 +140,7 @@ pub struct NoteTakingConfig {
     pub batch_size: usize,
 
     #[serde(default = "default_batch_flush_ms")]
-    pub batch_flush_ms: u64
+    pub batch_flush_ms: u64,
 }
 
 fn default_sampling_rate() -> u32 {
@@ -175,7 +175,7 @@ impl Default for NoteTakingConfig {
             overhead_budget_ms: default_overhead_budget_ms(),
             queue_size: default_queue_size(),
             batch_size: default_batch_size(),
-            batch_flush_ms: default_batch_flush_ms()
+            batch_flush_ms: default_batch_flush_ms(),
         }
     }
 }
@@ -195,7 +195,7 @@ pub struct HindsightConfig {
     pub promotion_threshold: f32,
 
     #[serde(default)]
-    pub auto_capture_enabled: bool
+    pub auto_capture_enabled: bool,
 }
 
 fn default_max_results() -> usize {
@@ -213,7 +213,7 @@ impl Default for HindsightConfig {
             semantic_threshold: 0.8,
             max_results: 5,
             promotion_threshold: 0.8,
-            auto_capture_enabled: true
+            auto_capture_enabled: true,
         }
     }
 }
@@ -236,7 +236,7 @@ pub struct MetaAgentConfig {
     pub test_timeout_secs: u64,
 
     #[serde(default)]
-    pub auto_escalate_on_failure: bool
+    pub auto_escalate_on_failure: bool,
 }
 
 fn default_max_iterations() -> u32 {
@@ -263,7 +263,7 @@ impl Default for MetaAgentConfig {
             iteration_timeout_secs: 300,
             build_timeout_secs: 120,
             test_timeout_secs: 60,
-            auto_escalate_on_failure: true
+            auto_escalate_on_failure: true,
         }
     }
 }
@@ -275,7 +275,7 @@ impl Default for CcaConfig {
             context_architect: ContextArchitectConfig::default(),
             note_taking: NoteTakingConfig::default(),
             hindsight: HindsightConfig::default(),
-            meta_agent: MetaAgentConfig::default()
+            meta_agent: MetaAgentConfig::default(),
         }
     }
 }

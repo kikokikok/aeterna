@@ -11,7 +11,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::trace::TraceLayer;
 
-use super::{AppState, health, mcp_transport, openspec};
+use super::{AppState, health, mcp_transport, openspec, webhooks};
 
 pub fn build_router(state: Arc<AppState>) -> Router {
     let mut app = Router::new()
@@ -20,6 +20,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/v1",
             knowledge::api::router(state.governance_dashboard.clone()),
         )
+        .nest("/api/v1", webhooks::router(state.clone()))
         .nest("/openspec/v1", openspec::router(state.clone()))
         .nest("/mcp", mcp_transport::router(state.mcp_server.clone()))
         .nest("/ws", state.ws_server.clone().router())

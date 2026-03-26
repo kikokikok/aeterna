@@ -906,6 +906,8 @@ mod tests {
             auth_service,
             mcp_server,
             sync_manager,
+            git_provider: None,
+            webhook_secret: None,
             event_publisher: None,
             graph_store: None,
             governance_storage: None,

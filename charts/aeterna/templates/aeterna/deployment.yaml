@@ -190,6 +190,56 @@ spec:
               value: {{ .Values.observability.logging.format | default "json" | quote }}
             - name: AETERNA_KNOWLEDGE_REPO_PATH
               value: /tmp/knowledge-repo
+            {{- if .Values.knowledgeRepo.enabled }}
+            - name: AETERNA_KNOWLEDGE_REPO_URL
+              value: {{ .Values.knowledgeRepo.remoteUrl | quote }}
+            - name: AETERNA_KNOWLEDGE_REPO_BRANCH
+              value: {{ .Values.knowledgeRepo.branch | default "main" | quote }}
+            {{- if .Values.knowledgeRepo.ssh.existingSecret }}
+            - name: AETERNA_KNOWLEDGE_REPO_SSH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.knowledgeRepo.ssh.existingSecret }}
+                  key: ssh-key
+            {{- end }}
+            {{- if .Values.knowledgeRepo.github.owner }}
+            - name: AETERNA_GITHUB_OWNER
+              value: {{ .Values.knowledgeRepo.github.owner | quote }}
+            {{- end }}
+            {{- if .Values.knowledgeRepo.github.repo }}
+            - name: AETERNA_GITHUB_REPO
+              value: {{ .Values.knowledgeRepo.github.repo | quote }}
+            {{- end }}
+            {{- if .Values.knowledgeRepo.github.tokenSecret }}
+            - name: AETERNA_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.knowledgeRepo.github.tokenSecret }}
+                  key: token
+            {{- end }}
+            {{- if .Values.knowledgeRepo.github.appId }}
+            - name: AETERNA_GITHUB_APP_ID
+              value: {{ .Values.knowledgeRepo.github.appId | quote }}
+            {{- end }}
+            {{- if .Values.knowledgeRepo.github.installationId }}
+            - name: AETERNA_GITHUB_INSTALLATION_ID
+              value: {{ .Values.knowledgeRepo.github.installationId | quote }}
+            {{- end }}
+            {{- if .Values.knowledgeRepo.github.pemSecret }}
+            - name: AETERNA_GITHUB_APP_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.knowledgeRepo.github.pemSecret }}
+                  key: pem-key
+            {{- end }}
+            {{- if .Values.knowledgeRepo.webhook.secretName }}
+            - name: AETERNA_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.knowledgeRepo.webhook.secretName }}
+                  key: webhook-secret
+            {{- end }}
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.aeterna.livenessProbe | nindent 12 }}
           readinessProbe:

@@ -12,9 +12,10 @@ use idp_sync::config::{AzureAdConfig, IdpProvider, IdpSyncConfig, OktaConfig};
 use idp_sync::okta::OktaClient;
 use idp_sync::{IdpClient, IdpSyncService};
 use knowledge::api::GovernanceDashboardApi;
+use knowledge::git_provider::{GitHubProvider, GitProvider};
 use knowledge::governance::GovernanceEngine;
 use knowledge::manager::KnowledgeManager;
-use knowledge::repository::GitRepository;
+use knowledge::repository::{GitRepository, RemoteConfig};
 use memory::embedding::create_embedding_service_from_env;
 use memory::llm::create_llm_service_from_env;
 use memory::manager::MemoryManager;
@@ -39,7 +40,63 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     postgres.initialize_schema().await?;
 
     let governance_storage = Some(Arc::new(GovernanceStorage::new(postgres.pool().clone())));
-    let knowledge_repository = Arc::new(GitRepository::new(knowledge_repo_path())?);
+
+    let git_provider: Option<Arc<dyn GitProvider>> = if let (Some(owner), Some(repo)) = (
+        &config.knowledge_repo.github_owner,
+        &config.knowledge_repo.github_repo,
+    ) {
+        if let (Some(app_id), Some(installation_id), Some(pem)) = (
+            config.knowledge_repo.github_app_id,
+            config.knowledge_repo.github_installation_id,
+            &config.knowledge_repo.github_app_pem,
+        ) {
+            tracing::info!(
+                "Initializing GitHub App auth (app_id={app_id}, installation_id={installation_id})"
+            );
+            Some(Arc::new(
+                GitHubProvider::new_with_app(
+                    app_id,
+                    installation_id,
+                    pem,
+                    owner.clone(),
+                    repo.clone(),
+                    config.knowledge_repo.webhook_secret.clone(),
+                )
+                .context("Failed to build GitHub App provider")?,
+            ))
+        } else if let Some(token) = &config.knowledge_repo.github_token {
+            tracing::info!("Initializing GitHub PAT auth");
+            Some(Arc::new(
+                GitHubProvider::new(
+                    token,
+                    owner.clone(),
+                    repo.clone(),
+                    config.knowledge_repo.webhook_secret.clone(),
+                )
+                .context("Failed to build GitHub PAT provider")?,
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let remote_config = config
+        .knowledge_repo
+        .remote_url
+        .as_ref()
+        .map(|url| RemoteConfig {
+            url: url.clone(),
+            branch: config.knowledge_repo.branch.clone(),
+            ssh_key: config.knowledge_repo.ssh_key.clone(),
+            git_provider: git_provider.clone(),
+        });
+
+    let knowledge_repository = Arc::new(
+        GitRepository::new_with_remote(knowledge_repo_path(), remote_config)
+            .context("Failed to initialize knowledge repository")?,
+    );
 
     let auth_for_memory = build_boxed_auth_service()?;
     let auth_service = build_anyhow_auth_service()?;
@@ -155,6 +212,7 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
 
     let (idp_config, idp_client, idp_sync_service) = build_optional_idp_services(postgres.clone())?;
     let ws_server = Arc::new(WsServer::new(Arc::new(AllowAllTokenValidator)));
+    let webhook_secret = config.knowledge_repo.webhook_secret.clone();
 
     let (shutdown_tx, _) = tokio::sync::watch::channel(false);
 
@@ -169,6 +227,8 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         auth_service,
         mcp_server,
         sync_manager,
+        git_provider,
+        webhook_secret,
         event_publisher: None,
         graph_store,
         governance_storage,

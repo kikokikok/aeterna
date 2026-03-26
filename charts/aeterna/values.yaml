@@ -227,6 +227,39 @@ aeterna:
     ## @param aeterna.features.reflective Enable reflective reasoning
     reflective: true
 
+## Shared knowledge repository configuration
+## Enables multi-replica consistency via a remote Git repository (GitHub)
+## and PR-based governance for knowledge mutations at higher layers.
+knowledgeRepo:
+  ## @param knowledgeRepo.enabled Enable shared knowledge repository
+  enabled: false
+  ## @param knowledgeRepo.remoteUrl SSH URL for the shared knowledge Git repo (e.g. git@github.com:org/repo.git)
+  remoteUrl: ""
+  ## @param knowledgeRepo.branch Default branch for the knowledge repo
+  branch: "main"
+  ## SSH deploy key for Git clone/push
+  ssh:
+    ## @param knowledgeRepo.ssh.existingSecret Existing secret containing SSH private key (key: ssh-key)
+    existingSecret: ""
+  ## GitHub API configuration (for PR-based governance)
+  github:
+    ## @param knowledgeRepo.github.owner GitHub repository owner
+    owner: ""
+    ## @param knowledgeRepo.github.repo GitHub repository name
+    repo: ""
+    ## @param knowledgeRepo.github.tokenSecret Existing secret containing GitHub token (key: token)
+    tokenSecret: ""
+    ## @param knowledgeRepo.github.appId GitHub App ID
+    appId: ""
+    ## @param knowledgeRepo.github.installationId GitHub App Installation ID
+    installationId: ""
+    ## @param knowledgeRepo.github.pemSecret Existing secret containing GitHub App PEM key (key: pem-key)
+    pemSecret: ""
+  ## Webhook configuration (GitHub webhook for PR merge sync)
+  webhook:
+    ## @param knowledgeRepo.webhook.secretName Existing secret containing webhook secret (key: webhook-secret)
+    secretName: ""
+
 ## Vector backend configuration
 vectorBackend:
   ## @param vectorBackend.type Vector backend type: qdrant, pgvector, pinecone, weaviate, mongodb, vertexai, databricks

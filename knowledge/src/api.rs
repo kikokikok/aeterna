@@ -525,6 +525,20 @@ pub async fn approve_proposal(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to approve proposal: {:?}", e))?;
 
+    if let Err(e) = api
+        .engine
+        .publish_event(GovernanceEvent::RequestApproved {
+            request_id: proposal_id.to_string(),
+            approver_id: ctx.user_id.to_string(),
+            fully_approved: true,
+            tenant_id: ctx.tenant_id.clone(),
+            timestamp: chrono::Utc::now().timestamp(),
+        })
+        .await
+    {
+        tracing::warn!("Failed to publish approval event: {:?}", e);
+    }
+
     Ok(())
 }
 
@@ -579,6 +593,20 @@ pub async fn reject_proposal(
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to reject proposal: {:?}", e))?;
+
+    if let Err(e) = api
+        .engine
+        .publish_event(GovernanceEvent::RequestRejected {
+            request_id: proposal_id.to_string(),
+            rejector_id: ctx.user_id.to_string(),
+            reason: reason.to_string(),
+            tenant_id: ctx.tenant_id.clone(),
+            timestamp: chrono::Utc::now().timestamp(),
+        })
+        .await
+    {
+        tracing::warn!("Failed to publish rejection event: {:?}", e);
+    }
 
     Ok(())
 }

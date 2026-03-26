@@ -4,6 +4,7 @@ pub mod mcp_transport;
 pub mod metrics;
 pub mod openspec;
 pub mod router;
+pub mod webhooks;
 
 use std::sync::Arc;
 
@@ -11,6 +12,7 @@ use agent_a2a::{AuthState as A2aAuthState, Config as A2aConfig};
 use idp_sync::config::IdpSyncConfig;
 use idp_sync::{IdpClient, IdpSyncService};
 use knowledge::api::GovernanceDashboardApi;
+use knowledge::git_provider::GitProvider;
 use knowledge::governance::GovernanceEngine;
 use knowledge::manager::KnowledgeManager;
 use knowledge::repository::RepositoryError;
@@ -37,6 +39,8 @@ pub struct AppState {
     pub auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error> + Send + Sync>,
     pub mcp_server: Arc<McpServer>,
     pub sync_manager: Arc<SyncManager>,
+    pub git_provider: Option<Arc<dyn GitProvider>>,
+    pub webhook_secret: Option<String>,
     pub event_publisher: Option<Arc<dyn EventPublisher<Error = EventError> + Send + Sync>>,
     pub graph_store: Option<Arc<DuckDbGraphStore>>,
     pub governance_storage: Option<Arc<GovernanceStorage>>,

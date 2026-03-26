@@ -73,9 +73,12 @@ pub struct Config {
     #[serde(default)]
     pub job: JobConfig,
 
+    #[serde(default)]
+    pub knowledge_repo: KnowledgeRepoConfig,
+
     /// CCA (Confucius Code Agent) capabilities configuration
     #[serde(default)]
-    pub cca: CcaConfig
+    pub cca: CcaConfig,
 }
 
 impl Config {
@@ -128,7 +131,7 @@ pub struct DeploymentConfig {
 
     /// Enable synchronization in Hybrid mode
     #[serde(default = "default_deployment_sync_enabled")]
-    pub sync_enabled: bool
+    pub sync_enabled: bool,
 }
 
 fn default_deployment_mode() -> String {
@@ -142,7 +145,7 @@ fn default_deployment_sync_enabled() -> bool {
 fn validate_deployment_mode(value: &str) -> Result<(), validator::ValidationError> {
     match value {
         "local" | "hybrid" | "remote" => Ok(()),
-        _ => Err(validator::ValidationError::new("Invalid deployment mode"))
+        _ => Err(validator::ValidationError::new("Invalid deployment mode")),
     }
 }
 
@@ -151,7 +154,7 @@ impl Default for DeploymentConfig {
         Self {
             mode: default_deployment_mode(),
             remote_url: None,
-            sync_enabled: default_deployment_sync_enabled()
+            sync_enabled: default_deployment_sync_enabled(),
         }
     }
 }
@@ -204,6 +207,34 @@ impl DeploymentConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default, PartialEq)]
+pub struct KnowledgeRepoConfig {
+    #[serde(default)]
+    pub remote_url: Option<String>,
+    #[serde(default = "default_branch")]
+    pub branch: String,
+    #[serde(default)]
+    pub ssh_key: Option<String>,
+    #[serde(default)]
+    pub github_owner: Option<String>,
+    #[serde(default)]
+    pub github_repo: Option<String>,
+    #[serde(default)]
+    pub github_token: Option<String>,
+    #[serde(default)]
+    pub github_app_id: Option<u64>,
+    #[serde(default)]
+    pub github_installation_id: Option<u64>,
+    #[serde(default)]
+    pub github_app_pem: Option<String>,
+    #[serde(default)]
+    pub webhook_secret: Option<String>,
+}
+
+fn default_branch() -> String {
+    "main".to_string()
+}
+
 /// Configuration for storage providers.
 ///
 /// Manages connection settings for all storage backends.
@@ -246,7 +277,7 @@ pub struct ProviderConfig {
 
     /// DuckDB graph store configuration
     #[serde(default)]
-    pub graph: GraphConfig
+    pub graph: GraphConfig,
 }
 
 /// PostgreSQL configuration.
@@ -300,7 +331,7 @@ pub struct PostgresConfig {
     /// Connection timeout in seconds
     #[serde(default = "default_postgres_timeout")]
     #[validate(range(min = 1, max = 300))]
-    pub timeout_seconds: u64
+    pub timeout_seconds: u64,
 }
 
 fn default_postgres_host() -> String {
@@ -340,7 +371,7 @@ impl Default for PostgresConfig {
             username: default_postgres_username(),
             password: default_postgres_password(),
             pool_size: default_postgres_pool_size(),
-            timeout_seconds: default_postgres_timeout()
+            timeout_seconds: default_postgres_timeout(),
         }
     }
 }
@@ -377,7 +408,7 @@ pub struct QdrantConfig {
     /// Request timeout in seconds
     #[serde(default = "default_qdrant_timeout")]
     #[validate(range(min = 1, max = 300))]
-    pub timeout_seconds: u64
+    pub timeout_seconds: u64,
 }
 
 fn default_qdrant_host() -> String {
@@ -402,7 +433,7 @@ impl Default for QdrantConfig {
             host: default_qdrant_host(),
             port: default_qdrant_port(),
             collection: default_qdrant_collection(),
-            timeout_seconds: default_qdrant_timeout()
+            timeout_seconds: default_qdrant_timeout(),
         }
     }
 }
@@ -445,7 +476,7 @@ pub struct RedisConfig {
     /// Connection timeout in seconds
     #[serde(default = "default_redis_timeout")]
     #[validate(range(min = 1, max = 300))]
-    pub timeout_seconds: u64
+    pub timeout_seconds: u64,
 }
 
 fn default_redis_host() -> String {
@@ -475,7 +506,7 @@ impl Default for RedisConfig {
             port: default_redis_port(),
             db: default_redis_db(),
             pool_size: default_redis_pool_size(),
-            timeout_seconds: default_redis_timeout()
+            timeout_seconds: default_redis_timeout(),
         }
     }
 }
@@ -523,7 +554,7 @@ pub struct GraphConfig {
 
     /// Alerting thresholds for write contention
     #[serde(default)]
-    pub contention_alerts: ContentionAlertConfig
+    pub contention_alerts: ContentionAlertConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
@@ -550,7 +581,7 @@ pub struct ContentionAlertConfig {
 
     #[serde(default = "default_timeout_rate_critical")]
     #[validate(range(min = 0.0, max = 100.0))]
-    pub timeout_rate_critical_percent: f64
+    pub timeout_rate_critical_percent: f64,
 }
 
 fn default_queue_depth_warn() -> u32 {
@@ -580,7 +611,7 @@ impl Default for ContentionAlertConfig {
             wait_time_warn_ms: default_wait_time_warn_ms(),
             wait_time_critical_ms: default_wait_time_critical_ms(),
             timeout_rate_warn_percent: default_timeout_rate_warn(),
-            timeout_rate_critical_percent: default_timeout_rate_critical()
+            timeout_rate_critical_percent: default_timeout_rate_critical(),
         }
     }
 }
@@ -606,7 +637,7 @@ impl Default for GraphConfig {
             s3_prefix: None,
             s3_endpoint: None,
             s3_region: default_graph_s3_region(),
-            contention_alerts: ContentionAlertConfig::default()
+            contention_alerts: ContentionAlertConfig::default(),
         }
     }
 }
@@ -648,7 +679,7 @@ pub struct SyncConfig {
     /// Conflict resolution strategy
     #[serde(default = "default_sync_conflict_resolution")]
     #[validate(custom(function = "validate_conflict_resolution"))]
-    pub conflict_resolution: String
+    pub conflict_resolution: String,
 }
 
 fn default_sync_enabled() -> bool {
@@ -675,8 +706,8 @@ fn validate_conflict_resolution(value: &str) -> Result<(), validator::Validation
     match value {
         "prefer_knowledge" | "prefer_memory" | "manual" => Ok(()),
         _ => Err(validator::ValidationError::new(
-            "Invalid conflict resolution strategy"
-        ))
+            "Invalid conflict resolution strategy",
+        )),
     }
 }
 
@@ -687,7 +718,7 @@ impl Default for SyncConfig {
             sync_interval_seconds: default_sync_interval(),
             batch_size: default_sync_batch_size(),
             checkpoint_enabled: default_sync_checkpoint(),
-            conflict_resolution: default_sync_conflict_resolution()
+            conflict_resolution: default_sync_conflict_resolution(),
         }
     }
 }
@@ -728,7 +759,7 @@ pub struct ToolConfig {
     /// Rate limit: requests per minute
     #[serde(default = "default_tools_rate_limit")]
     #[validate(range(min = 1, max = 1000))]
-    pub rate_limit_requests_per_minute: u32
+    pub rate_limit_requests_per_minute: u32,
 }
 
 fn default_tools_enabled() -> bool {
@@ -754,7 +785,7 @@ impl Default for ToolConfig {
             host: default_tools_host(),
             port: default_tools_port(),
             api_key: None,
-            rate_limit_requests_per_minute: default_tools_rate_limit()
+            rate_limit_requests_per_minute: default_tools_rate_limit(),
         }
     }
 }
@@ -789,7 +820,7 @@ pub struct ObservabilityConfig {
     /// Metrics server port
     #[serde(default = "default_observability_metrics_port")]
     #[validate(range(min = 1, max = 65535))]
-    pub metrics_port: u16
+    pub metrics_port: u16,
 }
 
 fn default_observability_metrics_enabled() -> bool {
@@ -811,7 +842,7 @@ fn default_observability_metrics_port() -> u16 {
 fn validate_logging_level(value: &str) -> Result<(), validator::ValidationError> {
     match value {
         "trace" | "debug" | "info" | "warn" | "error" => Ok(()),
-        _ => Err(validator::ValidationError::new("Invalid logging level"))
+        _ => Err(validator::ValidationError::new("Invalid logging level")),
     }
 }
 
@@ -821,7 +852,7 @@ impl Default for ObservabilityConfig {
             metrics_enabled: default_observability_metrics_enabled(),
             tracing_enabled: default_observability_tracing_enabled(),
             logging_level: default_observability_logging_level(),
-            metrics_port: default_observability_metrics_port()
+            metrics_port: default_observability_metrics_port(),
         }
     }
 }
@@ -854,7 +885,7 @@ pub struct MemoryConfig {
 
     /// Configuration for Recursive Language Model (RLM) search
     #[serde(default)]
-    pub rlm: RlmConfig
+    pub rlm: RlmConfig,
 }
 
 /// Configuration for Recursive Language Model (RLM) search.
@@ -885,7 +916,7 @@ pub struct RlmConfig {
     /// Threshold [0.0, 1.0] for routing to RLM based on query complexity
     #[serde(default = "default_rlm_complexity_threshold")]
     #[validate(range(min = 0.0, max = 1.0))]
-    pub complexity_threshold: f32
+    pub complexity_threshold: f32,
 }
 
 fn default_rlm_enabled() -> bool {
@@ -905,7 +936,7 @@ impl Default for RlmConfig {
         Self {
             enabled: default_rlm_enabled(),
             max_steps: default_rlm_max_steps(),
-            complexity_threshold: default_rlm_complexity_threshold()
+            complexity_threshold: default_rlm_complexity_threshold(),
         }
     }
 }
@@ -1017,7 +1048,7 @@ pub struct ReasoningConfig {
     /// Maximum query budget for multi-hop retrieval (default: 50)
     #[serde(default = "default_max_query_budget")]
     #[validate(range(min = 1, max = 500))]
-    pub max_query_budget: u32
+    pub max_query_budget: u32,
 }
 
 fn default_reasoning_enabled() -> bool {
@@ -1118,7 +1149,7 @@ impl Default for ReasoningConfig {
             circuit_breaker_half_open_requests: default_circuit_breaker_half_open_requests(),
             max_hop_depth: default_max_hop_depth(),
             hop_relevance_threshold: default_hop_relevance_threshold(),
-            max_query_budget: default_max_query_budget()
+            max_query_budget: default_max_query_budget(),
         }
     }
 }
@@ -1148,7 +1179,7 @@ impl Default for MemoryConfig {
             optimization_trigger_count: default_optimization_trigger_count(),
             layer_summary_configs: std::collections::HashMap::new(),
             reasoning: ReasoningConfig::default(),
-            rlm: RlmConfig::default()
+            rlm: RlmConfig::default(),
         }
     }
 }
@@ -1192,7 +1223,7 @@ pub struct JobConfig {
     /// Timeout for graceful shutdown in seconds
     #[serde(default = "default_graceful_shutdown_timeout_seconds")]
     #[validate(range(min = 1, max = 300))]
-    pub graceful_shutdown_timeout_seconds: u64
+    pub graceful_shutdown_timeout_seconds: u64,
 }
 
 fn default_lock_ttl_seconds() -> u64 {
@@ -1222,7 +1253,7 @@ impl Default for JobConfig {
             job_timeout_seconds: default_job_timeout_seconds(),
             deduplication_window_seconds: default_deduplication_window_seconds(),
             checkpoint_interval: default_checkpoint_interval(),
-            graceful_shutdown_timeout_seconds: default_graceful_shutdown_timeout_seconds()
+            graceful_shutdown_timeout_seconds: default_graceful_shutdown_timeout_seconds(),
         }
     }
 }
@@ -1331,7 +1362,7 @@ mod tests {
         let config = DeploymentConfig {
             mode: "local".to_string(),
             remote_url: None,
-            sync_enabled: true
+            sync_enabled: true,
         };
         assert!(config.is_local());
         assert!(!config.is_hybrid());
@@ -1343,7 +1374,7 @@ mod tests {
         let config = DeploymentConfig {
             mode: "hybrid".to_string(),
             remote_url: Some("http://localhost:8080".to_string()),
-            sync_enabled: true
+            sync_enabled: true,
         };
         assert!(!config.is_local());
         assert!(config.is_hybrid());
@@ -1355,7 +1386,7 @@ mod tests {
         let config = DeploymentConfig {
             mode: "remote".to_string(),
             remote_url: Some("http://localhost:8080".to_string()),
-            sync_enabled: false
+            sync_enabled: false,
         };
         assert!(!config.is_local());
         assert!(!config.is_hybrid());
