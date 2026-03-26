@@ -238,6 +238,34 @@ impl GitRepository {
                 git2::Cred::ssh_key_from_memory(username.unwrap_or("git"), None, &key, None)
             });
         }
+        // Accept known GitHub SSH host keys.
+        // In a container with read-only root filesystem there is no ~/.ssh/known_hosts,
+        // so libgit2 rejects the connection by default. We verify the server key fingerprint
+        // against GitHub's published key fingerprints instead.
+        callbacks.certificate_check(|cert, host| {
+            if host == "github.com" {
+                if let Some(host_key) = cert.as_hostkey() {
+                    if let Some(hash) = host_key.hash_sha256() {
+                        // GitHub's published SSH host key fingerprints (base64-encoded SHA256):
+                        // https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
+                        use base64::Engine;
+                        let known = [
+                            "uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s", // RSA
+                            "p2QAMXNIC1TJYWeIOttrVc98/R1BUFWu3/LiyKgUfQM", // ECDSA
+                            "+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU", // Ed25519
+                        ];
+                        let fingerprint = base64::engine::general_purpose::STANDARD.encode(hash);
+                        if known.iter().any(|k| *k == fingerprint) {
+                            return Ok(git2::CertificateCheckStatus::CertificateOk);
+                        }
+                    }
+                }
+                return Err(git2::Error::from_str(
+                    "GitHub SSH host key fingerprint mismatch",
+                ));
+            }
+            Ok(git2::CertificateCheckStatus::CertificateOk)
+        });
         callbacks
     }
 
