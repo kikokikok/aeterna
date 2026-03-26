@@ -46,9 +46,9 @@ backoff.workspace = true
 octocrab.workspace = true
 jsonwebtoken.workspace = true
 hmac.workspace = true
+rustls = { version = "0.23", features = ["aws_lc_rs"] }
 
 [dev-dependencies]
 memory.workspace = true
 testing.workspace = true
 tower.workspace = true
-rustls = { version = "0.23", features = ["aws_lc_rs"] }

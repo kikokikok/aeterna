@@ -191,6 +191,7 @@ impl GitHubProvider {
         repo: String,
         webhook_secret: Option<String>,
     ) -> Result<Self, GitProviderError> {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         let client = octocrab::Octocrab::builder()
             .personal_token(token.to_string())
             .build()
@@ -211,6 +212,7 @@ impl GitHubProvider {
         repo: String,
         webhook_secret: Option<String>,
     ) -> Result<Self, GitProviderError> {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         let key = jsonwebtoken::EncodingKey::from_rsa_pem(pem_key.as_bytes())
             .map_err(|e| GitProviderError::Auth(format!("Invalid PEM key: {e}")))?;
 
