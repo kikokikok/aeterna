@@ -273,6 +273,12 @@ mod tests {
         ) -> Result<String, knowledge::git_provider::GitProviderError> {
             Ok("sha".to_string())
         }
+
+        async fn get_installation_token(
+            &self,
+        ) -> Result<String, knowledge::git_provider::GitProviderError> {
+            Ok("mock-token".to_string())
+        }
     }
 
     struct MockRepo;

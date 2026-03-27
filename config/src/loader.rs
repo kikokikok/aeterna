@@ -127,7 +127,6 @@ fn load_knowledge_repo_from_env() -> anyhow::Result<KnowledgeRepoConfig> {
     Ok(KnowledgeRepoConfig {
         remote_url: env::var("AETERNA_KNOWLEDGE_REPO_URL").ok(),
         branch: env::var("AETERNA_KNOWLEDGE_REPO_BRANCH").unwrap_or_else(|_| "main".to_string()),
-        ssh_key: env::var("AETERNA_KNOWLEDGE_REPO_SSH_KEY").ok(),
         github_owner: env::var("AETERNA_GITHUB_OWNER").ok(),
         github_repo: env::var("AETERNA_GITHUB_REPO").ok(),
         github_token: env::var("AETERNA_GITHUB_TOKEN").ok(),

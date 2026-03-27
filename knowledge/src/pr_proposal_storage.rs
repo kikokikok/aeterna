@@ -231,6 +231,10 @@ mod tests {
         async fn get_default_branch_sha(&self) -> Result<String, GitProviderError> {
             Ok(self.default_sha.clone())
         }
+
+        async fn get_installation_token(&self) -> Result<String, GitProviderError> {
+            Ok("mock-token".to_string())
+        }
     }
 
     fn pr(number: u64, head: &str) -> PullRequestInfo {

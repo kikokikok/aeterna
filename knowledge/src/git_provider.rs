@@ -2,8 +2,23 @@ use async_trait::async_trait;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// Cached installation access token with expiry.
+struct CachedToken {
+    token: String,
+    /// Tokens expire after 1 hour; we refresh 5 minutes early.
+    expires_at: std::time::Instant,
+}
+
+/// Credentials needed to mint installation tokens via GitHub App JWT.
+struct AppCredentials {
+    app_id: u64,
+    installation_id: u64,
+    pem_key: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MergeMethod {
@@ -157,6 +172,8 @@ pub trait GitProvider: Send + Sync {
     ) -> Result<WebhookEvent, GitProviderError>;
 
     async fn get_default_branch_sha(&self) -> Result<String, GitProviderError>;
+
+    async fn get_installation_token(&self) -> Result<String, GitProviderError>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -182,6 +199,8 @@ pub struct GitHubProvider {
     owner: String,
     repo: String,
     webhook_secret: Option<String>,
+    app_credentials: Option<AppCredentials>,
+    token_cache: Arc<Mutex<Option<CachedToken>>>,
 }
 
 impl GitHubProvider {
@@ -196,11 +215,17 @@ impl GitHubProvider {
             .personal_token(token.to_string())
             .build()
             .map_err(|e| GitProviderError::Auth(e.to_string()))?;
+        let token_cache = Arc::new(Mutex::new(Some(CachedToken {
+            token: token.to_string(),
+            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(86400 * 365),
+        })));
         Ok(Self {
             client: Arc::new(client),
             owner,
             repo,
             webhook_secret,
+            app_credentials: None,
+            token_cache,
         })
     }
 
@@ -230,6 +255,12 @@ impl GitHubProvider {
             owner,
             repo,
             webhook_secret,
+            app_credentials: Some(AppCredentials {
+                app_id,
+                installation_id,
+                pem_key: pem_key.to_string(),
+            }),
+            token_cache: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -510,6 +541,65 @@ impl GitProvider for GitHubProvider {
         };
         Ok(sha)
     }
+
+    async fn get_installation_token(&self) -> Result<String, GitProviderError> {
+        {
+            let cache = self.token_cache.lock().await;
+            if let Some(ref cached) = *cache {
+                if cached.expires_at > std::time::Instant::now() {
+                    return Ok(cached.token.clone());
+                }
+            }
+        }
+
+        let creds = self
+            .app_credentials
+            .as_ref()
+            .ok_or_else(|| GitProviderError::Auth(
+                "No App credentials configured; cannot mint installation token (PAT auth does not support token extraction)".to_string(),
+            ))?;
+
+        let now = chrono::Utc::now();
+        let claims = serde_json::json!({
+            "iat": (now - chrono::Duration::seconds(60)).timestamp(),
+            "exp": (now + chrono::Duration::seconds(600)).timestamp(),
+            "iss": creds.app_id.to_string(),
+        });
+
+        let jwt_key = jsonwebtoken::EncodingKey::from_rsa_pem(creds.pem_key.as_bytes())
+            .map_err(|e| GitProviderError::Auth(format!("PEM encode error: {e}")))?;
+        let jwt = jsonwebtoken::encode(
+            &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256),
+            &claims,
+            &jwt_key,
+        )
+        .map_err(|e| GitProviderError::Auth(format!("JWT sign error: {e}")))?;
+
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let http_client = octocrab::Octocrab::builder()
+            .personal_token(jwt)
+            .build()
+            .map_err(|e| GitProviderError::Auth(e.to_string()))?;
+
+        let url = format!("/app/installations/{}/access_tokens", creds.installation_id);
+        let resp: serde_json::Value = http_client
+            .post(url, None::<&()>)
+            .await
+            .map_err(|e| GitProviderError::Auth(format!("Token exchange failed: {e}")))?;
+
+        let token = resp["token"]
+            .as_str()
+            .ok_or_else(|| GitProviderError::Auth("No token in response".to_string()))?
+            .to_string();
+
+        let mut cache = self.token_cache.lock().await;
+        *cache = Some(CachedToken {
+            token: token.clone(),
+            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(55 * 60),
+        });
+
+        Ok(token)
+    }
 }
 
 impl GitHubProvider {
@@ -551,6 +641,18 @@ mod tests {
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     }
 
+    fn test_provider(webhook_secret: Option<String>) -> GitHubProvider {
+        init_crypto();
+        GitHubProvider {
+            client: Arc::new(octocrab::Octocrab::default()),
+            owner: "test".to_string(),
+            repo: "test".to_string(),
+            webhook_secret,
+            app_credentials: None,
+            token_cache: Arc::new(Mutex::new(None)),
+        }
+    }
+
     #[test]
     fn test_governance_branch_naming() {
         let branch = GovernanceBranch::new("promote", "api-auth-pattern");
@@ -586,13 +688,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_hmac_validation() {
-        init_crypto();
-        let provider = GitHubProvider {
-            client: Arc::new(octocrab::Octocrab::default()),
-            owner: "test".to_string(),
-            repo: "test".to_string(),
-            webhook_secret: Some("mysecret".to_string()),
-        };
+        let provider = test_provider(Some("mysecret".to_string()));
 
         let body = b"hello world";
         let mut mac = HmacSha256::new_from_slice(b"mysecret").unwrap();
@@ -606,13 +702,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_hmac_validation_invalid() {
-        init_crypto();
-        let provider = GitHubProvider {
-            client: Arc::new(octocrab::Octocrab::default()),
-            owner: "test".to_string(),
-            repo: "test".to_string(),
-            webhook_secret: Some("mysecret".to_string()),
-        };
+        let provider = test_provider(Some("mysecret".to_string()));
 
         assert!(
             provider
@@ -623,13 +713,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_hmac_validation_missing_prefix() {
-        init_crypto();
-        let provider = GitHubProvider {
-            client: Arc::new(octocrab::Octocrab::default()),
-            owner: "test".to_string(),
-            repo: "test".to_string(),
-            webhook_secret: Some("mysecret".to_string()),
-        };
+        let provider = test_provider(Some("mysecret".to_string()));
 
         assert!(provider.validate_hmac("badprefix=abc", b"hello").is_err());
     }
@@ -705,13 +789,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_webhook_pr_opened() {
-        init_crypto();
-        let provider = GitHubProvider {
-            client: Arc::new(octocrab::Octocrab::default()),
-            owner: "test".to_string(),
-            repo: "test".to_string(),
-            webhook_secret: None,
-        };
+        let provider = test_provider(None);
 
         let payload = serde_json::json!({
             "action": "opened",
@@ -745,13 +823,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_webhook_pr_merged() {
-        init_crypto();
-        let provider = GitHubProvider {
-            client: Arc::new(octocrab::Octocrab::default()),
-            owner: "test".to_string(),
-            repo: "test".to_string(),
-            webhook_secret: None,
-        };
+        let provider = test_provider(None);
 
         let payload = serde_json::json!({
             "action": "closed",
@@ -789,13 +861,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_webhook_pr_closed_not_merged() {
-        init_crypto();
-        let provider = GitHubProvider {
-            client: Arc::new(octocrab::Octocrab::default()),
-            owner: "test".to_string(),
-            repo: "test".to_string(),
-            webhook_secret: None,
-        };
+        let provider = test_provider(None);
 
         let payload = serde_json::json!({
             "action": "closed",
@@ -829,13 +895,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_webhook_unknown_event() {
-        init_crypto();
-        let provider = GitHubProvider {
-            client: Arc::new(octocrab::Octocrab::default()),
-            owner: "test".to_string(),
-            repo: "test".to_string(),
-            webhook_secret: None,
-        };
+        let provider = test_provider(None);
 
         let event = provider.parse_webhook("push", None, b"{}").await.unwrap();
 

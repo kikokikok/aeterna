@@ -233,15 +233,11 @@ aeterna:
 knowledgeRepo:
   ## @param knowledgeRepo.enabled Enable shared knowledge repository
   enabled: false
-  ## @param knowledgeRepo.remoteUrl SSH URL for the shared knowledge Git repo (e.g. git@github.com:org/repo.git)
+  ## @param knowledgeRepo.remoteUrl HTTPS URL for the shared knowledge Git repo (e.g. https://github.com/org/repo.git)
   remoteUrl: ""
   ## @param knowledgeRepo.branch Default branch for the knowledge repo
   branch: "main"
-  ## SSH deploy key for Git clone/push
-  ssh:
-    ## @param knowledgeRepo.ssh.existingSecret Existing secret containing SSH private key (key: ssh-key)
-    existingSecret: ""
-  ## GitHub API configuration (for PR-based governance)
+  ## GitHub API configuration (for PR-based governance and HTTPS git auth)
   github:
     ## @param knowledgeRepo.github.owner GitHub repository owner
     owner: ""

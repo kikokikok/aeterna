@@ -27,7 +27,6 @@ pub enum RepositoryError {
 pub struct RemoteConfig {
     pub url: String,
     pub branch: String,
-    pub ssh_key: Option<String>,
     pub git_provider: Option<Arc<dyn GitProvider>>,
 }
 
@@ -35,7 +34,6 @@ pub struct GitRepository {
     root_path: PathBuf,
     remote_url: Option<String>,
     branch: String,
-    ssh_key: Option<String>,
     git_provider: Option<Arc<dyn GitProvider>>,
     rw_lock: Arc<RwLock<()>>,
 }
@@ -54,17 +52,21 @@ impl GitRepository {
             std::fs::create_dir_all(&root_path)?;
         }
 
-        let (remote_url, branch, ssh_key, git_provider) = if let Some(cfg) = remote_config {
-            (Some(cfg.url), cfg.branch, cfg.ssh_key, cfg.git_provider)
+        let (remote_url, branch, git_provider) = if let Some(cfg) = remote_config {
+            let url = if cfg.git_provider.is_some() {
+                Self::ssh_url_to_https(&cfg.url)
+            } else {
+                cfg.url
+            };
+            (Some(url), cfg.branch, cfg.git_provider)
         } else {
-            (None, "main".to_string(), None, None)
+            (None, "main".to_string(), None)
         };
 
         let repo = Self {
             root_path,
             remote_url,
             branch,
-            ssh_key,
             git_provider,
             rw_lock: Arc::new(RwLock::new(())),
         };
@@ -109,7 +111,7 @@ impl GitRepository {
             .ok_or_else(|| RepositoryError::Remote("Remote URL not configured".to_string()))?;
 
         let mut fetch_options = git2::FetchOptions::new();
-        fetch_options.remote_callbacks(self.ssh_callbacks());
+        fetch_options.remote_callbacks(self.remote_callbacks());
 
         let mut builder = git2::build::RepoBuilder::new();
         builder.fetch_options(fetch_options);
@@ -148,7 +150,7 @@ impl GitRepository {
         let mut remote = repo.find_remote("origin")?;
 
         let mut fetch_options = git2::FetchOptions::new();
-        fetch_options.remote_callbacks(self.ssh_callbacks());
+        fetch_options.remote_callbacks(self.remote_callbacks());
         remote.fetch(&[self.branch.as_str()], Some(&mut fetch_options), None)?;
 
         let fetch_head = repo.find_reference("FETCH_HEAD")?;
@@ -230,42 +232,26 @@ impl GitRepository {
         }
     }
 
-    fn ssh_callbacks(&self) -> git2::RemoteCallbacks<'_> {
+    fn ssh_url_to_https(url: &str) -> String {
+        if let Some(rest) = url.strip_prefix("git@github.com:") {
+            let rest = rest.strip_suffix(".git").unwrap_or(rest);
+            format!("https://github.com/{rest}.git")
+        } else {
+            url.to_string()
+        }
+    }
+
+    fn remote_callbacks(&self) -> git2::RemoteCallbacks<'_> {
         let mut callbacks = git2::RemoteCallbacks::new();
-        if let Some(ref ssh_key) = self.ssh_key {
-            let key = ssh_key.clone();
-            callbacks.credentials(move |_url, username, _allowed| {
-                git2::Cred::ssh_key_from_memory(username.unwrap_or("git"), None, &key, None)
+        if let Some(ref provider) = self.git_provider {
+            let provider = Arc::clone(provider);
+            callbacks.credentials(move |_url, _username, _allowed| {
+                let token = tokio::runtime::Handle::current()
+                    .block_on(provider.get_installation_token())
+                    .map_err(|e| git2::Error::from_str(&format!("Token fetch failed: {e}")))?;
+                git2::Cred::userpass_plaintext("x-access-token", &token)
             });
         }
-        // Accept known GitHub SSH host keys.
-        // In a container with read-only root filesystem there is no ~/.ssh/known_hosts,
-        // so libgit2 rejects the connection by default. We verify the server key fingerprint
-        // against GitHub's published key fingerprints instead.
-        callbacks.certificate_check(|cert, host| {
-            if host == "github.com" {
-                if let Some(host_key) = cert.as_hostkey() {
-                    if let Some(hash) = host_key.hash_sha256() {
-                        // GitHub's published SSH host key fingerprints (base64-encoded SHA256):
-                        // https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
-                        use base64::Engine;
-                        let known = [
-                            "uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s", // RSA
-                            "p2QAMXNIC1TJYWeIOttrVc98/R1BUFWu3/LiyKgUfQM", // ECDSA
-                            "+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU", // Ed25519
-                        ];
-                        let fingerprint = base64::engine::general_purpose::STANDARD.encode(hash);
-                        if known.iter().any(|k| *k == fingerprint) {
-                            return Ok(git2::CertificateCheckStatus::CertificateOk);
-                        }
-                    }
-                }
-                return Err(git2::Error::from_str(
-                    "GitHub SSH host key fingerprint mismatch",
-                ));
-            }
-            Ok(git2::CertificateCheckStatus::CertificateOk)
-        });
         callbacks
     }
 
@@ -278,7 +264,7 @@ impl GitRepository {
         let mut remote = repo.find_remote("origin")?;
 
         let mut fetch_options = git2::FetchOptions::new();
-        fetch_options.remote_callbacks(self.ssh_callbacks());
+        fetch_options.remote_callbacks(self.remote_callbacks());
         remote.fetch(&[self.branch.as_str()], Some(&mut fetch_options), None)?;
 
         let fetch_head = repo.find_reference("FETCH_HEAD")?;
@@ -313,7 +299,7 @@ impl GitRepository {
             let repo = Repository::open(&self.root_path)?;
             let mut remote = repo.find_remote("origin")?;
             let mut push_options = git2::PushOptions::new();
-            push_options.remote_callbacks(self.ssh_callbacks());
+            push_options.remote_callbacks(self.remote_callbacks());
 
             match remote.push(&[refspec.as_str()], Some(&mut push_options)) {
                 Ok(()) => return Ok(()),
@@ -1042,6 +1028,10 @@ mod tests {
         async fn get_default_branch_sha(&self) -> Result<String, GitProviderError> {
             Ok("base-sha".to_string())
         }
+
+        async fn get_installation_token(&self) -> Result<String, GitProviderError> {
+            Ok("mock-token".to_string())
+        }
     }
 
     #[tokio::test]
@@ -1192,31 +1182,28 @@ mod tests {
     fn test_remote_config_construction() {
         let provider: Arc<dyn GitProvider> = Arc::new(TestGitProvider);
         let cfg = RemoteConfig {
-            url: "git@example.com:org/repo.git".to_string(),
+            url: "https://github.com/org/repo.git".to_string(),
             branch: "main".to_string(),
-            ssh_key: Some("ssh-private-key".to_string()),
             git_provider: Some(provider),
         };
 
-        assert_eq!(cfg.url, "git@example.com:org/repo.git");
+        assert_eq!(cfg.url, "https://github.com/org/repo.git");
         assert_eq!(cfg.branch, "main");
-        assert!(cfg.ssh_key.is_some());
         assert!(cfg.git_provider.is_some());
     }
 
     #[test]
-    fn test_ssh_callbacks_constructs() -> Result<(), anyhow::Error> {
+    fn test_remote_callbacks_constructs() -> Result<(), anyhow::Error> {
         let dir = tempdir()?;
         let repo = GitRepository {
             root_path: dir.path().to_path_buf(),
-            remote_url: Some("git@example.com:org/repo.git".to_string()),
+            remote_url: Some("https://github.com/org/repo.git".to_string()),
             branch: "main".to_string(),
-            ssh_key: Some("dummy-key".to_string()),
             git_provider: None,
             rw_lock: Arc::new(RwLock::new(())),
         };
 
-        let callbacks = repo.ssh_callbacks();
+        let callbacks = repo.remote_callbacks();
         let mut fetch_options = git2::FetchOptions::new();
         fetch_options.remote_callbacks(callbacks);
         Ok(())

@@ -214,8 +214,6 @@ pub struct KnowledgeRepoConfig {
     #[serde(default = "default_branch")]
     pub branch: String,
     #[serde(default)]
-    pub ssh_key: Option<String>,
-    #[serde(default)]
     pub github_owner: Option<String>,
     #[serde(default)]
     pub github_repo: Option<String>,

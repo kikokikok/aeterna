@@ -195,13 +195,6 @@ spec:
               value: {{ .Values.knowledgeRepo.remoteUrl | quote }}
             - name: AETERNA_KNOWLEDGE_REPO_BRANCH
               value: {{ .Values.knowledgeRepo.branch | default "main" | quote }}
-            {{- if .Values.knowledgeRepo.ssh.existingSecret }}
-            - name: AETERNA_KNOWLEDGE_REPO_SSH_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.knowledgeRepo.ssh.existingSecret }}
-                  key: ssh-key
-            {{- end }}
             {{- if .Values.knowledgeRepo.github.owner }}
             - name: AETERNA_GITHUB_OWNER
               value: {{ .Values.knowledgeRepo.github.owner | quote }}

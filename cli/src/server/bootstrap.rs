@@ -89,7 +89,6 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         .map(|url| RemoteConfig {
             url: url.clone(),
             branch: config.knowledge_repo.branch.clone(),
-            ssh_key: config.knowledge_repo.ssh_key.clone(),
             git_provider: git_provider.clone(),
         });
 
