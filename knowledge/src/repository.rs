@@ -246,9 +246,13 @@ impl GitRepository {
         if let Some(ref provider) = self.git_provider {
             let provider = Arc::clone(provider);
             callbacks.credentials(move |_url, _username, _allowed| {
-                let token = tokio::runtime::Handle::current()
-                    .block_on(provider.get_installation_token())
-                    .map_err(|e| git2::Error::from_str(&format!("Token fetch failed: {e}")))?;
+                let handle = tokio::runtime::Handle::current();
+                let token = std::thread::scope(|s| {
+                    s.spawn(|| handle.block_on(provider.get_installation_token()))
+                        .join()
+                        .expect("token thread panicked")
+                })
+                .map_err(|e| git2::Error::from_str(&format!("Token fetch failed: {e}")))?;
                 git2::Cred::userpass_plaintext("x-access-token", &token)
             });
         }
