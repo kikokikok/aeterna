@@ -129,7 +129,10 @@ pub fn requires_governance(
         }
         WriteOperation::StatusChange { to } => *to != mk_core::types::KnowledgeStatus::Draft,
         WriteOperation::Promote { .. } => true,
-        WriteOperation::Delete => true,
+        WriteOperation::Delete => {
+            layer != mk_core::types::KnowledgeLayer::Project
+                || status != mk_core::types::KnowledgeStatus::Draft
+        }
     }
 }
 
@@ -779,10 +782,31 @@ mod tests {
     }
 
     #[test]
-    fn test_requires_governance_delete_always() {
-        assert!(requires_governance(
+    fn test_requires_governance_delete_project_draft_fast_track() {
+        // Project/Draft deletes use fast-track (same as create/update)
+        assert!(!requires_governance(
             mk_core::types::KnowledgeLayer::Project,
             mk_core::types::KnowledgeStatus::Draft,
+            &WriteOperation::Delete,
+        ));
+    }
+
+    #[test]
+    fn test_requires_governance_delete_team_governance_track() {
+        // Non-Project deletes always go through governance
+        assert!(requires_governance(
+            mk_core::types::KnowledgeLayer::Team,
+            mk_core::types::KnowledgeStatus::Draft,
+            &WriteOperation::Delete,
+        ));
+    }
+
+    #[test]
+    fn test_requires_governance_delete_project_accepted_governance_track() {
+        // Non-Draft deletes always go through governance
+        assert!(requires_governance(
+            mk_core::types::KnowledgeLayer::Project,
+            mk_core::types::KnowledgeStatus::Accepted,
             &WriteOperation::Delete,
         ));
     }

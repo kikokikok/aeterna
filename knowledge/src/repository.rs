@@ -1271,9 +1271,18 @@ mod tests {
     }
 
     #[test]
-    fn test_routing_delete_always_governance_track() {
-        assert!(requires_governance(
+    fn test_routing_delete_project_draft_is_fast_track() {
+        assert!(!requires_governance(
             KnowledgeLayer::Project,
+            KnowledgeStatus::Draft,
+            &WriteOperation::Delete,
+        ));
+    }
+
+    #[test]
+    fn test_routing_delete_team_is_governance_track() {
+        assert!(requires_governance(
+            KnowledgeLayer::Team,
             KnowledgeStatus::Draft,
             &WriteOperation::Delete,
         ));
