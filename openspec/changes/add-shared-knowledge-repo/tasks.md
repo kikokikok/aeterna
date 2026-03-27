@@ -96,9 +96,9 @@
 - [x] 10.2 Run `cargo test -p knowledge` — verify unit tests pass
 - [x] 10.3 Commit and push code to `kikokikok/aeterna` on `feat/server-runtime-deploy`
 - [x] 10.4 Trigger GitHub Actions build → new Docker image
-- [ ] 10.5 Helm upgrade with new image tag and knowledge repo config
-- [ ] 10.6 Patch Dragonfly service selector (recurring workaround)
-- [ ] 10.7 Verify all pods Running and healthy
-- [ ] 10.8 Re-run Newman E2E tests — target 79/79 passing (multi-replica consistency fixed)
+- [x] 10.5 Helm upgrade with new image tag and knowledge repo config
+- [x] 10.6 Patch Dragonfly service selector (recurring workaround)
+- [x] 10.7 Verify all pods Running and healthy
+- [x] 10.8 Re-run Newman E2E tests — target 79/79 passing (multi-replica consistency fixed)
 - [ ] 10.9 Test governance-track: create a Team-layer knowledge entry → verify PR created in GitHub
 - [ ] 10.10 Test webhook: merge the PR in GitHub → verify entry appears on main, GovernanceEvent emitted

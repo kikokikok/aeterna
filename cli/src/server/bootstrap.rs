@@ -62,6 +62,7 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
                     repo.clone(),
                     config.knowledge_repo.webhook_secret.clone(),
                 )
+                .await
                 .context("Failed to build GitHub App provider")?,
             ))
         } else if let Some(token) = &config.knowledge_repo.github_token {

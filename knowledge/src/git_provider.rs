@@ -198,7 +198,7 @@ pub enum GitProviderError {
 }
 
 pub struct GitHubProvider {
-    client: Arc<octocrab::Octocrab>,
+    client: Arc<Mutex<octocrab::Octocrab>>,
     owner: String,
     repo: String,
     webhook_secret: Option<String>,
@@ -223,7 +223,7 @@ impl GitHubProvider {
             expires_at: std::time::Instant::now() + std::time::Duration::from_secs(86400 * 365),
         })));
         Ok(Self {
-            client: Arc::new(client),
+            client: Arc::new(Mutex::new(client)),
             owner,
             repo,
             webhook_secret,
@@ -232,7 +232,7 @@ impl GitHubProvider {
         })
     }
 
-    pub fn new_with_app(
+    pub async fn new_with_app(
         app_id: u64,
         installation_id: u64,
         pem_key: &str,
@@ -241,30 +241,106 @@ impl GitHubProvider {
         webhook_secret: Option<String>,
     ) -> Result<Self, GitProviderError> {
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        let key = jsonwebtoken::EncodingKey::from_rsa_pem(pem_key.as_bytes())
+        let _ = jsonwebtoken::EncodingKey::from_rsa_pem(pem_key.as_bytes())
             .map_err(|e| GitProviderError::Auth(format!("Invalid PEM key: {e}")))?;
 
-        let app_client = octocrab::Octocrab::builder()
-            .app(app_id.into(), key)
+        let app_credentials = AppCredentials {
+            app_id,
+            installation_id,
+            pem_key: pem_key.to_string(),
+        };
+
+        // Mint an installation token immediately and build a PAT-based client.
+        // This avoids octocrab's internal JWT→installation flow which produces
+        // opaque errors on some versions.
+        let token = Self::mint_installation_token(&app_credentials).await?;
+
+        let client = octocrab::Octocrab::builder()
+            .personal_token(token.clone())
             .build()
             .map_err(|e| GitProviderError::Auth(e.to_string()))?;
 
-        let installation_client = app_client
-            .installation(octocrab::models::InstallationId(installation_id))
-            .map_err(|e| GitProviderError::Auth(e.to_string()))?;
+        let token_cache = Arc::new(Mutex::new(Some(CachedToken {
+            token,
+            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(55 * 60),
+        })));
 
         Ok(Self {
-            client: Arc::new(installation_client),
+            client: Arc::new(Mutex::new(client)),
             owner,
             repo,
             webhook_secret,
-            app_credentials: Some(AppCredentials {
-                app_id,
-                installation_id,
-                pem_key: pem_key.to_string(),
-            }),
-            token_cache: Arc::new(Mutex::new(None)),
+            app_credentials: Some(app_credentials),
+            token_cache,
         })
+    }
+
+    async fn mint_installation_token(creds: &AppCredentials) -> Result<String, GitProviderError> {
+        let now = chrono::Utc::now();
+        let claims = serde_json::json!({
+            "iat": (now - chrono::Duration::seconds(60)).timestamp(),
+            "exp": (now + chrono::Duration::seconds(600)).timestamp(),
+            "iss": creds.app_id.to_string(),
+        });
+
+        let jwt_key = jsonwebtoken::EncodingKey::from_rsa_pem(creds.pem_key.as_bytes())
+            .map_err(|e| GitProviderError::Auth(format!("PEM encode error: {e}")))?;
+        let jwt = jsonwebtoken::encode(
+            &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256),
+            &claims,
+            &jwt_key,
+        )
+        .map_err(|e| GitProviderError::Auth(format!("JWT sign error: {e}")))?;
+
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let http_client = octocrab::Octocrab::builder()
+            .personal_token(jwt)
+            .build()
+            .map_err(|e| GitProviderError::Auth(e.to_string()))?;
+
+        let url = format!("/app/installations/{}/access_tokens", creds.installation_id);
+        let resp: serde_json::Value = http_client
+            .post(url, None::<&()>)
+            .await
+            .map_err(|e| GitProviderError::Auth(format!("Token exchange failed: {e}")))?;
+
+        resp["token"]
+            .as_str()
+            .ok_or_else(|| GitProviderError::Auth("No token in response".to_string()))
+            .map(|s| s.to_string())
+    }
+
+    async fn ensure_fresh_client(&self) -> Result<(), GitProviderError> {
+        let needs_refresh = {
+            let cache = self.token_cache.lock().await;
+            match *cache {
+                Some(ref cached) => cached.expires_at <= std::time::Instant::now(),
+                None => self.app_credentials.is_some(),
+            }
+        };
+
+        if !needs_refresh {
+            return Ok(());
+        }
+
+        let creds = self.app_credentials.as_ref().ok_or_else(|| {
+            GitProviderError::Auth("No App credentials for token refresh".to_string())
+        })?;
+
+        let token = Self::mint_installation_token(creds).await?;
+
+        let new_client = octocrab::Octocrab::builder()
+            .personal_token(token.clone())
+            .build()
+            .map_err(|e| GitProviderError::Auth(e.to_string()))?;
+
+        *self.client.lock().await = new_client;
+        *self.token_cache.lock().await = Some(CachedToken {
+            token,
+            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(55 * 60),
+        });
+
+        Ok(())
     }
 
     pub async fn find_existing_pr(
@@ -294,6 +370,11 @@ impl GitHubProvider {
             .map_err(|_| GitProviderError::InvalidSignature)
     }
 
+    async fn client(&self) -> Result<octocrab::Octocrab, GitProviderError> {
+        self.ensure_fresh_client().await?;
+        Ok(self.client.lock().await.clone())
+    }
+
     fn pr_from_octocrab(pr: &octocrab::models::pulls::PullRequest) -> PullRequestInfo {
         PullRequestInfo {
             number: pr.number,
@@ -320,7 +401,8 @@ impl GitHubProvider {
 impl GitProvider for GitHubProvider {
     async fn create_branch(&self, name: &str, from_sha: &str) -> Result<(), GitProviderError> {
         use octocrab::params::repos::Reference;
-        self.client
+        let client = self.client().await?;
+        client
             .repos(&self.owner, &self.repo)
             .create_ref(&Reference::Branch(name.to_string()), from_sha)
             .await
@@ -343,7 +425,8 @@ impl GitProvider for GitHubProvider {
         message: &str,
     ) -> Result<String, GitProviderError> {
         let existing_sha = self.get_file_sha(branch, path).await?;
-        let repos = self.client.repos(&self.owner, &self.repo);
+        let client = self.client().await?;
+        let repos = client.repos(&self.owner, &self.repo);
 
         let file_update = if let Some(sha) = existing_sha {
             repos
@@ -372,7 +455,8 @@ impl GitProvider for GitHubProvider {
         base: &str,
     ) -> Result<PullRequestInfo, GitProviderError> {
         let pr = self
-            .client
+            .client()
+            .await?
             .pulls(&self.owner, &self.repo)
             .create(title, head, base)
             .body(body)
@@ -393,7 +477,8 @@ impl GitProvider for GitHubProvider {
             MergeMethod::Rebase => octocrab::params::pulls::MergeMethod::Rebase,
         };
         let result = self
-            .client
+            .client()
+            .await?
             .pulls(&self.owner, &self.repo)
             .merge(pr_number)
             .method(method)
@@ -414,8 +499,8 @@ impl GitProvider for GitHubProvider {
         &self,
         head_prefix: Option<&str>,
     ) -> Result<Vec<PullRequestInfo>, GitProviderError> {
-        let mut page = self
-            .client
+        let client = self.client().await?;
+        let mut page = client
             .pulls(&self.owner, &self.repo)
             .list()
             .state(octocrab::params::State::Open)
@@ -436,8 +521,7 @@ impl GitProvider for GitHubProvider {
                     results.push(info);
                 }
             }
-            match self
-                .client
+            match client
                 .get_page::<octocrab::models::pulls::PullRequest>(&page.next)
                 .await
                 .map_err(|e| GitProviderError::Api(e.to_string()))?
@@ -517,8 +601,8 @@ impl GitProvider for GitHubProvider {
     async fn get_default_branch_sha(&self) -> Result<String, GitProviderError> {
         use octocrab::params::repos::Reference;
 
-        let repo = self
-            .client
+        let client = self.client().await?;
+        let repo = client
             .repos(&self.owner, &self.repo)
             .get()
             .await
@@ -526,8 +610,7 @@ impl GitProvider for GitHubProvider {
 
         let default_branch = repo.default_branch.as_deref().unwrap_or("main");
 
-        let git_ref = self
-            .client
+        let git_ref = client
             .repos(&self.owner, &self.repo)
             .get_ref(&Reference::Branch(default_branch.to_string()))
             .await
@@ -546,62 +629,13 @@ impl GitProvider for GitHubProvider {
     }
 
     async fn get_installation_token(&self) -> Result<String, GitProviderError> {
-        {
-            let cache = self.token_cache.lock().await;
-            if let Some(ref cached) = *cache {
-                if cached.expires_at > std::time::Instant::now() {
-                    return Ok(cached.token.clone());
-                }
-            }
-        }
+        self.ensure_fresh_client().await?;
 
-        let creds = self
-            .app_credentials
+        let cache = self.token_cache.lock().await;
+        cache
             .as_ref()
-            .ok_or_else(|| GitProviderError::Auth(
-                "No App credentials configured; cannot mint installation token (PAT auth does not support token extraction)".to_string(),
-            ))?;
-
-        let now = chrono::Utc::now();
-        let claims = serde_json::json!({
-            "iat": (now - chrono::Duration::seconds(60)).timestamp(),
-            "exp": (now + chrono::Duration::seconds(600)).timestamp(),
-            "iss": creds.app_id.to_string(),
-        });
-
-        let jwt_key = jsonwebtoken::EncodingKey::from_rsa_pem(creds.pem_key.as_bytes())
-            .map_err(|e| GitProviderError::Auth(format!("PEM encode error: {e}")))?;
-        let jwt = jsonwebtoken::encode(
-            &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256),
-            &claims,
-            &jwt_key,
-        )
-        .map_err(|e| GitProviderError::Auth(format!("JWT sign error: {e}")))?;
-
-        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        let http_client = octocrab::Octocrab::builder()
-            .personal_token(jwt)
-            .build()
-            .map_err(|e| GitProviderError::Auth(e.to_string()))?;
-
-        let url = format!("/app/installations/{}/access_tokens", creds.installation_id);
-        let resp: serde_json::Value = http_client
-            .post(url, None::<&()>)
-            .await
-            .map_err(|e| GitProviderError::Auth(format!("Token exchange failed: {e}")))?;
-
-        let token = resp["token"]
-            .as_str()
-            .ok_or_else(|| GitProviderError::Auth("No token in response".to_string()))?
-            .to_string();
-
-        let mut cache = self.token_cache.lock().await;
-        *cache = Some(CachedToken {
-            token: token.clone(),
-            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(55 * 60),
-        });
-
-        Ok(token)
+            .map(|c| c.token.clone())
+            .ok_or_else(|| GitProviderError::Auth("No token available after refresh".to_string()))
     }
 }
 
@@ -616,7 +650,8 @@ impl GitHubProvider {
             self.owner, self.repo
         );
         match self
-            .client
+            .client()
+            .await?
             .get::<serde_json::Value, _, _>(url, None::<&()>)
             .await
         {
@@ -647,7 +682,7 @@ mod tests {
     fn test_provider(webhook_secret: Option<String>) -> GitHubProvider {
         init_crypto();
         GitHubProvider {
-            client: Arc::new(octocrab::Octocrab::default()),
+            client: Arc::new(Mutex::new(octocrab::Octocrab::default())),
             owner: "test".to_string(),
             repo: "test".to_string(),
             webhook_secret,
