@@ -3,6 +3,7 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::error;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -375,6 +376,15 @@ impl GitHubProvider {
         Ok(self.client.lock().await.clone())
     }
 
+    /// Convert an octocrab error to a GitProviderError with full debug details.
+    /// octocrab's Display impl often just prints "GitHub" — Debug reveals the
+    /// actual HTTP status and response body.
+    fn api_err(context: &str, e: octocrab::Error) -> GitProviderError {
+        let err_debug = format!("{e:?}");
+        error!(%context, error = %err_debug, "GitHub API call failed");
+        GitProviderError::Api(format!("{context}: {err_debug}"))
+    }
+
     fn pr_from_octocrab(pr: &octocrab::models::pulls::PullRequest) -> PullRequestInfo {
         PullRequestInfo {
             number: pr.number,
@@ -407,11 +417,11 @@ impl GitProvider for GitHubProvider {
             .create_ref(&Reference::Branch(name.to_string()), from_sha)
             .await
             .map_err(|e| {
-                let msg = e.to_string();
-                if msg.contains("Reference already exists") {
+                let err_debug = format!("{e:?}");
+                if err_debug.contains("Reference already exists") {
                     GitProviderError::BranchExists(name.to_string())
                 } else {
-                    GitProviderError::Api(msg)
+                    Self::api_err("create_branch", e)
                 }
             })?;
         Ok(())
@@ -441,7 +451,7 @@ impl GitProvider for GitHubProvider {
                 .send()
                 .await
         }
-        .map_err(|e| GitProviderError::Api(e.to_string()))?;
+        .map_err(|e| Self::api_err("commit_to_branch", e))?;
 
         let commit_sha = file_update.commit.sha.unwrap_or_default();
         Ok(commit_sha)
@@ -462,7 +472,7 @@ impl GitProvider for GitHubProvider {
             .body(body)
             .send()
             .await
-            .map_err(|e| GitProviderError::Api(e.to_string()))?;
+            .map_err(|e| Self::api_err("create_pull_request", e))?;
         Ok(Self::pr_from_octocrab(&pr))
     }
 
@@ -485,11 +495,12 @@ impl GitProvider for GitHubProvider {
             .send()
             .await
             .map_err(|e| {
-                let msg = e.to_string();
-                if msg.contains("404") {
+                let err_debug = format!("{e:?}");
+                if err_debug.contains("404") {
+                    error!(pr_number, error = %err_debug, "merge_pull_request: PR not found");
                     GitProviderError::PrNotFound(pr_number)
                 } else {
-                    GitProviderError::Api(msg)
+                    Self::api_err("merge_pull_request", e)
                 }
             })?;
         Ok(result.sha.unwrap_or_default())
@@ -507,7 +518,7 @@ impl GitProvider for GitHubProvider {
             .per_page(100)
             .send()
             .await
-            .map_err(|e| GitProviderError::Api(e.to_string()))?;
+            .map_err(|e| Self::api_err("list_open_prs", e))?;
 
         let mut results: Vec<PullRequestInfo> = Vec::new();
         loop {
@@ -524,7 +535,7 @@ impl GitProvider for GitHubProvider {
             match client
                 .get_page::<octocrab::models::pulls::PullRequest>(&page.next)
                 .await
-                .map_err(|e| GitProviderError::Api(e.to_string()))?
+                .map_err(|e| Self::api_err("list_open_prs pagination", e))?
             {
                 Some(next_page) => page = next_page,
                 None => break,
@@ -606,7 +617,7 @@ impl GitProvider for GitHubProvider {
             .repos(&self.owner, &self.repo)
             .get()
             .await
-            .map_err(|e| GitProviderError::Api(e.to_string()))?;
+            .map_err(|e| Self::api_err("get_default_branch_sha: get repo", e))?;
 
         let default_branch = repo.default_branch.as_deref().unwrap_or("main");
 
@@ -614,7 +625,7 @@ impl GitProvider for GitHubProvider {
             .repos(&self.owner, &self.repo)
             .get_ref(&Reference::Branch(default_branch.to_string()))
             .await
-            .map_err(|e| GitProviderError::Api(e.to_string()))?;
+            .map_err(|e| Self::api_err("get_default_branch_sha: get ref", e))?;
 
         let sha = match git_ref.object {
             octocrab::models::repos::Object::Commit { sha, .. }
@@ -657,11 +668,12 @@ impl GitHubProvider {
         {
             Ok(resp) => Ok(resp["sha"].as_str().map(String::from)),
             Err(e) => {
-                let msg = e.to_string();
-                if msg.contains("404") || msg.contains("Not Found") {
+                let err_debug = format!("{e:?}");
+                if err_debug.contains("404") || err_debug.contains("Not Found") {
                     Ok(None)
                 } else {
-                    Err(GitProviderError::Api(msg))
+                    error!(branch, path, error = %err_debug, "get_file_sha: GitHub API call failed");
+                    Err(GitProviderError::Api(format!("get_file_sha: {err_debug}")))
                 }
             }
         }
