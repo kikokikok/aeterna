@@ -495,6 +495,11 @@ pub async fn initialize_github_sync_schema(pool: &PgPool) -> IdpSyncResult<()> {
         .await
         .map_err(IdpSyncError::DatabaseError)?;
 
+    sqlx::query(r#"CREATE EXTENSION IF NOT EXISTS "uuid-ossp""#)
+        .execute(pool)
+        .await
+        .map_err(IdpSyncError::DatabaseError)?;
+
     // Tenants table — required before resolve_tenant_id() can query it
     sqlx::query(
         r#"
