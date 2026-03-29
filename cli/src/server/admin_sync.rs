@@ -54,6 +54,11 @@ async fn handle_github_sync(State(state): State<Arc<AppState>>) -> impl IntoResp
 
 async fn run_sync(state: &Arc<AppState>) -> anyhow::Result<idp_sync::sync::SyncReport> {
     let github_config = build_github_config()?;
+
+    idp_sync::github::initialize_github_sync_schema(state.postgres.pool())
+        .await
+        .map_err(|e| anyhow::anyhow!("Schema init failed: {e:?}"))?;
+
     let tenant_id = resolve_tenant_id(state).await?;
 
     tracing::info!(
@@ -66,6 +71,12 @@ async fn run_sync(state: &Arc<AppState>) -> anyhow::Result<idp_sync::sync::SyncR
         idp_sync::github::run_github_sync(&github_config, state.postgres.pool(), tenant_id)
             .await
             .map_err(|e| anyhow::anyhow!("GitHub sync failed: {e:?}"))?;
+
+    if let Err(e) =
+        idp_sync::github::bridge_sync_to_governance(state.postgres.pool(), tenant_id).await
+    {
+        tracing::warn!(error = ?e, "Governance bridge failed (non-fatal)");
+    }
 
     tracing::info!(
         users_created = report.users_created,

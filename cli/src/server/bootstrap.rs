@@ -356,7 +356,11 @@ fn build_anyhow_auth_service()
                 .context("AETERNA_CEDAR_POLICY_TEXT is required for cedar auth")?;
             let schema = std::env::var("AETERNA_CEDAR_SCHEMA_TEXT")
                 .context("AETERNA_CEDAR_SCHEMA_TEXT is required for cedar auth")?;
-            let service = CedarAuthorizer::new(&policy, &schema)?;
+            let mut service = CedarAuthorizer::new(&policy, &schema)?;
+            if let Ok(url) = std::env::var("AETERNA_OPAL_FETCHER_URL") {
+                tracing::info!(url = %url, "Cedar auth: OPAL fetcher configured");
+                service = service.with_opal_fetcher(url);
+            }
             Ok(Arc::new(AnyhowAuthWrapper { inner: service }))
         }
         "permit" => {

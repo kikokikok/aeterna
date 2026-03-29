@@ -1,0 +1,110 @@
+## Tier 0 — BROKEN: Fix Sync → OPAL → Cedar Pipeline
+
+### 0.1 Schema Initialization Fixes
+- [x] 0.1.1 Add `CREATE TABLE IF NOT EXISTS tenants` DDL to `initialize_github_sync_schema()` in `idp-sync/src/github.rs`
+- [x] 0.1.2 Add `CREATE TABLE IF NOT EXISTS agents` DDL to `initialize_github_sync_schema()` in `idp-sync/src/github.rs`
+- [x] 0.1.3 Add `ALTER TABLE organizational_units ADD COLUMN IF NOT EXISTS slug TEXT` to `initialize_github_sync_schema()` in `idp-sync/src/github.rs`
+- [x] 0.1.4 Call `initialize_github_sync_schema(pool)` as first line of `run_github_sync()` in `idp-sync/src/github.rs`
+- [x] 0.1.5 Call `idp_sync::github::initialize_github_sync_schema(pool)` before `resolve_tenant_id()` in `cli/src/server/admin_sync.rs::run_sync()`
+- [x] 0.1.6 Populate `slug` column in `GitHubHierarchyMapper::upsert_unit()` from GitHub team/org slug
+
+### 0.2 OPAL Authorization Views
+- [x] 0.2.1 Create `v_hierarchy` view joining `organizational_units` self-referentially to produce flattened Company->Org->Team->Project rows with UUID IDs and slugs
+- [x] 0.2.2 Create `v_user_permissions` view joining `users`, `memberships`, `organizational_units`, and `governance_roles` to produce user-team-role rows
+- [x] 0.2.3 Create `v_agent_permissions` view joining `agents` with `users` for delegation chain
+- [x] 0.2.4 Create `v_code_search_repositories`, `v_code_search_requests`, `v_code_search_identities` stub views (return empty until codesearch tables exist)
+- [x] 0.2.5 Add all views to `initialize_github_sync_schema()` or a new `initialize_opal_views()` function
+
+### 0.3 Sync-to-Governance Bridge
+- [x] 0.3.1 Create `bridge_sync_to_governance()` function in `idp-sync/src/github.rs` that maps `SyncReport` users/memberships to `governance_roles` entries
+- [x] 0.3.2 Create corresponding `user_roles` entries from synced data with proper tenant_id and unit_id
+- [x] 0.3.3 Call `bridge_sync_to_governance()` in `admin_sync.rs::run_sync()` after `run_github_sync()` returns
+- [ ] 0.3.4 Add integration test: verify governance_roles populated after sync
+
+### 0.4 PG NOTIFY Triggers
+- [x] 0.4.1 Create trigger function `fn_notify_entity_change()` that emits `NOTIFY aeterna_entity_change` with JSON payload
+- [x] 0.4.2 Attach trigger to `users`, `memberships`, `organizational_units`, `governance_roles`, `agents` tables (INSERT/UPDATE/DELETE)
+- [x] 0.4.3 Add triggers to schema initialization function
+
+### 0.5 Cedar Entity Loading
+- [x] 0.5.1 Add `reqwest` dependency to `adapters` crate for HTTP entity fetching
+- [x] 0.5.2 Refactor `CedarAuthorizer` to accept an OPAL fetcher URL and fetch entities via HTTP on cache miss
+- [x] 0.5.3 Add entity cache with configurable TTL (default 30s) using `tokio::sync::RwLock`
+- [x] 0.5.4 Add fallback: use cached entities if OPAL fetcher unreachable, deny if no cache
+- [x] 0.5.5 Update `bootstrap.rs` to pass OPAL fetcher URL to `CedarAuthorizer::new()`
+- [x] 0.5.6 Add unit test: mock OPAL fetcher response, verify entities loaded and authorization uses them
+
+### 0.6 Verification and Deployment
+- [x] 0.6.1 `cargo check --workspace` passes
+- [x] 0.6.2 `cargo test -p idp-sync` — all tests pass (41+)
+- [x] 0.6.3 `cargo test -p adapters` — all tests pass
+- [ ] 0.6.4 Commit, push, trigger GHA build
+- [ ] 0.6.5 Deploy new image to ci-dev-04 via Helm upgrade
+- [ ] 0.6.6 Trigger GitHub sync via admin endpoint, verify SyncReport with real kyriba-eng data
+- [ ] 0.6.7 `curl` OPAL fetcher `/v1/hierarchy` — verify Cedar entities present
+- [ ] 0.6.8 `curl` OPAL fetcher `/v1/users` — verify user permissions present
+- [ ] 0.6.9 Verify E2E Newman tests still pass (87/87 requests)
+
+## Tier 1 — HIGH VALUE: Enable Core Use Cases
+
+### 1.1 Code Search — External Skill Integration
+- [ ] 1.1.1 Define `CodeIntelligenceBackend` trait in `tools/src/codesearch/` with methods: `search`, `trace_callers`, `trace_callees`, `graph`, `index_status`
+- [ ] 1.1.2 Implement `McpCodeIntelligence` backend that proxies to any connected MCP code intelligence server (JetBrains, VS Code, etc.)
+- [ ] 1.1.3 Remove sidecar binary spawning from `tools/src/codesearch/client.rs` — replace with MCP client connection to discovered backend
+- [ ] 1.1.4 Update `tools/src/codesearch/tools.rs` MCP tool handlers to delegate to `CodeIntelligenceBackend` trait
+- [ ] 1.1.5 Add backend discovery: check for available MCP servers at agent startup, register tools only if a backend is found
+- [ ] 1.1.6 Add graceful degradation: if no backend available, tools return informative error ("Install JetBrains Code Intelligence MCP plugin or compatible backend")
+- [ ] 1.1.7 Add integration test: mock MCP code intelligence server, verify tool delegation works
+
+### 1.2 Hybrid Deployment — Local Docker Compose
+- [ ] 1.2.1 Add `aeterna` service to `docker-compose.yml` with proper build context and env vars
+- [ ] 1.2.2 Add `AETERNA_` environment variables to docker-compose for local mode (PostgreSQL, Qdrant, Redis URLs)
+- [ ] 1.2.3 Document hybrid deployment architecture in `docs/guides/hybrid-deployment.md`
+- [ ] 1.2.4 Test: `docker compose up` starts all services and Aeterna responds on `localhost:8080`
+
+### 1.3 OpenCode Plugin MCP Wiring
+- [ ] 1.3.1 Wire memory MCP tools (memory_add, memory_search, memory_delete, memory_feedback, memory_optimize) in the NPM plugin
+- [ ] 1.3.2 Wire knowledge MCP tools (knowledge_query, knowledge_check, knowledge_show) in the NPM plugin
+- [ ] 1.3.3 Wire graph MCP tools (graph_query, graph_neighbors, graph_path) in the NPM plugin
+- [ ] 1.3.4 Add plugin configuration for Aeterna server URL
+
+### 1.4 Close Remaining OpenSpec Changes
+- [ ] 1.4.1 Complete `add-shared-knowledge-repo` tasks 10.9, 10.10 (73/75 to 75/75)
+- [ ] 1.4.2 Complete `add-server-runtime` task (60/61 to 61/61)
+- [ ] 1.4.3 Complete `add-cloud-llm-providers` task (15/16 to 16/16)
+- [ ] 1.4.4 Complete `fix-production-readiness-gaps` tasks (16/20 to 20/20)
+
+## Tier 2 — IMPORTANT: Full Vision
+
+### 2.1 Memory System E2E Validation
+- [ ] 2.1.1 Fix `PolicyRule` struct field mismatch in `memory/tests/llm_google_e2e_test.rs`
+- [ ] 2.1.2 Create integration test: full 7-layer memory promotion chain (sensory to working to episodic to semantic) with real Qdrant
+- [ ] 2.1.3 Create integration test: Memory-R1 reward propagation with graph traversal
+- [ ] 2.1.4 Create integration test: RLM query routing with complexity-based strategy selection
+
+### 2.2 Observability
+- [ ] 2.2.1 Add SLO monitoring module to `observability/src/` with configurable thresholds
+- [ ] 2.2.2 Add OpenTelemetry span instrumentation to `cli/src/server/` handlers
+- [ ] 2.2.3 Add OpenTelemetry span instrumentation to `memory/src/manager.rs` operations
+- [ ] 2.2.4 Add OpenTelemetry span instrumentation to `knowledge/src/manager.rs` operations
+- [ ] 2.2.5 Propagate trace context in HTTP calls to OPAL fetcher
+
+### 2.3 Cloud Deployment (OpenTofu)
+- [ ] 2.3.1 Create OpenTofu module for GCP: GKE cluster, Cloud SQL, Memorystore Redis, GCS bucket
+- [ ] 2.3.2 Create OpenTofu module for AWS: EKS cluster, RDS PostgreSQL, ElastiCache, S3 bucket
+- [ ] 2.3.3 Add CMEK encryption to all stateful resources in both modules
+- [ ] 2.3.4 Document cloud deployment in `docs/guides/cloud-deployment.md`
+
+## Tier 3 — FUTURE: Polish and Scale
+
+### 3.1 Code Search — Remove Legacy Sidecar
+- [ ] 3.1.1 Remove `tools/src/codesearch/client.rs` sidecar binary spawning code entirely
+- [ ] 3.1.2 Remove CLI commands that shell out to external `codesearch` binary (`cli/src/commands/search/`)
+- [ ] 3.1.3 Clean up unused types in `tools/src/codesearch/types.rs` that were specific to the sidecar protocol
+- [ ] 3.1.4 Update OpenCode plugin to remove hardcoded codesearch tool names — use dynamic MCP tool discovery
+
+### 3.2 Memory Pipeline Hardening
+- [ ] 3.2.1 Wire PII redaction (`storage/src/gdpr.rs`) into memory add pipeline
+- [ ] 3.2.2 Add per-tenant metrics to `observability/src/cost_tracking.rs`
+- [ ] 3.2.3 Configure HPA (Horizontal Pod Autoscaler) in Helm chart
+- [ ] 3.2.4 Configure PDB (PodDisruptionBudget) in Helm chart

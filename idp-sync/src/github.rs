@@ -495,6 +495,20 @@ pub async fn initialize_github_sync_schema(pool: &PgPool) -> IdpSyncResult<()> {
         .await
         .map_err(IdpSyncError::DatabaseError)?;
 
+    // Tenants table — required before resolve_tenant_id() can query it
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS tenants (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS users (
@@ -549,11 +563,47 @@ pub async fn initialize_github_sync_schema(pool: &PgPool) -> IdpSyncResult<()> {
     .await
     .map_err(IdpSyncError::DatabaseError)?;
 
+    // Agents table — required for v_agent_permissions OPAL view
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS agents (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name TEXT NOT NULL,
+            agent_type TEXT NOT NULL DEFAULT 'coding-assistant',
+            delegated_by_user_id UUID REFERENCES users(id),
+            delegated_by_agent_id UUID,
+            delegation_depth INT NOT NULL DEFAULT 0,
+            capabilities JSONB DEFAULT '[]',
+            allowed_company_ids UUID[],
+            allowed_org_ids UUID[],
+            allowed_team_ids UUID[],
+            allowed_project_ids UUID[],
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
     sqlx::query(
         r#"
         ALTER TABLE organizational_units
             ADD COLUMN IF NOT EXISTS external_id TEXT,
             ADD COLUMN IF NOT EXISTS idp_provider TEXT
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    // Slug column — required for OPAL hierarchy view (company_slug, org_slug, team_slug)
+    sqlx::query(
+        r#"
+        ALTER TABLE organizational_units
+            ADD COLUMN IF NOT EXISTS slug TEXT
         "#,
     )
     .execute(pool)
@@ -571,7 +621,251 @@ pub async fn initialize_github_sync_schema(pool: &PgPool) -> IdpSyncResult<()> {
     .await
     .map_err(IdpSyncError::DatabaseError)?;
 
+    initialize_opal_views(pool).await?;
+    initialize_notify_triggers(pool).await?;
+
     info!("GitHub sync schema initialized");
+    Ok(())
+}
+
+async fn initialize_opal_views(pool: &PgPool) -> IdpSyncResult<()> {
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE VIEW v_hierarchy AS
+        WITH RECURSIVE unit_tree AS (
+            SELECT
+                id,
+                name,
+                type,
+                slug,
+                parent_id,
+                tenant_id,
+                metadata,
+                id AS root_id
+            FROM organizational_units
+            WHERE type = 'company'
+
+            UNION ALL
+
+            SELECT
+                ou.id,
+                ou.name,
+                ou.type,
+                ou.slug,
+                ou.parent_id,
+                ou.tenant_id,
+                ou.metadata,
+                ut.root_id
+            FROM organizational_units ou
+            JOIN unit_tree ut ON ou.parent_id = ut.id
+        )
+        SELECT
+            uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, c.id) AS company_id,
+            c.slug AS company_slug,
+            c.name AS company_name,
+            CASE WHEN o.id IS NOT NULL THEN uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, o.id) END AS org_id,
+            o.slug AS org_slug,
+            o.name AS org_name,
+            CASE WHEN t.id IS NOT NULL THEN uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, t.id) END AS team_id,
+            t.slug AS team_slug,
+            t.name AS team_name,
+            CASE WHEN p.id IS NOT NULL THEN uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, p.id) END AS project_id,
+            p.slug AS project_slug,
+            p.name AS project_name,
+            p.metadata->>'git_remote' AS git_remote
+        FROM unit_tree c
+        LEFT JOIN unit_tree o ON o.parent_id = c.id AND o.type = 'organization'
+        LEFT JOIN unit_tree t ON t.parent_id = o.id AND t.type = 'team'
+        LEFT JOIN unit_tree p ON p.parent_id = t.id AND p.type = 'project'
+        WHERE c.type = 'company'
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE VIEW v_user_permissions AS
+        SELECT
+            u.id AS user_id,
+            u.email,
+            u.display_name AS user_name,
+            CASE WHEN u.is_active THEN 'active' ELSE 'inactive' END AS user_status,
+            uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, team_ou.id) AS team_id,
+            COALESCE(gr.role, m.role) AS role,
+            COALESCE(gr_permissions.permissions, '[]'::JSONB) AS permissions,
+            uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, org_ou.id) AS org_id,
+            uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, company_ou.id) AS company_id,
+            company_ou.slug AS company_slug,
+            org_ou.slug AS org_slug,
+            team_ou.slug AS team_slug
+        FROM users u
+        JOIN memberships m ON m.user_id = u.id
+        JOIN organizational_units team_ou ON team_ou.id = m.team_id::TEXT
+        LEFT JOIN organizational_units org_ou ON org_ou.id = team_ou.parent_id AND org_ou.type IN ('organization', 'company')
+        LEFT JOIN organizational_units company_ou ON company_ou.id = org_ou.parent_id AND company_ou.type = 'company'
+        LEFT JOIN governance_roles gr ON gr.principal_id = u.id AND gr.principal_type = 'user'
+            AND gr.team_id = uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, team_ou.id)
+            AND gr.revoked_at IS NULL
+        LEFT JOIN LATERAL (
+            SELECT '[]'::JSONB AS permissions
+        ) gr_permissions ON TRUE
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE VIEW v_agent_permissions AS
+        SELECT
+            a.id AS agent_id,
+            a.name AS agent_name,
+            a.agent_type,
+            a.delegated_by_user_id,
+            a.delegated_by_agent_id,
+            a.delegation_depth,
+            a.capabilities,
+            a.allowed_company_ids,
+            a.allowed_org_ids,
+            a.allowed_team_ids,
+            a.allowed_project_ids,
+            a.status AS agent_status,
+            u.email AS delegating_user_email,
+            u.display_name AS delegating_user_name
+        FROM agents a
+        LEFT JOIN users u ON u.id = a.delegated_by_user_id
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE VIEW v_code_search_repositories AS
+        SELECT
+            '00000000-0000-0000-0000-000000000000'::UUID AS id,
+            '' AS tenant_id,
+            '' AS name,
+            '' AS status,
+            '' AS sync_strategy,
+            '' AS current_branch
+        WHERE FALSE
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE VIEW v_code_search_requests AS
+        SELECT
+            '00000000-0000-0000-0000-000000000000'::UUID AS id,
+            '00000000-0000-0000-0000-000000000000'::UUID AS repository_id,
+            '' AS requester_id,
+            '' AS status,
+            '' AS tenant_id
+        WHERE FALSE
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE VIEW v_code_search_identities AS
+        SELECT
+            '00000000-0000-0000-0000-000000000000'::UUID AS id,
+            '' AS tenant_id,
+            '' AS name,
+            '' AS provider
+        WHERE FALSE
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    info!("OPAL authorization views initialized");
+    Ok(())
+}
+
+async fn initialize_notify_triggers(pool: &PgPool) -> IdpSyncResult<()> {
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE FUNCTION fn_notify_entity_change()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            PERFORM pg_notify('aeterna_entity_change', json_build_object(
+                'type', TG_TABLE_NAME,
+                'op', TG_OP,
+                'id', COALESCE(NEW.id::TEXT, OLD.id::TEXT)
+            )::TEXT);
+            RETURN COALESCE(NEW, OLD);
+        END;
+        $$ LANGUAGE plpgsql
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query(
+        "DROP TRIGGER IF EXISTS trg_users_entity_change ON users; \
+         CREATE TRIGGER trg_users_entity_change \
+         AFTER INSERT OR UPDATE OR DELETE ON users \
+         FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query(
+        "DROP TRIGGER IF EXISTS trg_memberships_entity_change ON memberships; \
+         CREATE TRIGGER trg_memberships_entity_change \
+         AFTER INSERT OR UPDATE OR DELETE ON memberships \
+         FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query(
+        "DROP TRIGGER IF EXISTS trg_organizational_units_entity_change ON organizational_units; \
+         CREATE TRIGGER trg_organizational_units_entity_change \
+         AFTER INSERT OR UPDATE OR DELETE ON organizational_units \
+         FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query(
+        "DROP TRIGGER IF EXISTS trg_governance_roles_entity_change ON governance_roles; \
+         CREATE TRIGGER trg_governance_roles_entity_change \
+         AFTER INSERT OR UPDATE OR DELETE ON governance_roles \
+         FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query(
+        "DROP TRIGGER IF EXISTS trg_agents_entity_change ON agents; \
+         CREATE TRIGGER trg_agents_entity_change \
+         AFTER INSERT OR UPDATE OR DELETE ON agents \
+         FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    info!("PG NOTIFY triggers initialized");
     Ok(())
 }
 
@@ -586,7 +880,7 @@ impl GitHubHierarchyMapper {
         groups: &[IdpGroup],
     ) -> IdpSyncResult<HashMap<String, Uuid>> {
         let company_id = self
-            .upsert_unit(org_name, "company", None, org_name)
+            .upsert_unit(org_name, "company", None, org_name, org_name)
             .await?;
         info!(company_id = %company_id, org = %org_name, "Company unit ensured");
 
@@ -605,7 +899,13 @@ impl GitHubHierarchyMapper {
 
         for team in &top_level {
             let unit_id = self
-                .upsert_unit(&team.name, "organization", Some(company_id), &team.id)
+                .upsert_unit(
+                    &team.name,
+                    "organization",
+                    Some(company_id),
+                    &team.id,
+                    &team.id,
+                )
                 .await?;
             slug_to_unit_id.insert(team.id.clone(), unit_id);
             debug!(slug = %team.id, unit_id = %unit_id, "Organization unit ensured");
@@ -624,7 +924,7 @@ impl GitHubHierarchyMapper {
                 .unwrap_or(company_id);
 
             let unit_id = self
-                .upsert_unit(&team.name, "team", Some(parent_id), &team.id)
+                .upsert_unit(&team.name, "team", Some(parent_id), &team.id, &team.id)
                 .await?;
             slug_to_unit_id.insert(team.id.clone(), unit_id);
             debug!(slug = %team.id, parent = %parent_slug, unit_id = %unit_id, "Team unit ensured");
@@ -664,6 +964,7 @@ impl GitHubHierarchyMapper {
         unit_type: &str,
         parent_id: Option<Uuid>,
         external_id: &str,
+        slug: &str,
     ) -> IdpSyncResult<Uuid> {
         let now_epoch = Utc::now().timestamp();
         let new_id = Uuid::new_v4().to_string();
@@ -672,13 +973,14 @@ impl GitHubHierarchyMapper {
 
         let row = sqlx::query_scalar::<_, String>(
             r#"
-            INSERT INTO organizational_units (id, tenant_id, name, type, parent_id, external_id, idp_provider, metadata, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, 'github', '{}', $7, $7)
+            INSERT INTO organizational_units (id, tenant_id, name, type, parent_id, external_id, idp_provider, slug, metadata, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, 'github', $8, '{}', $7, $7)
             ON CONFLICT (tenant_id, external_id, idp_provider)
             DO UPDATE SET
                 name = EXCLUDED.name,
                 parent_id = EXCLUDED.parent_id,
                 type = EXCLUDED.type,
+                slug = EXCLUDED.slug,
                 updated_at = EXCLUDED.updated_at
             RETURNING id
             "#,
@@ -690,6 +992,7 @@ impl GitHubHierarchyMapper {
         .bind(&parent_str)
         .bind(external_id)
         .bind(now_epoch)
+        .bind(slug)
         .fetch_one(&self.db_pool)
         .await
         .map_err(IdpSyncError::DatabaseError)?;
@@ -704,6 +1007,9 @@ pub async fn run_github_sync(
     db_pool: &PgPool,
     tenant_id: Uuid,
 ) -> IdpSyncResult<crate::sync::SyncReport> {
+    // Ensure schema exists before any DB queries (CronJob path bypasses admin_sync.rs)
+    initialize_github_sync_schema(db_pool).await?;
+
     let github_client = GitHubClient::new(config.clone()).await?;
     let mapper = GitHubHierarchyMapper::new(db_pool.clone(), tenant_id);
 
@@ -735,6 +1041,84 @@ pub async fn run_github_sync(
     let report = sync_service.sync_all().await?;
 
     Ok(report)
+}
+
+pub async fn bridge_sync_to_governance(
+    pool: &PgPool,
+    tenant_id: Uuid,
+) -> IdpSyncResult<(usize, usize)> {
+    let tenant_uuid_expr =
+        format!("uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, '{tenant_id}')");
+    let _ = tenant_uuid_expr;
+
+    let roles_created = sqlx::query_scalar::<_, i64>(
+        r#"
+        WITH synced AS (
+            INSERT INTO governance_roles (
+                principal_type, principal_id, role,
+                company_id, org_id, team_id,
+                granted_by, granted_at
+            )
+            SELECT
+                'user',
+                u.id,
+                m.role,
+                NULL::UUID,
+                NULL::UUID,
+                uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, team_ou.id),
+                u.id,
+                NOW()
+            FROM users u
+            JOIN memberships m ON m.user_id = u.id
+            JOIN organizational_units team_ou ON team_ou.id = m.team_id::TEXT
+            ON CONFLICT (
+                principal_type, principal_id, role,
+                COALESCE(company_id, '00000000-0000-0000-0000-000000000000'::UUID),
+                COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::UUID),
+                COALESCE(team_id, '00000000-0000-0000-0000-000000000000'::UUID),
+                COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::UUID)
+            )
+            DO NOTHING
+            RETURNING 1
+        )
+        SELECT COUNT(*) FROM synced
+        "#,
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    let user_roles_created = sqlx::query_scalar::<_, i64>(
+        r#"
+        WITH synced AS (
+            INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at)
+            SELECT
+                u.id::TEXT,
+                team_ou.tenant_id,
+                team_ou.id,
+                m.role,
+                EXTRACT(EPOCH FROM NOW())::BIGINT
+            FROM users u
+            JOIN memberships m ON m.user_id = u.id
+            JOIN organizational_units team_ou ON team_ou.id = m.team_id::TEXT
+            ON CONFLICT (user_id, tenant_id, unit_id, role)
+            DO NOTHING
+            RETURNING 1
+        )
+        SELECT COUNT(*) FROM synced
+        "#,
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    info!(
+        governance_roles = roles_created,
+        user_roles = user_roles_created,
+        "Governance bridge completed"
+    );
+
+    Ok((roles_created as usize, user_roles_created as usize))
 }
 
 #[cfg(test)]
