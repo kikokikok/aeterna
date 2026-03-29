@@ -997,7 +997,7 @@ impl GitHubHierarchyMapper {
             r#"
             INSERT INTO organizational_units (id, tenant_id, name, type, parent_id, external_id, idp_provider, slug, metadata, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, 'github', $8, '{}', $7, $7)
-            ON CONFLICT (tenant_id, external_id, idp_provider)
+            ON CONFLICT (tenant_id, external_id, idp_provider) WHERE external_id IS NOT NULL AND idp_provider IS NOT NULL
             DO UPDATE SET
                 name = EXCLUDED.name,
                 parent_id = EXCLUDED.parent_id,

@@ -38,7 +38,7 @@
 - [x] 0.6.1 `cargo check --workspace` passes
 - [x] 0.6.2 `cargo test -p idp-sync` — all tests pass (41+)
 - [x] 0.6.3 `cargo test -p adapters` — all tests pass
-- [ ] 0.6.4 Commit, push, trigger GHA build
+- [x] 0.6.4 Commit, push, trigger GHA build (commit `035e96a`, GHA run `23706496924`)
 - [ ] 0.6.5 Deploy new image to ci-dev-04 via Helm upgrade
 - [ ] 0.6.6 Trigger GitHub sync via admin endpoint, verify SyncReport with real kyriba-eng data
 - [ ] 0.6.7 `curl` OPAL fetcher `/v1/hierarchy` — verify Cedar entities present

@@ -63,7 +63,7 @@
 
 ## 10. E2E Testing & Deployment
 
-- [ ] 10.1 Update GitHub App `aeterna-knowledge-bot` permissions: add Organization Members (Read), Organization Administration (Read)
-- [ ] 10.2 Subscribe GitHub App to `organization`, `team`, and `membership` webhook events
+- [x] 10.1 Update GitHub App `aeterna-knowledge-bot` permissions: add Organization Members (Read), Organization Administration (Read)
+- [x] 10.2 Subscribe GitHub App to `organization`, `team`, and `membership` webhook events
 - [x] 10.3 Add E2E Newman test for `POST /api/v1/admin/sync/github` endpoint (trigger sync, verify SyncReport response)
-- [ ] 10.4 Build, deploy, and verify full sync against live `kyriba-eng` org on ci-dev-04
+- [x] 10.4 Build, deploy, and verify full sync against live `kyriba-eng` org on ci-dev-04
