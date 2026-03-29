@@ -227,6 +227,42 @@ aeterna:
     ## @param aeterna.features.reflective Enable reflective reasoning
     reflective: true
 
+## GitHub Organization Sync configuration
+## Syncs GitHub Org teams and members into Aeterna's organizational hierarchy
+## Uses the GitHub App configured in knowledgeRepo.github for authentication
+githubOrgSync:
+  ## @param githubOrgSync.enabled Enable GitHub Organization sync
+  enabled: false
+  ## @param githubOrgSync.orgName GitHub Organization name to sync (e.g. "kyriba-eng")
+  orgName: ""
+  ## @param githubOrgSync.teamFilter Optional regex to filter teams (e.g. "^platform-")
+  teamFilter: ""
+  ## @param githubOrgSync.syncReposAsProjects Map team repositories as projects in the hierarchy
+  syncReposAsProjects: false
+  ## @param githubOrgSync.tenantId Tenant identifier for synced entities (name or UUID)
+  tenantId: "default"
+  ## CronJob configuration for periodic full resync
+  cronJob:
+    ## @param githubOrgSync.cronJob.enabled Enable CronJob for periodic GitHub org sync
+    enabled: false
+    ## @param githubOrgSync.cronJob.schedule Cron schedule expression (default: every 15 minutes)
+    schedule: "*/15 * * * *"
+    ## @param githubOrgSync.cronJob.successfulJobsHistoryLimit Number of successful jobs to retain
+    successfulJobsHistoryLimit: 3
+    ## @param githubOrgSync.cronJob.failedJobsHistoryLimit Number of failed jobs to retain
+    failedJobsHistoryLimit: 3
+    ## @param githubOrgSync.cronJob.backoffLimit Number of retries before marking job as failed
+    backoffLimit: 1
+    ## @param githubOrgSync.cronJob.activeDeadlineSeconds Maximum runtime per job execution (seconds)
+    activeDeadlineSeconds: 300
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
 ## Shared knowledge repository configuration
 ## Enables multi-replica consistency via a remote Git repository (GitHub)
 ## and PR-based governance for knowledge mutations at higher layers.

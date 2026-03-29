@@ -59,6 +59,13 @@ metrics = { workspace = true }
 
 # Crypto
 sha2 = { workspace = true }
+hmac = { workspace = true }
+
+# GitHub App auth
+octocrab = { workspace = true }
+jsonwebtoken = { workspace = true }
+regex = { workspace = true }
+rustls = { version = "0.23", features = ["aws_lc_rs"] }
 
 # URL encoding
 urlencoding = "2.1"

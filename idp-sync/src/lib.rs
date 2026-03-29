@@ -1,6 +1,7 @@
 pub mod azure;
 pub mod config;
 pub mod error;
+pub mod github;
 pub mod okta;
 pub mod scheduler;
 pub mod sync;

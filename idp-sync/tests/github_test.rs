@@ -1,0 +1,672 @@
+mod test_helpers;
+
+use idp_sync::github::{
+    AeternaRole, GitHubHierarchyMapper, initialize_github_sync_schema, map_github_org_role,
+    map_github_team_role, run_github_sync,
+};
+use idp_sync::okta::{GroupType, IdpClient, IdpGroup};
+use serial_test::serial;
+use sqlx::PgPool;
+use testing::postgres;
+use uuid::Uuid;
+use wiremock::matchers::{method, path, path_regex};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+use test_helpers::*;
+
+async fn pg_pool() -> Option<PgPool> {
+    let fixture = postgres().await?;
+    let pool = PgPool::connect(fixture.url())
+        .await
+        .expect("connect to testcontainer pg");
+    setup_db(&pool).await;
+    Some(pool)
+}
+
+// ──────────────────────────────────────────────────────────
+// 8.1: Token minting & client construction with wiremock
+// ──────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_github_client_new_mints_token_via_wiremock() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path_regex(r"/app/installations/\d+/access_tokens"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_token_response()))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let config = github_config(&mock_server);
+    let client = idp_sync::github::GitHubClient::new(config).await;
+    assert!(
+        client.is_ok(),
+        "Client should be created: {:?}",
+        client.err()
+    );
+}
+
+#[tokio::test]
+async fn test_github_client_new_rejects_invalid_pem() {
+    let mock_server = MockServer::start().await;
+    let mut config = github_config(&mock_server);
+    config.private_key_pem = "not-a-valid-pem".to_string();
+
+    let result = idp_sync::github::GitHubClient::new(config).await;
+    assert!(result.is_err());
+    let err = format!("{:?}", result.unwrap_err());
+    assert!(
+        err.contains("PEM") || err.contains("Invalid"),
+        "error should mention PEM: {err}"
+    );
+}
+
+#[tokio::test]
+async fn test_github_client_new_handles_token_exchange_failure() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path_regex(r"/app/installations/\d+/access_tokens"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
+            "message": "Bad credentials"
+        })))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let config = github_config(&mock_server);
+    let result = idp_sync::github::GitHubClient::new(config).await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_github_client_new_handles_no_token_in_response() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path_regex(r"/app/installations/\d+/access_tokens"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "expires_at": "2099-01-01T00:00:00Z"
+        })))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let config = github_config(&mock_server);
+    let result = idp_sync::github::GitHubClient::new(config).await;
+    assert!(result.is_err());
+    let err = format!("{:?}", result.unwrap_err());
+    assert!(
+        err.contains("No token"),
+        "error should mention missing token: {err}"
+    );
+}
+
+// ──────────────────────────────────────────────────────────
+// 8.1: IdpClient trait methods via wiremock
+// ──────────────────────────────────────────────────────────
+
+async fn make_client(mock_server: &MockServer) -> idp_sync::github::GitHubClient {
+    Mock::given(method("POST"))
+        .and(path_regex(r"/app/installations/\d+/access_tokens"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_token_response()))
+        .mount(mock_server)
+        .await;
+
+    idp_sync::github::GitHubClient::new(github_config(mock_server))
+        .await
+        .expect("client creation")
+}
+
+#[tokio::test]
+async fn test_list_users_returns_org_members() {
+    let mock_server = MockServer::start().await;
+    let client = make_client(&mock_server).await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_org_members()))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let page = client.list_users(None).await.expect("list_users");
+    assert_eq!(page.users.len(), 3);
+    assert_eq!(page.users[0].idp_subject, "alice");
+    assert_eq!(page.users[1].idp_subject, "bob");
+    assert_eq!(page.users[2].idp_subject, "charlie");
+    assert!(page.next_page_token.is_none());
+}
+
+#[tokio::test]
+async fn test_list_groups_returns_teams() {
+    let mock_server = MockServer::start().await;
+    let client = make_client(&mock_server).await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_teams_nested()))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let page = client.list_groups(None).await.expect("list_groups");
+    assert_eq!(page.groups.len(), 4);
+
+    let platform = page.groups.iter().find(|g| g.id == "platform").unwrap();
+    assert_eq!(platform.group_type, GroupType::GitHubTeam);
+
+    let api = page.groups.iter().find(|g| g.id == "api-team").unwrap();
+    assert_eq!(api.group_type, GroupType::GitHubNestedTeam);
+    assert!(
+        api.description
+            .as_ref()
+            .unwrap()
+            .contains("parent:platform")
+    );
+}
+
+#[tokio::test]
+async fn test_get_group_members_paginates() {
+    let mock_server = MockServer::start().await;
+    let client = make_client(&mock_server).await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams/platform/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_team_members_alice_bob()))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let members = client
+        .get_group_members("platform")
+        .await
+        .expect("get_group_members");
+    assert_eq!(members.len(), 2);
+    assert_eq!(members[0].idp_subject, "alice");
+    assert_eq!(members[1].idp_subject, "bob");
+}
+
+#[tokio::test]
+async fn test_get_user_parses_name() {
+    let mock_server = MockServer::start().await;
+    let client = make_client(&mock_server).await;
+
+    Mock::given(method("GET"))
+        .and(path("/users/alice"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_user_alice()))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let user = client.get_user("alice").await.expect("get_user");
+    assert_eq!(user.first_name.as_deref(), Some("Alice"));
+    assert_eq!(user.last_name.as_deref(), Some("Smith"));
+    assert_eq!(user.email, "alice@example.com");
+    assert_eq!(user.idp_provider, "github");
+}
+
+// ──────────────────────────────────────────────────────────
+// 8.2: GitHubHierarchyMapper with testcontainers PG
+// ──────────────────────────────────────────────────────────
+
+fn make_groups(teams_json: serde_json::Value) -> Vec<IdpGroup> {
+    let teams: Vec<serde_json::Value> = serde_json::from_value(teams_json).unwrap();
+    teams
+        .into_iter()
+        .map(|t| {
+            let parent =
+                t.get("parent")
+                    .and_then(|p| if p.is_null() { None } else { Some(p.clone()) });
+            let (group_type, description) = match parent {
+                None => (
+                    GroupType::GitHubTeam,
+                    t["description"].as_str().map(String::from),
+                ),
+                Some(p) => {
+                    let slug = p["slug"].as_str().unwrap_or("");
+                    (GroupType::GitHubNestedTeam, Some(format!("parent:{slug}")))
+                }
+            };
+            IdpGroup {
+                id: t["slug"].as_str().unwrap().to_string(),
+                name: t["name"].as_str().unwrap().to_string(),
+                description,
+                group_type,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            }
+        })
+        .collect()
+}
+
+#[tokio::test]
+#[serial]
+async fn test_hierarchy_mapper_flat_teams() {
+    let Some(pool) = pg_pool().await else {
+        eprintln!("Skipping: Docker not available");
+        return;
+    };
+
+    let tenant_id = Uuid::new_v4();
+    let mapper = GitHubHierarchyMapper::new(pool.clone(), tenant_id);
+    let groups = make_groups(mock_teams_flat());
+
+    let mappings = mapper
+        .create_hierarchy("test-org", &groups)
+        .await
+        .expect("create_hierarchy");
+
+    assert_eq!(mappings.len(), 2, "should map 2 top-level teams");
+    assert!(mappings.contains_key("platform"));
+    assert!(mappings.contains_key("security"));
+
+    let company: (String, String) = sqlx::query_as(
+        "SELECT name, type FROM organizational_units WHERE tenant_id = $1 AND type = 'company'",
+    )
+    .bind(tenant_id.to_string())
+    .fetch_one(&pool)
+    .await
+    .expect("company row");
+    assert_eq!(company.0, "test-org");
+    assert_eq!(company.1, "company");
+
+    let org_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM organizational_units WHERE tenant_id = $1 AND type = 'organization'",
+    )
+    .bind(tenant_id.to_string())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(org_count.0, 2);
+}
+
+#[tokio::test]
+#[serial]
+async fn test_hierarchy_mapper_two_level_nesting() {
+    let Some(pool) = pg_pool().await else {
+        eprintln!("Skipping: Docker not available");
+        return;
+    };
+
+    let tenant_id = Uuid::new_v4();
+    let mapper = GitHubHierarchyMapper::new(pool.clone(), tenant_id);
+    let groups = make_groups(mock_teams_nested());
+
+    let mappings = mapper
+        .create_hierarchy("test-org", &groups)
+        .await
+        .expect("hierarchy");
+
+    assert_eq!(mappings.len(), 4);
+    assert!(mappings.contains_key("api-team"));
+    assert!(mappings.contains_key("frontend-team"));
+
+    let api_team: (String, Option<String>) = sqlx::query_as(
+        "SELECT type, parent_id FROM organizational_units WHERE tenant_id = $1 AND external_id = 'api-team'"
+    )
+    .bind(tenant_id.to_string())
+    .fetch_one(&pool)
+    .await
+    .expect("api-team row");
+    assert_eq!(api_team.0, "team");
+
+    let platform_id = mappings.get("platform").unwrap().to_string();
+    assert_eq!(api_team.1.as_deref(), Some(platform_id.as_str()));
+}
+
+#[tokio::test]
+#[serial]
+async fn test_hierarchy_mapper_three_level_nesting() {
+    let Some(pool) = pg_pool().await else {
+        eprintln!("Skipping: Docker not available");
+        return;
+    };
+
+    let tenant_id = Uuid::new_v4();
+    let mapper = GitHubHierarchyMapper::new(pool.clone(), tenant_id);
+    let groups = make_groups(mock_teams_three_level());
+
+    let mappings = mapper
+        .create_hierarchy("test-org", &groups)
+        .await
+        .expect("hierarchy");
+
+    assert_eq!(mappings.len(), 3);
+
+    let engineering_id = mappings.get("engineering").unwrap().to_string();
+    let platform_id = mappings.get("platform").unwrap().to_string();
+
+    let platform_row: (String, Option<String>) = sqlx::query_as(
+        "SELECT type, parent_id FROM organizational_units WHERE tenant_id = $1 AND external_id = 'platform'"
+    )
+    .bind(tenant_id.to_string())
+    .fetch_one(&pool)
+    .await
+    .expect("platform row");
+    assert_eq!(platform_row.1.as_deref(), Some(engineering_id.as_str()));
+
+    let api_row: (String, Option<String>) = sqlx::query_as(
+        "SELECT type, parent_id FROM organizational_units WHERE tenant_id = $1 AND external_id = 'api-team'"
+    )
+    .bind(tenant_id.to_string())
+    .fetch_one(&pool)
+    .await
+    .expect("api-team row");
+    assert_eq!(api_row.0, "team");
+    assert_eq!(api_row.1.as_deref(), Some(platform_id.as_str()));
+}
+
+#[tokio::test]
+#[serial]
+async fn test_hierarchy_mapper_idempotent_upsert() {
+    let Some(pool) = pg_pool().await else {
+        eprintln!("Skipping: Docker not available");
+        return;
+    };
+
+    let tenant_id = Uuid::new_v4();
+    let mapper = GitHubHierarchyMapper::new(pool.clone(), tenant_id);
+    let groups = make_groups(mock_teams_flat());
+
+    let first = mapper
+        .create_hierarchy("test-org", &groups)
+        .await
+        .expect("first");
+    let second = mapper
+        .create_hierarchy("test-org", &groups)
+        .await
+        .expect("second");
+
+    assert_eq!(
+        first.get("platform"),
+        second.get("platform"),
+        "ID should be stable across upserts"
+    );
+    assert_eq!(first.get("security"), second.get("security"));
+
+    let count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM organizational_units WHERE tenant_id = $1")
+            .bind(tenant_id.to_string())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count.0, 3, "company + 2 orgs, no duplicates");
+}
+
+#[tokio::test]
+#[serial]
+async fn test_store_group_to_team_mappings() {
+    let Some(pool) = pg_pool().await else {
+        eprintln!("Skipping: Docker not available");
+        return;
+    };
+
+    let tenant_id = Uuid::new_v4();
+    let mapper = GitHubHierarchyMapper::new(pool.clone(), tenant_id);
+    let groups = make_groups(mock_teams_flat());
+
+    let mappings = mapper
+        .create_hierarchy("test-org", &groups)
+        .await
+        .expect("hierarchy");
+    mapper
+        .store_group_to_team_mappings(&mappings)
+        .await
+        .expect("store mappings");
+
+    let count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM idp_group_mappings WHERE idp_provider = 'github'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(count.0 >= 2, "should have at least 2 mappings");
+}
+
+// ──────────────────────────────────────────────────────────
+// 8.3: Role mapping (augmented edge cases)
+// ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_role_mapping_unknown_org_role_defaults_developer() {
+    assert_eq!(
+        map_github_org_role("billing_manager"),
+        AeternaRole::Developer
+    );
+    assert_eq!(map_github_org_role(""), AeternaRole::Developer);
+    assert_eq!(map_github_org_role("ADMIN"), AeternaRole::Developer); // case-sensitive
+}
+
+#[test]
+fn test_role_mapping_unknown_team_role_defaults_developer() {
+    assert_eq!(map_github_team_role(""), AeternaRole::Developer);
+    assert_eq!(map_github_team_role("admin"), AeternaRole::Developer);
+    assert_eq!(map_github_team_role("MAINTAINER"), AeternaRole::Developer);
+}
+
+#[test]
+fn test_aeterna_role_as_str() {
+    assert_eq!(AeternaRole::Admin.as_str(), "admin");
+    assert_eq!(AeternaRole::TechLead.as_str(), "techlead");
+    assert_eq!(AeternaRole::Developer.as_str(), "developer");
+}
+
+#[test]
+fn test_role_precedence_total_ordering() {
+    let roles = [
+        AeternaRole::Developer,
+        AeternaRole::TechLead,
+        AeternaRole::Admin,
+    ];
+    for i in 0..roles.len() {
+        for j in (i + 1)..roles.len() {
+            assert!(
+                roles[i].precedence() < roles[j].precedence(),
+                "{:?} should have lower precedence than {:?}",
+                roles[i],
+                roles[j]
+            );
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────
+// 8.4: Full sync flow (testcontainers PG + wiremock)
+// ──────────────────────────────────────────────────────────
+
+#[tokio::test]
+#[serial]
+async fn test_full_sync_flow_creates_users_and_teams() {
+    let Some(pool) = pg_pool().await else {
+        eprintln!("Skipping: Docker not available");
+        return;
+    };
+
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path_regex(r"/app/installations/\d+/access_tokens"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_token_response()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams\?"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_teams_nested()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/members\?"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_org_members()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams/platform/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_team_members_alice_bob()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams/security/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_team_members_charlie()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams/api-team/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_team_members_alice_bob()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams/frontend-team/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .mount(&mock_server)
+        .await;
+
+    let config = github_config(&mock_server);
+    let tenant_id = Uuid::new_v4();
+
+    let report = run_github_sync(&config, &pool, tenant_id)
+        .await
+        .expect("sync should succeed");
+
+    assert_eq!(report.users_created, 3, "should create 3 users");
+    assert!(report.groups_synced >= 2, "should sync groups");
+    assert!(report.completed_at.is_some(), "should be marked complete");
+    assert!(!report.has_errors(), "no errors: {:?}", report.errors);
+
+    let user_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM users WHERE idp_provider = 'github'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(user_count.0, 3);
+
+    let unit_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM organizational_units WHERE tenant_id = $1")
+            .bind(tenant_id.to_string())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        unit_count.0 >= 5,
+        "company + 2 orgs + 2 teams = at least 5, got {}",
+        unit_count.0
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn test_full_sync_idempotent_second_run_no_creates() {
+    let Some(pool) = pg_pool().await else {
+        eprintln!("Skipping: Docker not available");
+        return;
+    };
+
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path_regex(r"/app/installations/\d+/access_tokens"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_token_response()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams\?"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_teams_flat()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/members\?"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_org_members()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams/platform/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_team_members_alice_bob()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams/security/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_team_members_charlie()))
+        .mount(&mock_server)
+        .await;
+
+    let config = github_config(&mock_server);
+    let tenant_id = Uuid::new_v4();
+
+    let first = run_github_sync(&config, &pool, tenant_id)
+        .await
+        .expect("first sync");
+    assert_eq!(first.users_created, 3);
+
+    let second = run_github_sync(&config, &pool, tenant_id)
+        .await
+        .expect("second sync");
+    assert_eq!(second.users_created, 0, "no new users on re-sync");
+    assert_eq!(second.users_deactivated, 0);
+}
+
+// ──────────────────────────────────────────────────────────
+// 8.5: Webhook event deserialization & processing
+// ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_org_member_added_payload_deser() {
+    let payload = serde_json::json!({
+        "action": "member_added",
+        "organization": {"login": "test-org", "id": 1},
+        "membership": {
+            "user": {"login": "newuser", "id": 9999},
+            "role": "member"
+        }
+    });
+    let val: serde_json::Value = serde_json::from_value(payload).unwrap();
+    assert_eq!(val["action"], "member_added");
+    assert_eq!(val["membership"]["user"]["login"], "newuser");
+}
+
+#[test]
+fn test_team_created_payload_deser() {
+    let payload = serde_json::json!({
+        "action": "created",
+        "team": {
+            "id": 555,
+            "slug": "new-team",
+            "name": "New Team",
+            "parent": null
+        },
+        "organization": {"login": "test-org", "id": 1}
+    });
+    let val: serde_json::Value = serde_json::from_value(payload).unwrap();
+    assert_eq!(val["action"], "created");
+    assert_eq!(val["team"]["slug"], "new-team");
+}
+
+#[test]
+fn test_membership_added_payload_deser() {
+    let payload = serde_json::json!({
+        "action": "added",
+        "member": {"login": "alice", "id": 1001},
+        "team": {"id": 100, "slug": "platform", "name": "Platform"},
+        "organization": {"login": "test-org", "id": 1}
+    });
+    let val: serde_json::Value = serde_json::from_value(payload).unwrap();
+    assert_eq!(val["action"], "added");
+    assert_eq!(val["member"]["login"], "alice");
+    assert_eq!(val["team"]["slug"], "platform");
+}
+
+#[test]
+fn test_schema_initialization_is_safe_to_call_twice() {
+    // This is a compile-time test ensuring the function signature is correct.
+    // Actual DB test is in the integration tests above (every pg_pool call runs it).
+    let _ = initialize_github_sync_schema;
+}

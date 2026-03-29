@@ -190,6 +190,37 @@ spec:
               value: {{ .Values.observability.logging.format | default "json" | quote }}
             - name: AETERNA_KNOWLEDGE_REPO_PATH
               value: /tmp/knowledge-repo
+            {{- if .Values.githubOrgSync.enabled }}
+            - name: AETERNA_GITHUB_ORG_NAME
+              value: {{ .Values.githubOrgSync.orgName | quote }}
+            {{- if .Values.githubOrgSync.teamFilter }}
+            - name: AETERNA_GITHUB_TEAM_FILTER
+              value: {{ .Values.githubOrgSync.teamFilter | quote }}
+            {{- end }}
+            {{- if .Values.githubOrgSync.syncReposAsProjects }}
+            - name: AETERNA_GITHUB_SYNC_REPOS_AS_PROJECTS
+              value: "true"
+            {{- end }}
+            {{- if .Values.githubOrgSync.tenantId }}
+            - name: AETERNA_TENANT_ID
+              value: {{ .Values.githubOrgSync.tenantId | quote }}
+            {{- end }}
+            {{- if and (not .Values.knowledgeRepo.enabled) .Values.knowledgeRepo.github.appId }}
+            - name: AETERNA_GITHUB_APP_ID
+              value: {{ .Values.knowledgeRepo.github.appId | quote }}
+            {{- end }}
+            {{- if and (not .Values.knowledgeRepo.enabled) .Values.knowledgeRepo.github.installationId }}
+            - name: AETERNA_GITHUB_INSTALLATION_ID
+              value: {{ .Values.knowledgeRepo.github.installationId | quote }}
+            {{- end }}
+            {{- if and (not .Values.knowledgeRepo.enabled) .Values.knowledgeRepo.github.pemSecret }}
+            - name: AETERNA_GITHUB_APP_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.knowledgeRepo.github.pemSecret }}
+                  key: pem-key
+            {{- end }}
+            {{- end }}
             {{- if .Values.knowledgeRepo.enabled }}
             - name: AETERNA_KNOWLEDGE_REPO_URL
               value: {{ .Values.knowledgeRepo.remoteUrl | quote }}

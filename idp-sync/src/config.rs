@@ -20,6 +20,19 @@ pub struct IdpSyncConfig {
 pub enum IdpProvider {
     Okta(OktaConfig),
     AzureAd(AzureAdConfig),
+    GitHub(GitHubConfig),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitHubConfig {
+    pub org_name: String,
+    pub app_id: u64,
+    pub installation_id: u64,
+    pub private_key_pem: String,
+    pub team_filter: Option<String>,
+    #[serde(default)]
+    pub sync_repos_as_projects: bool,
+    pub api_base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

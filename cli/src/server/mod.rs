@@ -1,3 +1,4 @@
+pub mod admin_sync;
 pub mod bootstrap;
 pub mod health;
 pub mod mcp_transport;

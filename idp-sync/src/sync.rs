@@ -252,6 +252,7 @@ impl IdpSyncService {
         match &self.config.provider {
             IdpProvider::Okta(_) => "okta".to_string(),
             IdpProvider::AzureAd(_) => "azure_ad".to_string(),
+            IdpProvider::GitHub(_) => "github".to_string(),
         }
     }
 
@@ -286,10 +287,19 @@ impl IdpSyncService {
 
     async fn create_user(&self, user: &IdpUser) -> IdpSyncResult<Uuid> {
         let id = Uuid::new_v4();
-        sqlx::query(
+        let row = sqlx::query_as::<_, (Uuid,)>(
             r#"
             INSERT INTO users (id, email, first_name, last_name, display_name, idp_provider, idp_subject, is_active, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+            ON CONFLICT (email) DO UPDATE SET
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                display_name = EXCLUDED.display_name,
+                idp_provider = EXCLUDED.idp_provider,
+                idp_subject = EXCLUDED.idp_subject,
+                is_active = EXCLUDED.is_active,
+                updated_at = NOW()
+            RETURNING id
             "#,
         )
         .bind(id)
@@ -300,10 +310,10 @@ impl IdpSyncService {
         .bind(&user.idp_provider)
         .bind(&user.idp_subject)
         .bind(user.status == UserStatus::Active)
-        .execute(&self.db_pool)
+        .fetch_one(&self.db_pool)
         .await?;
 
-        Ok(id)
+        Ok(row.0)
     }
 
     async fn update_user(&self, user_id: Uuid, user: &IdpUser) -> IdpSyncResult<()> {

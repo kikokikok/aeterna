@@ -25,6 +25,9 @@ pub enum AdminCommand {
 
     #[command(about = "Import data from backup or another instance")]
     Import(AdminImportArgs),
+
+    #[command(about = "Sync organizational data from identity provider")]
+    Sync(AdminSyncArgs),
 }
 
 #[derive(Args)]
@@ -178,6 +181,21 @@ pub enum ImportMode {
     SkipExisting,
 }
 
+#[derive(Args)]
+pub struct AdminSyncArgs {
+    /// Identity provider to sync from (github)
+    #[arg(default_value = "github")]
+    pub provider: String,
+
+    /// Dry run - show what would be synced without making changes
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
 pub async fn run(cmd: AdminCommand) -> anyhow::Result<()> {
     match cmd {
         AdminCommand::Health(args) => run_health(args).await,
@@ -186,6 +204,7 @@ pub async fn run(cmd: AdminCommand) -> anyhow::Result<()> {
         AdminCommand::Drift(args) => run_drift(args).await,
         AdminCommand::Export(args) => run_export(args).await,
         AdminCommand::Import(args) => run_import(args).await,
+        AdminCommand::Sync(args) => run_sync(args).await,
     }
 }
 
@@ -925,6 +944,144 @@ fn colored_status(icon: &str, color: &str) -> String {
         "red" => icon.red().to_string(),
         _ => icon.white().to_string(),
     }
+}
+
+async fn run_sync(args: AdminSyncArgs) -> anyhow::Result<()> {
+    match args.provider.as_str() {
+        "github" => run_sync_github(args).await,
+        provider => {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "success": false,
+                        "error": "unsupported_provider",
+                        "message": format!("Unsupported sync provider: {provider}. Supported: github")
+                    }))?
+                );
+            } else {
+                ux_error::UxError::new(&format!("Unsupported sync provider: {provider}"))
+                    .why("Currently supported providers: github")
+                    .fix("Use: aeterna admin sync github")
+                    .display();
+            }
+            Ok(())
+        }
+    }
+}
+
+async fn run_sync_github(args: AdminSyncArgs) -> anyhow::Result<()> {
+    let org_name = std::env::var("AETERNA_GITHUB_ORG_NAME")
+        .map_err(|_| anyhow::anyhow!("AETERNA_GITHUB_ORG_NAME is required for GitHub sync"))?;
+
+    let app_id: u64 = std::env::var("AETERNA_GITHUB_APP_ID")
+        .map_err(|_| anyhow::anyhow!("AETERNA_GITHUB_APP_ID is required"))?
+        .parse()
+        .map_err(|_| anyhow::anyhow!("AETERNA_GITHUB_APP_ID must be a number"))?;
+
+    let installation_id: u64 = std::env::var("AETERNA_GITHUB_INSTALLATION_ID")
+        .map_err(|_| anyhow::anyhow!("AETERNA_GITHUB_INSTALLATION_ID is required"))?
+        .parse()
+        .map_err(|_| anyhow::anyhow!("AETERNA_GITHUB_INSTALLATION_ID must be a number"))?;
+
+    let private_key_pem = std::env::var("AETERNA_GITHUB_APP_PEM")
+        .map_err(|_| anyhow::anyhow!("AETERNA_GITHUB_APP_PEM is required"))?;
+
+    let team_filter = std::env::var("AETERNA_GITHUB_TEAM_FILTER").ok();
+    let sync_repos_as_projects = std::env::var("AETERNA_GITHUB_SYNC_REPOS_AS_PROJECTS")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+
+    let github_config = idp_sync::config::GitHubConfig {
+        org_name: org_name.clone(),
+        app_id,
+        installation_id,
+        private_key_pem,
+        team_filter,
+        sync_repos_as_projects,
+        api_base_url: None,
+    };
+
+    if args.dry_run {
+        if args.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "dry_run": true,
+                    "provider": "github",
+                    "org_name": org_name,
+                    "app_id": app_id,
+                    "installation_id": installation_id,
+                    "message": "Dry run — would sync GitHub org into Aeterna hierarchy"
+                }))?
+            );
+        } else {
+            output::header("GitHub Organization Sync (Dry Run)");
+            println!();
+            println!("  Provider:        github");
+            println!("  Organization:    {org_name}");
+            println!("  App ID:          {app_id}");
+            println!("  Installation ID: {installation_id}");
+            println!();
+            println!("  This is a dry run. No changes will be made.");
+        }
+        return Ok(());
+    }
+
+    if !args.json {
+        output::header("GitHub Organization Sync");
+        println!();
+        println!("  Syncing {org_name}...");
+        println!();
+    }
+
+    let database_url = std::env::var("DATABASE_URL")
+        .or_else(|_| std::env::var("AETERNA_DATABASE_URL"))
+        .map_err(|_| anyhow::anyhow!("DATABASE_URL or AETERNA_DATABASE_URL is required"))?;
+
+    let pool = sqlx::PgPool::connect(&database_url).await?;
+
+    let tenant_str = std::env::var("AETERNA_TENANT_ID").unwrap_or_else(|_| "default".to_string());
+    let tenant_id: uuid::Uuid = {
+        let row: Option<(uuid::Uuid,)> =
+            sqlx::query_as("SELECT id FROM tenants WHERE name = $1 OR id::text = $1 LIMIT 1")
+                .bind(&tenant_str)
+                .fetch_optional(&pool)
+                .await?;
+        match row {
+            Some((id,)) => id,
+            None => {
+                let id = uuid::Uuid::new_v4();
+                sqlx::query("INSERT INTO tenants (id, name, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id")
+                    .bind(id)
+                    .bind(&tenant_str)
+                    .execute(&pool)
+                    .await?;
+                id
+            }
+        }
+    };
+
+    let report = idp_sync::github::run_github_sync(&github_config, &pool, tenant_id)
+        .await
+        .map_err(|e| anyhow::anyhow!("GitHub sync failed: {e:?}"))?;
+
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&json!(report))?);
+    } else {
+        output::subheader("Sync Report");
+        println!();
+        println!("  Users created:       {}", report.users_created);
+        println!("  Users updated:       {}", report.users_updated);
+        println!("  Users deactivated:   {}", report.users_deactivated);
+        println!("  Groups synced:       {}", report.groups_synced);
+        println!("  Memberships added:   {}", report.memberships_added);
+        println!("  Memberships removed: {}", report.memberships_removed);
+        println!();
+        println!("  ✓ GitHub organization sync completed successfully");
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

@@ -416,6 +416,10 @@ fn build_optional_idp_services(
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(false),
         }),
+        "github" => {
+            tracing::info!("GitHub org sync uses the dedicated /api/v1/admin/sync/github endpoint");
+            return Ok((None, None, None));
+        }
         _ => return Ok((None, None, None)),
     };
 
@@ -445,6 +449,9 @@ fn build_optional_idp_services(
     let client: Arc<dyn IdpClient> = match &config.provider {
         IdpProvider::Okta(okta) => Arc::new(OktaClient::new(okta.clone())?),
         IdpProvider::AzureAd(azure) => Arc::new(AzureAdClient::new(azure.clone())?),
+        IdpProvider::GitHub(_) => {
+            unreachable!("GitHub provider is handled by the dedicated admin sync endpoint")
+        }
     };
 
     let sync_service = Arc::new(IdpSyncService::new(

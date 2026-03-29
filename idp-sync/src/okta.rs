@@ -55,6 +55,8 @@ pub enum GroupType {
     OktaGroup,
     AppGroup,
     BuiltIn,
+    GitHubTeam,
+    GitHubNestedTeam,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

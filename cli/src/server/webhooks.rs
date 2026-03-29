@@ -10,6 +10,7 @@ use axum::{
 };
 use knowledge::git_provider::WebhookEvent;
 use mk_core::types::{GovernanceEvent, TenantContext};
+use serde::Deserialize;
 use serde_json::json;
 
 use super::AppState;
@@ -47,6 +48,13 @@ async fn handle_github_webhook(
         }
     };
 
+    if matches!(
+        event_type,
+        "organization" | "team" | "membership" | "member"
+    ) {
+        return handle_org_sync_webhook(&state, event_type, &body).await;
+    }
+
     let signature = headers
         .get("X-Hub-Signature-256")
         .and_then(|value| value.to_str().ok());
@@ -77,6 +85,230 @@ async fn handle_github_webhook(
     handle_event(&state, event).await;
 
     (StatusCode::OK, Json(json!({"status": "ok"}))).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct OrgSyncWebhookPayload {
+    action: String,
+    #[serde(default)]
+    member: Option<GitHubMember>,
+    #[serde(default)]
+    team: Option<GitHubTeamPayload>,
+    #[serde(default)]
+    membership: Option<GitHubMembershipPayload>,
+    #[serde(default)]
+    organization: Option<GitHubOrgPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubMember {
+    login: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubTeamPayload {
+    slug: String,
+    name: String,
+    #[serde(default)]
+    parent: Option<GitHubTeamParent>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubTeamParent {
+    slug: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubMembershipPayload {
+    user: GitHubMember,
+    team: GitHubTeamPayload,
+    role: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubOrgPayload {
+    login: String,
+}
+
+async fn handle_org_sync_webhook(
+    state: &Arc<AppState>,
+    event_type: &str,
+    body: &[u8],
+) -> axum::response::Response {
+    let payload: OrgSyncWebhookPayload = match serde_json::from_slice(body) {
+        Ok(p) => p,
+        Err(err) => {
+            tracing::warn!(
+                event_type,
+                "Failed to parse org sync webhook payload: {err:?}"
+            );
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid webhook payload"})),
+            )
+                .into_response();
+        }
+    };
+
+    let org_name = payload
+        .organization
+        .as_ref()
+        .map(|o| o.login.as_str())
+        .unwrap_or("unknown");
+
+    match event_type {
+        "organization" => match payload.action.as_str() {
+            "member_added" => {
+                let login = payload
+                    .member
+                    .as_ref()
+                    .map(|m| m.login.as_str())
+                    .unwrap_or("?");
+                tracing::info!(org = org_name, member = login, "GitHub org member added");
+            }
+            "member_removed" => {
+                let login = payload
+                    .member
+                    .as_ref()
+                    .map(|m| m.login.as_str())
+                    .unwrap_or("?");
+                tracing::info!(org = org_name, member = login, "GitHub org member removed");
+            }
+            action => {
+                tracing::debug!(org = org_name, action, "Ignored organization event action");
+                return (StatusCode::OK, Json(json!({"status": "ignored"}))).into_response();
+            }
+        },
+        "team" => {
+            let slug = payload
+                .team
+                .as_ref()
+                .map(|t| t.slug.as_str())
+                .unwrap_or("?");
+            let name = payload
+                .team
+                .as_ref()
+                .map(|t| t.name.as_str())
+                .unwrap_or("?");
+            match payload.action.as_str() {
+                "created" => {
+                    let parent = payload
+                        .team
+                        .as_ref()
+                        .and_then(|t| t.parent.as_ref())
+                        .map(|p| p.slug.as_str())
+                        .unwrap_or("(top-level)");
+                    tracing::info!(org = org_name, slug, name, parent, "GitHub team created");
+                }
+                "deleted" => {
+                    tracing::info!(org = org_name, slug, name, "GitHub team deleted");
+                }
+                "edited" => {
+                    let parent = payload
+                        .team
+                        .as_ref()
+                        .and_then(|t| t.parent.as_ref())
+                        .map(|p| p.slug.as_str())
+                        .unwrap_or("(top-level)");
+                    tracing::info!(
+                        org = org_name,
+                        slug,
+                        name,
+                        parent,
+                        "GitHub team edited (possible reparent)"
+                    );
+                }
+                action => {
+                    tracing::debug!(org = org_name, slug, action, "Ignored team event action");
+                    return (StatusCode::OK, Json(json!({"status": "ignored"}))).into_response();
+                }
+            }
+        }
+        "membership" => {
+            if let Some(ref ms) = payload.membership {
+                match payload.action.as_str() {
+                    "added" => {
+                        tracing::info!(
+                            org = org_name,
+                            user = %ms.user.login,
+                            team = %ms.team.slug,
+                            role = %ms.role,
+                            "GitHub team membership added"
+                        );
+                    }
+                    "removed" => {
+                        tracing::info!(
+                            org = org_name,
+                            user = %ms.user.login,
+                            team = %ms.team.slug,
+                            "GitHub team membership removed"
+                        );
+                    }
+                    action => {
+                        tracing::debug!(org = org_name, action, "Ignored membership event action");
+                        return (StatusCode::OK, Json(json!({"status": "ignored"})))
+                            .into_response();
+                    }
+                }
+            }
+        }
+        _ => {
+            tracing::debug!(event_type, "Unhandled org sync event type");
+            return (StatusCode::OK, Json(json!({"status": "ignored"}))).into_response();
+        }
+    }
+
+    trigger_incremental_sync(state, org_name).await;
+
+    (
+        StatusCode::OK,
+        Json(json!({"status": "ok", "sync": "triggered"})),
+    )
+        .into_response()
+}
+
+async fn trigger_incremental_sync(state: &Arc<AppState>, org_name: &str) {
+    tracing::info!(
+        org = org_name,
+        "Triggering incremental GitHub org sync from webhook"
+    );
+
+    let github_config = match super::admin_sync::build_github_config_from_env() {
+        Ok(config) => config,
+        Err(err) => {
+            tracing::warn!("Cannot trigger org sync — GitHub config not available: {err:?}");
+            return;
+        }
+    };
+
+    let tenant_id =
+        match super::admin_sync::resolve_tenant_id_from_pool(state.postgres.pool()).await {
+            Ok(id) => id,
+            Err(err) => {
+                tracing::warn!("Cannot resolve tenant for org sync: {err:?}");
+                return;
+            }
+        };
+
+    tokio::spawn({
+        let pool = state.postgres.pool().clone();
+        async move {
+            match idp_sync::github::run_github_sync(&github_config, &pool, tenant_id).await {
+                Ok(report) => {
+                    tracing::info!(
+                        users_created = report.users_created,
+                        users_updated = report.users_updated,
+                        groups_synced = report.groups_synced,
+                        memberships_added = report.memberships_added,
+                        "Webhook-triggered GitHub org sync completed"
+                    );
+                }
+                Err(err) => {
+                    tracing::warn!("Webhook-triggered GitHub org sync failed: {err:?}");
+                }
+            }
+        }
+    });
 }
 
 async fn handle_event(state: &Arc<AppState>, event: WebhookEvent) {

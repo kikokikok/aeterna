@@ -1,0 +1,101 @@
+{{- if and .Values.githubOrgSync.enabled .Values.githubOrgSync.cronJob.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "aeterna.fullname" . }}-github-sync
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+    app.kubernetes.io/component: github-sync
+spec:
+  schedule: {{ .Values.githubOrgSync.cronJob.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.githubOrgSync.cronJob.successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .Values.githubOrgSync.cronJob.failedJobsHistoryLimit | default 3 }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.githubOrgSync.cronJob.backoffLimit | default 1 }}
+      activeDeadlineSeconds: {{ .Values.githubOrgSync.cronJob.activeDeadlineSeconds | default 300 }}
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            {{- include "aeterna.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: github-sync
+        spec:
+          restartPolicy: OnFailure
+          {{- include "aeterna.imagePullSecrets" . | nindent 10 }}
+          serviceAccountName: {{ include "aeterna.serviceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.aeterna.podSecurityContext | nindent 12 }}
+          containers:
+            - name: github-sync
+              securityContext:
+                {{- toYaml .Values.aeterna.securityContext | nindent 16 }}
+              image: {{ include "aeterna.image" . | quote }}
+              imagePullPolicy: {{ .Values.aeterna.image.pullPolicy }}
+              command: ["aeterna"]
+              args: ["admin", "sync", "github"]
+              env:
+                - name: AETERNA_GITHUB_ORG_NAME
+                  value: {{ .Values.githubOrgSync.orgName | quote }}
+                {{- if .Values.githubOrgSync.teamFilter }}
+                - name: AETERNA_GITHUB_TEAM_FILTER
+                  value: {{ .Values.githubOrgSync.teamFilter | quote }}
+                {{- end }}
+                {{- if .Values.githubOrgSync.syncReposAsProjects }}
+                - name: AETERNA_GITHUB_SYNC_REPOS_AS_PROJECTS
+                  value: "true"
+                {{- end }}
+                {{- if .Values.githubOrgSync.tenantId }}
+                - name: AETERNA_TENANT_ID
+                  value: {{ .Values.githubOrgSync.tenantId | quote }}
+                {{- end }}
+                - name: AETERNA_GITHUB_APP_ID
+                  value: {{ .Values.knowledgeRepo.github.appId | quote }}
+                - name: AETERNA_GITHUB_INSTALLATION_ID
+                  value: {{ .Values.knowledgeRepo.github.installationId | quote }}
+                {{- if .Values.knowledgeRepo.github.pemSecret }}
+                - name: AETERNA_GITHUB_APP_PEM
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.knowledgeRepo.github.pemSecret }}
+                      key: pem-key
+                {{- end }}
+                - name: PG_HOST
+                  value: {{ include "aeterna.postgresql.host" . | quote }}
+                - name: PG_PORT
+                  value: {{ include "aeterna.postgresql.port" . | quote }}
+                - name: PG_DATABASE
+                  value: {{ include "aeterna.postgresql.database" . | quote }}
+                - name: PG_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "aeterna.postgresql.secretName" . }}
+                      key: username
+                      optional: true
+                - name: PG_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "aeterna.postgresql.secretName" . }}
+                      key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+                - name: RUST_LOG
+                  value: {{ .Values.observability.logging.level | default "info" | quote }}
+                - name: LOG_FORMAT
+                  value: {{ .Values.observability.logging.format | default "json" | quote }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                {{- toYaml .Values.githubOrgSync.cronJob.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
+          {{- with .Values.aeterna.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.aeterna.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
