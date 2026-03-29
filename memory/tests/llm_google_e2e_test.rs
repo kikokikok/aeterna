@@ -31,8 +31,8 @@ mod google_llm_e2e {
     use memory::llm::google::GoogleLlmService;
     use mk_core::traits::LlmService;
     use mk_core::types::{
-        ConstraintSeverity, Policy, PolicyMode, PolicyRule, RuleMergeStrategy,
-        KnowledgeLayer,
+        ConstraintOperator, ConstraintSeverity, ConstraintTarget, KnowledgeLayer, Policy,
+        PolicyMode, PolicyRule, RuleMergeStrategy, RuleType,
     };
     use std::collections::HashMap;
 
@@ -89,7 +89,10 @@ mod google_llm_e2e {
             .expect("second LLM call must succeed");
 
         assert!(r1.contains('4'), "first answer must contain 4, got: {r1:?}");
-        assert!(r2.contains('6'), "second answer must contain 6, got: {r2:?}");
+        assert!(
+            r2.contains('6'),
+            "second answer must contain 6, got: {r2:?}"
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -102,15 +105,19 @@ mod google_llm_e2e {
 
         let policies = vec![Policy {
             id: "no-lodash".to_string(),
+            name: "No Vulnerable Lodash".to_string(),
+            description: Some("Block lodash < 4.17.21 due to CVE-2021-23337".to_string()),
             layer: KnowledgeLayer::Company,
             mode: PolicyMode::Mandatory,
             merge_strategy: RuleMergeStrategy::Merge,
             rules: vec![PolicyRule {
                 id: "dep-lodash".to_string(),
-                description: "Must not use lodash < 4.17.21 (CVE-2021-23337)".to_string(),
+                rule_type: RuleType::default(),
+                target: ConstraintTarget::Dependency,
+                operator: ConstraintOperator::MustNotUse,
+                value: serde_json::json!("lodash < 4.17.21"),
                 severity: ConstraintSeverity::Block,
-                pattern: Some("lodash".to_string()),
-                ..Default::default()
+                message: "Must not use lodash < 4.17.21 (CVE-2021-23337)".to_string(),
             }],
             metadata: HashMap::new(),
         }];
