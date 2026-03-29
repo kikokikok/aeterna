@@ -395,7 +395,6 @@ constraints:
     severity: warn
     message: "Remove console.log before merging (use logger instead)"
 ```
-```
 
 ---
 

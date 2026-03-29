@@ -286,7 +286,7 @@ A README is the first thing people see. It should explain what the project does,
 - Open source compliance
 
 **README Template**:
-```markdown
+````markdown
 # Project Name
 
 Brief description of what this project does.
@@ -332,7 +332,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md).
 ## License
 
 [MIT](./LICENSE)
-```
+````
 
 ---
 

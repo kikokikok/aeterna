@@ -1121,7 +1121,7 @@ aeterna_mcp_auth_failures_total{reason="invalid_token"}
 
 ## Next Steps
 
-- [OpenCode Integration Guide](./opencode-integration.md) - Full NPM plugin documentation
-- [Strangler Fig Example](../examples/strangler-fig-migration.md) - Real-world usage
-- [Tool Interface Specification](../../specs/06-tool-interface.md) - Detailed tool contracts
-- [Helm Chart Deployment](../../openspec/changes/add-helm-chart/design.md) - Kubernetes deployment
+- [OpenCode Integration Guide](./opencode-integration) - Full NPM plugin documentation
+- [Strangler Fig Example](../examples/strangler-fig-migration) - Real-world usage
+- [Tool Interface Specification](../specs/tool-interface) - Detailed tool contracts
+- [Helm Chart Deployment](../helm/architecture) - Kubernetes deployment

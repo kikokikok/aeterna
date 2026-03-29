@@ -175,33 +175,32 @@ This specification explicitly does **not** cover:
 
 Adapters bridge this specification to specific AI agent frameworks:
 
-| Ecosystem | Adapter Location | Status |
-|-----------|------------------|--------|
-| OpenCode | [`adapters/opencode/`](../adapters/opencode/) | Planned |
-| LangChain | [`adapters/langchain/`](../adapters/langchain/) | Planned |
-| AutoGen | [`adapters/autogen/`](../adapters/autogen/) | Planned |
-| CrewAI | [`adapters/crewai/`](../adapters/crewai/) | Planned |
+| Ecosystem | Adapter | Status |
+|-----------|---------|--------|
+| OpenCode | `@kiko-aeterna/opencode-plugin` | Released |
+| LangChain | `adapters/langchain/` | Planned |
+| AutoGen | `adapters/autogen/` | Planned |
+| CrewAI | `adapters/crewai/` | Planned |
 
 ## Quick Start
 
 ### For Specification Readers
 
-1. Start with [01-core-concepts.md](./01-core-concepts.md) for terminology
-2. Read [02-memory-system.md](./02-memory-system.md) for the memory model
-3. Read [03-knowledge-repository.md](./03-knowledge-repository.md) for knowledge management
-4. See [05-adapter-architecture.md](./05-adapter-architecture.md) for integration patterns
+1. Start with [Core Concepts](./core-concepts) for terminology
+2. Read [Memory System](./memory-system) for the memory model
+3. Read [Knowledge Repository](./knowledge-repository) for knowledge management
+4. See [Adapter Architecture](./adapter-architecture) for integration patterns
 
 ### For Implementers
 
-1. Review [06-tool-interface.md](./06-tool-interface.md) for required tool contracts
-2. Check [07-configuration.md](./07-configuration.md) for configuration schema
-3. See [`schemas/`](../schemas/) for JSON Schema definitions
-4. Reference [`examples/`](../examples/) for implementation examples
+1. Review [Tool Interface](./tool-interface) for required tool contracts
+2. Check [Configuration](./configuration) for configuration schema
+3. Reference [Examples](../examples/strangler-fig-migration) for implementation examples
 
 ### For Ecosystem Integrators
 
-1. Read [05-adapter-architecture.md](./05-adapter-architecture.md) for adapter interface
-2. Check existing adapters in [`adapters/`](../adapters/) for patterns
+1. Read [Adapter Architecture](./adapter-architecture) for adapter interface
+2. Check the [OpenCode Integration](../integrations/opencode-integration) as a reference
 3. Implement the `EcosystemAdapter` interface for your framework
 
 ## Versioning
@@ -224,8 +223,8 @@ Contributions welcome via:
 
 ## License
 
-Apache License 2.0 - See [LICENSE](../LICENSE) for details.
+Apache License 2.0 — See the [GitHub repository](https://github.com/kikokikok/aeterna) for details.
 
 ---
 
-**Next**: [01-core-concepts.md](./01-core-concepts.md) - Core Concepts and Terminology
+**Next**: [Core Concepts](./core-concepts) - Core Concepts and Terminology
