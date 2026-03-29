@@ -1,19 +1,14 @@
 # Installation & Deployment Guide
 
-This file currently focuses on Code Search deployment details. If you are deploying Aeterna for interactive user access with federated authentication, start with the dedicated Okta deployment guide:
+This guide covers deploying Aeterna in production via the supported **Helm chart** path.
 
-- [`docs/guides/okta-auth-deployment.md`](docs/guides/okta-auth-deployment.md)
+For interactive user access with federated authentication, also see:
 
-That guide documents:
+- [`docs/guides/okta-auth-deployment.md`](docs/guides/okta-auth-deployment.md) — Okta-backed login, oauth2-proxy ingress, secret handling, OPAL/Cedar authorization
 
-- Okta-backed interactive login
-- oauth2-proxy ingress setup
-- required claims/groups and callback URLs
-- secret handling
-- why OPAL/Cedar must still be deployed for the supported production authorization path
-- where permissions are stored versus synchronized
+For high-availability infrastructure references (Patroni, Qdrant cluster, Redis Sentinel), see:
 
-The rest of this file remains focused on Code Search repository management deployment.
+- [`docs/guides/ha-deployment.md`](docs/guides/ha-deployment.md)
 
 ---
 
@@ -162,187 +157,175 @@ Keep environment-specific deployment values (project IDs, secret references, clu
 
 ---
 
-## 🏗 System Architecture
+## Secret Management
 
-The Code Search Repository Management system follows a distributed, multi-tenant architecture designed for Kubernetes:
+### Kubernetes Secrets
 
-1.  **RepoManager**: Core service handling the repository lifecycle (Request → Clone → Index).
-2.  **ShardRouter**: Ensures data locality by routing repository operations to specific "Owner" pods.
-3.  **PolicyEvaluator**: Uses the Cedar Policy Engine for fine-grained access control (PBAC).
-4.  **Identity Store**: Securely manages Git credentials (PATs, OAuth tokens) using AWS Secrets Manager or HashiCorp Vault.
-5.  **Cold Storage**: Archives inactive repositories to S3/GCS as Git bundles.
+The Helm chart generates secrets on first install for internal credentials (PostgreSQL password, Redis password, API keys). To manage secrets externally:
 
----
+1. **Pre-create secrets** before `helm install`:
+   ```bash
+   kubectl create secret generic aeterna-secrets -n aeterna \
+     --from-literal=AETERNA_ADMIN_API_KEY=your-key \
+     --from-literal=DATABASE_URL=postgres://user:pass@host:5432/aeterna
+   ```
 
-## 🚀 Quick Start (Local Development)
+2. **Reference in values.yaml**:
+   ```yaml
+   aeterna:
+     existingSecret: aeterna-secrets
+   ```
 
-### 1. Prerequisites
-- **PostgreSQL 15+**
-- **Redis 7+**
-- **Rust (Nightly)**
-- **Git**
+3. **External secret managers** (recommended for production):
+   - Use [External Secrets Operator](https://external-secrets.io/) to sync from AWS Secrets Manager, GCP Secret Manager, or HashiCorp Vault
+   - See `charts/aeterna/examples/values-sops.yaml` for SOPS-encrypted values example
 
-### 2. Setup Environment
+### GitHub App Authentication
+
+For GitHub organization sync, Aeterna uses GitHub App certificate-based authentication (not personal access tokens):
+
 ```bash
-# Clone the repository
-git clone https://github.com/aeterna/aeterna.git
-cd aeterna
-
-# Set up environment variables
-export DATABASE_URL="postgres://user:pass@localhost:5432/aeterna"
-export REDIS_URL="redis://localhost:6379/0"
-export CODE_SEARCH_BASE_PATH="/tmp/code-search-repos"
+kubectl create secret generic aeterna-github-app-pem -n aeterna \
+  --from-file=private-key.pem=/path/to/your-github-app.pem
 ```
 
-### 3. Run Migrations
-```bash
-# Apply migrations using sqlx
-sqlx migrate run --source storage/migrations
-```
-
-### 4. Build and Run
-```bash
-cargo build -p storage
-cargo run -p storage --example simple_repo_manager
-```
-
----
-
-## ☸️ Kubernetes Production Deployment
-
-For production, we use a **StatefulSet** for indexer pods and a **Service Mesh** or **Ingress Controller** for affinity routing.
-
-### 1. Database Schema
-Ensure the `code_search_indexer_shards` and `codesearch_repositories` (internal name) tables are initialized.
-
-### 2. Identity Management & Secrets
-Code Search integrates with external secret managers. Configure your provider:
-
-**HashiCorp Vault Setup:**
+Configure in values.yaml:
 ```yaml
-env:
-  - name: VAULT_ADDR
-    value: "https://vault.internal:8200"
-  - name: VAULT_TOKEN
-    valueFrom:
-      secretKeyRef:
-        name: vault-credentials
-        key: token
+aeterna:
+  github:
+    appId: "your-app-id"
+    installationId: "your-installation-id"
+    privateKeySecret: aeterna-github-app-pem
 ```
 
-### 3. Distributed Indexing (StatefulSet)
-Use the `SHARD_ID` environment variable to identify pods.
+---
+
+## Ingress & TLS
+
+### TLS Termination
+
+The chart supports TLS via cert-manager or pre-provisioned certificates:
 
 ```yaml
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: code-search-indexer
-spec:
-  serviceName: code-search-indexer
-  replicas: 5
-  template:
-    spec:
-      containers:
-        - name: indexer
-          image: aeterna/code-search-indexer:latest
-          env:
-            - name: SHARD_ID
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
-          lifecycle:
-            preStop:
-              exec:
-                # Trigger clean backup before shutdown
-                command: ["/bin/sh", "-c", "curl -X POST http://localhost:8080/internal/shutdown"]
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: aeterna.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: aeterna-tls
+      hosts:
+        - aeterna.example.com
 ```
 
-### 4. Ingress & Affinity Routing
-To ensure requests for a repository hit the correct pod, configure your Ingress to hash based on the `X-Repo-ID` header.
-
-**NGINX Ingress Example:**
+**With cert-manager** (recommended):
 ```yaml
-annotations:
-  nginx.ingress.kubernetes.io/upstream-hash-by: "$http_x_repo_id"
+ingress:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    - secretName: aeterna-tls
+      hosts:
+        - aeterna.example.com
+```
+
+**Pre-provisioned certificate**:
+```bash
+kubectl create secret tls aeterna-tls -n aeterna \
+  --cert=/path/to/tls.crt \
+  --key=/path/to/tls.key
 ```
 
 ---
 
-## 🔐 Governance & Policies
+## Database Migration
 
-Code Search uses **Cedar** for access control. Policies are defined in `storage/policies/repo_management.cedar`.
+Aeterna initializes its schema automatically on startup. The Helm chart includes a migration Job that runs before the main deployment:
 
-### Example Policy: Lead Approval
-```cedar
-// Only users with 'lead' role can approve repository requests
-permit (
-    principal in Aeterna::Role::"lead",
-    action == CodeSearch::Action::"ApproveRepository",
-    resource is CodeSearch::Request
-);
-```
+- Migrations are idempotent — safe to re-run on upgrade
+- The migration job uses `initContainers` to wait for PostgreSQL readiness
+- Schema includes: `organizational_units`, `users`, `memberships`, `governance_roles`, `user_roles`, `agents`, `tenants`, plus OPAL authorization views
 
-### Customizing Policies:
-You can update the policies at runtime if using an **OPAL**-style sync or by updating the `PolicyEvaluator` configuration.
+### Manual Migration
 
----
-
-## 🛠 Operation & Maintenance
-
-### 1. Rebalancing Shards
-If you add new indexer pods, the load won't automatically shift. Run a rebalancing job:
+If you need to run migrations manually:
 
 ```bash
-# Triggers reassignment of repos from unhealthy/overloaded shards
-aeterna code-search shard rebalance
+# Port-forward to PostgreSQL (or use your DB endpoint directly)
+kubectl port-forward svc/aeterna-postgresql 5432:5432 -n aeterna
+
+# Run migrations
+DATABASE_URL="postgres://aeterna:password@localhost:5432/aeterna" \
+  cargo run -p cli -- migrate
 ```
 
-### 2. Cold Storage Archive
-Repositories not searched for 30 days are automatically archived to S3. To manually archive a repo:
+---
+
+## Upgrade Procedures
+
+### Helm Upgrade
 
 ```bash
-aeterna code-search repo archive --id <repo-uuid>
+# Standard upgrade (recommended: no --wait flag for large deployments)
+helm upgrade aeterna oci://ghcr.io/kikokikok/charts/aeterna \
+  --version <new-version> \
+  -n aeterna \
+  -f your-values.yaml \
+  --no-hooks --server-side=false
+
+# Or from local chart during development
+helm upgrade aeterna ./charts/aeterna \
+  -n aeterna \
+  -f your-values.yaml \
+  --no-hooks --server-side=false
 ```
 
-### 3. Monitoring
-Code Search exposes metrics via Prometheus:
-- `code_search_indexer_shards_active`: Number of healthy pods.
-- `code_search_repo_indexing_duration_seconds`: Time taken for incremental indexing.
-- `code_search_usage_metrics_total`: Search/Trace counters per tenant.
+### Pre-Upgrade Checklist
+
+1. Review the [CHANGELOG](CHANGELOG.md) for breaking changes
+2. Back up PostgreSQL data (`pg_dump`)
+3. Ensure new image is available (`ghcr.io/kikokikok/aeterna:<tag>`)
+4. Test with `helm diff` if available:
+   ```bash
+   helm diff upgrade aeterna ./charts/aeterna -n aeterna -f your-values.yaml
+   ```
+
+### Rollback
+
+```bash
+helm rollback aeterna <revision> -n aeterna
+```
 
 ---
 
-## ❓ FAQ
+## GitHub Organization Sync
 
-**Q: What happens if a pod dies suddenly (SIGKILL)?**
-A: The consistent hashing algorithm will detect the shard as offline (via heartbeat timeout). Subsequent requests will trigger a "Cold Restore" from S3 onto a new healthy shard.
+Aeterna can sync users, teams, and memberships from a GitHub organization:
 
-**Q: Can I use local storage instead of S3?**
-A: Yes, for single-node deployments, set the `ColdStorageProvider` to `Local` and use a persistent volume.
+- **Scheduled sync**: Kubernetes CronJob runs every 15 minutes by default
+- **Webhook sync**: GitHub Organization Webhooks push real-time updates (subscribe to: `team`, `membership`, `organization`, `member`)
+- **Idempotent**: Re-syncs are safe; keyed on user email uniqueness
 
----
-
-## 📧 Support & Documentation
-- **Specs**: See `openspec/changes/add-codesearch-repo-management/`
-- **Architecture**: `docs/distributed-indexing.md`
-
----
-
-## ❓ FAQ
-
-**Q: What happens if a pod dies suddenly (SIGKILL)?**
-A: The consistent hashing algorithm will detect the shard as offline (via heartbeat timeout). Subsequent requests will trigger a "Cold Restore" from S3 onto a new healthy shard.
-
-**Q: Can I use local storage instead of S3?**
-A: Yes, for single-node deployments, set the `ColdStorageProvider` to `Local` and use a persistent volume.
+Configure in values.yaml:
+```yaml
+aeterna:
+  github:
+    enabled: true
+    orgName: your-org
+    syncSchedule: "*/15 * * * *"
+```
 
 ---
 
-## 📧 Support & Documentation
-- **Specs**: See `openspec/changes/add-codesearch-repo-management/`
-- **Architecture**: `docs/distributed-indexing.md`
+## Supported Deployment Paths
+
+| Path | Status | Documentation |
+|------|--------|---------------|
+| **Helm chart** (Kubernetes) | **Supported** | This file + `charts/aeterna/examples/` |
+| **Okta-backed interactive auth** | **Supported** | `docs/guides/okta-auth-deployment.md` |
+| **HA infrastructure references** | **Reference only** | `docs/guides/ha-deployment.md` |
+
+> **Note:** Code search is not a built-in Aeterna component. It integrates as an external skill via pluggable MCP backends (e.g., JetBrains Code Intelligence MCP). No sidecar indexer, StatefulSet, or ShardRouter deployment is required.

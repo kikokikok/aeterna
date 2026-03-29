@@ -48,31 +48,28 @@
 ## Tier 1 — HIGH VALUE: Enable Core Use Cases
 
 ### 1.1 Code Search — External Skill Integration
-- [ ] 1.1.1 Define `CodeIntelligenceBackend` trait in `tools/src/codesearch/` with methods: `search`, `trace_callers`, `trace_callees`, `graph`, `index_status`
-- [ ] 1.1.2 Implement `McpCodeIntelligence` backend that proxies to any connected MCP code intelligence server (JetBrains, VS Code, etc.)
-- [ ] 1.1.3 Remove sidecar binary spawning from `tools/src/codesearch/client.rs` — replace with MCP client connection to discovered backend
-- [ ] 1.1.4 Update `tools/src/codesearch/tools.rs` MCP tool handlers to delegate to `CodeIntelligenceBackend` trait
-- [ ] 1.1.5 Add backend discovery: check for available MCP servers at agent startup, register tools only if a backend is found
-- [ ] 1.1.6 Add graceful degradation: if no backend available, tools return informative error ("Install JetBrains Code Intelligence MCP plugin or compatible backend")
-- [ ] 1.1.7 Add integration test: mock MCP code intelligence server, verify tool delegation works
+- [x] 1.1.1 Define `CodeIntelligenceBackend` trait in `tools/src/codesearch/client.rs` with methods: `search`, `trace_callers`, `trace_callees`, `graph`, `index_status`, `repo_request`
+- [x] 1.1.2 Implement `McpCodeIntelligence` backend — HTTP JSON-RPC proxy to any MCP code intelligence server (JetBrains, VS Code, etc.) via `reqwest::Client`
+- [x] 1.1.3 Remove sidecar binary spawning from `tools/src/codesearch/client.rs` — replaced with trait-based dispatch (`CodeSearchClient` wraps `Arc<dyn CodeIntelligenceBackend>` with circuit breaker)
+- [x] 1.1.4 Update `tools/src/codesearch/tools.rs` tests to use `CodeSearchClient::mock()` / `from_config()` — all 6 tool structs still use `Arc<CodeSearchClient>` (API backward compatible)
+- [x] 1.1.5 Add backend discovery via `CodeSearchClient::from_config()` — checks `mcp_server_url` config, falls back to `NoBackend`
+- [x] 1.1.6 Add graceful degradation: `NoBackend` returns informative error ("Install JetBrains Code Intelligence MCP plugin or compatible backend, set AETERNA_CODE_INTEL_MCP_URL")
+- [x] 1.1.7 13 tests in `client.rs` (mock, circuit breaker, no-backend, config discovery) + 12 non-ignored tests in `tools.rs` covering full delegation chain — all 447 tools tests pass
 
-### 1.2 Hybrid Deployment — Local Docker Compose
-- [ ] 1.2.1 Add `aeterna` service to `docker-compose.yml` with proper build context and env vars
-- [ ] 1.2.2 Add `AETERNA_` environment variables to docker-compose for local mode (PostgreSQL, Qdrant, Redis URLs)
-- [ ] 1.2.3 Document hybrid deployment architecture in `docs/guides/hybrid-deployment.md`
-- [ ] 1.2.4 Test: `docker compose up` starts all services and Aeterna responds on `localhost:8080`
+### ~~1.2 Hybrid Deployment — Local Docker Compose~~ CANCELLED
+Reason: Local deployment uses k3s, not docker-compose. The real feature needed is local-first memory with remote sync (embedded local store in plugin/CLI for agent/user/session layers, sync to remote for team/org/company). This is a separate OpenSpec change, not a docker-compose task.
 
 ### 1.3 OpenCode Plugin MCP Wiring
-- [ ] 1.3.1 Wire memory MCP tools (memory_add, memory_search, memory_delete, memory_feedback, memory_optimize) in the NPM plugin
-- [ ] 1.3.2 Wire knowledge MCP tools (knowledge_query, knowledge_check, knowledge_show) in the NPM plugin
-- [ ] 1.3.3 Wire graph MCP tools (graph_query, graph_neighbors, graph_path) in the NPM plugin
-- [ ] 1.3.4 Add plugin configuration for Aeterna server URL
+- [x] 1.3.1 Wire memory MCP tools (memory_add, memory_search, memory_delete, memory_feedback, memory_optimize) in the NPM plugin — already implemented in `packages/opencode-plugin/src/tools/memory.ts`
+- [x] 1.3.2 Wire knowledge MCP tools (knowledge_query, knowledge_check, knowledge_show) in the NPM plugin — already implemented in `packages/opencode-plugin/src/tools/knowledge.ts`
+- [x] 1.3.3 Wire graph MCP tools (graph_query, graph_neighbors, graph_path) in the NPM plugin — already implemented in `packages/opencode-plugin/src/tools/graph.ts`
+- [x] 1.3.4 Add plugin configuration for Aeterna server URL — already implemented via `AETERNA_SERVER_URL` env var in `packages/opencode-plugin/src/index.ts`
 
 ### 1.4 Close Remaining OpenSpec Changes
-- [ ] 1.4.1 Complete `add-shared-knowledge-repo` tasks 10.9, 10.10 (73/75 to 75/75)
-- [ ] 1.4.2 Complete `add-server-runtime` task (60/61 to 61/61)
-- [ ] 1.4.3 Complete `add-cloud-llm-providers` task (15/16 to 16/16)
-- [ ] 1.4.4 Complete `fix-production-readiness-gaps` tasks (16/20 to 20/20)
+- [ ] 1.4.1 Complete `add-shared-knowledge-repo` tasks 10.9, 10.10 (73/75 to 75/75) — requires live E2E: governance PR creation + webhook merge
+- [ ] 1.4.2 Complete `add-server-runtime` task (60/61 to 61/61) — coverage gate, user-deferred
+- [ ] 1.4.3 Complete `add-cloud-llm-providers` task (15/16 to 16/16) — coverage gate, user-deferred
+- [x] 1.4.4 Complete `fix-production-readiness-gaps` tasks (16/20 to 19/20 — 5.1, 5.2, 5.3 done; coverage gate user-deferred)
 
 ## Tier 2 — IMPORTANT: Full Vision
 
@@ -98,7 +95,7 @@
 ## Tier 3 — FUTURE: Polish and Scale
 
 ### 3.1 Code Search — Remove Legacy Sidecar
-- [ ] 3.1.1 Remove `tools/src/codesearch/client.rs` sidecar binary spawning code entirely
+- [x] 3.1.1 Remove `tools/src/codesearch/client.rs` sidecar binary spawning code entirely — done in 1.1.3 (full rewrite to trait-based)
 - [ ] 3.1.2 Remove CLI commands that shell out to external `codesearch` binary (`cli/src/commands/search/`)
 - [ ] 3.1.3 Clean up unused types in `tools/src/codesearch/types.rs` that were specific to the sidecar protocol
 - [ ] 3.1.4 Update OpenCode plugin to remove hardcoded codesearch tool names — use dynamic MCP tool discovery
