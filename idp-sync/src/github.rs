@@ -820,9 +820,12 @@ async fn initialize_notify_triggers(pool: &PgPool) -> IdpSyncResult<()> {
     .await
     .map_err(IdpSyncError::DatabaseError)?;
 
+    sqlx::query("DROP TRIGGER IF EXISTS trg_users_entity_change ON users")
+        .execute(pool)
+        .await
+        .map_err(IdpSyncError::DatabaseError)?;
     sqlx::query(
-        "DROP TRIGGER IF EXISTS trg_users_entity_change ON users; \
-         CREATE TRIGGER trg_users_entity_change \
+        "CREATE TRIGGER trg_users_entity_change \
          AFTER INSERT OR UPDATE OR DELETE ON users \
          FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
     )
@@ -830,9 +833,12 @@ async fn initialize_notify_triggers(pool: &PgPool) -> IdpSyncResult<()> {
     .await
     .map_err(IdpSyncError::DatabaseError)?;
 
+    sqlx::query("DROP TRIGGER IF EXISTS trg_memberships_entity_change ON memberships")
+        .execute(pool)
+        .await
+        .map_err(IdpSyncError::DatabaseError)?;
     sqlx::query(
-        "DROP TRIGGER IF EXISTS trg_memberships_entity_change ON memberships; \
-         CREATE TRIGGER trg_memberships_entity_change \
+        "CREATE TRIGGER trg_memberships_entity_change \
          AFTER INSERT OR UPDATE OR DELETE ON memberships \
          FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
     )
@@ -841,8 +847,13 @@ async fn initialize_notify_triggers(pool: &PgPool) -> IdpSyncResult<()> {
     .map_err(IdpSyncError::DatabaseError)?;
 
     sqlx::query(
-        "DROP TRIGGER IF EXISTS trg_organizational_units_entity_change ON organizational_units; \
-         CREATE TRIGGER trg_organizational_units_entity_change \
+        "DROP TRIGGER IF EXISTS trg_organizational_units_entity_change ON organizational_units",
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+    sqlx::query(
+        "CREATE TRIGGER trg_organizational_units_entity_change \
          AFTER INSERT OR UPDATE OR DELETE ON organizational_units \
          FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
     )
@@ -850,9 +861,12 @@ async fn initialize_notify_triggers(pool: &PgPool) -> IdpSyncResult<()> {
     .await
     .map_err(IdpSyncError::DatabaseError)?;
 
+    sqlx::query("DROP TRIGGER IF EXISTS trg_governance_roles_entity_change ON governance_roles")
+        .execute(pool)
+        .await
+        .map_err(IdpSyncError::DatabaseError)?;
     sqlx::query(
-        "DROP TRIGGER IF EXISTS trg_governance_roles_entity_change ON governance_roles; \
-         CREATE TRIGGER trg_governance_roles_entity_change \
+        "CREATE TRIGGER trg_governance_roles_entity_change \
          AFTER INSERT OR UPDATE OR DELETE ON governance_roles \
          FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
     )
@@ -860,9 +874,12 @@ async fn initialize_notify_triggers(pool: &PgPool) -> IdpSyncResult<()> {
     .await
     .map_err(IdpSyncError::DatabaseError)?;
 
+    sqlx::query("DROP TRIGGER IF EXISTS trg_agents_entity_change ON agents")
+        .execute(pool)
+        .await
+        .map_err(IdpSyncError::DatabaseError)?;
     sqlx::query(
-        "DROP TRIGGER IF EXISTS trg_agents_entity_change ON agents; \
-         CREATE TRIGGER trg_agents_entity_change \
+        "CREATE TRIGGER trg_agents_entity_change \
          AFTER INSERT OR UPDATE OR DELETE ON agents \
          FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
     )
