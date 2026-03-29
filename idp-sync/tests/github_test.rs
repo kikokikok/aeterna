@@ -1,8 +1,8 @@
 mod test_helpers;
 
 use idp_sync::github::{
-    AeternaRole, GitHubHierarchyMapper, initialize_github_sync_schema, map_github_org_role,
-    map_github_team_role, run_github_sync,
+    AeternaRole, GitHubHierarchyMapper, bridge_sync_to_governance, initialize_github_sync_schema,
+    map_github_org_role, map_github_team_role, run_github_sync,
 };
 use idp_sync::okta::{GroupType, IdpClient, IdpGroup};
 use serial_test::serial;
@@ -216,9 +216,9 @@ fn make_groups(teams_json: serde_json::Value) -> Vec<IdpGroup> {
     teams
         .into_iter()
         .map(|t| {
-            let parent =
-                t.get("parent")
-                    .and_then(|p| if p.is_null() { None } else { Some(p.clone()) });
+            let parent = t
+                .get("parent")
+                .and_then(|p| if p.is_null() { None } else { Some(p.clone()) });
             let (group_type, description) = match parent {
                 None => (
                     GroupType::GitHubTeam,
@@ -669,4 +669,127 @@ fn test_schema_initialization_is_safe_to_call_twice() {
     // This is a compile-time test ensuring the function signature is correct.
     // Actual DB test is in the integration tests above (every pg_pool call runs it).
     let _ = initialize_github_sync_schema;
+}
+
+// ──────────────────────────────────────────────────────────
+// 8.6: Governance bridge integration (task 0.3.4)
+// ──────────────────────────────────────────────────────────
+
+#[tokio::test]
+#[serial]
+async fn test_bridge_sync_to_governance_populates_roles() {
+    let Some(pool) = pg_pool().await else {
+        eprintln!("Skipping: Docker not available");
+        return;
+    };
+
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path_regex(r"/app/installations/\d+/access_tokens"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_token_response()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams\?"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_teams_nested()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/members\?"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_org_members()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams/platform/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_team_members_alice_bob()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams/security/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_team_members_charlie()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams/api-team/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_team_members_alice_bob()))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path_regex(r"/orgs/test-org/teams/frontend-team/members"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .mount(&mock_server)
+        .await;
+
+    let config = github_config(&mock_server);
+    let tenant_id = Uuid::new_v4();
+
+    // Step 1: Run sync to create users, memberships, org units
+    let report = run_github_sync(&config, &pool, tenant_id)
+        .await
+        .expect("sync should succeed");
+    assert!(!report.has_errors(), "sync errors: {:?}", report.errors);
+    assert!(report.users_created >= 3, "should create users");
+
+    // Step 2: Run governance bridge
+    let (gov_roles, user_roles) = bridge_sync_to_governance(&pool, tenant_id)
+        .await
+        .expect("bridge should succeed");
+
+    // Step 3: Verify governance_roles were created
+    // We have 3 users (alice, bob, charlie) with memberships to teams.
+    // alice+bob → platform + api-team, charlie → security
+    // That's at least 5 membership rows, so at least 5 governance_roles.
+    assert!(
+        gov_roles >= 3,
+        "should create governance_roles, got {gov_roles}"
+    );
+
+    // Step 4: Verify user_roles were created
+    assert!(
+        user_roles >= 3,
+        "should create user_roles, got {user_roles}"
+    );
+
+    // Step 5: Verify data in DB directly
+    let gov_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM governance_roles WHERE principal_type = 'user'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        gov_count.0 >= 3,
+        "governance_roles DB count should be >= 3, got {}",
+        gov_count.0
+    );
+
+    let ur_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM user_roles WHERE tenant_id = $1")
+        .bind(tenant_id.to_string())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(
+        ur_count.0 >= 3,
+        "user_roles DB count should be >= 3, got {}",
+        ur_count.0
+    );
+
+    // Step 6: Verify idempotency — running bridge again should not duplicate
+    let (gov_roles_2, user_roles_2) = bridge_sync_to_governance(&pool, tenant_id)
+        .await
+        .expect("second bridge should succeed");
+    assert_eq!(
+        gov_roles_2, 0,
+        "second bridge should not create new governance_roles"
+    );
+    assert_eq!(
+        user_roles_2, 0,
+        "second bridge should not create new user_roles"
+    );
 }

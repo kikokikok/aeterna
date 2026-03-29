@@ -19,7 +19,7 @@
 - [x] 0.3.1 Create `bridge_sync_to_governance()` function in `idp-sync/src/github.rs` that maps `SyncReport` users/memberships to `governance_roles` entries
 - [x] 0.3.2 Create corresponding `user_roles` entries from synced data with proper tenant_id and unit_id
 - [x] 0.3.3 Call `bridge_sync_to_governance()` in `admin_sync.rs::run_sync()` after `run_github_sync()` returns
-- [ ] 0.3.4 Add integration test: verify governance_roles populated after sync
+- [x] 0.3.4 Add integration test: verify governance_roles populated after sync
 
 ### 0.4 PG NOTIFY Triggers
 - [x] 0.4.1 Create trigger function `fn_notify_entity_change()` that emits `NOTIFY aeterna_entity_change` with JSON payload
@@ -77,7 +77,7 @@
 ## Tier 2 — IMPORTANT: Full Vision
 
 ### 2.1 Memory System E2E Validation
-- [ ] 2.1.1 Fix `PolicyRule` struct field mismatch in `memory/tests/llm_google_e2e_test.rs`
+- [x] 2.1.1 Fix `PolicyRule` struct field mismatch in `memory/tests/llm_google_e2e_test.rs`
 - [ ] 2.1.2 Create integration test: full 7-layer memory promotion chain (sensory to working to episodic to semantic) with real Qdrant
 - [ ] 2.1.3 Create integration test: Memory-R1 reward propagation with graph traversal
 - [ ] 2.1.4 Create integration test: RLM query routing with complexity-based strategy selection
