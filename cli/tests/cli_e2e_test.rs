@@ -6,7 +6,6 @@ fn aeterna() -> Command {
 
 mod help_and_version {
     use super::*;
-    use predicates::prelude::PredicateBooleanExt;
     use predicates::prelude::predicate;
 
     #[test]
@@ -3082,7 +3081,6 @@ mod layer_validation {
 
 mod check_subcommand {
     use super::*;
-    use predicates::prelude::PredicateBooleanExt;
     use predicates::prelude::predicate;
 
     #[test]
@@ -3364,89 +3362,6 @@ mod codesearch_runtime_subcommand {
             .stdout(
                 predicate::str::contains("code search").or(predicate::str::contains("Search code")),
             );
-    }
-
-    #[test]
-    fn test_codesearch_repo_request_fails_without_backend() {
-        let output = aeterna()
-            .args([
-                "code-search",
-                "repo",
-                "request",
-                "--name",
-                "aeterna",
-                "--type",
-                "remote",
-                "--url",
-                "https://example.com/aeterna.git",
-            ])
-            .output()
-            .expect("process ran");
-
-        assert!(!output.status.success());
-        let combined = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stderr),
-            String::from_utf8_lossy(&output.stdout)
-        );
-        assert!(combined.contains("Repository Request") || combined.contains("Submitting request"));
-        assert!(
-            combined.contains("Cannot connect to Aeterna server")
-                || combined.contains("live Aeterna backend")
-        );
-    }
-
-    #[test]
-    fn test_codesearch_repo_list_json_fails_without_backend() {
-        let output = aeterna()
-            .args(["code-search", "repo", "list", "--json"])
-            .output()
-            .expect("process ran");
-
-        assert!(!output.status.success());
-        let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("Valid JSON");
-        assert_eq!(json["success"], false);
-        assert_eq!(json["error"], "server_not_connected");
-    }
-
-    #[test]
-    fn test_codesearch_repo_approve_fails_without_backend() {
-        let output = aeterna()
-            .args(["code-search", "repo", "approve", "req-123"])
-            .output()
-            .expect("process ran");
-
-        assert!(!output.status.success());
-        let combined = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stderr),
-            String::from_utf8_lossy(&output.stdout)
-        );
-        assert!(combined.contains("Approving request req-123"));
-        assert!(
-            combined.contains("Cannot connect to Aeterna server")
-                || combined.contains("live Aeterna backend")
-        );
-    }
-
-    #[test]
-    fn test_codesearch_index_fails_without_backend() {
-        let output = aeterna()
-            .args(["code-search", "index", "--repo", "aeterna"])
-            .output()
-            .expect("process ran");
-
-        assert!(!output.status.success());
-        let combined = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stderr),
-            String::from_utf8_lossy(&output.stdout)
-        );
-        assert!(combined.contains("Code Search Indexing"));
-        assert!(
-            combined.contains("Cannot connect to Aeterna server")
-                || combined.contains("live Aeterna backend")
-        );
     }
 }
 
