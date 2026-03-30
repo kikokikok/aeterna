@@ -377,7 +377,7 @@ const testState = vi.hoisted(() => {
 
   class FakeSqliteDatabase {
     public readonly path: string;
-    public readonly options: { timeout: number };
+    public readonly options: { strict: boolean };
     public readonly execCalls: string[] = [];
     public readonly pragmaCalls: string[] = [];
     public readonly prepareCalls: string[] = [];
@@ -391,7 +391,7 @@ const testState = vi.hoisted(() => {
     public userVersion: number;
     public setUserVersionCalls = 0;
 
-    constructor(path: string, options: { timeout: number }) {
+    constructor(path: string, options: { strict: boolean }) {
       this.path = path;
       this.options = options;
       this.userVersion = state.initialUserVersion;
@@ -450,7 +450,7 @@ const testState = vi.hoisted(() => {
     initialUserVersion: 0,
   };
 
-  const mockBetterSqlite3 = vi.fn((path: string, options: { timeout: number }) => {
+  const mockBunSqlite = vi.fn((path: string, options: { strict: boolean }) => {
     return new FakeSqliteDatabase(path, options);
   });
 
@@ -461,7 +461,7 @@ const testState = vi.hoisted(() => {
   const reset = (): void => {
     state.instances = [];
     state.initialUserVersion = 0;
-    mockBetterSqlite3.mockClear();
+    mockBunSqlite.mockClear();
     mockMkdirSync.mockClear();
     mockExistsSync.mockReset();
     mockReadFileSync.mockReset();
@@ -481,15 +481,15 @@ const testState = vi.hoisted(() => {
     state,
     reset,
     lastInstance,
-    mockBetterSqlite3,
+    mockBunSqlite,
     mockMkdirSync,
     mockExistsSync,
     mockReadFileSync,
   };
 });
 
-vi.mock("better-sqlite3", () => ({
-  default: testState.mockBetterSqlite3,
+vi.mock("bun:sqlite", () => ({
+  Database: testState.mockBunSqlite,
 }));
 
 vi.mock("node:fs", async () => {
@@ -568,8 +568,8 @@ describe("Local local-first components", () => {
 
       expect(db.connection).toBeDefined();
       expect(testState.mockMkdirSync).toHaveBeenCalledWith("/tmp/aeterna", { recursive: true });
-      expect(testState.mockBetterSqlite3).toHaveBeenCalledWith("/tmp/aeterna/local.db", {
-        timeout: 5000,
+      expect(testState.mockBunSqlite).toHaveBeenCalledWith("/tmp/aeterna/local.db", {
+        strict: true,
       });
       expect(sqlite.journalMode).toBe("WAL");
       expect(sqlite.busyTimeout).toBe(5000);
