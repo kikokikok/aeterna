@@ -1,9 +1,9 @@
 {
   "info": {
     "name": "Aeterna E2E Test Suite",
-    "description": "Exhaustive end-to-end tests for the Aeterna stack via HTTPS ingress.\n\n1. Deployment Validation — health, readiness, liveness, 404 fallback\n2. Admin Features & Configuration — OpenSpec discovery, governance, A2A, MCP\n3. Realistic Scenario — Full knowledge CRUD lifecycle\n4. MCP Protocol — JSON-RPC initialize, tools/list, tools/call, error handling\n5. A2A Protocol — Agent card, health, metrics, task submission\n6. Webhook Validation — GitHub webhook endpoint error paths\n7. Error Validation — Invalid inputs, missing fields, nonexistent resources\n8. Knowledge Layer Tests — Multi-layer creation, PR-track governance\n9. MCP Governance Tools — Configure, request lifecycle, audit, roles\n10. MCP Memory Tools — Add, delete, feedback, close\n11. MCP CCA & Sync Tools — Context assemble, note capture, meta-loop, sync\n12. MCP Knowledge & Policy Tools — knowledge_get, knowledge_query\n13. Plugin Auth — Bootstrap Flow\n14. Plugin Auth — Token Refresh & Logout\n15. Auth Guards — Sessions\n16. Auth Guards — Knowledge CRUD\n17. Auth Guards — Sync\n18. Auth Edge Cases — Security Boundaries\n19. Authenticated Memory Lifecycle\n20. Authenticated Knowledge — Multi-layer & Governance\n21. Authenticated Governance — Drift & Proposals\n22. Authenticated Sync Bridge\n23. Authenticated CCA Capabilities\n24. Full Authenticated Journey — End-to-End",
+    "description": "Exhaustive end-to-end tests for the Aeterna stack via HTTPS ingress.\n\n1. Deployment Validation \u2014 health, readiness, liveness, 404 fallback\n2. Admin Features & Configuration \u2014 OpenSpec discovery, governance, A2A, MCP\n3. Realistic Scenario \u2014 Full knowledge CRUD lifecycle\n4. MCP Protocol \u2014 JSON-RPC initialize, tools/list, tools/call, error handling\n5. A2A Protocol \u2014 Agent card, health, metrics, task submission\n6. Webhook Validation \u2014 GitHub webhook endpoint error paths\n7. Error Validation \u2014 Invalid inputs, missing fields, nonexistent resources\n8. Knowledge Layer Tests \u2014 Multi-layer creation, PR-track governance\n9. MCP Governance Tools \u2014 Configure, request lifecycle, audit, roles\n10. MCP Memory Tools \u2014 Add, delete, feedback, close\n11. MCP CCA & Sync Tools \u2014 Context assemble, note capture, meta-loop, sync\n12. MCP Knowledge & Policy Tools \u2014 knowledge_get, knowledge_query\n13. Plugin Auth \u2014 Bootstrap Flow\n14. Plugin Auth \u2014 Token Refresh & Logout\n15. Auth Guards \u2014 Sessions\n16. Auth Guards \u2014 Knowledge CRUD\n17. Auth Guards \u2014 Sync\n18. Auth Edge Cases \u2014 Security Boundaries\n19. Authenticated Memory Lifecycle\n20. Authenticated Knowledge \u2014 Multi-layer & Governance\n21. Authenticated Governance \u2014 Drift & Proposals\n22. Authenticated Sync Bridge\n23. Authenticated CCA Capabilities\n24. Full Authenticated Journey \u2014 End-to-End",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "version": "4.0.0"
+    "version": "5.0.0"
   },
   "variable": [
     {
@@ -153,6 +153,46 @@
     },
     {
       "key": "journeyKnowledgeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "graphEdgeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "graphEdgeId2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "promoteMemoryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "proposeDraftId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "chainMemoryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "chainMemoryId2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "chainEdgeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "chainEdgeId2",
       "value": "",
       "type": "string"
     }
@@ -695,7 +735,7 @@
           }
         },
         {
-          "name": "2.12 Admin — GitHub Org Sync",
+          "name": "2.12 Admin \u2014 GitHub Org Sync",
           "event": [
             {
               "listen": "test",
@@ -762,7 +802,7 @@
       ]
     },
     {
-      "name": "3. Realistic Scenario — Knowledge CRUD Lifecycle",
+      "name": "3. Realistic Scenario \u2014 Knowledge CRUD Lifecycle",
       "event": [
         {
           "listen": "prerequest",
@@ -1338,7 +1378,7 @@
       ]
     },
     {
-      "name": "4. MCP Protocol — JSON-RPC",
+      "name": "4. MCP Protocol \u2014 JSON-RPC",
       "item": [
         {
           "name": "4.1 MCP Initialize",
@@ -2735,7 +2775,7 @@
       ]
     },
     {
-      "name": "8. Knowledge Layer Tests — Multi-layer & Governance",
+      "name": "8. Knowledge Layer Tests \u2014 Multi-layer & Governance",
       "event": [
         {
           "listen": "prerequest",
@@ -3059,7 +3099,7 @@
       "name": "9. MCP Governance Tools",
       "item": [
         {
-          "name": "9.1 governance_configure — set governance config",
+          "name": "9.1 governance_configure \u2014 set governance config",
           "event": [
             {
               "listen": "test",
@@ -3124,7 +3164,7 @@
           }
         },
         {
-          "name": "9.2 governance_request_create — create approval request",
+          "name": "9.2 governance_request_create \u2014 create approval request",
           "event": [
             {
               "listen": "test",
@@ -3190,7 +3230,7 @@
           }
         },
         {
-          "name": "9.3 governance_request_list — list pending requests",
+          "name": "9.3 governance_request_list \u2014 list pending requests",
           "event": [
             {
               "listen": "test",
@@ -3245,7 +3285,7 @@
           }
         },
         {
-          "name": "9.4 governance_audit_list — list audit entries",
+          "name": "9.4 governance_audit_list \u2014 list audit entries",
           "event": [
             {
               "listen": "test",
@@ -3300,7 +3340,7 @@
           }
         },
         {
-          "name": "9.5 governance_role_list — list governance roles",
+          "name": "9.5 governance_role_list \u2014 list governance roles",
           "event": [
             {
               "listen": "test",
@@ -3355,7 +3395,7 @@
           }
         },
         {
-          "name": "9.6 governance_config_get — verify config set in 9.1",
+          "name": "9.6 governance_config_get \u2014 verify config set in 9.1",
           "event": [
             {
               "listen": "test",
@@ -3410,7 +3450,7 @@
           }
         },
         {
-          "name": "9.7 governance_unit_create — create org unit",
+          "name": "9.7 governance_unit_create \u2014 create org unit",
           "event": [
             {
               "listen": "test",
@@ -3465,7 +3505,7 @@
           }
         },
         {
-          "name": "9.8 governance_hierarchy_navigate — navigate org hierarchy",
+          "name": "9.8 governance_hierarchy_navigate \u2014 navigate org hierarchy",
           "event": [
             {
               "listen": "test",
@@ -3525,7 +3565,7 @@
       "name": "10. MCP Memory Tools",
       "item": [
         {
-          "name": "10.1 memory_add — store a memory",
+          "name": "10.1 memory_add \u2014 store a memory",
           "event": [
             {
               "listen": "test",
@@ -3590,7 +3630,7 @@
           }
         },
         {
-          "name": "10.2 memory_search — search memories (with tenant)",
+          "name": "10.2 memory_search \u2014 search memories (with tenant)",
           "event": [
             {
               "listen": "test",
@@ -3645,7 +3685,7 @@
           }
         },
         {
-          "name": "10.3 memory_feedback — submit reward signal",
+          "name": "10.3 memory_feedback \u2014 submit reward signal",
           "event": [
             {
               "listen": "test",
@@ -3700,7 +3740,7 @@
           }
         },
         {
-          "name": "10.4 memory_delete — delete a memory",
+          "name": "10.4 memory_delete \u2014 delete a memory",
           "event": [
             {
               "listen": "test",
@@ -3755,7 +3795,7 @@
           }
         },
         {
-          "name": "10.5 memory_close — close session context",
+          "name": "10.5 memory_close \u2014 close session context",
           "event": [
             {
               "listen": "test",
@@ -3810,7 +3850,7 @@
           }
         },
         {
-          "name": "10.6 memory_optimize — trigger optimization",
+          "name": "10.6 memory_optimize \u2014 trigger optimization",
           "event": [
             {
               "listen": "test",
@@ -3865,7 +3905,7 @@
           }
         },
         {
-          "name": "10.7 memory_reason — reflective reasoning",
+          "name": "10.7 memory_reason \u2014 reflective reasoning",
           "event": [
             {
               "listen": "test",
@@ -3925,7 +3965,7 @@
       "name": "11. MCP CCA & Sync Tools",
       "item": [
         {
-          "name": "11.1 context_assemble — hierarchical context",
+          "name": "11.1 context_assemble \u2014 hierarchical context",
           "event": [
             {
               "listen": "test",
@@ -3980,7 +4020,7 @@
           }
         },
         {
-          "name": "11.2 note_capture — capture trajectory event",
+          "name": "11.2 note_capture \u2014 capture trajectory event",
           "event": [
             {
               "listen": "test",
@@ -4035,7 +4075,7 @@
           }
         },
         {
-          "name": "11.3 meta_loop_status — get meta-agent status",
+          "name": "11.3 meta_loop_status \u2014 get meta-agent status",
           "event": [
             {
               "listen": "test",
@@ -4090,7 +4130,7 @@
           }
         },
         {
-          "name": "11.4 hindsight_query — query error patterns",
+          "name": "11.4 hindsight_query \u2014 query error patterns",
           "event": [
             {
               "listen": "test",
@@ -4145,7 +4185,7 @@
           }
         },
         {
-          "name": "11.5 sync_now — trigger sync",
+          "name": "11.5 sync_now \u2014 trigger sync",
           "event": [
             {
               "listen": "test",
@@ -4200,7 +4240,7 @@
           }
         },
         {
-          "name": "11.6 sync_status — check sync status",
+          "name": "11.6 sync_status \u2014 check sync status",
           "event": [
             {
               "listen": "test",
@@ -4260,7 +4300,7 @@
       "name": "12. MCP Knowledge & Policy Tools",
       "item": [
         {
-          "name": "12.1 knowledge_get — get by path",
+          "name": "12.1 knowledge_get \u2014 get by path",
           "event": [
             {
               "listen": "test",
@@ -4315,7 +4355,7 @@
           }
         },
         {
-          "name": "12.2 knowledge_query — semantic search",
+          "name": "12.2 knowledge_query \u2014 semantic search",
           "event": [
             {
               "listen": "test",
@@ -4370,7 +4410,7 @@
           }
         },
         {
-          "name": "12.3 knowledge_list — list by layer",
+          "name": "12.3 knowledge_list \u2014 list by layer",
           "event": [
             {
               "listen": "test",
@@ -4425,7 +4465,7 @@
           }
         },
         {
-          "name": "12.4 knowledge_resolve_conflict — conflict resolution",
+          "name": "12.4 knowledge_resolve_conflict \u2014 conflict resolution",
           "event": [
             {
               "listen": "test",
@@ -4482,10 +4522,10 @@
       ]
     },
     {
-      "name": "13. Plugin Auth — Bootstrap Flow",
+      "name": "13. Plugin Auth \u2014 Bootstrap Flow",
       "item": [
         {
-          "name": "13.1 Bootstrap — Happy Path",
+          "name": "13.1 Bootstrap \u2014 Happy Path",
           "event": [
             {
               "listen": "test",
@@ -4553,7 +4593,7 @@
           }
         },
         {
-          "name": "13.2 Bootstrap — Unsupported Provider",
+          "name": "13.2 Bootstrap \u2014 Unsupported Provider",
           "event": [
             {
               "listen": "test",
@@ -4602,7 +4642,7 @@
           }
         },
         {
-          "name": "13.3 Bootstrap — Missing Required Fields",
+          "name": "13.3 Bootstrap \u2014 Missing Required Fields",
           "event": [
             {
               "listen": "test",
@@ -4653,7 +4693,7 @@
           }
         },
         {
-          "name": "13.4 Bootstrap — Invalid GitHub Token",
+          "name": "13.4 Bootstrap \u2014 Invalid GitHub Token",
           "event": [
             {
               "listen": "test",
@@ -4702,7 +4742,7 @@
           }
         },
         {
-          "name": "13.5 Bootstrap — Empty Body",
+          "name": "13.5 Bootstrap \u2014 Empty Body",
           "event": [
             {
               "listen": "test",
@@ -4755,10 +4795,10 @@
       ]
     },
     {
-      "name": "14. Plugin Auth — Token Refresh & Logout",
+      "name": "14. Plugin Auth \u2014 Token Refresh & Logout",
       "item": [
         {
-          "name": "14.1 Refresh — Happy Path",
+          "name": "14.1 Refresh \u2014 Happy Path",
           "event": [
             {
               "listen": "test",
@@ -4823,7 +4863,7 @@
           }
         },
         {
-          "name": "14.2 Refresh — Old Token Rejected (single-use)",
+          "name": "14.2 Refresh \u2014 Old Token Rejected (single-use)",
           "event": [
             {
               "listen": "test",
@@ -4872,7 +4912,7 @@
           }
         },
         {
-          "name": "14.3 Refresh — Missing Token Field",
+          "name": "14.3 Refresh \u2014 Missing Token Field",
           "event": [
             {
               "listen": "test",
@@ -4923,7 +4963,7 @@
           }
         },
         {
-          "name": "14.4 Logout — Happy Path",
+          "name": "14.4 Logout \u2014 Happy Path",
           "event": [
             {
               "listen": "test",
@@ -4972,7 +5012,7 @@
           }
         },
         {
-          "name": "14.5 Logout — No Refresh Token",
+          "name": "14.5 Logout \u2014 No Refresh Token",
           "event": [
             {
               "listen": "test",
@@ -5073,10 +5113,10 @@
       ]
     },
     {
-      "name": "15. Auth Guards — Sessions",
+      "name": "15. Auth Guards \u2014 Sessions",
       "item": [
         {
-          "name": "15.1 Session Start — Valid Token",
+          "name": "15.1 Session Start \u2014 Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5131,7 +5171,7 @@
           }
         },
         {
-          "name": "15.2 Session Start — No Token (401)",
+          "name": "15.2 Session Start \u2014 No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5178,7 +5218,7 @@
           }
         },
         {
-          "name": "15.3 Session Start — Invalid Token (401)",
+          "name": "15.3 Session Start \u2014 Invalid Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5229,7 +5269,7 @@
           }
         },
         {
-          "name": "15.4 Session End — Valid Token",
+          "name": "15.4 Session End \u2014 Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5283,7 +5323,7 @@
           }
         },
         {
-          "name": "15.5 Session End — No Token (401)",
+          "name": "15.5 Session End \u2014 No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5334,10 +5374,10 @@
       ]
     },
     {
-      "name": "16. Auth Guards — Knowledge CRUD",
+      "name": "16. Auth Guards \u2014 Knowledge CRUD",
       "item": [
         {
-          "name": "16.1 Knowledge Create — Valid Token",
+          "name": "16.1 Knowledge Create \u2014 Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5391,7 +5431,7 @@
           }
         },
         {
-          "name": "16.2 Knowledge Create — No Token (401)",
+          "name": "16.2 Knowledge Create \u2014 No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5439,7 +5479,7 @@
           }
         },
         {
-          "name": "16.3 Knowledge Query — Valid Token",
+          "name": "16.3 Knowledge Query \u2014 Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5491,7 +5531,7 @@
           }
         },
         {
-          "name": "16.4 Knowledge Query — No Token (401)",
+          "name": "16.4 Knowledge Query \u2014 No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5539,7 +5579,7 @@
           }
         },
         {
-          "name": "16.5 Knowledge Delete — Valid Token (cleanup)",
+          "name": "16.5 Knowledge Delete \u2014 Valid Token (cleanup)",
           "event": [
             {
               "listen": "test",
@@ -5588,7 +5628,7 @@
           }
         },
         {
-          "name": "16.6 Knowledge Delete — No Token (401)",
+          "name": "16.6 Knowledge Delete \u2014 No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5623,10 +5663,10 @@
       ]
     },
     {
-      "name": "17. Auth Guards — Sync",
+      "name": "17. Auth Guards \u2014 Sync",
       "item": [
         {
-          "name": "17.1 Sync Push — Valid Token",
+          "name": "17.1 Sync Push \u2014 Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5678,7 +5718,7 @@
           }
         },
         {
-          "name": "17.2 Sync Push — No Token (401)",
+          "name": "17.2 Sync Push \u2014 No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5726,7 +5766,7 @@
           }
         },
         {
-          "name": "17.3 Sync Pull — Valid Token",
+          "name": "17.3 Sync Pull \u2014 Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5775,7 +5815,7 @@
           }
         },
         {
-          "name": "17.4 Sync Pull — No Token (401)",
+          "name": "17.4 Sync Pull \u2014 No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5820,10 +5860,10 @@
       ]
     },
     {
-      "name": "18. Auth Edge Cases — Security Boundaries",
+      "name": "18. Auth Edge Cases \u2014 Security Boundaries",
       "item": [
         {
-          "name": "18.1 Admin Sync — No Auth Required (security gap documented)",
+          "name": "18.1 Admin Sync \u2014 No Auth Required (security gap documented)",
           "event": [
             {
               "listen": "test",
@@ -5860,7 +5900,7 @@
           }
         },
         {
-          "name": "18.2 Health Endpoints — No Auth Required",
+          "name": "18.2 Health Endpoints \u2014 No Auth Required",
           "event": [
             {
               "listen": "test",
@@ -5896,7 +5936,7 @@
           }
         },
         {
-          "name": "18.3 Knowledge Discovery — No Auth Required",
+          "name": "18.3 Knowledge Discovery \u2014 No Auth Required",
           "event": [
             {
               "listen": "test",
@@ -5929,7 +5969,7 @@
           }
         },
         {
-          "name": "18.4 Auth Bootstrap — Malformed JSON",
+          "name": "18.4 Auth Bootstrap \u2014 Malformed JSON",
           "event": [
             {
               "listen": "test",
@@ -5980,7 +6020,7 @@
           }
         },
         {
-          "name": "18.5 Protected Endpoint — Bearer Prefix Missing",
+          "name": "18.5 Protected Endpoint \u2014 Bearer Prefix Missing",
           "event": [
             {
               "listen": "test",
@@ -6031,7 +6071,7 @@
           }
         },
         {
-          "name": "18.6 Protected Endpoint — Empty Bearer",
+          "name": "18.6 Protected Endpoint \u2014 Empty Bearer",
           "event": [
             {
               "listen": "test",
@@ -6087,7 +6127,7 @@
       "name": "19. Authenticated Memory Lifecycle",
       "item": [
         {
-          "name": "19.1 memory_add — store project-layer memory (authenticated)",
+          "name": "19.1 memory_add \u2014 store project-layer memory (authenticated)",
           "event": [
             {
               "listen": "prerequest",
@@ -6156,7 +6196,7 @@
           }
         },
         {
-          "name": "19.2 memory_add — store team-layer memory",
+          "name": "19.2 memory_add \u2014 store team-layer memory",
           "event": [
             {
               "listen": "test",
@@ -6204,7 +6244,7 @@
           }
         },
         {
-          "name": "19.3 memory_search — find project memories",
+          "name": "19.3 memory_search \u2014 find project memories",
           "event": [
             {
               "listen": "test",
@@ -6256,7 +6296,7 @@
           }
         },
         {
-          "name": "19.4 memory_feedback — reward signal on stored memory",
+          "name": "19.4 memory_feedback \u2014 reward signal on stored memory",
           "event": [
             {
               "listen": "test",
@@ -6303,7 +6343,7 @@
           }
         },
         {
-          "name": "19.5 memory_reason — reflective reasoning query",
+          "name": "19.5 memory_reason \u2014 reflective reasoning query",
           "event": [
             {
               "listen": "test",
@@ -6350,7 +6390,7 @@
           }
         },
         {
-          "name": "19.6 memory_optimize — trigger Memory-R1 optimization",
+          "name": "19.6 memory_optimize \u2014 trigger Memory-R1 optimization",
           "event": [
             {
               "listen": "test",
@@ -6397,7 +6437,7 @@
           }
         },
         {
-          "name": "19.7 memory_close — close session context",
+          "name": "19.7 memory_close \u2014 close session context",
           "event": [
             {
               "listen": "test",
@@ -6444,7 +6484,7 @@
           }
         },
         {
-          "name": "19.8 memory_delete — cleanup test memory",
+          "name": "19.8 memory_delete \u2014 cleanup test memory",
           "event": [
             {
               "listen": "test",
@@ -6494,7 +6534,7 @@
       ]
     },
     {
-      "name": "20. Authenticated Knowledge — Multi-layer & Governance",
+      "name": "20. Authenticated Knowledge \u2014 Multi-layer & Governance",
       "item": [
         {
           "name": "20.1 Create Project-layer entry (fast-track, authenticated)",
@@ -6903,10 +6943,10 @@
       ]
     },
     {
-      "name": "21. Authenticated Governance — Drift & Proposals",
+      "name": "21. Authenticated Governance \u2014 Drift & Proposals",
       "item": [
         {
-          "name": "21.1 governance_configure — set drift config (MCP)",
+          "name": "21.1 governance_configure \u2014 set drift config (MCP)",
           "event": [
             {
               "listen": "test",
@@ -6954,7 +6994,7 @@
           }
         },
         {
-          "name": "21.2 governance_config_get — verify config (MCP)",
+          "name": "21.2 governance_config_get \u2014 verify config (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7001,7 +7041,7 @@
           }
         },
         {
-          "name": "21.3 Drift Config — REST endpoint",
+          "name": "21.3 Drift Config \u2014 REST endpoint",
           "event": [
             {
               "listen": "test",
@@ -7035,7 +7075,7 @@
           }
         },
         {
-          "name": "21.4 Drift Detection — REST endpoint",
+          "name": "21.4 Drift Detection \u2014 REST endpoint",
           "event": [
             {
               "listen": "test",
@@ -7069,7 +7109,7 @@
           }
         },
         {
-          "name": "21.5 governance_request_create — create approval request (MCP)",
+          "name": "21.5 governance_request_create \u2014 create approval request (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7117,7 +7157,7 @@
           }
         },
         {
-          "name": "21.6 governance_request_list — list pending requests (MCP)",
+          "name": "21.6 governance_request_list \u2014 list pending requests (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7164,7 +7204,7 @@
           }
         },
         {
-          "name": "21.7 governance_audit_list — audit trail (MCP)",
+          "name": "21.7 governance_audit_list \u2014 audit trail (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7211,7 +7251,7 @@
           }
         },
         {
-          "name": "21.8 governance_role_list — list roles (MCP)",
+          "name": "21.8 governance_role_list \u2014 list roles (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7258,7 +7298,7 @@
           }
         },
         {
-          "name": "21.9 governance_unit_create — create org unit (MCP)",
+          "name": "21.9 governance_unit_create \u2014 create org unit (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7305,7 +7345,7 @@
           }
         },
         {
-          "name": "21.10 Governance Reports — REST endpoint",
+          "name": "21.10 Governance Reports \u2014 REST endpoint",
           "event": [
             {
               "listen": "test",
@@ -7339,7 +7379,7 @@
           }
         },
         {
-          "name": "21.11 List Proposals — REST endpoint",
+          "name": "21.11 List Proposals \u2014 REST endpoint",
           "event": [
             {
               "listen": "test",
@@ -7373,7 +7413,7 @@
           }
         },
         {
-          "name": "21.12 Event Replay — REST endpoint",
+          "name": "21.12 Event Replay \u2014 REST endpoint",
           "event": [
             {
               "listen": "test",
@@ -7422,7 +7462,7 @@
       "name": "22. Authenticated Sync Bridge",
       "item": [
         {
-          "name": "22.1 Sync Push — empty batch (authenticated)",
+          "name": "22.1 Sync Push \u2014 empty batch (authenticated)",
           "event": [
             {
               "listen": "test",
@@ -7476,7 +7516,7 @@
           }
         },
         {
-          "name": "22.2 Sync Pull — initial cursor (authenticated)",
+          "name": "22.2 Sync Pull \u2014 initial cursor (authenticated)",
           "event": [
             {
               "listen": "test",
@@ -7525,7 +7565,7 @@
           }
         },
         {
-          "name": "22.3 sync_now — trigger sync (MCP)",
+          "name": "22.3 sync_now \u2014 trigger sync (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7572,7 +7612,7 @@
           }
         },
         {
-          "name": "22.4 sync_status — check sync status (MCP)",
+          "name": "22.4 sync_status \u2014 check sync status (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7619,7 +7659,7 @@
           }
         },
         {
-          "name": "22.5 Sync Push — with entry (authenticated)",
+          "name": "22.5 Sync Push \u2014 with entry (authenticated)",
           "event": [
             {
               "listen": "test",
@@ -7677,7 +7717,7 @@
       "name": "23. Authenticated CCA Capabilities",
       "item": [
         {
-          "name": "23.1 context_assemble — hierarchical context",
+          "name": "23.1 context_assemble \u2014 hierarchical context",
           "event": [
             {
               "listen": "test",
@@ -7725,7 +7765,7 @@
           }
         },
         {
-          "name": "23.2 note_capture — capture trajectory event",
+          "name": "23.2 note_capture \u2014 capture trajectory event",
           "event": [
             {
               "listen": "test",
@@ -7772,7 +7812,7 @@
           }
         },
         {
-          "name": "23.3 hindsight_query — query error patterns",
+          "name": "23.3 hindsight_query \u2014 query error patterns",
           "event": [
             {
               "listen": "test",
@@ -7819,7 +7859,7 @@
           }
         },
         {
-          "name": "23.4 meta_loop_status — check meta-agent status",
+          "name": "23.4 meta_loop_status \u2014 check meta-agent status",
           "event": [
             {
               "listen": "test",
@@ -7866,7 +7906,7 @@
           }
         },
         {
-          "name": "23.5 knowledge_query — semantic search via MCP",
+          "name": "23.5 knowledge_query \u2014 semantic search via MCP",
           "event": [
             {
               "listen": "test",
@@ -7913,7 +7953,7 @@
           }
         },
         {
-          "name": "23.6 knowledge_list — list by layer via MCP",
+          "name": "23.6 knowledge_list \u2014 list by layer via MCP",
           "event": [
             {
               "listen": "test",
@@ -7962,7 +8002,7 @@
       ]
     },
     {
-      "name": "24. Full Authenticated Journey — End-to-End",
+      "name": "24. Full Authenticated Journey \u2014 End-to-End",
       "item": [
         {
           "name": "24.1 Re-bootstrap (fresh tokens)",
@@ -8682,6 +8722,2528 @@
               }
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "25. Graph Tools \u2014 Link, Traverse, Query",
+      "item": [
+        {
+          "name": "25.1 graph_link \u2014 create edge memory->knowledge",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.error).to.be.undefined;",
+                  "});",
+                  "pm.test('Tool returned success and stores graphEdgeId', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "        const parsed = JSON.parse(content[0].text);",
+                  "        pm.expect(parsed.success).to.eql(true);",
+                  "        if (parsed.edge_id) pm.collectionVariables.set('graphEdgeId', parsed.edge_id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":700,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_link\",\"arguments\":{\"source_id\":\"e2e-memory-1\",\"target_id\":\"e2e-knowledge-1\",\"edge_type\":\"implements\",\"confidence\":0.95,\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "25.2 graph_link \u2014 create second edge memory->memory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.error).to.be.undefined;",
+                  "});",
+                  "pm.test('Store second edge id', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "        const parsed = JSON.parse(content[0].text);",
+                  "        pm.expect(parsed.success).to.eql(true);",
+                  "        if (parsed.edge_id) pm.collectionVariables.set('graphEdgeId2', parsed.edge_id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":701,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_link\",\"arguments\":{\"source_id\":\"e2e-memory-1\",\"target_id\":\"e2e-memory-2\",\"edge_type\":\"related_to\",\"confidence\":0.9,\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "25.3 graph_traverse \u2014 BFS from e2e-memory-1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid and visited array present', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      pm.expect(parsed.visited).to.be.an('array');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":702,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_traverse\",\"arguments\":{\"node_id\":\"e2e-memory-1\",\"direction\":\"both\",\"max_depth\":2,\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "25.4 graph_find_path \u2014 memory to knowledge",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Path contains start and end', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      pm.expect(parsed.path).to.be.an('array');",
+                  "      const p = JSON.stringify(parsed.path);",
+                  "      pm.expect(p).to.include('e2e-memory-1');",
+                  "      pm.expect(p).to.include('e2e-knowledge-1');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":703,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_find_path\",\"arguments\":{\"start_id\":\"e2e-memory-1\",\"end_id\":\"e2e-knowledge-1\",\"max_depth\":3,\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "25.5 graph_related \u2014 find related",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Related array present', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      pm.expect(parsed.related).to.be.an('array');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":704,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_related\",\"arguments\":{\"node_id\":\"e2e-memory-1\",\"threshold\":0.5,\"max_results\":10,\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "25.6 graph_violations \u2014 check violations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Violations array present', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      pm.expect(parsed.violations).to.be.an('array');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":705,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_violations\",\"arguments\":{\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "25.7 graph_implementations \u2014 by knowledge id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Implementations array present', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      pm.expect(parsed.implementations).to.be.an('array');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":706,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_implementations\",\"arguments\":{\"knowledge_id\":\"e2e-knowledge-1\",\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "25.8 graph_context \u2014 file context",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('file_node field present', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      pm.expect(parsed).to.have.property('file_node');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":707,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_context\",\"arguments\":{\"file_path\":\"src/server/plugin_auth.rs\",\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "25.9 graph_query \u2014 search nodes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('results array present', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      pm.expect(parsed.results).to.be.an('array');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":708,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_query\",\"arguments\":{\"query\":\"memory\",\"limit\":10,\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "25.10 graph_neighbors \u2014 find neighbors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('neighbors array present', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      pm.expect(parsed.neighbors).to.be.an('array');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":709,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_neighbors\",\"arguments\":{\"nodeId\":\"e2e-memory-1\",\"depth\":1,\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "25.11 graph_unlink \u2014 cleanup by edge_id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Cleanup success', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":710,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_unlink\",\"arguments\":{\"edge_id\":\"{{graphEdgeId}}\",\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "25.12 graph_unlink \u2014 cleanup second edge",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Cleanup success', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":711,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_unlink\",\"arguments\":{\"source_id\":\"e2e-memory-1\",\"target_id\":\"e2e-memory-2\",\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "26. Memory Promote & Auto-Promote",
+      "item": [
+        {
+          "name": "26.1 memory_add \u2014 store promotable memory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Stores promoteMemoryId', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.error).to.be.undefined;",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      if (parsed.memoryId) pm.collectionVariables.set('promoteMemoryId', parsed.memoryId);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":800,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_add\",\"arguments\":{\"content\":\"E2E promote test: critical architectural decision about microservice boundaries\",\"layer\":\"project\",\"tags\":[\"promote-test\",\"architecture\"]},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "26.2 memory_feedback \u2014 boost reward",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Feedback success', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":801,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_feedback\",\"arguments\":{\"memoryId\":\"{{promoteMemoryId}}\",\"feedback\":\"positive\",\"score\":0.9},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "26.3 aeterna_memory_promote \u2014 manual promote to team",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response valid (success or governance error)', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":802,\"method\":\"tools/call\",\"params\":{\"name\":\"aeterna_memory_promote\",\"arguments\":{\"memoryId\":\"{{promoteMemoryId}}\",\"toLayer\":\"team\",\"reason\":\"Critical architectural decision relevant to entire team\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "26.4 aeterna_memory_auto_promote \u2014 dry run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('dryRun response fields', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed).to.have.property('evaluatedCount');",
+                  "      pm.expect(parsed).to.have.property('promotedCount');",
+                  "      pm.expect(parsed.dryRun).to.eql(true);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":803,\"method\":\"tools/call\",\"params\":{\"name\":\"aeterna_memory_auto_promote\",\"arguments\":{\"layer\":\"project\",\"threshold\":0.3,\"dryRun\":true},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "26.5 aeterna_memory_auto_promote \u2014 actual run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('actual run response fields', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed).to.have.property('evaluatedCount');",
+                  "      pm.expect(parsed).to.have.property('promotedCount');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":804,\"method\":\"tools/call\",\"params\":{\"name\":\"aeterna_memory_auto_promote\",\"arguments\":{\"layer\":\"project\",\"threshold\":0.3,\"dryRun\":false},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "26.6 memory_delete \u2014 cleanup",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Delete success', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":805,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_delete\",\"arguments\":{\"memoryId\":\"{{promoteMemoryId}}\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "27. Knowledge Propose & Governance Workflow",
+      "item": [
+        {
+          "name": "27.1 aeterna_knowledge_propose \u2014 propose ADR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Draft returned and draftId stored', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.error).to.be.undefined;",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      pm.expect(parsed.draft).to.be.an('object');",
+                  "      pm.expect(parsed.draft).to.have.property('draftId');",
+                  "      pm.expect(parsed.draft).to.have.property('title');",
+                  "      pm.expect(parsed.draft).to.have.property('kind');",
+                  "      pm.expect(parsed.draft).to.have.property('layer');",
+                  "      pm.expect(parsed.draft).to.have.property('content');",
+                  "      pm.collectionVariables.set('proposeDraftId', parsed.draft.draftId);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":850,\"method\":\"tools/call\",\"params\":{\"name\":\"aeterna_knowledge_propose\",\"arguments\":{\"description\":\"We should use PostgreSQL 16+ for all new microservices because of the improved JSON performance and logical replication support\",\"proposedBy\":\"e2e-user@test.com\",\"knowledgeType\":\"adr\",\"layer\":\"team\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "27.2 aeterna_knowledge_pending \u2014 list pending",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Pending response is valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":851,\"method\":\"tools/call\",\"params\":{\"name\":\"aeterna_knowledge_pending\",\"arguments\":{},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "27.3 aeterna_knowledge_propose \u2014 propose pattern",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Pattern proposal success', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      pm.expect(parsed.draft).to.be.an('object');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":852,\"method\":\"tools/call\",\"params\":{\"name\":\"aeterna_knowledge_propose\",\"arguments\":{\"description\":\"All REST endpoints must return consistent error responses with code, message, and optional details fields\",\"proposedBy\":\"e2e-user@test.com\",\"knowledgeType\":\"pattern\",\"layer\":\"org\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "27.4 aeterna_knowledge_propose \u2014 propose policy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Policy proposal success', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":853,\"method\":\"tools/call\",\"params\":{\"name\":\"aeterna_knowledge_propose\",\"arguments\":{\"description\":\"Production services must not use alpha or beta version dependencies unless explicitly approved by the architect\",\"proposedBy\":\"e2e-user@test.com\",\"knowledgeType\":\"policy\",\"layer\":\"company\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "27.5 aeterna_knowledge_propose \u2014 propose hindsight",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Hindsight proposal success', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":854,\"method\":\"tools/call\",\"params\":{\"name\":\"aeterna_knowledge_propose\",\"arguments\":{\"description\":\"Discovered that DuckDB connection pooling causes deadlocks when concurrent graph writes exceed 4 threads. Mitigation: use a single-writer mutex pattern.\",\"proposedBy\":\"e2e-user@test.com\",\"knowledgeType\":\"hindsight\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "27.6 knowledge_resolve_conflict \u2014 resolve federation conflict",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Graceful response for conflict resolution', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":855,\"method\":\"tools/call\",\"params\":{\"name\":\"knowledge_resolve_conflict\",\"arguments\":{\"upstream_id\":\"e2e-upstream-1\",\"resolution\":\"ours\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "28. Connected Integration Chain \u2014 Memory\u2192Graph\u2192Drift\u2192CCA\u2192Sync",
+      "item": [
+        {
+          "name": "28.1 memory_add \u2014 chain seed memory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Store chainMemoryId', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      if (parsed.memoryId) pm.collectionVariables.set('chainMemoryId', parsed.memoryId);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":900,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_add\",\"arguments\":{\"content\":\"Chain seed: use PostgreSQL 16+ for event-heavy services to improve JSON query performance and replication\",\"layer\":\"project\",\"tags\":[\"chain\",\"postgres\",\"adr\"]},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.2 memory_add \u2014 chain second memory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Store chainMemoryId2', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      if (parsed.memoryId) pm.collectionVariables.set('chainMemoryId2', parsed.memoryId);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":901,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_add\",\"arguments\":{\"content\":\"Chain related memory: replication lag drops with tuned logical slots and smaller transaction batches\",\"layer\":\"project\",\"tags\":[\"chain\",\"replication\"]},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.3 graph_link \u2014 memory1 related_to memory2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Stores chainEdgeId', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      if (parsed.edge_id) pm.collectionVariables.set('chainEdgeId', parsed.edge_id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":902,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_link\",\"arguments\":{\"source_id\":\"{{chainMemoryId}}\",\"target_id\":\"{{chainMemoryId2}}\",\"edge_type\":\"related_to\",\"confidence\":0.92,\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.4 graph_link \u2014 memory1 implements knowledge ref",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Stores chainEdgeId2', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      if (parsed.edge_id) pm.collectionVariables.set('chainEdgeId2', parsed.edge_id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":903,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_link\",\"arguments\":{\"source_id\":\"{{chainMemoryId}}\",\"target_id\":\"chain-knowledge-ref\",\"edge_type\":\"implements\",\"confidence\":0.91,\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.5 graph_traverse \u2014 verify both memories reachable",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Visited includes both memory ids', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      const visited = JSON.stringify(parsed.visited || []);",
+                  "      pm.expect(visited).to.include(pm.collectionVariables.get('chainMemoryId'));",
+                  "      pm.expect(visited).to.include(pm.collectionVariables.get('chainMemoryId2'));",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":904,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_traverse\",\"arguments\":{\"node_id\":\"{{chainMemoryId}}\",\"direction\":\"both\",\"max_depth\":2,\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.6 graph_find_path \u2014 memory1 to memory2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Path found', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      pm.expect(parsed.path).to.be.an('array');",
+                  "      pm.expect(parsed.path.length).to.be.at.least(1);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":905,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_find_path\",\"arguments\":{\"start_id\":\"{{chainMemoryId}}\",\"end_id\":\"{{chainMemoryId2}}\",\"max_depth\":3,\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.7 graph_related \u2014 verify memory2 appears",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Related includes chainMemoryId2', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      const related = JSON.stringify(parsed.related || []);",
+                  "      pm.expect(related).to.include(pm.collectionVariables.get('chainMemoryId2'));",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":906,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_related\",\"arguments\":{\"node_id\":\"{{chainMemoryId}}\",\"threshold\":0.5,\"max_results\":10,\"tenant_id\":\"e2e-auth\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.8 memory_feedback \u2014 reward memory1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Feedback success', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":907,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_feedback\",\"arguments\":{\"memoryId\":\"{{chainMemoryId}}\",\"feedback\":\"positive\",\"score\":0.95},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.9 aeterna_memory_auto_promote \u2014 dry run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Dry run includes promoted list with chain memory', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.dryRun).to.eql(true);",
+                  "      const promoted = JSON.stringify(parsed.promoted || parsed.promotedMemories || []);",
+                  "      pm.expect(promoted).to.include(pm.collectionVariables.get('chainMemoryId'));",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":908,\"method\":\"tools/call\",\"params\":{\"name\":\"aeterna_memory_auto_promote\",\"arguments\":{\"layer\":\"project\",\"threshold\":0.3,\"dryRun\":true},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.10 aeterna_knowledge_propose \u2014 from chain memory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Draft created', () => {",
+                  "    const json = pm.response.json();",
+                  "    const content = json.result && json.result.content;",
+                  "    if (content && content[0] && content[0].text) {",
+                  "      const parsed = JSON.parse(content[0].text);",
+                  "      pm.expect(parsed.success).to.eql(true);",
+                  "      if (parsed.draft && parsed.draft.draftId) pm.collectionVariables.set('proposeDraftId', parsed.draft.draftId);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":909,\"method\":\"tools/call\",\"params\":{\"name\":\"aeterna_knowledge_propose\",\"arguments\":{\"description\":\"From chain memory: adopt PostgreSQL 16+ and replication tuning for event-heavy microservices\",\"proposedBy\":\"e2e-user@test.com\",\"knowledgeType\":\"adr\",\"layer\":\"team\"},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.11 GET drift detection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', () => pm.expect([200,404]).to.include(pm.response.code));",
+                  "pm.test('JSON body parseable', () => pm.response.json());"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/drift/detection",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "drift",
+                "detection"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.12 context_assemble \u2014 chain topic",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Context assemble response valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":910,\"method\":\"tools/call\",\"params\":{\"name\":\"context_assemble\",\"arguments\":{\"query\":\"PostgreSQL decision and replication tuning chain context\",\"layers\":[\"project\",\"team\"],\"tokenBudget\":2500},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.13 hindsight_query \u2014 chain error patterns",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Hindsight response valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":911,\"method\":\"tools/call\",\"params\":{\"name\":\"hindsight_query\",\"arguments\":{\"query\":\"chain postgres replication issue patterns\",\"limit\":10},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.14 sync_status \u2014 bridge status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sync status response valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":912,\"method\":\"tools/call\",\"params\":{\"name\":\"sync_status\",\"arguments\":{},\"tenantContext\":{\"tenant_id\":\"e2e-auth\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          }
+        },
+        {
+          "name": "28.15 Cleanup \u2014 delete chain memory 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 913, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_delete\", \"arguments\": {\"memoryId\": \"{{chainMemoryId}}\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"user_id\": \"e2e-user\"}}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "28.16 Cleanup \u2014 delete chain memory 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 914, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_delete\", \"arguments\": {\"memoryId\": \"{{chainMemoryId2}}\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"user_id\": \"e2e-user\"}}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "28.17 Cleanup \u2014 unlink chain edge 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 915, \"method\": \"tools/call\", \"params\": {\"name\": \"graph_unlink\", \"arguments\": {\"edge_id\": \"{{chainEdgeId}}\", \"tenant_id\": \"e2e-auth\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"user_id\": \"e2e-user\"}}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "28.18 Cleanup \u2014 unlink chain edge 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{pluginAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 916, \"method\": \"tools/call\", \"params\": {\"name\": \"graph_unlink\", \"arguments\": {\"edge_id\": \"{{chainEdgeId2}}\", \"tenant_id\": \"e2e-auth\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"user_id\": \"e2e-user\"}}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     }
