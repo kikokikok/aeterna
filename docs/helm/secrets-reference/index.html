@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-helm/secrets-reference" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.9.2">
+<title data-rh="true">Secrets &amp; Environment Variables Reference | Aeterna</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://kikokikok.github.io/aeterna/docs/helm/secrets-reference"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Secrets &amp; Environment Variables Reference | Aeterna"><meta data-rh="true" name="description" content="Complete inventory of all secrets, credentials, and environment variables required to deploy and operate Aeterna."><meta data-rh="true" property="og:description" content="Complete inventory of all secrets, credentials, and environment variables required to deploy and operate Aeterna."><link data-rh="true" rel="icon" href="/aeterna/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://kikokikok.github.io/aeterna/docs/helm/secrets-reference"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/helm/secrets-reference" hreflang="en"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/helm/secrets-reference" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Secrets & Environment Variables Reference","item":"https://kikokikok.github.io/aeterna/docs/helm/secrets-reference"}]}</script><link rel="stylesheet" href="/aeterna/assets/css/styles.a5946a0e.css">
+<script src="/aeterna/assets/js/runtime~main.b0f081ec.js" defer="defer"></script>
+<script src="/aeterna/assets/js/main.6d66e2bc.js" defer="defer"></script>
+</head>
+<body class="navigation-with-keyboard">
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||"light"),document.documentElement.setAttribute("data-theme-choice",t||"light")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><link rel="preload" as="image" href="/aeterna/img/logo.svg"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/aeterna/"><div class="navbar__logo"><img src="/aeterna/img/logo.svg" alt="Aeterna Logo" class="themedComponent_mlkZ themedComponent--light_NVdE"><img src="/aeterna/img/logo.svg" alt="Aeterna Logo" class="themedComponent_mlkZ themedComponent--dark_xIcU"></div><b class="navbar__title text--truncate">Aeterna</b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/aeterna/docs/">Documentation</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/aeterna/docs/"><span title="Introduction to Aeterna" class="linkLabel_WmDU">Introduction to Aeterna</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/aeterna/docs/helm/quickstart-local"><span title="Getting Started" class="categoryLinkLabel_W154">Getting Started</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-local"><span title="Local Mode Quick Start" class="linkLabel_WmDU">Local Mode Quick Start</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-hybrid"><span title="Hybrid Mode Deployment Guide" class="linkLabel_WmDU">Hybrid Mode Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/quickstart-remote"><span title="Remote Mode Deployment Guide" class="linkLabel_WmDU">Remote Mode Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/guides/cli-quick-reference"><span title="Aeterna CLI Quick Reference" class="linkLabel_WmDU">Aeterna CLI Quick Reference</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/overview"><span title="Concepts" class="categoryLinkLabel_W154">Concepts</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/memory-system"><span title="Memory System" class="categoryLinkLabel_W154">Memory System</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/knowledge-repository"><span title="Knowledge Repository" class="categoryLinkLabel_W154">Knowledge Repository</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/governance/policy-model"><span title="Governance" class="categoryLinkLabel_W154">Governance</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/cca/overview"><span title="CCA — Confucius Code Agent" class="categoryLinkLabel_W154">CCA — Confucius Code Agent</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/integrations/mcp-server"><span title="Integrations" class="categoryLinkLabel_W154">Integrations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/security/rbac-matrix"><span title="Security" class="categoryLinkLabel_W154">Security</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/aeterna/docs/helm/architecture"><span title="Helm Deployment" class="categoryLinkLabel_W154">Helm Deployment</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/architecture"><span title="Architecture Overview" class="linkLabel_WmDU">Architecture Overview</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/local-mode"><span title="Local Mode Deployment Guide" class="linkLabel_WmDU">Local Mode Deployment Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/hybrid-mode"><span title="Hybrid Mode: Architecture and Data Flow" class="linkLabel_WmDU">Hybrid Mode: Architecture and Data Flow</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/ha-requirements"><span title="High Availability Requirements for Aeterna" class="linkLabel_WmDU">High Availability Requirements for Aeterna</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/sizing-guide"><span title="Sizing Guide for Aeterna Deployments" class="linkLabel_WmDU">Sizing Guide for Aeterna Deployments</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/production-checklist"><span title="Production Deployment Checklist" class="linkLabel_WmDU">Production Deployment Checklist</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/security"><span title="Security Best Practices" class="linkLabel_WmDU">Security Best Practices</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/external-secrets"><span title="External Secrets Operator Integration" class="linkLabel_WmDU">External Secrets Operator Integration</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/sops-secrets"><span title="SOPS Secrets Management" class="linkLabel_WmDU">SOPS Secrets Management</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/aeterna/docs/helm/secrets-reference"><span title="Secrets &amp; Environment Variables Reference" class="linkLabel_WmDU">Secrets &amp; Environment Variables Reference</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/upgrade"><span title="Upgrade Guide" class="linkLabel_WmDU">Upgrade Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/cnpg-upgrade"><span title="CloudNativePG Upgrade Procedure" class="linkLabel_WmDU">CloudNativePG Upgrade Procedure</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/restore"><span title="Backup Restore Procedure" class="linkLabel_WmDU">Backup Restore Procedure</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/logging"><span title="Log Aggregation with Aeterna" class="linkLabel_WmDU">Log Aggregation with Aeterna</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/tracing"><span title="Distributed Tracing with Aeterna" class="linkLabel_WmDU">Distributed Tracing with Aeterna</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/aeterna/docs/helm/chart-versioning"><span title="Chart Versioning Strategy" class="linkLabel_WmDU">Chart Versioning Strategy</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/guides/ha-deployment"><span title="Operations" class="categoryLinkLabel_W154">Operations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/examples/strangler-fig-migration"><span title="Examples" class="categoryLinkLabel_W154">Examples</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/aeterna/docs/specs/tool-interface"><span title="Reference" class="categoryLinkLabel_W154">Reference</span></a></div></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/aeterna/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Helm Deployment</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">Secrets &amp; Environment Variables Reference</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Secrets &amp; Environment Variables Reference</h1></header>
+<p>Complete inventory of all secrets, credentials, and environment variables required to deploy and operate Aeterna.</p>
+<div class="theme-admonition theme-admonition-tip admonition_xJq3 alert alert--success"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 12 16"><path fill-rule="evenodd" d="M6.5 0C3.48 0 1 2.19 1 5c0 .92.55 2.25 1 3 1.34 2.25 1.78 2.78 2 4v1h5v-1c.22-1.22.66-1.75 2-4 .45-.75 1-2.08 1-3 0-2.81-2.48-5-5.5-5zm3.64 7.48c-.25.44-.47.8-.67 1.11-.86 1.41-1.25 2.06-1.45 3.23-.02.05-.02.11-.02.17H5c0-.06 0-.13-.02-.17-.2-1.17-.59-1.83-1.45-3.23-.2-.31-.42-.67-.67-1.11C2.44 6.78 2 5.65 2 5c0-2.2 2.02-4 4.5-4 1.22 0 2.36.42 3.22 1.19C10.55 2.94 11 3.94 11 5c0 .66-.44 1.78-.86 2.48zM4 14h5c-.23 1.14-1.3 2-2.5 2s-2.27-.86-2.5-2z"></path></svg></span>tip</div><div class="admonitionContent_BuS1"><p>Never store credentials in <code>values.yaml</code>. Use <code>existingSecret</code> references, <a class="" href="/aeterna/docs/helm/sops-secrets">SOPS encryption</a>, or <a class="" href="/aeterna/docs/helm/external-secrets">External Secrets Operator</a>.</p></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="kubernetes-secrets">Kubernetes Secrets<a href="#kubernetes-secrets" class="hash-link" aria-label="Direct link to Kubernetes Secrets" title="Direct link to Kubernetes Secrets" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="core-infrastructure">Core Infrastructure<a href="#core-infrastructure" class="hash-link" aria-label="Direct link to Core Infrastructure" title="Direct link to Core Infrastructure" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Secret Purpose</th><th>Values Key</th><th>K8s Secret Key(s)</th><th>Required</th><th>Notes</th></tr></thead><tbody><tr><td>PostgreSQL credentials</td><td><code>postgresql.external.existingSecret</code></td><td><code>postgres-password</code>, <code>username</code>, <code>host</code>, <code>port</code></td><td><strong>Yes</strong></td><td>Auto-created by CNPG when bundled; required for external PG</td></tr><tr><td>Redis/Dragonfly password</td><td><code>cache.external.existingSecret</code></td><td><code>redis-password</code></td><td>When using external Redis</td><td>Not needed with bundled Dragonfly</td></tr><tr><td>OPAL master/client tokens</td><td>Auto-generated on first install</td><td><code>OPAL_AUTH_MASTER_TOKEN</code>, <code>OPAL_AUTH_CLIENT_TOKEN</code></td><td><strong>Yes</strong> (auto)</td><td>Generated at first <code>helm install</code>; persist the secret for upgrades</td></tr><tr><td>OPAL Redis password</td><td><code>opal.server.redis.existingSecret</code></td><td><code>redis-password</code></td><td>When OPAL uses external Redis</td><td>Not needed when sharing bundled Dragonfly</td></tr><tr><td>OPAL Policy Repo SSH key</td><td><code>opal.server.policyRepo.sshKey.existingSecret</code></td><td><code>ssh-key</code></td><td>When Cedar policies are in a private Git repo</td><td>Only if policy repo requires SSH auth</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="llm-provider-credentials">LLM Provider Credentials<a href="#llm-provider-credentials" class="hash-link" aria-label="Direct link to LLM Provider Credentials" title="Direct link to LLM Provider Credentials" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Provider</th><th>Values Key</th><th>K8s Secret Key</th><th>Required</th></tr></thead><tbody><tr><td>OpenAI</td><td><code>llm.openai.existingSecret</code></td><td><code>api-key</code></td><td>When <code>llm.provider: openai</code></td></tr><tr><td>Anthropic</td><td><code>llm.anthropic.existingSecret</code></td><td><code>api-key</code></td><td>When <code>llm.provider: anthropic</code></td></tr><tr><td>Google Vertex AI</td><td><code>llm.google.existingSecret</code></td><td>Mounted as <code>credentials.json</code> (ADC)</td><td>When <code>llm.provider: google</code></td></tr><tr><td>AWS Bedrock</td><td>N/A (IAM role)</td><td>N/A</td><td>When <code>llm.provider: bedrock</code> — uses pod IAM role or IRSA</td></tr><tr><td>Ollama</td><td>N/A</td><td>N/A</td><td>Local, no auth needed</td></tr></tbody></table>
+<p><strong>Create example (OpenAI):</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret generic aeterna-llm-openai </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">api-key</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&#x27;sk-...&#x27;</span><br></span></code></pre></div></div>
+<p><strong>Create example (Google Vertex AI):</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret generic aeterna-google-llm </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-file</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">credentials.json</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">/path/to/service-account.json</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="vector-backend-credentials">Vector Backend Credentials<a href="#vector-backend-credentials" class="hash-link" aria-label="Direct link to Vector Backend Credentials" title="Direct link to Vector Backend Credentials" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Backend</th><th>Values Key</th><th>K8s Secret Key</th><th>Required</th></tr></thead><tbody><tr><td>Qdrant (external)</td><td><code>vectorBackend.qdrant.external.existingSecret</code></td><td><code>api-key</code></td><td>When using external Qdrant</td></tr><tr><td>Pinecone</td><td><code>vectorBackend.pinecone.existingSecret</code></td><td><code>api-key</code></td><td>When <code>vectorBackend.type: pinecone</code></td></tr><tr><td>pgvector</td><td>Uses PostgreSQL secret</td><td>Same as PostgreSQL</td><td>Shares PG credentials</td></tr><tr><td>Weaviate</td><td>N/A (internal)</td><td>N/A</td><td>Bundled subchart, no auth by default</td></tr><tr><td>MongoDB Atlas</td><td>N/A</td><td>N/A</td><td>Configure via connection string</td></tr><tr><td>Vertex AI Vector</td><td>Uses Google ADC</td><td>Same as Google LLM</td><td>Shares Vertex AI credentials</td></tr><tr><td>Databricks</td><td>N/A</td><td>N/A</td><td>Configure via workspace URL + PAT</td></tr></tbody></table>
+<p><strong>Create example (Pinecone):</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret generic aeterna-pinecone </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">api-key</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&#x27;pc-...&#x27;</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="knowledge-repository--github-integration">Knowledge Repository &amp; GitHub Integration<a href="#knowledge-repository--github-integration" class="hash-link" aria-label="Direct link to Knowledge Repository &amp; GitHub Integration" title="Direct link to Knowledge Repository &amp; GitHub Integration" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Secret Purpose</th><th>Values Key</th><th>K8s Secret Key</th><th>Required</th></tr></thead><tbody><tr><td>Knowledge repo SSH key</td><td>Mounted as volume</td><td><code>ssh-privatekey</code></td><td>When <code>knowledgeRepo.enabled: true</code> with SSH remote</td></tr><tr><td>GitHub API token</td><td><code>knowledgeRepo.github.tokenSecret</code></td><td><code>token</code></td><td>When using token-based GitHub auth</td></tr><tr><td>GitHub App PEM key</td><td><code>knowledgeRepo.github.pemSecret</code></td><td><code>pem-key</code></td><td>When using GitHub App auth (recommended)</td></tr><tr><td>Webhook secret</td><td><code>knowledgeRepo.webhook.secretName</code></td><td><code>webhook-secret</code></td><td>When receiving GitHub webhooks</td></tr></tbody></table>
+<p><strong>Create example (GitHub App PEM):</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret generic aeterna-github-app-pem </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-file</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">pem-key</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">/path/to/github-app-private-key.pem</span><br></span></code></pre></div></div>
+<p><strong>Create example (Webhook):</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret generic aeterna-webhook-secret </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">webhook-secret</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&quot;</span><span class="token string variable" style="color:#36acaa">$(</span><span class="token string variable" style="color:#36acaa">openssl rand </span><span class="token string variable parameter variable" style="color:#36acaa">-hex</span><span class="token string variable" style="color:#36acaa"> </span><span class="token string variable number" style="color:#36acaa">32</span><span class="token string variable" style="color:#36acaa">)</span><span class="token string" style="color:#e3116c">&quot;</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="okta--oauth2-proxy">Okta / OAuth2 Proxy<a href="#okta--oauth2-proxy" class="hash-link" aria-label="Direct link to Okta / OAuth2 Proxy" title="Direct link to Okta / OAuth2 Proxy" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Secret Purpose</th><th>Values Key</th><th>K8s Secret Key</th><th>Required</th></tr></thead><tbody><tr><td>OAuth2 client ID</td><td><code>okta.existingSecret</code></td><td><code>client-id</code></td><td>When <code>okta.enabled: true</code></td></tr><tr><td>OAuth2 client secret</td><td><code>okta.existingSecret</code></td><td><code>client-secret</code></td><td>When <code>okta.enabled: true</code></td></tr><tr><td>Cookie secret</td><td><code>okta.existingSecret</code></td><td><code>cookie-secret</code></td><td>When <code>okta.enabled: true</code></td></tr></tbody></table>
+<p><strong>Create example:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret generic aeterna-okta </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">client-id</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&#x27;0oa...&#x27;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">client-secret</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&#x27;...&#x27;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">cookie-secret</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&quot;</span><span class="token string variable" style="color:#36acaa">$(</span><span class="token string variable" style="color:#36acaa">openssl rand </span><span class="token string variable parameter variable" style="color:#36acaa">-base64</span><span class="token string variable" style="color:#36acaa"> </span><span class="token string variable number" style="color:#36acaa">32</span><span class="token string variable" style="color:#36acaa"> </span><span class="token string variable operator" style="color:#393A34">|</span><span class="token string variable" style="color:#36acaa"> </span><span class="token string variable function" style="color:#d73a49">tr</span><span class="token string variable" style="color:#36acaa"> -- </span><span class="token string variable string" style="color:#e3116c">&#x27;+/&#x27;</span><span class="token string variable" style="color:#36acaa"> </span><span class="token string variable string" style="color:#e3116c">&#x27;-_&#x27;</span><span class="token string variable" style="color:#36acaa">)</span><span class="token string" style="color:#e3116c">&quot;</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="central-server-hybridremote-modes">Central Server (Hybrid/Remote Modes)<a href="#central-server-hybridremote-modes" class="hash-link" aria-label="Direct link to Central Server (Hybrid/Remote Modes)" title="Direct link to Central Server (Hybrid/Remote Modes)" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Secret Purpose</th><th>Values Key</th><th>K8s Secret Key</th><th>Required</th></tr></thead><tbody><tr><td>Central API key</td><td><code>central.existingSecret</code></td><td><code>api-key</code></td><td>When <code>deploymentMode: hybrid</code> or <code>remote</code></td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="backup--disaster-recovery">Backup &amp; Disaster Recovery<a href="#backup--disaster-recovery" class="hash-link" aria-label="Direct link to Backup &amp; Disaster Recovery" title="Direct link to Backup &amp; Disaster Recovery" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Secret Purpose</th><th>Values Key</th><th>K8s Secret Key</th><th>Required</th></tr></thead><tbody><tr><td>S3/GCS/Azure credentials</td><td><code>backup.destination.credentialsSecret</code></td><td>Provider-specific keys</td><td>When backups are enabled</td></tr></tbody></table>
+<p><strong>S3 example:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret generic aeterna-backup-s3 </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">aws-access-key-id</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&#x27;AKIA...&#x27;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">aws-secret-access-key</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&#x27;...&#x27;</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="image-pull-private-registries">Image Pull (Private Registries)<a href="#image-pull-private-registries" class="hash-link" aria-label="Direct link to Image Pull (Private Registries)" title="Direct link to Image Pull (Private Registries)" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Secret Purpose</th><th>Values Key</th><th>Required</th></tr></thead><tbody><tr><td>Docker registry auth</td><td><code>aeterna.imagePullSecrets[].name</code></td><td>When pulling from private registries</td></tr></tbody></table>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret docker-registry my-registry </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --docker-server</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">ghcr.io </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --docker-username</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">USERNAME </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --docker-password</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">TOKEN</span><br></span></code></pre></div></div>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="environment-variables-configmap">Environment Variables (ConfigMap)<a href="#environment-variables-configmap" class="hash-link" aria-label="Direct link to Environment Variables (ConfigMap)" title="Direct link to Environment Variables (ConfigMap)" translate="no">​</a></h2>
+<p>These are set via the ConfigMap and Helm values — no secrets involved:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Variable</th><th>Values Key</th><th>Default</th><th>Purpose</th></tr></thead><tbody><tr><td><code>AETERNA_DEPLOYMENT_MODE</code></td><td><code>deploymentMode</code></td><td><code>local</code></td><td>Deployment mode (local/hybrid/remote)</td></tr><tr><td><code>AETERNA_LOG_LEVEL</code></td><td><code>observability.logging.level</code></td><td><code>info</code></td><td>Log verbosity</td></tr><tr><td><code>AETERNA_LOG_FORMAT</code></td><td><code>observability.logging.format</code></td><td><code>json</code></td><td>Log format (json/text)</td></tr><tr><td><code>AETERNA_LLM_PROVIDER</code></td><td><code>llm.provider</code></td><td><code>openai</code></td><td>LLM backend</td></tr><tr><td><code>AETERNA_VECTOR_BACKEND</code></td><td><code>vectorBackend.type</code></td><td><code>qdrant</code></td><td>Vector storage backend</td></tr><tr><td><code>AETERNA_POSTGRESQL_HOST</code></td><td>Auto-resolved</td><td>—</td><td>PostgreSQL host</td></tr><tr><td><code>AETERNA_POSTGRESQL_PORT</code></td><td>Auto-resolved</td><td><code>5432</code></td><td>PostgreSQL port</td></tr><tr><td><code>AETERNA_POSTGRESQL_DATABASE</code></td><td>Auto-resolved</td><td><code>aeterna</code></td><td>PostgreSQL database</td></tr><tr><td><code>AETERNA_REDIS_HOST</code></td><td>Auto-resolved</td><td>—</td><td>Redis/Dragonfly host</td></tr><tr><td><code>AETERNA_REDIS_PORT</code></td><td>Auto-resolved</td><td><code>6379</code></td><td>Redis/Dragonfly port</td></tr><tr><td><code>AETERNA_QDRANT_HOST</code></td><td>Auto-resolved</td><td>—</td><td>Qdrant host</td></tr><tr><td><code>AETERNA_QDRANT_PORT</code></td><td>Auto-resolved</td><td><code>6334</code></td><td>Qdrant gRPC port</td></tr><tr><td><code>AETERNA_OPAL_ENABLED</code></td><td><code>opal.enabled</code></td><td><code>true</code></td><td>Enable OPAL authorization</td></tr><tr><td><code>AETERNA_CEDAR_AGENT_HOST</code></td><td>Auto-resolved</td><td>—</td><td>Cedar Agent service host</td></tr><tr><td><code>AETERNA_CEDAR_AGENT_PORT</code></td><td>—</td><td><code>8180</code></td><td>Cedar Agent service port</td></tr><tr><td><code>AETERNA_FEATURE_CCA</code></td><td><code>aeterna.features.cca</code></td><td><code>true</code></td><td>Enable CCA capabilities</td></tr><tr><td><code>AETERNA_FEATURE_RADKIT</code></td><td><code>aeterna.features.radkit</code></td><td><code>false</code></td><td>Enable Radkit A2A</td></tr><tr><td><code>AETERNA_FEATURE_RLM</code></td><td><code>aeterna.features.rlm</code></td><td><code>true</code></td><td>Enable RLM navigation</td></tr><tr><td><code>AETERNA_FEATURE_REFLECTIVE</code></td><td><code>aeterna.features.reflective</code></td><td><code>true</code></td><td>Enable reflective reasoning</td></tr><tr><td><code>AETERNA_KNOWLEDGE_REPO_PATH</code></td><td>—</td><td><code>/tmp/knowledge-repo</code></td><td>Local git clone path</td></tr><tr><td><code>AETERNA_KNOWLEDGE_REPO_URL</code></td><td><code>knowledgeRepo.remoteUrl</code></td><td>—</td><td>Remote knowledge repo SSH URL</td></tr><tr><td><code>AETERNA_KNOWLEDGE_REPO_BRANCH</code></td><td><code>knowledgeRepo.branch</code></td><td><code>main</code></td><td>Knowledge repo branch</td></tr><tr><td><code>AETERNA_GITHUB_OWNER</code></td><td><code>knowledgeRepo.github.owner</code></td><td>—</td><td>GitHub org/user for knowledge repo</td></tr><tr><td><code>AETERNA_GITHUB_REPO</code></td><td><code>knowledgeRepo.github.repo</code></td><td>—</td><td>GitHub repo name for knowledge</td></tr><tr><td><code>AETERNA_GITHUB_APP_ID</code></td><td><code>knowledgeRepo.github.appId</code></td><td>—</td><td>GitHub App ID</td></tr><tr><td><code>AETERNA_GITHUB_INSTALLATION_ID</code></td><td><code>knowledgeRepo.github.installationId</code></td><td>—</td><td>GitHub App installation ID</td></tr><tr><td><code>AETERNA_GITHUB_ORG_NAME</code></td><td><code>githubOrgSync.orgName</code></td><td>—</td><td>GitHub org to sync</td></tr><tr><td><code>AETERNA_GITHUB_TEAM_FILTER</code></td><td><code>githubOrgSync.teamFilter</code></td><td>—</td><td>Regex to filter synced teams</td></tr><tr><td><code>AETERNA_GITHUB_SYNC_REPOS_AS_PROJECTS</code></td><td><code>githubOrgSync.syncReposAsProjects</code></td><td><code>false</code></td><td>Map repos to projects</td></tr><tr><td><code>AETERNA_TENANT_ID</code></td><td><code>githubOrgSync.tenantId</code></td><td><code>default</code></td><td>Tenant ID for synced entities</td></tr><tr><td><code>AETERNA_CENTRAL_URL</code></td><td><code>central.url</code></td><td>—</td><td>Central server URL (hybrid/remote)</td></tr><tr><td><code>AETERNA_CENTRAL_AUTH</code></td><td><code>central.auth</code></td><td>—</td><td>Central auth method</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="llm-provider-specific-variables">LLM Provider-Specific Variables<a href="#llm-provider-specific-variables" class="hash-link" aria-label="Direct link to LLM Provider-Specific Variables" title="Direct link to LLM Provider-Specific Variables" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Provider</th><th>Variables</th></tr></thead><tbody><tr><td>OpenAI</td><td><code>AETERNA_OPENAI_MODEL</code>, <code>AETERNA_OPENAI_EMBEDDING_MODEL</code></td></tr><tr><td>Anthropic</td><td><code>AETERNA_ANTHROPIC_MODEL</code></td></tr><tr><td>Ollama</td><td><code>AETERNA_OLLAMA_HOST</code>, <code>AETERNA_OLLAMA_MODEL</code>, <code>AETERNA_OLLAMA_EMBEDDING_MODEL</code></td></tr><tr><td>Google</td><td><code>AETERNA_GOOGLE_PROJECT_ID</code>, <code>AETERNA_GOOGLE_LOCATION</code>, <code>AETERNA_GOOGLE_MODEL</code>, <code>AETERNA_GOOGLE_EMBEDDING_MODEL</code></td></tr><tr><td>Bedrock</td><td><code>AETERNA_BEDROCK_REGION</code>, <code>AETERNA_BEDROCK_MODEL</code>, <code>AETERNA_BEDROCK_EMBEDDING_MODEL</code></td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="vector-backend-specific-variables">Vector Backend-Specific Variables<a href="#vector-backend-specific-variables" class="hash-link" aria-label="Direct link to Vector Backend-Specific Variables" title="Direct link to Vector Backend-Specific Variables" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Backend</th><th>Variables</th></tr></thead><tbody><tr><td>Pinecone</td><td><code>AETERNA_PINECONE_ENVIRONMENT</code>, <code>AETERNA_PINECONE_INDEX_NAME</code></td></tr><tr><td>pgvector</td><td><code>AETERNA_PGVECTOR_ENABLED</code></td></tr><tr><td>Weaviate</td><td><code>AETERNA_WEAVIATE_HOST</code></td></tr><tr><td>Vertex AI</td><td><code>AETERNA_VERTEXAI_PROJECT</code>, <code>AETERNA_VERTEXAI_REGION</code>, <code>AETERNA_VERTEXAI_ENDPOINT</code></td></tr><tr><td>Databricks</td><td><code>AETERNA_DATABRICKS_WORKSPACE_URL</code>, <code>AETERNA_DATABRICKS_CATALOG</code></td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="observability-variables">Observability Variables<a href="#observability-variables" class="hash-link" aria-label="Direct link to Observability Variables" title="Direct link to Observability Variables" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Variable</th><th>Values Key</th><th>Default</th><th>Purpose</th></tr></thead><tbody><tr><td><code>OTEL_EXPORTER_OTLP_ENDPOINT</code></td><td><code>observability.tracing.endpoint</code></td><td>—</td><td>OpenTelemetry collector endpoint</td></tr><tr><td><code>OTEL_TRACES_SAMPLER_ARG</code></td><td><code>observability.tracing.samplingRatio</code></td><td><code>1.0</code></td><td>Trace sampling ratio</td></tr><tr><td><code>RUST_LOG</code></td><td><code>observability.logging.level</code></td><td><code>info</code></td><td>Rust log filter</td></tr><tr><td><code>LOG_FORMAT</code></td><td><code>observability.logging.format</code></td><td><code>json</code></td><td>Log output format</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="github-actions-secrets">GitHub Actions Secrets<a href="#github-actions-secrets" class="hash-link" aria-label="Direct link to GitHub Actions Secrets" title="Direct link to GitHub Actions Secrets" translate="no">​</a></h2>
+<p>These secrets must be configured in your GitHub repository settings under <strong>Settings → Secrets and variables → Actions</strong>.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="required-for-cicd">Required for CI/CD<a href="#required-for-cicd" class="hash-link" aria-label="Direct link to Required for CI/CD" title="Direct link to Required for CI/CD" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Secret</th><th>Workflow</th><th>Required</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GITHUB_TOKEN</code></td><td><code>docker.yml</code>, <code>helm-release.yml</code>, <code>deploy-docs.yml</code></td><td>Auto-provided</td><td>GitHub Actions built-in token for GHCR push, Pages deploy</td></tr><tr><td><code>NPM_TOKEN</code></td><td><code>opencode-plugin-ci.yml</code></td><td>For npm publish</td><td>npm registry auth token; only needed when publishing plugin via <code>plugin-v*</code> tag</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="required-for-codesearch-index-optional">Required for Codesearch Index (Optional)<a href="#required-for-codesearch-index-optional" class="hash-link" aria-label="Direct link to Required for Codesearch Index (Optional)" title="Direct link to Required for Codesearch Index (Optional)" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Secret</th><th>Workflow</th><th>Required</th><th>Purpose</th></tr></thead><tbody><tr><td><code>OPENAI_API_KEY</code></td><td><code>codesearch-index.yml</code></td><td>When using OpenAI embeddings</td><td>Embedding model API key</td></tr><tr><td><code>QDRANT_URL</code></td><td><code>codesearch-index.yml</code></td><td>Yes</td><td>Qdrant endpoint URL for index storage</td></tr><tr><td><code>AETERNA_API_KEY</code></td><td><code>codesearch-index.yml</code></td><td>Yes</td><td>API key for Central Index webhook notifications</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="quick-setup-cheat-sheet">Quick Setup Cheat Sheet<a href="#quick-setup-cheat-sheet" class="hash-link" aria-label="Direct link to Quick Setup Cheat Sheet" title="Direct link to Quick Setup Cheat Sheet" translate="no">​</a></h2>
+<p>Minimum secrets for a production deployment with OpenAI and bundled infrastructure:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># 1. LLM provider</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret generic aeterna-llm-openai </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">api-key</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&#x27;sk-...&#x27;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># 2. GitHub App (for knowledge repo + org sync)</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret generic aeterna-github-app-pem </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-file</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">pem-key</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">/path/to/private-key.pem</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># 3. Webhook secret (for GitHub webhook integration)</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret generic aeterna-webhook-secret </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">webhook-secret</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&quot;</span><span class="token string variable" style="color:#36acaa">$(</span><span class="token string variable" style="color:#36acaa">openssl rand </span><span class="token string variable parameter variable" style="color:#36acaa">-hex</span><span class="token string variable" style="color:#36acaa"> </span><span class="token string variable number" style="color:#36acaa">32</span><span class="token string variable" style="color:#36acaa">)</span><span class="token string" style="color:#e3116c">&quot;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># 4. Okta (if using interactive login)</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">kubectl create secret generic aeterna-okta </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">client-id</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&#x27;0oa...&#x27;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">client-secret</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&#x27;...&#x27;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  --from-literal</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">cookie-secret</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&quot;</span><span class="token string variable" style="color:#36acaa">$(</span><span class="token string variable" style="color:#36acaa">openssl rand </span><span class="token string variable parameter variable" style="color:#36acaa">-base64</span><span class="token string variable" style="color:#36acaa"> </span><span class="token string variable number" style="color:#36acaa">32</span><span class="token string variable" style="color:#36acaa"> </span><span class="token string variable operator" style="color:#393A34">|</span><span class="token string variable" style="color:#36acaa"> </span><span class="token string variable function" style="color:#d73a49">tr</span><span class="token string variable" style="color:#36acaa"> -- </span><span class="token string variable string" style="color:#e3116c">&#x27;+/&#x27;</span><span class="token string variable" style="color:#36acaa"> </span><span class="token string variable string" style="color:#e3116c">&#x27;-_&#x27;</span><span class="token string variable" style="color:#36acaa">)</span><span class="token string" style="color:#e3116c">&quot;</span><br></span></code></pre></div></div>
+<p>Then reference them in your Helm values:</p>
+<div class="language-yaml codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-yaml codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token key atrule" style="color:#00a4db">llm</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token key atrule" style="color:#00a4db">provider</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> openai</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token key atrule" style="color:#00a4db">openai</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">existingSecret</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> aeterna</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">llm</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">openai</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token key atrule" style="color:#00a4db">knowledgeRepo</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token key atrule" style="color:#00a4db">enabled</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token boolean important" style="color:#36acaa">true</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token key atrule" style="color:#00a4db">github</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">pemSecret</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> aeterna</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">github</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">app</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">pem</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token key atrule" style="color:#00a4db">webhook</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">secretName</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> aeterna</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">webhook</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">secret</span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token key atrule" style="color:#00a4db">okta</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token key atrule" style="color:#00a4db">enabled</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token boolean important" style="color:#36acaa">true</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token key atrule" style="color:#00a4db">existingSecret</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> aeterna</span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain">okta</span><br></span></code></pre></div></div>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="see-also">See Also<a href="#see-also" class="hash-link" aria-label="Direct link to See Also" title="Direct link to See Also" translate="no">​</a></h2>
+<ul>
+<li class=""><a class="" href="/aeterna/docs/helm/external-secrets">External Secrets Operator</a> — Sync secrets from AWS, Vault, or Azure</li>
+<li class=""><a class="" href="/aeterna/docs/helm/sops-secrets">SOPS Encryption</a> — Encrypt values files at rest</li>
+<li class=""><a class="" href="/aeterna/docs/helm/security">Security Best Practices</a> — Pod security, network policies, TLS</li>
+<li class=""><a class="" href="/aeterna/docs/helm/production-checklist">Production Checklist</a> — Pre-deployment verification</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/kikokikok/aeterna/tree/main/website/docs/helm/secrets-reference.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/aeterna/docs/helm/sops-secrets"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">SOPS Secrets Management</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/aeterna/docs/helm/upgrade"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Upgrade Guide</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#kubernetes-secrets" class="table-of-contents__link toc-highlight">Kubernetes Secrets</a><ul><li><a href="#core-infrastructure" class="table-of-contents__link toc-highlight">Core Infrastructure</a></li><li><a href="#llm-provider-credentials" class="table-of-contents__link toc-highlight">LLM Provider Credentials</a></li><li><a href="#vector-backend-credentials" class="table-of-contents__link toc-highlight">Vector Backend Credentials</a></li><li><a href="#knowledge-repository--github-integration" class="table-of-contents__link toc-highlight">Knowledge Repository &amp; GitHub Integration</a></li><li><a href="#okta--oauth2-proxy" class="table-of-contents__link toc-highlight">Okta / OAuth2 Proxy</a></li><li><a href="#central-server-hybridremote-modes" class="table-of-contents__link toc-highlight">Central Server (Hybrid/Remote Modes)</a></li><li><a href="#backup--disaster-recovery" class="table-of-contents__link toc-highlight">Backup &amp; Disaster Recovery</a></li><li><a href="#image-pull-private-registries" class="table-of-contents__link toc-highlight">Image Pull (Private Registries)</a></li></ul></li><li><a href="#environment-variables-configmap" class="table-of-contents__link toc-highlight">Environment Variables (ConfigMap)</a><ul><li><a href="#llm-provider-specific-variables" class="table-of-contents__link toc-highlight">LLM Provider-Specific Variables</a></li><li><a href="#vector-backend-specific-variables" class="table-of-contents__link toc-highlight">Vector Backend-Specific Variables</a></li><li><a href="#observability-variables" class="table-of-contents__link toc-highlight">Observability Variables</a></li></ul></li><li><a href="#github-actions-secrets" class="table-of-contents__link toc-highlight">GitHub Actions Secrets</a><ul><li><a href="#required-for-cicd" class="table-of-contents__link toc-highlight">Required for CI/CD</a></li><li><a href="#required-for-codesearch-index-optional" class="table-of-contents__link toc-highlight">Required for Codesearch Index (Optional)</a></li></ul></li><li><a href="#quick-setup-cheat-sheet" class="table-of-contents__link toc-highlight">Quick Setup Cheat Sheet</a></li><li><a href="#see-also" class="table-of-contents__link toc-highlight">See Also</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Docs</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/aeterna/docs/">Getting Started</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Community</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div></div><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2026 Aeterna Contributors.</div></div></div></footer></div>
+</body>
+</html>
