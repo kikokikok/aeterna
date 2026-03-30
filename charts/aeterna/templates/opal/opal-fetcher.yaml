@@ -51,11 +51,14 @@ spec:
                   key: client-token
             - name: OPAL_INLINE_OPA_ENABLED
               value: "false"
+            - name: OPAL_INLINE_CEDAR_ENABLED
+              value: "false"
+            - name: OPAL_POLICY_STORE_URL
+              value: "http://{{ include "aeterna.fullname" . }}-cedar-agent:8180"
+            - name: OPAL_POLICY_STORE_TYPE
+              value: "CEDAR"
             - name: OPAL_DATA_UPDATER_ENABLED
               value: "true"
-            # PostgreSQL connection for data fetching
-            - name: OPAL_FETCH_PROVIDER_MODULES
-              value: "opal_common.fetcher.providers,opal_fetcher_postgres.provider"
             - name: POSTGRES_HOST
               value: {{ include "aeterna.postgresql.host" . | quote }}
             - name: POSTGRES_PORT
@@ -77,18 +80,18 @@ spec:
             httpGet:
               path: /healthcheck
               port: http
-            initialDelaySeconds: 10
+            initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 3
+            failureThreshold: 10
           readinessProbe:
             httpGet:
               path: /healthcheck
               port: http
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 3
-            failureThreshold: 3
+            failureThreshold: 10
           resources:
             {{- toYaml .Values.opal.fetcher.resources | nindent 12 }}
           volumeMounts:

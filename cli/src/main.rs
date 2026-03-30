@@ -4,6 +4,7 @@ use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 mod commands;
 mod output;
+mod server;
 pub mod ux_error;
 
 use commands::{Cli, Commands};
@@ -36,6 +37,6 @@ async fn main() -> Result<()> {
         Commands::CodeSearch(cmd) => commands::search::handle_command(cmd).await,
         Commands::Completion(args) => commands::completion::run(args),
         Commands::Setup(args) => commands::setup::run(args).await,
-        Commands::Serve(args) => commands::serve::run(args)
+        Commands::Serve(args) => commands::serve::run(args).await,
     }
 }

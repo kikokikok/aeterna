@@ -103,43 +103,80 @@ impl CostTracker {
 
     /// Record an embedding generation cost
     pub fn record_embedding_generation(&self, ctx: &TenantContext, token_count: u64, model: &str) {
+        self.record_embedding_generation_scoped(ctx, token_count, model, None, None);
+    }
+
+    pub fn record_embedding_generation_scoped(
+        &self,
+        ctx: &TenantContext,
+        token_count: u64,
+        model: &str,
+        team_id: Option<&str>,
+        project_id: Option<&str>,
+    ) {
         let cost = (token_count as f64 / 1000.0) * self.config.embedding_cost_per_1k_tokens;
-        self.record_cost(
+        self.record_cost_scoped(
             ctx,
             ResourceType::EmbeddingGeneration,
             "generate",
             cost,
             token_count,
             vec![("model".to_string(), model.to_string())],
+            team_id,
+            project_id,
         );
     }
 
     /// Record an LLM completion cost
     pub fn record_llm_completion(&self, ctx: &TenantContext, token_count: u64, model: &str) {
+        self.record_llm_completion_scoped(ctx, token_count, model, None, None);
+    }
+
+    pub fn record_llm_completion_scoped(
+        &self,
+        ctx: &TenantContext,
+        token_count: u64,
+        model: &str,
+        team_id: Option<&str>,
+        project_id: Option<&str>,
+    ) {
         let cost = (token_count as f64 / 1000.0) * self.config.llm_cost_per_1k_tokens;
-        self.record_cost(
+        self.record_cost_scoped(
             ctx,
             ResourceType::LlmCompletion,
             "complete",
             cost,
             token_count,
             vec![("model".to_string(), model.to_string())],
+            team_id,
+            project_id,
         );
     }
 
     /// Record vector storage cost
     pub fn record_storage(&self, ctx: &TenantContext, bytes: u64) {
+        self.record_storage_scoped(ctx, bytes, None, None);
+    }
+
+    pub fn record_storage_scoped(
+        &self,
+        ctx: &TenantContext,
+        bytes: u64,
+        team_id: Option<&str>,
+        project_id: Option<&str>,
+    ) {
         let gb = bytes as f64 / (1024.0 * 1024.0 * 1024.0);
         let monthly_cost = gb * self.config.storage_cost_per_gb_month;
-        // Prorate to daily cost
         let daily_cost = monthly_cost / 30.0;
-        self.record_cost(
+        self.record_cost_scoped(
             ctx,
             ResourceType::VectorStorage,
             "store",
             daily_cost,
             bytes,
             vec![],
+            team_id,
+            project_id,
         );
     }
 
@@ -153,20 +190,124 @@ impl CostTracker {
         units: u64,
         metadata: Vec<(String, String)>,
     ) {
+        self.record_cost_scoped(
+            ctx,
+            resource_type,
+            operation,
+            cost,
+            units,
+            metadata,
+            None,
+            None,
+        );
+    }
+
+    pub fn record_cost_scoped(
+        &self,
+        ctx: &TenantContext,
+        resource_type: ResourceType,
+        operation: &str,
+        cost: f64,
+        units: u64,
+        metadata: Vec<(String, String)>,
+        team_id: Option<&str>,
+        project_id: Option<&str>,
+    ) {
+        let tenant_id_str = ctx.tenant_id.as_str().to_string();
+        let resource_str = resource_type.as_str().to_string();
+        let mut metadata_map: HashMap<String, String> = metadata.into_iter().collect();
+        if let Some(team_id) = team_id {
+            metadata_map.insert("team_id".to_string(), team_id.to_string());
+        }
+        if let Some(project_id) = project_id {
+            metadata_map.insert("project_id".to_string(), project_id.to_string());
+        }
+
+        let team_label = metadata_map
+            .get("team_id")
+            .or_else(|| metadata_map.get("team"))
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
+        let project_label = metadata_map
+            .get("project_id")
+            .or_else(|| metadata_map.get("project"))
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
+
         let entry = CostEntry {
-            tenant_id: ctx.tenant_id.as_str().to_string(),
+            tenant_id: tenant_id_str.clone(),
             resource_type,
             operation: operation.to_string(),
             cost,
             currency: self.config.currency.clone(),
             units,
             timestamp: Utc::now(),
-            metadata: metadata.into_iter().collect(),
+            metadata: metadata_map,
         };
 
         if let Ok(mut entries) = self.entries.write() {
             entries.push(entry);
         }
+
+        metrics::counter!(
+            "aeterna_cost_operations_total",
+            "tenant_id" => tenant_id_str.clone(),
+            "team_id" => team_label.clone(),
+            "project_id" => project_label.clone(),
+            "resource_type" => resource_str.clone(),
+            "operation" => operation.to_string()
+        )
+        .increment(1);
+        metrics::counter!(
+            "aeterna_cost_units_total",
+            "tenant_id" => tenant_id_str.clone(),
+            "team_id" => team_label.clone(),
+            "project_id" => project_label.clone(),
+            "resource_type" => resource_str.clone(),
+            "operation" => operation.to_string()
+        )
+        .increment(units);
+        metrics::histogram!(
+            "aeterna_cost_amount_dollars",
+            "tenant_id" => tenant_id_str.clone(),
+            "team_id" => team_label.clone(),
+            "project_id" => project_label.clone(),
+            "resource_type" => resource_str,
+            "operation" => operation.to_string()
+        )
+        .record(cost);
+
+        let thirty_days_ago = Utc::now() - chrono::Duration::days(30);
+        let now = Utc::now();
+        let entries = self.entries.read().unwrap();
+        let scoped_total: f64 = entries
+            .iter()
+            .filter(|entry| entry.timestamp >= thirty_days_ago && entry.timestamp <= now)
+            .filter(|entry| entry.tenant_id == tenant_id_str)
+            .filter(|entry| {
+                entry
+                    .metadata
+                    .get("team_id")
+                    .or_else(|| entry.metadata.get("team"))
+                    .map_or(team_label == "unknown", |value| value == &team_label)
+            })
+            .filter(|entry| {
+                entry
+                    .metadata
+                    .get("project_id")
+                    .or_else(|| entry.metadata.get("project"))
+                    .map_or(project_label == "unknown", |value| value == &project_label)
+            })
+            .map(|entry| entry.cost)
+            .sum();
+
+        metrics::gauge!(
+            "aeterna_cost_total_30d_dollars",
+            "tenant_id" => tenant_id_str,
+            "team_id" => team_label,
+            "project_id" => project_label
+        )
+        .set(scoped_total);
 
         tracing::debug!(
             "Recorded cost for tenant {}: ${:.4}",
@@ -305,5 +446,30 @@ mod tests {
         tracker.record_llm_completion(&ctx, 50000, "gpt-4"); // ~$1.50
 
         assert!(tracker.is_over_budget("test-tenant"));
+    }
+
+    #[test]
+    fn test_scoped_cost_tracking_persists_team_and_project_metadata() {
+        let tracker = CostTracker::new(CostConfig::default());
+        let ctx = test_tenant_context();
+
+        tracker.record_llm_completion_scoped(
+            &ctx,
+            1_000,
+            "gpt-4",
+            Some("team-platform"),
+            Some("project-aeterna"),
+        );
+
+        let entries = tracker.entries.read().unwrap();
+        let entry = entries.last().unwrap();
+        assert_eq!(
+            entry.metadata.get("team_id").map(String::as_str),
+            Some("team-platform")
+        );
+        assert_eq!(
+            entry.metadata.get("project_id").map(String::as_str),
+            Some("project-aeterna")
+        );
     }
 }

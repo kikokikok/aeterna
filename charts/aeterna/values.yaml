@@ -142,13 +142,13 @@ aeterna:
   ## Autoscaling configuration
   autoscaling:
     ## @param aeterna.autoscaling.enabled Enable HPA
-    enabled: false
+    enabled: true
     ## @param aeterna.autoscaling.minReplicas Minimum replicas
-    minReplicas: 1
+    minReplicas: 2
     ## @param aeterna.autoscaling.maxReplicas Maximum replicas
     maxReplicas: 10
     ## @param aeterna.autoscaling.targetCPUUtilizationPercentage Target CPU utilization
-    targetCPUUtilizationPercentage: 80
+    targetCPUUtilizationPercentage: 70
     ## @param aeterna.autoscaling.targetMemoryUtilizationPercentage Target memory utilization
     targetMemoryUtilizationPercentage: 80
 
@@ -171,7 +171,7 @@ aeterna:
   ## Pod disruption budget
   pdb:
     ## @param aeterna.pdb.enabled Enable PDB
-    enabled: false
+    enabled: true
     ## @param aeterna.pdb.minAvailable Minimum available pods
     minAvailable: 1
 
@@ -226,6 +226,71 @@ aeterna:
     rlm: true
     ## @param aeterna.features.reflective Enable reflective reasoning
     reflective: true
+
+## GitHub Organization Sync configuration
+## Syncs GitHub Org teams and members into Aeterna's organizational hierarchy
+## Uses the GitHub App configured in knowledgeRepo.github for authentication
+githubOrgSync:
+  ## @param githubOrgSync.enabled Enable GitHub Organization sync
+  enabled: false
+  ## @param githubOrgSync.orgName GitHub Organization name to sync (e.g. "acme-corp")
+  orgName: ""
+  ## @param githubOrgSync.teamFilter Optional regex to filter teams (e.g. "^platform-")
+  teamFilter: ""
+  ## @param githubOrgSync.syncReposAsProjects Map team repositories as projects in the hierarchy
+  syncReposAsProjects: false
+  ## @param githubOrgSync.tenantId Tenant identifier for synced entities (name or UUID)
+  tenantId: "default"
+  ## CronJob configuration for periodic full resync
+  cronJob:
+    ## @param githubOrgSync.cronJob.enabled Enable CronJob for periodic GitHub org sync
+    enabled: false
+    ## @param githubOrgSync.cronJob.schedule Cron schedule expression (default: every 15 minutes)
+    schedule: "*/15 * * * *"
+    ## @param githubOrgSync.cronJob.successfulJobsHistoryLimit Number of successful jobs to retain
+    successfulJobsHistoryLimit: 3
+    ## @param githubOrgSync.cronJob.failedJobsHistoryLimit Number of failed jobs to retain
+    failedJobsHistoryLimit: 3
+    ## @param githubOrgSync.cronJob.backoffLimit Number of retries before marking job as failed
+    backoffLimit: 1
+    ## @param githubOrgSync.cronJob.activeDeadlineSeconds Maximum runtime per job execution (seconds)
+    activeDeadlineSeconds: 300
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+## Shared knowledge repository configuration
+## Enables multi-replica consistency via a remote Git repository (GitHub)
+## and PR-based governance for knowledge mutations at higher layers.
+knowledgeRepo:
+  ## @param knowledgeRepo.enabled Enable shared knowledge repository
+  enabled: false
+  ## @param knowledgeRepo.remoteUrl HTTPS URL for the shared knowledge Git repo (e.g. https://github.com/org/repo.git)
+  remoteUrl: ""
+  ## @param knowledgeRepo.branch Default branch for the knowledge repo
+  branch: "main"
+  ## GitHub API configuration (for PR-based governance and HTTPS git auth)
+  github:
+    ## @param knowledgeRepo.github.owner GitHub repository owner
+    owner: ""
+    ## @param knowledgeRepo.github.repo GitHub repository name
+    repo: ""
+    ## @param knowledgeRepo.github.tokenSecret Existing secret containing GitHub token (key: token)
+    tokenSecret: ""
+    ## @param knowledgeRepo.github.appId GitHub App ID
+    appId: ""
+    ## @param knowledgeRepo.github.installationId GitHub App Installation ID
+    installationId: ""
+    ## @param knowledgeRepo.github.pemSecret Existing secret containing GitHub App PEM key (key: pem-key)
+    pemSecret: ""
+  ## Webhook configuration (GitHub webhook for PR merge sync)
+  webhook:
+    ## @param knowledgeRepo.webhook.secretName Existing secret containing webhook secret (key: webhook-secret)
+    secretName: ""
 
 ## Vector backend configuration
 vectorBackend:
@@ -488,14 +553,23 @@ opal:
       pubsubUri: "redis://aeterna-redis:6379/0"
       ## @param opal.server.redis.existingSecret Existing secret containing Redis URI (key: pubsub-uri)
       existingSecret: ""
+    ## @param opal.server.policyRepoUrl Git repository URL for Cedar policies (set via private values for auth repos)
+    policyRepoUrl: ""
+    ## Policy repository SSH key configuration
+    policyRepo:
+      sshKey:
+        ## @param opal.server.policyRepo.sshKey.existingSecret Existing secret containing SSH deploy key (key: ssh-key)
+        existingSecret: ""
 
-  ## Cedar Agent configuration
+  ## Cedar Agent configuration (uses opal-client-cedar: OPAL client with embedded Cedar engine)
   cedarAgent:
     ## @param opal.cedarAgent.enabled Enable Cedar Agent
     enabled: true
+    ## @param opal.cedarAgent.replicaCount Number of Cedar Agent replicas (runs as Deployment, namespace-scoped)
+    replicaCount: 1
     image:
-      repository: permitio/cedar-agent
-      tag: "0.4.0"
+      repository: permitio/opal-client-cedar
+      tag: "0.9.3"
       pullPolicy: IfNotPresent
     resources:
       limits:

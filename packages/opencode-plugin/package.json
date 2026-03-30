@@ -1,6 +1,6 @@
 {
   "name": "@kiko-aeterna/opencode-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenCode plugin for Aeterna memory and knowledge integration",
   "type": "module",
   "main": "./dist/index.js",
@@ -47,15 +47,15 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.1.36",
-    "zod": "^3.23.8"
+    "@opencode-ai/plugin": "1.3.6",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "typescript": "^5.5.0",
-    "vitest": "^2.0.0"
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0"
   },
   "peerDependencies": {
-    "@opencode-ai/plugin": ">=1.0.0"
+    "@opencode-ai/plugin": ">=1.3.0"
   }
 }

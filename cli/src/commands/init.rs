@@ -35,7 +35,7 @@ pub struct InitArgs {
     pub force: bool,
 
     #[arg(long, help = "Skip interactive prompts")]
-    pub yes: bool
+    pub yes: bool,
 }
 
 pub fn run(args: InitArgs) -> Result<()> {

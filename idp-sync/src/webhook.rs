@@ -6,7 +6,7 @@ use axum::{
     Router,
     extract::{Json, State},
     http::{HeaderMap, StatusCode},
-    routing::post
+    routing::post,
 };
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -18,41 +18,52 @@ use tracing::{debug, error, info, warn};
 pub struct WebhookServer {
     config: IdpSyncConfig,
     sync_service: Arc<IdpSyncService>,
-    client: Arc<dyn IdpClient>
+    client: Arc<dyn IdpClient>,
 }
 
 #[derive(Clone)]
 struct AppState {
     webhook_secret: Option<String>,
     sync_service: Arc<IdpSyncService>,
-    client: Arc<dyn IdpClient>
+    client: Arc<dyn IdpClient>,
+}
+
+pub fn router(
+    config: &IdpSyncConfig,
+    sync_service: Arc<IdpSyncService>,
+    client: Arc<dyn IdpClient>,
+) -> Router {
+    let state = AppState {
+        webhook_secret: config.webhook_secret.clone(),
+        sync_service,
+        client,
+    };
+
+    Router::new()
+        .route("/okta", post(handle_okta_webhook))
+        .route("/azure", post(handle_azure_webhook))
+        .route("/health", axum::routing::get(health_check))
+        .with_state(state)
 }
 
 impl WebhookServer {
     pub fn new(
         config: IdpSyncConfig,
         sync_service: Arc<IdpSyncService>,
-        client: Arc<dyn IdpClient>
+        client: Arc<dyn IdpClient>,
     ) -> Self {
         Self {
             config,
             sync_service,
-            client
+            client,
         }
     }
 
     pub async fn run(&self) -> IdpSyncResult<()> {
-        let state = AppState {
-            webhook_secret: self.config.webhook_secret.clone(),
-            sync_service: self.sync_service.clone(),
-            client: self.client.clone()
-        };
-
-        let app = Router::new()
-            .route("/webhooks/okta", post(handle_okta_webhook))
-            .route("/webhooks/azure", post(handle_azure_webhook))
-            .route("/health", axum::routing::get(health_check))
-            .with_state(state);
+        let app = Router::new().nest(
+            "/webhooks",
+            router(&self.config, self.sync_service.clone(), self.client.clone()),
+        );
 
         let addr = format!("0.0.0.0:{}", self.config.webhook_port);
         info!(addr = %addr, "Starting webhook server");
@@ -77,12 +88,12 @@ async fn health_check() -> StatusCode {
 struct OktaWebhookPayload {
     #[serde(rename = "eventType")]
     event_type: String,
-    data: OktaEventData
+    data: OktaEventData,
 }
 
 #[derive(Debug, Deserialize)]
 struct OktaEventData {
-    events: Vec<OktaEvent>
+    events: Vec<OktaEvent>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -90,7 +101,7 @@ struct OktaEvent {
     #[serde(rename = "eventType")]
     event_type: String,
     target: Vec<OktaTarget>,
-    published: DateTime<Utc>
+    published: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -99,13 +110,13 @@ struct OktaTarget {
     #[serde(rename = "type")]
     target_type: String,
     #[serde(rename = "alternateId")]
-    alternate_id: Option<String>
+    alternate_id: Option<String>,
 }
 
 async fn handle_okta_webhook(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(payload): Json<OktaWebhookPayload>
+    Json(payload): Json<OktaWebhookPayload>,
 ) -> StatusCode {
     if let Some(ref secret) = state.webhook_secret {
         if !verify_okta_signature(&headers, secret) {
@@ -163,17 +174,17 @@ fn verify_okta_signature(headers: &HeaderMap, secret: &str) -> bool {
     let signature = match headers.get("x-okta-request-signature") {
         Some(sig) => match sig.to_str() {
             Ok(s) => s,
-            Err(_) => return false
+            Err(_) => return false,
         },
-        None => return false
+        None => return false,
     };
 
     let timestamp = match headers.get("x-okta-request-timestamp") {
         Some(ts) => match ts.to_str() {
             Ok(s) => s,
-            Err(_) => return false
+            Err(_) => return false,
         },
-        None => return false
+        None => return false,
     };
 
     let expected = compute_okta_signature(secret, timestamp);
@@ -189,7 +200,7 @@ fn compute_okta_signature(secret: &str, timestamp: &str) -> String {
 
 #[derive(Debug, Deserialize)]
 struct AzureWebhookPayload {
-    value: Vec<AzureNotification>
+    value: Vec<AzureNotification>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -197,20 +208,20 @@ struct AzureWebhookPayload {
 struct AzureNotification {
     change_type: String,
     resource: String,
-    resource_data: AzureResourceData
+    resource_data: AzureResourceData,
 }
 
 #[derive(Debug, Deserialize)]
 struct AzureResourceData {
     id: String,
     #[serde(rename = "@odata.type")]
-    odata_type: Option<String>
+    odata_type: Option<String>,
 }
 
 async fn handle_azure_webhook(
     State(state): State<AppState>,
     _headers: HeaderMap,
-    Json(payload): Json<AzureWebhookPayload>
+    Json(payload): Json<AzureWebhookPayload>,
 ) -> StatusCode {
     debug!("Received Azure AD webhook");
 
@@ -226,7 +237,7 @@ async fn handle_azure_webhook(
 
 async fn process_azure_notification(
     state: &AppState,
-    notification: &AzureNotification
+    notification: &AzureNotification,
 ) -> IdpSyncResult<()> {
     let resource_type = notification
         .resource_data

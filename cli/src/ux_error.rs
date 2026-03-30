@@ -5,7 +5,7 @@ pub struct UxError {
     pub what: String,
     pub why: Option<String>,
     pub how_to_fix: Vec<String>,
-    pub suggested_command: Option<String>
+    pub suggested_command: Option<String>,
 }
 
 impl UxError {
@@ -14,7 +14,7 @@ impl UxError {
             what: what.into(),
             why: None,
             how_to_fix: Vec::new(),
-            suggested_command: None
+            suggested_command: None,
         }
     }
 

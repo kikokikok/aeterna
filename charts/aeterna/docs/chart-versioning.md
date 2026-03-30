@@ -84,4 +84,4 @@ helm status aeterna -n aeterna
 kubectl get pods -n aeterna
 ```
 
-Rollback automatically reverts both chart templates and application version. Database migrations are **not** automatically rolled back — see [restore procedure](backup-restore.md) for data recovery.
+Rollback automatically reverts both chart templates and application version. Database migrations are **not** automatically rolled back — see [restore procedure](./restore) for data recovery.

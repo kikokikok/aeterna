@@ -1,13 +1,50 @@
 .heroBanner {
-  padding: 4rem 0;
+  padding: 6rem 0 4rem;
   text-align: center;
   position: relative;
   overflow: hidden;
+  background: linear-gradient(135deg, var(--ifm-color-primary-darkest) 0%, var(--ifm-color-primary) 50%, var(--ifm-color-primary-light) 100%);
+  color: #fff;
+}
+
+[data-theme='dark'] .heroBanner {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+}
+
+.heroTitle {
+  font-size: 3.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+  color: #fff;
+}
+
+.heroSubtitle {
+  font-size: 1.4rem;
+  opacity: 0.95;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #fff;
+}
+
+.heroDescription {
+  font-size: 1.05rem;
+  opacity: 0.8;
+  max-width: 700px;
+  margin: 0 auto 2rem;
+  line-height: 1.6;
+  color: #fff;
 }
 
 @media screen and (max-width: 996px) {
   .heroBanner {
-    padding: 2rem;
+    padding: 3rem 1.5rem;
+  }
+  .heroTitle {
+    font-size: 2.5rem;
+  }
+  .heroSubtitle {
+    font-size: 1.1rem;
   }
 }
 
@@ -18,14 +55,169 @@
   gap: 1rem;
 }
 
-.features {
-  display: flex;
-  align-items: center;
-  padding: 2rem 0;
-  width: 100%;
+.buttons .button--primary {
+  background: #fff;
+  color: var(--ifm-color-primary-darkest);
+  border: none;
+  font-weight: 600;
 }
 
-.featureSvg {
-  height: 200px;
-  width: 200px;
+.buttons .button--primary:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.buttons .button--outline {
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #fff;
+}
+
+.buttons .button--outline:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #fff;
+  color: #fff;
+}
+
+/* Features section */
+.features {
+  padding: 4rem 0;
+}
+
+.sectionHeading {
+  text-align: center;
+  margin-bottom: 2.5rem;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.featureCard {
+  display: block;
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  margin-bottom: 1.5rem;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  color: inherit;
+  height: calc(100% - 1.5rem);
+}
+
+.featureCard:hover {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
+  transform: translateY(-2px);
+  text-decoration: none;
+  color: inherit;
+}
+
+.featureEmoji {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.featureTitle {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.featureDescription {
+  font-size: 0.95rem;
+  opacity: 0.85;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Architecture section */
+.architectureSection {
+  padding: 4rem 0;
+  background: var(--ifm-color-emphasis-100);
+}
+
+[data-theme='dark'] .architectureSection {
+  background: var(--ifm-color-emphasis-100);
+}
+
+.sectionDescription {
+  text-align: center;
+  max-width: 700px;
+  margin: -1.5rem auto 2.5rem;
+  opacity: 0.85;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.hierarchyGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+@media screen and (max-width: 768px) {
+  .hierarchyGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hierarchyColumn {
+  text-align: center;
+}
+
+.hierarchyColumn h4 {
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.layerStack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.layerItem {
+  padding: 0.6rem 1rem;
+  background: var(--ifm-color-primary);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* Tech stack section */
+.techSection {
+  padding: 4rem 0;
+}
+
+.techGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+@media screen and (max-width: 768px) {
+  .techGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.techItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.25rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  text-align: center;
+  gap: 0.25rem;
+}
+
+.techItem strong {
+  font-size: 1rem;
+}
+
+.techItem span {
+  font-size: 0.8rem;
+  opacity: 0.7;
 }

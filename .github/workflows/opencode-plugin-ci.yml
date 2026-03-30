@@ -1,0 +1,93 @@
+name: OpenCode Plugin CI
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - 'packages/opencode-plugin/**'
+      - '.github/workflows/opencode-plugin-ci.yml'
+  pull_request:
+    branches: [main, master, develop]
+    paths:
+      - 'packages/opencode-plugin/**'
+      - '.github/workflows/opencode-plugin-ci.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: packages/opencode-plugin
+
+jobs:
+  build:
+    name: Build & Typecheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: packages/opencode-plugin/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-dist
+          path: packages/opencode-plugin/dist
+          retention-days: 7
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: packages/opencode-plugin/package-lock.json
+
+      - run: npm ci
+
+      - name: Run tests
+        run: npm run test
+
+  publish:
+    name: Publish to npm
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/plugin-v')
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+          cache-dependency-path: packages/opencode-plugin/package-lock.json
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

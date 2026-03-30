@@ -41,7 +41,7 @@ pub enum IdpSyncError {
     SerializationError(#[from] serde_json::Error),
 
     #[error("Scheduler error: {0}")]
-    SchedulerError(String)
+    SchedulerError(String),
 }
 
 impl IdpSyncError {
@@ -54,7 +54,7 @@ impl IdpSyncError {
 
     pub fn retry_after(&self) -> Option<u64> {
         if let Self::RateLimited {
-            retry_after_seconds
+            retry_after_seconds,
         } = self
         {
             Some(*retry_after_seconds)

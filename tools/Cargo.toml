@@ -24,6 +24,7 @@ validator.workspace = true
 chrono.workspace = true
 tempfile.workspace = true
 anyhow.workspace = true
+reqwest.workspace = true
 redis.workspace = true
 regex.workspace = true
 flate2 = "1.0"

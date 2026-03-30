@@ -1,10 +1,10 @@
-use clap::Args;
-use std::sync::Arc;
+use std::net::SocketAddr;
 
-use memory::embedding::create_embedding_service_from_env;
-use memory::llm::create_llm_service_from_env;
-use memory::manager::MemoryManager;
-use memory::reasoning::{DefaultReflectiveReasoner, ReflectiveReasoner};
+use clap::Args;
+use tokio::net::TcpListener;
+use tokio::sync::watch;
+
+use crate::server::{bootstrap, metrics, router};
 
 #[derive(Args)]
 pub struct ServeArgs {
@@ -29,134 +29,76 @@ pub struct ServeArgs {
     pub log_level: String,
 }
 
-struct RuntimeProviderServices {
-    memory_manager: Arc<MemoryManager>,
-    reasoner: Option<Arc<dyn ReflectiveReasoner>>,
-}
-
-fn bootstrap_runtime_provider_services() -> anyhow::Result<RuntimeProviderServices> {
-    let mut manager = MemoryManager::new();
-
-    if let Some(embedding_service) = create_embedding_service_from_env()? {
-        manager = manager.with_embedding_service(embedding_service);
-    }
-
-    let reasoner = if let Some(llm_service) = create_llm_service_from_env()? {
-        let reasoner: Arc<dyn ReflectiveReasoner> =
-            Arc::new(DefaultReflectiveReasoner::new(llm_service.clone()));
-        manager = manager
-            .with_llm_service(llm_service)
-            .with_reasoner(reasoner.clone());
-        Some(reasoner)
-    } else {
-        None
-    };
-
-    Ok(RuntimeProviderServices {
-        memory_manager: Arc::new(manager),
-        reasoner,
-    })
-}
-
-pub fn run(args: ServeArgs) -> anyhow::Result<()> {
-    let config_path = args
-        .config
-        .clone()
-        .unwrap_or_else(|| std::path::PathBuf::from("./config"));
-
-    // Validate required environment / config presence before attempting to bind.
-    // In the current state the full Aeterna HTTP server is not yet wired into
-    // this binary; surface a clear, actionable error rather than silently
-    // claiming success or panicking.
-    if !config_path.exists() {
+pub async fn run(args: ServeArgs) -> anyhow::Result<()> {
+    if let Some(config_path) = &args.config
+        && !config_path.exists()
+    {
         anyhow::bail!(
-            "Configuration directory not found: {}\n\
-             \n\
-             Set AETERNA_CONFIG_PATH to a valid config directory, or run:\n\
-             \n\
-             \taeterna setup\n\
-             \n\
-             to create an initial configuration.",
+            "Configuration directory not found: {}\n\nSet AETERNA_CONFIG_PATH to a valid config directory, or run:\n\n\taeterna setup\n\nto create an initial configuration.",
             config_path.display()
         );
     }
 
-    // Check required infrastructure environment variables.
-    let missing: Vec<&str> = ["AETERNA_POSTGRESQL_HOST", "AETERNA_POSTGRESQL_DATABASE"]
-        .iter()
-        .copied()
-        .filter(|v| std::env::var(v).is_err())
-        .collect();
+    let state = bootstrap::bootstrap().await?;
+    let app = router::build_router(state.clone());
+    let metrics_handle = metrics::create_recorder();
+    let metrics_app = metrics::router(metrics_handle);
 
-    if !missing.is_empty() {
-        anyhow::bail!(
-            "Required environment variables are not set: {}\n\
-             \n\
-             Aeterna server requires a running PostgreSQL instance.\n\
-             Configure the connection via environment variables or Helm values.\n\
-             Run 'aeterna setup' to generate a configuration.",
-            missing.join(", ")
-        );
+    let app_addr: SocketAddr = format!("{}:{}", args.bind, args.port).parse()?;
+    let metrics_addr: SocketAddr = format!("{}:{}", args.bind, args.metrics_port).parse()?;
+
+    tracing::info!(address = %app_addr, "Aeterna API server starting");
+    tracing::info!(address = %metrics_addr, "Aeterna metrics server starting");
+
+    let app_listener = TcpListener::bind(app_addr).await?;
+    let metrics_listener = TcpListener::bind(metrics_addr).await?;
+
+    let shutdown_rx_http = state.shutdown_tx.subscribe();
+    let shutdown_rx_metrics = state.shutdown_tx.subscribe();
+
+    let shutdown_tx = state.shutdown_tx.clone();
+    let signal_task = tokio::spawn(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        let _ = shutdown_tx.send(true);
+    });
+
+    #[cfg(unix)]
+    let shutdown_tx_sigterm = state.shutdown_tx.clone();
+    #[cfg(unix)]
+    let sigterm_task = tokio::spawn(async move {
+        use tokio::signal::unix::{SignalKind, signal};
+        if let Ok(mut sigterm) = signal(SignalKind::terminate()) {
+            sigterm.recv().await;
+            let _ = shutdown_tx_sigterm.send(true);
+        }
+    });
+
+    let app_server =
+        axum::serve(app_listener, app).with_graceful_shutdown(await_shutdown(shutdown_rx_http));
+
+    let metrics_server = axum::serve(metrics_listener, metrics_app)
+        .with_graceful_shutdown(await_shutdown(shutdown_rx_metrics));
+
+    tokio::try_join!(app_server, metrics_server)?;
+
+    signal_task.abort();
+    #[cfg(unix)]
+    sigterm_task.abort();
+
+    Ok(())
+}
+
+async fn await_shutdown(mut shutdown_rx: watch::Receiver<bool>) {
+    while shutdown_rx.changed().await.is_ok() {
+        if *shutdown_rx.borrow() {
+            break;
+        }
     }
-
-    // All prerequisites met — start the server.
-    // The bind address and port are resolved here; the actual Axum/Hyper server
-    // will be wired in when the server crate is integrated.
-    let addr = format!("{}:{}", args.bind, args.port);
-    tracing::info!("Aeterna API server starting on http://{}", addr);
-    tracing::info!(
-        "Metrics endpoint on http://{}:{}/metrics",
-        args.bind,
-        args.metrics_port
-    );
-
-    let runtime = bootstrap_runtime_provider_services()?;
-    tracing::info!(
-        llm_enabled = runtime.reasoner.is_some(),
-        provider_backed_memory_manager = true,
-        "Runtime provider services initialized"
-    );
-    let _ = runtime.memory_manager;
-
-    // Runtime is already provided by the #[tokio::main] in main.rs.
-    // This function is synchronous; the actual async server loop will be
-    // spawned here once the server crate is integrated.
-    anyhow::bail!(
-        "The Aeterna HTTP API server is not yet integrated into this binary.\n\
-         \n\
-         To run Aeterna in a container, ensure AETERNA_POSTGRESQL_HOST and related\n\
-         variables are set correctly, then re-run once the server crate is available.\n\
-         \n\
-         For development, use: cargo run -p agent-a2a"
-    );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serial_test::serial;
-
-    fn set_base_runtime_env() {
-        unsafe {
-            std::env::set_var("AETERNA_POSTGRESQL_HOST", "localhost");
-            std::env::set_var("AETERNA_POSTGRESQL_DATABASE", "aeterna");
-            std::env::set_var("AETERNA_LLM_PROVIDER", "none");
-            std::env::remove_var("OPENAI_API_KEY");
-            std::env::remove_var("AETERNA_OPENAI_MODEL");
-            std::env::remove_var("AETERNA_OPENAI_EMBEDDING_MODEL");
-        }
-    }
-
-    fn clear_runtime_env() {
-        unsafe {
-            std::env::remove_var("AETERNA_POSTGRESQL_HOST");
-            std::env::remove_var("AETERNA_POSTGRESQL_DATABASE");
-            std::env::remove_var("AETERNA_LLM_PROVIDER");
-            std::env::remove_var("OPENAI_API_KEY");
-            std::env::remove_var("AETERNA_OPENAI_MODEL");
-            std::env::remove_var("AETERNA_OPENAI_EMBEDDING_MODEL");
-        }
-    }
 
     #[test]
     fn test_serve_args_defaults() {
@@ -190,8 +132,8 @@ mod tests {
         assert_eq!(args.log_level, "debug");
     }
 
-    #[test]
-    fn test_serve_missing_config_path_returns_error() {
+    #[tokio::test]
+    async fn test_serve_missing_config_path_returns_error() {
         let args = ServeArgs {
             bind: "0.0.0.0".to_string(),
             port: 8080,
@@ -201,98 +143,17 @@ mod tests {
             )),
             log_level: "info".to_string(),
         };
-        let result = run(args);
+        let result = run(args).await;
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(
-            msg.contains("Configuration directory not found"),
-            "Expected 'Configuration directory not found', got: {msg}"
-        );
+        assert!(msg.contains("Configuration directory not found"));
     }
 
-    #[test]
-    #[serial]
-    fn test_serve_missing_env_vars_with_existing_config_path() {
-        // Use a path that exists ("/tmp") so we pass the config check and hit
-        // the environment variable check.
-        // Clear relevant env vars for this test.
-        // SAFETY: single-threaded test, no other threads reading these vars.
-        unsafe {
-            std::env::remove_var("AETERNA_POSTGRESQL_HOST");
-            std::env::remove_var("AETERNA_POSTGRESQL_DATABASE");
-            std::env::set_var("AETERNA_LLM_PROVIDER", "none");
-            std::env::remove_var("OPENAI_API_KEY");
-        }
-
-        let args = ServeArgs {
-            bind: "0.0.0.0".to_string(),
-            port: 8080,
-            metrics_port: 9090,
-            config: Some(std::path::PathBuf::from("/tmp")),
-            log_level: "info".to_string(),
-        };
-        let result = run(args);
-        assert!(result.is_err());
-        let msg = result.unwrap_err().to_string();
-        // Either the env var check or the "not yet integrated" message is acceptable.
-        assert!(
-            msg.contains("AETERNA_POSTGRESQL") || msg.contains("not yet integrated"),
-            "Expected AETERNA_POSTGRESQL or not-yet-integrated error, got: {msg}"
-        );
-
-        clear_runtime_env();
-    }
-
-    #[test]
-    #[serial]
-    fn test_bootstrap_runtime_provider_services_allows_none_provider() {
-        set_base_runtime_env();
-
-        let services = bootstrap_runtime_provider_services().expect("bootstrap should succeed");
-        assert!(services.reasoner.is_none());
-
-        clear_runtime_env();
-    }
-
-    #[test]
-    #[serial]
-    fn test_bootstrap_runtime_provider_services_requires_openai_key() {
-        set_base_runtime_env();
-        unsafe {
-            std::env::set_var("AETERNA_LLM_PROVIDER", "openai");
-        }
-
-        let err = match bootstrap_runtime_provider_services() {
-            Ok(_) => panic!("expected openai provider bootstrap to fail without key"),
-            Err(err) => err,
-        };
-        assert!(err.to_string().contains("OPENAI_API_KEY"));
-
-        clear_runtime_env();
-    }
-
-    #[test]
-    #[serial]
-    fn test_serve_surfaces_provider_bootstrap_failure_before_not_integrated() {
-        unsafe {
-            std::env::set_var("AETERNA_POSTGRESQL_HOST", "localhost");
-            std::env::set_var("AETERNA_POSTGRESQL_DATABASE", "aeterna");
-            std::env::set_var("AETERNA_LLM_PROVIDER", "openai");
-            std::env::remove_var("OPENAI_API_KEY");
-        }
-
-        let args = ServeArgs {
-            bind: "0.0.0.0".to_string(),
-            port: 8080,
-            metrics_port: 9090,
-            config: Some(std::path::PathBuf::from("/tmp")),
-            log_level: "info".to_string(),
-        };
-        let result = run(args);
-        assert!(result.is_err());
-        let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("OPENAI_API_KEY"), "unexpected error: {msg}");
-
-        clear_runtime_env();
+    #[tokio::test]
+    async fn await_shutdown_returns_when_flag_becomes_true() {
+        let (tx, rx) = watch::channel(false);
+        let task = tokio::spawn(await_shutdown(rx));
+        tx.send(true).unwrap();
+        task.await.unwrap();
     }
 }

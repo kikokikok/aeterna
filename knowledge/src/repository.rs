@@ -1,10 +1,14 @@
 use async_trait::async_trait;
 use git2::{Repository, Signature};
 use mk_core::traits::KnowledgeRepository;
-use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeType};
-use std::path::PathBuf;
+use mk_core::types::{KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use thiserror::Error;
+use tokio::sync::RwLock;
 use walkdir::WalkDir;
+
+use crate::git_provider::{GitProvider, GovernanceBranch, WriteOperation, requires_governance};
 
 #[derive(Error, Debug)]
 pub enum RepositoryError {
@@ -15,39 +19,313 @@ pub enum RepositoryError {
     #[error("Invalid path: {0}")]
     InvalidPath(String),
     #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error)
+    Serialization(#[from] serde_json::Error),
+    #[error("Remote error: {0}")]
+    Remote(String),
+}
+
+pub struct RemoteConfig {
+    pub url: String,
+    pub branch: String,
+    pub git_provider: Option<Arc<dyn GitProvider>>,
 }
 
 pub struct GitRepository {
-    root_path: PathBuf
+    root_path: PathBuf,
+    remote_url: Option<String>,
+    branch: String,
+    git_provider: Option<Arc<dyn GitProvider>>,
+    rw_lock: Arc<RwLock<()>>,
 }
 
 impl GitRepository {
     pub fn new(root_path: impl Into<PathBuf>) -> Result<Self, RepositoryError> {
+        Self::new_with_remote(root_path, None)
+    }
+
+    pub fn new_with_remote(
+        root_path: impl Into<PathBuf>,
+        remote_config: Option<RemoteConfig>,
+    ) -> Result<Self, RepositoryError> {
         let root_path = root_path.into();
         if !root_path.exists() {
             std::fs::create_dir_all(&root_path)?;
         }
 
-        if Repository::open(&root_path).is_err() {
-            Repository::init(&root_path)?;
+        let (remote_url, branch, git_provider) = if let Some(cfg) = remote_config {
+            let url = if cfg.git_provider.is_some() {
+                Self::ssh_url_to_https(&cfg.url)
+            } else {
+                cfg.url
+            };
+            (Some(url), cfg.branch, cfg.git_provider)
+        } else {
+            (None, "main".to_string(), None)
+        };
+
+        let repo = Self {
+            root_path,
+            remote_url,
+            branch,
+            git_provider,
+            rw_lock: Arc::new(RwLock::new(())),
+        };
+
+        if repo.remote_url.is_some() {
+            repo.init_or_sync_remote()?;
+        } else if Repository::open(&repo.root_path).is_err() {
+            Repository::init(&repo.root_path)?;
         }
 
-        Ok(Self { root_path })
+        Ok(repo)
+    }
+
+    fn init_or_sync_remote(&self) -> Result<(), RepositoryError> {
+        let git_dir = self.root_path.join(".git");
+        if git_dir.exists() {
+            let repo = Repository::open(&self.root_path)?;
+            self.ensure_origin_remote(&repo)?;
+            self.pull_from_remote()?;
+            return Ok(());
+        }
+
+        if Self::is_dir_empty(&self.root_path)? {
+            self.clone_from_remote()?;
+            return Ok(());
+        }
+
+        Err(RepositoryError::Remote(
+            "Repository path is not empty and is not a git repository".to_string(),
+        ))
+    }
+
+    fn is_dir_empty(path: &Path) -> Result<bool, RepositoryError> {
+        let mut entries = std::fs::read_dir(path)?;
+        Ok(entries.next().is_none())
+    }
+
+    fn clone_from_remote(&self) -> Result<(), RepositoryError> {
+        let remote_url = self
+            .remote_url
+            .as_ref()
+            .ok_or_else(|| RepositoryError::Remote("Remote URL not configured".to_string()))?;
+
+        let mut fetch_options = git2::FetchOptions::new();
+        fetch_options.remote_callbacks(self.remote_callbacks());
+
+        let mut builder = git2::build::RepoBuilder::new();
+        builder.fetch_options(fetch_options);
+        builder.branch(&self.branch);
+        builder
+            .clone(remote_url, &self.root_path)
+            .map_err(RepositoryError::from)?;
+        Ok(())
+    }
+
+    fn ensure_origin_remote(&self, repo: &Repository) -> Result<(), RepositoryError> {
+        let expected_url = self
+            .remote_url
+            .as_ref()
+            .ok_or_else(|| RepositoryError::Remote("Remote URL not configured".to_string()))?;
+
+        match repo.find_remote("origin") {
+            Ok(remote) => {
+                let actual_url = remote.url().unwrap_or_default();
+                if actual_url != expected_url {
+                    return Err(RepositoryError::Remote(format!(
+                        "Remote mismatch: expected '{expected_url}', found '{actual_url}'"
+                    )));
+                }
+            }
+            Err(_) => {
+                repo.remote("origin", expected_url)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn merge_remote_into_local(&self) -> Result<(), RepositoryError> {
+        let repo = Repository::open(&self.root_path)?;
+        let mut remote = repo.find_remote("origin")?;
+
+        let mut fetch_options = git2::FetchOptions::new();
+        fetch_options.remote_callbacks(self.remote_callbacks());
+        remote.fetch(&[self.branch.as_str()], Some(&mut fetch_options), None)?;
+
+        let fetch_head = repo.find_reference("FETCH_HEAD")?;
+        let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)?;
+        let (analysis, _) = repo.merge_analysis(&[&fetch_commit])?;
+
+        if analysis.is_up_to_date() {
+            return Ok(());
+        }
+
+        if analysis.is_fast_forward() {
+            self.fast_forward_to_fetch(&repo, &fetch_commit)?;
+            return Ok(());
+        }
+
+        if analysis.is_normal() {
+            repo.merge(&[&fetch_commit], None, None)?;
+            let mut index = repo.index()?;
+            if index.has_conflicts() {
+                repo.cleanup_state()?;
+                return Err(RepositoryError::Remote(
+                    "Merge conflict while reconciling with remote".to_string(),
+                ));
+            }
+
+            let tree_id = index.write_tree_to(&repo)?;
+            let tree = repo.find_tree(tree_id)?;
+            let sig = repo
+                .signature()
+                .or_else(|_| Signature::now("Aeterna", "system@aeterna.ai"))?;
+
+            let head_commit = repo.head()?.peel_to_commit()?;
+            let remote_commit = repo.find_commit(fetch_commit.id())?;
+            repo.commit(
+                Some("HEAD"),
+                &sig,
+                &sig,
+                "Merge remote changes",
+                &tree,
+                &[&head_commit, &remote_commit],
+            )?;
+
+            let mut checkout = git2::build::CheckoutBuilder::new();
+            checkout.force();
+            repo.checkout_head(Some(&mut checkout))?;
+            repo.cleanup_state()?;
+            return Ok(());
+        }
+
+        Ok(())
+    }
+
+    fn fast_forward_to_fetch(
+        &self,
+        repo: &Repository,
+        fetch_commit: &git2::AnnotatedCommit<'_>,
+    ) -> Result<(), RepositoryError> {
+        let branch_ref = format!("refs/heads/{}", self.branch);
+
+        if let Ok(mut reference) = repo.find_reference(&branch_ref) {
+            reference.set_target(fetch_commit.id(), "Fast-forward")?;
+        } else {
+            repo.reference(&branch_ref, fetch_commit.id(), true, "Create local branch")?;
+        }
+
+        repo.set_head(&branch_ref)?;
+        let mut checkout = git2::build::CheckoutBuilder::new();
+        checkout.force();
+        repo.checkout_head(Some(&mut checkout))?;
+        Ok(())
+    }
+
+    fn layer_dir(layer: KnowledgeLayer) -> &'static str {
+        match layer {
+            KnowledgeLayer::Company => "company",
+            KnowledgeLayer::Org => "org",
+            KnowledgeLayer::Team => "team",
+            KnowledgeLayer::Project => "project",
+        }
+    }
+
+    fn ssh_url_to_https(url: &str) -> String {
+        if let Some(rest) = url.strip_prefix("git@github.com:") {
+            let rest = rest.strip_suffix(".git").unwrap_or(rest);
+            format!("https://github.com/{rest}.git")
+        } else {
+            url.to_string()
+        }
+    }
+
+    fn remote_callbacks(&self) -> git2::RemoteCallbacks<'_> {
+        let mut callbacks = git2::RemoteCallbacks::new();
+        if let Some(ref provider) = self.git_provider {
+            let provider = Arc::clone(provider);
+            callbacks.credentials(move |_url, _username, _allowed| {
+                let handle = tokio::runtime::Handle::current();
+                let token = std::thread::scope(|s| {
+                    s.spawn(|| handle.block_on(provider.get_installation_token()))
+                        .join()
+                        .expect("token thread panicked")
+                })
+                .map_err(|e| git2::Error::from_str(&format!("Token fetch failed: {e}")))?;
+                git2::Cred::userpass_plaintext("x-access-token", &token)
+            });
+        }
+        callbacks
+    }
+
+    pub fn pull_from_remote(&self) -> Result<(), RepositoryError> {
+        if self.remote_url.is_none() {
+            return Ok(());
+        }
+
+        let repo = Repository::open(&self.root_path)?;
+        let mut remote = repo.find_remote("origin")?;
+
+        let mut fetch_options = git2::FetchOptions::new();
+        fetch_options.remote_callbacks(self.remote_callbacks());
+        remote.fetch(&[self.branch.as_str()], Some(&mut fetch_options), None)?;
+
+        let fetch_head = repo.find_reference("FETCH_HEAD")?;
+        let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)?;
+        let (analysis, _) = repo.merge_analysis(&[&fetch_commit])?;
+
+        if analysis.is_up_to_date() {
+            return Ok(());
+        }
+
+        if analysis.is_fast_forward() {
+            self.fast_forward_to_fetch(&repo, &fetch_commit)?;
+            return Ok(());
+        }
+
+        if analysis.is_normal() {
+            let target = repo.find_object(fetch_commit.id(), None)?;
+            repo.reset(&target, git2::ResetType::Hard, None)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn push_to_remote(&self) -> Result<(), RepositoryError> {
+        if self.remote_url.is_none() {
+            return Ok(());
+        }
+
+        let refspec = format!("refs/heads/{0}:refs/heads/{0}", self.branch);
+
+        for attempt in 0..3 {
+            let repo = Repository::open(&self.root_path)?;
+            let mut remote = repo.find_remote("origin")?;
+            let mut push_options = git2::PushOptions::new();
+            push_options.remote_callbacks(self.remote_callbacks());
+
+            match remote.push(&[refspec.as_str()], Some(&mut push_options)) {
+                Ok(()) => return Ok(()),
+                Err(err) => {
+                    if attempt == 2 {
+                        return Err(RepositoryError::Remote(err.to_string()));
+                    }
+                    self.merge_remote_into_local()?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn resolve_path(
         &self,
         ctx: &mk_core::types::TenantContext,
         layer: KnowledgeLayer,
-        path: &str
+        path: &str,
     ) -> PathBuf {
-        let layer_dir = match layer {
-            KnowledgeLayer::Company => "company",
-            KnowledgeLayer::Org => "org",
-            KnowledgeLayer::Team => "team",
-            KnowledgeLayer::Project => "project"
-        };
+        let layer_dir = Self::layer_dir(layer);
         self.root_path
             .join(ctx.tenant_id.as_str())
             .join(layer_dir)
@@ -72,12 +350,12 @@ impl GitRepository {
 
         let parent_commit = match repo.head() {
             Ok(head) => Some(head.peel_to_commit()?),
-            Err(_) => None
+            Err(_) => None,
         };
 
         let parents = match &parent_commit {
             Some(c) => vec![c],
-            None => vec![]
+            None => vec![],
         };
 
         let commit_id = repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents)?;
@@ -89,7 +367,7 @@ impl GitRepository {
         let repo = Repository::open(&self.root_path)?;
         match repo.head() {
             Ok(head) => Ok(Some(head.peel_to_commit()?.id().to_string())),
-            Err(_) => Ok(None)
+            Err(_) => Ok(None),
         }
     }
 
@@ -102,84 +380,12 @@ impl GitRepository {
         Self::new(root).unwrap()
     }
 
-    pub async fn get_by_path(
-        &self,
-        ctx: mk_core::types::TenantContext,
-        path: &str
-    ) -> Result<Option<KnowledgeEntry>, RepositoryError> {
-        for layer in [
-            KnowledgeLayer::Company,
-            KnowledgeLayer::Org,
-            KnowledgeLayer::Team,
-            KnowledgeLayer::Project
-        ] {
-            if let Some(entry) = self.get(ctx.clone(), layer, path).await? {
-                return Ok(Some(entry));
-            }
-        }
-        Ok(None)
-    }
-}
-
-#[async_trait]
-impl KnowledgeRepository for GitRepository {
-    type Error = RepositoryError;
-
-    async fn get_head_commit(
-        &self,
-        _ctx: mk_core::types::TenantContext
-    ) -> Result<Option<String>, Self::Error> {
-        self.get_head_commit_sync()
-    }
-
-    async fn get_affected_items(
-        &self,
-        _ctx: mk_core::types::TenantContext,
-        since_commit: &str
-    ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
-        let repo = Repository::open(&self.root_path)?;
-        let from_obj = repo.revparse_single(since_commit)?;
-        let from_commit = from_obj.peel_to_commit()?;
-        let from_tree = from_commit.tree()?;
-
-        let head = repo.head()?.peel_to_commit()?;
-        let head_tree = head.tree()?;
-
-        let diff = repo.diff_tree_to_tree(Some(&from_tree), Some(&head_tree), None)?;
-        let mut affected = Vec::new();
-
-        diff.foreach(
-            &mut |delta, _| {
-                if let Some(path) = delta.new_file().path().and_then(|p| p.to_str()) {
-                    let parts: Vec<&str> = path.split('/').collect();
-                    if parts.len() >= 2 {
-                        let layer = match parts[0] {
-                            "company" => KnowledgeLayer::Company,
-                            "org" => KnowledgeLayer::Org,
-                            "team" => KnowledgeLayer::Team,
-                            "project" => KnowledgeLayer::Project,
-                            _ => return true
-                        };
-                        let inner_path = parts[1..].join("/");
-                        affected.push((layer, inner_path));
-                    }
-                }
-                true
-            },
-            None,
-            None,
-            None
-        )?;
-
-        Ok(affected)
-    }
-
-    async fn get(
+    async fn get_inner(
         &self,
         ctx: mk_core::types::TenantContext,
         layer: KnowledgeLayer,
-        path: &str
-    ) -> Result<Option<KnowledgeEntry>, Self::Error> {
+        path: &str,
+    ) -> Result<Option<KnowledgeEntry>, RepositoryError> {
         let full_path = self.resolve_path(&ctx, layer, path);
         if !full_path.exists() {
             return Ok(None);
@@ -208,7 +414,7 @@ impl KnowledgeRepository for GitRepository {
                 serde_json::from_value(meta["author"].clone()).unwrap_or_default(),
                 meta["updated_at"]
                     .as_i64()
-                    .unwrap_or_else(|| chrono::Utc::now().timestamp())
+                    .unwrap_or_else(|| chrono::Utc::now().timestamp()),
             )
         } else {
             (
@@ -217,7 +423,7 @@ impl KnowledgeRepository for GitRepository {
                 std::collections::HashMap::new(),
                 std::collections::HashMap::new(),
                 None,
-                chrono::Utc::now().timestamp()
+                chrono::Utc::now().timestamp(),
             )
         };
 
@@ -231,16 +437,16 @@ impl KnowledgeRepository for GitRepository {
             metadata,
             commit_hash,
             author,
-            updated_at
+            updated_at,
         }))
     }
 
-    async fn store(
+    async fn store_inner(
         &self,
         ctx: mk_core::types::TenantContext,
         entry: KnowledgeEntry,
-        message: &str
-    ) -> Result<String, Self::Error> {
+        message: &str,
+    ) -> Result<String, RepositoryError> {
         let full_path = self.resolve_path(&ctx, entry.layer, &entry.path);
         let metadata_path = full_path.with_extension("metadata.json");
 
@@ -263,19 +469,14 @@ impl KnowledgeRepository for GitRepository {
         self.commit(message)
     }
 
-    async fn list(
+    async fn list_inner(
         &self,
         ctx: mk_core::types::TenantContext,
         layer: KnowledgeLayer,
-        prefix: &str
-    ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+        prefix: &str,
+    ) -> Result<Vec<KnowledgeEntry>, RepositoryError> {
         let tenant_path = self.root_path.join(ctx.tenant_id.as_str());
-        let layer_path = match layer {
-            KnowledgeLayer::Company => tenant_path.join("company"),
-            KnowledgeLayer::Org => tenant_path.join("org"),
-            KnowledgeLayer::Team => tenant_path.join("team"),
-            KnowledgeLayer::Project => tenant_path.join("project")
-        };
+        let layer_path = tenant_path.join(Self::layer_dir(layer));
 
         if !layer_path.exists() {
             return Ok(vec![]);
@@ -296,7 +497,7 @@ impl KnowledgeRepository for GitRepository {
 
             if relative_path.to_string_lossy().starts_with(prefix)
                 && let Some(ke) = self
-                    .get(ctx.clone(), layer, &relative_path.to_string_lossy())
+                    .get_inner(ctx.clone(), layer, &relative_path.to_string_lossy())
                     .await?
             {
                 entries.push(ke);
@@ -306,13 +507,13 @@ impl KnowledgeRepository for GitRepository {
         Ok(entries)
     }
 
-    async fn delete(
+    async fn delete_inner(
         &self,
         ctx: mk_core::types::TenantContext,
         layer: KnowledgeLayer,
         path: &str,
-        message: &str
-    ) -> Result<String, Self::Error> {
+        message: &str,
+    ) -> Result<String, RepositoryError> {
         let full_path = self.resolve_path(&ctx, layer, path);
         let metadata_path = full_path.with_extension("metadata.json");
 
@@ -327,16 +528,16 @@ impl KnowledgeRepository for GitRepository {
         }
     }
 
-    async fn search(
+    async fn search_inner(
         &self,
         ctx: mk_core::types::TenantContext,
         query: &str,
         layers: Vec<KnowledgeLayer>,
-        limit: usize
-    ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+        limit: usize,
+    ) -> Result<Vec<KnowledgeEntry>, RepositoryError> {
         let mut results = Vec::new();
         for layer in layers {
-            let entries = self.list(ctx.clone(), layer, "").await?;
+            let entries = self.list_inner(ctx.clone(), layer, "").await?;
             for entry in entries {
                 if entry.content.contains(query) || entry.path.contains(query) {
                     results.push(entry);
@@ -349,6 +550,403 @@ impl KnowledgeRepository for GitRepository {
         Ok(results)
     }
 
+    async fn store_governance_track(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        entry: KnowledgeEntry,
+        message: &str,
+    ) -> Result<String, RepositoryError> {
+        self.store_governance_track_with_verb(ctx, entry, message, "create")
+            .await
+    }
+
+    async fn store_governance_track_with_verb(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        entry: KnowledgeEntry,
+        message: &str,
+        verb: &str,
+    ) -> Result<String, RepositoryError> {
+        let git_provider = self
+            .git_provider
+            .as_ref()
+            .ok_or_else(|| RepositoryError::Remote("Git provider not configured".to_string()))?;
+
+        let branch = GovernanceBranch::new(verb, &entry.path);
+        let base_sha = git_provider
+            .get_default_branch_sha()
+            .await
+            .map_err(|e| RepositoryError::Remote(e.to_string()))?;
+
+        if let Err(err) = git_provider.create_branch(&branch.name, &base_sha).await {
+            let msg = err.to_string();
+            if !msg.contains("Branch already exists") {
+                return Err(RepositoryError::Remote(msg));
+            }
+        }
+
+        let content = serde_json::to_string_pretty(&serde_json::json!({
+            "content": entry.content,
+            "kind": entry.kind,
+            "status": entry.status,
+            "metadata": entry.metadata,
+            "author": entry.author,
+            "updated_at": entry.updated_at,
+        }))?;
+
+        let file_path = format!(
+            "{}/{}/{}",
+            ctx.tenant_id,
+            Self::layer_dir(entry.layer),
+            entry.path
+        );
+
+        git_provider
+            .commit_to_branch(&branch.name, &file_path, content.as_bytes(), message)
+            .await
+            .map_err(|e| RepositoryError::Remote(e.to_string()))?;
+
+        let pr = git_provider
+            .create_pull_request(
+                &format!("[Governance] {message}"),
+                message,
+                &branch.name,
+                &self.branch,
+            )
+            .await
+            .map_err(|e| RepositoryError::Remote(e.to_string()))?;
+
+        Ok(format!("pr:{}", pr.number))
+    }
+
+    async fn delete_governance_track(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        layer: KnowledgeLayer,
+        path: &str,
+        message: &str,
+    ) -> Result<String, RepositoryError> {
+        let git_provider = self
+            .git_provider
+            .as_ref()
+            .ok_or_else(|| RepositoryError::Remote("Git provider not configured".to_string()))?;
+
+        let branch = GovernanceBranch::new("delete", path);
+        let base_sha = git_provider
+            .get_default_branch_sha()
+            .await
+            .map_err(|e| RepositoryError::Remote(e.to_string()))?;
+
+        if let Err(err) = git_provider.create_branch(&branch.name, &base_sha).await {
+            let msg = err.to_string();
+            if !msg.contains("Branch already exists") {
+                return Err(RepositoryError::Remote(msg));
+            }
+        }
+
+        let file_path = format!("{}/{}/{}", ctx.tenant_id, Self::layer_dir(layer), path);
+        let marker = serde_json::to_string_pretty(&serde_json::json!({
+            "deleted": true,
+            "path": path,
+            "message": message,
+        }))?;
+
+        git_provider
+            .commit_to_branch(&branch.name, &file_path, marker.as_bytes(), message)
+            .await
+            .map_err(|e| RepositoryError::Remote(e.to_string()))?;
+
+        let pr = git_provider
+            .create_pull_request(
+                &format!("[Governance] {message}"),
+                message,
+                &branch.name,
+                &self.branch,
+            )
+            .await
+            .map_err(|e| RepositoryError::Remote(e.to_string()))?;
+
+        Ok(format!("pr:{}", pr.number))
+    }
+
+    async fn update_status_local(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        layer: KnowledgeLayer,
+        path: &str,
+        new_status: KnowledgeStatus,
+        message: &str,
+    ) -> Result<String, RepositoryError> {
+        let mut entry = self
+            .get_inner(ctx.clone(), layer, path)
+            .await?
+            .ok_or_else(|| RepositoryError::InvalidPath(path.to_string()))?;
+        entry.status = new_status;
+        entry.updated_at = chrono::Utc::now().timestamp();
+        self.store_inner(ctx, entry, message).await
+    }
+
+    async fn update_status_governance_track(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        layer: KnowledgeLayer,
+        path: &str,
+        new_status: KnowledgeStatus,
+        message: &str,
+    ) -> Result<String, RepositoryError> {
+        let mut entry = self
+            .get_inner(ctx.clone(), layer, path)
+            .await?
+            .ok_or_else(|| RepositoryError::InvalidPath(path.to_string()))?;
+        entry.status = new_status;
+        entry.updated_at = chrono::Utc::now().timestamp();
+        self.store_governance_track_with_verb(ctx, entry, message, "status")
+            .await
+    }
+
+    async fn promote_local(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        source_layer: KnowledgeLayer,
+        target_layer: KnowledgeLayer,
+        path: &str,
+        message: &str,
+    ) -> Result<String, RepositoryError> {
+        let mut entry = self
+            .get_inner(ctx.clone(), source_layer, path)
+            .await?
+            .ok_or_else(|| RepositoryError::InvalidPath(path.to_string()))?;
+        entry.layer = target_layer;
+        entry.updated_at = chrono::Utc::now().timestamp();
+        self.store_inner(ctx, entry, message).await
+    }
+
+    async fn promote_governance_track(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        source_layer: KnowledgeLayer,
+        target_layer: KnowledgeLayer,
+        path: &str,
+        message: &str,
+    ) -> Result<String, RepositoryError> {
+        let mut entry = self
+            .get_inner(ctx.clone(), source_layer, path)
+            .await?
+            .ok_or_else(|| RepositoryError::InvalidPath(path.to_string()))?;
+        entry.layer = target_layer;
+        entry.updated_at = chrono::Utc::now().timestamp();
+        self.store_governance_track_with_verb(ctx, entry, message, "promote")
+            .await
+    }
+
+    pub async fn get_by_path(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        path: &str,
+    ) -> Result<Option<KnowledgeEntry>, RepositoryError> {
+        for layer in [
+            KnowledgeLayer::Company,
+            KnowledgeLayer::Org,
+            KnowledgeLayer::Team,
+            KnowledgeLayer::Project,
+        ] {
+            if let Some(entry) = self.get(ctx.clone(), layer, path).await? {
+                return Ok(Some(entry));
+            }
+        }
+        Ok(None)
+    }
+}
+
+#[async_trait]
+impl KnowledgeRepository for GitRepository {
+    type Error = RepositoryError;
+
+    async fn get_head_commit(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+    ) -> Result<Option<String>, Self::Error> {
+        self.get_head_commit_sync()
+    }
+
+    async fn get_affected_items(
+        &self,
+        _ctx: mk_core::types::TenantContext,
+        since_commit: &str,
+    ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
+        let repo = Repository::open(&self.root_path)?;
+        let from_obj = repo.revparse_single(since_commit)?;
+        let from_commit = from_obj.peel_to_commit()?;
+        let from_tree = from_commit.tree()?;
+
+        let head = repo.head()?.peel_to_commit()?;
+        let head_tree = head.tree()?;
+
+        let diff = repo.diff_tree_to_tree(Some(&from_tree), Some(&head_tree), None)?;
+        let mut affected = Vec::new();
+
+        diff.foreach(
+            &mut |delta, _| {
+                if let Some(path) = delta.new_file().path().and_then(|p| p.to_str()) {
+                    let parts: Vec<&str> = path.split('/').collect();
+                    if parts.len() >= 2 {
+                        let layer = match parts[0] {
+                            "company" => KnowledgeLayer::Company,
+                            "org" => KnowledgeLayer::Org,
+                            "team" => KnowledgeLayer::Team,
+                            "project" => KnowledgeLayer::Project,
+                            _ => return true,
+                        };
+                        let inner_path = parts[1..].join("/");
+                        affected.push((layer, inner_path));
+                    }
+                }
+                true
+            },
+            None,
+            None,
+            None,
+        )?;
+
+        Ok(affected)
+    }
+
+    async fn get(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        layer: KnowledgeLayer,
+        path: &str,
+    ) -> Result<Option<KnowledgeEntry>, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.read().await;
+            self.pull_from_remote()?;
+            self.get_inner(ctx, layer, path).await
+        } else {
+            self.get_inner(ctx, layer, path).await
+        }
+    }
+
+    async fn store(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        entry: KnowledgeEntry,
+        message: &str,
+    ) -> Result<String, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.write().await;
+            if requires_governance(entry.layer, entry.status, &WriteOperation::Create) {
+                self.store_governance_track(ctx, entry, message).await
+            } else {
+                let sha = self.store_inner(ctx, entry, message).await?;
+                self.push_to_remote()?;
+                Ok(sha)
+            }
+        } else {
+            self.store_inner(ctx, entry, message).await
+        }
+    }
+
+    async fn list(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        layer: KnowledgeLayer,
+        prefix: &str,
+    ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.read().await;
+            self.pull_from_remote()?;
+            self.list_inner(ctx, layer, prefix).await
+        } else {
+            self.list_inner(ctx, layer, prefix).await
+        }
+    }
+
+    async fn delete(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        layer: KnowledgeLayer,
+        path: &str,
+        message: &str,
+    ) -> Result<String, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.write().await;
+            if requires_governance(layer, KnowledgeStatus::Draft, &WriteOperation::Delete) {
+                self.delete_governance_track(ctx, layer, path, message)
+                    .await
+            } else {
+                let sha = self.delete_inner(ctx, layer, path, message).await?;
+                self.push_to_remote()?;
+                Ok(sha)
+            }
+        } else {
+            self.delete_inner(ctx, layer, path, message).await
+        }
+    }
+
+    async fn search(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        query: &str,
+        layers: Vec<KnowledgeLayer>,
+        limit: usize,
+    ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.read().await;
+            self.pull_from_remote()?;
+            self.search_inner(ctx, query, layers, limit).await
+        } else {
+            self.search_inner(ctx, query, layers, limit).await
+        }
+    }
+
+    async fn update_status(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        layer: KnowledgeLayer,
+        path: &str,
+        new_status: KnowledgeStatus,
+        message: &str,
+    ) -> Result<String, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.write().await;
+            if requires_governance(
+                layer,
+                new_status,
+                &WriteOperation::StatusChange { to: new_status },
+            ) {
+                self.update_status_governance_track(ctx, layer, path, new_status, message)
+                    .await
+            } else {
+                let sha = self
+                    .update_status_local(ctx, layer, path, new_status, message)
+                    .await?;
+                self.push_to_remote()?;
+                Ok(sha)
+            }
+        } else {
+            self.update_status_local(ctx, layer, path, new_status, message)
+                .await
+        }
+    }
+
+    async fn promote(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        source_layer: KnowledgeLayer,
+        target_layer: KnowledgeLayer,
+        path: &str,
+        message: &str,
+    ) -> Result<String, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.write().await;
+            self.promote_governance_track(ctx, source_layer, target_layer, path, message)
+                .await
+        } else {
+            self.promote_local(ctx, source_layer, target_layer, path, message)
+                .await
+        }
+    }
+
     fn root_path(&self) -> Option<std::path::PathBuf> {
         Some(self.root_path.clone())
     }
@@ -357,7 +955,88 @@ impl KnowledgeRepository for GitRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::git_provider::{
+        GitProviderError, MergeMethod, PullRequestInfo, PullRequestState, WebhookEvent,
+    };
+    use async_trait::async_trait;
     use tempfile::tempdir;
+
+    struct TestGitProvider;
+
+    #[async_trait]
+    impl GitProvider for TestGitProvider {
+        async fn create_branch(
+            &self,
+            _name: &str,
+            _from_sha: &str,
+        ) -> Result<(), GitProviderError> {
+            Ok(())
+        }
+
+        async fn commit_to_branch(
+            &self,
+            _branch: &str,
+            _path: &str,
+            _content: &[u8],
+            _message: &str,
+        ) -> Result<String, GitProviderError> {
+            Ok("mock-commit".to_string())
+        }
+
+        async fn create_pull_request(
+            &self,
+            _title: &str,
+            _body: &str,
+            _head: &str,
+            _base: &str,
+        ) -> Result<PullRequestInfo, GitProviderError> {
+            Ok(PullRequestInfo {
+                number: 42,
+                title: "mock".to_string(),
+                body: None,
+                head_branch: "governance/mock".to_string(),
+                base_branch: "main".to_string(),
+                state: PullRequestState::Open,
+                html_url: "https://example.invalid/pr/42".to_string(),
+                merged: false,
+                merge_commit_sha: None,
+            })
+        }
+
+        async fn merge_pull_request(
+            &self,
+            _pr_number: u64,
+            _merge_method: MergeMethod,
+        ) -> Result<String, GitProviderError> {
+            Ok("mock-merge".to_string())
+        }
+
+        async fn list_open_prs(
+            &self,
+            _head_prefix: Option<&str>,
+        ) -> Result<Vec<PullRequestInfo>, GitProviderError> {
+            Ok(vec![])
+        }
+
+        async fn parse_webhook(
+            &self,
+            _event_type: &str,
+            _signature: Option<&str>,
+            _body: &[u8],
+        ) -> Result<WebhookEvent, GitProviderError> {
+            Ok(WebhookEvent::Unknown {
+                event_type: "mock".to_string(),
+            })
+        }
+
+        async fn get_default_branch_sha(&self) -> Result<String, GitProviderError> {
+            Ok("base-sha".to_string())
+        }
+
+        async fn get_installation_token(&self) -> Result<String, GitProviderError> {
+            Ok("mock-token".to_string())
+        }
+    }
 
     #[tokio::test]
     async fn test_git_repository_lifecycle() -> Result<(), anyhow::Error> {
@@ -377,7 +1056,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         };
 
         repo.store(ctx.clone(), entry.clone(), "initial commit")
@@ -398,7 +1077,7 @@ mod tests {
             ctx.clone(),
             KnowledgeLayer::Project,
             "test.md",
-            "delete file"
+            "delete file",
         )
         .await?;
         let after_delete = repo.get(ctx, KnowledgeLayer::Project, "test.md").await?;
@@ -430,7 +1109,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         };
 
         repo.store(ctx_a.clone(), entry, "tenant a commit").await?;
@@ -477,7 +1156,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         };
 
         repo.store(ctx_a.clone(), entry, "malicious commit").await?;
@@ -492,6 +1171,153 @@ mod tests {
             full_path
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_new_with_remote_none_is_backward_compatible() -> Result<(), anyhow::Error> {
+        let dir = tempdir()?;
+        let repo = GitRepository::new_with_remote(dir.path(), None)?;
+        assert!(repo.root_path().join(".git").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn test_remote_config_construction() {
+        let provider: Arc<dyn GitProvider> = Arc::new(TestGitProvider);
+        let cfg = RemoteConfig {
+            url: "https://github.com/org/repo.git".to_string(),
+            branch: "main".to_string(),
+            git_provider: Some(provider),
+        };
+
+        assert_eq!(cfg.url, "https://github.com/org/repo.git");
+        assert_eq!(cfg.branch, "main");
+        assert!(cfg.git_provider.is_some());
+    }
+
+    #[test]
+    fn test_remote_callbacks_constructs() -> Result<(), anyhow::Error> {
+        let dir = tempdir()?;
+        let repo = GitRepository {
+            root_path: dir.path().to_path_buf(),
+            remote_url: Some("https://github.com/org/repo.git".to_string()),
+            branch: "main".to_string(),
+            git_provider: None,
+            rw_lock: Arc::new(RwLock::new(())),
+        };
+
+        let callbacks = repo.remote_callbacks();
+        let mut fetch_options = git2::FetchOptions::new();
+        fetch_options.remote_callbacks(callbacks);
+        Ok(())
+    }
+
+    #[test]
+    fn test_pull_from_remote_without_remote_config_is_noop() -> Result<(), anyhow::Error> {
+        let dir = tempdir()?;
+        let repo = GitRepository::new(dir.path())?;
+        repo.pull_from_remote()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_routing_project_draft_create_is_fast_track() {
+        assert!(!requires_governance(
+            KnowledgeLayer::Project,
+            KnowledgeStatus::Draft,
+            &WriteOperation::Create,
+        ));
+    }
+
+    #[test]
+    fn test_routing_team_draft_create_is_governance_track() {
+        assert!(requires_governance(
+            KnowledgeLayer::Team,
+            KnowledgeStatus::Draft,
+            &WriteOperation::Create,
+        ));
+    }
+
+    #[test]
+    fn test_routing_project_accepted_create_is_governance_track() {
+        assert!(requires_governance(
+            KnowledgeLayer::Project,
+            KnowledgeStatus::Accepted,
+            &WriteOperation::Create,
+        ));
+    }
+
+    #[test]
+    fn test_routing_status_change_to_accepted_is_governance_track() {
+        assert!(requires_governance(
+            KnowledgeLayer::Project,
+            KnowledgeStatus::Draft,
+            &WriteOperation::StatusChange {
+                to: KnowledgeStatus::Accepted,
+            },
+        ));
+    }
+
+    #[test]
+    fn test_routing_promote_always_governance_track() {
+        assert!(requires_governance(
+            KnowledgeLayer::Project,
+            KnowledgeStatus::Draft,
+            &WriteOperation::Promote {
+                target_layer: KnowledgeLayer::Team,
+            },
+        ));
+    }
+
+    #[test]
+    fn test_routing_delete_project_draft_is_fast_track() {
+        assert!(!requires_governance(
+            KnowledgeLayer::Project,
+            KnowledgeStatus::Draft,
+            &WriteOperation::Delete,
+        ));
+    }
+
+    #[test]
+    fn test_routing_delete_team_is_governance_track() {
+        assert!(requires_governance(
+            KnowledgeLayer::Team,
+            KnowledgeStatus::Draft,
+            &WriteOperation::Delete,
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_no_remote_configured_always_local_mode() -> Result<(), anyhow::Error> {
+        let dir = tempdir()?;
+        let repo = GitRepository::new(dir.path())?;
+
+        let tenant_id = mk_core::types::TenantId::new("c1".into()).unwrap();
+        let user_id = mk_core::types::UserId::new("u1".into()).unwrap();
+        let ctx = mk_core::types::TenantContext::new(tenant_id, user_id);
+
+        let entry = KnowledgeEntry {
+            path: "governed.md".to_string(),
+            content: "team content".to_string(),
+            layer: KnowledgeLayer::Team,
+            kind: KnowledgeType::Spec,
+            status: KnowledgeStatus::Accepted,
+            summaries: std::collections::HashMap::new(),
+            metadata: std::collections::HashMap::new(),
+            commit_hash: None,
+            author: None,
+            updated_at: chrono::Utc::now().timestamp(),
+        };
+
+        let sha = repo.store(ctx.clone(), entry, "local write").await?;
+        assert!(!sha.is_empty());
+
+        let loaded = repo
+            .get(ctx, KnowledgeLayer::Team, "governed.md")
+            .await?
+            .expect("entry should exist");
+        assert_eq!(loaded.content, "team content");
         Ok(())
     }
 }

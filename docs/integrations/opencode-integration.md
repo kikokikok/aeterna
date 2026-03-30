@@ -1034,6 +1034,6 @@ npx aeterna health
 
 ## Next Steps
 
-- [MCP Server Setup](./mcp-server.md) - For remote deployments
-- [Strangler Fig Example](../examples/strangler-fig-migration.md) - Real-world usage
-- [Tool Interface Specification](../../specs/06-tool-interface.md) - Detailed tool contracts
+- [MCP Server Setup](./mcp-server) - For remote deployments
+- [Strangler Fig Example](../examples/strangler-fig-migration) - Real-world usage
+- [Tool Interface Specification](../specs/tool-interface) - Detailed tool contracts

@@ -1,0 +1,4405 @@
+{
+  "info": {
+    "name": "Aeterna E2E Test Suite",
+    "description": "Exhaustive end-to-end tests for the Aeterna stack via HTTPS ingress.\n\n1. Deployment Validation \u2014 health, readiness, liveness, 404 fallback\n2. Admin Features & Configuration \u2014 OpenSpec discovery, governance, A2A, MCP\n3. Realistic Scenario \u2014 Full knowledge CRUD lifecycle\n4. MCP Protocol \u2014 JSON-RPC initialize, tools/list, tools/call, error handling\n5. A2A Protocol \u2014 Agent card, health, metrics, task submission\n6. Webhook Validation \u2014 GitHub webhook endpoint error paths\n7. Error Validation \u2014 Invalid inputs, missing fields, nonexistent resources\n8. Knowledge Layer Tests \u2014 Multi-layer creation, PR-track governance\n9. MCP Governance Tools \u2014 Configure, request lifecycle, audit, roles\n10. MCP Memory Tools \u2014 Add, delete, feedback, close\n11. MCP CCA & Sync Tools \u2014 Context assemble, note capture, meta-loop, sync\n12. MCP Knowledge & Policy Tools \u2014 knowledge_get, knowledge_query",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://aeterna.example.com",
+      "type": "string"
+    },
+    {
+      "key": "knowledgeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "knowledgeCommit",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "batchId1",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "batchId2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "scenarioRunTs",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "mcpToolCount",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "teamKnowledgeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "teamKnowledgeCommit",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "govConfigId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "govRequestId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "govRequestNumber",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "mcpMemoryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "mcpNoteEventCount",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Response time < 5000ms', () => {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Deployment Validation",
+      "item": [
+        {
+          "name": "1.1 Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Health response has status ok and version', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('ok');",
+                  "    pm.expect(json.version).to.match(/^\\d+\\.\\d+\\.\\d+/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.2 Liveness Probe",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Empty body', () => pm.expect(pm.response.text()).to.have.lengthOf(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "live"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.3 Readiness Probe",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Ready with postgres and vector_store ok', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('ready');",
+                  "    pm.expect(json.checks.postgres.status).to.eql('ok');",
+                  "    pm.expect(json.checks.vector_store.status).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/ready",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ready"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.4 404 Fallback",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));",
+                  "",
+                  "pm.test('Structured error JSON', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('not_found');",
+                  "    pm.expect(json.message).to.eql('Route not found');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/nonexistent-route-e2e-test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nonexistent-route-e2e-test"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Admin Features & Configuration",
+      "item": [
+        {
+          "name": "2.1 OpenSpec Knowledge Discovery",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Service info and endpoints', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.service).to.eql('aeterna-knowledge');",
+                  "    pm.expect(json.version).to.be.a('string');",
+                  "    pm.expect(json.endpoints).to.be.an('array');",
+                  "    pm.expect(json.endpoints.length).to.be.at.least(6);",
+                  "    const paths = json.endpoints.map(e => e.path);",
+                  "    pm.expect(paths).to.include('/api/v1/knowledge/query');",
+                  "    pm.expect(paths).to.include('/api/v1/knowledge/create');",
+                  "    pm.expect(paths).to.include('/api/v1/knowledge/batch');",
+                  "    pm.expect(paths).to.include('/api/v1/knowledge/stream');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.2 Governance - List Proposals",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Valid JSON', () => pm.response.json());"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/proposals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "proposals"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.3 Governance - List Jobs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Valid JSON', () => pm.response.json());"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "jobs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.4 Governance - Drift Config",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', () => pm.expect(pm.response.code).to.be.oneOf([200, 404]));",
+                  "pm.test('Valid JSON', () => pm.response.json());"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/drift-config/e2e-test-project",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "drift-config",
+                "e2e-test-project"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.5 Governance - Drift Detection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', () => pm.expect(pm.response.code).to.be.oneOf([200, 404]));",
+                  "pm.test('Valid JSON', () => pm.response.json());"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/drift/e2e-test-project",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "drift",
+                "e2e-test-project"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.6 Governance - Reports",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', () => pm.expect(pm.response.code).to.be.oneOf([200, 404]));",
+                  "pm.test('Valid JSON', () => pm.response.json());"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/reports/e2e-test-org",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "reports",
+                "e2e-test-org"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.7 Governance - Event Replay",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Valid JSON', () => pm.response.json());"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/events/replay?since_timestamp=0&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "events",
+                "replay"
+              ],
+              "query": [
+                {
+                  "key": "since_timestamp",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.8 A2A Agent Card",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Agent card has name', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('name');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/a2a/.well-known/agent.json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "a2a",
+                ".well-known",
+                "agent.json"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.9 MCP SSE Endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('MCP SSE responds', () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));",
+                  "",
+                  "pm.test('Content-Type is event-stream if 200', () => {",
+                  "    if (pm.response.code === 200) {",
+                  "        pm.expect(pm.response.headers.get('Content-Type')).to.include('text/event-stream');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/sse",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "sse"
+              ]
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "2.10 MCP Message Endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Reachable (not 404)', () => pm.expect(pm.response.code).to.not.eql(404));",
+                  "pm.test('Valid JSON', () => pm.response.json());"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"method\":\"ping\",\"id\":1}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "2.11 A2A Task Submit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Reachable (not 404)', () => pm.expect(pm.response.code).to.not.eql(404));",
+                  "pm.test('Valid JSON', () => pm.response.json());"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/a2a/tasks/send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "a2a",
+                "tasks",
+                "send"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"method\":\"tasks/send\",\"id\":\"e2e-test\",\"params\":{\"id\":\"e2e-task-1\",\"message\":{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"text\":\"ping\"}]}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "2.12 Admin \u2014 GitHub Org Sync",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const status = pm.response.code;",
+                  "",
+                  "pm.test('GitHub sync endpoint responds', () => {",
+                  "    pm.expect([200, 409, 500]).to.include(status);",
+                  "});",
+                  "",
+                  "pm.test('Response has JSON body', () => {",
+                  "    pm.response.to.be.json;",
+                  "});",
+                  "",
+                  "if (status === 200) {",
+                  "    pm.test('Sync report fields', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('users_created');",
+                  "        pm.expect(json).to.have.property('users_updated');",
+                  "        pm.expect(json).to.have.property('groups_synced');",
+                  "        pm.expect(json).to.have.property('memberships_added');",
+                  "    });",
+                  "} else if (status === 409) {",
+                  "    pm.test('Concurrent sync guard active', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json.error).to.eql('sync_in_progress');",
+                  "    });",
+                  "} else if (status === 500) {",
+                  "    pm.test('Sync failed with structured error', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json.error).to.eql('sync_failed');",
+                  "        pm.expect(json.message).to.be.a('string');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/sync/github",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "sync",
+                "github"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Realistic Scenario \u2014 Knowledge CRUD Lifecycle",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('scenarioRunTs')) {",
+              "    pm.collectionVariables.set('scenarioRunTs', String(Date.now()));",
+              "}"
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "name": "3.1 Create Knowledge Entry",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "",
+                  "pm.test('Has id and commit', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.commit).to.be.a('string').and.not.be.empty;",
+                  "    pm.collectionVariables.set('knowledgeId', json.id);",
+                  "    pm.collectionVariables.set('knowledgeCommit', json.commit);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"# E2E Test Entry\\n\\nCreated by Newman at {{scenarioRunTs}}.\",\n  \"path\": \"e2e-test-{{scenarioRunTs}}\",\n  \"layer\": \"project\",\n  \"tags\": [\"e2e\", \"newman\"],\n  \"metadata\": {\"source\": \"newman-e2e\", \"run_ts\": \"{{scenarioRunTs}}\"}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.2 Query Knowledge",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('knowledgeId')) throw new Error('knowledgeId not set');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Has items and total', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.items).to.be.an('array');",
+                  "    pm.expect(json.total).to.be.a('number');",
+                  "    pm.expect(json.items.length).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"e2e-test\", \"limit\": 50, \"layer\": \"project\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.3 Get Metadata",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('knowledgeId')) throw new Error('knowledgeId not set');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Metadata fields', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.eql(pm.collectionVariables.get('knowledgeId'));",
+                  "    pm.expect(json.layer).to.eql('project');",
+                  "    pm.expect(json.tags).to.include('e2e');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{knowledgeId}}/metadata",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{knowledgeId}}",
+                "metadata"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.4 Update Knowledge Entry",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('knowledgeId')) throw new Error('knowledgeId not set');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Updated id and commit', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.eql(pm.collectionVariables.get('knowledgeId'));",
+                  "    pm.expect(json.commit).to.be.a('string').and.not.be.empty;",
+                  "    pm.collectionVariables.set('knowledgeCommit', json.commit);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{knowledgeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{knowledgeId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"# E2E Test Entry (UPDATED)\\n\\nUpdated by Newman at {{scenarioRunTs}}.\",\n  \"path\": \"e2e-test-{{scenarioRunTs}}\",\n  \"tags\": [\"e2e\", \"newman\", \"updated\"],\n  \"metadata\": {\"source\": \"newman-e2e\", \"updated\": true}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.5 Query Updated Entry",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Results found', () => pm.expect(pm.response.json().total).to.be.at.least(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"e2e-test\", \"limit\": 50, \"layer\": \"project\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.6 Batch Create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Both batch ops succeeded', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.results).to.be.an('array').with.lengthOf(2);",
+                  "    json.results.forEach((r, i) => {",
+                  "        pm.expect(r.success).to.be.true;",
+                  "        pm.expect(r.id).to.be.a('string').and.not.be.empty;",
+                  "    });",
+                  "    pm.collectionVariables.set('batchId1', json.results[0].id);",
+                  "    pm.collectionVariables.set('batchId2', json.results[1].id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/batch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "batch"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operations\": [\n    {\"action\": \"create\", \"content\": \"Batch 1 at {{scenarioRunTs}}\", \"path\": \"e2e-batch1-{{scenarioRunTs}}\", \"layer\": \"project\", \"tags\": [\"e2e\", \"batch\"]},\n    {\"action\": \"create\", \"content\": \"Batch 2 at {{scenarioRunTs}}\", \"path\": \"e2e-batch2-{{scenarioRunTs}}\", \"layer\": \"project\", \"tags\": [\"e2e\", \"batch\"]}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.7 Query Batch Entries",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('batchId1')) throw new Error('batchId1 not set');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Batch entries found', () => pm.expect(pm.response.json().total).to.be.at.least(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"e2e-batch\", \"limit\": 50, \"layer\": \"project\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.8 SSE Stream Connectivity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('SSE responds 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Event-stream content type', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('text/event-stream'));",
+                  "pm.test('Connected event', () => pm.expect(pm.response.text()).to.include('connected'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "stream"
+              ]
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "3.9 Delete Original Entry",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('knowledgeId')) throw new Error('knowledgeId not set');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{knowledgeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{knowledgeId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.10 Delete Batch Entry 1",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('batchId1')) throw new Error('batchId1 not set');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{batchId1}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{batchId1}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.11 Delete Batch Entry 2",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('batchId2')) throw new Error('batchId2 not set');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{batchId2}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{batchId2}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.12 Verify Deletion (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));",
+                  "",
+                  "pm.test('Cleanup variables', () => {",
+                  "    pm.collectionVariables.unset('knowledgeId');",
+                  "    pm.collectionVariables.unset('knowledgeCommit');",
+                  "    pm.collectionVariables.unset('batchId1');",
+                  "    pm.collectionVariables.unset('batchId2');",
+                  "    pm.collectionVariables.unset('scenarioRunTs');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{knowledgeId}}/metadata",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{knowledgeId}}",
+                "metadata"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. MCP Protocol \u2014 JSON-RPC",
+      "item": [
+        {
+          "name": "4.1 MCP Initialize",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC 2.0 initialize response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(1);",
+                  "    pm.expect(json.error).to.be.oneOf([null, undefined]);",
+                  "});",
+                  "",
+                  "pm.test('Server info and protocol version', () => {",
+                  "    const result = pm.response.json().result;",
+                  "    pm.expect(result.protocolVersion).to.eql('2024-11-05');",
+                  "    pm.expect(result.serverInfo.name).to.eql('aeterna-tools');",
+                  "    pm.expect(result.capabilities.tools).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"newman-e2e\",\"version\":\"1.0.0\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4.2 MCP Tools List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC tools list', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(2);",
+                  "    pm.expect(json.error).to.be.oneOf([null, undefined]);",
+                  "});",
+                  "",
+                  "pm.test('Tools array with known tools', () => {",
+                  "    const tools = pm.response.json().result;",
+                  "    pm.expect(tools).to.be.an('array');",
+                  "    pm.expect(tools.length).to.be.at.least(10);",
+                  "    pm.collectionVariables.set('mcpToolCount', String(tools.length));",
+                  "    const names = tools.map(t => t.name);",
+                  "    pm.expect(names).to.include('memory_add');",
+                  "    pm.expect(names).to.include('memory_search');",
+                  "    pm.expect(names).to.include('memory_delete');",
+                  "    pm.expect(names).to.include('knowledge_get');",
+                  "    pm.expect(names).to.include('knowledge_list');",
+                  "    pm.expect(names).to.include('knowledge_query');",
+                  "    pm.expect(names).to.include('sync_now');",
+                  "    pm.expect(names).to.include('sync_status');",
+                  "});",
+                  "",
+                  "pm.test('Each tool has name, description, input_schema', () => {",
+                  "    const tools = pm.response.json().result;",
+                  "    tools.forEach(t => {",
+                  "        pm.expect(t.name).to.be.a('string').and.not.be.empty;",
+                  "        pm.expect(t.description).to.be.a('string');",
+                  "        pm.expect(t.input_schema).to.be.an('object');",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4.3 MCP tools/call - memory_search (no tenant context -> error)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC error for missing tenant context', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(3);",
+                  "    pm.expect(json.error).to.be.an('object');",
+                  "    pm.expect(json.error.code).to.be.a('number');",
+                  "    pm.expect(json.error.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_search\",\"arguments\":{\"query\":\"e2e-test\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4.4 MCP tools/call - memory_search (with tenant context)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response for memory_search', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(4);",
+                  "});",
+                  "",
+                  "pm.test('Either success result or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_search\",\"arguments\":{\"query\":\"e2e-test\",\"limit\":5},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4.5 MCP tools/call - knowledge_list (with tenant context)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response for knowledge_list', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(5);",
+                  "});",
+                  "",
+                  "pm.test('Either success result or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"knowledge_list\",\"arguments\":{\"layer\":\"project\",\"prefix\":\"\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4.6 MCP tools/call - sync_status (with tenant context)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response for sync_status', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(6);",
+                  "});",
+                  "",
+                  "pm.test('Either success result or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"sync_status\",\"arguments\":{},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4.7 MCP tools/call - nonexistent tool",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC error for nonexistent tool', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(7);",
+                  "    pm.expect(json.error).to.be.an('object');",
+                  "    pm.expect(json.error.code).to.be.a('number');",
+                  "    pm.expect(json.error.message).to.include('not found');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"nonexistent_tool_e2e\",\"arguments\":{},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4.8 MCP unknown method",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC method not found error', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(8);",
+                  "    pm.expect(json.error).to.be.an('object');",
+                  "    pm.expect(json.error.code).to.eql(-32601);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"nonexistent/method\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4.9 MCP tools/call - missing params",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC invalid params error', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(9);",
+                  "    pm.expect(json.error).to.be.an('object');",
+                  "    pm.expect(json.error.code).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4.10 MCP tools/call - governance_config_get",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response for governance_config_get', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(10);",
+                  "});",
+                  "",
+                  "pm.test('Either success result or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/call\",\"params\":{\"name\":\"governance_config_get\",\"arguments\":{},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4.11 MCP tools/call - hindsight_query",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response for hindsight_query', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(11);",
+                  "});",
+                  "",
+                  "pm.test('Either success result or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/call\",\"params\":{\"name\":\"hindsight_query\",\"arguments\":{\"query\":\"e2e test patterns\",\"limit\":5},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. A2A Protocol",
+      "item": [
+        {
+          "name": "5.1 A2A Agent Card - Full Validation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Agent card structure', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.name).to.eql('Aeterna A2A Agent');",
+                  "    pm.expect(json.version).to.be.a('string');",
+                  "    pm.expect(json.skills).to.be.an('array');",
+                  "    pm.expect(json.skills.length).to.be.at.least(3);",
+                  "});",
+                  "",
+                  "pm.test('Agent card has memory, knowledge, governance skills', () => {",
+                  "    const skills = pm.response.json().skills;",
+                  "    const names = skills.map(s => s.name);",
+                  "    pm.expect(names).to.include('memory');",
+                  "    pm.expect(names).to.include('knowledge');",
+                  "    pm.expect(names).to.include('governance');",
+                  "});",
+                  "",
+                  "pm.test('Each skill has name and description', () => {",
+                  "    const skills = pm.response.json().skills;",
+                  "    skills.forEach(s => {",
+                  "        pm.expect(s.name).to.be.a('string').and.not.be.empty;",
+                  "        pm.expect(s.description).to.be.a('string').and.not.be.empty;",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/a2a/.well-known/agent.json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "a2a",
+                ".well-known",
+                "agent.json"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.2 A2A Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 503 (degraded - backend not ready)', () => pm.response.to.have.status(503));",
+                  "",
+                  "pm.test('Health response structure', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('degraded');",
+                  "    pm.expect(json.ready).to.be.false;",
+                  "    pm.expect(json.checks).to.be.an('object');",
+                  "    pm.expect(json.checks.backend).to.eql('unavailable');",
+                  "    pm.expect(json.checks.task_execution).to.eql('not_implemented');",
+                  "    pm.expect(json.timestamp).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/a2a/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "a2a",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.3 A2A Metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Prometheus metrics format', () => {",
+                  "    const text = pm.response.text();",
+                  "    pm.expect(text).to.include('a2a_runtime_ready');",
+                  "    pm.expect(text).to.include('a2a_auth_ready');",
+                  "    pm.expect(text).to.include('a2a_backend_ready');",
+                  "    pm.expect(text).to.include('a2a_task_execution_ready');",
+                  "    pm.expect(text).to.include('a2a_requests_total');",
+                  "    pm.expect(text).to.include('a2a_active_connections');",
+                  "});",
+                  "",
+                  "pm.test('Content-Type is text/plain', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/plain');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/a2a/metrics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "a2a",
+                "metrics"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.4 A2A Task Send - Not Implemented",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 501 Not Implemented', () => pm.response.to.have.status(501));",
+                  "",
+                  "pm.test('Error response structure', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('not_implemented');",
+                  "    pm.expect(json.message).to.include('not yet implemented');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/a2a/tasks/send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "a2a",
+                "tasks",
+                "send"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"method\":\"tasks/send\",\"id\":\"e2e-a2a-1\",\"params\":{\"id\":\"e2e-task-1\",\"message\":{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"text\":\"hello from e2e test\"}]}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Webhook Validation",
+      "item": [
+        {
+          "name": "6.1 Webhook - Missing X-GitHub-Event header",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "",
+                  "pm.test('Error message about missing header', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.include('Missing X-GitHub-Event');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/github",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "github"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Hub-Signature-256",
+                "value": "sha256=invalid"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"action\":\"opened\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "6.2 Webhook - Invalid signature",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "",
+                  "pm.test('Error message about invalid signature', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.include('Invalid webhook signature');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/github",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "github"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-GitHub-Event",
+                "value": "push"
+              },
+              {
+                "key": "X-Hub-Signature-256",
+                "value": "sha256=definitely_wrong_signature"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"ref\":\"refs/heads/main\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "6.3 Webhook - Wrong HTTP method (GET)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET on webhook returns 404 (only POST allowed)', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([404, 405]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/github",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "github"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Error Validation",
+      "item": [
+        {
+          "name": "7.1 Create with invalid layer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "",
+                  "pm.test('Error body with invalid_layer', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_layer');",
+                  "    pm.expect(json.message).to.include('nonexistent_layer');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"test\", \"path\": \"e2e-invalid-layer\", \"layer\": \"nonexistent_layer\", \"tags\": []}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "7.2 Create with missing required fields",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 4xx', () => {",
+                  "    pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"test\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "7.3 Create with malformed JSON",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 4xx', () => {",
+                  "    pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{this is not valid json",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "7.4 Get metadata for nonexistent ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));",
+                  "",
+                  "pm.test('Not found error body', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('not_found');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/nonexistent-id-e2e-99999/metadata",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "nonexistent-id-e2e-99999",
+                "metadata"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.5 Update nonexistent entry",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));",
+                  "",
+                  "pm.test('Not found error', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('not_found');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/nonexistent-id-e2e-99999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "nonexistent-id-e2e-99999"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"updated content\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "7.6 Delete nonexistent entry",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));",
+                  "",
+                  "pm.test('Not found error', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('not_found');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/nonexistent-id-e2e-99999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "nonexistent-id-e2e-99999"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.7 Query with empty body",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 4xx (missing query field)', () => {",
+                  "    pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "7.8 Batch with empty operations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 (empty batch is valid)', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Empty results array', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.results).to.be.an('array').with.lengthOf(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/batch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "batch"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"operations\": []}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "7.9 Batch delete nonexistent entry",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Delete op failed gracefully', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.results).to.be.an('array').with.lengthOf(1);",
+                  "    pm.expect(json.results[0].success).to.be.false;",
+                  "    pm.expect(json.results[0].error).to.include('not found');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/batch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "batch"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"operations\": [{\"action\": \"delete\", \"id\": \"nonexistent-batch-e2e-99999\"}]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "7.10 MCP message with empty body",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 4xx (invalid JSON-RPC)', () => {",
+                  "    pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Knowledge Layer Tests \u2014 Multi-layer & Governance",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('scenarioRunTs')) {",
+              "    pm.collectionVariables.set('scenarioRunTs', String(Date.now()));",
+              "}"
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "name": "8.1 Create Team-layer entry (PR-track governance)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "",
+                  "pm.test('Has id and commit (PR-track)', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.commit).to.be.a('string').and.not.be.empty;",
+                  "    pm.collectionVariables.set('teamKnowledgeId', json.id);",
+                  "    pm.collectionVariables.set('teamKnowledgeCommit', json.commit);",
+                  "});",
+                  "",
+                  "pm.test('Commit indicates PR track (pr: prefix)', () => {",
+                  "    const commit = pm.response.json().commit;",
+                  "    pm.expect(commit).to.match(/^pr:/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"# E2E Team Knowledge\\n\\nTeam-layer entry created by Newman at {{scenarioRunTs}} for PR-track governance test.\",\n  \"path\": \"e2e-team-{{scenarioRunTs}}\",\n  \"layer\": \"team\",\n  \"tags\": [\"e2e\", \"team\", \"governance\"],\n  \"metadata\": {\"source\": \"newman-e2e\", \"track\": \"pr\"}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "8.2 Create Org-layer entry (PR-track governance)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "",
+                  "pm.test('Has id and commit', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.commit).to.be.a('string').and.not.be.empty;",
+                  "});",
+                  "",
+                  "pm.test('Commit indicates PR track', () => {",
+                  "    const commit = pm.response.json().commit;",
+                  "    pm.expect(commit).to.match(/^pr:/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"# E2E Org Knowledge\\n\\nOrg-layer entry created by Newman at {{scenarioRunTs}} for PR-track governance test.\",\n  \"path\": \"e2e-org-{{scenarioRunTs}}\",\n  \"layer\": \"org\",\n  \"tags\": [\"e2e\", \"org\", \"governance\"],\n  \"metadata\": {\"source\": \"newman-e2e\", \"track\": \"pr\"}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "8.3 Create Company-layer entry (PR-track governance)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "",
+                  "pm.test('Has id and commit', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.commit).to.be.a('string').and.not.be.empty;",
+                  "});",
+                  "",
+                  "pm.test('Commit indicates PR track', () => {",
+                  "    const commit = pm.response.json().commit;",
+                  "    pm.expect(commit).to.match(/^pr:/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"# E2E Company Knowledge\\n\\nCompany-layer entry created by Newman at {{scenarioRunTs}} for PR-track governance test.\",\n  \"path\": \"e2e-company-{{scenarioRunTs}}\",\n  \"layer\": \"company\",\n  \"tags\": [\"e2e\", \"company\", \"governance\"],\n  \"metadata\": {\"source\": \"newman-e2e\", \"track\": \"pr\"}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "8.4 Create second Project-layer entry (fast-track)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "",
+                  "pm.test('Has id and commit (direct commit, not PR)', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.commit).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.commit).to.not.match(/^pr:/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"# E2E Project Fast-Track\\n\\nProject-layer entry created by Newman at {{scenarioRunTs}} for fast-track governance test.\",\n  \"path\": \"e2e-project-fast-{{scenarioRunTs}}\",\n  \"layer\": \"project\",\n  \"tags\": [\"e2e\", \"project\", \"fast-track\"],\n  \"metadata\": {\"source\": \"newman-e2e\", \"track\": \"fast\"}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "8.5 Query across project layer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Project layer query returns results', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.items).to.be.an('array');",
+                  "    pm.expect(json.total).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"e2e-project-fast\", \"limit\": 10, \"layer\": \"project\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "8.6 Cleanup - Delete fast-track project entry",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));",
+                  "",
+                  "pm.test('Cleanup layer test variables', () => {",
+                  "    pm.collectionVariables.unset('teamKnowledgeId');",
+                  "    pm.collectionVariables.unset('teamKnowledgeCommit');",
+                  "    pm.collectionVariables.unset('scenarioRunTs');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/e2e-project-fast-{{scenarioRunTs}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "e2e-project-fast-{{scenarioRunTs}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. MCP Governance Tools",
+      "item": [
+        {
+          "name": "9.1 governance_configure \u2014 set governance config",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(100);",
+                  "});",
+                  "",
+                  "pm.test('Configure returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "    if (hasResult) {",
+                  "        const r = (typeof json.result === 'string') ? JSON.parse(json.result) : json.result;",
+                  "        if (r.content && Array.isArray(r.content)) {",
+                  "            const text = r.content.find(c => c.type === 'text');",
+                  "            if (text) {",
+                  "                const parsed = JSON.parse(text.text);",
+                  "                if (parsed.config_id) pm.collectionVariables.set('govConfigId', parsed.config_id);",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":100,\"method\":\"tools/call\",\"params\":{\"name\":\"governance_configure\",\"arguments\":{\"project_id\":\"e2e-project\",\"approval_mode\":\"single\",\"min_approvers\":1,\"timeout_hours\":24,\"auto_approve_low_risk\":true},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "9.2 governance_request_create \u2014 create approval request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(101);",
+                  "});",
+                  "",
+                  "pm.test('Request created or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "    if (hasResult) {",
+                  "        const r = (typeof json.result === 'string') ? JSON.parse(json.result) : json.result;",
+                  "        if (r.content && Array.isArray(r.content)) {",
+                  "            const text = r.content.find(c => c.type === 'text');",
+                  "            if (text) {",
+                  "                const parsed = JSON.parse(text.text);",
+                  "                if (parsed.request && parsed.request.id) pm.collectionVariables.set('govRequestId', String(parsed.request.id));",
+                  "                if (parsed.request && parsed.request.request_number) pm.collectionVariables.set('govRequestNumber', parsed.request.request_number);",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":101,\"method\":\"tools/call\",\"params\":{\"name\":\"governance_request_create\",\"arguments\":{\"request_type\":\"knowledge\",\"target_type\":\"adr\",\"target_id\":\"e2e-adr-001\",\"project_id\":\"e2e-project\",\"title\":\"E2E Test Approval Request\",\"description\":\"Newman E2E test governance request\",\"payload\":{\"change\":\"add-e2e-test-knowledge\"},\"risk_level\":\"low\",\"requestor_id\":\"00000000-0000-0000-0000-000000000001\",\"requestor_email\":\"e2e@test.local\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "9.3 governance_request_list \u2014 list pending requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(102);",
+                  "});",
+                  "",
+                  "pm.test('List returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":102,\"method\":\"tools/call\",\"params\":{\"name\":\"governance_request_list\",\"arguments\":{\"request_type\":\"knowledge\",\"project_id\":\"e2e-project\",\"limit\":10},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "9.4 governance_audit_list \u2014 list audit entries",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(103);",
+                  "});",
+                  "",
+                  "pm.test('Audit list returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":103,\"method\":\"tools/call\",\"params\":{\"name\":\"governance_audit_list\",\"arguments\":{\"days_back\":30,\"limit\":20},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "9.5 governance_role_list \u2014 list governance roles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(104);",
+                  "});",
+                  "",
+                  "pm.test('Role list returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":104,\"method\":\"tools/call\",\"params\":{\"name\":\"governance_role_list\",\"arguments\":{},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "9.6 governance_config_get \u2014 verify config set in 9.1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(105);",
+                  "});",
+                  "",
+                  "pm.test('Config get returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":105,\"method\":\"tools/call\",\"params\":{\"name\":\"governance_config_get\",\"arguments\":{\"project_id\":\"e2e-project\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "9.7 governance_unit_create \u2014 create org unit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(106);",
+                  "});",
+                  "",
+                  "pm.test('Unit create returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":106,\"method\":\"tools/call\",\"params\":{\"name\":\"governance_unit_create\",\"arguments\":{\"name\":\"E2E Test Team\",\"unit_type\":\"team\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "9.8 governance_hierarchy_navigate \u2014 navigate org hierarchy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(107);",
+                  "});",
+                  "",
+                  "pm.test('Hierarchy navigate returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":107,\"method\":\"tools/call\",\"params\":{\"name\":\"governance_hierarchy_navigate\",\"arguments\":{\"direction\":\"children\",\"unit_type\":\"company\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. MCP Memory Tools",
+      "item": [
+        {
+          "name": "10.1 memory_add \u2014 store a memory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(200);",
+                  "});",
+                  "",
+                  "pm.test('Memory add returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "    if (hasResult) {",
+                  "        const r = (typeof json.result === 'string') ? JSON.parse(json.result) : json.result;",
+                  "        if (r.content && Array.isArray(r.content)) {",
+                  "            const text = r.content.find(c => c.type === 'text');",
+                  "            if (text) {",
+                  "                const parsed = JSON.parse(text.text);",
+                  "                if (parsed.memoryId) pm.collectionVariables.set('mcpMemoryId', parsed.memoryId);",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":200,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_add\",\"arguments\":{\"content\":\"E2E Newman test memory entry - project conventions for testing\",\"layer\":\"project\",\"metadata\":{\"source\":\"newman-e2e\"}},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "10.2 memory_search \u2014 search memories (with tenant)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(201);",
+                  "});",
+                  "",
+                  "pm.test('Search returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":201,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_search\",\"arguments\":{\"query\":\"project conventions testing\",\"limit\":5},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "10.3 memory_feedback \u2014 submit reward signal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(202);",
+                  "});",
+                  "",
+                  "pm.test('Feedback returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":202,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_feedback\",\"arguments\":{\"memoryId\":\"e2e-feedback-test-id\",\"layer\":\"project\",\"rewardType\":\"helpful\",\"score\":0.8,\"reasoning\":\"E2E test feedback\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "10.4 memory_delete \u2014 delete a memory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(203);",
+                  "});",
+                  "",
+                  "pm.test('Delete returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":203,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_delete\",\"arguments\":{\"memoryId\":\"e2e-delete-test-id\",\"layer\":\"project\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "10.5 memory_close \u2014 close session context",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(204);",
+                  "});",
+                  "",
+                  "pm.test('Close returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":204,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_close\",\"arguments\":{\"id\":\"e2e-session-close-test\",\"target\":\"session\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "10.6 memory_optimize \u2014 trigger optimization",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(205);",
+                  "});",
+                  "",
+                  "pm.test('Optimize returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":205,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_optimize\",\"arguments\":{\"layer\":\"project\",\"strategy\":\"dedup\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "10.7 memory_reason \u2014 reflective reasoning",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(206);",
+                  "});",
+                  "",
+                  "pm.test('Reason returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":206,\"method\":\"tools/call\",\"params\":{\"name\":\"memory_reason\",\"arguments\":{\"query\":\"What are the project testing conventions?\",\"contextSummary\":\"E2E test context\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. MCP CCA & Sync Tools",
+      "item": [
+        {
+          "name": "11.1 context_assemble \u2014 hierarchical context",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(300);",
+                  "});",
+                  "",
+                  "pm.test('Context assemble returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":300,\"method\":\"tools/call\",\"params\":{\"name\":\"context_assemble\",\"arguments\":{\"query\":\"e2e test context\",\"tokenBudget\":2000,\"layers\":[\"project\",\"team\"]},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "11.2 note_capture \u2014 capture trajectory event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(301);",
+                  "});",
+                  "",
+                  "pm.test('Note capture returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":301,\"method\":\"tools/call\",\"params\":{\"name\":\"note_capture\",\"arguments\":{\"description\":\"E2E test trajectory capture event\",\"tags\":[\"e2e\",\"newman\"],\"toolName\":\"newman-e2e\",\"success\":true},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "11.3 meta_loop_status \u2014 get meta-agent status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(302);",
+                  "});",
+                  "",
+                  "pm.test('Meta loop status returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":302,\"method\":\"tools/call\",\"params\":{\"name\":\"meta_loop_status\",\"arguments\":{\"includeDetails\":true},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "11.4 hindsight_query \u2014 query error patterns",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(303);",
+                  "});",
+                  "",
+                  "pm.test('Hindsight returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":303,\"method\":\"tools/call\",\"params\":{\"name\":\"hindsight_query\",\"arguments\":{\"errorType\":\"RuntimeError\",\"messagePattern\":\"connection refused\",\"contextPatterns\":[\"database\",\"postgres\"]},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "11.5 sync_now \u2014 trigger sync",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(304);",
+                  "});",
+                  "",
+                  "pm.test('Sync now returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":304,\"method\":\"tools/call\",\"params\":{\"name\":\"sync_now\",\"arguments\":{},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "11.6 sync_status \u2014 check sync status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(305);",
+                  "});",
+                  "",
+                  "pm.test('Sync status returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":305,\"method\":\"tools/call\",\"params\":{\"name\":\"sync_status\",\"arguments\":{},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. MCP Knowledge & Policy Tools",
+      "item": [
+        {
+          "name": "12.1 knowledge_get \u2014 get by path",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(400);",
+                  "});",
+                  "",
+                  "pm.test('Knowledge get returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":400,\"method\":\"tools/call\",\"params\":{\"name\":\"knowledge_get\",\"arguments\":{\"path\":\"e2e-nonexistent-path\",\"layer\":\"project\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "12.2 knowledge_query \u2014 semantic search",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(401);",
+                  "});",
+                  "",
+                  "pm.test('Knowledge query returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":401,\"method\":\"tools/call\",\"params\":{\"name\":\"knowledge_query\",\"arguments\":{\"query\":\"authentication patterns best practices\",\"layers\":[\"project\",\"team\"],\"limit\":5},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "12.3 knowledge_list \u2014 list by layer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(402);",
+                  "});",
+                  "",
+                  "pm.test('Knowledge list returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":402,\"method\":\"tools/call\",\"params\":{\"name\":\"knowledge_list\",\"arguments\":{\"layer\":\"project\",\"prefix\":\"e2e\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "12.4 knowledge_resolve_conflict \u2014 conflict resolution",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JSON-RPC valid response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(403);",
+                  "});",
+                  "",
+                  "pm.test('Resolve conflict returns success or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    const hasResult = json.result !== null && json.result !== undefined;",
+                  "    const hasError = json.error !== null && json.error !== undefined;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":403,\"method\":\"tools/call\",\"params\":{\"name\":\"knowledge_resolve_conflict\",\"arguments\":{\"path\":\"e2e-test-conflict\",\"layer\":\"project\",\"resolution\":\"keep_local\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

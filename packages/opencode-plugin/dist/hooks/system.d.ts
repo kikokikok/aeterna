@@ -1,6 +1,7 @@
 import type { AeternaClient } from "../client.js";
 type SystemTransformInput = {
-    sessionID: string;
+    sessionID?: string;
+    model?: unknown;
 };
 type SystemTransformOutput = {
     system: string[];

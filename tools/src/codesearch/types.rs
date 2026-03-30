@@ -1,7 +1,5 @@
 //! # Code Search Type Definitions
 //!
-//! Types for Code Search requests and responses.
-
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -75,28 +73,6 @@ pub struct IndexStatus {
     /// Indexing state (idle, indexing, error)
     pub state: String,
     /// Error message if state is error
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-/// Code Search MCP request structure (for proxying)
-#[derive(Serialize, Deserialize, Debug)]
-pub struct CodeSearchRequest {
-    /// Tool name (codesearch_search, codesearch_trace_callers, etc.)
-    pub tool: String,
-    /// Tool parameters
-    pub params: Value,
-}
-
-/// Code Search MCP response structure (for proxying)
-#[derive(Serialize, Deserialize, Debug)]
-pub struct CodeSearchResponse {
-    /// Success flag
-    pub success: bool,
-    /// Response data
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
-    /// Error message
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

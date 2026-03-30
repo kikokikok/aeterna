@@ -26,7 +26,7 @@ pub struct IdpUser {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub idp_provider: String,
-    pub idp_subject: String
+    pub idp_subject: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,7 +36,7 @@ pub enum UserStatus {
     Inactive,
     Suspended,
     Deprovisioned,
-    Pending
+    Pending,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ pub struct IdpGroup {
     pub description: Option<String>,
     pub group_type: GroupType,
     pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,24 +54,26 @@ pub struct IdpGroup {
 pub enum GroupType {
     OktaGroup,
     AppGroup,
-    BuiltIn
+    BuiltIn,
+    GitHubTeam,
+    GitHubNestedTeam,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPage {
     pub users: Vec<IdpUser>,
-    pub next_page_token: Option<String>
+    pub next_page_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GroupPage {
     pub groups: Vec<IdpGroup>,
-    pub next_page_token: Option<String>
+    pub next_page_token: Option<String>,
 }
 
 pub struct OktaClient {
     client: Client,
-    config: OktaConfig
+    config: OktaConfig,
 }
 
 impl OktaClient {
@@ -90,7 +92,7 @@ impl OktaClient {
 
     async fn get<T: for<'de> Deserialize<'de>>(
         &self,
-        path: &str
+        path: &str,
     ) -> IdpSyncResult<(T, Option<String>)> {
         let url = format!("{}{}", self.base_url(), path);
         debug!(url = %url, "Making Okta API request");
@@ -118,18 +120,18 @@ impl OktaClient {
                     .and_then(|s| s.parse::<u64>().ok())
                     .unwrap_or(60);
                 Err(IdpSyncError::RateLimited {
-                    retry_after_seconds: retry_after
+                    retry_after_seconds: retry_after,
                 })
             }
             StatusCode::UNAUTHORIZED => Err(IdpSyncError::AuthenticationError(
-                "Invalid Okta API token".to_string()
+                "Invalid Okta API token".to_string(),
             )),
             StatusCode::NOT_FOUND => Err(IdpSyncError::UserNotFound(path.to_string())),
             status => {
                 let body = response.text().await.unwrap_or_default();
                 Err(IdpSyncError::IdpApiError {
                     status: status.as_u16(),
-                    message: body
+                    message: body,
                 })
             }
         }
@@ -166,12 +168,12 @@ impl OktaClient {
                 "SUSPENDED" => UserStatus::Suspended,
                 "DEPROVISIONED" => UserStatus::Deprovisioned,
                 "STAGED" | "PROVISIONED" => UserStatus::Pending,
-                _ => UserStatus::Inactive
+                _ => UserStatus::Inactive,
             },
             created_at: okta_user.created,
             updated_at: okta_user.last_updated,
             idp_provider: "okta".to_string(),
-            idp_subject: okta_user.id
+            idp_subject: okta_user.id,
         }
     }
 }
@@ -202,7 +204,7 @@ impl IdpClient for OktaClient {
                     .nth(1)
                     .and_then(|s| s.split('&').next())
                     .map(|s| s.to_string())
-            })
+            }),
         })
     }
 
@@ -231,10 +233,10 @@ impl IdpClient for OktaClient {
                         "OKTA_GROUP" => GroupType::OktaGroup,
                         "APP_GROUP" => GroupType::AppGroup,
                         "BUILT_IN" => GroupType::BuiltIn,
-                        _ => GroupType::OktaGroup
+                        _ => GroupType::OktaGroup,
                     },
                     created_at: g.created,
-                    updated_at: g.last_updated
+                    updated_at: g.last_updated,
                 })
                 .collect(),
             next_page_token: next_token.and_then(|url| {
@@ -242,7 +244,7 @@ impl IdpClient for OktaClient {
                     .nth(1)
                     .and_then(|s| s.split('&').next())
                     .map(|s| s.to_string())
-            })
+            }),
         })
     }
 
@@ -264,7 +266,7 @@ impl IdpClient for OktaClient {
                         .unwrap_or("");
                     current_path = format!("/groups/{}/users?after={}&limit=200", group_id, after);
                 }
-                _ => break
+                _ => break,
             }
         }
 
@@ -285,7 +287,7 @@ struct OktaUserResponse {
     created: DateTime<Utc>,
     #[serde(rename = "lastUpdated")]
     last_updated: DateTime<Utc>,
-    profile: OktaUserProfile
+    profile: OktaUserProfile,
 }
 
 #[derive(Debug, Deserialize)]
@@ -296,7 +298,7 @@ struct OktaUserProfile {
     #[serde(rename = "lastName")]
     last_name: String,
     #[serde(rename = "displayName")]
-    display_name: Option<String>
+    display_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -307,13 +309,13 @@ struct OktaGroupResponse {
     created: DateTime<Utc>,
     #[serde(rename = "lastUpdated")]
     last_updated: DateTime<Utc>,
-    profile: OktaGroupProfile
+    profile: OktaGroupProfile,
 }
 
 #[derive(Debug, Deserialize)]
 struct OktaGroupProfile {
     name: String,
-    description: Option<String>
+    description: Option<String>,
 }
 
 pub fn create_okta_client(config: OktaConfig) -> IdpSyncResult<Arc<dyn IdpClient>> {
@@ -341,7 +343,7 @@ mod tests {
     #[test]
     fn test_idp_error_retryable() {
         let rate_limited = IdpSyncError::RateLimited {
-            retry_after_seconds: 60
+            retry_after_seconds: 60,
         };
         assert!(rate_limited.is_retryable());
         assert_eq!(rate_limited.retry_after(), Some(60));

@@ -441,6 +441,5 @@ redis-cli XINFO GROUPS trajectory:tenant-id:session-id
 
 ## Related Documentation
 
-- [PostgreSQL Migrations](migrations.md)
-- [Configuration Guide](configuration.md)
-- [Rollback Procedures](rollback.md)
+- [PostgreSQL Migrations](./migrations)
+- [Configuration Guide](./configuration)

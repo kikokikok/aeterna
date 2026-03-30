@@ -239,6 +239,7 @@ impl MemoryManager {
         self
     }
 
+    #[tracing::instrument(skip_all, fields(layer = ?layer))]
     pub async fn register_provider(
         &self,
         layer: MemoryLayer,
@@ -252,6 +253,7 @@ impl MemoryManager {
         providers.insert(layer, provider);
     }
 
+    #[tracing::instrument(skip_all, fields(layer = ?layer))]
     pub async fn add(
         &self,
         ctx: TenantContext,
@@ -310,6 +312,7 @@ impl MemoryManager {
         Ok(entry.id)
     }
 
+    #[tracing::instrument(skip_all, fields(limit, threshold))]
     pub async fn search(
         &self,
         ctx: TenantContext,
@@ -324,6 +327,7 @@ impl MemoryManager {
         Ok(results)
     }
 
+    #[tracing::instrument(skip_all, fields(limit))]
     pub async fn search_text_with_reasoning(
         &self,
         ctx: mk_core::types::TenantContext,
@@ -559,6 +563,7 @@ impl MemoryManager {
             .unwrap_or(0)
     }
 
+    #[tracing::instrument(skip_all, fields(layer = ?layer))]
     pub async fn trigger_autonomous_optimization(
         &self,
         ctx: TenantContext,
@@ -665,6 +670,7 @@ impl MemoryManager {
         Ok((trace.refined_query.clone(), trace, adjusted_limit))
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn get_trajectories(
         &self,
         ctx: &TenantContext,
@@ -676,6 +682,7 @@ impl MemoryManager {
             .unwrap_or_default()
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn close_agent(
         &self,
         ctx: TenantContext,
@@ -685,6 +692,7 @@ impl MemoryManager {
             .await
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn close_session(
         &self,
         ctx: TenantContext,
@@ -694,6 +702,7 @@ impl MemoryManager {
             .await
     }
 
+    #[tracing::instrument(skip_all, fields(layer = ?layer, memory_id))]
     pub async fn record_reward(
         &self,
         ctx: TenantContext,
@@ -734,6 +743,7 @@ impl MemoryManager {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(layer = ?layer))]
     pub async fn optimize_layer(
         &self,
         ctx: TenantContext,
@@ -742,6 +752,7 @@ impl MemoryManager {
         self.trigger_autonomous_optimization(ctx, layer).await
     }
 
+    #[tracing::instrument(skip_all, fields(layer = ?layer))]
     pub async fn promote_important_memories(
         &self,
         _ctx: TenantContext,
@@ -777,6 +788,7 @@ impl MemoryManager {
         Ok(vec![])
     }
 
+    #[tracing::instrument(skip_all, fields(limit))]
     pub async fn search_hierarchical(
         &self,
         ctx: TenantContext,
@@ -805,6 +817,7 @@ impl MemoryManager {
         Ok(all_results)
     }
 
+    #[tracing::instrument(skip_all, fields(limit))]
     pub async fn search_graph(
         &self,
         ctx: TenantContext,
@@ -845,6 +858,7 @@ impl MemoryManager {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(node_id))]
     pub async fn get_graph_neighbors(
         &self,
         ctx: TenantContext,
@@ -916,6 +930,7 @@ impl MemoryManager {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(layer = ?layer))]
     pub async fn add_to_layer(
         &self,
         ctx: mk_core::types::TenantContext,
@@ -930,6 +945,7 @@ impl MemoryManager {
         provider.add(ctx, entry).await
     }
 
+    #[tracing::instrument(skip_all, fields(layer = ?layer, id))]
     pub async fn get_from_layer(
         &self,
         ctx: mk_core::types::TenantContext,
@@ -944,6 +960,7 @@ impl MemoryManager {
         provider.get(ctx, id).await
     }
 
+    #[tracing::instrument(skip_all, fields(layer = ?layer, id))]
     pub async fn delete_from_layer(
         &self,
         ctx: mk_core::types::TenantContext,
@@ -958,6 +975,7 @@ impl MemoryManager {
         provider.delete(ctx, id).await
     }
 
+    #[tracing::instrument(skip_all, fields(layer = ?layer))]
     pub async fn list_all_from_layer(
         &self,
         ctx: mk_core::types::TenantContext,
