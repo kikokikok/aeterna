@@ -329,3 +329,68 @@ aeterna:
 | **HA infrastructure references** | **Reference only** | `docs/guides/ha-deployment.md` |
 
 > **Note:** Code search is not a built-in Aeterna component. It integrates as an external skill via pluggable MCP backends (e.g., JetBrains Code Intelligence MCP). No sidecar indexer, StatefulSet, or ShardRouter deployment is required.
+
+---
+
+## Local-First Memory (OpenCode Plugin)
+
+The OpenCode plugin includes a **local-first memory store** that keeps personal layers (agent, user, session) in an embedded SQLite database on the developer's machine. This enables offline-first operation with automatic sync when connected to an Aeterna server.
+
+### Architecture
+
+```
+Developer Machine                          Aeterna Server
+┌──────────────────────┐                  ┌────────────────────┐
+│  OpenCode Plugin     │                  │  Axum HTTP API     │
+│                      │                  │                    │
+│  ┌────────────────┐  │   push (30s)     │  POST /sync/push   │
+│  │ SQLite Store   │──┼────────────────► │  (upsert + embed)  │
+│  │ ~/.aeterna/    │  │                  │                    │
+│  │  local.db      │◄─┼────────────────  │  GET /sync/pull    │
+│  └────────────────┘  │   pull (60s)     │  (cursor paginate) │
+│                      │                  │                    │
+│  Personal layers:    │                  │  Shared layers:    │
+│  agent, user,        │                  │  project, team,    │
+│  session             │                  │  org, company      │
+└──────────────────────┘                  └────────────────────┘
+```
+
+### Configuration
+
+The local store is enabled by default. Configure via `.aeterna/config.toml` or environment variables:
+
+```toml
+[local]
+enabled = true                      # Enable/disable local store
+db_path = "~/.aeterna/local.db"     # SQLite database path
+sync_push_interval_ms = 30000       # Push cycle interval (default: 30s)
+sync_pull_interval_ms = 60000       # Pull cycle interval (default: 60s)
+max_cached_entries = 50000          # Max cached shared-layer entries
+session_storage_ttl_hours = 24      # Session memory retention
+```
+
+Environment variable overrides (take precedence over config file):
+
+| Variable | Description |
+|----------|-------------|
+| `AETERNA_LOCAL_ENABLED` | Enable/disable local store |
+| `AETERNA_LOCAL_DB_PATH` | SQLite database path |
+| `AETERNA_LOCAL_SYNC_PUSH_INTERVAL_MS` | Push sync interval |
+| `AETERNA_LOCAL_SYNC_PULL_INTERVAL_MS` | Pull sync interval |
+| `AETERNA_LOCAL_MAX_CACHED_ENTRIES` | Max cached entries |
+| `AETERNA_LOCAL_SESSION_STORAGE_TTL_HOURS` | Session TTL |
+
+### Offline Behavior
+
+- **Personal layers** (agent/user/session) work fully offline — all reads and writes go to the local SQLite database
+- **Shared layers** (project/team/org/company) require server connectivity for writes; reads use the local cache with staleness warnings after 10 minutes
+- When connectivity is restored, the sync engine automatically pushes queued changes and pulls remote updates
+- Conflict resolution is server-wins: if the same memory ID has a newer `updated_at` on the server, the server version takes precedence
+
+### Server-Side Requirements
+
+The sync endpoints require the Aeterna server (v0.3.0+) with:
+- `POST /api/v1/sync/push` — accepts batched memory entries with device ID
+- `GET /api/v1/sync/pull` — cursor-based pagination with layer filtering
+- Authentication via Bearer token (same `AETERNA_TOKEN` used for all API calls)
+- PostgreSQL with `device_id` and `importance_score` columns on `memory_entries` table (applied automatically by schema initialization)

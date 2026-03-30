@@ -54,6 +54,7 @@ export interface MemorySearchParams {
   layers?: MemoryLayer[];
   limit?: number;
   threshold?: number;
+  queryEmbedding?: number[];
   sessionId?: string;
   tags?: string[];
 }
@@ -63,6 +64,59 @@ export interface MemoryPromoteParams {
   memoryId: string;
   targetLayer: MemoryLayer;
   reason?: string;
+}
+
+export interface SyncPushEntry {
+  id: string;
+  content: string;
+  layer: MemoryLayer;
+  tags: string[];
+  metadata?: Record<string, unknown>;
+  importance: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+export interface SyncPushPayload {
+  entries: SyncPushEntry[];
+  device_id: string;
+}
+
+export interface SyncConflictEntry {
+  id: string;
+  remote_content: string;
+  remote_updated_at: string;
+}
+
+export interface SyncPushResponse {
+  cursor: string;
+  conflicts: SyncConflictEntry[];
+  embeddings: Record<string, number[]>;
+}
+
+export interface SyncPullParams {
+  sinceCursor?: string;
+  layers?: MemoryLayer[];
+  limit?: number;
+}
+
+export interface SyncPullEntry {
+  id: string;
+  content: string;
+  layer: MemoryLayer;
+  embedding?: number[];
+  tags: string[];
+  metadata?: Record<string, unknown>;
+  importance: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SyncPullResponse {
+  entries: SyncPullEntry[];
+  cursor: string;
+  has_more: boolean;
 }
 
 // =============================================================================

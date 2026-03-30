@@ -33,8 +33,15 @@ import type {
   MemoryOptimizeParams,
   MemoryOptimizeResult,
   MemoryLayer,
+  SyncPullParams,
+  SyncPullResponse,
+  SyncPushPayload,
+  SyncPushResponse,
 } from "./types.js";
 import { DEFAULT_CONFIG } from "./types.js";
+import type { MemoryRouter } from "./local/router.js";
+import type { LocalMemoryManager } from "./local/manager.js";
+import type { SyncEngine } from "./local/sync.js";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
@@ -54,6 +61,9 @@ export class AeternaClient {
   private governanceSubscription: AbortController | null = null;
   private pendingCaptures: Map<string, ToolExecutionRecord> = new Map();
   private captureDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private router: MemoryRouter | null = null;
+  private localManager: LocalMemoryManager | null = null;
+  private syncEngine: SyncEngine | null = null;
 
   constructor(config: AeternaClientConfig) {
     this.config = config;
@@ -65,7 +75,8 @@ export class AeternaClient {
   private async request<T>(
     method: HttpMethod,
     path: string,
-    body?: unknown
+    body?: unknown,
+    options?: { signal?: AbortSignal }
   ): Promise<Result<T>> {
     try {
       const response = await fetch(`${this.serverUrl}${path}`, {
@@ -81,6 +92,7 @@ export class AeternaClient {
           }),
         },
         body: body ? JSON.stringify(body) : undefined,
+        signal: options?.signal,
       });
 
       if (!response.ok) {
@@ -150,6 +162,15 @@ export class AeternaClient {
   }
 
   async memoryAdd(params: MemoryAddParams): Promise<MemoryEntry> {
+    const layer = params.layer ?? "session";
+    if (this.router && ["agent", "user", "session"].includes(layer)) {
+      return this.router.add({ ...params, layer });
+    }
+
+    return this.memoryAddRemote({ ...params, layer });
+  }
+
+  async memoryAddRemote(params: MemoryAddParams): Promise<MemoryEntry> {
     const result = await this.request<MemoryEntry>("POST", "/api/v1/memories", {
       ...params,
       sessionId: params.sessionId ?? this.sessionContext?.sessionId,
@@ -162,6 +183,14 @@ export class AeternaClient {
   }
 
   async memorySearch(params: MemorySearchParams): Promise<MemorySearchResult[]> {
+    if (this.router) {
+      return this.router.search(params);
+    }
+
+    return this.memorySearchRemote(params);
+  }
+
+  async memorySearchRemote(params: MemorySearchParams): Promise<MemorySearchResult[]> {
     const result = await this.request<MemorySearchResult[]>(
       "POST",
       "/api/v1/memories/search",
@@ -173,6 +202,31 @@ export class AeternaClient {
 
     if (!result.ok) {
       throw new Error(`Failed to search memories: ${result.error.message}`);
+    }
+    return result.value;
+  }
+
+  async syncPush(payload: SyncPushPayload, options?: { signal?: AbortSignal }): Promise<SyncPushResponse> {
+    const result = await this.request<SyncPushResponse>("POST", "/api/v1/sync/push", payload, options);
+    if (!result.ok) {
+      throw new Error(`Sync push failed: ${result.error.message}`);
+    }
+    return result.value;
+  }
+
+  async syncPull(params: SyncPullParams, options?: { signal?: AbortSignal }): Promise<SyncPullResponse> {
+    const qs = new URLSearchParams();
+    if (params.sinceCursor) qs.set("since_cursor", params.sinceCursor);
+    if (params.layers) qs.set("layers", params.layers.join(","));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const result = await this.request<SyncPullResponse>(
+      "GET",
+      `/api/v1/sync/pull?${qs.toString()}`,
+      undefined,
+      options
+    );
+    if (!result.ok) {
+      throw new Error(`Sync pull failed: ${result.error.message}`);
     }
     return result.value;
   }
@@ -391,6 +445,43 @@ export class AeternaClient {
 
   setPluginConfig(config: Partial<PluginConfig>): void {
     this.pluginConfig = { ...this.pluginConfig, ...config };
+  }
+
+  setRouter(router: MemoryRouter): void {
+    this.router = router;
+  }
+
+  setLocalManager(manager: LocalMemoryManager): void {
+    this.localManager = manager;
+  }
+
+  setSyncEngine(engine: SyncEngine): void {
+    this.syncEngine = engine;
+  }
+
+  getServerUrl(): string {
+    return this.serverUrl;
+  }
+
+  getLocalSyncStatus(): {
+    pendingPushCount: number;
+    lastPush: number | null;
+    lastPull: number | null;
+    entryCounts: Record<string, number>;
+    serverConnectivity: boolean;
+  } | null {
+    if (!this.localManager) {
+      return null;
+    }
+
+    const timestamps = this.localManager.getLastSyncTimestamps();
+    return {
+      pendingPushCount: this.localManager.getPendingSyncCount(),
+      lastPush: timestamps.lastPush,
+      lastPull: timestamps.lastPull,
+      entryCounts: this.localManager.getEntryCounts(),
+      serverConnectivity: this.syncEngine?.getServerConnectivity() ?? false,
+    };
   }
 
   getSessionContext(): SessionContext | null {

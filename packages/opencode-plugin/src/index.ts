@@ -6,6 +6,10 @@ import { createCcaTools } from "./tools/cca.js";
 import { createKnowledgeTools } from "./tools/knowledge.js";
 import { createGovernanceTools } from "./tools/governance.js";
 import { createChatHook, createSystemHook, createToolHooks, createPermissionHook, createSessionHook } from "./hooks/index.js";
+import { parseLocalConfig } from "./local/config.js";
+import { LocalMemoryManager } from "./local/manager.js";
+import { SyncEngine } from "./local/sync.js";
+import { MemoryRouter } from "./local/router.js";
 
 export const aeterna: Plugin = async (input: PluginInput): Promise<Hooks> => {
   // Extract project identifier from worktree path or project ID
@@ -28,6 +32,22 @@ export const aeterna: Plugin = async (input: PluginInput): Promise<Hooks> => {
     userId: process.env.AETERNA_USER_ID,
   });
 
+  const localConfig = parseLocalConfig(process.env, input.directory);
+  let syncEngine: SyncEngine | null = null;
+
+  if (localConfig.enabled) {
+    const localManager = new LocalMemoryManager(localConfig.db_path, localConfig);
+    syncEngine = new SyncEngine(localManager, client, localConfig);
+    const router = new MemoryRouter(localManager, client, localConfig);
+    client.setRouter(router);
+    client.setLocalManager(localManager);
+    client.setSyncEngine(syncEngine);
+
+    if (process.env.AETERNA_SERVER_URL) {
+      syncEngine.start();
+    }
+  }
+
   await client.sessionStart();
 
   return {
@@ -44,7 +64,7 @@ export const aeterna: Plugin = async (input: PluginInput): Promise<Hooks> => {
     "tool.execute.before": createToolHooks(client).before,
     "tool.execute.after": createToolHooks(client).after,
     "permission.ask": createPermissionHook(client),
-    event: createSessionHook(client),
+    event: createSessionHook(client, syncEngine),
   };
 };
 

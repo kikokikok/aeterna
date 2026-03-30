@@ -528,3 +528,230 @@ async fn shutdown_channel_propagates_true_signal() {
     rx.changed().await.unwrap();
     assert!(*rx.borrow());
 }
+
+#[tokio::test]
+async fn sync_push_stores_entries() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    let push_body = json!({
+        "entries": [
+            {
+                "id": "test-mem-1",
+                "content": "Test memory content",
+                "layer": "project",
+                "tags": ["test"],
+                "metadata": null,
+                "importance": 0.5,
+                "created_at": "2025-01-15T10:30:00Z",
+                "updated_at": "2025-01-15T10:30:00Z",
+                "deleted_at": null
+            }
+        ],
+        "device_id": "test-device"
+    });
+
+    let push_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sync/push")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer test-token")
+                .body(Body::from(serde_json::to_vec(&push_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(push_response.status(), StatusCode::OK);
+    let push_bytes = axum::body::to_bytes(push_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let push_json: serde_json::Value = serde_json::from_slice(&push_bytes).unwrap();
+    assert!(!push_json["cursor"].as_str().unwrap().is_empty());
+    assert!(push_json["conflicts"].as_array().unwrap().is_empty());
+
+    let pull_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/sync/pull?since_cursor=0&layers=project")
+                .header("authorization", "Bearer test-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(pull_response.status(), StatusCode::OK);
+    let pull_bytes = axum::body::to_bytes(pull_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let pull_json: serde_json::Value = serde_json::from_slice(&pull_bytes).unwrap();
+    let entries = pull_json["entries"].as_array().unwrap();
+    assert!(!entries.is_empty());
+    assert!(entries.iter().any(|entry| {
+        entry["id"] == "test-mem-1"
+            && entry["content"] == "Test memory content"
+            && entry["layer"] == "project"
+    }));
+}
+
+#[tokio::test]
+async fn sync_pull_returns_seeded_data() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    let push_body = json!({
+        "entries": [
+            {
+                "id": "test-mem-project",
+                "content": "Project memory",
+                "layer": "project",
+                "tags": ["project"],
+                "metadata": null,
+                "importance": 0.7,
+                "created_at": "2025-01-15T10:30:00Z",
+                "updated_at": "2025-01-15T10:30:00Z",
+                "deleted_at": null
+            },
+            {
+                "id": "test-mem-team",
+                "content": "Team memory",
+                "layer": "team",
+                "tags": ["team"],
+                "metadata": null,
+                "importance": 0.6,
+                "created_at": "2025-01-15T10:31:00Z",
+                "updated_at": "2025-01-15T10:31:00Z",
+                "deleted_at": null
+            }
+        ],
+        "device_id": "test-device"
+    });
+
+    let push_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sync/push")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer test-token")
+                .body(Body::from(serde_json::to_vec(&push_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(push_response.status(), StatusCode::OK);
+
+    let pull_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/sync/pull?since_cursor=0&layers=project")
+                .header("authorization", "Bearer test-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(pull_response.status(), StatusCode::OK);
+    let pull_bytes = axum::body::to_bytes(pull_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let pull_json: serde_json::Value = serde_json::from_slice(&pull_bytes).unwrap();
+
+    let entries = pull_json["entries"].as_array().unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0]["id"], "test-mem-project");
+    assert_eq!(entries[0]["layer"], "project");
+    assert!(entries.iter().all(|entry| entry["layer"] == "project"));
+
+    let cursor = pull_json["cursor"].as_str().unwrap();
+    assert!(!cursor.is_empty());
+    assert_ne!(cursor, "0");
+}
+
+#[tokio::test]
+async fn sync_endpoints_reject_unauthenticated() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    let push_body = json!({
+        "entries": [
+            {
+                "id": "test-mem-unauth",
+                "content": "Test memory content",
+                "layer": "project",
+                "tags": ["test"],
+                "metadata": null,
+                "importance": 0.5,
+                "created_at": "2025-01-15T10:30:00Z",
+                "updated_at": "2025-01-15T10:30:00Z",
+                "deleted_at": null
+            }
+        ],
+        "device_id": "test-device"
+    });
+
+    let push_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sync/push")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&push_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(push_response.status(), StatusCode::UNAUTHORIZED);
+    let push_bytes = axum::body::to_bytes(push_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let push_json: serde_json::Value = serde_json::from_slice(&push_bytes).unwrap();
+    assert_eq!(
+        push_json,
+        json!({
+            "error": "auth_required",
+            "message": "Bearer token required"
+        })
+    );
+
+    let pull_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/sync/pull?since_cursor=0&layers=project")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pull_response.status(), StatusCode::UNAUTHORIZED);
+    let pull_bytes = axum::body::to_bytes(pull_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let pull_json: serde_json::Value = serde_json::from_slice(&pull_bytes).unwrap();
+    assert_eq!(
+        pull_json,
+        json!({
+            "error": "auth_required",
+            "message": "Bearer token required"
+        })
+    );
+}
