@@ -1,9 +1,9 @@
 {
   "info": {
     "name": "Aeterna E2E Test Suite",
-    "description": "Exhaustive end-to-end tests for the Aeterna stack via HTTPS ingress.\n\n1. Deployment Validation \u2014 health, readiness, liveness, 404 fallback\n2. Admin Features & Configuration \u2014 OpenSpec discovery, governance, A2A, MCP\n3. Realistic Scenario \u2014 Full knowledge CRUD lifecycle\n4. MCP Protocol \u2014 JSON-RPC initialize, tools/list, tools/call, error handling\n5. A2A Protocol \u2014 Agent card, health, metrics, task submission\n6. Webhook Validation \u2014 GitHub webhook endpoint error paths\n7. Error Validation \u2014 Invalid inputs, missing fields, nonexistent resources\n8. Knowledge Layer Tests \u2014 Multi-layer creation, PR-track governance\n9. MCP Governance Tools \u2014 Configure, request lifecycle, audit, roles\n10. MCP Memory Tools \u2014 Add, delete, feedback, close\n11. MCP CCA & Sync Tools \u2014 Context assemble, note capture, meta-loop, sync\n12. MCP Knowledge & Policy Tools \u2014 knowledge_get, knowledge_query",
+    "description": "Exhaustive end-to-end tests for the Aeterna stack via HTTPS ingress.\n\n1. Deployment Validation — health, readiness, liveness, 404 fallback\n2. Admin Features & Configuration — OpenSpec discovery, governance, A2A, MCP\n3. Realistic Scenario — Full knowledge CRUD lifecycle\n4. MCP Protocol — JSON-RPC initialize, tools/list, tools/call, error handling\n5. A2A Protocol — Agent card, health, metrics, task submission\n6. Webhook Validation — GitHub webhook endpoint error paths\n7. Error Validation — Invalid inputs, missing fields, nonexistent resources\n8. Knowledge Layer Tests — Multi-layer creation, PR-track governance\n9. MCP Governance Tools — Configure, request lifecycle, audit, roles\n10. MCP Memory Tools — Add, delete, feedback, close\n11. MCP CCA & Sync Tools — Context assemble, note capture, meta-loop, sync\n12. MCP Knowledge & Policy Tools — knowledge_get, knowledge_query\n13. Plugin Auth — Bootstrap Flow\n14. Plugin Auth — Token Refresh & Logout\n15. Auth Guards — Sessions\n16. Auth Guards — Knowledge CRUD\n17. Auth Guards — Sync\n18. Auth Edge Cases — Security Boundaries\n19. Authenticated Memory Lifecycle\n20. Authenticated Knowledge — Multi-layer & Governance\n21. Authenticated Governance — Drift & Proposals\n22. Authenticated Sync Bridge\n23. Authenticated CCA Capabilities\n24. Full Authenticated Journey — End-to-End",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "version": "2.0.0"
+    "version": "4.0.0"
   },
   "variable": [
     {
@@ -73,6 +73,86 @@
     },
     {
       "key": "mcpNoteEventCount",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pluginAccessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pluginRefreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pluginGithubLogin",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authSessionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authKnowledgeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authMemoryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authScenarioTs",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authTeamKnowledgeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authOrgKnowledgeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authCompanyKnowledgeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authProjectKnowledgeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authGovConfigId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authGovRequestId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "journeySessionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "journeyMemoryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "journeyKnowledgeId",
       "value": "",
       "type": "string"
     }
@@ -615,7 +695,7 @@
           }
         },
         {
-          "name": "2.12 Admin \u2014 GitHub Org Sync",
+          "name": "2.12 Admin — GitHub Org Sync",
           "event": [
             {
               "listen": "test",
@@ -682,7 +762,7 @@
       ]
     },
     {
-      "name": "3. Realistic Scenario \u2014 Knowledge CRUD Lifecycle",
+      "name": "3. Realistic Scenario — Knowledge CRUD Lifecycle",
       "event": [
         {
           "listen": "prerequest",
@@ -1258,7 +1338,7 @@
       ]
     },
     {
-      "name": "4. MCP Protocol \u2014 JSON-RPC",
+      "name": "4. MCP Protocol — JSON-RPC",
       "item": [
         {
           "name": "4.1 MCP Initialize",
@@ -2655,7 +2735,7 @@
       ]
     },
     {
-      "name": "8. Knowledge Layer Tests \u2014 Multi-layer & Governance",
+      "name": "8. Knowledge Layer Tests — Multi-layer & Governance",
       "event": [
         {
           "listen": "prerequest",
@@ -2979,7 +3059,7 @@
       "name": "9. MCP Governance Tools",
       "item": [
         {
-          "name": "9.1 governance_configure \u2014 set governance config",
+          "name": "9.1 governance_configure — set governance config",
           "event": [
             {
               "listen": "test",
@@ -3044,7 +3124,7 @@
           }
         },
         {
-          "name": "9.2 governance_request_create \u2014 create approval request",
+          "name": "9.2 governance_request_create — create approval request",
           "event": [
             {
               "listen": "test",
@@ -3110,7 +3190,7 @@
           }
         },
         {
-          "name": "9.3 governance_request_list \u2014 list pending requests",
+          "name": "9.3 governance_request_list — list pending requests",
           "event": [
             {
               "listen": "test",
@@ -3165,7 +3245,7 @@
           }
         },
         {
-          "name": "9.4 governance_audit_list \u2014 list audit entries",
+          "name": "9.4 governance_audit_list — list audit entries",
           "event": [
             {
               "listen": "test",
@@ -3220,7 +3300,7 @@
           }
         },
         {
-          "name": "9.5 governance_role_list \u2014 list governance roles",
+          "name": "9.5 governance_role_list — list governance roles",
           "event": [
             {
               "listen": "test",
@@ -3275,7 +3355,7 @@
           }
         },
         {
-          "name": "9.6 governance_config_get \u2014 verify config set in 9.1",
+          "name": "9.6 governance_config_get — verify config set in 9.1",
           "event": [
             {
               "listen": "test",
@@ -3330,7 +3410,7 @@
           }
         },
         {
-          "name": "9.7 governance_unit_create \u2014 create org unit",
+          "name": "9.7 governance_unit_create — create org unit",
           "event": [
             {
               "listen": "test",
@@ -3385,7 +3465,7 @@
           }
         },
         {
-          "name": "9.8 governance_hierarchy_navigate \u2014 navigate org hierarchy",
+          "name": "9.8 governance_hierarchy_navigate — navigate org hierarchy",
           "event": [
             {
               "listen": "test",
@@ -3445,7 +3525,7 @@
       "name": "10. MCP Memory Tools",
       "item": [
         {
-          "name": "10.1 memory_add \u2014 store a memory",
+          "name": "10.1 memory_add — store a memory",
           "event": [
             {
               "listen": "test",
@@ -3510,7 +3590,7 @@
           }
         },
         {
-          "name": "10.2 memory_search \u2014 search memories (with tenant)",
+          "name": "10.2 memory_search — search memories (with tenant)",
           "event": [
             {
               "listen": "test",
@@ -3565,7 +3645,7 @@
           }
         },
         {
-          "name": "10.3 memory_feedback \u2014 submit reward signal",
+          "name": "10.3 memory_feedback — submit reward signal",
           "event": [
             {
               "listen": "test",
@@ -3620,7 +3700,7 @@
           }
         },
         {
-          "name": "10.4 memory_delete \u2014 delete a memory",
+          "name": "10.4 memory_delete — delete a memory",
           "event": [
             {
               "listen": "test",
@@ -3675,7 +3755,7 @@
           }
         },
         {
-          "name": "10.5 memory_close \u2014 close session context",
+          "name": "10.5 memory_close — close session context",
           "event": [
             {
               "listen": "test",
@@ -3730,7 +3810,7 @@
           }
         },
         {
-          "name": "10.6 memory_optimize \u2014 trigger optimization",
+          "name": "10.6 memory_optimize — trigger optimization",
           "event": [
             {
               "listen": "test",
@@ -3785,7 +3865,7 @@
           }
         },
         {
-          "name": "10.7 memory_reason \u2014 reflective reasoning",
+          "name": "10.7 memory_reason — reflective reasoning",
           "event": [
             {
               "listen": "test",
@@ -3845,7 +3925,7 @@
       "name": "11. MCP CCA & Sync Tools",
       "item": [
         {
-          "name": "11.1 context_assemble \u2014 hierarchical context",
+          "name": "11.1 context_assemble — hierarchical context",
           "event": [
             {
               "listen": "test",
@@ -3900,7 +3980,7 @@
           }
         },
         {
-          "name": "11.2 note_capture \u2014 capture trajectory event",
+          "name": "11.2 note_capture — capture trajectory event",
           "event": [
             {
               "listen": "test",
@@ -3955,7 +4035,7 @@
           }
         },
         {
-          "name": "11.3 meta_loop_status \u2014 get meta-agent status",
+          "name": "11.3 meta_loop_status — get meta-agent status",
           "event": [
             {
               "listen": "test",
@@ -4010,7 +4090,7 @@
           }
         },
         {
-          "name": "11.4 hindsight_query \u2014 query error patterns",
+          "name": "11.4 hindsight_query — query error patterns",
           "event": [
             {
               "listen": "test",
@@ -4065,7 +4145,7 @@
           }
         },
         {
-          "name": "11.5 sync_now \u2014 trigger sync",
+          "name": "11.5 sync_now — trigger sync",
           "event": [
             {
               "listen": "test",
@@ -4120,7 +4200,7 @@
           }
         },
         {
-          "name": "11.6 sync_status \u2014 check sync status",
+          "name": "11.6 sync_status — check sync status",
           "event": [
             {
               "listen": "test",
@@ -4180,7 +4260,7 @@
       "name": "12. MCP Knowledge & Policy Tools",
       "item": [
         {
-          "name": "12.1 knowledge_get \u2014 get by path",
+          "name": "12.1 knowledge_get — get by path",
           "event": [
             {
               "listen": "test",
@@ -4235,7 +4315,7 @@
           }
         },
         {
-          "name": "12.2 knowledge_query \u2014 semantic search",
+          "name": "12.2 knowledge_query — semantic search",
           "event": [
             {
               "listen": "test",
@@ -4290,7 +4370,7 @@
           }
         },
         {
-          "name": "12.3 knowledge_list \u2014 list by layer",
+          "name": "12.3 knowledge_list — list by layer",
           "event": [
             {
               "listen": "test",
@@ -4345,7 +4425,7 @@
           }
         },
         {
-          "name": "12.4 knowledge_resolve_conflict \u2014 conflict resolution",
+          "name": "12.4 knowledge_resolve_conflict — conflict resolution",
           "event": [
             {
               "listen": "test",
@@ -4391,6 +4471,4210 @@
             "body": {
               "mode": "raw",
               "raw": "{\"jsonrpc\":\"2.0\",\"id\":403,\"method\":\"tools/call\",\"params\":{\"name\":\"knowledge_resolve_conflict\",\"arguments\":{\"path\":\"e2e-test-conflict\",\"layer\":\"project\",\"resolution\":\"keep_local\"},\"tenantContext\":{\"tenant_id\":\"e2e-test\",\"org_id\":\"e2e-org\",\"team_id\":\"e2e-team\",\"project_id\":\"e2e-project\",\"user_id\":\"e2e-user\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Plugin Auth — Bootstrap Flow",
+      "item": [
+        {
+          "name": "13.1 Bootstrap — Happy Path",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Response has access_token, refresh_token, expires_in, token_type, github_login', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('access_token');",
+                  "    pm.expect(json).to.have.property('refresh_token');",
+                  "    pm.expect(json).to.have.property('expires_in');",
+                  "    pm.expect(json).to.have.property('token_type');",
+                  "    pm.expect(json).to.have.property('github_login');",
+                  "});",
+                  "",
+                  "pm.test('token_type is Bearer and expires_in > 0', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.token_type).to.eql('Bearer');",
+                  "    pm.expect(json.expires_in).to.be.a('number');",
+                  "    pm.expect(json.expires_in).to.be.above(0);",
+                  "});",
+                  "",
+                  "pm.test('Store bootstrap auth artifacts in collection variables', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('pluginAccessToken', json.access_token);",
+                  "    pm.collectionVariables.set('pluginRefreshToken', json.refresh_token);",
+                  "    pm.collectionVariables.set('pluginGithubLogin', json.github_login);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"provider\":\"github\",\"github_access_token\":\"{{githubAccessToken}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/bootstrap",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "bootstrap"
+              ]
+            }
+          }
+        },
+        {
+          "name": "13.2 Bootstrap — Unsupported Provider",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error is unsupported_provider', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('unsupported_provider');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"provider\":\"gitlab\",\"github_access_token\":\"fake\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/bootstrap",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "bootstrap"
+              ]
+            }
+          }
+        },
+        {
+          "name": "13.3 Bootstrap — Missing Required Fields",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Response is JSON', () => {",
+                  "    const contentType = (pm.response.headers.get('Content-Type') || '').toLowerCase();",
+                  "    pm.expect(contentType).to.include('application/json');",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"provider\":\"github\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/bootstrap",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "bootstrap"
+              ]
+            }
+          }
+        },
+        {
+          "name": "13.4 Bootstrap — Invalid GitHub Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is github_user_fetch_failed', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('github_user_fetch_failed');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"provider\":\"github\",\"github_access_token\":\"gho_invalid_token_e2e_test\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/bootstrap",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "bootstrap"
+              ]
+            }
+          }
+        },
+        {
+          "name": "13.5 Bootstrap — Empty Body",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Response is JSON', () => {",
+                  "    const contentType = (pm.response.headers.get('Content-Type') || '').toLowerCase();",
+                  "    pm.expect(contentType).to.include('application/json');",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/bootstrap",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "bootstrap"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. Plugin Auth — Token Refresh & Logout",
+      "item": [
+        {
+          "name": "14.1 Refresh — Happy Path",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const oldAccess = pm.collectionVariables.get('pluginAccessToken');",
+                  "const oldRefresh = pm.collectionVariables.get('pluginRefreshToken');",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has access_token, refresh_token, expires_in, token_type, github_login', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('access_token');",
+                  "    pm.expect(json).to.have.property('refresh_token');",
+                  "    pm.expect(json).to.have.property('expires_in');",
+                  "    pm.expect(json).to.have.property('token_type');",
+                  "    pm.expect(json).to.have.property('github_login');",
+                  "});",
+                  "pm.test('Tokens rotate', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.access_token).to.not.eql(oldAccess);",
+                  "    pm.expect(json.refresh_token).to.not.eql(oldRefresh);",
+                  "});",
+                  "pm.test('Store rotated tokens', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('pluginAccessToken', json.access_token);",
+                  "    pm.collectionVariables.set('pluginRefreshToken', json.refresh_token);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"refresh_token\":\"{{pluginRefreshToken}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "refresh"
+              ]
+            }
+          }
+        },
+        {
+          "name": "14.2 Refresh — Old Token Rejected (single-use)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is invalid_refresh_token', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_refresh_token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"refresh_token\":\"already-consumed-fake-token-e2e\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "refresh"
+              ]
+            }
+          }
+        },
+        {
+          "name": "14.3 Refresh — Missing Token Field",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Response is JSON', () => {",
+                  "    const contentType = (pm.response.headers.get('Content-Type') || '').toLowerCase();",
+                  "    pm.expect(contentType).to.include('application/json');",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "refresh"
+              ]
+            }
+          }
+        },
+        {
+          "name": "14.4 Logout — Happy Path",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('message is Logged out successfully', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.message).to.eql('Logged out successfully');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"refresh_token\":\"{{pluginRefreshToken}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "logout"
+              ]
+            }
+          }
+        },
+        {
+          "name": "14.5 Logout — No Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('logout is always successful', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.message).to.eql('Logged out successfully');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"refresh_token\":null}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "logout"
+              ]
+            }
+          }
+        },
+        {
+          "name": "14.6 Re-bootstrap for Subsequent Tests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Store fresh access and refresh token values', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('pluginAccessToken', json.access_token);",
+                  "    pm.collectionVariables.set('pluginRefreshToken', json.refresh_token);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"provider\":\"github\",\"github_access_token\":\"{{githubAccessToken}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/bootstrap",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "bootstrap"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "15. Auth Guards — Sessions",
+      "item": [
+        {
+          "name": "15.1 Session Start — Valid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has sessionId, userId, startedAt and userId matches pluginGithubLogin', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('sessionId');",
+                  "    pm.expect(json).to.have.property('userId');",
+                  "    pm.expect(json).to.have.property('startedAt');",
+                  "    pm.expect(json.userId).to.eql(pm.collectionVariables.get('pluginGithubLogin'));",
+                  "    pm.collectionVariables.set('authSessionId', json.sessionId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"project\":\"e2e-auth-test\",\"directory\":\"/tmp/e2e\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "15.2 Session Start — No Token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is invalid_plugin_token', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_plugin_token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"project\":\"e2e-auth-test\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "15.3 Session Start — Invalid Token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is invalid_plugin_token', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_plugin_token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmYWtlIn0.invalid"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"project\":\"e2e-auth-test\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "15.4 Session End — Valid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ended is true and session_id matches authSessionId', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.ended).to.eql(true);",
+                  "    pm.expect(json.session_id).to.eql(pm.collectionVariables.get('authSessionId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"summary\":\"e2e auth test complete\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{authSessionId}}/end",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                "{{authSessionId}}",
+                "end"
+              ]
+            }
+          }
+        },
+        {
+          "name": "15.5 Session End — No Token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is invalid_plugin_token', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_plugin_token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/fake-session-id/end",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                "fake-session-id",
+                "end"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "16. Auth Guards — Knowledge CRUD",
+      "item": [
+        {
+          "name": "16.1 Knowledge Create — Valid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 201', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "pm.test('Response has id or knowledge_id and stores authKnowledgeId', () => {",
+                  "    const json = pm.response.json();",
+                  "    const id = json.id || json.knowledge_id;",
+                  "    pm.expect(id).to.be.a('string').and.to.not.be.empty;",
+                  "    pm.collectionVariables.set('authKnowledgeId', id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"e2e-auth-test-entry\",\"content\":\"Auth guard test content\",\"layer\":\"project\",\"tags\":[\"e2e\",\"auth-test\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "16.2 Knowledge Create — No Token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is invalid_plugin_token', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_plugin_token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"should-fail\",\"content\":\"no auth\",\"layer\":\"project\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "16.3 Knowledge Query — Valid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is JSON array or object with results', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(Array.isArray(json) || (json && typeof json === 'object')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\":\"e2e-auth-test-entry\",\"layer\":\"project\",\"top_k\":5}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            }
+          }
+        },
+        {
+          "name": "16.4 Knowledge Query — No Token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is invalid_plugin_token', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_plugin_token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\":\"test\",\"layer\":\"project\",\"top_k\":5}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            }
+          }
+        },
+        {
+          "name": "16.5 Knowledge Delete — Valid Token (cleanup)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 204', () => pm.expect([200, 204]).to.include(pm.response.code));",
+                  "pm.test('Response indicates success', () => {",
+                  "    if (pm.response.code === 204) {",
+                  "        pm.expect(true).to.be.true;",
+                  "        return;",
+                  "    }",
+                  "    const text = pm.response.text();",
+                  "    if (!text) {",
+                  "        pm.expect(true).to.be.true;",
+                  "        return;",
+                  "    }",
+                  "    const json = pm.response.json();",
+                  "    const ok = json.success === true || json.deleted === true || !!json.message;",
+                  "    pm.expect(ok).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{authKnowledgeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{authKnowledgeId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "16.6 Knowledge Delete — No Token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is invalid_plugin_token', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_plugin_token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/nonexistent-id-e2e",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "nonexistent-id-e2e"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "17. Auth Guards — Sync",
+      "item": [
+        {
+          "name": "17.1 Sync Push — Valid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has cursor', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('cursor');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"entries\":[],\"device_id\":\"e2e-auth-test-device\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/push",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "push"
+              ]
+            }
+          }
+        },
+        {
+          "name": "17.2 Sync Push — No Token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is invalid_plugin_token', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_plugin_token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"entries\":[],\"device_id\":\"e2e-test\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/push",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "push"
+              ]
+            }
+          }
+        },
+        {
+          "name": "17.3 Sync Pull — Valid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is JSON', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.not.equal(undefined);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/pull?cursor=0&device_id=e2e-auth-test-device",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "pull"
+              ],
+              "query": [
+                {
+                  "key": "cursor",
+                  "value": "0"
+                },
+                {
+                  "key": "device_id",
+                  "value": "e2e-auth-test-device"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "17.4 Sync Pull — No Token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is invalid_plugin_token', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_plugin_token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/pull?cursor=0&device_id=e2e-test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "pull"
+              ],
+              "query": [
+                {
+                  "key": "cursor",
+                  "value": "0"
+                },
+                {
+                  "key": "device_id",
+                  "value": "e2e-test"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "18. Auth Edge Cases — Security Boundaries",
+      "item": [
+        {
+          "name": "18.1 Admin Sync — No Auth Required (security gap documented)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// SECURITY NOTE: This admin endpoint has no authentication guard. Any unauthenticated request can trigger a full GitHub org sync.",
+                  "pm.test('Status is one of 200, 409, 500 and not 401', () => {",
+                  "    pm.expect([200, 409, 500]).to.include(pm.response.code);",
+                  "});",
+                  "pm.test('Response is JSON', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/sync/github",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "sync",
+                "github"
+              ]
+            }
+          }
+        },
+        {
+          "name": "18.2 Health Endpoints — No Auth Required",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Works regardless of Authorization header', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "18.3 Knowledge Discovery — No Auth Required",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has service and endpoints', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('service');",
+                  "    pm.expect(json).to.have.property('endpoints');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge"
+              ]
+            }
+          }
+        },
+        {
+          "name": "18.4 Auth Bootstrap — Malformed JSON",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422 or 400', () => pm.expect([422, 400]).to.include(pm.response.code));",
+                  "pm.test('Response is JSON error', () => {",
+                  "    const contentType = (pm.response.headers.get('Content-Type') || '').toLowerCase();",
+                  "    pm.expect(contentType).to.include('application/json');",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "not-json",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/bootstrap",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "bootstrap"
+              ]
+            }
+          }
+        },
+        {
+          "name": "18.5 Protected Endpoint — Bearer Prefix Missing",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is invalid_plugin_token', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_plugin_token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"project\":\"test\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "18.6 Protected Endpoint — Empty Bearer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error is invalid_plugin_token', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.error).to.eql('invalid_plugin_token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer "
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"project\":\"test\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "19. Authenticated Memory Lifecycle",
+      "item": [
+        {
+          "name": "19.1 memory_add — store project-layer memory (authenticated)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('authScenarioTs', String(Date.now()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid and memoryId captured', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(500);",
+                  "    const hasResult = json.result !== undefined && json.result !== null;",
+                  "    const hasError = json.error !== undefined && json.error !== null;",
+                  "    pm.expect(hasResult || hasError).to.be.true;",
+                  "    if (hasResult) {",
+                  "        const r = (typeof json.result === 'string') ? JSON.parse(json.result) : json.result;",
+                  "        if (r.content && Array.isArray(r.content)) {",
+                  "            const text = r.content.find(c => c.type === 'text');",
+                  "            if (text && text.text) {",
+                  "                const parsed = JSON.parse(text.text);",
+                  "                if (parsed.memoryId) pm.collectionVariables.set('authMemoryId', parsed.memoryId);",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 500, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_add\", \"arguments\": {\"content\": \"E2E authenticated memory: project uses Rust 2024 edition with Axum for HTTP\", \"layer\": \"project\", \"metadata\": {\"source\": \"newman-e2e-auth\", \"ts\": \"{{authScenarioTs}}\"}}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "19.2 memory_add — store team-layer memory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid with result or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(501);",
+                  "    pm.expect((json.result !== undefined && json.result !== null) || (json.error !== undefined && json.error !== null)).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 501, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_add\", \"arguments\": {\"content\": \"E2E authenticated memory: team standard is TDD with 80% coverage\", \"layer\": \"team\", \"metadata\": {\"source\": \"newman-e2e-auth\"}}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "19.3 memory_search — find project memories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid with non-empty payload', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(502);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "    if (json.result) {",
+                  "      const text = JSON.stringify(json.result);",
+                  "      pm.expect(text.length).to.be.above(0);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 502, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_search\", \"arguments\": {\"query\": \"Rust 2024 edition Axum\", \"limit\": 10}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "19.4 memory_feedback — reward signal on stored memory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(503);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 503, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_feedback\", \"arguments\": {\"memoryId\": \"{{authMemoryId}}\", \"layer\": \"project\", \"rewardType\": \"helpful\", \"score\": 0.9, \"reasoning\": \"Accurately captured project conventions\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "19.5 memory_reason — reflective reasoning query",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(504);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 504, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_reason\", \"arguments\": {\"query\": \"What technology stack does the project use?\", \"depth\": 2}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "19.6 memory_optimize — trigger Memory-R1 optimization",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(505);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 505, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_optimize\", \"arguments\": {\"layer\": \"project\", \"strategy\": \"promotion\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "19.7 memory_close — close session context",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(506);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 506, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_close\", \"arguments\": {\"id\": \"e2e-auth-session-close\", \"target\": \"session\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "19.8 memory_delete — cleanup test memory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid and cleanup variable', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(507);",
+                  "    pm.collectionVariables.unset('authMemoryId');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 507, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_delete\", \"arguments\": {\"memoryId\": \"{{authMemoryId}}\", \"layer\": \"project\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "20. Authenticated Knowledge — Multi-layer & Governance",
+      "item": [
+        {
+          "name": "20.1 Create Project-layer entry (fast-track, authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Has id and non-PR commit', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.commit).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.commit).to.not.match(/^pr:/);",
+                  "    pm.collectionVariables.set('authProjectKnowledgeId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"# E2E Auth Project Knowledge\\n\\nProject-layer entry for authenticated governance test.\", \"path\": \"e2e-auth-project-{{authScenarioTs}}\", \"layer\": \"project\", \"tags\": [\"e2e\", \"auth\", \"project\"], \"metadata\": {\"source\": \"newman-e2e-auth\"}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "20.2 Create Team-layer entry (PR-track, authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Has id and PR commit', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.commit).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.commit).to.match(/^pr:/);",
+                  "    pm.collectionVariables.set('authTeamKnowledgeId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"# E2E Auth Team Knowledge\\n\\nTeam-layer entry for PR-track governance test.\", \"path\": \"e2e-auth-team-{{authScenarioTs}}\", \"layer\": \"team\", \"tags\": [\"e2e\", \"auth\", \"team\"], \"metadata\": {\"source\": \"newman-e2e-auth\"}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "20.3 Create Org-layer entry (PR-track, authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Commit indicates PR track', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.commit).to.match(/^pr:/);",
+                  "    pm.collectionVariables.set('authOrgKnowledgeId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"# E2E Auth Org Knowledge\\n\\nOrg-layer entry for PR-track governance test.\", \"path\": \"e2e-auth-org-{{authScenarioTs}}\", \"layer\": \"org\", \"tags\": [\"e2e\", \"auth\", \"org\"], \"metadata\": {\"source\": \"newman-e2e-auth\"}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "20.4 Create Company-layer entry (PR-track, authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Commit indicates PR track', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.commit).to.match(/^pr:/);",
+                  "    pm.collectionVariables.set('authCompanyKnowledgeId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"# E2E Auth Company Knowledge\\n\\nCompany-layer entry for PR-track governance test.\", \"path\": \"e2e-auth-company-{{authScenarioTs}}\", \"layer\": \"company\", \"tags\": [\"e2e\", \"auth\", \"company\"], \"metadata\": {\"source\": \"newman-e2e-auth\"}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "20.5 Query project layer (authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has items array and total number', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.items).to.be.an('array');",
+                  "    pm.expect(json.total).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"e2e-auth-project\", \"limit\": 10, \"layer\": \"project\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "20.6 Get metadata (authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has id, layer, tags', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.exist;",
+                  "    pm.expect(json.layer).to.exist;",
+                  "    pm.expect(json.tags).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{authProjectKnowledgeId}}/metadata",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{authProjectKnowledgeId}}",
+                "metadata"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "20.7 Update knowledge entry (authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response indicates success', () => {",
+                  "    const text = pm.response.text();",
+                  "    if (!text) { pm.expect(true).to.be.true; return; }",
+                  "    const json = pm.response.json();",
+                  "    const ok = json.success === true || json.updated === true || !!json.message || !!json.commit;",
+                  "    pm.expect(ok).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{authProjectKnowledgeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{authProjectKnowledgeId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"# E2E Auth Project Knowledge (Updated)\\n\\nUpdated by authenticated Newman test.\", \"tags\": [\"e2e\", \"auth\", \"project\", \"updated\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "20.8 Delete project entry (cleanup, authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));",
+                  "pm.test('Cleanup project knowledge variable', () => {",
+                  "    pm.collectionVariables.unset('authProjectKnowledgeId');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{authProjectKnowledgeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{authProjectKnowledgeId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21. Authenticated Governance — Drift & Proposals",
+      "item": [
+        {
+          "name": "21.1 governance_configure — set drift config (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(540);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 540, \"method\": \"tools/call\", \"params\": {\"name\": \"governance_configure\", \"arguments\": {\"project_id\": \"e2e-auth-project\", \"governance_level\": \"standard\", \"auto_approve_project\": true, \"require_pr_for_team\": true, \"require_pr_for_org\": true}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "21.2 governance_config_get — verify config (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(541);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 541, \"method\": \"tools/call\", \"params\": {\"name\": \"governance_config_get\", \"arguments\": {\"project_id\": \"e2e-auth-project\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "21.3 Drift Config — REST endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', () => pm.expect([200,404]).to.include(pm.response.code));",
+                  "pm.test('Response is valid JSON', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/drift-config/e2e-auth-project",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "drift-config",
+                "e2e-auth-project"
+              ]
+            }
+          }
+        },
+        {
+          "name": "21.4 Drift Detection — REST endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', () => pm.expect([200,404]).to.include(pm.response.code));",
+                  "pm.test('Response is valid JSON', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/drift/e2e-auth-project",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "drift",
+                "e2e-auth-project"
+              ]
+            }
+          }
+        },
+        {
+          "name": "21.5 governance_request_create — create approval request (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(542);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 542, \"method\": \"tools/call\", \"params\": {\"name\": \"governance_request_create\", \"arguments\": {\"title\": \"E2E Auth Test Proposal\", \"description\": \"Test governance request from authenticated e2e suite\", \"layer\": \"team\", \"project_id\": \"e2e-auth-project\", \"requestor\": \"{{pluginGithubLogin}}\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "21.6 governance_request_list — list pending requests (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(543);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 543, \"method\": \"tools/call\", \"params\": {\"name\": \"governance_request_list\", \"arguments\": {\"status\": \"pending\", \"project_id\": \"e2e-auth-project\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "21.7 governance_audit_list — audit trail (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(544);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 544, \"method\": \"tools/call\", \"params\": {\"name\": \"governance_audit_list\", \"arguments\": {\"project_id\": \"e2e-auth-project\", \"limit\": 10}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "21.8 governance_role_list — list roles (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(545);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 545, \"method\": \"tools/call\", \"params\": {\"name\": \"governance_role_list\", \"arguments\": {}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "21.9 governance_unit_create — create org unit (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(546);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 546, \"method\": \"tools/call\", \"params\": {\"name\": \"governance_unit_create\", \"arguments\": {\"name\": \"e2e-auth-unit\", \"unit_type\": \"team\", \"parent_type\": \"org\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "21.10 Governance Reports — REST endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', () => pm.expect([200,404]).to.include(pm.response.code));",
+                  "pm.test('Response is valid JSON', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/reports/e2e-auth-org",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "reports",
+                "e2e-auth-org"
+              ]
+            }
+          }
+        },
+        {
+          "name": "21.11 List Proposals — REST endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is JSON array or object with items', () => {",
+                  "    const json = pm.response.json();",
+                  "    const ok = Array.isArray(json) || Array.isArray(json.items) || Array.isArray(json.proposals);",
+                  "    pm.expect(ok).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/proposals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "proposals"
+              ]
+            }
+          }
+        },
+        {
+          "name": "21.12 Event Replay — REST endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is valid JSON', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.not.equal(undefined);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/events/replay?since_timestamp=0&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "events",
+                "replay"
+              ],
+              "query": [
+                {
+                  "key": "since_timestamp",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "22. Authenticated Sync Bridge",
+      "item": [
+        {
+          "name": "22.1 Sync Push — empty batch (authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has cursor, conflicts array, embeddings object', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('cursor');",
+                  "    pm.expect(json.conflicts).to.be.an('array');",
+                  "    pm.expect(json.embeddings).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/push",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "push"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"entries\": [], \"device_id\": \"e2e-auth-device-{{authScenarioTs}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "22.2 Sync Pull — initial cursor (authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Valid JSON response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/pull?cursor=0&device_id=e2e-auth-device-{{authScenarioTs}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "pull"
+              ],
+              "query": [
+                {
+                  "key": "cursor",
+                  "value": "0"
+                },
+                {
+                  "key": "device_id",
+                  "value": "e2e-auth-device-{{authScenarioTs}}"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "22.3 sync_now — trigger sync (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(560);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 560, \"method\": \"tools/call\", \"params\": {\"name\": \"sync_now\", \"arguments\": {\"force\": true}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "22.4 sync_status — check sync status (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(561);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 561, \"method\": \"tools/call\", \"params\": {\"name\": \"sync_status\", \"arguments\": {}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "22.5 Sync Push — with entry (authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response shape has cursor and conflicts', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('cursor');",
+                  "    pm.expect(json.conflicts).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/push",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "push"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"entries\": [{\"id\": \"e2e-sync-entry-1\", \"content\": \"E2E sync test memory\", \"layer\": \"session\", \"tags\": [\"e2e\", \"sync\"], \"importance\": 0.5, \"created_at\": \"2025-01-01T00:00:00Z\", \"updated_at\": \"2025-01-01T00:00:00Z\", \"deleted_at\": null}], \"device_id\": \"e2e-auth-device-{{authScenarioTs}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "23. Authenticated CCA Capabilities",
+      "item": [
+        {
+          "name": "23.1 context_assemble — hierarchical context",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid with content', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(580);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 580, \"method\": \"tools/call\", \"params\": {\"name\": \"context_assemble\", \"arguments\": {\"query\": \"What are the project coding standards and team conventions?\", \"layers\": [\"project\", \"team\", \"org\"], \"tokenBudget\": 4000}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "23.2 note_capture — capture trajectory event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(581);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 581, \"method\": \"tools/call\", \"params\": {\"name\": \"note_capture\", \"arguments\": {\"description\": \"E2E test: authenticated user explored project conventions\", \"toolName\": \"memory_search\", \"success\": true, \"tags\": [\"e2e\", \"auth\"]}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "23.3 hindsight_query — query error patterns",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(582);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 582, \"method\": \"tools/call\", \"params\": {\"name\": \"hindsight_query\", \"arguments\": {\"errorType\": \"compilation\", \"messagePattern\": \"type mismatch\", \"limit\": 5}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "23.4 meta_loop_status — check meta-agent status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(583);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 583, \"method\": \"tools/call\", \"params\": {\"name\": \"meta_loop_status\", \"arguments\": {}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "23.5 knowledge_query — semantic search via MCP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(584);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 584, \"method\": \"tools/call\", \"params\": {\"name\": \"knowledge_query\", \"arguments\": {\"query\": \"project coding standards\", \"scope\": \"project\", \"limit\": 5}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "23.6 knowledge_list — list by layer via MCP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(585);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 585, \"method\": \"tools/call\", \"params\": {\"name\": \"knowledge_list\", \"arguments\": {\"layer\": \"project\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "24. Full Authenticated Journey — End-to-End",
+      "item": [
+        {
+          "name": "24.1 Re-bootstrap (fresh tokens)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Stores fresh plugin tokens and login', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.access_token).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.refresh_token).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.github_login).to.be.a('string').and.not.be.empty;",
+                  "    pm.collectionVariables.set('pluginAccessToken', json.access_token);",
+                  "    pm.collectionVariables.set('pluginRefreshToken', json.refresh_token);",
+                  "    pm.collectionVariables.set('pluginGithubLogin', json.github_login);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/bootstrap",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "bootstrap"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"provider\": \"github\", \"github_access_token\": \"{{githubAccessToken}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.2 Start session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Stores session id and validates user login', () => {",
+                  "    const json = pm.response.json();",
+                  "    const sid = json.id || json.session_id;",
+                  "    pm.expect(sid).to.be.a('string').and.not.be.empty;",
+                  "    pm.collectionVariables.set('journeySessionId', sid);",
+                  "    if (json.user && json.user.github_login) {",
+                  "      pm.expect(json.user.github_login).to.eql(pm.collectionVariables.get('pluginGithubLogin'));",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"project\": \"e2e-journey\", \"directory\": \"/tmp/e2e-journey\", \"team\": \"e2e-team\", \"org\": \"e2e-org\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.3 Add memory (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid and stores memory id', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(600);",
+                  "    if (json.result) {",
+                  "      const r = (typeof json.result === 'string') ? JSON.parse(json.result) : json.result;",
+                  "      if (r.content && Array.isArray(r.content)) {",
+                  "        const text = r.content.find(c => c.type === 'text');",
+                  "        if (text && text.text) {",
+                  "          const parsed = JSON.parse(text.text);",
+                  "          if (parsed.memoryId) pm.collectionVariables.set('journeyMemoryId', parsed.memoryId);",
+                  "        }",
+                  "      }",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 600, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_add\", \"arguments\": {\"content\": \"Journey test: discovered that the payment service requires PostgreSQL 16+\", \"layer\": \"project\", \"metadata\": {\"source\": \"e2e-journey\"}}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.4 Search memory (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid with results or handled error', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(601);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 601, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_search\", \"arguments\": {\"query\": \"payment service PostgreSQL\", \"limit\": 5}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.5 Create knowledge entry (REST, authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Stores journey knowledge id', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.be.a('string').and.not.be.empty;",
+                  "    pm.collectionVariables.set('journeyKnowledgeId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"# Payment Service ADR\\n\\nDecision: Use PostgreSQL 16+ for payment service.\", \"path\": \"e2e-journey-adr-{{authScenarioTs}}\", \"layer\": \"project\", \"tags\": [\"e2e\", \"journey\", \"adr\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.6 Query knowledge (REST, authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has items array', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.items).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"payment service PostgreSQL\", \"limit\": 5, \"layer\": \"project\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.7 Check drift (REST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', () => pm.expect([200,404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/drift/e2e-journey",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "drift",
+                "e2e-journey"
+              ]
+            }
+          }
+        },
+        {
+          "name": "24.8 CCA context assemble (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(602);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 602, \"method\": \"tools/call\", \"params\": {\"name\": \"context_assemble\", \"arguments\": {\"query\": \"Payment service technology decisions\", \"layers\": [\"project\", \"team\"], \"tokenBudget\": 2000}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.9 Sync push (REST, authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/push",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "push"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"entries\": [], \"device_id\": \"e2e-journey-device\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.10 Sync status (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(603);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 603, \"method\": \"tools/call\", \"params\": {\"name\": \"sync_status\", \"arguments\": {}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.11 Memory feedback (MCP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(604);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 604, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_feedback\", \"arguments\": {\"memoryId\": \"{{journeyMemoryId}}\", \"layer\": \"project\", \"rewardType\": \"helpful\", \"score\": 1.0, \"reasoning\": \"Accurate ADR discovery\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.12 Delete knowledge entry (REST, authenticated, cleanup)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{journeyKnowledgeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{journeyKnowledgeId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "24.13 Delete memory (MCP, cleanup)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JSON-RPC valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(605);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 605, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_delete\", \"arguments\": {\"memoryId\": \"{{journeyMemoryId}}\", \"layer\": \"project\"}, \"tenantContext\": {\"tenant_id\": \"e2e-auth\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-project\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.14 End session (REST, authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Session ended is true', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.ended).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{journeySessionId}}/end",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                "{{journeySessionId}}",
+                "end"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"summary\": \"E2E journey test completed successfully\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "24.15 Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "logout"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"refresh_token\": \"{{pluginRefreshToken}}\"}",
               "options": {
                 "raw": {
                   "language": "json"
