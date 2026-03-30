@@ -30,6 +30,8 @@ The system SHALL support a four-level organizational hierarchy within each tenan
 3. Team (working group)
 4. Project (codebase/repository)
 
+The hierarchy MUST be bootstrappable from an external identity provider (GitHub, Okta, Azure AD) via the IdP sync framework, in addition to manual creation via the API.
+
 #### Scenario: Hierarchy navigation
 - **WHEN** a user queries for knowledge at the Team level
 - **THEN** the system SHALL include inherited knowledge from Organization and Company levels
@@ -39,6 +41,12 @@ The system SHALL support a four-level organizational hierarchy within each tenan
 - **WHEN** an admin creates a new Team under an Organization
 - **THEN** the Team SHALL inherit default policies from the parent Organization
 - **AND** the Team SHALL be visible to all Organization members with appropriate permissions
+
+#### Scenario: IdP-bootstrapped hierarchy
+- **WHEN** an IdP sync provider (GitHub, Okta, or Azure AD) is configured
+- **THEN** the system SHALL create the Company, Organization, and Team units automatically from the IdP's group/team structure
+- **AND** manually-created units SHALL coexist with IdP-synced units without conflict
+- **AND** IdP-synced units SHALL be tagged with their source provider for audit purposes
 
 ### Requirement: Relationship-Based Access Control
 
@@ -379,4 +387,30 @@ The system SHALL secure dashboard API endpoints.
 - **WHEN** dashboard frontends access API
 - **THEN** CORS MUST be configured with allowed origins
 - **AND** production MUST not allow wildcard origins
+
+### Requirement: Federated Identity Tenant Context Mapping
+The system SHALL derive tenant context for authenticated interactive users from trusted Okta-backed identity claims and configured mapping rules.
+
+#### Scenario: Authenticated user receives tenant context
+- **WHEN** an authenticated interactive request reaches Aeterna with the required trusted identity fields
+- **THEN** the system SHALL resolve the user's tenant context using configured claim and mapping rules
+- **AND** the resolved tenant context SHALL be made available to downstream authorization checks
+
+#### Scenario: Tenant mapping cannot be resolved
+- **WHEN** the system cannot derive a valid tenant context from the authenticated user's trusted identity fields
+- **THEN** the request SHALL be rejected as unauthorized
+- **AND** the system SHALL NOT assign a default tenant
+
+### Requirement: Okta Group Authorization Mapping
+The system SHALL map trusted Okta group claims into Aeterna roles and policy inputs used for authorization.
+
+#### Scenario: Group claims map to roles
+- **WHEN** an authenticated user presents trusted Okta group claims
+- **THEN** the system SHALL translate those groups into configured Aeterna roles or policy attributes
+- **AND** authorization decisions SHALL use the translated roles or attributes
+
+#### Scenario: Missing required group mapping fails closed
+- **WHEN** an operation requires a role or policy attribute that cannot be derived from the authenticated user's trusted group claims
+- **THEN** the system SHALL deny the operation
+- **AND** the system SHALL record the authorization failure for audit or troubleshooting
 

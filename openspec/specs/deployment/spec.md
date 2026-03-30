@@ -5,19 +5,41 @@ Deployment configuration, high availability infrastructure, disaster recovery, h
 ## Requirements
 ### Requirement: Deployment Configuration
 
-The system SHALL support multiple deployment modes WITH high availability options.
+The system SHALL support multiple deployment modes WITH high availability options using deployment assets that are internally consistent, installable, and upgrade-safe.
 
-#### Scenario: Production HA Deployment
-- **WHEN** deploying to production
-- **THEN** Helm chart deploys:
-  - PostgreSQL with Patroni (1 primary + 2 replicas)
-  - Qdrant cluster (3 nodes, RF=2)
-  - Redis Sentinel (3 nodes)
-  - Memory service (3+ replicas)
-  - Knowledge service (2+ replicas)
-- **AND** configures PodDisruptionBudgets
-- **AND** enables automatic backups
-- **AND** configures monitoring
+#### Scenario: Supported deployment assets are valid
+- **WHEN** operators use the documented production deployment path
+- **THEN** all referenced manifests, charts, commands, and services SHALL exist in the repository
+- **AND** the deployment path SHALL NOT reference missing service directories, missing manifests, or unsupported commands
+
+#### Scenario: Helm install with defaults
+- **WHEN** running `helm install` against the supported Aeterna chart with documented default values
+- **THEN** the chart SHALL render only Kubernetes resources whose required APIs and dependencies are part of the supported installation path
+- **AND** default dependency wiring SHALL resolve to valid in-cluster service names
+- **AND** the deployment SHALL NOT rely on undocumented prerequisite operators or manually created resources
+
+#### Scenario: Upgrade-safe secret behavior
+- **WHEN** performing `helm upgrade` without changing secret inputs
+- **THEN** generated credentials and OPAL tokens SHALL be reused from existing secrets
+- **AND** upgrade operations SHALL NOT rotate live credentials unexpectedly
+- **AND** external secret providers SHALL be supported without falling back to random secret generation
+
+#### Scenario: Valid production example values
+- **WHEN** operators use documented production example values
+- **THEN** the values SHALL map to actual chart schema keys
+- **AND** the rendered topology SHALL match the documented deployment intent
+- **AND** invalid or contradictory production examples SHALL be rejected during validation
+
+#### Scenario: Network isolation in production
+- **WHEN** network policies are enabled for production deployment
+- **THEN** ingress SHALL be limited to explicitly allowed controllers or workloads
+- **AND** egress SHALL be limited to required dependencies and DNS
+- **AND** same-namespace wildcard access SHALL NOT be treated as a secure default
+
+#### Scenario: TLS ingress configuration
+- **WHEN** ingress TLS is enabled with cert-manager integration
+- **THEN** ingress resources SHALL support controller-specific annotations and certificate issuer configuration through chart values
+- **AND** the documented example SHALL describe secret naming and certificate manager expectations
 
 ### Requirement: OpenTofu Multi-Cloud Provisioning
 The platform SHALL provide OpenTofu Infrastructure-as-Code modules for automated, highly-available deployment across GCP, AWS, and Azure.
@@ -33,6 +55,40 @@ The deployment modules MUST enforce Customer-Managed Encryption Keys (CMEK) at r
 #### Scenario: GCP Encryption
 - **WHEN** provisioning GCS Buckets or Cloud SQL in GCP
 - **THEN** the resources must be encrypted with a Cloud KMS key provisioned by the module
+
+### Requirement: Supported Okta Authentication Deployment
+The supported Kubernetes deployment SHALL include a documented authentication boundary for interactive product access that is configured with Okta issuer, client, callback, session, and TLS settings.
+
+For the supported production authorization path, the deployment SHALL also document that Cedar policy files are the authorization-rule source of truth, Postgres-backed membership and role data are the authorization-data source of truth, and OPAL/Cedar Agent components are required to synchronize and evaluate that data at runtime.
+
+#### Scenario: Operator configures Okta-backed deployment
+- **WHEN** an operator enables Okta-backed user authentication in the supported Helm deployment path
+- **THEN** the deployment SHALL expose configuration for Okta issuer URL, client credentials, callback/redirect URL, and session secret material
+- **AND** the deployment SHALL document the required ingress and TLS configuration for the authentication flow
+- **AND** the deployment SHALL explain that OPAL is deployed as the runtime policy/data synchronization plane rather than as the permissions storage system
+
+#### Scenario: Operator understands where permissions are stored
+- **WHEN** an operator follows the supported Okta-backed deployment documentation
+- **THEN** the documentation SHALL state that application permissions and role assignments are stored in the platform data stores and policy files rather than in OPAL itself
+- **AND** the documentation SHALL describe OPAL and the Cedar Agent as required runtime distribution and evaluation components for the supported authorization path
+
+#### Scenario: Authentication boundary protects product ingress
+- **WHEN** interactive product ingress is enabled for an Okta-backed deployment
+- **THEN** protected product routes SHALL be reachable only through the supported authentication boundary
+- **AND** direct unauthenticated access to protected routes SHALL be denied
+
+### Requirement: Trusted Identity Header Boundary
+The deployment SHALL enforce that identity headers or equivalent trusted identity fields are only accepted from the supported authentication boundary.
+
+#### Scenario: Trusted identity arrives from supported auth boundary
+- **WHEN** a request is forwarded from the supported authentication boundary to Aeterna
+- **THEN** the deployment SHALL permit the normalized trusted identity fields needed by Aeterna
+- **AND** those fields SHALL be treated as authoritative for interactive user identity
+
+#### Scenario: Spoofed identity header is blocked
+- **WHEN** a request attempts to supply trusted identity fields from outside the supported authentication boundary
+- **THEN** the deployment SHALL prevent those fields from being trusted
+- **AND** the request SHALL fail closed rather than inheriting forged identity
 
 ## Overview
 

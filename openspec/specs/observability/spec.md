@@ -5,7 +5,7 @@ TBD - created by archiving change add-production-improvements. Update Purpose af
 ## Requirements
 ### Requirement: Distributed Tracing with Correlation
 
-The system SHALL provide end-to-end tracing with correlation across all services.
+The system SHALL provide end-to-end tracing with correlation across all services using live runtime signals rather than placeholder metrics or synthetic health success.
 
 #### Scenario: Trace Propagation
 - **WHEN** user makes API request
@@ -14,16 +14,6 @@ The system SHALL provide end-to-end tracing with correlation across all services
 - **AND** includes trace ID in all log entries
 - **AND** includes trace ID in all metrics
 - **AND** stores trace spans in Jaeger/Zipkin
-
-#### Scenario: Cross-Service Trace
-- **WHEN** memory search triggers knowledge query
-- **THEN** single trace shows:
-  - API gateway span (5ms)
-  - Memory service span (50ms)
-  - Knowledge service span (80ms)
-  - PostgreSQL query span (20ms)
-  - Qdrant search span (45ms)
-- **AND** total latency visible as 155ms
 
 ### Requirement: Cost Tracking and Budgeting
 
@@ -127,6 +117,12 @@ The system SHALL provide role-specific dashboards for different stakeholders.
   - Vector search performance
   - Memory promotion rates
 
+#### Scenario: Server Runtime Metrics Availability
+- **WHEN** the Aeterna server is running
+- **THEN** a dedicated metrics listener on port 9090 SHALL serve Prometheus-format metrics at `GET /metrics`
+- **AND** the metrics SHALL include HTTP request counters, latency histograms, status code distributions, and backend connection pool gauges
+- **AND** the metrics listener SHALL be independent of the main application port to avoid interference with application traffic
+
 ### Requirement: S3 Operations Observability
 The system SHALL emit OpenTelemetry spans and metrics for all operations directed to the Iceberg Catalog and underlying object storage.
 
@@ -134,4 +130,22 @@ The system SHALL emit OpenTelemetry spans and metrics for all operations directe
 - **WHEN** an Iceberg commit is performed
 - **THEN** a `storage.iceberg.commit` span must be generated
 - **AND** latency and error rate metrics must be exported to Prometheus
+
+### Requirement: Service Health and Metrics Integrity
+The system SHALL expose health and metrics outputs that reflect actual process and dependency state.
+
+#### Scenario: Dependency-aware readiness
+- **WHEN** a readiness or health endpoint reports success for a runtime service
+- **THEN** the service SHALL have verified required dependencies for that mode of operation
+- **AND** placeholder success responses SHALL NOT be returned when backend connectivity or required runtime state is unavailable
+
+#### Scenario: Real metrics emission
+- **WHEN** metrics endpoints are scraped
+- **THEN** counters, gauges, and histograms SHALL be backed by live runtime instrumentation
+- **AND** static placeholder metric payloads SHALL NOT be used for production-capable services
+
+#### Scenario: Crash and restart visibility
+- **WHEN** a runtime integration process crashes or is restarted
+- **THEN** the system SHALL emit metrics and logs describing the crash and recovery attempt
+- **AND** health output SHALL reflect the degraded state until recovery is complete
 

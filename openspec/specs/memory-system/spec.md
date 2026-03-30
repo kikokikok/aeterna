@@ -236,18 +236,23 @@ The system SHALL support filtering memories by metadata fields.
 - **AND** system SHALL support equality, contains, and range operators
 
 ### Requirement: Embedding Generation
-The system SHALL generate vector embeddings for memory content.
+The system SHALL generate vector embeddings for memory content using the configured runtime embedding provider.
 
 #### Scenario: Generate embedding for new content
 - **WHEN** adding a memory with new content
-- **THEN** system SHALL generate vector embedding using configured provider
-- **AND** system SHALL store embedding with memory
-- **AND** system SHALL return embeddingGenerated: true
+- **THEN** the system SHALL generate vector embedding using the configured runtime embedding provider
+- **AND** the system SHALL store the embedding with memory
+- **AND** the system SHALL return `embeddingGenerated: true`
 
 #### Scenario: Cache repeated embeddings
 - **WHEN** adding memory with content seen before
-- **THEN** system SHALL return cached embedding if exists
-- **AND** system SHALL NOT call embedding provider again
+- **THEN** the system SHALL return a cached embedding if one exists
+- **AND** the system SHALL NOT call the embedding provider again
+
+#### Scenario: Reject provider-dependent embedding operation when provider construction failed
+- **WHEN** an operation requires embeddings but the configured embedding provider failed validation or construction
+- **THEN** the system SHALL fail closed
+- **AND** the error SHALL indicate that the configured embedding provider is unavailable
 
 ### Requirement: Layer Access Control
 The system SHALL enforce layer access based on provided identifiers and tenant context.
@@ -388,17 +393,20 @@ The system SHALL enforce tenant isolation at the graph layer using tenant_id col
 - **AND** IAM policies SHALL restrict access to tenant-owned prefixes
 
 ### Requirement: LLM-based Entity Extraction
-The system SHALL use LLM providers to extract entities and relationships from memory content.
+The system SHALL use the configured runtime LLM provider to extract entities and relationships from memory content.
 
-#### Scenario: Extract entities from memory
-- **WHEN** a new memory is stored
-- **THEN** the system SHALL invoke the configured LLM to extract named entities
-- **AND** create entity nodes linked to the memory node
+#### Scenario: Extract entities with configured runtime provider
+- **WHEN** processing memory content that requires entity extraction
+- **THEN** the system SHALL invoke the configured runtime LLM provider to extract named entities
 
-#### Scenario: Extract relationships
-- **WHEN** multiple entities are extracted from a memory
-- **THEN** the system SHALL invoke the LLM to identify relationships between entities
-- **AND** create typed edges (e.g., `WORKS_ON`, `CAUSED_BY`, `RELATES_TO`)
+#### Scenario: Extract relationships with configured runtime provider
+- **WHEN** processing memory content that contains multiple named entities
+- **THEN** the system SHALL invoke the configured runtime LLM provider to identify relationships between entities
+
+#### Scenario: Fail closed when configured LLM provider is unavailable
+- **WHEN** an operation requires LLM-based extraction and the configured runtime LLM provider failed validation or construction
+- **THEN** the system SHALL fail closed
+- **AND** the error SHALL identify that the configured LLM provider is unavailable
 
 ### Requirement: Cascading Graph Deletion
 The system SHALL automatically remove orphaned graph data when memory entries are deleted to prevent data accumulation and maintain referential integrity.
