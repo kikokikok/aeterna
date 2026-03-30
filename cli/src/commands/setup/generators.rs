@@ -490,7 +490,7 @@ fn generate_opencode_config(config: &SetupConfig) -> Result<Option<PathBuf>> {
         r#"{{
   "$schema": "https://opencode.ai/schemas/opencode.json",
   "plugins": [
-    "@kiko-aeterna/opencode-plugin"
+    "@aeterna-org/opencode-plugin"
   ],
   "mcpServers": {{
     "aeterna": {{

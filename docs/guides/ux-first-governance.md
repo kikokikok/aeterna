@@ -1344,7 +1344,7 @@ governance_check:
 
 ```typescript
 // .opencode/config.ts
-import { AeternaPlugin } from '@kiko-aeterna/opencode-plugin';
+import { AeternaPlugin } from '@aeterna-org/opencode-plugin';
 
 export default {
   plugins: [

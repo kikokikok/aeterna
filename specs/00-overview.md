@@ -177,7 +177,7 @@ Adapters bridge this specification to specific AI agent frameworks:
 
 | Ecosystem | Adapter | Status |
 |-----------|---------|--------|
-| OpenCode | `@kiko-aeterna/opencode-plugin` | Released |
+| OpenCode | `@aeterna-org/opencode-plugin` | Released |
 | LangChain | `adapters/langchain/` | Planned |
 | AutoGen | `adapters/autogen/` | Planned |
 | CrewAI | `adapters/crewai/` | Planned |

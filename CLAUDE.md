@@ -228,7 +228,7 @@ openspec archive <change-id> --yes    # Archive after deployment
 
 ## OpenCode Plugin
 
-Published as `@kiko-aeterna/opencode-plugin` — MCP tools + hooks + automatic context injection.
+Published as `@aeterna-org/opencode-plugin` — MCP tools + hooks + automatic context injection.
 
 ---
 

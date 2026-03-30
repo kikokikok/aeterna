@@ -1,4 +1,4 @@
-# @kiko-aeterna/opencode-plugin
+# @aeterna-org/opencode-plugin
 
 OpenCode plugin for Aeterna memory and knowledge integration with CCA and RLM support.
 
@@ -20,7 +20,7 @@ OpenCode plugin for Aeterna memory and knowledge integration with CCA and RLM su
 ## Installation
 
 ```bash
-npm install -D @kiko-aeterna/opencode-plugin
+npm install -D @aeterna-org/opencode-plugin
 ```
 
 ## Configuration
@@ -31,7 +31,7 @@ Add the plugin to your `opencode.jsonc`:
 {
   "$schema": "https://opencode.ai/config.json",
 
-  "plugin": ["@kiko-aeterna/opencode-plugin"]
+  "plugin": ["@aeterna-org/opencode-plugin"]
 }
 ```
 
