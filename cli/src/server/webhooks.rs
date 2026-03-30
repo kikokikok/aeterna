@@ -393,6 +393,8 @@ async fn handle_event(state: &Arc<AppState>, event: WebhookEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::server::PluginAuthState;
+    use crate::server::plugin_auth::RefreshTokenStore;
     use agent_a2a::config::TrustedIdentityConfig;
     use async_trait::async_trait;
     use axum::body::Body;
@@ -737,6 +739,10 @@ mod tests {
                 jwt_secret: None,
                 enabled: false,
                 trusted_identity: TrustedIdentityConfig::default(),
+            }),
+            plugin_auth_state: Arc::new(PluginAuthState {
+                config: config::PluginAuthConfig::default(),
+                refresh_store: RefreshTokenStore::new(),
             }),
             idp_config: None,
             idp_sync_service: None,

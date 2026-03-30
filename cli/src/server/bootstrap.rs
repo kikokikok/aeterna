@@ -30,7 +30,8 @@ use sync::state_persister::DatabasePersister;
 use sync::websocket::{AuthToken, TokenValidator, WsResult, WsServer};
 use tools::server::McpServer;
 
-use super::AppState;
+use super::plugin_auth::RefreshTokenStore;
+use super::{AppState, PluginAuthState};
 
 pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     validate_required_env()?;
@@ -209,6 +210,10 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         trusted_identity: a2a_config.auth.trusted_identity.clone(),
     });
     a2a_auth_state.validate()?;
+    let plugin_auth_state = Arc::new(PluginAuthState {
+        config: config.plugin_auth.clone(),
+        refresh_store: RefreshTokenStore::new(),
+    });
 
     let (idp_config, idp_client, idp_sync_service) = build_optional_idp_services(postgres.clone())?;
     let ws_server = Arc::new(WsServer::new(Arc::new(AllowAllTokenValidator)));
@@ -236,6 +241,7 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         ws_server,
         a2a_config,
         a2a_auth_state,
+        plugin_auth_state,
         idp_config,
         idp_sync_service,
         idp_client,
@@ -769,6 +775,24 @@ mod tests {
         assert!(allowed);
     }
 
+    #[tokio::test]
+    #[serial]
+    async fn build_anyhow_auth_service_ignores_plugin_auth_env() {
+        remove_env("AETERNA_AUTH_BACKEND");
+        set_env("AETERNA_PLUGIN_AUTH_ENABLED", "true");
+        set_env("AETERNA_PLUGIN_AUTH_JWT_SECRET", "plugin-secret");
+
+        let auth = build_anyhow_auth_service().unwrap();
+        let allowed = auth
+            .check_permission(&TenantContext::default(), "read", "resource")
+            .await
+            .unwrap();
+        assert!(allowed);
+
+        remove_env("AETERNA_PLUGIN_AUTH_ENABLED");
+        remove_env("AETERNA_PLUGIN_AUTH_JWT_SECRET");
+    }
+
     #[test]
     #[serial]
     fn build_anyhow_auth_service_errors_for_missing_cedar_inputs() {
@@ -801,5 +825,35 @@ mod tests {
         assert!(config.is_none());
         assert!(client.is_none());
         assert!(service.is_none());
+    }
+
+    #[test]
+    fn github_app_bootstrap_uses_knowledge_repo_fields_not_plugin_auth_fields() {
+        let mut config = config::Config::default();
+        config.knowledge_repo.github_owner = Some("acme".to_string());
+        config.knowledge_repo.github_repo = Some("knowledge".to_string());
+        config.knowledge_repo.github_app_id = Some(101);
+        config.knowledge_repo.github_installation_id = Some(202);
+        config.knowledge_repo.github_app_pem = Some("knowledge-pem".to_string());
+
+        config.plugin_auth.enabled = true;
+        config.plugin_auth.github_app_id = Some(999);
+        config.plugin_auth.github_app_pem = Some("plugin-pem".to_string());
+
+        assert_eq!(config.knowledge_repo.github_app_id, Some(101));
+        assert_eq!(config.knowledge_repo.github_installation_id, Some(202));
+        assert_eq!(
+            config.knowledge_repo.github_app_pem.as_deref(),
+            Some("knowledge-pem")
+        );
+        assert_eq!(config.plugin_auth.github_app_id, Some(999));
+        assert_eq!(
+            config.plugin_auth.github_app_pem.as_deref(),
+            Some("plugin-pem")
+        );
+        assert_ne!(
+            config.knowledge_repo.github_app_pem,
+            config.plugin_auth.github_app_pem
+        );
     }
 }

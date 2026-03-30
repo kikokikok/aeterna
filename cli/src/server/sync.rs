@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use super::AppState;
+use super::plugin_auth::{tenant_context_from_plugin_bearer, validate_plugin_bearer};
 
 #[derive(Debug, Deserialize)]
 pub struct SyncPushRequest {
@@ -104,7 +105,11 @@ async fn push_handler(
         );
     }
 
-    let ctx = default_tenant_context();
+    if let Some(response) = reject_invalid_plugin_bearer(&state, &headers) {
+        return response;
+    }
+
+    let ctx = tenant_context_from_request(&state, &headers);
     let pool = state.postgres.pool();
 
     let mut conflicts = Vec::new();
@@ -200,7 +205,11 @@ async fn pull_handler(
         );
     }
 
-    let ctx = default_tenant_context();
+    if let Some(response) = reject_invalid_plugin_bearer(&state, &headers) {
+        return response;
+    }
+
+    let ctx = tenant_context_from_request(&state, &headers);
     let pool = state.postgres.pool();
 
     let since_cursor = query
@@ -294,6 +303,45 @@ fn extract_auth_token(headers: &HeaderMap) -> Option<String> {
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .map(ToString::to_string)
+}
+
+fn tenant_context_from_request(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> mk_core::types::TenantContext {
+    if let Some(secret) = state.plugin_auth_state.config.jwt_secret.as_deref() {
+        if state.plugin_auth_state.config.enabled {
+            return tenant_context_from_plugin_bearer(headers, secret);
+        }
+    }
+    default_tenant_context()
+}
+
+fn reject_invalid_plugin_bearer(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Option<axum::response::Response> {
+    if !state.plugin_auth_state.config.enabled {
+        return None;
+    }
+
+    let Some(secret) = state.plugin_auth_state.config.jwt_secret.as_deref() else {
+        return Some(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "configuration_error",
+            "Plugin auth JWT secret is not configured",
+        ));
+    };
+
+    if validate_plugin_bearer(headers, secret).is_none() {
+        return Some(error_response(
+            StatusCode::UNAUTHORIZED,
+            "invalid_plugin_token",
+            "Valid plugin bearer token required",
+        ));
+    }
+
+    None
 }
 
 fn default_tenant_context() -> mk_core::types::TenantContext {
