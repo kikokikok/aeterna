@@ -11,6 +11,12 @@ pub mod trace;
 
 use clap::Subcommand;
 
+pub(crate) fn legacy_codesearch_binary_removed(command: &str) -> anyhow::Error {
+    anyhow::anyhow!(
+        "`aeterna code-search {command}` no longer shells out to the legacy `codesearch` binary. Configure an MCP-compatible code intelligence backend instead (for example JetBrains Code Intelligence MCP) and access code intelligence through Aeterna's MCP tooling."
+    )
+}
+
 #[derive(Subcommand)]
 pub enum CodeSearchCommand {
     #[command(about = "Initialize code search for a project directory")]

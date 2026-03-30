@@ -75,16 +75,16 @@ Reason: Local deployment uses k3s, not docker-compose. The real feature needed i
 
 ### 2.1 Memory System E2E Validation
 - [x] 2.1.1 Fix `PolicyRule` struct field mismatch in `memory/tests/llm_google_e2e_test.rs`
-- [ ] 2.1.2 Create integration test: full 7-layer memory promotion chain (sensory to working to episodic to semantic) with real Qdrant
-- [ ] 2.1.3 Create integration test: Memory-R1 reward propagation with graph traversal
-- [ ] 2.1.4 Create integration test: RLM query routing with complexity-based strategy selection
+- [x] 2.1.2 Create integration test: full 7-layer memory promotion chain (sensory to working to episodic to semantic) with real Qdrant
+- [x] 2.1.3 Create integration test: Memory-R1 reward propagation with graph traversal
+- [x] 2.1.4 Create integration test: RLM query routing with complexity-based strategy selection
 
 ### 2.2 Observability
-- [ ] 2.2.1 Add SLO monitoring module to `observability/src/` with configurable thresholds
-- [ ] 2.2.2 Add OpenTelemetry span instrumentation to `cli/src/server/` handlers
-- [ ] 2.2.3 Add OpenTelemetry span instrumentation to `memory/src/manager.rs` operations
-- [ ] 2.2.4 Add OpenTelemetry span instrumentation to `knowledge/src/manager.rs` operations
-- [ ] 2.2.5 Propagate trace context in HTTP calls to OPAL fetcher
+- [x] 2.2.1 Add SLO monitoring module to `observability/src/` with configurable thresholds
+- [x] 2.2.2 Add OpenTelemetry span instrumentation to `cli/src/server/` handlers
+- [x] 2.2.3 Add OpenTelemetry span instrumentation to `memory/src/manager.rs` operations
+- [x] 2.2.4 Add OpenTelemetry span instrumentation to `knowledge/src/manager.rs` operations
+- [x] 2.2.5 Propagate trace context in HTTP calls to OPAL fetcher
 
 ### 2.3 Cloud Deployment (OpenTofu)
 - [ ] 2.3.1 Create OpenTofu module for GCP: GKE cluster, Cloud SQL, Memorystore Redis, GCS bucket
@@ -96,12 +96,12 @@ Reason: Local deployment uses k3s, not docker-compose. The real feature needed i
 
 ### 3.1 Code Search — Remove Legacy Sidecar
 - [x] 3.1.1 Remove `tools/src/codesearch/client.rs` sidecar binary spawning code entirely — done in 1.1.3 (full rewrite to trait-based)
-- [ ] 3.1.2 Remove CLI commands that shell out to external `codesearch` binary (`cli/src/commands/search/`)
-- [ ] 3.1.3 Clean up unused types in `tools/src/codesearch/types.rs` that were specific to the sidecar protocol
-- [ ] 3.1.4 Update OpenCode plugin to remove hardcoded codesearch tool names — use dynamic MCP tool discovery
+- [x] 3.1.2 Remove CLI commands that shell out to external `codesearch` binary (`cli/src/commands/search/`)
+- [x] 3.1.3 Clean up unused types in `tools/src/codesearch/types.rs` that were specific to the sidecar protocol
+- [x] 3.1.4 Update OpenCode plugin to remove hardcoded codesearch tool names — use dynamic MCP tool discovery
 
 ### 3.2 Memory Pipeline Hardening
 - [ ] 3.2.1 Wire PII redaction (`storage/src/gdpr.rs`) into memory add pipeline
-- [ ] 3.2.2 Add per-tenant metrics to `observability/src/cost_tracking.rs`
-- [ ] 3.2.3 Configure HPA (Horizontal Pod Autoscaler) in Helm chart
-- [ ] 3.2.4 Configure PDB (PodDisruptionBudget) in Helm chart
+- [x] 3.2.2 Add per-tenant metrics to `observability/src/cost_tracking.rs`
+- [x] 3.2.3 Configure HPA (Horizontal Pod Autoscaler) in Helm chart
+- [x] 3.2.4 Configure PDB (PodDisruptionBudget) in Helm chart

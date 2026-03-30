@@ -20,6 +20,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
+#[tracing::instrument(skip_all)]
 async fn handle_github_sync(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     if SYNC_IN_PROGRESS
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -52,6 +53,7 @@ async fn handle_github_sync(State(state): State<Arc<AppState>>) -> impl IntoResp
     }
 }
 
+#[tracing::instrument(skip_all)]
 async fn run_sync(state: &Arc<AppState>) -> anyhow::Result<idp_sync::sync::SyncReport> {
     let github_config = build_github_config()?;
 
@@ -126,6 +128,7 @@ pub(crate) fn build_github_config_from_env() -> anyhow::Result<GitHubConfig> {
     })
 }
 
+#[tracing::instrument(skip_all)]
 async fn resolve_tenant_id(state: &Arc<AppState>) -> anyhow::Result<Uuid> {
     resolve_tenant_id_from_pool(state.postgres.pool()).await
 }

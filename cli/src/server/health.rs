@@ -41,6 +41,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
+#[tracing::instrument(skip_all)]
 async fn health_handler() -> impl IntoResponse {
     Json(HealthResponse {
         status: "ok",
@@ -48,10 +49,12 @@ async fn health_handler() -> impl IntoResponse {
     })
 }
 
+#[tracing::instrument(skip_all)]
 async fn liveness_handler() -> StatusCode {
     StatusCode::OK
 }
 
+#[tracing::instrument(skip_all)]
 async fn readiness_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pg_check = check_postgres(&state).await;
     let vector_check = check_vector_store(&state).await;
@@ -81,6 +84,7 @@ pub(crate) fn readiness_response(
     (status_code, Json(response))
 }
 
+#[tracing::instrument(skip_all)]
 async fn check_postgres(state: &AppState) -> CheckResult {
     match sqlx::query("SELECT 1").execute(state.postgres.pool()).await {
         Ok(_) => CheckResult {
@@ -94,6 +98,7 @@ async fn check_postgres(state: &AppState) -> CheckResult {
     }
 }
 
+#[tracing::instrument(skip_all)]
 async fn check_vector_store(_state: &AppState) -> CheckResult {
     // Vector store health is verified through the memory manager's embedded
     // backend. For now, report ok — the readiness probe covers postgres which

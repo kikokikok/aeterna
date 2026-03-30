@@ -167,12 +167,16 @@ Providers SHALL support concurrent queries across multiple layers with intellige
 
 ---
 
-## OpenSpec Protocol Specification
+## Knowledge API Specification
+
+Canonical route prefix: `/api/v1/knowledge`
+
+Compatibility alias: `/openspec/v1/knowledge`
 
 ### Requirement: Discovery Endpoint
 The system SHALL provide a discovery endpoint for providers to expose capabilities and configuration.
 
-**Endpoint**: `GET /openspec/v1/knowledge`
+**Endpoint**: `GET /api/v1/knowledge`
 
 **Purpose**: Discover provider capabilities and configuration
 
@@ -222,7 +226,7 @@ interface DiscoveryResponse {
 ### Requirement: Query Endpoint
 The system SHALL provide a query endpoint for searching and retrieving knowledge entries.
 
-**Endpoint**: `POST /openspec/v1/knowledge/query`
+**Endpoint**: `POST /api/v1/knowledge/query`
 
 **Purpose**: Search and retrieve knowledge entries
 
@@ -308,8 +312,8 @@ interface QueryMetadata {
 ### Requirement: Create/Update Endpoint
 The system SHALL provide endpoints for creating and updating knowledge entries.
 
-**Endpoint**: `POST /openspec/v1/knowledge/create`
-**Endpoint**: `PUT /openspec/v1/knowledge/{id}`
+**Endpoint**: `POST /api/v1/knowledge/create`
+**Endpoint**: `PUT /api/v1/knowledge/{id}`
 
 **Purpose**: Store or update knowledge entries
 
@@ -361,7 +365,7 @@ interface CreateResponse {
 ### Requirement: Delete Endpoint
 The system SHALL provide an endpoint for removing knowledge entries.
 
-**Endpoint**: `DELETE /openspec/v1/knowledge/{id}`
+**Endpoint**: `DELETE /api/v1/knowledge/{id}`
 
 **Purpose**: Remove knowledge entries
 
@@ -397,7 +401,7 @@ interface DeleteResponse {
 ### Requirement: Batch Operations Endpoint
 The system SHALL provide a batch operations endpoint for bulk create, update, and delete operations.
 
-**Endpoint**: `POST /openspec/v1/knowledge/batch`
+**Endpoint**: `POST /api/v1/knowledge/batch`
 
 **Purpose**: Bulk operations (create, update, delete)
 
@@ -432,7 +436,7 @@ interface BatchResponse {
 ### Requirement: Streaming Endpoint
 The system SHALL provide a streaming endpoint for real-time knowledge updates and query results.
 
-**Endpoint**: `GET /openspec/v1/knowledge/stream`
+**Endpoint**: `GET /api/v1/knowledge/stream`
 
 **Purpose**: Stream real-time knowledge updates and query results
 
@@ -475,7 +479,7 @@ interface QueryResultEvent {
 ### Requirement: Metadata Operations Endpoint
 The system SHALL provide an endpoint for retrieving metadata without retrieving full content.
 
-**Endpoint**: `GET /openspec/v1/knowledge/{id}/metadata`
+**Endpoint**: `GET /api/v1/knowledge/{id}/metadata`
 
 **Purpose**: Retrieve metadata without content
 
@@ -669,7 +673,7 @@ pub trait EmbeddingProvider: Send + Sync {
 
 ## OpenAPI Specification
 
-All OpenSpec Knowledge Providers MUST provide an OpenAPI 3.0 specification documenting:
+All knowledge API providers MUST provide an OpenAPI 3.0 specification documenting:
 - All endpoints
 - Request/response schemas
 - Authentication methods
@@ -683,13 +687,13 @@ All OpenSpec Knowledge Providers MUST provide an OpenAPI 3.0 specification docum
 
 | Requirement | Status | Implementation Notes |
 |-------------|--------|---------------------|
-| **Discovery endpoint** | ✅ Required | `GET /openspec/v1/knowledge` |
-| **Query endpoint** | ✅ Required | `POST /openspec/v1/knowledge/query` |
-| **Create/Update endpoint** | ✅ Required | `POST /openspec/v1/knowledge/create` + `PUT /openspec/v1/knowledge/{id}` |
-| **Delete endpoint** | ✅ Required | `DELETE /openspec/v1/knowledge/{id}` |
-| **Batch operations** | ✅ Required | `POST /openspec/v1/knowledge/batch` |
-| **Streaming endpoint** | ✅ Required | `GET /openspec/v1/knowledge/stream` |
-| **Metadata operations** | ✅ Required | `GET /openspec/v1/knowledge/{id}/metadata` |
+| **Discovery endpoint** | ✅ Required | `GET /api/v1/knowledge` |
+| **Query endpoint** | ✅ Required | `POST /api/v1/knowledge/query` |
+| **Create/Update endpoint** | ✅ Required | `POST /api/v1/knowledge/create` + `PUT /api/v1/knowledge/{id}` |
+| **Delete endpoint** | ✅ Required | `DELETE /api/v1/knowledge/{id}` |
+| **Batch operations** | ✅ Required | `POST /api/v1/knowledge/batch` |
+| **Streaming endpoint** | ✅ Required | `GET /api/v1/knowledge/stream` |
+| **Metadata operations** | ✅ Required | `GET /api/v1/knowledge/{id}/metadata` |
 | **Authentication** | ✅ Required | Bearer token + OAuth2 |
 | **Error handling** | ✅ Required | Full error code system |
 | **Performance requirements** | ✅ Required | Latency targets, throughput targets |

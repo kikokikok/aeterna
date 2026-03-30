@@ -21,6 +21,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
+#[tracing::instrument(skip_all, fields(event_type))]
 async fn handle_github_webhook(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -130,6 +131,7 @@ struct GitHubOrgPayload {
     login: String,
 }
 
+#[tracing::instrument(skip_all, fields(event_type, org_name))]
 async fn handle_org_sync_webhook(
     state: &Arc<AppState>,
     event_type: &str,
@@ -267,6 +269,7 @@ async fn handle_org_sync_webhook(
         .into_response()
 }
 
+#[tracing::instrument(skip_all, fields(org_name))]
 async fn trigger_incremental_sync(state: &Arc<AppState>, org_name: &str) {
     tracing::info!(
         org = org_name,
@@ -311,6 +314,7 @@ async fn trigger_incremental_sync(state: &Arc<AppState>, org_name: &str) {
     });
 }
 
+#[tracing::instrument(skip_all)]
 async fn handle_event(state: &Arc<AppState>, event: WebhookEvent) {
     let ctx = TenantContext::default();
 

@@ -60,6 +60,7 @@ impl CedarAuthorizer {
         self
     }
 
+    #[tracing::instrument(skip_all)]
     async fn get_entities(&self) -> Result<Entities, CedarError> {
         let opal_url = match &self.opal_fetcher_url {
             Some(url) => url,
@@ -97,11 +98,16 @@ impl CedarAuthorizer {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(opal_url = %base_url))]
     async fn fetch_entities_from_opal(&self, base_url: &str) -> Result<Entities, CedarError> {
         let url = format!("{base_url}/v1/all");
+
+        let span = tracing::Span::current();
+        let trace_id = format!("{:032x}", span.id().map(|id| id.into_u64()).unwrap_or(0));
         let resp = self
             .http_client
             .get(&url)
+            .header("traceparent", format!("00-{trace_id}-{:016x}-01", 0u64))
             .send()
             .await
             .map_err(|e| CedarError::EntityFetch(format!("HTTP request failed: {e}")))?;
@@ -196,6 +202,7 @@ impl CedarAuthorizer {
 impl AuthorizationService for CedarAuthorizer {
     type Error = CedarError;
 
+    #[tracing::instrument(skip_all, fields(action, resource))]
     async fn check_permission(
         &self,
         ctx: &TenantContext,

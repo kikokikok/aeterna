@@ -235,15 +235,15 @@
                   "",
                   "pm.test('Service info and endpoints', () => {",
                   "    const json = pm.response.json();",
-                  "    pm.expect(json.service).to.eql('aeterna-openspec');",
+                  "    pm.expect(json.service).to.eql('aeterna-knowledge');",
                   "    pm.expect(json.version).to.be.a('string');",
                   "    pm.expect(json.endpoints).to.be.an('array');",
                   "    pm.expect(json.endpoints.length).to.be.at.least(6);",
                   "    const paths = json.endpoints.map(e => e.path);",
-                  "    pm.expect(paths).to.include('/openspec/v1/knowledge/query');",
-                  "    pm.expect(paths).to.include('/openspec/v1/knowledge/create');",
-                  "    pm.expect(paths).to.include('/openspec/v1/knowledge/batch');",
-                  "    pm.expect(paths).to.include('/openspec/v1/knowledge/stream');",
+                  "    pm.expect(paths).to.include('/api/v1/knowledge/query');",
+                  "    pm.expect(paths).to.include('/api/v1/knowledge/create');",
+                  "    pm.expect(paths).to.include('/api/v1/knowledge/batch');",
+                  "    pm.expect(paths).to.include('/api/v1/knowledge/stream');",
                   "});"
                 ]
               }
@@ -252,12 +252,12 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge",
+              "raw": "{{baseUrl}}/api/v1/knowledge",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge"
               ]
@@ -721,12 +721,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/create",
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "create"
@@ -781,12 +781,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/query",
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "query"
@@ -841,12 +841,12 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/{{knowledgeId}}/metadata",
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{knowledgeId}}/metadata",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "{{knowledgeId}}",
@@ -887,12 +887,12 @@
           "request": {
             "method": "PUT",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/{{knowledgeId}}",
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{knowledgeId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "{{knowledgeId}}"
@@ -932,12 +932,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/query",
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "query"
@@ -987,12 +987,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/batch",
+              "raw": "{{baseUrl}}/api/v1/knowledge/batch",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "batch"
@@ -1041,12 +1041,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/query",
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "query"
@@ -1087,12 +1087,12 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/stream",
+              "raw": "{{baseUrl}}/api/v1/knowledge/stream",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "stream"
@@ -1128,12 +1128,12 @@
           "request": {
             "method": "DELETE",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/{{knowledgeId}}",
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{knowledgeId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "{{knowledgeId}}"
@@ -1166,12 +1166,12 @@
           "request": {
             "method": "DELETE",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/{{batchId1}}",
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{batchId1}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "{{batchId1}}"
@@ -1204,12 +1204,12 @@
           "request": {
             "method": "DELETE",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/{{batchId2}}",
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{batchId2}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "{{batchId2}}"
@@ -1241,12 +1241,12 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/{{knowledgeId}}/metadata",
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{knowledgeId}}/metadata",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "{{knowledgeId}}",
@@ -2224,12 +2224,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/create",
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "create"
@@ -2270,12 +2270,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/create",
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "create"
@@ -2316,12 +2316,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/create",
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "create"
@@ -2365,12 +2365,12 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/nonexistent-id-e2e-99999/metadata",
+              "raw": "{{baseUrl}}/api/v1/knowledge/nonexistent-id-e2e-99999/metadata",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "nonexistent-id-e2e-99999",
@@ -2400,12 +2400,12 @@
           "request": {
             "method": "PUT",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/nonexistent-id-e2e-99999",
+              "raw": "{{baseUrl}}/api/v1/knowledge/nonexistent-id-e2e-99999",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "nonexistent-id-e2e-99999"
@@ -2449,12 +2449,12 @@
           "request": {
             "method": "DELETE",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/nonexistent-id-e2e-99999",
+              "raw": "{{baseUrl}}/api/v1/knowledge/nonexistent-id-e2e-99999",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "nonexistent-id-e2e-99999"
@@ -2480,12 +2480,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/query",
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "query"
@@ -2529,12 +2529,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/batch",
+              "raw": "{{baseUrl}}/api/v1/knowledge/batch",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "batch"
@@ -2580,12 +2580,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/batch",
+              "raw": "{{baseUrl}}/api/v1/knowledge/batch",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "batch"
@@ -2699,12 +2699,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/create",
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "create"
@@ -2754,12 +2754,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/create",
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "create"
@@ -2809,12 +2809,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/create",
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "create"
@@ -2860,12 +2860,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/create",
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "create"
@@ -2910,12 +2910,12 @@
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/query",
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "query"
@@ -2960,12 +2960,12 @@
           "request": {
             "method": "DELETE",
             "url": {
-              "raw": "{{baseUrl}}/openspec/v1/knowledge/e2e-project-fast-{{scenarioRunTs}}",
+              "raw": "{{baseUrl}}/api/v1/knowledge/e2e-project-fast-{{scenarioRunTs}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "openspec",
+                "api",
                 "v1",
                 "knowledge",
                 "e2e-project-fast-{{scenarioRunTs}}"

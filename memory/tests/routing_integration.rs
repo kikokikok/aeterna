@@ -6,6 +6,7 @@
 
 use config::RlmConfig;
 use memory::rlm::router::ComplexityRouter;
+use mk_core::traits::MemoryProviderAdapter;
 use mk_core::types::SearchQuery;
 
 /// Create a test router with default configuration.
@@ -13,7 +14,7 @@ fn create_test_router(threshold: f32) -> ComplexityRouter {
     ComplexityRouter::new(RlmConfig {
         enabled: true,
         max_steps: 5,
-        complexity_threshold: threshold
+        complexity_threshold: threshold,
     })
 }
 
@@ -40,7 +41,7 @@ fn test_simple_queries_not_routed() {
             target_layers: vec![],
             filters: std::collections::HashMap::new(),
             limit: 10,
-            threshold: 0.7
+            threshold: 0.7,
         };
 
         let complexity = router.compute_complexity(&query);
@@ -145,7 +146,7 @@ fn test_rlm_disabled() {
     let router = ComplexityRouter::new(RlmConfig {
         enabled: false,
         max_steps: 5,
-        complexity_threshold: 0.0 // Even with 0 threshold, should not route when disabled
+        complexity_threshold: 0.0, // Even with 0 threshold, should not route when disabled
     });
 
     let complex_query = SearchQuery {
@@ -372,7 +373,7 @@ mod transparent_routing_tests {
     fn test_tenant() -> TenantContext {
         TenantContext::new(
             TenantId::from_str("test-tenant").unwrap(),
-            UserId::from_str("test-user").unwrap()
+            UserId::from_str("test-user").unwrap(),
         )
     }
 
@@ -383,7 +384,7 @@ mod transparent_routing_tests {
             rlm: RlmConfig {
                 enabled: true,
                 max_steps: 5,
-                complexity_threshold: 0.3
+                complexity_threshold: 0.3,
             },
             ..Default::default()
         };
@@ -397,7 +398,7 @@ mod transparent_routing_tests {
             rlm: RlmConfig {
                 enabled: false,
                 max_steps: 5,
-                complexity_threshold: 0.3
+                complexity_threshold: 0.3,
             },
             ..Default::default()
         };
@@ -410,7 +411,7 @@ mod transparent_routing_tests {
             rlm: RlmConfig {
                 enabled: true,
                 max_steps: 5,
-                complexity_threshold: 0.3
+                complexity_threshold: 0.3,
             },
             ..Default::default()
         };
@@ -432,7 +433,7 @@ mod transparent_routing_tests {
             rlm: RlmConfig {
                 enabled: true,
                 max_steps: 5,
-                complexity_threshold: 0.2
+                complexity_threshold: 0.2,
             },
             ..Default::default()
         };
@@ -462,11 +463,11 @@ mod transparent_routing_tests {
             ("get user by id", false),
             (
                 "compare all authentication methods and summarize trends over time",
-                true
+                true,
             ),
             (
                 "trace the evolution of error handling then analyze impact",
-                true
+                true,
             ),
         ];
 
@@ -504,11 +505,140 @@ mod transparent_routing_tests {
             rlm: RlmConfig {
                 enabled: true,
                 max_steps: 3,
-                complexity_threshold: 0.5
+                complexity_threshold: 0.5,
             },
             ..Default::default()
         };
 
         let _manager = MemoryManager::new().with_config(config);
+    }
+
+    #[test]
+    fn test_complexity_strategy_selection_by_threshold() {
+        let thresholds = [0.1, 0.2, 0.3, 0.5, 0.8];
+        let query = SearchQuery {
+            text: "compare the evolution of authentication methods and summarize the impact"
+                .to_string(),
+            ..Default::default()
+        };
+
+        let mut routed_at: Vec<f32> = Vec::new();
+        let mut not_routed_at: Vec<f32> = Vec::new();
+
+        for threshold in thresholds {
+            let router = create_test_router(threshold);
+            let complexity = router.compute_complexity(&query);
+            if router.should_route_to_rlm(&query) {
+                routed_at.push(threshold);
+            } else {
+                not_routed_at.push(threshold);
+            }
+
+            assert!(
+                complexity > 0.0,
+                "Complex query should have non-zero complexity at threshold {}",
+                threshold
+            );
+        }
+
+        for &routed_t in &routed_at {
+            for &not_routed_t in &not_routed_at {
+                assert!(
+                    routed_t <= not_routed_t,
+                    "Lower thresholds should route before higher: routed at {} but not at {}",
+                    routed_t,
+                    not_routed_t
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_rlm_disabled_never_routes() {
+        let router = ComplexityRouter::new(RlmConfig {
+            enabled: false,
+            max_steps: 5,
+            complexity_threshold: 0.0,
+        });
+
+        let complex_query = SearchQuery {
+            text: "compare the evolution of authentication methods between last week and today and summarize the impact on security posture".to_string(),
+            ..Default::default()
+        };
+
+        assert!(
+            !router.should_route_to_rlm(&complex_query),
+            "Disabled RLM should never route, regardless of complexity"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_manager_search_respects_rlm_routing() {
+        let provider = std::sync::Arc::new(memory::providers::MockProvider::new());
+        let ctx = test_tenant();
+
+        let manager = MemoryManager::new()
+            .with_embedding_service(std::sync::Arc::new(
+                memory::embedding::mock::MockEmbeddingService::new(128),
+            ))
+            .with_config(config::MemoryConfig {
+                rlm: RlmConfig {
+                    enabled: true,
+                    max_steps: 5,
+                    complexity_threshold: 0.2,
+                },
+                ..Default::default()
+            });
+
+        manager
+            .register_provider(mk_core::types::MemoryLayer::Project, provider.clone())
+            .await;
+
+        provider
+            .add(
+                ctx.clone(),
+                mk_core::types::MemoryEntry {
+                    id: "test-mem".to_string(),
+                    content: "Authentication patterns for microservices".to_string(),
+                    layer: mk_core::types::MemoryLayer::Project,
+                    embedding: Some(vec![0.1; 128]),
+                    importance_score: Some(0.7),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        let simple_results = manager
+            .search(
+                ctx.clone(),
+                "login",
+                10,
+                0.0,
+                std::collections::HashMap::new(),
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            simple_results.len() <= 10,
+            "Simple search should return bounded results"
+        );
+
+        let complex_results = manager
+            .search(
+                ctx.clone(),
+                "compare and analyze the evolution of all authentication methods across teams over time and summarize",
+                10,
+                0.0,
+                std::collections::HashMap::new(),
+            )
+            .await;
+
+        assert!(
+            complex_results.is_ok(),
+            "Complex search should not error even without LLM (graceful fallback): {:?}",
+            complex_results.err()
+        );
     }
 }

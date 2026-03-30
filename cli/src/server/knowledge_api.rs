@@ -140,49 +140,49 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-/// GET /openspec/v1/knowledge — discovery endpoint
+#[tracing::instrument(skip_all)]
 async fn discovery_handler() -> impl IntoResponse {
     Json(DiscoveryResponse {
-        service: "aeterna-openspec",
+        service: "aeterna-knowledge",
         version: env!("CARGO_PKG_VERSION"),
         endpoints: vec![
             EndpointInfo {
-                path: "/openspec/v1/knowledge",
+                path: "/api/v1/knowledge",
                 method: "GET",
                 description: "Service discovery",
             },
             EndpointInfo {
-                path: "/openspec/v1/knowledge/query",
+                path: "/api/v1/knowledge/query",
                 method: "POST",
                 description: "Search knowledge with relevance ranking",
             },
             EndpointInfo {
-                path: "/openspec/v1/knowledge/create",
+                path: "/api/v1/knowledge/create",
                 method: "POST",
                 description: "Create a new knowledge item",
             },
             EndpointInfo {
-                path: "/openspec/v1/knowledge/{id}",
+                path: "/api/v1/knowledge/{id}",
                 method: "PUT",
                 description: "Update an existing knowledge item",
             },
             EndpointInfo {
-                path: "/openspec/v1/knowledge/{id}",
+                path: "/api/v1/knowledge/{id}",
                 method: "DELETE",
                 description: "Delete a knowledge item",
             },
             EndpointInfo {
-                path: "/openspec/v1/knowledge/batch",
+                path: "/api/v1/knowledge/batch",
                 method: "POST",
                 description: "Batch operations on knowledge items",
             },
             EndpointInfo {
-                path: "/openspec/v1/knowledge/stream",
+                path: "/api/v1/knowledge/stream",
                 method: "GET",
                 description: "SSE stream of knowledge updates",
             },
             EndpointInfo {
-                path: "/openspec/v1/knowledge/{id}/metadata",
+                path: "/api/v1/knowledge/{id}/metadata",
                 method: "GET",
                 description: "Get metadata for a knowledge item",
             },
@@ -190,7 +190,7 @@ async fn discovery_handler() -> impl IntoResponse {
     })
 }
 
-/// POST /openspec/v1/knowledge/query — search knowledge
+#[tracing::instrument(skip_all, fields(query = %req.query, limit = req.limit))]
 async fn query_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<KnowledgeQueryRequest>,
@@ -221,7 +221,7 @@ async fn query_handler(
     }
 }
 
-/// POST /openspec/v1/knowledge/create — create knowledge item
+#[tracing::instrument(skip_all, fields(path = %req.path, layer = %req.layer))]
 async fn create_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateKnowledgeRequest>,
@@ -260,7 +260,7 @@ async fn create_handler(
 
     match state
         .knowledge_repository
-        .store(ctx, entry.clone(), "Created via OpenSpec API")
+        .store(ctx, entry.clone(), "Created via Knowledge API")
         .await
     {
         Ok(commit_hash) => (
@@ -279,7 +279,7 @@ async fn create_handler(
     }
 }
 
-/// PUT /openspec/v1/knowledge/{id} — update knowledge item
+#[tracing::instrument(skip_all, fields(id = %id))]
 async fn update_handler(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -316,7 +316,7 @@ async fn update_handler(
 
     match state
         .knowledge_repository
-        .store(ctx, entry, "Updated via OpenSpec API")
+        .store(ctx, entry, "Updated via Knowledge API")
         .await
     {
         Ok(commit_hash) => (
@@ -335,7 +335,7 @@ async fn update_handler(
     }
 }
 
-/// DELETE /openspec/v1/knowledge/{id} — delete knowledge item
+#[tracing::instrument(skip_all, fields(id = %id))]
 async fn delete_handler(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -347,7 +347,7 @@ async fn delete_handler(
         Some(entry) => {
             match state
                 .knowledge_repository
-                .delete(ctx, entry.layer, &entry.path, "Deleted via OpenSpec API")
+                .delete(ctx, entry.layer, &entry.path, "Deleted via Knowledge API")
                 .await
             {
                 Ok(_) => StatusCode::NO_CONTENT.into_response(),
@@ -366,7 +366,7 @@ async fn delete_handler(
     }
 }
 
-/// POST /openspec/v1/knowledge/batch — batch operations
+#[tracing::instrument(skip_all, fields(operation_count = req.operations.len()))]
 async fn batch_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<BatchRequest>,
@@ -394,7 +394,7 @@ async fn batch_handler(
                 let id = entry.path.clone();
                 match state
                     .knowledge_repository
-                    .store(ctx.clone(), entry, "Batch create via OpenSpec API")
+                    .store(ctx.clone(), entry, "Batch create via Knowledge API")
                     .await
                 {
                     Ok(_) => BatchOperationResult {
@@ -419,7 +419,7 @@ async fn batch_handler(
                             ctx.clone(),
                             entry.layer,
                             &entry.path,
-                            "Batch delete via OpenSpec API",
+                            "Batch delete via Knowledge API",
                         )
                         .await
                     {
@@ -451,7 +451,7 @@ async fn batch_handler(
     Json(BatchResponse { results })
 }
 
-/// GET /openspec/v1/knowledge/stream — SSE stream of updates
+#[tracing::instrument(skip_all)]
 async fn stream_handler(
     State(_state): State<Arc<AppState>>,
     Query(_query): Query<StreamQuery>,
@@ -467,7 +467,7 @@ async fn stream_handler(
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
-/// GET /openspec/v1/knowledge/{id}/metadata — item metadata
+#[tracing::instrument(skip_all, fields(id = %id))]
 async fn metadata_handler(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -945,7 +945,7 @@ mod tests {
             .await
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["service"], "aeterna-openspec");
+        assert_eq!(json["service"], "aeterna-knowledge");
         assert!(json["endpoints"].as_array().unwrap().len() == 8);
     }
 

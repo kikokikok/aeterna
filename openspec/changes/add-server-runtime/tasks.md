@@ -31,7 +31,7 @@
 - [x] 5.1 Create `cli/src/server/router.rs` that builds the unified Axum router by merging sub-routers
 - [x] 5.2 Mount health routes at `/health`, `/ready`, `/live`
 - [x] 5.3 Mount Governance Dashboard API from `knowledge::api` at `/api/v1/` — refactor `knowledge/src/api.rs` to export `pub fn router(state) -> Router`
-- [x] 5.4 Mount OpenSpec compliance endpoints at `/openspec/v1/` (discovery, query, create, update, delete, batch, stream, metadata)
+- [x] 5.4 Mount knowledge API endpoints at `/api/v1/knowledge` (with `/openspec/v1/knowledge` compatibility alias) (discovery, query, create, update, delete, batch, stream, metadata)
 - [x] 5.5 Mount MCP HTTP/SSE transport at `/mcp/` (session init, message handler)
 - [x] 5.6 Mount A2A routes from `agent-a2a::create_router()` at `/a2a/`
 - [x] 5.7 Mount WebSocket sync from `sync::websocket::WsServer` at `/ws/`
@@ -48,15 +48,15 @@
 
 ## 7. OpenSpec Compliance Endpoints
 
-- [x] 7.1 Create `cli/src/server/openspec.rs` implementing the 8 OpenSpec v1 endpoints
-- [x] 7.2 Implement `GET /openspec/v1/knowledge` (discovery)
-- [x] 7.3 Implement `POST /openspec/v1/knowledge/query` (search with relevance)
-- [x] 7.4 Implement `POST /openspec/v1/knowledge/create` (create knowledge item)
-- [x] 7.5 Implement `PUT /openspec/v1/knowledge/{id}` (update)
-- [x] 7.6 Implement `DELETE /openspec/v1/knowledge/{id}` (delete)
-- [x] 7.7 Implement `POST /openspec/v1/knowledge/batch` (batch operations)
-- [x] 7.8 Implement `GET /openspec/v1/knowledge/stream` (SSE stream of updates)
-- [x] 7.9 Implement `GET /openspec/v1/knowledge/{id}/metadata` (metadata)
+- [x] 7.1 Create `cli/src/server/knowledge_api.rs` implementing the 8 knowledge API endpoints with OpenSpec compatibility alias
+- [x] 7.2 Implement `GET /api/v1/knowledge` (discovery; keep `/openspec/v1/knowledge` compatibility alias)
+- [x] 7.3 Implement `POST /api/v1/knowledge/query` (search with relevance)
+- [x] 7.4 Implement `POST /api/v1/knowledge/create` (create knowledge item)
+- [x] 7.5 Implement `PUT /api/v1/knowledge/{id}` (update)
+- [x] 7.6 Implement `DELETE /api/v1/knowledge/{id}` (delete)
+- [x] 7.7 Implement `POST /api/v1/knowledge/batch` (batch operations)
+- [x] 7.8 Implement `GET /api/v1/knowledge/stream` (SSE stream of updates)
+- [x] 7.9 Implement `GET /api/v1/knowledge/{id}/metadata` (metadata)
 - [x] 7.10 Write tests for each endpoint with mock knowledge repository
 
 ## 8. Knowledge API Refactoring

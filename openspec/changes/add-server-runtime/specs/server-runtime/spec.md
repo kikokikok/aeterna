@@ -51,8 +51,9 @@ The server SHALL compose a unified Axum HTTP router by merging sub-routers from 
 - **WHEN** the server builds the HTTP router
 - **THEN** the following route groups SHALL be registered:
   - `/health`, `/ready`, `/live` — health endpoints
-  - `/openspec/v1/*` — OpenSpec compliance endpoints
-  - `/api/v1/*` — Governance Dashboard API endpoints
+  - `/api/v1/knowledge/*` — canonical knowledge API endpoints
+  - `/openspec/v1/knowledge/*` — compatibility alias for knowledge API endpoints
+  - `/api/v1/governance/*` — Governance Dashboard API endpoints
   - `/mcp/*` — MCP HTTP/SSE transport endpoints
   - `/a2a/*` — A2A agent protocol endpoints
   - `/ws/*` — WebSocket sync endpoints
@@ -170,23 +171,23 @@ The server SHALL mount the Governance Dashboard API endpoints from the `knowledg
 - **THEN** all 11 Governance Dashboard API endpoints SHALL be accessible under `/api/v1/`
 - **AND** each endpoint SHALL use the existing utoipa-annotated handler functions
 
-### Requirement: OpenSpec Compliance Endpoints
-The server SHALL implement the OpenSpec v1 protocol endpoints as defined in `project.md`.
+### Requirement: Knowledge API Endpoints
+The server SHALL implement the knowledge API endpoints as defined in `project.md`, with `/api/v1/knowledge/*` as canonical routes and `/openspec/v1/knowledge/*` as compatibility aliases.
 
 #### Scenario: Discovery Endpoint
-- **WHEN** `GET /openspec/v1/knowledge` is called
+- **WHEN** `GET /api/v1/knowledge` is called
 - **THEN** the server SHALL return a list of available knowledge items
 
 #### Scenario: Query Endpoint
-- **WHEN** `POST /openspec/v1/knowledge/query` is called with a search body
+- **WHEN** `POST /api/v1/knowledge/query` is called with a search body
 - **THEN** the server SHALL return matching knowledge items with relevance scores
 
 #### Scenario: Create Endpoint
-- **WHEN** `POST /openspec/v1/knowledge/create` is called with a knowledge item body
+- **WHEN** `POST /api/v1/knowledge/create` is called with a knowledge item body
 - **THEN** the server SHALL create the item and return the created resource with ID
 
 #### Scenario: Streaming Endpoint
-- **WHEN** `GET /openspec/v1/knowledge/stream` is called
+- **WHEN** `GET /api/v1/knowledge/stream` is called
 - **THEN** the server SHALL return an SSE stream of knowledge updates
 
 ### Requirement: WebSocket Sync Integration

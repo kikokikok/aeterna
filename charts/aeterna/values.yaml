@@ -142,13 +142,13 @@ aeterna:
   ## Autoscaling configuration
   autoscaling:
     ## @param aeterna.autoscaling.enabled Enable HPA
-    enabled: false
+    enabled: true
     ## @param aeterna.autoscaling.minReplicas Minimum replicas
-    minReplicas: 1
+    minReplicas: 2
     ## @param aeterna.autoscaling.maxReplicas Maximum replicas
     maxReplicas: 10
     ## @param aeterna.autoscaling.targetCPUUtilizationPercentage Target CPU utilization
-    targetCPUUtilizationPercentage: 80
+    targetCPUUtilizationPercentage: 70
     ## @param aeterna.autoscaling.targetMemoryUtilizationPercentage Target memory utilization
     targetMemoryUtilizationPercentage: 80
 
@@ -171,7 +171,7 @@ aeterna:
   ## Pod disruption budget
   pdb:
     ## @param aeterna.pdb.enabled Enable PDB
-    enabled: false
+    enabled: true
     ## @param aeterna.pdb.minAvailable Minimum available pods
     minAvailable: 1
 

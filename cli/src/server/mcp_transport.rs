@@ -15,6 +15,7 @@ pub fn router(mcp_server: Arc<McpServer>) -> Router {
         .with_state(mcp_server)
 }
 
+#[tracing::instrument(skip_all)]
 async fn handle_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let stream = stream::once(async {
         Ok::<_, Infallible>(
@@ -27,6 +28,7 @@ async fn handle_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
+#[tracing::instrument(skip_all, fields(method = %request.method))]
 async fn handle_message(
     State(server): State<Arc<McpServer>>,
     Json(request): Json<JsonRpcRequest>,

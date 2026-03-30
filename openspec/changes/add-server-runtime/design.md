@@ -75,8 +75,9 @@ The Helm chart expects port 8080 (HTTP), port 9090 (metrics), and K8s probes tar
 ```rust
 let app = Router::new()
     .merge(health::router())                    // GET /health, /ready, /live
-    .nest("/openspec/v1", openspec::router(state.clone()))  // OpenSpec compliance
-    .nest("/api/v1", knowledge_api::router(state.clone()))  // Governance Dashboard
+    .nest("/api/v1", knowledge_api::router(state.clone()))  // Knowledge API
+    .nest("/openspec/v1", knowledge_api::router(state.clone()))  // Compatibility alias
+    .nest("/api/v1", knowledge::api::router(state.clone()))  // Governance Dashboard
     .nest("/mcp", mcp_http::router(state.clone()))          // MCP SSE transport
     .nest("/a2a", a2a::router(state.clone()))               // A2A agent protocol
     .nest("/ws", ws::router(state.clone()))                  // WebSocket sync
@@ -84,7 +85,7 @@ let app = Router::new()
     .layer(/* tower middleware stack */);
 ```
 
-**Rationale**: Clean separation of concerns. Each crate owns its routes. Merge is additive and order-independent.
+**Rationale**: Clean separation of concerns. The knowledge CRUD surface is exposed under a canonical `/api/v1/knowledge/*` namespace, while the legacy OpenSpec path remains as an alias during migration. Merge is additive and order-independent.
 
 ### D4: Shared `AppState` for Dependency Injection
 

@@ -1,9 +1,9 @@
 pub mod admin_sync;
 pub mod bootstrap;
 pub mod health;
+pub mod knowledge_api;
 pub mod mcp_transport;
 pub mod metrics;
-pub mod openspec;
 pub mod router;
 pub mod webhooks;
 
