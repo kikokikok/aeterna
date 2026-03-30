@@ -21,10 +21,13 @@ export class LocalDatabase {
   }
 
   private initialize(): void {
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("busy_timeout = 5000");
+    this.db.exec("PRAGMA journal_mode = WAL");
+    this.db.exec("PRAGMA busy_timeout = 5000");
 
-    const currentVersion = this.db.pragma("user_version", { simple: true }) as number;
+    const currentVersion =
+      this.db
+        .query<never, { user_version: number }>("PRAGMA user_version")
+        .get()?.user_version ?? 0;
     if (currentVersion > SCHEMA_VERSION) {
       throw new Error(
         `Unsupported local schema version ${currentVersion}, expected <= ${SCHEMA_VERSION}`
@@ -36,7 +39,7 @@ export class LocalDatabase {
     }
 
     if (currentVersion < SCHEMA_VERSION) {
-      this.db.pragma(`user_version = ${SCHEMA_VERSION}`);
+      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     }
   }
 }

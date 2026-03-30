@@ -221,6 +221,10 @@ const testState = vi.hoisted(() => {
     get(params?: unknown): unknown {
       const sql = normalizeSql(this.sql);
 
+      if (sql.includes("pragma user_version")) {
+        return { user_version: this.db.userVersion };
+      }
+
       if (sql.includes("where id = @id") && sql.includes("ownership = 'local'")) {
         const id = (params as { id: string }).id;
         const row = this.db.memories.get(id);
@@ -394,42 +398,38 @@ const testState = vi.hoisted(() => {
     constructor(path: string, options: { strict: boolean }) {
       this.path = path;
       this.options = options;
-      this.userVersion = state.initialUserVersion;
+      this.userVersion = state.persistedUserVersions.get(path) ?? state.initialUserVersion;
       state.instances.push(this);
-    }
-
-    pragma(arg: string, options?: { simple?: boolean }): unknown {
-      this.pragmaCalls.push(arg);
-      if (arg === "journal_mode = WAL") {
-        this.journalMode = "WAL";
-        return "wal";
-      }
-
-      if (arg === "busy_timeout = 5000") {
-        this.busyTimeout = 5000;
-        return 5000;
-      }
-
-      if (arg === "user_version" && options?.simple) {
-        return this.userVersion;
-      }
-
-      if (arg.startsWith("user_version = ")) {
-        const parsed = Number.parseInt(arg.replace("user_version =", "").trim(), 10);
-        if (Number.isFinite(parsed)) {
-          this.userVersion = parsed;
-          this.setUserVersionCalls += 1;
-        }
-      }
-
-      return undefined;
     }
 
     exec(sql: string): void {
       this.execCalls.push(sql);
+
+      const normalized = normalizeSql(sql);
+      if (normalized === "pragma journal_mode = wal") {
+        this.journalMode = "WAL";
+      }
+
+      if (normalized === "pragma busy_timeout = 5000") {
+        this.busyTimeout = 5000;
+      }
+
+      if (normalized.startsWith("pragma user_version =")) {
+        const parsed = Number.parseInt(normalized.replace("pragma user_version =", "").trim(), 10);
+        if (Number.isFinite(parsed)) {
+          this.userVersion = parsed;
+          this.setUserVersionCalls += 1;
+          state.persistedUserVersions.set(this.path, parsed);
+        }
+      }
     }
 
     prepare(sql: string): FakeStatement {
+      this.prepareCalls.push(sql);
+      return new FakeStatement(this, sql);
+    }
+
+    query(sql: string): FakeStatement {
       this.prepareCalls.push(sql);
       return new FakeStatement(this, sql);
     }
@@ -448,6 +448,7 @@ const testState = vi.hoisted(() => {
   const state = {
     instances: [] as FakeSqliteDatabase[],
     initialUserVersion: 0,
+    persistedUserVersions: new Map<string, number>(),
   };
 
   const mockBunSqlite = vi.fn((path: string, options: { strict: boolean }) => {
@@ -461,6 +462,7 @@ const testState = vi.hoisted(() => {
   const reset = (): void => {
     state.instances = [];
     state.initialUserVersion = 0;
+    state.persistedUserVersions = new Map<string, number>();
     mockBunSqlite.mockClear();
     mockMkdirSync.mockClear();
     mockExistsSync.mockReset();
@@ -573,7 +575,7 @@ describe("Local local-first components", () => {
       });
       expect(sqlite.journalMode).toBe("WAL");
       expect(sqlite.busyTimeout).toBe(5000);
-      expect(sqlite.execCalls).toHaveLength(SCHEMA_STATEMENTS.length);
+      expect(sqlite.execCalls).toHaveLength(SCHEMA_STATEMENTS.length + 3);
       expect(sqlite.userVersion).toBe(SCHEMA_VERSION);
     });
 
@@ -589,7 +591,7 @@ describe("Local local-first components", () => {
 
       expect(sqlite1.setUserVersionCalls).toBe(0);
       expect(sqlite2.setUserVersionCalls).toBe(0);
-      expect(sqlite2.execCalls).toHaveLength(SCHEMA_STATEMENTS.length);
+      expect(sqlite2.execCalls).toHaveLength(SCHEMA_STATEMENTS.length + 2);
       db2.close();
     });
 
