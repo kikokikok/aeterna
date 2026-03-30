@@ -20,7 +20,7 @@ OpenCode plugin for Aeterna memory and knowledge integration with CCA and RLM su
 ## Installation
 
 ```bash
-npm install -D @aeterna-org/opencode-plugin
+opencode plugin @aeterna-org/opencode-plugin
 ```
 
 ## Configuration
@@ -247,7 +247,13 @@ Contributions are welcome! Please read the main Aeterna repository for guideline
 
 ## Changelog
 
-### 0.3.0
+### 0.2.1
+
+- Added `oc-plugin` target declaration for OpenCode 1.3.0 plugin discovery
+- Added `./server` export path required by OpenCode plugin loader
+- Fixed installation: use `opencode plugin @aeterna-org/opencode-plugin` (not npm install)
+
+### 0.2.0
 
 - Added local-first memory architecture with embedded SQLite store
 - Personal layers (agent/user/session) work fully offline
@@ -256,9 +262,6 @@ Contributions are welcome! Please read the main Aeterna repository for guideline
 - Memory router dispatches reads/writes by layer ownership
 - Sync status tool with data provenance and staleness warnings
 - Configurable via `[local]` section in `.aeterna/config.toml` or environment variables
-
-### 0.2.0
-
 - Upgraded to `@opencode-ai/plugin` v1.3.6 with Zod v4 schemas
 - Updated `@types/node` to v22, TypeScript to v5.8, Vitest to v3.1
 - Fixed `experimental.chat.system.transform` hook for optional `sessionID`
