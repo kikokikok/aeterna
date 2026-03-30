@@ -180,6 +180,12 @@ The MCP server MUST:
 - **THEN** the MCP server SHALL translate to internal operation
 - **AND** return results in MCP-compliant format
 
+#### Scenario: MCP HTTP Transport via Server Runtime
+- **WHEN** the Aeterna server is running with `aeterna serve`
+- **THEN** the MCP HTTP transport SHALL be served on the main HTTP port at `/mcp/*`
+- **AND** the transport SHALL follow the MCP 2024-11-05 streamable HTTP spec (SSE)
+- **AND** the MCP server process management (health, restart) is handled by the server runtime rather than a standalone supervisor
+
 ### Requirement: Automatic Session Capture
 
 The system SHALL automatically capture session context during OpenCode coding sessions without requiring explicit user action.
@@ -422,7 +428,7 @@ The system SHALL define and implement session state storage strategy.
 - **AND** expired sessions MUST be automatically cleaned up
 
 ### Requirement: MCP Server Health Management (OC-H5)
-The system SHALL implement robust MCP server process management.
+The system SHALL implement robust MCP server process management with runtime behavior aligned to actual backend connectivity and supported integration paths.
 
 #### Scenario: Health Check Implementation
 - **WHEN** MCP server is running
@@ -438,4 +444,10 @@ The system SHALL implement robust MCP server process management.
 - **WHEN** MCP server recovers from crash
 - **THEN** it MUST restore in-flight request state if possible
 - **AND** emit metrics for crash events
+
+#### Scenario: Unsupported integration path
+- **WHEN** a documented plugin or MCP integration mode is not fully implemented for the current build or deployment mode
+- **THEN** the system SHALL fail explicitly during initialization
+- **AND** the system SHALL NOT present the mode as healthy or ready
+- **AND** documentation and examples SHALL identify the supported integration modes
 

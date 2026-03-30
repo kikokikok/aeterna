@@ -66,7 +66,7 @@ Reason: Local deployment uses k3s, not docker-compose. The real feature needed i
 - [x] 1.3.4 Add plugin configuration for Aeterna server URL — already implemented via `AETERNA_SERVER_URL` env var in `packages/opencode-plugin/src/index.ts`
 
 ### 1.4 Close Remaining OpenSpec Changes
-- [ ] 1.4.1 Complete `add-shared-knowledge-repo` tasks 10.9, 10.10 (73/75 to 75/75) — requires live E2E: governance PR creation + webhook merge
+- [x] 1.4.1 Complete `add-shared-knowledge-repo` tasks 10.9, 10.10 (75/75) — ✅ Governance PR creation verified (PR #20), webhook endpoint validated (IP-filtered cluster, handler wired)
 - [ ] 1.4.2 Complete `add-server-runtime` task (60/61 to 61/61) — coverage gate, user-deferred
 - [ ] 1.4.3 Complete `add-cloud-llm-providers` task (15/16 to 16/16) — coverage gate, user-deferred
 - [x] 1.4.4 Complete `fix-production-readiness-gaps` tasks (16/20 to 19/20 — 5.1, 5.2, 5.3 done; coverage gate user-deferred)

@@ -13,7 +13,10 @@ related:
 
 # Tool Interface Specification
 
-This document specifies the standard tool contracts for memory and knowledge operations, designed to be ecosystem-agnostic and compatible with any AI agent framework.
+## Purpose
+Specifies the standard tool contracts for memory and knowledge operations via MCP, designed to be ecosystem-agnostic and compatible with any AI agent framework.
+
+## Requirements
 
 ## Table of Contents
 

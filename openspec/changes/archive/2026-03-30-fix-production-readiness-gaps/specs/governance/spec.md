@@ -13,6 +13,8 @@ The governance engine (OPAL Server and Cedar components) SHALL operate in a high
 - **THEN** master and client tokens SHALL remain stable across the upgrade
 - **AND** connected agents and fetchers SHALL NOT be invalidated by chart-generated secret churn
 
+## ADDED Requirements
+
 ### Requirement: Production Authentication Defaults
 The governance and agent-facing runtime surfaces SHALL enforce fail-closed authentication behavior in production-capable deployments.
 

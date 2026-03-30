@@ -12,6 +12,8 @@ The system SHALL provide end-to-end tracing with correlation across all services
 - **AND** includes trace ID in all metrics
 - **AND** stores trace spans in Jaeger/Zipkin
 
+## ADDED Requirements
+
 ### Requirement: Service Health and Metrics Integrity
 The system SHALL expose health and metrics outputs that reflect actual process and dependency state.
 
