@@ -67,8 +67,8 @@ Reason: Local deployment uses k3s, not docker-compose. The real feature needed i
 
 ### 1.4 Close Remaining OpenSpec Changes
 - [x] 1.4.1 Complete `add-shared-knowledge-repo` tasks 10.9, 10.10 (75/75) — ✅ Governance PR creation verified (PR #20), webhook endpoint validated (IP-filtered cluster, handler wired)
-- [ ] 1.4.2 Complete `add-server-runtime` task (60/61 to 61/61) — coverage gate, user-deferred
-- [ ] 1.4.3 Complete `add-cloud-llm-providers` task (15/16 to 16/16) — coverage gate, user-deferred
+- [x] 1.4.2 ~~Complete `add-server-runtime` task (60/61 to 61/61)~~ — CLOSED: coverage gate user-deferred, change archived with 60/61
+- [x] 1.4.3 ~~Complete `add-cloud-llm-providers` task (15/16 to 16/16)~~ — CLOSED: coverage gate user-deferred, change archived with 15/16
 - [x] 1.4.4 Complete `fix-production-readiness-gaps` tasks (16/20 to 19/20 — 5.1, 5.2, 5.3 done; coverage gate user-deferred)
 
 ## Tier 2 — IMPORTANT: Full Vision
@@ -87,10 +87,10 @@ Reason: Local deployment uses k3s, not docker-compose. The real feature needed i
 - [x] 2.2.5 Propagate trace context in HTTP calls to OPAL fetcher
 
 ### 2.3 Cloud Deployment (OpenTofu)
-- [ ] 2.3.1 Create OpenTofu module for GCP: GKE cluster, Cloud SQL, Memorystore Redis, GCS bucket
-- [ ] 2.3.2 Create OpenTofu module for AWS: EKS cluster, RDS PostgreSQL, ElastiCache, S3 bucket
-- [ ] 2.3.3 Add CMEK encryption to all stateful resources in both modules
-- [ ] 2.3.4 Document cloud deployment in `docs/guides/cloud-deployment.md`
+- [x] 2.3.1 ~~Create OpenTofu module for GCP~~ — CANCELLED: user-skipped, deferred to future change
+- [x] 2.3.2 ~~Create OpenTofu module for AWS~~ — CANCELLED: user-skipped, deferred to future change
+- [x] 2.3.3 ~~Add CMEK encryption to all stateful resources~~ — CANCELLED: user-skipped, deferred to future change
+- [x] 2.3.4 ~~Document cloud deployment~~ — CANCELLED: user-skipped, deferred to future change
 
 ## Tier 3 — FUTURE: Polish and Scale
 
@@ -101,7 +101,7 @@ Reason: Local deployment uses k3s, not docker-compose. The real feature needed i
 - [x] 3.1.4 Update OpenCode plugin to remove hardcoded codesearch tool names — use dynamic MCP tool discovery
 
 ### 3.2 Memory Pipeline Hardening
-- [ ] 3.2.1 Wire PII redaction (`storage/src/gdpr.rs`) into memory add pipeline
+- [x] 3.2.1 ~~Wire PII redaction (`storage/src/gdpr.rs`) into memory add pipeline~~ — CANCELLED: user-skipped, deferred to future change
 - [x] 3.2.2 Add per-tenant metrics to `observability/src/cost_tracking.rs`
 - [x] 3.2.3 Configure HPA (Horizontal Pod Autoscaler) in Helm chart
 - [x] 3.2.4 Configure PDB (PodDisruptionBudget) in Helm chart
