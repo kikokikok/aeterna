@@ -19,9 +19,16 @@ OpenCode plugin for Aeterna memory and knowledge integration with CCA and RLM su
 
 ## Installation
 
-```bash
-opencode plugin @aeterna-org/opencode-plugin
+Add the plugin to your global or project OpenCode config:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@aeterna-org/opencode-plugin"]
+}
 ```
+
+OpenCode installs configured npm plugins automatically at startup.
 
 ## Configuration
 
@@ -247,11 +254,17 @@ Contributions are welcome! Please read the main Aeterna repository for guideline
 
 ## Changelog
 
+### 0.2.2
+
+- Replaced `better-sqlite3` with Bun-compatible `bun:sqlite` so the plugin loads inside OpenCode
+- Kept local-first SQLite storage for personal layers while removing the unsupported native Node addon
+- Corrected installation instructions to use the official OpenCode `plugin` config flow
+
 ### 0.2.1
 
 - Added `oc-plugin` target declaration for OpenCode 1.3.0 plugin discovery
 - Added `./server` export path required by OpenCode plugin loader
-- Fixed installation: use `opencode plugin @aeterna-org/opencode-plugin` (not npm install)
+- Fixed plugin package metadata required by the OpenCode loader
 
 ### 0.2.0
 
