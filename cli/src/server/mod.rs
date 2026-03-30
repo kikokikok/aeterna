@@ -5,10 +5,13 @@ pub mod knowledge_api;
 pub mod mcp_transport;
 pub mod metrics;
 pub mod router;
+pub mod sync;
 pub mod webhooks;
 
 use std::sync::Arc;
 
+use ::sync::bridge::SyncManager;
+use ::sync::websocket::WsServer;
 use agent_a2a::{AuthState as A2aAuthState, Config as A2aConfig};
 use idp_sync::config::IdpSyncConfig;
 use idp_sync::{IdpClient, IdpSyncService};
@@ -24,8 +27,6 @@ use storage::events::EventError;
 use storage::governance::GovernanceStorage;
 use storage::graph_duckdb::DuckDbGraphStore;
 use storage::postgres::PostgresBackend;
-use sync::bridge::SyncManager;
-use sync::websocket::WsServer;
 use tools::server::McpServer;
 
 #[derive(Clone)]

@@ -208,8 +208,34 @@ impl PostgresBackend {
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS memory_entries ( id TEXT PRIMARY KEY, tenant_id TEXT NOT \
              NULL, content TEXT NOT NULL, embedding VECTOR(1536), memory_layer TEXT NOT NULL, \
-             properties JSONB DEFAULT '{}', created_at BIGINT NOT NULL, updated_at BIGINT NOT \
-             NULL, deleted_at BIGINT )",
+             properties JSONB DEFAULT '{}', device_id TEXT, importance_score REAL DEFAULT 0.0, \
+             created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL, deleted_at BIGINT )",
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
+
+        sqlx::query("ALTER TABLE memory_entries ADD COLUMN IF NOT EXISTS device_id TEXT")
+            .execute(&self.pool)
+            .await
+            .ok();
+        sqlx::query(
+            "ALTER TABLE memory_entries ADD COLUMN IF NOT EXISTS importance_score REAL DEFAULT \
+             0.0",
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_memory_entries_device_id ON \
+             memory_entries(device_id, tenant_id)",
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_memory_entries_updated_at ON \
+             memory_entries(updated_at, tenant_id)",
         )
         .execute(&self.pool)
         .await

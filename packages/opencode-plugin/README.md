@@ -4,6 +4,7 @@ OpenCode plugin for Aeterna memory and knowledge integration with CCA and RLM su
 
 ## Features
 
+- **Local-First Memory**: Embedded SQLite store for personal layers (agent/user/session) — works offline, syncs when connected
 - **Memory Management**: Add, search, retrieve, and promote memories across 7 layers
 - **Knowledge Repository**: Query and propose knowledge items with governance
 - **Graph Layer**: Explore memory relationships and find paths
@@ -43,6 +44,12 @@ Add the plugin to your `opencode.jsonc`:
 | `AETERNA_TEAM` | Team context for multi-tenant hierarchy | (optional) |
 | `AETERNA_ORG` | Organization context for multi-tenant hierarchy | (optional) |
 | `AETERNA_USER_ID` | User ID for personalization | (optional) |
+| `AETERNA_LOCAL_ENABLED` | Enable local-first memory store | `true` |
+| `AETERNA_LOCAL_DB_PATH` | SQLite database path | `~/.aeterna/local.db` |
+| `AETERNA_LOCAL_SYNC_PUSH_INTERVAL_MS` | Push sync interval (ms) | `30000` |
+| `AETERNA_LOCAL_SYNC_PULL_INTERVAL_MS` | Pull sync interval (ms) | `60000` |
+| `AETERNA_LOCAL_MAX_CACHED_ENTRIES` | Max cached shared-layer entries | `50000` |
+| `AETERNA_LOCAL_SESSION_STORAGE_TTL_HOURS` | Session memory retention (hours) | `24` |
 
 ### Aeterna Configuration
 
@@ -74,6 +81,14 @@ use_redis = false
 [experimental]
 system_prompt_hook = true
 permission_hook = true
+
+[local]
+enabled = true
+db_path = "~/.aeterna/local.db"
+sync_push_interval_ms = 30000
+sync_pull_interval_ms = 60000
+max_cached_entries = 50000
+session_storage_ttl_hours = 24
 ```
 
 ## Usage
@@ -119,10 +134,43 @@ The plugin implements several OpenCode hooks for deep integration:
 5. **Permission Hook** - Validates knowledge proposal permissions
 6. **Session Event Hook** - Manages session lifecycle and cleanup
 
+## Local-First Memory Architecture
+
+The plugin includes an embedded SQLite store for personal memory layers (agent, user, session). This enables offline-first operation with automatic bidirectional sync when a server is available.
+
+### Layer Ownership
+
+| Layer | Storage | Write Path | Read Path |
+|-------|---------|------------|-----------|
+| agent, user, session | Local SQLite | Direct local write | Local query |
+| project, team, org, company | Remote server | HTTP API | Local cache, remote fallback |
+
+### How It Works
+
+1. **Personal layers** (agent/user/session) are owned locally — reads and writes go directly to the embedded SQLite database at `~/.aeterna/local.db`
+2. **Shared layers** (project/team/org/company) are owned by the remote server — writes go via HTTP, reads check the local cache first (< 60s staleness) then fall back to HTTP
+3. **Sync engine** runs in the background:
+   - **Push** every 30s: local changes queued and batch-pushed to the server
+   - **Pull** every 60s: shared-layer updates pulled and cached locally
+4. **Offline resilience**: personal layers work without any server connection. Changes queue up and sync when connectivity is restored
+5. **Conflict resolution**: server-wins for same-ID conflicts (remote has newer `updated_at`)
+
+### Sync Status
+
+Use the `aeterna_sync_status` tool to check:
+- Pending push count (queued local changes)
+- Last push/pull timestamps
+- Server connectivity
+- Local store size (entry counts per layer)
+
+Memory search results include `source` metadata (`local`, `cache`, or `remote`) and staleness warnings when cached data is older than 10 minutes.
+
 ## How It Works
 
 1. **Session Start**: When an OpenCode session starts, the plugin:
-   - Initializes the Aeterna client
+   - Initializes the local SQLite memory store
+   - Starts the sync engine (push/pull background timers)
+   - Initializes the Aeterna client with memory router
    - Starts a session context on the backend
    - Prefetches frequently accessed knowledge
    - Subscribes to governance events
@@ -139,9 +187,11 @@ The plugin implements several OpenCode hooks for deep integration:
    - Captured memories are available for future sessions
 
 4. **Session End**: When session ends, the plugin:
+   - Flushes pending sync queue (final push with 5s timeout)
    - Generates a session summary
    - Flushes all pending captures to the backend
    - Promotes significant memories to broader layers
+   - Closes local SQLite database cleanly
    - Cleans up subscriptions and caches
 
 ## Development
@@ -170,6 +220,7 @@ The plugin communicates with Aeterna's Rust backend via HTTP API:
 - **CCA**: `/api/v1/cca/*` operations
 - **Governance**: `/api/v1/governance/*` operations
 - **Session**: `/api/v1/sessions/*` operations
+- **Sync**: `/api/v1/sync/push` and `/api/v1/sync/pull` for local-first memory synchronization
 
 All requests include proper authentication and tenant context headers.
 
@@ -191,9 +242,20 @@ Contributions are welcome! Please read the main Aeterna repository for guideline
 
 - Requires `@opencode-ai/plugin` version 1.3.0 or higher
 - Node.js version 18.0.0 or higher
-- Requires Aeterna backend server running on HTTP
+- Requires Aeterna backend server for shared layers (personal layers work offline)
+- Native `better-sqlite3` module required for local memory store
 
 ## Changelog
+
+### 0.3.0
+
+- Added local-first memory architecture with embedded SQLite store
+- Personal layers (agent/user/session) work fully offline
+- Bidirectional sync engine with push/pull cycles and exponential backoff
+- Shared-layer caching with configurable staleness thresholds
+- Memory router dispatches reads/writes by layer ownership
+- Sync status tool with data provenance and staleness warnings
+- Configurable via `[local]` section in `.aeterna/config.toml` or environment variables
 
 ### 0.2.0
 
