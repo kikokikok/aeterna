@@ -8,10 +8,33 @@
 #   - newman installed: npm install -g newman
 #   - Optional: npm install -g newman-reporter-htmlextra
 #
+# Authentication (folders 13-24):
+#   Folders 13-24 test authenticated workflows and require a GitHub access
+#   token obtained via the OAuth device-code flow. Before running these:
+#
+#   1. Request a device code:
+#      curl -s -X POST https://github.com/login/device/code \
+#        -H 'Accept: application/json' \
+#        -d 'client_id=YOUR_OAUTH_CLIENT_ID&scope=read:user,user:email'
+#
+#   2. Open the verification_uri in a browser and enter the user_code.
+#
+#   3. Poll for the token:
+#      curl -s -X POST https://github.com/login/oauth/access_token \
+#        -H 'Accept: application/json' \
+#        -d 'client_id=YOUR_OAUTH_CLIENT_ID&device_code=DEVICE_CODE&grant_type=urn:ietf:params:oauth:grant-type:device_code'
+#
+#   4. Set the token in your environment file or pass it via --env-var:
+#      ./run-e2e.sh --env-var "githubAccessToken=ghu_..."
+#
+#   To run only unauthenticated tests (folders 1-12), skip the above.
+#
 # Usage:
 #   ./run-e2e.sh                           # Run all tests
 #   ./run-e2e.sh --folder "1. Deployment"  # Run specific folder
 #   ./run-e2e.sh --bail                    # Stop on first failure
+#   ./run-e2e.sh --folder "13. Plugin Auth Bootstrap Flow" \
+#     --env-var "githubAccessToken=ghu_..."
 #
 
 set -euo pipefail
