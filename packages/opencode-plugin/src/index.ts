@@ -11,6 +11,92 @@ import { LocalMemoryManager } from "./local/manager.js";
 import { SyncEngine } from "./local/sync.js";
 import { MemoryRouter } from "./local/router.js";
 
+// ---------------------------------------------------------------------------
+// Auth bootstrap helpers – GitHub OAuth device flow
+// ---------------------------------------------------------------------------
+
+/**
+ * Attempt to authenticate the plugin client before the session starts.
+ *
+ * Priority:
+ *  1. `AETERNA_TOKEN` set → static token already loaded by constructor.
+ *  2. `AETERNA_PLUGIN_AUTH_ENABLED=true` → device-flow auth:
+ *     a. Refresh token available → silent refresh.
+ *     b. Otherwise → request device code, show user_code + verification_uri,
+ *        poll GitHub for an access token, then bootstrap Aeterna auth.
+ *  3. Neither → unauthenticated / local-only.
+ *
+ * Never throws — failures are logged; the plugin continues in degraded mode.
+ */
+async function attemptPluginAuth(client: AeternaClient): Promise<void> {
+  // (1) Static token already loaded — nothing to do.
+  if (process.env.AETERNA_TOKEN) {
+    return;
+  }
+
+  // (2) Dynamic auth enabled?
+  if (process.env.AETERNA_PLUGIN_AUTH_ENABLED !== "true") {
+    return;
+  }
+
+  // (2a) Refresh token in environment → silent refresh
+  const cachedRefreshToken = process.env.AETERNA_PLUGIN_REFRESH_TOKEN;
+  if (cachedRefreshToken) {
+    try {
+      client.setAuthTokens("", cachedRefreshToken);
+      const tokens = await client.refreshAuth();
+      console.error(
+        `[aeterna] Plugin auth: refreshed token for ${tokens.githubLogin}`
+      );
+      return;
+    } catch (err) {
+      console.error(
+        `[aeterna] Plugin auth: silent refresh failed (${(err as Error).message}), attempting device flow sign-in`
+      );
+    }
+  }
+
+  // (2b) Device flow bootstrap
+  const clientId = process.env.AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID;
+  if (!clientId) {
+    console.error(
+      "[aeterna] Plugin auth: AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID is not set — skipping interactive auth"
+    );
+    return;
+  }
+
+  try {
+    const deviceResp = await client.requestDeviceCode(clientId);
+
+    console.error(
+      `[aeterna] Plugin auth: please visit the following URL and enter the code shown below:\n\n` +
+      `  URL:  ${deviceResp.verification_uri}\n` +
+      `  Code: ${deviceResp.user_code}\n\n` +
+      `Waiting for authorisation…`
+    );
+
+    const githubAccessToken = await client.pollDeviceToken(
+      clientId,
+      deviceResp.device_code,
+      deviceResp.interval,
+      deviceResp.expires_in
+    );
+
+    const tokens = await client.bootstrapAuth(githubAccessToken);
+    console.error(
+      `[aeterna] Plugin auth: signed in as ${tokens.githubLogin}`
+    );
+  } catch (err) {
+    console.error(
+      `[aeterna] Plugin auth: device flow failed (${(err as Error).message}) — continuing unauthenticated`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Plugin entry point
+// ---------------------------------------------------------------------------
+
 export const aeterna: Plugin = async (input: PluginInput): Promise<Hooks> => {
   // Extract project identifier from worktree path or project ID
   // OpenCode SDK Project type has: id, worktree, vcsDir, vcs, time
@@ -47,6 +133,9 @@ export const aeterna: Plugin = async (input: PluginInput): Promise<Hooks> => {
       syncEngine.start();
     }
   }
+
+  // Authenticate before starting the session (task 3.3 / 4.1)
+  await attemptPluginAuth(client);
 
   await client.sessionStart();
 

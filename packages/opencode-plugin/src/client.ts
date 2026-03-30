@@ -1,4 +1,6 @@
 import type {
+  PluginAuthTokens,
+  DeviceCodeResponse,
   AeternaClientConfig,
   MemoryEntry,
   MemoryAddParams,
@@ -53,7 +55,8 @@ interface KnowledgeCache {
 
 export class AeternaClient {
   private readonly serverUrl: string;
-  private readonly token: string;
+  private accessToken: string;
+  private refreshTokenValue: string | null = null;
   private readonly config: AeternaClientConfig;
   private sessionContext: SessionContext | null = null;
   private pluginConfig: PluginConfig = DEFAULT_CONFIG;
@@ -69,7 +72,7 @@ export class AeternaClient {
     this.config = config;
     this.serverUrl =
       config.serverUrl ?? process.env.AETERNA_SERVER_URL ?? "http://localhost:8080";
-    this.token = config.token ?? process.env.AETERNA_TOKEN ?? "";
+    this.accessToken = config.token ?? process.env.AETERNA_TOKEN ?? "";
   }
 
   private async request<T>(
@@ -83,7 +86,7 @@ export class AeternaClient {
         method,
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.token}`,
+          Authorization: `Bearer ${this.accessToken}`,
           "X-Aeterna-Project": this.config.project,
           ...(this.config.team && { "X-Aeterna-Team": this.config.team }),
           ...(this.config.org && { "X-Aeterna-Org": this.config.org }),
@@ -271,7 +274,7 @@ export class AeternaClient {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.token}`,
+          Authorization: `Bearer ${this.accessToken}`,
           "X-Aeterna-Project": this.config.project,
         },
         body: JSON.stringify(params),
@@ -681,4 +684,228 @@ export class AeternaClient {
     }
     return result.value;
   }
+  // ---------------------------------------------------------------------------
+  // Plugin auth lifecycle (task 3.2)
+  // ---------------------------------------------------------------------------
+
+  /** Current access token – useful for inspecting auth state in tests. */
+  getAccessToken(): string {
+    return this.accessToken;
+  }
+
+  /** Whether the client currently holds a dynamic refresh token. */
+  hasRefreshToken(): boolean {
+    return this.refreshTokenValue !== null;
+  }
+
+  /**
+   * Initiate the GitHub OAuth device flow.
+   *
+   * Calls `POST https://github.com/login/device/code` and returns the
+   * device code payload including the `user_code` and `verification_uri`
+   * that must be shown to the user.
+   */
+  async requestDeviceCode(clientId: string, scope = "read:user user:email"): Promise<DeviceCodeResponse> {
+    const body = new URLSearchParams({ client_id: clientId, scope });
+    const resp = await fetch("https://github.com/login/device/code", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: body.toString(),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: "device_code_request_failed", message: `HTTP ${resp.status}` })) as { error: string; message: string };
+      throw new Error(`Device code request failed: ${err.message ?? err.error}`);
+    }
+
+    return await resp.json() as DeviceCodeResponse;
+  }
+
+  /**
+   * Poll GitHub for an OAuth access token using the device code.
+   *
+   * Polls `POST https://github.com/login/oauth/access_token` at the
+   * interval specified in the device-code response until the user
+   * completes authorisation, the code expires, or an unrecoverable error
+   * occurs.
+   *
+   * @returns The GitHub OAuth access token string.
+   */
+  async pollDeviceToken(
+    clientId: string,
+    deviceCode: string,
+    interval: number,
+    expiresIn: number,
+    signal?: AbortSignal
+  ): Promise<string> {
+    const grantType = "urn:ietf:params:oauth:grant-type:device_code";
+    const deadline = Date.now() + expiresIn * 1000;
+    let waitMs = interval * 1000;
+
+    while (Date.now() < deadline) {
+      if (signal?.aborted) {
+        throw new Error("Device token polling aborted");
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+
+      const resp = await fetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          client_id: clientId,
+          device_code: deviceCode,
+          grant_type: grantType,
+        }).toString(),
+        signal,
+      });
+
+      const data = await resp.json() as {
+        access_token?: string;
+        error?: string;
+        interval?: number;
+      };
+
+      if (data.access_token) {
+        return data.access_token;
+      }
+
+      if (data.error === "authorization_pending") {
+        continue;
+      }
+
+      if (data.error === "slow_down") {
+        waitMs = (data.interval ?? interval + 5) * 1000;
+        continue;
+      }
+
+      throw new Error(`Device token polling failed: ${data.error ?? "unknown error"}`);
+    }
+
+    throw new Error("Device code expired before user completed authorisation");
+  }
+
+  /**
+   * Bootstrap Aeterna plugin credentials using a GitHub OAuth access token
+   * obtained via the device flow.
+   *
+   * On success the client's internal access token and refresh token are
+   * updated so that subsequent `request()` calls carry the new bearer token.
+   */
+  async bootstrapAuth(githubAccessToken: string): Promise<PluginAuthTokens> {
+    const resp = await fetch(`${this.serverUrl}/api/v1/auth/plugin/bootstrap`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "github", github_access_token: githubAccessToken }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: "bootstrap_failed", message: `HTTP ${resp.status}` })) as { error: string; message: string };
+      throw new Error(`Plugin auth bootstrap failed: ${err.message ?? err.error}`);
+    }
+
+    const data = await resp.json() as {
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+      github_login: string;
+      github_email?: string;
+    };
+
+    this.accessToken = data.access_token;
+    this.refreshTokenValue = data.refresh_token;
+
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresIn: data.expires_in,
+      githubLogin: data.github_login,
+      githubEmail: data.github_email,
+    };
+  }
+
+  /**
+   * Use the stored refresh token to obtain a new access token.
+   *
+   * Implements single-use refresh token rotation: the server consumes the
+   * current refresh token and issues a new pair.
+   *
+   * @throws {Error} When no refresh token is stored or the server rejects it.
+   */
+  async refreshAuth(): Promise<PluginAuthTokens> {
+    if (!this.refreshTokenValue) {
+      throw new Error("No refresh token available — sign in first");
+    }
+
+    const resp = await fetch(`${this.serverUrl}/api/v1/auth/plugin/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: this.refreshTokenValue }),
+    });
+
+    if (!resp.ok) {
+      // Discard stale refresh token so callers know re-auth is required
+      this.refreshTokenValue = null;
+      const err = await resp.json().catch(() => ({ error: "refresh_failed", message: `HTTP ${resp.status}` })) as { error: string; message: string };
+      throw new Error(`Plugin auth refresh failed: ${err.message ?? err.error}`);
+    }
+
+    const data = await resp.json() as {
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+      github_login: string;
+      github_email?: string;
+    };
+
+    this.accessToken = data.access_token;
+    this.refreshTokenValue = data.refresh_token;
+
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresIn: data.expires_in,
+      githubLogin: data.github_login,
+      githubEmail: data.github_email,
+    };
+  }
+
+  /**
+   * Revoke the current refresh token on the server and clear local auth state.
+   *
+   * Safe to call even when no refresh token is held (no-op in that case).
+   */
+  async logoutAuth(): Promise<void> {
+    const tokenToRevoke = this.refreshTokenValue;
+    // Clear local state first so we don't retry on network failure
+    this.refreshTokenValue = null;
+    this.accessToken = "";
+
+    if (!tokenToRevoke) return;
+
+    await fetch(`${this.serverUrl}/api/v1/auth/plugin/logout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: tokenToRevoke }),
+    }).catch(() => {
+      // Logout is best-effort; local state is already cleared
+    });
+  }
+
+  /**
+   * Inject a token pair obtained externally (e.g. from a persisted credential
+   * store or a test stub).
+   */
+  setAuthTokens(accessToken: string, refreshToken: string): void {
+    this.accessToken = accessToken;
+    this.refreshTokenValue = refreshToken;
+  }
+
+
 }
