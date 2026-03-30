@@ -1,4 +1,4 @@
-import type { Database as SqliteDatabase } from "better-sqlite3";
+import type { Database as SqliteDatabase } from "bun:sqlite";
 import { LocalDatabase } from "./db.js";
 import type { LocalConfig } from "./config.js";
 import type {
