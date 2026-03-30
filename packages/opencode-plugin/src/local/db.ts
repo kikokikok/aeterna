@@ -1,18 +1,18 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import Database from "better-sqlite3";
+import { Database } from "bun:sqlite";
 import { SCHEMA_STATEMENTS, SCHEMA_VERSION } from "./schema.js";
 
 export class LocalDatabase {
-  private readonly db: Database.Database;
+  private readonly db: Database;
 
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
-    this.db = new Database(dbPath, { timeout: 5000 });
+    this.db = new Database(dbPath, { strict: true });
     this.initialize();
   }
 
-  get connection(): Database.Database {
+  get connection(): Database {
     return this.db;
   }
 
