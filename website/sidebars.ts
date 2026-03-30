@@ -98,6 +98,7 @@ const sidebars: SidebarsConfig = {
         'helm/security',
         'helm/external-secrets',
         'helm/sops-secrets',
+        'helm/secrets-reference',
         'helm/upgrade',
         'helm/cnpg-upgrade',
         'helm/restore',
