@@ -261,6 +261,62 @@ export interface ProjectContext {
 }
 
 // =============================================================================
+// Plugin Auth Configuration
+// =============================================================================
+
+/**
+ * Configuration for interactive GitHub-backed plugin authentication.
+ *
+ * When `enabled` is true the plugin will use the Aeterna server's
+ * `/api/v1/auth/plugin/*` endpoints to exchange a GitHub OAuth code for
+ * Aeterna-issued plugin session credentials rather than relying on a static
+ * `AETERNA_TOKEN`.
+ *
+ * If `enabled` is false (or absent) the plugin falls back to the static
+ * `AETERNA_TOKEN` environment variable / constructor argument.
+ */
+export interface PluginAuthConfig {
+  /** Enable interactive GitHub OAuth plugin authentication. Default: false */
+  enabled: boolean;
+  /**
+   * GitHub OAuth App client ID.  Typically read from
+   * `AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID`.
+   */
+  githubClientId?: string;
+  /** OAuth scope requested from GitHub during device-flow authorisation. Default: `"read:user user:email"` */
+  scope?: string;
+  /** Aeterna server base URL used for token exchange.  Mirrors `serverUrl`. */
+  serverUrl: string;
+}
+
+/**
+ * Response from GitHub's `POST https://github.com/login/device/code`
+ * endpoint when initiating the OAuth device flow.
+ */
+export interface DeviceCodeResponse {
+  /** The code the plugin polls with. */
+  device_code: string;
+  /** Short code the user must enter at `verification_uri`. */
+  user_code: string;
+  /** URL the user opens in their browser. */
+  verification_uri: string;
+  /** Seconds before the device code expires. */
+  expires_in: number;
+  /** Minimum polling interval in seconds. */
+  interval: number;
+}
+
+/** Token pair returned by the plugin auth endpoints. */
+export interface PluginAuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  /** Seconds until the access token expires. */
+  expiresIn: number;
+  githubLogin: string;
+  githubEmail?: string;
+}
+
+// =============================================================================
 // Client Configuration
 // =============================================================================
 
@@ -310,6 +366,8 @@ export interface PluginConfig {
     systemPromptHook: boolean;
     permissionHook: boolean;
   };
+  /** Interactive GitHub-backed plugin auth.  Undefined means disabled. */
+  auth?: PluginAuthConfig;
 }
 
 /** Default plugin configuration */
@@ -340,6 +398,8 @@ export const DEFAULT_CONFIG: PluginConfig = {
     systemPromptHook: true,
     permissionHook: true,
   },
+  // auth is intentionally omitted from the default — disabled unless explicitly
+  // configured via env vars or .aeterna/config.toml [auth] section.
 };
 
 // =============================================================================
