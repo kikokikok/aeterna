@@ -810,7 +810,7 @@ Extensions are registered in the OpenCode plugin:
 
 ```typescript
 // opencode-plugin/src/extensions/index.ts
-import { ExtensionRegistry } from '@kiko-aeterna/opencode-plugin';
+import { ExtensionRegistry } from '@aeterna-org/opencode-plugin';
 
 const registry = new ExtensionRegistry();
 

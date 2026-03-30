@@ -232,7 +232,7 @@ impl McpServer {
                     },
                     "serverInfo": {
                         "name": "aeterna-tools",
-                        "version": "0.1.0"
+                        "version": "0.2.0"
                     }
                 })),
                 error: None,

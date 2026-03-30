@@ -913,11 +913,11 @@ For enterprise deployments, combine both:
   "$schema": "https://opencode.ai/config.json",
   
   // NPM Plugin for hooks and deep integration
-  "plugin": ["@kiko-aeterna/opencode-plugin"],
+  "plugin": ["@aeterna-org/opencode-plugin"],
   
   // Plugin configured to use remote MCP as backend
   "pluginConfig": {
-    "@kiko-aeterna/opencode-plugin": {
+    "@aeterna-org/opencode-plugin": {
       "backend": {
         "type": "mcp",
         "url": "https://aeterna.company.com/mcp",

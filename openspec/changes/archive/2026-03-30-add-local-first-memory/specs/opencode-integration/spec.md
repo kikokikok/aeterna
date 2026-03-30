@@ -2,7 +2,7 @@
 
 ### Requirement: NPM Plugin Package
 
-The system SHALL provide an NPM package `@kiko-aeterna/opencode-plugin` that integrates with OpenCode using the official `@opencode-ai/plugin` SDK.
+The system SHALL provide an NPM package `@aeterna-org/opencode-plugin` that integrates with OpenCode using the official `@opencode-ai/plugin` SDK.
 
 The plugin MUST:
 - Export a default Plugin function conforming to OpenCode's Plugin type
@@ -13,7 +13,7 @@ The plugin MUST:
 - Run a background `SyncEngine` for bidirectional memory synchronization
 
 #### Scenario: Plugin installation
-- **WHEN** a user runs `npm install -D @kiko-aeterna/opencode-plugin`
+- **WHEN** a user runs `npm install -D @aeterna-org/opencode-plugin`
 - **THEN** the plugin SHALL be available for OpenCode configuration
 - **AND** the plugin SHALL include `better-sqlite3` as a dependency
 

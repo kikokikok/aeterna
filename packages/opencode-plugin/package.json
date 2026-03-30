@@ -1,5 +1,5 @@
 {
-  "name": "@kiko-aeterna/opencode-plugin",
+  "name": "@aeterna-org/opencode-plugin",
   "version": "0.2.0",
   "description": "OpenCode plugin for Aeterna memory and knowledge integration",
   "type": "module",

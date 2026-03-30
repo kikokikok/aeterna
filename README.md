@@ -451,15 +451,15 @@ The following changes have been archived (completed and deployed):
 
 ### OpenCode Plugin
 
-The OpenCode plugin is published as `@kiko-aeterna/opencode-plugin`:
+The OpenCode plugin is published as `@aeterna-org/opencode-plugin`:
 
 ```bash
-npm install -D @kiko-aeterna/opencode-plugin
+npm install -D @aeterna-org/opencode-plugin
 ```
 
 ```jsonc
 {
-  "plugin": ["@kiko-aeterna/opencode-plugin"]
+  "plugin": ["@aeterna-org/opencode-plugin"]
 }
 ```
 
