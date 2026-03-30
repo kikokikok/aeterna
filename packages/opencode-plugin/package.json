@@ -1,12 +1,17 @@
 {
   "name": "@aeterna-org/opencode-plugin",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "OpenCode plugin for Aeterna memory and knowledge integration",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "oc-plugin": ["server"],
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
