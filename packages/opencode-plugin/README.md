@@ -254,6 +254,11 @@ Contributions are welcome! Please read the main Aeterna repository for guideline
 
 ## Changelog
 
+### 0.2.3
+
+- Replaced unsupported `bun:sqlite` `.pragma()` helper calls with SQL `PRAGMA` statements that work in OpenCode's Bun runtime
+- Verified local-first SQLite initialization under Bun with passing tests, typecheck, and build
+
 ### 0.2.2
 
 - Replaced `better-sqlite3` with Bun-compatible `bun:sqlite` so the plugin loads inside OpenCode
