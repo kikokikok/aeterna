@@ -7,10 +7,18 @@ use crate::governance::{
     GovernanceRoleListTool, GovernanceRoleRevokeTool, HierarchyNavigateTool, UnitCreateTool,
     UnitPolicyAddTool, UserRoleAssignTool, UserRoleRemoveTool,
 };
-use crate::knowledge::{KnowledgeGetTool, KnowledgeListTool, KnowledgeQueryTool};
+use crate::graph::{
+    GraphContextTool, GraphFindPathTool, GraphImplementationsTool, GraphLinkTool, GraphRelatedTool,
+    GraphTraverseTool, GraphUnlinkTool, GraphViolationsTool,
+};
+use crate::knowledge::{
+    InMemoryKnowledgeProposalStorage, KnowledgeGetTool, KnowledgeListTool, KnowledgeProposeTool,
+    KnowledgeQueryTool, SimpleKnowledgeInterpreter,
+};
 use crate::memory::{
-    GraphNeighborsTool, GraphPathTool, GraphQueryTool, MemoryAddTool, MemoryCloseTool,
-    MemoryDeleteTool, MemoryFeedbackTool, MemoryOptimizeTool, MemoryReasonTool, MemorySearchTool,
+    DefaultPromotionGovernance, GraphNeighborsTool, GraphPathTool, GraphQueryTool, MemoryAddTool,
+    MemoryAutoPromoteTool, MemoryCloseTool, MemoryDeleteTool, MemoryFeedbackTool,
+    MemoryOptimizeTool, MemoryPromoteTool, MemoryReasonTool, MemorySearchTool,
 };
 use crate::tools::{ToolDefinition, ToolRegistry};
 use knowledge::governance::GovernanceEngine;
@@ -70,7 +78,17 @@ impl McpServer {
         if let Some(graph) = graph_store {
             registry.register(Box::new(GraphQueryTool::new(graph.clone())));
             registry.register(Box::new(GraphNeighborsTool::new(graph.clone())));
-            registry.register(Box::new(GraphPathTool::new(graph)));
+            registry.register(Box::new(GraphPathTool::new(graph.clone())));
+
+            let db = graph.db_handle();
+            registry.register(Box::new(GraphLinkTool::new(db.clone())));
+            registry.register(Box::new(GraphUnlinkTool::new(db.clone())));
+            registry.register(Box::new(GraphTraverseTool::new(db.clone())));
+            registry.register(Box::new(GraphFindPathTool::new(db.clone())));
+            registry.register(Box::new(GraphViolationsTool::new(db.clone())));
+            registry.register(Box::new(GraphImplementationsTool::new(db.clone())));
+            registry.register(Box::new(GraphContextTool::new(db.clone())));
+            registry.register(Box::new(GraphRelatedTool::new(db)));
         }
 
         registry.register(Box::new(KnowledgeGetTool::new(
@@ -83,6 +101,16 @@ impl McpServer {
             memory_manager.clone(),
             knowledge_repository.clone(),
         )));
+        registry.register(Box::new(KnowledgeProposeTool::new(
+            Arc::new(InMemoryKnowledgeProposalStorage::default()),
+            Arc::new(SimpleKnowledgeInterpreter::default()),
+        )));
+
+        registry.register(Box::new(MemoryPromoteTool::new(
+            memory_manager.clone(),
+            Arc::new(DefaultPromotionGovernance::new()),
+        )));
+        registry.register(Box::new(MemoryAutoPromoteTool::new(memory_manager.clone())));
 
         registry.register(Box::new(SyncNowTool::new(sync_manager.clone())));
         registry.register(Box::new(SyncStatusTool::new(sync_manager.clone())));
