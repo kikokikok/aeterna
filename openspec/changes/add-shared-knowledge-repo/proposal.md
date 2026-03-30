@@ -27,6 +27,6 @@ A shared remote GitHub repository as the backing store solves this: all replicas
 
 - **Code**: `knowledge/src/repository.rs` (major changes to `GitRepository`), `config/src/config.rs` (new config fields), `cli/src/server/bootstrap.rs` (init with remote), `config/src/loader.rs` (env var loading)
 - **Helm**: `charts/aeterna/templates/aeterna/deployment.yaml` (new env vars + secret mount), `charts/aeterna/values.yaml` (new knowledge repo config block)
-- **Infrastructure**: Requires a GitHub repo with deploy key (already exists: `kyriba-eng/aeterna-knowledge` or similar), K8s secret for SSH key
+- **Infrastructure**: Requires a GitHub repo with deploy key, K8s secret for SSH key
 - **Dependencies**: `git2` crate already in use — remote operations use its `Remote` API (fetch, push). No new crate dependencies expected.
 - **Risk**: Push conflicts under high write concurrency — mitigated by pull-rebase-push retry loop

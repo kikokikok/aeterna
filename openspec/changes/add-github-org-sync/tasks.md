@@ -59,11 +59,11 @@
 
 - [x] 9.1 Add `aeterna.github.orgSync` section to Helm values schema (`enabled`, `orgName`, `appId`, `installationId`, `pemSecretName`)
 - [x] 9.2 Update Helm deployment template to inject GitHub App env vars and mount PEM secret when orgSync is enabled
-- [x] 9.3 Update `environments/ci-dev-04/values.yaml` in `aeterna-kyriba-deployment` with `kyriba-eng` org sync config
+- [x] 9.3 Update deployment values in your private deployment repo with org sync config
 
 ## 10. E2E Testing & Deployment
 
 - [x] 10.1 Update GitHub App `aeterna-knowledge-bot` permissions: add Organization Members (Read), Organization Administration (Read)
 - [x] 10.2 Subscribe GitHub App to `organization`, `team`, and `membership` webhook events
 - [x] 10.3 Add E2E Newman test for `POST /api/v1/admin/sync/github` endpoint (trigger sync, verify SyncReport response)
-- [x] 10.4 Build, deploy, and verify full sync against live `kyriba-eng` org on ci-dev-04
+- [x] 10.4 Build, deploy, and verify full sync against live org on staging cluster

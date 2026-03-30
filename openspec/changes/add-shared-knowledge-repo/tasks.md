@@ -81,14 +81,14 @@
 
 ## 9. Infrastructure Setup
 
-- [x] 9.1 Create GitHub repo `kyriba-eng/aeterna-knowledge` (private, empty)
+- [x] 9.1 Create GitHub repo for shared knowledge (private, empty)
 - [x] 9.2 Generate SSH deploy key (read-write) and add to the repo
 - [x] 9.3 Create K8s secret `aeterna-knowledge-repo-key` with SSH private key
-- [x] 9.4 Create GitHub App on kyriba-eng org, install on aeterna-knowledge repo
+- [x] 9.4 Create GitHub App on org, install on aeterna-knowledge repo
 - [x] 9.5 Create K8s secret `aeterna-github-app-pem` with App private key PEM
 - [x] 9.6 Generate webhook secret, create K8s secret `aeterna-webhook-secret`
-- [x] 9.7 Configure GitHub webhook on `aeterna-knowledge` repo → `https://aeterna.ci-dev-04.dev.kyriba.io/api/v1/webhooks/github`
-- [x] 9.8 Update Kyriba deployment values in `aeterna-kyriba-deployment/environments/ci-dev-04/values.yaml`
+- [x] 9.7 Configure GitHub webhook on knowledge repo → `https://<your-aeterna-host>/api/v1/webhooks/github`
+- [x] 9.8 Update deployment values with knowledge repo config (in your private deployment repo)
 
 ## 10. Build, Deploy & Validate
 

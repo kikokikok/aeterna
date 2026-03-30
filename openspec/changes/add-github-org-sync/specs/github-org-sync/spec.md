@@ -29,8 +29,8 @@ The system SHALL map GitHub Organization structure to Aeterna's four-level hiera
 - GitHub Organization Members → Users
 
 #### Scenario: Full hierarchy sync
-- **WHEN** an admin triggers a full sync for GitHub org `kyriba-eng`
-- **THEN** the system SHALL create a Company unit named `kyriba-eng` if it does not exist
+- **WHEN** an admin triggers a full sync for GitHub org `acme-corp`
+- **THEN** the system SHALL create a Company unit named `acme-corp` if it does not exist
 - **AND** the system SHALL create Organization units for each top-level team
 - **AND** the system SHALL create Team units for each nested team, parented under the correct Organization
 - **AND** the system SHALL create or update User records for all org members

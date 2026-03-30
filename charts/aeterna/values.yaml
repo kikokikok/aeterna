@@ -233,7 +233,7 @@ aeterna:
 githubOrgSync:
   ## @param githubOrgSync.enabled Enable GitHub Organization sync
   enabled: false
-  ## @param githubOrgSync.orgName GitHub Organization name to sync (e.g. "kyriba-eng")
+  ## @param githubOrgSync.orgName GitHub Organization name to sync (e.g. "acme-corp")
   orgName: ""
   ## @param githubOrgSync.teamFilter Optional regex to filter teams (e.g. "^platform-")
   teamFilter: ""

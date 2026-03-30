@@ -161,8 +161,8 @@ pub struct GitHubConfig {
 
 ## Migration Plan
 
-1. **GitHub App permissions update**: Add `Organization: Members (Read)`, `Organization: Administration (Read)` to `aeterna-knowledge-bot` app settings. Reinstall on `kyriba-eng` org.
-2. **Helm values update**: Add `github_org_sync` section to `environments/ci-dev-04/values.yaml` with org_name, app_id, installation_id, and reference to existing PEM secret.
+1. **GitHub App permissions update**: Add `Organization: Members (Read)`, `Organization: Administration (Read)` to the GitHub App settings. Reinstall on your org.
+2. **Helm values update**: Add `github_org_sync` section to your deployment values with org_name, app_id, installation_id, and reference to existing PEM secret.
 3. **Deploy**: Standard helm upgrade — new code is additive, no breaking changes.
 4. **Initial sync**: Trigger `POST /api/v1/admin/sync/github` manually to verify mapping.
 5. **Enable webhook events**: In GitHub App settings, subscribe to `Organization`, `Team`, and `Membership` events.

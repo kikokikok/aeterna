@@ -40,7 +40,7 @@ check_prereqs() {
 
 smoke_test() {
     local base_url
-    base_url=$(python3 -c "import json; env=json.load(open('${ENVIRONMENT}')); print(next(v['value'] for v in env['values'] if v['key']=='baseUrl'))" 2>/dev/null || echo "https://aeterna.ci-dev-04.dev.kyriba.io")
+    base_url=$(python3 -c "import json; env=json.load(open('${ENVIRONMENT}')); print(next(v['value'] for v in env['values'] if v['key']=='baseUrl'))" 2>/dev/null || echo "https://aeterna.example.com")
 
     log "Smoke test: ${base_url}/health"
     local status

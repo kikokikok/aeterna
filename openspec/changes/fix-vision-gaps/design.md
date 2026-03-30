@@ -1,6 +1,6 @@
 ## Context
 
-Aeterna is deployed on ci-dev-04 (Rev 27, `sha-3311bed`) with the full OPAL stack running (cedar-agent, opal-fetcher, 2x opal-server). The GitHub Org Sync was implemented (40/40 tasks marked done, `idp-sync` crate compiles, 41 tests pass) but **fails at runtime** because:
+Aeterna is deployed on a staging cluster (Rev 27, `sha-3311bed`) with the full OPAL stack running (cedar-agent, opal-fetcher, 2x opal-server). The GitHub Org Sync was implemented (40/40 tasks marked done, `idp-sync` crate compiles, 41 tests pass) but **fails at runtime** because:
 
 1. The `tenants` table doesn't exist — `resolve_tenant_id()` crashes
 2. `run_github_sync()` never calls `initialize_github_sync_schema()`
@@ -44,7 +44,7 @@ The broader vision has 23 OpenSpec specs with ~270+ requirements. Code search, h
 ### Decision 3: Add `slug` and fix UUID handling in `organizational_units`
 **What**: Add `slug TEXT` column. The OPAL fetcher expects `company_slug`, `org_slug`, `team_slug`, `project_slug` from the `v_hierarchy` view. The current `organizational_units.id` is TEXT but `governance_roles.*_id` is UUID. The views will CAST where needed.
 **Why**: The opal-fetcher entity model is already deployed and correct. We adapt the underlying data to fit its expectations.
-**Alternatives considered**: Changing `organizational_units.id` to UUID — rejected because existing sync code writes TEXT IDs like `company-kyriba-eng`. Instead, views will generate deterministic UUIDs from TEXT IDs using `uuid_generate_v5()`.
+**Alternatives considered**: Changing `organizational_units.id` to UUID — rejected because existing sync code writes TEXT IDs like `company-<org-name>`. Instead, views will generate deterministic UUIDs from TEXT IDs using `uuid_generate_v5()`.
 
 ### Decision 4: Create `agents` table for `v_agent_permissions` view
 **What**: `CREATE TABLE IF NOT EXISTS agents (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, agent_type TEXT NOT NULL DEFAULT 'coding-assistant', delegated_by_user_id UUID REFERENCES users(id), delegated_by_agent_id UUID REFERENCES agents(id), delegation_depth INT NOT NULL DEFAULT 0, capabilities JSONB DEFAULT '[]', allowed_company_ids UUID[], allowed_org_ids UUID[], allowed_team_ids UUID[], allowed_project_ids UUID[], status TEXT NOT NULL DEFAULT 'active', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`.

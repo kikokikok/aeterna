@@ -8,7 +8,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "https://aeterna.ci-dev-04.dev.kyriba.io",
+      "value": "https://aeterna.example.com",
       "type": "string"
     },
     {
