@@ -454,14 +454,10 @@ The following changes have been archived (completed and deployed):
 The OpenCode plugin is published as `@aeterna-org/opencode-plugin`:
 
 ```bash
-npm install -D @aeterna-org/opencode-plugin
+opencode plugin @aeterna-org/opencode-plugin
 ```
 
-```jsonc
-{
-  "plugin": ["@aeterna-org/opencode-plugin"]
-}
-```
+This installs the plugin and adds it to your OpenCode configuration automatically.
 
 **Features**: Memory tools, knowledge tools, graph tools, CCA tools, governance tools, automatic context injection, tool execution capture
 
