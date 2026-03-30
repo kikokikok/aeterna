@@ -740,6 +740,7 @@ where
 pub struct InMemoryKnowledgeProposalStorage {
     drafts: tokio::sync::RwLock<std::collections::HashMap<String, KnowledgeDraft>>,
     proposals: tokio::sync::RwLock<std::collections::HashMap<String, KnowledgeProposal>>,
+    pr_storage: Option<Arc<knowledge::pr_proposal_storage::PrProposalStorage>>,
 }
 
 impl InMemoryKnowledgeProposalStorage {
@@ -747,6 +748,34 @@ impl InMemoryKnowledgeProposalStorage {
         Self {
             drafts: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             proposals: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            pr_storage: None,
+        }
+    }
+
+    pub fn with_git_provider(
+        git_provider: Arc<dyn knowledge::git_provider::GitProvider>,
+        default_branch: impl Into<String>,
+    ) -> Self {
+        Self {
+            drafts: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            proposals: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            pr_storage: Some(Arc::new(
+                knowledge::pr_proposal_storage::PrProposalStorage::new(
+                    git_provider,
+                    default_branch.into(),
+                ),
+            )),
+        }
+    }
+
+    pub fn with_optional_git_provider(
+        git_provider: Option<Arc<dyn knowledge::git_provider::GitProvider>>,
+        default_branch: impl Into<String>,
+    ) -> Self {
+        if let Some(provider) = git_provider {
+            Self::with_git_provider(provider, default_branch)
+        } else {
+            Self::new()
         }
     }
 }
@@ -779,8 +808,46 @@ impl KnowledgeProposalStorage for InMemoryKnowledgeProposalStorage {
     }
 
     async fn store_proposal(&self, proposal: KnowledgeProposal) -> Result<(), KnowledgeToolError> {
+        let mut enriched = proposal.clone();
+
+        if let Some(pr_storage) = &self.pr_storage {
+            let tenant_id = proposal
+                .metadata
+                .get("tenantId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("default");
+            let layer = format!("{:?}", proposal.layer).to_lowercase();
+            let path = format!("{}-{}.md", proposal.draft_id, proposal.proposal_id);
+            let message = format!("propose knowledge: {}", proposal.title);
+
+            let proposal_info = pr_storage
+                .propose(tenant_id, &layer, &path, &proposal.content, &message)
+                .await
+                .map_err(|e| KnowledgeToolError::StorageError(e.to_string()))?;
+
+            let pr = pr_storage
+                .submit(&proposal_info, &proposal.title, None)
+                .await
+                .map_err(|e| KnowledgeToolError::StorageError(e.to_string()))?;
+
+            enriched
+                .metadata
+                .insert("prNumber".to_string(), serde_json::json!(pr.number));
+            enriched
+                .metadata
+                .insert("prUrl".to_string(), serde_json::json!(pr.html_url));
+            enriched.metadata.insert(
+                "prBranch".to_string(),
+                serde_json::json!(proposal_info.branch_name),
+            );
+            enriched.metadata.insert(
+                "prFilePath".to_string(),
+                serde_json::json!(proposal_info.file_path),
+            );
+        }
+
         let mut proposals = self.proposals.write().await;
-        proposals.insert(proposal.proposal_id.clone(), proposal);
+        proposals.insert(enriched.proposal_id.clone(), enriched);
         Ok(())
     }
 
@@ -796,6 +863,43 @@ impl KnowledgeProposalStorage for InMemoryKnowledgeProposalStorage {
         &self,
         layer: Option<mk_core::types::KnowledgeLayer>,
     ) -> Result<Vec<KnowledgeProposal>, KnowledgeToolError> {
+        if let Some(pr_storage) = &self.pr_storage {
+            let prs = pr_storage
+                .list_pending()
+                .await
+                .map_err(|e| KnowledgeToolError::StorageError(e.to_string()))?;
+
+            let mapped = prs
+                .into_iter()
+                .filter_map(|pr| {
+                    let fallback_layer = mk_core::types::KnowledgeLayer::Project;
+                    if layer.is_some_and(|l| l != fallback_layer) {
+                        return None;
+                    }
+
+                    let mut metadata = std::collections::HashMap::new();
+                    metadata.insert("prNumber".to_string(), serde_json::json!(pr.number));
+                    metadata.insert("prUrl".to_string(), serde_json::json!(pr.html_url));
+
+                    Some(KnowledgeProposal {
+                        proposal_id: format!("pr-{}", pr.number),
+                        draft_id: format!("pr-{}", pr.number),
+                        title: pr.title,
+                        content: pr.body.unwrap_or_default(),
+                        kind: mk_core::types::KnowledgeType::Adr,
+                        layer: fallback_layer,
+                        proposed_by: "github".to_string(),
+                        proposed_at: chrono::Utc::now(),
+                        status: KnowledgeProposalStatus::Pending,
+                        approvers: Vec::new(),
+                        metadata,
+                    })
+                })
+                .collect();
+
+            return Ok(mapped);
+        }
+
         let proposals = self.proposals.read().await;
         let pending: Vec<_> = proposals
             .values()

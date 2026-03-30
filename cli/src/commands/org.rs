@@ -20,7 +20,7 @@ pub enum OrgCommand {
     Members(OrgMembersArgs),
 
     #[command(about = "Set default organization for current context")]
-    Use(OrgUseArgs)
+    Use(OrgUseArgs),
 }
 
 #[derive(Args)]
@@ -42,7 +42,7 @@ pub struct OrgCreateArgs {
 
     /// Dry run - show what would be created
     #[arg(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 #[derive(Args)]
@@ -57,7 +57,7 @@ pub struct OrgListArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -71,7 +71,7 @@ pub struct OrgShowArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -98,13 +98,13 @@ pub struct OrgMembersArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
 pub struct OrgUseArgs {
     /// Organization ID to set as default
-    pub org_id: String
+    pub org_id: String,
 }
 
 pub async fn run(cmd: OrgCommand) -> anyhow::Result<()> {
@@ -113,7 +113,7 @@ pub async fn run(cmd: OrgCommand) -> anyhow::Result<()> {
         OrgCommand::List(args) => run_list(args).await,
         OrgCommand::Show(args) => run_show(args).await,
         OrgCommand::Members(args) => run_members(args).await,
-        OrgCommand::Use(args) => run_use(args).await
+        OrgCommand::Use(args) => run_use(args).await,
     }
 }
 

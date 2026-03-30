@@ -12,18 +12,18 @@ use tracing::debug;
 pub struct AzureAdClient {
     http_client: Client,
     config: AzureAdConfig,
-    access_token: Arc<RwLock<Option<CachedToken>>>
+    access_token: Arc<RwLock<Option<CachedToken>>>,
 }
 
 struct CachedToken {
     token: String,
-    expires_at: DateTime<Utc>
+    expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OAuthTokenResponse {
     access_token: String,
-    expires_in: u64
+    expires_in: u64,
 }
 
 impl AzureAdClient {
@@ -36,7 +36,7 @@ impl AzureAdClient {
         Ok(Self {
             http_client,
             config,
-            access_token: Arc::new(RwLock::new(None))
+            access_token: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -90,7 +90,7 @@ impl AzureAdClient {
             let mut cached = self.access_token.write().await;
             *cached = Some(CachedToken {
                 token: token_response.access_token.clone(),
-                expires_at
+                expires_at,
             });
         }
 
@@ -122,14 +122,14 @@ impl AzureAdClient {
                     .and_then(|s| s.parse::<u64>().ok())
                     .unwrap_or(60);
                 Err(IdpSyncError::RateLimited {
-                    retry_after_seconds: retry_after
+                    retry_after_seconds: retry_after,
                 })
             }
             StatusCode::UNAUTHORIZED => {
                 let mut cached = self.access_token.write().await;
                 *cached = None;
                 Err(IdpSyncError::AuthenticationError(
-                    "Azure AD authentication failed".to_string()
+                    "Azure AD authentication failed".to_string(),
                 ))
             }
             StatusCode::NOT_FOUND => Err(IdpSyncError::UserNotFound(url.to_string())),
@@ -137,7 +137,7 @@ impl AzureAdClient {
                 let body = response.text().await.unwrap_or_default();
                 Err(IdpSyncError::IdpApiError {
                     status: status.as_u16(),
-                    message: body
+                    message: body,
                 })
             }
         }
@@ -158,7 +158,7 @@ impl AzureAdClient {
             created_at: user.created_date_time.unwrap_or_else(Utc::now),
             updated_at: Utc::now(),
             idp_provider: "azure_ad".to_string(),
-            idp_subject: user.id
+            idp_subject: user.id,
         }
     }
 }
@@ -185,7 +185,7 @@ impl IdpClient for AzureAdClient {
                 .into_iter()
                 .map(|u| self.graph_user_to_idp_user(u))
                 .collect(),
-            next_page_token: response.odata_next_link
+            next_page_token: response.odata_next_link,
         })
     }
 
@@ -217,10 +217,10 @@ impl IdpClient for AzureAdClient {
                         GroupType::OktaGroup
                     },
                     created_at: g.created_date_time.unwrap_or_else(Utc::now),
-                    updated_at: Utc::now()
+                    updated_at: Utc::now(),
                 })
                 .collect(),
-            next_page_token: response.odata_next_link
+            next_page_token: response.odata_next_link,
         })
     }
 
@@ -237,12 +237,12 @@ impl IdpClient for AzureAdClient {
                 response
                     .value
                     .into_iter()
-                    .map(|u| self.graph_user_to_idp_user(u))
+                    .map(|u| self.graph_user_to_idp_user(u)),
             );
 
             match response.odata_next_link {
                 Some(next_url) => url = next_url,
-                None => break
+                None => break,
             }
         }
 
@@ -277,7 +277,7 @@ impl IdpClient for AzureAdClient {
 struct GraphListResponse<T> {
     value: Vec<T>,
     #[serde(rename = "@odata.nextLink")]
-    odata_next_link: Option<String>
+    odata_next_link: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -290,7 +290,7 @@ struct GraphUser {
     surname: Option<String>,
     display_name: Option<String>,
     account_enabled: Option<bool>,
-    created_date_time: Option<DateTime<Utc>>
+    created_date_time: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -301,7 +301,7 @@ struct GraphGroup {
     description: Option<String>,
     #[serde(default)]
     group_types: Vec<String>,
-    created_date_time: Option<DateTime<Utc>>
+    created_date_time: Option<DateTime<Utc>>,
 }
 
 pub fn create_azure_client(config: AzureAdConfig) -> IdpSyncResult<Arc<dyn IdpClient>> {
@@ -322,7 +322,7 @@ mod tests {
             surname: Some("User".to_string()),
             display_name: Some("Test User".to_string()),
             account_enabled: Some(true),
-            created_date_time: Some(Utc::now())
+            created_date_time: Some(Utc::now()),
         };
 
         let config = AzureAdConfig {
@@ -330,7 +330,7 @@ mod tests {
             client_id: "client".to_string(),
             client_secret: "secret".to_string(),
             group_filter: None,
-            include_nested_groups: false
+            include_nested_groups: false,
         };
 
         let client = AzureAdClient::new(config).unwrap();

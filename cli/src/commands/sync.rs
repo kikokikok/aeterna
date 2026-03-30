@@ -32,7 +32,7 @@ pub struct SyncArgs {
 
     /// Show verbose sync details
     #[arg(long, short)]
-    pub verbose: bool
+    pub verbose: bool,
 }
 
 pub async fn run(args: SyncArgs) -> Result<()> {
@@ -69,8 +69,15 @@ pub async fn run(args: SyncArgs) -> Result<()> {
     // We cannot accurately report "Already in sync" or "no planned changes"
     // without querying the real backend — always surface the not-connected state.
     eprintln!();
-    eprintln!("{} {}", "error:".red().bold(), "Cannot connect to Aeterna server".white().bold());
-    eprintln!("       {}", "The memory/knowledge backend is not running or unreachable".dimmed());
+    eprintln!(
+        "{} {}",
+        "error:".red().bold(),
+        "Cannot connect to Aeterna server".white().bold()
+    );
+    eprintln!(
+        "       {}",
+        "The memory/knowledge backend is not running or unreachable".dimmed()
+    );
     eprintln!();
     eprintln!("{}", "How to fix:".yellow().bold());
     eprintln!("  1. Start the Aeterna server");
@@ -101,7 +108,7 @@ async fn run_json(args: SyncArgs, ctx: &context::ResolvedContext) -> Result<()> 
 struct SyncState {
     memories_pending: u32,
     stale_pointers: u32,
-    cache_expired: u32
+    cache_expired: u32,
 }
 
 impl SyncState {
@@ -115,7 +122,7 @@ struct SyncResults {
     memories_promoted: u32,
     pointers_refreshed: u32,
     cache_updated: u32,
-    errors: u32
+    errors: u32,
 }
 
 fn analyze_sync_state(_args: &SyncArgs) -> SyncState {
@@ -124,7 +131,7 @@ fn analyze_sync_state(_args: &SyncArgs) -> SyncState {
     SyncState {
         memories_pending: 0,
         stale_pointers: 0,
-        cache_expired: 0
+        cache_expired: 0,
     }
 }
 
@@ -176,14 +183,14 @@ mod tests {
         let state = SyncState {
             memories_pending: 0,
             stale_pointers: 0,
-            cache_expired: 0
+            cache_expired: 0,
         };
         assert!(state.is_synced());
 
         let state = SyncState {
             memories_pending: 1,
             stale_pointers: 0,
-            cache_expired: 0
+            cache_expired: 0,
         };
         assert!(!state.is_synced());
     }
@@ -195,7 +202,7 @@ mod tests {
             dry_run: false,
             force: false,
             direction: "all".to_string(),
-            verbose: false
+            verbose: false,
         };
         // analyze_sync_state returns a zero-valued sentinel (server not connected).
         // The caller must NOT interpret this as "already in sync" —
@@ -213,16 +220,22 @@ mod tests {
             dry_run: false,
             force: false,
             direction: "all".to_string(),
-            verbose: false
+            verbose: false,
         };
         let state = SyncState {
             memories_pending: 5,
             stale_pointers: 3,
-            cache_expired: 2
+            cache_expired: 2,
         };
         let result = execute_sync(&args, &state);
-        assert!(result.is_err(), "execute_sync must fail when server not connected");
+        assert!(
+            result.is_err(),
+            "execute_sync must fail when server not connected"
+        );
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("not connected"), "error message should mention not connected");
+        assert!(
+            msg.contains("not connected"),
+            "error message should mention not connected"
+        );
     }
 }

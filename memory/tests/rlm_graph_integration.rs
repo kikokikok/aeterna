@@ -15,7 +15,7 @@ pub fn test_ctx() -> TenantContext {
     use std::str::FromStr;
     TenantContext::new(
         TenantId::from_str("test-tenant").unwrap(),
-        UserId::from_str("test-user").unwrap()
+        UserId::from_str("test-user").unwrap(),
     )
 }
 
@@ -24,7 +24,7 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
 {
     let graph_store = Arc::new(
         DuckDbGraphStore::new(DuckDbGraphConfig::default())
-            .expect("Failed to create DuckDB graph store")
+            .expect("Failed to create DuckDB graph store"),
     );
 
     let repo = Arc::new(GitRepository::new_mock());
@@ -49,13 +49,13 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
 
     let manager = MemoryManager::new()
         .with_embedding_service(Arc::new(
-            memory::embedding::mock::MockEmbeddingService::new(1536)
+            memory::embedding::mock::MockEmbeddingService::new(1536),
         ))
         .with_config(config::MemoryConfig {
             rlm: config::RlmConfig {
                 enabled: true,
                 max_steps: 5,
-                complexity_threshold: 0.1
+                complexity_threshold: 0.1,
             },
             ..Default::default()
         })
@@ -79,9 +79,9 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
             metadata: std::collections::HashMap::new(),
             commit_hash: None,
             author: None,
-            updated_at: 0
+            updated_at: 0,
         },
-        "add mem1"
+        "add mem1",
     )
     .await?;
 
@@ -92,8 +92,8 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
                 id: "mem1".to_string(),
                 label: "Memory".to_string(),
                 properties: serde_json::json!({}),
-                tenant_id: ctx.tenant_id.to_string()
-            }
+                tenant_id: ctx.tenant_id.to_string(),
+            },
         )
         .await?;
 
@@ -104,8 +104,8 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
                 id: "mem2".to_string(),
                 label: "target".to_string(),
                 properties: serde_json::json!({}),
-                tenant_id: ctx.tenant_id.to_string()
-            }
+                tenant_id: ctx.tenant_id.to_string(),
+            },
         )
         .await?;
 
@@ -118,8 +118,8 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
                 target_id: "mem2".to_string(),
                 relation: "RELATES_TO".to_string(),
                 properties: serde_json::json!({}),
-                tenant_id: ctx.tenant_id.to_string()
-            }
+                tenant_id: ctx.tenant_id.to_string(),
+            },
         )
         .await?;
 
@@ -137,7 +137,7 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
                 layer: MemoryLayer::Project,
                 importance_score: Some(0.5),
                 ..Default::default()
-            }
+            },
         )
         .await?;
 
@@ -150,7 +150,7 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
                 layer: MemoryLayer::Project,
                 importance_score: Some(0.5),
                 ..Default::default()
-            }
+            },
         )
         .await?;
 
@@ -160,7 +160,7 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
             "compare the bridge and target relationships summarize",
             1,
             0.0,
-            HashMap::new()
+            HashMap::new(),
         )
         .await?;
 
@@ -193,6 +193,214 @@ async fn test_rlm_graph_reward_propagation() -> Result<(), Box<dyn std::error::E
     let ids: Vec<_> = reward_events.iter().map(|e| e.entry_id.as_str()).collect();
     assert!(ids.contains(&"mem1"));
     assert!(ids.contains(&"mem2"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_rlm_multi_hop_reward_propagation()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let graph_store = Arc::new(
+        DuckDbGraphStore::new(DuckDbGraphConfig::default())
+            .expect("Failed to create DuckDB graph store"),
+    );
+
+    let repo = Arc::new(GitRepository::new_mock());
+    let governance = Arc::new(GovernanceEngine::new());
+    let km = Arc::new(KnowledgeManager::new(repo, governance));
+
+    let llm_service = memory::llm::mock::MockLlmService::new();
+
+    let action1 = r#"{"SearchLayer": {"layer": "project", "query": "architecture"}}"#;
+    let action2 = r#"{"DrillDown": {"memory_id": "hop1", "query": "patterns"}}"#;
+    let action3 = r#"{"DrillDown": {"memory_id": "hop2", "query": "details"}}"#;
+    let action4 = r#"{"Aggregate": {"strategy": "Summary", "results": ["Found via 3-hop chain"]}}"#;
+
+    llm_service
+        .set_responses(vec![
+            action1.to_string(),
+            action2.to_string(),
+            action3.to_string(),
+            action4.to_string(),
+        ])
+        .await;
+    let llm = Arc::new(llm_service);
+
+    let manager = MemoryManager::new()
+        .with_embedding_service(Arc::new(
+            memory::embedding::mock::MockEmbeddingService::new(1536),
+        ))
+        .with_config(config::MemoryConfig {
+            rlm: config::RlmConfig {
+                enabled: true,
+                max_steps: 10,
+                complexity_threshold: 0.1,
+            },
+            ..Default::default()
+        })
+        .with_graph_store(graph_store.clone()
+            as Arc<
+                dyn storage::graph::GraphStore<Error = Box<dyn std::error::Error + Send + Sync>>,
+            >)
+        .with_llm_service(llm)
+        .with_knowledge_manager(km.clone());
+
+    let ctx = test_ctx();
+
+    for (id, label) in [
+        ("hop1", "Architecture"),
+        ("hop2", "Patterns"),
+        ("hop3", "Details"),
+    ] {
+        km.add(
+            ctx.clone(),
+            mk_core::types::KnowledgeEntry {
+                path: id.to_string(),
+                content: format!("{} content", label),
+                layer: mk_core::types::KnowledgeLayer::Project,
+                kind: mk_core::types::KnowledgeType::Spec,
+                status: mk_core::types::KnowledgeStatus::Accepted,
+                summaries: std::collections::HashMap::new(),
+                metadata: std::collections::HashMap::new(),
+                commit_hash: None,
+                author: None,
+                updated_at: 0,
+            },
+            &format!("add {}", id),
+        )
+        .await?;
+
+        graph_store
+            .add_node(
+                ctx.clone(),
+                storage::graph::GraphNode {
+                    id: id.to_string(),
+                    label: label.to_string(),
+                    properties: serde_json::json!({}),
+                    tenant_id: ctx.tenant_id.to_string(),
+                },
+            )
+            .await?;
+    }
+
+    graph_store
+        .add_edge(
+            ctx.clone(),
+            storage::graph::GraphEdge {
+                id: "edge_1_2".to_string(),
+                source_id: "hop1".to_string(),
+                target_id: "hop2".to_string(),
+                relation: "LEADS_TO".to_string(),
+                properties: serde_json::json!({}),
+                tenant_id: ctx.tenant_id.to_string(),
+            },
+        )
+        .await?;
+
+    graph_store
+        .add_edge(
+            ctx.clone(),
+            storage::graph::GraphEdge {
+                id: "edge_2_3".to_string(),
+                source_id: "hop2".to_string(),
+                target_id: "hop3".to_string(),
+                relation: "LEADS_TO".to_string(),
+                properties: serde_json::json!({}),
+                tenant_id: ctx.tenant_id.to_string(),
+            },
+        )
+        .await?;
+
+    let provider = Arc::new(memory::providers::MockProvider::new());
+    manager
+        .register_provider(MemoryLayer::Project, provider.clone())
+        .await;
+
+    for (id, content) in [
+        ("hop1", "Architecture decisions for microservices"),
+        ("hop2", "Design patterns used in service mesh"),
+        ("hop3", "Implementation details for circuit breaker"),
+    ] {
+        provider
+            .add(
+                ctx.clone(),
+                MemoryEntry {
+                    id: id.to_string(),
+                    content: content.to_string(),
+                    layer: MemoryLayer::Project,
+                    importance_score: Some(0.5),
+                    ..Default::default()
+                },
+            )
+            .await?;
+    }
+
+    let results = manager
+        .search(
+            ctx.clone(),
+            "trace the architecture patterns through to implementation details and summarize",
+            1,
+            0.0,
+            HashMap::new(),
+        )
+        .await?;
+
+    assert!(
+        !results.is_empty(),
+        "Multi-hop search should return results"
+    );
+
+    let hop1 = manager
+        .get_from_layer(ctx.clone(), MemoryLayer::Project, "hop1")
+        .await?
+        .unwrap();
+    let hop2 = manager
+        .get_from_layer(ctx.clone(), MemoryLayer::Project, "hop2")
+        .await?
+        .unwrap();
+    let _hop3 = manager
+        .get_from_layer(ctx.clone(), MemoryLayer::Project, "hop3")
+        .await?
+        .unwrap();
+
+    assert!(
+        hop1.importance_score.unwrap() > 0.5,
+        "hop1 importance should increase from rewards: {}",
+        hop1.importance_score.unwrap()
+    );
+    assert!(
+        hop2.importance_score.unwrap() > 0.5,
+        "hop2 importance should increase from rewards: {}",
+        hop2.importance_score.unwrap()
+    );
+
+    assert!(
+        hop1.metadata.contains_key("reward"),
+        "hop1 should have reward metadata"
+    );
+    assert!(
+        hop2.metadata.contains_key("reward"),
+        "hop2 should have reward metadata"
+    );
+
+    let trajectories = manager.get_trajectories(&ctx).await;
+    let reward_events: Vec<_> = trajectories.iter().filter(|e| e.reward.is_some()).collect();
+
+    assert!(
+        reward_events.len() >= 2,
+        "Should have at least 2 reward events in multi-hop trajectory, found {}",
+        reward_events.len()
+    );
+
+    let rewarded_ids: Vec<_> = reward_events.iter().map(|e| e.entry_id.as_str()).collect();
+    assert!(
+        rewarded_ids.contains(&"hop1"),
+        "hop1 should be in rewarded IDs"
+    );
+    assert!(
+        rewarded_ids.contains(&"hop2"),
+        "hop2 should be in rewarded IDs"
+    );
 
     Ok(())
 }

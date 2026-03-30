@@ -20,7 +20,7 @@ pub enum TeamCommand {
     Members(TeamMembersArgs),
 
     #[command(about = "Set default team for current context")]
-    Use(TeamUseArgs)
+    Use(TeamUseArgs),
 }
 
 #[derive(Args)]
@@ -42,7 +42,7 @@ pub struct TeamCreateArgs {
 
     /// Dry run - show what would be created
     #[arg(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 #[derive(Args)]
@@ -57,7 +57,7 @@ pub struct TeamListArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -71,7 +71,7 @@ pub struct TeamShowArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -98,13 +98,13 @@ pub struct TeamMembersArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
 pub struct TeamUseArgs {
     /// Team ID to set as default
-    pub team_id: String
+    pub team_id: String,
 }
 
 pub async fn run(cmd: TeamCommand) -> anyhow::Result<()> {
@@ -113,7 +113,7 @@ pub async fn run(cmd: TeamCommand) -> anyhow::Result<()> {
         TeamCommand::List(args) => run_list(args).await,
         TeamCommand::Show(args) => run_show(args).await,
         TeamCommand::Members(args) => run_members(args).await,
-        TeamCommand::Use(args) => run_use(args).await
+        TeamCommand::Use(args) => run_use(args).await,
     }
 }
 

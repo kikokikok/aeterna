@@ -21,9 +21,9 @@
 - [x] 4.3 Update image/build workflows so all referenced deployable images are either built and published or removed from supported deployment paths
 
 ## 5. Docs and operator guidance
-- [ ] 5.1 Reconcile README, INSTALL, deployment docs, and examples with the actual supported deployment/runtime paths
-- [ ] 5.2 Document secret management, ingress TLS, migration, and upgrade procedures for the supported Helm path
-- [ ] 5.3 Remove or clearly deprecate divergent deployment paths that are not supported in production
+- [x] 5.1 Reconcile README, INSTALL, deployment docs, and examples with the actual supported deployment/runtime paths
+- [x] 5.2 Document secret management, ingress TLS, migration, and upgrade procedures for the supported Helm path
+- [x] 5.3 Remove or clearly deprecate divergent deployment paths that are not supported in production
 
 ## Validation status
 - [x] Workspace test suite passes (`cargo test --workspace`)

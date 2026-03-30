@@ -1,110 +1,99 @@
-//! # Code Search MCP Client
+//! # Code Intelligence Backend
 //!
-//! Client for communicating with Code Search sidecar via MCP protocol.
+//! Pluggable backend trait for code intelligence services (search, call graph, index status).
 //!
-//! ## Communication Pattern
-//! - stdio-based MCP communication with Code Search process
-//! - JSON-RPC for tool invocation
-//! - Circuit breaker for resilience
-//! - Spawn-per-call: each request spawns a new `codesearch mcp serve` process
+//! ## Architecture
+//! - `CodeIntelligenceBackend` trait: defines the contract for any code intelligence provider
+//! - `McpCodeIntelligence`: proxies calls to an external MCP code intelligence server (JetBrains, VS Code, etc.)
+//! - `MockCodeIntelligence`: in-memory mock for testing
+//! - `CodeSearchClient`: facade that dispatches to the configured backend with circuit breaker
 
+use async_trait::async_trait;
 use serde_json::Value;
-use std::process::Stdio;
 use std::sync::{Arc, Mutex};
-use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
-use tokio::time::{Duration, timeout};
 
 /// Configuration for Code Search client
 #[derive(Debug, Clone)]
 pub struct CodeSearchConfig {
-    /// Path to Code Search binary (default: "codesearch")
-    pub binary_path: String,
+    /// MCP server endpoint URL for HTTP-based backends (e.g. "http://localhost:3000")
+    pub mcp_server_url: Option<String>,
     /// Workspace name for tenant isolation (default: "default")
     pub workspace: String,
     /// Request timeout in seconds (default: 30)
     pub timeout_secs: u64,
     /// Enable debug logging
     pub debug: bool,
-    /// Extra arguments to pass to the Code Search binary (default: ["mcp", "serve"])
-    pub mcp_args: Vec<String>,
-    /// When true, use mock responses instead of spawning the binary (default: false)
-    pub use_mock: bool,
 }
 
 impl Default for CodeSearchConfig {
     fn default() -> Self {
         Self {
-            binary_path: "codesearch".to_string(),
+            mcp_server_url: None,
             workspace: "default".to_string(),
             timeout_secs: 30,
             debug: false,
-            mcp_args: vec!["mcp".to_string(), "serve".to_string()],
-            use_mock: false,
         }
     }
 }
 
-/// Code Search MCP client for communicating with sidecar
-pub struct CodeSearchClient {
-    config: CodeSearchConfig,
-    /// Circuit breaker state
-    failures: Arc<Mutex<usize>>,
-    max_failures: usize,
+/// Pluggable backend for code intelligence operations.
+///
+/// Implementations proxy to any MCP-compatible code intelligence server
+/// (JetBrains Code Intelligence MCP, VS Code extensions, custom backends, etc.).
+#[async_trait]
+pub trait CodeIntelligenceBackend: Send + Sync {
+    fn is_available(&self) -> bool;
+    async fn search(
+        &self,
+        params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>>;
+    async fn trace_callers(
+        &self,
+        params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>>;
+    async fn trace_callees(
+        &self,
+        params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>>;
+    async fn graph(&self, params: Value)
+    -> Result<Value, Box<dyn std::error::Error + Send + Sync>>;
+    async fn index_status(
+        &self,
+        params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>>;
+    async fn repo_request(
+        &self,
+        params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>>;
 }
 
-impl CodeSearchClient {
-    /// Create new Code Search client with configuration
-    pub fn new(config: CodeSearchConfig) -> Self {
+/// Backend that proxies calls to an external MCP code intelligence server via HTTP JSON-RPC.
+pub struct McpCodeIntelligence {
+    server_url: String,
+    client: reqwest::Client,
+    timeout: std::time::Duration,
+    debug: bool,
+}
+
+impl McpCodeIntelligence {
+    pub fn new(server_url: String, timeout_secs: u64, debug: bool) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(timeout_secs))
+            .build()
+            .unwrap_or_default();
         Self {
-            config,
-            failures: Arc::new(Mutex::new(0)),
-            max_failures: 5,
+            server_url,
+            client,
+            timeout: std::time::Duration::from_secs(timeout_secs),
+            debug,
         }
     }
 
-    /// Create client with default configuration
-    pub fn default() -> Self {
-        Self::new(CodeSearchConfig::default())
-    }
-
-    /// Check if circuit breaker is open (too many failures)
-    pub fn is_available(&self) -> bool {
-        let failures = self.failures.lock().unwrap();
-        *failures < self.max_failures
-    }
-
-    /// Reset circuit breaker after successful call
-    fn reset_failures(&self) {
-        let mut failures = self.failures.lock().unwrap();
-        *failures = 0;
-    }
-
-    /// Increment failure count
-    fn record_failure(&self) {
-        let mut failures = self.failures.lock().unwrap();
-        *failures += 1;
-    }
-
-    /// Call Code Search tool via MCP protocol
-    ///
-    /// # Arguments
-    /// * `tool_name` - Code Search tool name (e.g., "codesearch_search")
-    /// * `params` - Tool parameters as JSON
-    ///
-    /// # Returns
-    /// Result JSON or error
-    pub async fn call_tool(
+    async fn call_tool(
         &self,
         tool_name: &str,
         params: Value,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        // Check circuit breaker
-        if !self.is_available() {
-            return Err("Code Search sidecar unavailable (circuit breaker open)".into());
-        }
-
-        // Prepare MCP request
         let request = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -115,111 +104,42 @@ impl CodeSearchClient {
             }
         });
 
-        if self.config.debug {
-            eprintln!(
-                "Code Search request: {}",
+        if self.debug {
+            tracing::debug!(
+                "MCP code intelligence request: {}",
                 serde_json::to_string_pretty(&request)?
             );
         }
 
-        // Execute with timeout
-        let result = timeout(
-            Duration::from_secs(self.config.timeout_secs),
-            self.execute_mcp_call(request),
-        )
-        .await;
-
-        match result {
-            Ok(Ok(response)) => {
-                self.reset_failures();
-                Ok(response)
-            }
-            Ok(Err(e)) => {
-                self.record_failure();
-                Err(e)
-            }
-            Err(_) => {
-                self.record_failure();
-                Err("Code Search call timed out".into())
-            }
-        }
-    }
-
-    async fn execute_mcp_call(
-        &self,
-        request: Value,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        if self.config.use_mock {
-            return self.execute_mcp_call_mock(&request);
-        }
-
-        match self.execute_mcp_call_stdio(&request).await {
-            Ok(response) => Ok(response),
-            Err(e) => {
-                let err_msg = e.to_string();
-                let is_binary_missing = err_msg.contains("No such file or directory")
-                    || err_msg.contains("not found")
-                    || err_msg.contains("os error 2");
-
-                if is_binary_missing && self.config.use_mock {
-                    self.execute_mcp_call_mock(&request)
-                } else {
-                    Err(e)
-                }
-            }
-        }
-    }
-
-    async fn execute_mcp_call_stdio(
-        &self,
-        request: &Value,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        let mut child = Command::new(&self.config.binary_path)
-            .args(&self.config.mcp_args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
+        let response = self
+            .client
+            .post(&self.server_url)
+            .json(&request)
+            .timeout(self.timeout)
+            .send()
+            .await
             .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
                 format!(
-                    "Failed to spawn Code Search binary '{}': {}",
-                    self.config.binary_path, e
+                    "MCP code intelligence server unreachable at {}: {}",
+                    self.server_url, e
                 )
                 .into()
             })?;
 
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or("Failed to open stdin for Code Search process")?;
-        let request_bytes = serde_json::to_vec(request)?;
-        stdin.write_all(&request_bytes).await?;
-        stdin.write_all(b"\n").await?;
-        drop(stdin);
+        let body: Value =
+            response
+                .json()
+                .await
+                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+                    format!("Failed to parse MCP response: {}", e).into()
+                })?;
 
-        let output = child.wait_with_output().await.map_err(
-            |e| -> Box<dyn std::error::Error + Send + Sync> {
-                format!("Code Search process failed: {}", e).into()
-            },
-        )?;
-
-        if !output.status.success() {
-            return Err(
-                format!("Code Search process exited with status: {}", output.status).into(),
-            );
+        if let Some(err) = body.get("error") {
+            return Err(format!("MCP code intelligence error: {}", err).into());
         }
 
-        let response: Value = serde_json::from_slice(&output.stdout).map_err(
-            |e| -> Box<dyn std::error::Error + Send + Sync> {
-                format!("Failed to parse Code Search response: {}", e).into()
-            },
-        )?;
-
-        if let Some(err) = response.get("error") {
-            return Err(format!("Code Search MCP error: {}", err).into());
-        }
-
-        if let Some(text) = response
+        // Extract result from JSON-RPC response
+        if let Some(text) = body
             .pointer("/result/content/0/text")
             .and_then(|v| v.as_str())
         {
@@ -228,50 +148,293 @@ impl CodeSearchClient {
             return Ok(parsed);
         }
 
-        if let Some(result) = response.get("result") {
+        if let Some(result) = body.get("result") {
             return Ok(result.clone());
         }
 
-        Err("Code Search returned empty response".into())
+        Err("MCP code intelligence returned empty response".into())
+    }
+}
+
+#[async_trait]
+impl CodeIntelligenceBackend for McpCodeIntelligence {
+    fn is_available(&self) -> bool {
+        // For HTTP backends, we assume available if configured.
+        // The circuit breaker in CodeSearchClient handles transient failures.
+        true
     }
 
-    fn execute_mcp_call_mock(
+    async fn search(
         &self,
-        request: &Value,
+        params: Value,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        let tool_name = request["params"]["name"]
-            .as_str()
-            .ok_or("Missing tool name")?;
+        self.call_tool("codesearch_search", params).await
+    }
 
-        match tool_name {
-            "codesearch_search" => Ok(serde_json::json!({
-                "success": true,
-                "results": []
-            })),
-            "codesearch_trace_callers" | "codesearch_trace_callees" => Ok(serde_json::json!({
-                "success": true,
-                "symbols": []
-            })),
-            "codesearch_trace_graph" => Ok(serde_json::json!({
-                "success": true,
-                "nodes": []
-            })),
-            "codesearch_index_status" => Ok(serde_json::json!({
-                "success": true,
-                "status": {
-                    "project": self.config.workspace.clone(),
-                    "files_indexed": 0,
-                    "chunks": 0,
-                    "state": "idle"
-                }
-            })),
-            "codesearch_repo_request" => Ok(serde_json::json!({
-                "success": true,
-                "id": uuid::Uuid::new_v4().to_string(),
-                "status": "requested"
-            })),
-            _ => Err(format!("Unknown Code Search tool: {}", tool_name).into()),
+    async fn trace_callers(
+        &self,
+        params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        self.call_tool("codesearch_trace_callers", params).await
+    }
+
+    async fn trace_callees(
+        &self,
+        params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        self.call_tool("codesearch_trace_callees", params).await
+    }
+
+    async fn graph(
+        &self,
+        params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        self.call_tool("codesearch_trace_graph", params).await
+    }
+
+    async fn index_status(
+        &self,
+        params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        self.call_tool("codesearch_index_status", params).await
+    }
+
+    async fn repo_request(
+        &self,
+        params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        self.call_tool("codesearch_repo_request", params).await
+    }
+}
+
+pub struct MockCodeIntelligence {
+    workspace: String,
+}
+
+impl MockCodeIntelligence {
+    pub fn new(workspace: String) -> Self {
+        Self { workspace }
+    }
+}
+
+impl Default for MockCodeIntelligence {
+    fn default() -> Self {
+        Self::new("default".to_string())
+    }
+}
+
+#[async_trait]
+impl CodeIntelligenceBackend for MockCodeIntelligence {
+    fn is_available(&self) -> bool {
+        true
+    }
+
+    async fn search(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(serde_json::json!({
+            "success": true,
+            "results": []
+        }))
+    }
+
+    async fn trace_callers(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(serde_json::json!({
+            "success": true,
+            "symbols": []
+        }))
+    }
+
+    async fn trace_callees(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(serde_json::json!({
+            "success": true,
+            "symbols": []
+        }))
+    }
+
+    async fn graph(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(serde_json::json!({
+            "success": true,
+            "nodes": []
+        }))
+    }
+
+    async fn index_status(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(serde_json::json!({
+            "success": true,
+            "status": {
+                "project": self.workspace.clone(),
+                "files_indexed": 0,
+                "chunks": 0,
+                "state": "idle"
+            }
+        }))
+    }
+
+    async fn repo_request(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(serde_json::json!({
+            "success": true,
+            "id": uuid::Uuid::new_v4().to_string(),
+            "status": "requested"
+        }))
+    }
+}
+
+/// Returns informative errors guiding the user to install a compatible backend.
+pub struct NoBackend;
+
+const NO_BACKEND_MSG: &str = "No code intelligence backend configured. \
+     Install a compatible MCP backend (e.g. JetBrains Code Intelligence MCP plugin, \
+     VS Code Code Intelligence extension) and set AETERNA_CODE_INTEL_MCP_URL.";
+
+#[async_trait]
+impl CodeIntelligenceBackend for NoBackend {
+    fn is_available(&self) -> bool {
+        false
+    }
+
+    async fn search(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Err(NO_BACKEND_MSG.into())
+    }
+
+    async fn trace_callers(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Err(NO_BACKEND_MSG.into())
+    }
+
+    async fn trace_callees(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Err(NO_BACKEND_MSG.into())
+    }
+
+    async fn graph(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Err(NO_BACKEND_MSG.into())
+    }
+
+    async fn index_status(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Err(NO_BACKEND_MSG.into())
+    }
+
+    async fn repo_request(
+        &self,
+        _params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Err(NO_BACKEND_MSG.into())
+    }
+}
+
+pub struct CodeSearchClient {
+    backend: Arc<dyn CodeIntelligenceBackend>,
+    failures: Arc<Mutex<usize>>,
+    max_failures: usize,
+}
+
+impl CodeSearchClient {
+    pub fn new(backend: Arc<dyn CodeIntelligenceBackend>) -> Self {
+        Self {
+            backend,
+            failures: Arc::new(Mutex::new(0)),
+            max_failures: 5,
         }
+    }
+
+    pub fn from_config(config: &CodeSearchConfig) -> Self {
+        let backend: Arc<dyn CodeIntelligenceBackend> = if let Some(url) = &config.mcp_server_url {
+            Arc::new(McpCodeIntelligence::new(
+                url.clone(),
+                config.timeout_secs,
+                config.debug,
+            ))
+        } else {
+            Arc::new(NoBackend)
+        };
+
+        Self::new(backend)
+    }
+
+    pub fn mock(workspace: &str) -> Self {
+        Self::new(Arc::new(MockCodeIntelligence::new(workspace.to_string())))
+    }
+
+    pub fn is_available(&self) -> bool {
+        let failures = self.failures.lock().unwrap();
+        *failures < self.max_failures && self.backend.is_available()
+    }
+
+    fn reset_failures(&self) {
+        let mut failures = self.failures.lock().unwrap();
+        *failures = 0;
+    }
+
+    fn record_failure(&self) {
+        let mut failures = self.failures.lock().unwrap();
+        *failures += 1;
+    }
+
+    pub async fn call_tool(
+        &self,
+        tool_name: &str,
+        params: Value,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        if !self.is_available() {
+            return Err("Code intelligence backend unavailable (circuit breaker open)".into());
+        }
+
+        let result = match tool_name {
+            "codesearch_search" => self.backend.search(params).await,
+            "codesearch_trace_callers" => self.backend.trace_callers(params).await,
+            "codesearch_trace_callees" => self.backend.trace_callees(params).await,
+            "codesearch_trace_graph" => self.backend.graph(params).await,
+            "codesearch_index_status" => self.backend.index_status(params).await,
+            "codesearch_repo_request" => self.backend.repo_request(params).await,
+            _ => Err(format!("Unknown code intelligence tool: {}", tool_name).into()),
+        };
+
+        match &result {
+            Ok(_) => self.reset_failures(),
+            Err(_) => self.record_failure(),
+        }
+
+        result
+    }
+
+    pub fn backend(&self) -> &Arc<dyn CodeIntelligenceBackend> {
+        &self.backend
+    }
+}
+
+impl Default for CodeSearchClient {
+    fn default() -> Self {
+        Self::new(Arc::new(NoBackend))
     }
 }
 
@@ -280,19 +443,21 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_client_creation() {
-        let client = CodeSearchClient::default();
+    async fn test_client_with_mock_backend() {
+        let client = CodeSearchClient::mock("default");
         assert!(client.is_available());
     }
 
     #[tokio::test]
-    async fn test_circuit_breaker() {
-        let client = CodeSearchClient::new(CodeSearchConfig {
-            binary_path: "nonexistent".to_string(),
-            use_mock: true,
-            ..Default::default()
-        });
+    async fn test_client_default_no_backend() {
+        let client = CodeSearchClient::default();
+        // NoBackend reports not available
+        assert!(!client.is_available());
+    }
 
+    #[tokio::test]
+    async fn test_circuit_breaker() {
+        let client = CodeSearchClient::mock("default");
         assert!(client.is_available());
 
         for _ in 0..5 {
@@ -303,12 +468,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_mock_call_tool() {
-        let client = CodeSearchClient::new(CodeSearchConfig {
-            use_mock: true,
-            ..Default::default()
-        });
-
+    async fn test_mock_search() {
+        let client = CodeSearchClient::mock("default");
         let result = client
             .call_tool("codesearch_search", serde_json::json!({"query": "test"}))
             .await;
@@ -318,16 +479,124 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_binary_not_found_returns_error() {
-        let client = CodeSearchClient::new(CodeSearchConfig {
-            binary_path: "nonexistent_binary_that_does_not_exist".to_string(),
-            use_mock: false,
-            ..Default::default()
-        });
-
+    async fn test_mock_trace_callers() {
+        let client = CodeSearchClient::mock("default");
         let result = client
-            .call_tool("codesearch_search", serde_json::json!({"query": "test"}))
+            .call_tool(
+                "codesearch_trace_callers",
+                serde_json::json!({"symbol": "main"}),
+            )
+            .await;
+        assert!(result.is_ok());
+        let val = result.unwrap();
+        assert_eq!(val["success"], true);
+    }
+
+    #[tokio::test]
+    async fn test_mock_trace_callees() {
+        let client = CodeSearchClient::mock("default");
+        let result = client
+            .call_tool(
+                "codesearch_trace_callees",
+                serde_json::json!({"symbol": "main"}),
+            )
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_mock_graph() {
+        let client = CodeSearchClient::mock("default");
+        let result = client
+            .call_tool(
+                "codesearch_trace_graph",
+                serde_json::json!({"symbol": "main"}),
+            )
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_mock_index_status() {
+        let client = CodeSearchClient::mock("default");
+        let result = client
+            .call_tool("codesearch_index_status", serde_json::json!({}))
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_mock_repo_request() {
+        let client = CodeSearchClient::mock("default");
+        let result = client
+            .call_tool(
+                "codesearch_repo_request",
+                serde_json::json!({"name": "test", "type": "local"}),
+            )
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_unknown_tool() {
+        let client = CodeSearchClient::mock("default");
+        let result = client
+            .call_tool("unknown_tool", serde_json::json!({}))
             .await;
         assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unknown"));
+    }
+
+    #[tokio::test]
+    async fn test_no_backend_returns_informative_error() {
+        let _client = CodeSearchClient::default();
+        let backend = NoBackend;
+        let result = backend.search(serde_json::json!({"query": "test"})).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("No code intelligence backend configured"));
+        assert!(err.contains("JetBrains"));
+    }
+
+    #[tokio::test]
+    async fn test_from_config_with_no_url() {
+        let config = CodeSearchConfig::default();
+        let client = CodeSearchClient::from_config(&config);
+        // No URL configured → NoBackend → not available
+        assert!(!client.is_available());
+    }
+
+    #[tokio::test]
+    async fn test_from_config_with_url() {
+        let config = CodeSearchConfig {
+            mcp_server_url: Some("http://localhost:3000".to_string()),
+            ..Default::default()
+        };
+        let client = CodeSearchClient::from_config(&config);
+        // URL configured → McpCodeIntelligence → available (assumes reachable)
+        assert!(client.is_available());
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_reset() {
+        let client = CodeSearchClient::mock("default");
+
+        // Record some failures
+        for _ in 0..3 {
+            client.record_failure();
+        }
+        assert!(client.is_available()); // Still under threshold
+
+        // Successful call resets
+        let _ = client
+            .call_tool("codesearch_search", serde_json::json!({"query": "test"}))
+            .await;
+        assert!(client.is_available());
+
+        // Verify failures were reset (we should be able to fail 5 more times)
+        for _ in 0..5 {
+            client.record_failure();
+        }
+        assert!(!client.is_available());
     }
 }

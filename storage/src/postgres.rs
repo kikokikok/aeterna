@@ -25,6 +25,10 @@ impl PostgresBackend {
         &self.pool
     }
 
+    pub fn from_pool(pool: Pool<Postgres>) -> Self {
+        Self { pool }
+    }
+
     pub async fn new(connection_url: &str) -> Result<Self, PostgresError> {
         use sqlx::postgres::PgPoolOptions;
         use std::time::Duration;

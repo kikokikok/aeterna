@@ -1,8 +1,10 @@
 # High Availability Deployment Guide
 
+> **⚠️ Reference Only** — The primary supported production deployment path is the **Helm chart** documented in [`INSTALL.md`](../../INSTALL.md). The manifests referenced below (`infrastructure/ha/`) are supplementary reference configurations for operators who need to customize HA storage independently of the chart. The Helm chart already includes HA sizing presets (`values-production.yaml`, `values-large.yaml`) that configure replicas, PDBs, and anti-affinity for production use.
+
 ## Overview
 
-This guide describes the configuration and deployment of the Aeterna High Availability (HA) infrastructure. To achieve 99.9% availability, Aeterna uses a multi-node storage architecture with automated failover for all critical data stores.
+This guide describes reference configurations for Aeterna High Availability (HA) infrastructure components. These YAML manifests in `infrastructure/ha/` provide examples for operators who manage storage clusters independently of the Helm chart.
 
 ## Architecture
 
@@ -17,7 +19,8 @@ The HA setup consists of the following components:
 
 - Kubernetes cluster with at least 3 nodes across multiple Availability Zones (AZs).
 - `kubectl` and `helm` installed and configured.
-- Access to the `infrastructure/ha/` directory in the Aeterna repository.
+- The `infrastructure/ha/` directory in the Aeterna repository contains the reference manifests.
+- **For most deployments**: Use the Helm chart with `values-production.yaml` or `values-large.yaml` instead of deploying these manifests directly.
 
 ## Component Configuration
 

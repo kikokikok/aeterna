@@ -698,8 +698,8 @@ curl http://localhost:8080/config | jq '.deployment'
 
 ## Additional Resources
 
-- [Architecture Overview](../architecture/overview.md)
-- [Configuration Reference](../configuration/)
-- [API Documentation](../api/)
-- [Monitoring Guide](../monitoring/)
-- [Security Guidelines](../security/)
+- [Architecture Overview](../architecture-overview)
+- [Configuration Reference](../specs/configuration)
+- [API Reference](./api-reference)
+- [Observability Runbook](../guides/observability-runbook)
+- [Security — RBAC Matrix](../security/rbac-matrix)

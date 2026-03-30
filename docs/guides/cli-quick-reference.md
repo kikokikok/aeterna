@@ -445,7 +445,7 @@ export AETERNA_AGENT_TOKEN=aeterna_agent_abc123xyz
 
 - [UX-First Governance Guide](ux-first-governance.md) - Complete guide with workflows
 - [Strangler Fig Migration](../examples/strangler-fig-migration.md) - Real-world example
-- [Architecture Overview](../../README.md) - System architecture
+- [Architecture Overview](../architecture-overview) - System architecture
 
 ---
 

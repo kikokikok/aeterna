@@ -189,11 +189,17 @@ Contributions are welcome! Please read the main Aeterna repository for guideline
 
 ## Compatibility
 
-- Requires `@opencode-ai/plugin` version 1.1.36 or higher
+- Requires `@opencode-ai/plugin` version 1.3.0 or higher
 - Node.js version 18.0.0 or higher
 - Requires Aeterna backend server running on HTTP
 
 ## Changelog
+
+### 0.2.0
+
+- Upgraded to `@opencode-ai/plugin` v1.3.6 with Zod v4 schemas
+- Updated `@types/node` to v22, TypeScript to v5.8, Vitest to v3.1
+- Fixed `experimental.chat.system.transform` hook for optional `sessionID`
 
 ### 0.1.0
 

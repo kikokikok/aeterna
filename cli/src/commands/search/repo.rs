@@ -1,7 +1,5 @@
 use clap::{Args, Subcommand};
 
-use crate::ux_error;
-
 #[derive(Args)]
 pub struct RepoArgs {
     #[command(subcommand)]
@@ -104,101 +102,6 @@ pub struct RejectArgs {
 }
 
 pub async fn handle(args: RepoArgs) -> anyhow::Result<()> {
-    match args.command {
-        RepoSubcommand::Request(req) => handle_request(req).await,
-        RepoSubcommand::List(list) => handle_list(list).await,
-        RepoSubcommand::Approve(app) => handle_approve(app).await,
-        RepoSubcommand::Reject(rej) => handle_reject(rej).await,
-        RepoSubcommand::Identity(id) => handle_identity(id).await,
-    }
-}
-
-async fn handle_request(args: RequestArgs) -> anyhow::Result<()> {
-    use crate::output;
-    output::header("Code Search Repository Request");
-    println!("  Name: {}", args.name);
-    println!("  Type: {}", args.r#type);
-    if let Some(url) = &args.url {
-        println!("  URL:  {}", url);
-    }
-    if let Some(auth) = &args.identity {
-        println!("  Auth: {}", auth);
-    }
-    println!("  Sync: {} ({}m)", args.strategy, args.interval);
-    println!();
-
-    output::info("Submitting request to backend...");
-    ux_error::server_not_connected().display();
-    anyhow::bail!(
-        "Repository request submission is not available without a live Aeterna backend. \
-         Set AETERNA_SERVER_URL and ensure the server is running."
-    )
-}
-
-async fn handle_list(args: ListArgs) -> anyhow::Result<()> {
-    use crate::output;
-
-    if args.json {
-        let output = serde_json::json!({
-            "success": false,
-            "error": "server_not_connected",
-            "message": "Repository listing requires a live Aeterna backend"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Tracked Repositories");
-        println!();
-        ux_error::server_not_connected().display();
-    }
-
-    anyhow::bail!(
-        "Repository listing is not available without a live Aeterna backend. \
-         Set AETERNA_SERVER_URL and ensure the server is running."
-    )
-}
-
-async fn handle_approve(args: ApproveArgs) -> anyhow::Result<()> {
-    use crate::output;
-    output::info(&format!("Approving request {}...", args.id));
-    ux_error::server_not_connected().display();
-    anyhow::bail!(
-        "Repository approval is not available without a live Aeterna backend. \
-         Set AETERNA_SERVER_URL and ensure the server is running."
-    )
-}
-
-async fn handle_reject(args: RejectArgs) -> anyhow::Result<()> {
-    use crate::output;
-    output::warn(&format!(
-        "Rejecting request {} for reason: {}",
-        args.id, args.reason
-    ));
-    ux_error::server_not_connected().display();
-    anyhow::bail!(
-        "Repository rejection is not available without a live Aeterna backend. \
-         Set AETERNA_SERVER_URL and ensure the server is running."
-    )
-}
-
-async fn handle_identity(args: IdentityArgs) -> anyhow::Result<()> {
-    use crate::output;
-    match args.command {
-        IdentitySubcommand::Add(add) => {
-            output::info(&format!("Adding Git identity '{}'...", add.name));
-            ux_error::server_not_connected().display();
-            anyhow::bail!(
-                "Git identity registration is not available without a live Aeterna backend. \
-                 Set AETERNA_SERVER_URL and ensure the server is running."
-            );
-        }
-        IdentitySubcommand::List => {
-            output::header("Git Identities");
-            println!();
-            ux_error::server_not_connected().display();
-            anyhow::bail!(
-                "Git identity listing is not available without a live Aeterna backend. \
-                 Set AETERNA_SERVER_URL and ensure the server is running."
-            );
-        }
-    }
+    let _ = args;
+    Err(super::legacy_codesearch_binary_removed("repo"))
 }

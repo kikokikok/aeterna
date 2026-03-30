@@ -12,14 +12,27 @@ pub struct IdpSyncConfig {
     #[serde(default)]
     pub dry_run: bool,
     #[serde(default = "default_retry_config")]
-    pub retry: RetryConfig
+    pub retry: RetryConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum IdpProvider {
     Okta(OktaConfig),
-    AzureAd(AzureAdConfig)
+    AzureAd(AzureAdConfig),
+    GitHub(GitHubConfig),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitHubConfig {
+    pub org_name: String,
+    pub app_id: u64,
+    pub installation_id: u64,
+    pub private_key_pem: String,
+    pub team_filter: Option<String>,
+    #[serde(default)]
+    pub sync_repos_as_projects: bool,
+    pub api_base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +42,7 @@ pub struct OktaConfig {
     #[serde(default)]
     pub scim_enabled: bool,
     pub group_filter: Option<String>,
-    pub user_filter: Option<String>
+    pub user_filter: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,21 +52,21 @@ pub struct AzureAdConfig {
     pub client_secret: String,
     pub group_filter: Option<String>,
     #[serde(default)]
-    pub include_nested_groups: bool
+    pub include_nested_groups: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetryConfig {
     pub max_retries: u32,
     pub initial_backoff_ms: u64,
-    pub max_backoff_ms: u64
+    pub max_backoff_ms: u64,
 }
 
 fn default_retry_config() -> RetryConfig {
     RetryConfig {
         max_retries: 3,
         initial_backoff_ms: 1000,
-        max_backoff_ms: 30000
+        max_backoff_ms: 30000,
     }
 }
 
@@ -65,7 +78,7 @@ impl Default for IdpSyncConfig {
                 api_token: String::new(),
                 scim_enabled: false,
                 group_filter: None,
-                user_filter: None
+                user_filter: None,
             }),
             sync_interval_seconds: 300,
             batch_size: 100,
@@ -73,7 +86,7 @@ impl Default for IdpSyncConfig {
             webhook_port: 8090,
             webhook_secret: None,
             dry_run: false,
-            retry: default_retry_config()
+            retry: default_retry_config(),
         }
     }
 }

@@ -6,21 +6,20 @@ metadata:
   labels:
     {{- include "aeterna.opal.labels" . | nindent 4 }}
 data:
-  # Data sources configuration for OPAL
   data-config-sources: |
     {
       "config": {
         "entries": [
+          {{- if .Values.aeterna.enabled }}
           {
-            "url": "http://{{ include "aeterna.fullname" . }}-opal-fetcher:7000/policy-data",
+            "url": "http://{{ include "aeterna.fullname" . }}-cedar-agent:8180/v1/data",
             "topics": ["policy_data"],
-            "dst_path": "/aeterna"
+            "dst_path": ""
           }
+          {{- end }}
         ]
       }
     }
-  # Policy repository URL (optional, can be overridden)
-  policy-repo-url: ""
-  # Log level
+  policy-repo-url: {{ .Values.opal.server.policyRepoUrl | default "" | quote }}
   log-level: {{ .Values.observability.logging.level | default "info" | quote }}
 {{- end }}

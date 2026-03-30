@@ -55,6 +55,10 @@ const config: Config = {
   themeConfig: {
     navbar: {
       title: 'Aeterna',
+      logo: {
+        alt: 'Aeterna Logo',
+        src: 'img/logo.svg',
+      },
       items: [
         {
           type: 'docSidebar',

@@ -358,20 +358,20 @@ mod tests {
 
 ### API Endpoint Tests
 
-**Requirement**: All OpenSpec endpoints must have integration tests with real and mock dependencies.
+**Requirement**: All knowledge API endpoints must have integration tests with real and mock dependencies.
 
 **Required Tests**:
-1. Discovery endpoint (`GET /openspec/v1/knowledge`)
-2. Query endpoint (`POST /openspec/v1/knowledge/query`)
-3. Create endpoint (`POST /openspec/v1/knowledge/create`)
-4. Update endpoint (`PUT /openspec/v1/knowledge/{id}`)
-5. Delete endpoint (`DELETE /openspec/v1/knowledge/{id}`)
-6. Batch operations endpoint (`POST /openspec/v1/knowledge/batch`)
-7. Streaming endpoint (`GET /openspec/v1/knowledge/stream`)
-8. Metadata operations (`GET /openspec/v1/knowledge/{id}/metadata`)
+1. Discovery endpoint (`GET /api/v1/knowledge`)
+2. Query endpoint (`POST /api/v1/knowledge/query`)
+3. Create endpoint (`POST /api/v1/knowledge/create`)
+4. Update endpoint (`PUT /api/v1/knowledge/{id}`)
+5. Delete endpoint (`DELETE /api/v1/knowledge/{id}`)
+6. Batch operations endpoint (`POST /api/v1/knowledge/batch`)
+7. Streaming endpoint (`GET /api/v1/knowledge/stream`)
+8. Metadata operations (`GET /api/v1/knowledge/{id}/metadata`)
 
 **Integration Test Requirements**:
-- [ ] All 8 OpenSpec endpoints have integration tests
+- [ ] All 8 knowledge API endpoints have integration tests
 - [ ] Tests with mock dependencies (fast, deterministic)
 - [ ] Tests with real dependencies (PostgreSQL, Qdrant, Redis)
 - [ ] Error handling tests (4xx, 5xx errors)

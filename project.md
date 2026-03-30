@@ -102,16 +102,18 @@ interface KnowledgeEntry {
 - **Throughput**: >100 QPS, >50 CPS (creates per second)
 - **Resource utilization**: CPU <70%, Memory <80%, DB connections <80%
 
-### OpenSpec Compliance
-All implementations MUST provide:
-1. Discovery endpoint (`GET /openspec/v1/knowledge`)
-2. Query endpoint (`POST /openspec/v1/knowledge/query`)
-3. Create endpoint (`POST /openspec/v1/knowledge/create`)
-4. Update endpoint (`PUT /openspec/v1/knowledge/{id}`)
-5. Delete endpoint (`DELETE /openspec/v1/knowledge/{id}`)
-6. Batch operations endpoint (`POST /openspec/v1/knowledge/batch`)
-7. Streaming endpoint (`GET /openspec/v1/knowledge/stream`)
-8. Metadata operations (`GET /openspec/v1/knowledge/{id}/metadata`)
+### Knowledge API Compatibility
+All implementations MUST provide canonical knowledge endpoints at `/api/v1/knowledge/*` and SHOULD preserve `/openspec/v1/knowledge/*` as a compatibility alias during migration:
+1. Discovery endpoint (`GET /api/v1/knowledge`)
+2. Query endpoint (`POST /api/v1/knowledge/query`)
+3. Create endpoint (`POST /api/v1/knowledge/create`)
+4. Update endpoint (`PUT /api/v1/knowledge/{id}`)
+5. Delete endpoint (`DELETE /api/v1/knowledge/{id}`)
+6. Batch operations endpoint (`POST /api/v1/knowledge/batch`)
+7. Streaming endpoint (`GET /api/v1/knowledge/stream`)
+8. Metadata operations (`GET /api/v1/knowledge/{id}/metadata`)
+
+Compatibility alias: `/openspec/v1/knowledge/*`
 
 ## External Dependencies
 

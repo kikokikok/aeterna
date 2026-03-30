@@ -21,7 +21,7 @@ pub enum KnowledgeCommand {
     Check(KnowledgeCheckArgs),
 
     #[command(about = "Propose new knowledge (ADR, Pattern, Policy, Spec)")]
-    Propose(KnowledgeProposeArgs)
+    Propose(KnowledgeProposeArgs),
 }
 
 #[derive(Args)]
@@ -51,7 +51,7 @@ pub struct KnowledgeSearchArgs {
 
     /// Dry run - don't actually search, just show what would happen
     #[arg(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 #[derive(Args)]
@@ -65,7 +65,7 @@ pub struct KnowledgeGetArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -84,7 +84,7 @@ pub struct KnowledgeListArgs {
 
     /// Output as JSON
     #[arg(long)]
-    pub json: bool
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -111,7 +111,7 @@ pub struct KnowledgeCheckArgs {
 
     /// Dry run
     #[arg(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 #[derive(Args)]
@@ -147,7 +147,7 @@ pub struct KnowledgeProposeArgs {
 
     /// Dry run - show what would be proposed without creating draft
     #[arg(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 pub async fn run(cmd: KnowledgeCommand) -> anyhow::Result<()> {
@@ -156,7 +156,7 @@ pub async fn run(cmd: KnowledgeCommand) -> anyhow::Result<()> {
         KnowledgeCommand::Get(args) => run_get(args).await,
         KnowledgeCommand::List(args) => run_list(args).await,
         KnowledgeCommand::Check(args) => run_check(args).await,
-        KnowledgeCommand::Propose(args) => run_propose(args).await
+        KnowledgeCommand::Propose(args) => run_propose(args).await,
     }
 }
 
@@ -184,7 +184,7 @@ async fn run_search(args: KnowledgeSearchArgs) -> anyhow::Result<()> {
                 "company".to_string(),
             ]
         },
-        |l| l.split(',').map(|s| s.trim().to_lowercase()).collect()
+        |l| l.split(',').map(|s| s.trim().to_lowercase()).collect(),
     );
 
     let valid_layers = ["company", "org", "team", "project"];
@@ -258,7 +258,7 @@ async fn run_search(args: KnowledgeSearchArgs) -> anyhow::Result<()> {
                     "team" => "Team standards and conventions",
                     "org" => "Organization-wide policies",
                     "company" => "Company global standards",
-                    _ => ""
+                    _ => "",
                 };
                 println!("    {}. {} - {}", i + 1, layer, desc);
             }

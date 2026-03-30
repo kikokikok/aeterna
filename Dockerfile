@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 ARG RUST_VERSION=1.93
 
 FROM rust:${RUST_VERSION}-bookworm AS chef
@@ -13,10 +14,15 @@ ARG BUILD_DATE
 ARG VCS_REF
 
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
-RUN cargo build --release --package aeterna
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    cargo build --release --package aeterna \
+    && cp /app/target/release/aeterna /app/aeterna-bin
 
 FROM debian:bookworm-slim AS runtime
 
@@ -32,6 +38,7 @@ LABEL org.opencontainers.image.revision="${VCS_REF}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    curl \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -39,7 +46,7 @@ RUN useradd -m -u 1000 -s /bin/bash aeterna
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/aeterna /usr/local/bin/aeterna
+COPY --from=builder /app/aeterna-bin /usr/local/bin/aeterna
 
 RUN chown -R aeterna:aeterna /app
 
@@ -51,11 +58,8 @@ ENV AETERNA_CONFIG_PATH=/app/config
 EXPOSE 8080
 EXPOSE 9090
 
-# Health check: 'admin health --json' exits 0 only when context resolution succeeds
-# and required environment variables are present.  The full connectivity probe will
-# be upgraded to an HTTP call once the server crate is integrated.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/usr/local/bin/aeterna", "admin", "health", "--json"] || exit 1
+    CMD ["curl", "--fail", "--silent", "http://localhost:8080/health"] || exit 1
 
 ENTRYPOINT ["/usr/local/bin/aeterna"]
 CMD ["serve"]

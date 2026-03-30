@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo tarpaulin:*)",
+      "Bash(cargo mutants:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo run:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(git:*)",
+      "Bash(openspec:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(rg:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(echo:*)",
+      "Bash(printf:*)",
+      "Bash(touch:*)",
+      "Bash(chmod:*)",
+      "Bash(jq:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(wc:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(curl:*)"
+    ],
+    "deny": []
+  }
+}

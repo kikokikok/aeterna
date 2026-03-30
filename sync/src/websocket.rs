@@ -1,3 +1,8 @@
+use axum::Router;
+use axum::extract::State;
+use axum::extract::ws::{Message as AxumWsMessage, WebSocket, WebSocketUpgrade};
+use axum::response::IntoResponse;
+use axum::routing::get;
 use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -368,6 +373,126 @@ impl WsServer {
             .map(|c| c.rooms.clone())
             .unwrap_or_default()
     }
+
+    pub fn router(self: Arc<Self>) -> Router {
+        Router::new()
+            .route("/", get(ws_upgrade_handler))
+            .with_state(self)
+    }
+
+    async fn handle_axum_socket(self: Arc<Self>, socket: WebSocket) -> WsResult<()> {
+        let (mut ws_sender, mut ws_receiver) = socket.split();
+
+        let auth_msg = tokio::time::timeout(std::time::Duration::from_secs(10), ws_receiver.next())
+            .await
+            .map_err(|_| WsError::AuthFailed("Authentication timeout".into()))?
+            .ok_or(WsError::ConnectionClosed)?;
+
+        let client_msg: WsClientMessage = match auth_msg {
+            Ok(AxumWsMessage::Text(text)) => serde_json::from_str(text.as_str())?,
+            Ok(_) => return Err(WsError::AuthFailed("Expected text message".into())),
+            Err(err) => {
+                return Err(WsError::Send(format!(
+                    "WebSocket auth receive failed: {err}"
+                )));
+            }
+        };
+
+        let token = match client_msg {
+            WsClientMessage::Authenticate { token } => token,
+            _ => {
+                return Err(WsError::AuthFailed(
+                    "First message must be Authenticate".into(),
+                ));
+            }
+        };
+
+        let auth_token = self.token_validator.validate(&token).await?;
+        let client_id = Uuid::new_v4();
+        let now = chrono::Utc::now().timestamp();
+
+        let client_info = ClientInfo {
+            client_id,
+            user_id: auth_token.user_id.clone(),
+            tenant_id: auth_token.tenant_id.clone(),
+            rooms: HashSet::new(),
+            connected_at: now,
+        };
+
+        self.clients.insert(client_id, client_info);
+
+        let auth_response = WsServerMessage::Authenticated { client_id };
+        let auth_json = serde_json::to_string(&auth_response)?;
+        ws_sender
+            .send(AxumWsMessage::Text(auth_json.into()))
+            .await
+            .map_err(|e| WsError::Send(format!("Failed to send auth response: {e}")))?;
+
+        let (msg_tx, mut msg_rx) = mpsc::channel::<WsServerMessage>(256);
+        self.client_senders.insert(client_id, msg_tx);
+
+        let server = Arc::clone(&self);
+        let result: WsResult<()> = async {
+            loop {
+                tokio::select! {
+                    incoming = ws_receiver.next() => {
+                        match incoming {
+                            Some(Ok(AxumWsMessage::Text(text))) => {
+                                let msg: WsClientMessage = serde_json::from_str(text.as_str())?;
+                                let response = server.handle_client_message(client_id, msg).await?;
+                                if let Some(resp) = response {
+                                    let json = serde_json::to_string(&resp)?;
+                                    ws_sender.send(AxumWsMessage::Text(json.into())).await.map_err(|e| {
+                                        WsError::Send(format!("Failed to send response: {e}"))
+                                    })?;
+                                }
+                            }
+                            Some(Ok(AxumWsMessage::Close(_))) | None => {
+                                break;
+                            }
+                            Some(Ok(AxumWsMessage::Ping(data))) => {
+                                ws_sender.send(AxumWsMessage::Pong(data)).await.map_err(|e| {
+                                    WsError::Send(format!("Failed to send pong: {e}"))
+                                })?;
+                            }
+                            Some(Ok(_)) => {}
+                            Some(Err(e)) => {
+                                tracing::warn!("WebSocket receive error for {client_id}: {e}");
+                                break;
+                            }
+                        }
+                    }
+                    outgoing = msg_rx.recv() => {
+                        match outgoing {
+                            Some(msg) => {
+                                let json = serde_json::to_string(&msg)?;
+                                ws_sender.send(AxumWsMessage::Text(json.into())).await.map_err(|e| {
+                                    WsError::Send(format!("Failed to send outbound room message: {e}"))
+                                })?;
+                            }
+                            None => break,
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+        .await;
+
+        self.disconnect_client(client_id).await;
+        result
+    }
+}
+
+async fn ws_upgrade_handler(
+    ws: WebSocketUpgrade,
+    State(server): State<Arc<WsServer>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| async move {
+        if let Err(err) = server.handle_axum_socket(socket).await {
+            tracing::warn!("Axum WebSocket connection failed: {err}");
+        }
+    })
 }
 
 #[cfg(test)]
