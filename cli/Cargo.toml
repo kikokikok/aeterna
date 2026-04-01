@@ -52,6 +52,8 @@ metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
 futures-util.workspace = true
 octocrab.workspace = true
+jsonwebtoken.workspace = true
+reqwest.workspace = true
 
 colored = "3.0"
 console = "0.15"

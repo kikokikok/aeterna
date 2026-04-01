@@ -1,5 +1,5 @@
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::{delete, get, post, put};
@@ -10,6 +10,7 @@ use std::convert::Infallible;
 use std::sync::Arc;
 
 use super::AppState;
+use super::plugin_auth::{tenant_context_from_plugin_bearer, validate_plugin_bearer};
 
 #[derive(Debug, Deserialize)]
 pub struct KnowledgeQueryRequest {
@@ -193,9 +194,14 @@ async fn discovery_handler() -> impl IntoResponse {
 #[tracing::instrument(skip_all, fields(query = %req.query, limit = req.limit))]
 async fn query_handler(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(req): Json<KnowledgeQueryRequest>,
 ) -> impl IntoResponse {
-    let ctx = default_tenant_context();
+    if let Some(response) = reject_invalid_plugin_bearer(&state, &headers) {
+        return response;
+    }
+
+    let ctx = tenant_context_from_request(&state, &headers);
     let layer =
         parse_layer(req.layer.as_deref()).unwrap_or(mk_core::types::KnowledgeLayer::Project);
 
@@ -224,9 +230,14 @@ async fn query_handler(
 #[tracing::instrument(skip_all, fields(path = %req.path, layer = %req.layer))]
 async fn create_handler(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(req): Json<CreateKnowledgeRequest>,
 ) -> impl IntoResponse {
-    let ctx = default_tenant_context();
+    if let Some(response) = reject_invalid_plugin_bearer(&state, &headers) {
+        return response;
+    }
+
+    let ctx = tenant_context_from_request(&state, &headers);
     let layer = match parse_layer(Some(&req.layer)) {
         Some(l) => l,
         None => {
@@ -282,10 +293,15 @@ async fn create_handler(
 #[tracing::instrument(skip_all, fields(id = %id))]
 async fn update_handler(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<UpdateKnowledgeRequest>,
 ) -> impl IntoResponse {
-    let ctx = default_tenant_context();
+    if let Some(response) = reject_invalid_plugin_bearer(&state, &headers) {
+        return response;
+    }
+
+    let ctx = tenant_context_from_request(&state, &headers);
 
     let existing = find_entry_by_id(&state, &ctx, &id).await;
     let mut entry = match existing {
@@ -338,9 +354,14 @@ async fn update_handler(
 #[tracing::instrument(skip_all, fields(id = %id))]
 async fn delete_handler(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = default_tenant_context();
+    if let Some(response) = reject_invalid_plugin_bearer(&state, &headers) {
+        return response;
+    }
+
+    let ctx = tenant_context_from_request(&state, &headers);
 
     let existing = find_entry_by_id(&state, &ctx, &id).await;
     match existing {
@@ -369,9 +390,14 @@ async fn delete_handler(
 #[tracing::instrument(skip_all, fields(operation_count = req.operations.len()))]
 async fn batch_handler(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(req): Json<BatchRequest>,
 ) -> impl IntoResponse {
-    let ctx = default_tenant_context();
+    if let Some(response) = reject_invalid_plugin_bearer(&state, &headers) {
+        return response;
+    }
+
+    let ctx = tenant_context_from_request(&state, &headers);
     let mut results = Vec::with_capacity(req.operations.len());
 
     for (index, op) in req.operations.into_iter().enumerate() {
@@ -448,7 +474,7 @@ async fn batch_handler(
         results.push(result);
     }
 
-    Json(BatchResponse { results })
+    Json(BatchResponse { results }).into_response()
 }
 
 #[tracing::instrument(skip_all)]
@@ -470,9 +496,14 @@ async fn stream_handler(
 #[tracing::instrument(skip_all, fields(id = %id))]
 async fn metadata_handler(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = default_tenant_context();
+    if let Some(response) = reject_invalid_plugin_bearer(&state, &headers) {
+        return response;
+    }
+
+    let ctx = tenant_context_from_request(&state, &headers);
 
     match find_entry_by_id(&state, &ctx, &id).await {
         Some(entry) => {
@@ -512,6 +543,48 @@ fn default_tenant_context() -> mk_core::types::TenantContext {
         mk_core::types::TenantId::new("default".to_string()).expect("default tenant id"),
         mk_core::types::UserId::new("system".to_string()).expect("default user id"),
     )
+}
+
+/// Derive the caller's `TenantContext` from a validated Aeterna plugin bearer
+/// token.  Falls back to the default system context when no valid token is
+/// present (e.g. unauthenticated or static-token callers).
+fn tenant_context_from_request(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> mk_core::types::TenantContext {
+    if let Some(secret) = state.plugin_auth_state.config.jwt_secret.as_deref() {
+        if state.plugin_auth_state.config.enabled {
+            return tenant_context_from_plugin_bearer(headers, secret);
+        }
+    }
+    default_tenant_context()
+}
+
+fn reject_invalid_plugin_bearer(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Option<axum::response::Response> {
+    if !state.plugin_auth_state.config.enabled {
+        return None;
+    }
+
+    let Some(secret) = state.plugin_auth_state.config.jwt_secret.as_deref() else {
+        return Some(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "configuration_error",
+            "Plugin auth JWT secret is not configured",
+        ));
+    };
+
+    if validate_plugin_bearer(headers, secret).is_none() {
+        return Some(error_response(
+            StatusCode::UNAUTHORIZED,
+            "invalid_plugin_token",
+            "Valid plugin bearer token required",
+        ));
+    }
+
+    None
 }
 
 fn parse_layer(s: Option<&str>) -> Option<mk_core::types::KnowledgeLayer> {
@@ -620,6 +693,8 @@ fn error_response(status: StatusCode, error: &str, message: &str) -> axum::respo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::server::PluginAuthState;
+    use crate::server::plugin_auth::RefreshTokenStore;
     use agent_a2a::config::TrustedIdentityConfig;
     use async_trait::async_trait;
     use axum::body::Body;
@@ -919,6 +994,10 @@ mod tests {
                 jwt_secret: None,
                 enabled: false,
                 trusted_identity: TrustedIdentityConfig::default(),
+            }),
+            plugin_auth_state: Arc::new(PluginAuthState {
+                config: config::PluginAuthConfig::default(),
+                refresh_store: RefreshTokenStore::new(),
             }),
             idp_config: None,
             idp_sync_service: None,

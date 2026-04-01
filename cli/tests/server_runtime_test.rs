@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aeterna::server::{AppState, health, metrics, router};
+use aeterna::server::plugin_auth::{PluginTokenClaims, RefreshTokenStore};
+use aeterna::server::{AppState, PluginAuthState, health, metrics, router};
 use agent_a2a::config::TrustedIdentityConfig;
 use async_trait::async_trait;
 use axum::body::Body;
-use axum::http::{Request, StatusCode};
+use axum::http::{Request, StatusCode, header::AUTHORIZATION};
+use jsonwebtoken::{EncodingKey, Header, encode};
 use knowledge::api::GovernanceDashboardApi;
 use knowledge::governance::GovernanceEngine;
 use knowledge::manager::KnowledgeManager;
@@ -222,7 +224,9 @@ fn sample_entry(path: &str) -> KnowledgeEntry {
     }
 }
 
-async fn test_app_state() -> Option<(Arc<AppState>, TempDir)> {
+async fn test_app_state_with_plugin_auth(
+    plugin_auth_config: config::PluginAuthConfig,
+) -> Option<(Arc<AppState>, TempDir)> {
     let tempdir = tempfile::tempdir().unwrap();
     let repo = Arc::new(MockRepo::new());
     repo.store(
@@ -302,6 +306,10 @@ async fn test_app_state() -> Option<(Arc<AppState>, TempDir)> {
                 enabled: false,
                 trusted_identity: TrustedIdentityConfig::default(),
             }),
+            plugin_auth_state: Arc::new(PluginAuthState {
+                config: plugin_auth_config,
+                refresh_store: RefreshTokenStore::new(),
+            }),
             idp_config: None,
             idp_sync_service: None,
             idp_client: None,
@@ -309,6 +317,31 @@ async fn test_app_state() -> Option<(Arc<AppState>, TempDir)> {
         }),
         tempdir,
     ))
+}
+
+async fn test_app_state() -> Option<(Arc<AppState>, TempDir)> {
+    test_app_state_with_plugin_auth(config::PluginAuthConfig::default()).await
+}
+
+fn mint_test_plugin_bearer(secret: &str, tenant_id: &str, github_login: &str) -> String {
+    let now = chrono::Utc::now().timestamp();
+    encode(
+        &Header::new(jsonwebtoken::Algorithm::HS256),
+        &PluginTokenClaims {
+            sub: github_login.to_string(),
+            tenant_id: tenant_id.to_string(),
+            iss: "aeterna-test".to_string(),
+            aud: vec![PluginTokenClaims::AUDIENCE.to_string()],
+            iat: now,
+            exp: now + 3600,
+            jti: "test-jti".to_string(),
+            github_id: 42,
+            email: Some(format!("{github_login}@example.com")),
+            kind: PluginTokenClaims::KIND.to_string(),
+        },
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .unwrap()
 }
 
 #[tokio::test]
@@ -754,4 +787,202 @@ async fn sync_endpoints_reject_unauthenticated() {
             "message": "Bearer token required"
         })
     );
+}
+
+#[tokio::test]
+async fn session_start_rejects_invalid_plugin_bearer_when_plugin_auth_enabled() {
+    let secret = "super-secret-test-key-at-least-32-chars";
+    let Some((state, _tmp)) = test_app_state_with_plugin_auth(config::PluginAuthConfig {
+        enabled: true,
+        jwt_secret: Some(secret.to_string()),
+        ..Default::default()
+    })
+    .await
+    else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("content-type", "application/json")
+                .header(AUTHORIZATION, "Bearer not-a-jwt")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "project": "auth-test",
+                        "directory": "/tmp/auth-test"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["error"], "invalid_plugin_token");
+}
+
+#[tokio::test]
+async fn session_start_accepts_valid_plugin_bearer_and_returns_github_login() {
+    let secret = "super-secret-test-key-at-least-32-chars";
+    let Some((state, _tmp)) = test_app_state_with_plugin_auth(config::PluginAuthConfig {
+        enabled: true,
+        jwt_secret: Some(secret.to_string()),
+        ..Default::default()
+    })
+    .await
+    else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+    let token = mint_test_plugin_bearer(secret, "tenant-7", "octocat");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("content-type", "application/json")
+                .header(AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "project": "auth-test",
+                        "directory": "/tmp/auth-test"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["userId"], "octocat");
+    assert_eq!(json["project"], "auth-test");
+    assert!(!json["sessionId"].as_str().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn sync_push_rejects_invalid_plugin_bearer_when_plugin_auth_enabled() {
+    let secret = "super-secret-test-key-at-least-32-chars";
+    let Some((state, _tmp)) = test_app_state_with_plugin_auth(config::PluginAuthConfig {
+        enabled: true,
+        jwt_secret: Some(secret.to_string()),
+        ..Default::default()
+    })
+    .await
+    else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sync/push")
+                .header("content-type", "application/json")
+                .header(AUTHORIZATION, "Bearer not-a-jwt")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "entries": [],
+                        "device_id": "test-device"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["error"], "invalid_plugin_token");
+}
+
+#[tokio::test]
+async fn plugin_auth_bootstrap_returns_service_unavailable_when_disabled() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/plugin/bootstrap")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "provider": "github",
+                        "github_access_token": "gho_test"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn plugin_auth_refresh_rejects_invalid_refresh_token() {
+    let secret = "super-secret-test-key-at-least-32-chars";
+    let Some((state, _tmp)) = test_app_state_with_plugin_auth(config::PluginAuthConfig {
+        enabled: true,
+        jwt_secret: Some(secret.to_string()),
+        ..Default::default()
+    })
+    .await
+    else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/plugin/refresh")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "refresh_token": "missing-refresh-token"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["error"], "invalid_refresh_token");
 }

@@ -15,8 +15,8 @@
 
 use crate::config::{
     Config, ContentionAlertConfig, GraphConfig, KnowledgeRepoConfig, MemoryConfig,
-    ObservabilityConfig, PostgresConfig, ProviderConfig, QdrantConfig, ReasoningConfig,
-    RedisConfig, RlmConfig, SyncConfig, ToolConfig,
+    ObservabilityConfig, PluginAuthConfig, PostgresConfig, ProviderConfig, QdrantConfig,
+    ReasoningConfig, RedisConfig, RlmConfig, SyncConfig, ToolConfig,
 };
 use std::env;
 
@@ -98,6 +98,7 @@ pub fn load_from_env() -> anyhow::Result<Config> {
         deployment: load_deployment_from_env()?,
         job: load_job_from_env()?,
         knowledge_repo: load_knowledge_repo_from_env()?,
+        plugin_auth: load_plugin_auth_from_env()?,
         cca: crate::cca::CcaConfig::default(),
     };
 
@@ -138,6 +139,28 @@ fn load_knowledge_repo_from_env() -> anyhow::Result<KnowledgeRepoConfig> {
             .and_then(|v| v.parse::<u64>().ok()),
         github_app_pem: env::var("AETERNA_GITHUB_APP_PEM").ok(),
         webhook_secret: env::var("AETERNA_WEBHOOK_SECRET").ok(),
+    })
+}
+
+fn load_plugin_auth_from_env() -> anyhow::Result<PluginAuthConfig> {
+    Ok(PluginAuthConfig {
+        enabled: parse_env("AETERNA_PLUGIN_AUTH_ENABLED").unwrap_or(false),
+        github_client_id: env::var("AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID").ok(),
+        github_client_secret: env::var("AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_SECRET").ok(),
+        github_app_id: env::var("AETERNA_PLUGIN_AUTH_GITHUB_APP_ID")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok()),
+        github_app_name: env::var("AETERNA_PLUGIN_AUTH_GITHUB_APP_NAME").ok(),
+        github_app_pem: env::var("AETERNA_PLUGIN_AUTH_GITHUB_APP_PEM").ok(),
+        redirect_base_url: env::var("AETERNA_PLUGIN_AUTH_REDIRECT_BASE_URL").ok(),
+        token_issuer: env::var("AETERNA_PLUGIN_AUTH_TOKEN_ISSUER").ok(),
+        jwt_secret: env::var("AETERNA_PLUGIN_AUTH_JWT_SECRET").ok(),
+        access_token_ttl_seconds: env::var("AETERNA_PLUGIN_AUTH_ACCESS_TOKEN_TTL_SECONDS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok()),
+        refresh_token_ttl_seconds: env::var("AETERNA_PLUGIN_AUTH_REFRESH_TOKEN_TTL_SECONDS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok()),
     })
 }
 

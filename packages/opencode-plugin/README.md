@@ -57,6 +57,48 @@ Add the plugin to your `opencode.jsonc`:
 | `AETERNA_LOCAL_SYNC_PULL_INTERVAL_MS` | Pull sync interval (ms) | `60000` |
 | `AETERNA_LOCAL_MAX_CACHED_ENTRIES` | Max cached shared-layer entries | `50000` |
 | `AETERNA_LOCAL_SESSION_STORAGE_TTL_HOURS` | Session memory retention (hours) | `24` |
+| `AETERNA_PLUGIN_AUTH_ENABLED` | Enable interactive GitHub OAuth plugin auth (device flow) | `false` |
+| `AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID` | GitHub OAuth App client ID for plugin auth | (required when auth enabled) |
+| `AETERNA_PLUGIN_REFRESH_TOKEN` | Cached refresh token for silent re-auth on start | (optional) |
+
+### Authentication
+
+By default the plugin authenticates with a static bearer token set via `AETERNA_TOKEN`. For interactive use the plugin supports a GitHub OAuth device flow that exchanges a GitHub access token for Aeterna-issued short-lived JWTs.
+
+#### Token Priority
+
+1. **Static token** (`AETERNA_TOKEN`) — set this for service-to-service or CI use. The plugin uses it as-is; no interactive auth is performed.
+2. **Dynamic auth** (`AETERNA_PLUGIN_AUTH_ENABLED=true`) — the plugin performs the GitHub OAuth device flow sign-in and stores a rotating refresh token. The access token is renewed automatically on each session start.
+3. **Unauthenticated** — if neither is configured the plugin runs in local-only mode; personal memory layers work offline, shared layers return empty results.
+
+#### Interactive Sign-in (Device Flow)
+
+```bash
+# Set these in your shell or .env before starting OpenCode:
+export AETERNA_PLUGIN_AUTH_ENABLED=true
+export AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID=<your-oauth-app-client-id>
+
+# On first start the plugin prints a verification URL and a user code.
+# Open the URL in your browser, enter the code, and authorise the app.
+# The plugin polls GitHub automatically and completes sign-in.
+```
+
+#### Migration from Static Tokens
+
+Existing deployments using `AETERNA_TOKEN` continue to work without any change. Interactive auth is opt-in; the static token path is preserved.
+
+#### Server-side Configuration
+
+```bash
+AETERNA_PLUGIN_AUTH_ENABLED=true
+AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID=<oauth-app-client-id>
+AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_SECRET=<oauth-app-client-secret>
+AETERNA_PLUGIN_AUTH_JWT_SECRET=<min-32-char-random-secret>
+# Optional defaults:
+AETERNA_PLUGIN_AUTH_ACCESS_TOKEN_TTL_SECONDS=3600
+AETERNA_PLUGIN_AUTH_REFRESH_TOKEN_TTL_SECONDS=2592000
+AETERNA_PLUGIN_AUTH_TOKEN_ISSUER=aeterna
+```
 
 ### Aeterna Configuration
 
@@ -250,9 +292,30 @@ Contributions are welcome! Please read the main Aeterna repository for guideline
 - Requires `@opencode-ai/plugin` version 1.3.0 or higher
 - Node.js version 18.0.0 or higher
 - Requires Aeterna backend server for shared layers (personal layers work offline)
-- Native `better-sqlite3` module required for local memory store
+- Bun runtime SQLite support is used for local memory store inside OpenCode
 
 ## Changelog
+
+### 0.4.0
+
+- Migrated plugin authentication from browser redirect/code exchange to GitHub OAuth device flow
+- `bootstrapAuth()` now accepts a GitHub access token (obtained via device flow) instead of an authorization code + redirect URI
+- Added `requestDeviceCode()` to initiate the device flow and return `user_code` + `verification_uri`
+- Added `pollDeviceToken()` to poll GitHub for the OAuth access token after user authorisation
+- Plugin entry point now prints verification URL and user code, then polls automatically (no restart needed)
+- Removed `AETERNA_PLUGIN_AUTH_REDIRECT_URI` and `AETERNA_OAUTH_CODE` env vars (no longer needed)
+- Static `AETERNA_TOKEN` precedence and refresh/logout behaviour unchanged
+
+### 0.3.0
+
+- Added interactive GitHub OAuth plugin authentication flow (task add-opencode-github-app-auth)
+- `AeternaClient` now holds a mutable access token updated on bootstrap/refresh
+- Added `bootstrapAuth()`, `refreshAuth()`, `logoutAuth()`, `setAuthTokens()`, `getAccessToken()`, `hasRefreshToken()` methods
+- Plugin entry point attempts silent token refresh or interactive bootstrap before `sessionStart()`
+- Session hook performs silent token refresh on `session.start` events when a refresh token is held
+- `callWithReauth()` helper retries API calls after a 401 by refreshing the token
+- Static `AETERNA_TOKEN` is preserved as first-priority fallback (no behaviour change for existing deployments)
+- New env vars: `AETERNA_PLUGIN_AUTH_ENABLED`, `AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID`, `AETERNA_PLUGIN_REFRESH_TOKEN`
 
 ### 0.2.3
 
