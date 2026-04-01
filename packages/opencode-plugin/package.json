@@ -1,6 +1,6 @@
 {
   "name": "@aeterna-org/opencode-plugin",
-  "version": "0.2.3",
+  "version": "0.4.0",
   "description": "OpenCode plugin for Aeterna memory and knowledge integration",
   "type": "module",
   "main": "./dist/index.js",
