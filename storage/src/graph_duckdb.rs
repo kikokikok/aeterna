@@ -678,6 +678,11 @@ impl DuckDbGraphStore {
         Ok(store)
     }
 
+    /// Returns a handle to the underlying DuckDB connection for use by graph tools.
+    pub fn db_handle(&self) -> Arc<Mutex<Connection>> {
+        self.conn.clone()
+    }
+
     fn enable_parquet_support(conn: &Connection) -> Result<(), GraphError> {
         conn.execute_batch(
             "SET autoinstall_known_extensions=1; SET autoload_known_extensions=1; INSTALL parquet; LOAD parquet;",

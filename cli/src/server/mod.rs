@@ -4,7 +4,9 @@ pub mod health;
 pub mod knowledge_api;
 pub mod mcp_transport;
 pub mod metrics;
+pub mod plugin_auth;
 pub mod router;
+pub mod sessions;
 pub mod sync;
 pub mod webhooks;
 
@@ -29,6 +31,26 @@ use storage::graph_duckdb::DuckDbGraphStore;
 use storage::postgres::PostgresBackend;
 use tools::server::McpServer;
 
+use plugin_auth::RefreshTokenStore;
+
+/// Plugin-auth runtime state: configuration + in-process token store.
+///
+/// Held as `Arc<PluginAuthState>` inside `AppState` so handlers can access it
+/// via `State<Arc<AppState>>` without an extra extraction layer.
+pub struct PluginAuthState {
+    pub config: config::PluginAuthConfig,
+    /// Single-use refresh-token store (rotated on every refresh).
+    pub refresh_store: RefreshTokenStore,
+}
+
+impl std::fmt::Debug for PluginAuthState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PluginAuthState")
+            .field("config", &self.config)
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<config::Config>,
@@ -50,6 +72,7 @@ pub struct AppState {
     pub ws_server: Arc<WsServer>,
     pub a2a_config: Arc<A2aConfig>,
     pub a2a_auth_state: Arc<A2aAuthState>,
+    pub plugin_auth_state: Arc<PluginAuthState>,
     pub idp_config: Option<Arc<IdpSyncConfig>>,
     pub idp_sync_service: Option<Arc<IdpSyncService>>,
     pub idp_client: Option<Arc<dyn IdpClient>>,

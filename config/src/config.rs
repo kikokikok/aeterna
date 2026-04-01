@@ -76,6 +76,9 @@ pub struct Config {
     #[serde(default)]
     pub knowledge_repo: KnowledgeRepoConfig,
 
+    #[serde(default)]
+    pub plugin_auth: PluginAuthConfig,
+
     /// CCA (Confucius Code Agent) capabilities configuration
     #[serde(default)]
     pub cca: CcaConfig,
@@ -227,6 +230,32 @@ pub struct KnowledgeRepoConfig {
     pub github_app_pem: Option<String>,
     #[serde(default)]
     pub webhook_secret: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default, PartialEq)]
+pub struct PluginAuthConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub github_client_id: Option<String>,
+    #[serde(default)]
+    pub github_client_secret: Option<String>,
+    #[serde(default)]
+    pub github_app_id: Option<u64>,
+    #[serde(default)]
+    pub github_app_name: Option<String>,
+    #[serde(default)]
+    pub github_app_pem: Option<String>,
+    #[serde(default)]
+    pub redirect_base_url: Option<String>,
+    #[serde(default)]
+    pub token_issuer: Option<String>,
+    #[serde(default)]
+    pub jwt_secret: Option<String>,
+    #[serde(default)]
+    pub access_token_ttl_seconds: Option<u64>,
+    #[serde(default)]
+    pub refresh_token_ttl_seconds: Option<u64>,
 }
 
 fn default_branch() -> String {
