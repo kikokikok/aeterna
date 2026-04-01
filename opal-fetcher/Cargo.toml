@@ -1,6 +1,6 @@
 [package]
 name = "opal-fetcher"
-version = "0.2.0"
+version = "0.4.0"
 edition = "2024"
 description = "OPAL Data Fetcher for Aeterna - serves organizational data to Cedar Agent"
 license = "Apache-2.0"
