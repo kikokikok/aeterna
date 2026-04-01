@@ -1,6 +1,6 @@
 [package]
 name = "tools"
-version = "0.2.0"
+version = "0.4.0"
 edition = "2024"
 description = "MCP tool interface implementation"
 
@@ -42,4 +42,3 @@ testing.workspace = true
 default = []
 llm-integration = []  # Enables tests requiring LLM services
 embedding-integration = []  # Enables tests requiring embedding services
-
