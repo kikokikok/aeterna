@@ -5,13 +5,6 @@ on:
     branches: [master]
     tags:
       - 'v*'
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '**/Cargo.toml'
-      - '**/*.rs'
-      - 'Dockerfile'
-      - '.github/workflows/docker.yml'
   pull_request:
     branches: [master]
     paths:
