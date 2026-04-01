@@ -1,6 +1,6 @@
 [package]
 name = "agent-a2a"
-version = "0.2.0"
+version = "0.4.0"
 edition = "2024"
 description = "A2A (Agent-to-Agent) protocol implementation using Radkit"
 
