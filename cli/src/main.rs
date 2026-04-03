@@ -2,8 +2,12 @@ use anyhow::Result;
 use clap::Parser;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
+mod backend;
+mod client;
 mod commands;
+mod credentials;
 mod output;
+mod profile;
 mod server;
 pub mod ux_error;
 
@@ -30,6 +34,7 @@ async fn main() -> Result<()> {
         Commands::Policy(cmd) => commands::policy::run(cmd).await,
         Commands::Org(cmd) => commands::org::run(cmd).await,
         Commands::Team(cmd) => commands::team::run(cmd).await,
+        Commands::Tenant(cmd) => commands::tenant::run(cmd).await,
         Commands::User(cmd) => commands::user::run(cmd).await,
         Commands::Agent(cmd) => commands::agent::run(cmd).await,
         Commands::Govern(cmd) => commands::govern::run(cmd).await,

@@ -1,5 +1,5 @@
 use mk_core::traits::StorageBackend;
-use mk_core::types::{OrganizationalUnit, TenantContext, TenantId, UnitType, UserId};
+use mk_core::types::{OrganizationalUnit, RecordSource, TenantContext, TenantId, UnitType, UserId};
 use storage::postgres::PostgresBackend;
 use testing::{postgres, unique_id};
 
@@ -21,7 +21,9 @@ async fn test_recursive_hierarchy_queries() {
     let ctx = TenantContext {
         tenant_id: tenant_id.clone(),
         user_id: UserId::new("u1".to_string()).unwrap(),
-        agent_id: None
+        agent_id: None,
+        role: None,
+        target_tenant_id: None,
     };
 
     let comp_id = unique_id("comp");
@@ -37,7 +39,8 @@ async fn test_recursive_hierarchy_queries() {
         parent_id: None,
         metadata: std::collections::HashMap::new(),
         created_at: 1000,
-        updated_at: 1000
+        updated_at: 1000,
+        source_owner: RecordSource::Admin,
     };
     storage.create_unit(&company).await.unwrap();
 
@@ -49,7 +52,8 @@ async fn test_recursive_hierarchy_queries() {
         parent_id: Some(comp_id.clone()),
         metadata: std::collections::HashMap::new(),
         created_at: 1000,
-        updated_at: 1000
+        updated_at: 1000,
+        source_owner: RecordSource::Admin,
     };
     storage.create_unit(&org1).await.unwrap();
 
@@ -61,7 +65,8 @@ async fn test_recursive_hierarchy_queries() {
         parent_id: Some(org_id.clone()),
         metadata: std::collections::HashMap::new(),
         created_at: 1000,
-        updated_at: 1000
+        updated_at: 1000,
+        source_owner: RecordSource::Admin,
     };
     storage.create_unit(&team1).await.unwrap();
 
@@ -73,7 +78,8 @@ async fn test_recursive_hierarchy_queries() {
         parent_id: Some(team_id.clone()),
         metadata: std::collections::HashMap::new(),
         created_at: 1000,
-        updated_at: 1000
+        updated_at: 1000,
+        source_owner: RecordSource::Admin,
     };
     storage.create_unit(&project1).await.unwrap();
 
@@ -104,7 +110,9 @@ async fn test_recursive_hierarchy_queries() {
     let ctx2 = TenantContext {
         tenant_id: tenant2_id.clone(),
         user_id: UserId::new("u2".to_string()).unwrap(),
-        agent_id: None
+        agent_id: None,
+        role: None,
+        target_tenant_id: None,
     };
 
     let ancestors_t2 = storage.get_ancestors(&ctx2, &proj_id).await.unwrap();

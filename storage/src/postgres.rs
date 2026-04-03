@@ -733,6 +733,7 @@ impl PostgresBackend {
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                source_owner: mk_core::types::RecordSource::Admin,
             }))
         } else {
             Ok(None)
@@ -780,6 +781,7 @@ impl PostgresBackend {
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                source_owner: mk_core::types::RecordSource::Admin,
             }))
         } else {
             Ok(None)
@@ -824,6 +826,7 @@ impl PostgresBackend {
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                source_owner: mk_core::types::RecordSource::Admin,
             });
         }
 
@@ -877,6 +880,7 @@ impl PostgresBackend {
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                source_owner: mk_core::types::RecordSource::Admin,
             });
         }
 
@@ -938,6 +942,7 @@ impl PostgresBackend {
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                source_owner: mk_core::types::RecordSource::Admin,
             });
         }
 
@@ -1098,6 +1103,35 @@ impl PostgresBackend {
         }
         Ok(roles)
     }
+    /// Lists all (user_id, role) pairs assigned within a specific organisational unit.
+    pub async fn list_unit_roles(
+        &self,
+        tenant_id: &mk_core::types::TenantId,
+        unit_id: &str,
+    ) -> Result<Vec<(mk_core::types::UserId, mk_core::types::Role)>, PostgresError> {
+        use sqlx::Row;
+        let rows = sqlx::query(
+            "SELECT user_id, role FROM user_roles WHERE tenant_id = $1 AND unit_id = $2",
+        )
+        .bind(tenant_id.as_str())
+        .bind(unit_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            let user_id_str: String = row.get("user_id");
+            let role_str: String = row.get("role");
+            if let (Some(uid), Ok(role)) = (
+                mk_core::types::UserId::new(user_id_str),
+                role_str.parse::<mk_core::types::Role>(),
+            ) {
+                result.push((uid, role));
+            }
+        }
+        Ok(result)
+    }
+
     pub async fn log_event(
         &self,
         event: &mk_core::types::GovernanceEvent,
@@ -1178,6 +1212,51 @@ impl PostgresBackend {
                 tenant_id,
                 timestamp,
             } => ("request_rejected", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::TenantCreated {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("tenant_created", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::TenantUpdated {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("tenant_updated", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::TenantDeactivated {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("tenant_deactivated", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::RepositoryBindingCreated {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("repository_binding_created", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::RepositoryBindingUpdated {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("repository_binding_updated", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::GitProviderConnectionCreated {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("git_provider_connection_created", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::GitProviderConnectionUpdated {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("git_provider_connection_updated", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::GitProviderConnectionTenantGranted {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("git_provider_connection_tenant_granted", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::GitProviderConnectionTenantRevoked {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("git_provider_connection_tenant_revoked", tenant_id, *timestamp),
         };
 
         sqlx::query(
@@ -1693,6 +1772,7 @@ impl StorageBackend for PostgresBackend {
                 metadata: serde_json::from_value(row.get("metadata"))?,
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                source_owner: mk_core::types::RecordSource::Admin,
             });
         }
 

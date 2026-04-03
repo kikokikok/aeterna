@@ -1,0 +1,20 @@
+# Staging tenant config + Git provider connections overlay
+# Apply after values.yaml and staging/values.yaml
+
+tenantConfigProvider:
+  enabled: true
+  seedTenants:
+    - "staging-acme"
+
+# Staging GitHub App connection
+# Prerequisites:
+#   kubectl create secret generic aeterna-github-app-pem --from-file=pem-key=./staging-key.pem
+gitProviderConnections:
+  - id: "staging-github-app"
+    name: "Staging GitHub App"
+    providerKind: GitHubApp
+    appId: "111111"
+    installationId: "2222222"
+    pemSecretRef: "secret/aeterna-github-app-pem/pem-key"
+    allowedTenantIds:
+      - "staging-acme"

@@ -87,8 +87,9 @@ Git-versioned knowledge base supporting:
 
 - **Cedar policies** for fine-grained authorization
 - **OPAL** for real-time policy synchronization
-- **5 RBAC roles**: Admin, Architect, Tech Lead, Developer, Agent
+- **7 RBAC roles**: PlatformAdmin, TenantAdmin, Admin, Architect, Tech Lead, Developer, Agent
 - **Drift detection** and policy inheritance across the hierarchy
+- **Tenant config ownership boundaries** between platform-owned and tenant-owned fields and secret references
 
 ### MCP Tool Interface
 
@@ -114,7 +115,7 @@ Git-versioned knowledge base supporting:
 - **Concepts**: [Architecture Overview](./architecture-overview) · [Core Concepts](./specs/core-concepts) · [Sequence Diagrams](./sequence-diagrams)
 - **Integrations**: [MCP Server](./integrations/mcp-server) · [OpenCode Plugin](./integrations/opencode-integration)
 - **Operations**: [CLI Reference](./guides/cli-quick-reference) · [Helm Chart](./helm/architecture) · [Production Checklist](./helm/production-checklist)
-- **Governance**: [Policy Model](./governance/policy-model) · [RBAC Matrix](./security/rbac-matrix) · [Deployment Guide](./governance/deployment-guide)
+- **Governance**: [Policy Model](./governance/policy-model) · [RBAC Matrix](./security/rbac-matrix) · [Deployment Guide](./governance/deployment-guide) · [Tenant Admin Control Plane](./guides/tenant-admin-control-plane)
 
 ## Tech Stack
 

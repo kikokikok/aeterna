@@ -6,6 +6,12 @@ This document identifies production-grade gaps across all active OpenSpec change
 **Analyzed Changes**: 8 active proposals
 **Target Deployment**: 300+ engineers, enterprise-scale
 
+> **Historical snapshot**
+> This document predates `add-tenant-admin-control-plane` and
+> `add-tenant-config-provider`. Its multi-tenant sections do not reflect the
+> current PlatformAdmin/TenantAdmin model, tenant config provider contract, or
+> shared Git provider connection boundaries documented in the April 2026 guides.
+
 ---
 
 ## Summary by Change

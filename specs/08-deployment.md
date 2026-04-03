@@ -1,3 +1,16 @@
+> **⚠️ SPEC PENDING REWRITE**
+> This document was authored for an earlier third-party deployment model referencing
+> fictional images (`memory-knowledge-spec` GitHub org) and external services (`letta/letta-server`,
+> `mem0ai/openmemory`) that are not part of Aeterna.
+>
+> **Canonical deployment reference:**
+> - Helm chart: `charts/aeterna/` (self-hosted, Kubernetes-native)
+> - Repository: `https://github.com/kikokikok/aeterna`
+> - Container images: published under `ghcr.io/kikokikok/aeterna`
+> - Auth integration: Okta-backed `oauth2-proxy` for browser users; API keys for service clients
+>
+> See `charts/aeterna/README.md` and `docs/guides/okta-auth-deployment.md` for the authoritative deployment guide.
+
 # 08 - Deployment Patterns
 
 ```yaml

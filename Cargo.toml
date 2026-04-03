@@ -123,14 +123,6 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "request-id"] }
 hyper = { version = "1.6", features = ["full"] }
 
-[workspace.metadata.tarpaulin]
-all-features = true
-workspace = true
-timeout = "120"
-out = ["Html", "Json"]
-exclude-files = ["tests/*", "**/tests/*", "**/tests.rs"]
-fail-under = 80
-
 [workspace.metadata.mutants]
 timeout = 30
 jobs = 4

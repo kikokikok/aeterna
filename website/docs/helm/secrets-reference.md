@@ -67,6 +67,18 @@ kubectl create secret generic aeterna-pinecone \
 | GitHub App PEM key | `knowledgeRepo.github.pemSecret` | `pem-key` | When using GitHub App auth (recommended) |
 | Webhook secret | `knowledgeRepo.webhook.secretName` | `webhook-secret` | When receiving GitHub webhooks |
 
+For tenant-scoped repository bindings and shared Git provider connections, public documentation should describe **references**, not raw secret payloads.
+
+- `credentialRef` stores a secret reference, never the secret value
+- shared Git provider connections store `pemSecretRef` / `webhookSecretRef`, never raw PEM or webhook values
+- tenant config stores logical secret references only
+
+Supported reference shapes include:
+
+- `local/<name>`
+- `secret/<kubernetes-secret-name>/<key>`
+- `arn:aws:...`
+
 **Create example (GitHub App PEM):**
 ```bash
 kubectl create secret generic aeterna-github-app-pem \
@@ -155,6 +167,7 @@ These are set via the ConfigMap and Helm values — no secrets involved:
 | `AETERNA_FEATURE_RLM` | `aeterna.features.rlm` | `true` | Enable RLM navigation |
 | `AETERNA_FEATURE_REFLECTIVE` | `aeterna.features.reflective` | `true` | Enable reflective reasoning |
 | `AETERNA_KNOWLEDGE_REPO_PATH` | — | `/tmp/knowledge-repo` | Local git clone path |
+| `AETERNA_K8S_NAMESPACE` | Auto-resolved | Pod namespace | Namespace used by the tenant config provider |
 | `AETERNA_KNOWLEDGE_REPO_URL` | `knowledgeRepo.remoteUrl` | — | Remote knowledge repo SSH URL |
 | `AETERNA_KNOWLEDGE_REPO_BRANCH` | `knowledgeRepo.branch` | `main` | Knowledge repo branch |
 | `AETERNA_GITHUB_OWNER` | `knowledgeRepo.github.owner` | — | GitHub org/user for knowledge repo |
@@ -263,6 +276,15 @@ okta:
   enabled: true
   existingSecret: aeterna-okta
 ```
+
+### Tenant-scoped config containers
+
+For multi-tenant control-plane operation, Aeterna uses one ConfigMap and one paired Secret per tenant UUID:
+
+- `aeterna-tenant-<tenant-id>`
+- `aeterna-tenant-<tenant-id>-secret`
+
+The public Helm chart can seed empty containers via `tenantConfigProvider.seedTenants`, but environment-specific tenant overlays and actual secret values should be kept in a **private deployment repository**.
 
 ---
 

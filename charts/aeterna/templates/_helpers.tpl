@@ -329,3 +329,11 @@ Return Okta auth secret name.
 {{- printf "%s-okta-auth" (include "aeterna.fullname" .) }}
 {{- end }}
 {{- end }}
+
+{{- define "aeterna.tenantConfigMapName" -}}
+{{- printf "aeterna-tenant-%s" . -}}
+{{- end }}
+
+{{- define "aeterna.tenantSecretName" -}}
+{{- printf "aeterna-tenant-%s-secret" . -}}
+{{- end }}

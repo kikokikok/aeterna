@@ -16,15 +16,20 @@ use knowledge::git_provider::{GitHubProvider, GitProvider};
 use knowledge::governance::GovernanceEngine;
 use knowledge::manager::KnowledgeManager;
 use knowledge::repository::{GitRepository, RemoteConfig};
+use knowledge::tenant_repo_resolver::TenantRepositoryResolver;
 use memory::embedding::create_embedding_service_from_env;
 use memory::llm::create_llm_service_from_env;
 use memory::manager::MemoryManager;
 use memory::reasoning::{DefaultReflectiveReasoner, ReflectiveReasoner};
 use mk_core::traits::AuthorizationService;
 use mk_core::types::{ReasoningStrategy, ReasoningTrace, Role, TenantContext, UserId};
+use storage::git_provider_connection_store::InMemoryGitProviderConnectionStore;
 use storage::governance::GovernanceStorage;
 use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore};
 use storage::postgres::PostgresBackend;
+use storage::secret_provider::LocalSecretProvider;
+use storage::tenant_config_provider::KubernetesTenantConfigProvider;
+use storage::tenant_store::{TenantRepositoryBindingStore, TenantStore};
 use sync::bridge::SyncManager;
 use sync::state_persister::DatabasePersister;
 use sync::websocket::{AuthToken, TokenValidator, WsResult, WsServer};
@@ -221,6 +226,24 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
 
     let (shutdown_tx, _) = tokio::sync::watch::channel(false);
 
+    // Tenant stores and repository resolver
+    let tenant_store = Arc::new(TenantStore::new(postgres.pool().clone()));
+    let tenant_repository_binding_store =
+        Arc::new(TenantRepositoryBindingStore::new(postgres.pool().clone()));
+    let secret_provider = Arc::new(LocalSecretProvider::new(std::collections::HashMap::new()));
+    let git_provider_connection_registry = Arc::new(InMemoryGitProviderConnectionStore::new());
+    let tenant_repo_resolver = Arc::new(
+        TenantRepositoryResolver::new(
+            tenant_repository_binding_store.clone(),
+            knowledge_repo_path(),
+            secret_provider,
+        )
+        .with_connection_registry(git_provider_connection_registry.clone()),
+    );
+    let tenant_config_provider = Arc::new(KubernetesTenantConfigProvider::new(
+        tenant_config_provider_namespace(),
+    ));
+
     Ok(Arc::new(AppState {
         config,
         postgres,
@@ -246,6 +269,11 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         idp_sync_service,
         idp_client,
         shutdown_tx: Arc::new(shutdown_tx),
+        tenant_store,
+        tenant_repository_binding_store,
+        tenant_repo_resolver,
+        tenant_config_provider,
+        git_provider_connection_registry,
     }))
 }
 
@@ -311,6 +339,10 @@ fn knowledge_repo_path() -> PathBuf {
     std::env::var("AETERNA_KNOWLEDGE_REPO_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("./knowledge-repo"))
+}
+
+fn tenant_config_provider_namespace() -> String {
+    std::env::var("AETERNA_K8S_NAMESPACE").unwrap_or_else(|_| "default".to_string())
 }
 
 fn create_graph_store(config: &config::Config) -> anyhow::Result<Option<Arc<DuckDbGraphStore>>> {
@@ -686,6 +718,21 @@ mod tests {
             std::env::remove_var("AETERNA_KNOWLEDGE_REPO_PATH");
         }
         assert_eq!(knowledge_repo_path(), PathBuf::from("./knowledge-repo"));
+    }
+
+    #[test]
+    #[serial]
+    fn tenant_config_provider_namespace_uses_env_override() {
+        set_env("AETERNA_K8S_NAMESPACE", "aeterna");
+        assert_eq!(tenant_config_provider_namespace(), "aeterna");
+        remove_env("AETERNA_K8S_NAMESPACE");
+    }
+
+    #[test]
+    #[serial]
+    fn tenant_config_provider_namespace_defaults_to_default() {
+        remove_env("AETERNA_K8S_NAMESPACE");
+        assert_eq!(tenant_config_provider_namespace(), "default");
     }
 
     #[test]

@@ -126,6 +126,15 @@ impl RedisPublisher {
             GovernanceEvent::RequestCreated { tenant_id, .. } => tenant_id,
             GovernanceEvent::RequestApproved { tenant_id, .. } => tenant_id,
             GovernanceEvent::RequestRejected { tenant_id, .. } => tenant_id,
+            GovernanceEvent::TenantCreated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::TenantUpdated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::TenantDeactivated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RepositoryBindingCreated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RepositoryBindingUpdated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::GitProviderConnectionCreated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::GitProviderConnectionUpdated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::GitProviderConnectionTenantGranted { tenant_id, .. } => tenant_id,
+            GovernanceEvent::GitProviderConnectionTenantRevoked { tenant_id, .. } => tenant_id,
         };
 
         let stream_key = format!("{}:{}", base_stream_key, tenant_id.as_str());
@@ -449,6 +458,15 @@ mod tests {
                 GovernanceEvent::RequestCreated { tenant_id, .. } => tenant_id,
                 GovernanceEvent::RequestApproved { tenant_id, .. } => tenant_id,
                 GovernanceEvent::RequestRejected { tenant_id, .. } => tenant_id,
+                GovernanceEvent::TenantCreated { tenant_id, .. } => tenant_id,
+                GovernanceEvent::TenantUpdated { tenant_id, .. } => tenant_id,
+                GovernanceEvent::TenantDeactivated { tenant_id, .. } => tenant_id,
+                GovernanceEvent::RepositoryBindingCreated { tenant_id, .. } => tenant_id,
+                GovernanceEvent::RepositoryBindingUpdated { tenant_id, .. } => tenant_id,
+                GovernanceEvent::GitProviderConnectionCreated { tenant_id, .. } => tenant_id,
+                GovernanceEvent::GitProviderConnectionUpdated { tenant_id, .. } => tenant_id,
+                GovernanceEvent::GitProviderConnectionTenantGranted { tenant_id, .. } => tenant_id,
+                GovernanceEvent::GitProviderConnectionTenantRevoked { tenant_id, .. } => tenant_id,
             };
             assert_eq!(extracted_tenant_id, &tenant_id);
         }

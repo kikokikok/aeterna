@@ -20,9 +20,10 @@ This index provides a complete map of Aeterna documentation. All documentation f
 
 ### For Developers
 1. Read [project.md](../project.md) - Understand tech stack and conventions
-2. Review [Architecture Documentation](#architecture-documentation)
-3. Study [Sequence Diagrams](sequence-diagrams.md) - Understand system flows
-4. Check [API Reference](#api-reference)
+2. Read [Tenant Admin Control Plane](guides/tenant-admin-control-plane.md) - Understand tenancy setup, ownership, and bootstrap
+3. Review [Architecture Documentation](#architecture-documentation)
+4. Study [Sequence Diagrams](sequence-diagrams.md) - Understand system flows
+5. Check [API Reference](#api-reference)
 
 ### For Architects
 1. Read [Specifications](#specifications) - Core concepts and architecture
@@ -291,7 +292,7 @@ Location: `docs/governance/`
 
 **Topics:**
 - Cedar policy language
-- RBAC model (5 roles)
+- RBAC model (PlatformAdmin, TenantAdmin, and tenant-scoped roles)
 - Multi-tenant isolation
 - Permit.io integration
 - OPAL synchronization
@@ -329,7 +330,7 @@ Location: `docs/security/`
 |-------------|-------|--------|
 | Local Development | README.md + UX/DX Guide | ✅ Complete |
 | Docker Compose | docker-compose.yml + docs | ✅ Complete |
-| Kubernetes (Helm) | charts/ + specs/08-deployment.md | 🚧 In Progress |
+| Kubernetes (Helm) | charts/ + specs/08-deployment.md | ✅ Complete |
 | Okta-backed interactive auth | docs/guides/okta-auth-deployment.md | ✅ Complete |
 | Production | Gap Analysis (HA/DR section) | 📝 Planned |
 
@@ -468,12 +469,12 @@ See: [Gap Analysis: Implementation Roadmap](gap-analysis-improvements.md#impleme
 1. **[CHARTER.md](../CHARTER.md)** - Start here for vision
 2. **[Comprehensive UX/DX Guide](comprehensive-ux-dx-guide.md)** - Complete feature walkthrough
 3. **[README.md](../README.md)** - Technical overview
-4. **[Gap Analysis & Improvements](gap-analysis-improvements.md)** - Future roadmap
-5. **[Sequence Diagrams](sequence-diagrams.md)** - System flows
-6. **[specs/02-memory-system.md](../specs/02-memory-system.md)** - Memory architecture
-7. **[specs/03-knowledge-repository.md](../specs/03-knowledge-repository.md)** - Knowledge management
-8. **[project.md](../project.md)** - Developer conventions
-9. **[examples/strangler-fig-migration.md](../docs/examples/strangler-fig-migration.md)** - Real-world pattern
+4. **[Tenant Admin Control Plane](guides/tenant-admin-control-plane.md)** - Tenant ownership, bootstrap, config, and shared Git connections
+5. **[Gap Analysis & Improvements](gap-analysis-improvements.md)** - Future roadmap
+6. **[Sequence Diagrams](sequence-diagrams.md)** - System flows
+7. **[specs/02-memory-system.md](../specs/02-memory-system.md)** - Memory architecture
+8. **[specs/03-knowledge-repository.md](../specs/03-knowledge-repository.md)** - Knowledge management
+9. **[project.md](../project.md)** - Developer conventions
 10. **[PRODUCTION_GAPS.md](../PRODUCTION_GAPS.md)** - Known limitations
 
 ### By Audience
@@ -522,13 +523,14 @@ If you can't find what you're looking for, it may be a documentation gap:
 
 ## 🔄 Documentation Updates
 
-This documentation was generated on **2026-02-01**.
+This documentation was generated on **2026-04-03**.
 
 ### Recently Added (Latest)
 
 - ✨ **[Comprehensive UX/DX Guide](comprehensive-ux-dx-guide.md)** - Complete feature walkthrough with personae (2026-02-01)
 - ✨ **[Sequence Diagrams](sequence-diagrams.md)** - 8 detailed flow diagrams (2026-02-01)
 - ✨ **[Gap Analysis & Improvements](gap-analysis-improvements.md)** - Strategic roadmap (2026-02-01)
+- ✨ **[Tenant Admin Control Plane](guides/tenant-admin-control-plane.md)** - Canonical tenant ownership, config, and bootstrap guide (2026-04-03)
 
 ### Documentation Maintenance
 
@@ -590,7 +592,7 @@ Based on this documentation:
 
 ---
 
-**Last Updated:** 2026-02-01  
+**Last Updated:** 2026-04-03  
 **Maintainer:** Aeterna Team  
 **License:** Apache 2.0
 

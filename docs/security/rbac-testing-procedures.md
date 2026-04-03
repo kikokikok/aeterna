@@ -57,11 +57,22 @@ All tests must:
 
 | Precedence | Role | Key Permissions |
 |------------|------|-----------------|
-| 4 | Admin | Full access, role management |
+| 6 | PlatformAdmin | Cross-tenant tenant lifecycle, config/secrets, shared Git connections |
+| 5 | TenantAdmin | Tenant-scoped administration |
+| 4 | Admin | Full tenant access, role management |
 | 3 | Architect | Knowledge approval, org promotion |
 | 2 | TechLead | Team management, team promotion |
 | 1 | Developer | User-layer memory, view knowledge |
 | 0 | Agent | Delegated view-only by default |
+
+## Control-plane boundary procedures
+
+Add these checks to every RBAC regression pass:
+
+1. Verify `TenantAdmin` cannot set `--target-tenant` to a different tenant.
+2. Verify `TenantAdmin` cannot mutate platform-owned tenant config or secret entries.
+3. Verify `PlatformAdmin` can grant and revoke tenant visibility for shared Git provider connections.
+4. Verify repository bindings that reference shared Git provider connections fail closed when visibility is missing.
 
 ## Adding New RBAC Tests
 

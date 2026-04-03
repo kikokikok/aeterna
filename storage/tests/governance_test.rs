@@ -1,12 +1,12 @@
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde_json::json;
 use sqlx::{Pool, Postgres};
 use storage::governance::{
-    ApprovalDecision, ApprovalMode, ApprovalRequest, CreateApprovalRequest, CreateDecision,
-    CreateGovernanceRole, Decision, GovernanceConfig, GovernanceRole, GovernanceStorage,
-    GovernanceTemplate, PrincipalType, RequestStatus, RequestType, RiskLevel
+    ApprovalDecision, ApprovalMode, ApprovalRequest, CreateDecision, CreateGovernanceRole,
+    Decision, GovernanceConfig, GovernanceRole, GovernanceStorage, GovernanceTemplate,
+    PrincipalType, RequestFilters, RequestStatus, RequestType, RiskLevel,
 };
-use testing::{postgres, unique_id};
+use testing::postgres;
 use uuid::Uuid;
 
 async fn create_test_governance_storage() -> Option<GovernanceStorage> {
@@ -14,10 +14,6 @@ async fn create_test_governance_storage() -> Option<GovernanceStorage> {
     let pool = Pool::<Postgres>::connect(fixture.url()).await.ok()?;
     let storage = GovernanceStorage::new(pool);
     Some(storage)
-}
-
-fn unique_tenant_id() -> String {
-    unique_id("test-tenant")
 }
 
 fn create_test_config(company_id: Option<Uuid>) -> GovernanceConfig {
@@ -36,12 +32,15 @@ fn create_test_config(company_id: Option<Uuid>) -> GovernanceConfig {
         escalation_contact: Some("admin@example.com".to_string()),
         policy_settings: json!({"require_approval": true, "min_approvers": 2}),
         knowledge_settings: json!({"require_approval": true, "min_approvers": 1}),
-        memory_settings: json!({"require_approval": false, "auto_approve_threshold": 0.8})
+        memory_settings: json!({"require_approval": false, "auto_approve_threshold": 0.8}),
     }
 }
 
-fn create_test_request(company_id: Option<Uuid>, requestor_id: Uuid) -> CreateApprovalRequest {
-    CreateApprovalRequest {
+fn create_test_request(
+    company_id: Option<Uuid>,
+    requestor_id: Uuid,
+) -> storage::governance::CreateApprovalRequest {
+    storage::governance::CreateApprovalRequest {
         request_type: RequestType::Policy,
         target_type: "policy".to_string(),
         target_id: Some("test-policy-123".to_string()),
@@ -52,12 +51,12 @@ fn create_test_request(company_id: Option<Uuid>, requestor_id: Uuid) -> CreateAp
         title: "Test Policy Request".to_string(),
         description: Some("This is a test policy request".to_string()),
         payload: json!({"policy_name": "test-policy", "action": "create"}),
-        risk_level: RiskLevel::Medium,
+        risk_level: RiskLevel::High,
         requestor_type: PrincipalType::User,
         requestor_id,
         requestor_email: Some("user@example.com".to_string()),
         required_approvals: 2,
-        timeout_hours: None
+        timeout_hours: Some(24),
     }
 }
 
@@ -286,11 +285,274 @@ async fn test_governance_config_default() {
 
 #[tokio::test]
 async fn test_governance_storage_new() {
-    let Some(storage) = create_test_governance_storage().await else {
+    let Some(_storage) = create_test_governance_storage().await else {
         eprintln!("Skipping governance storage test: Docker not available");
         return;
     };
     assert!(true, "Should create governance storage");
+}
+
+#[tokio::test]
+async fn test_upsert_and_get_effective_config_roundtrip() {
+    let Some(storage) = create_test_governance_storage().await else {
+        eprintln!("Skipping governance storage test: Docker not available");
+        return;
+    };
+
+    let company_id = Uuid::new_v4();
+    let mut config = create_test_config(Some(company_id));
+    config.approval_mode = ApprovalMode::Single;
+    config.min_approvers = 1;
+
+    let config_id = storage.upsert_config(&config).await.unwrap();
+    assert!(!config_id.is_nil());
+
+    let effective = storage
+        .get_effective_config(Some(company_id), None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(effective.company_id, Some(company_id));
+    assert_eq!(effective.approval_mode, ApprovalMode::Single);
+    assert_eq!(effective.min_approvers, 1);
+
+    config.approval_mode = ApprovalMode::Unanimous;
+    config.min_approvers = 3;
+    let updated_id = storage.upsert_config(&config).await.unwrap();
+    assert_eq!(updated_id, config_id);
+
+    let updated = storage
+        .get_effective_config(Some(company_id), None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(updated.approval_mode, ApprovalMode::Unanimous);
+    assert_eq!(updated.min_approvers, 3);
+}
+
+#[tokio::test]
+async fn test_create_get_and_lookup_request_by_number() {
+    let Some(storage) = create_test_governance_storage().await else {
+        eprintln!("Skipping governance storage test: Docker not available");
+        return;
+    };
+
+    let company_id = Uuid::new_v4();
+    let requestor_id = Uuid::new_v4();
+    let request = create_test_request(Some(company_id), requestor_id);
+
+    let created = storage.create_request(&request).await.unwrap();
+    assert_eq!(created.request_type, RequestType::Policy);
+    assert_eq!(created.status, RequestStatus::Pending);
+    assert_eq!(created.current_approvals, 0);
+    assert_eq!(created.company_id, Some(company_id));
+    assert_eq!(created.requestor_id, requestor_id);
+
+    let fetched = storage.get_request(created.id).await.unwrap().unwrap();
+    assert_eq!(fetched.id, created.id);
+    assert_eq!(fetched.title, created.title);
+
+    let by_number = storage
+        .get_request_by_number(&created.request_number)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(by_number.id, created.id);
+
+    assert!(storage.get_request(Uuid::new_v4()).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn test_add_and_list_decisions_for_request() {
+    let Some(storage) = create_test_governance_storage().await else {
+        eprintln!("Skipping governance storage test: Docker not available");
+        return;
+    };
+
+    let created = storage
+        .create_request(&create_test_request(Some(Uuid::new_v4()), Uuid::new_v4()))
+        .await
+        .unwrap();
+
+    let approve = storage
+        .add_decision(&CreateDecision {
+            request_id: created.id,
+            approver_type: PrincipalType::User,
+            approver_id: Uuid::new_v4(),
+            approver_email: Some("approver1@example.com".to_string()),
+            decision: Decision::Approve,
+            comment: Some("Looks good".to_string()),
+        })
+        .await
+        .unwrap();
+    assert_eq!(approve.decision, Decision::Approve);
+
+    let reject = storage
+        .add_decision(&CreateDecision {
+            request_id: created.id,
+            approver_type: PrincipalType::Agent,
+            approver_id: Uuid::new_v4(),
+            approver_email: Some("approver2@example.com".to_string()),
+            decision: Decision::Reject,
+            comment: Some("Needs revision".to_string()),
+        })
+        .await
+        .unwrap();
+    assert_eq!(reject.decision, Decision::Reject);
+
+    let decisions = storage.get_decisions(created.id).await.unwrap();
+    assert_eq!(decisions.len(), 2);
+    assert!(decisions.iter().any(|d| d.decision == Decision::Approve));
+    assert!(decisions.iter().any(|d| d.decision == Decision::Reject));
+}
+
+#[tokio::test]
+async fn test_reject_cancel_mark_applied_and_pending_filters() {
+    let Some(storage) = create_test_governance_storage().await else {
+        eprintln!("Skipping governance storage test: Docker not available");
+        return;
+    };
+
+    let company_id = Uuid::new_v4();
+    let requestor_id = Uuid::new_v4();
+
+    let rejected = storage
+        .create_request(&create_test_request(Some(company_id), requestor_id))
+        .await
+        .unwrap();
+    let cancelled = storage
+        .create_request(&create_test_request(Some(company_id), requestor_id))
+        .await
+        .unwrap();
+    let applied = storage
+        .create_request(&create_test_request(Some(company_id), requestor_id))
+        .await
+        .unwrap();
+    let mut other_request = create_test_request(Some(Uuid::new_v4()), Uuid::new_v4());
+    other_request.request_type = RequestType::Memory;
+    let pending_other = storage.create_request(&other_request).await.unwrap();
+
+    let rejected = storage
+        .reject_request(rejected.id, "security concern")
+        .await
+        .unwrap();
+    assert_eq!(rejected.status, RequestStatus::Rejected);
+    assert_eq!(
+        rejected.resolution_reason.as_deref(),
+        Some("security concern")
+    );
+
+    let cancelled = storage.cancel_request(cancelled.id).await.unwrap();
+    assert_eq!(cancelled.status, RequestStatus::Cancelled);
+
+    let applied = storage
+        .mark_applied(applied.id, Uuid::new_v4())
+        .await
+        .unwrap();
+    assert!(applied.applied_at.is_some());
+    assert!(applied.applied_by.is_some());
+
+    let pending_for_company = storage
+        .list_pending_requests(&RequestFilters {
+            company_id: Some(company_id),
+            limit: Some(10),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert!(pending_for_company.is_empty());
+
+    let pending_memory = storage
+        .list_pending_requests(&RequestFilters {
+            request_type: Some(RequestType::Memory),
+            company_id: pending_other.company_id,
+            requestor_id: Some(pending_other.requestor_id),
+            limit: Some(10),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(pending_memory.len(), 1);
+    assert_eq!(pending_memory[0].id, pending_other.id);
+}
+
+#[tokio::test]
+async fn test_audit_logging_and_role_assignment_lifecycle() {
+    let Some(storage) = create_test_governance_storage().await else {
+        eprintln!("Skipping governance storage test: Docker not available");
+        return;
+    };
+
+    let actor_id = Uuid::new_v4();
+    let company_id = Uuid::new_v4();
+    let request = storage
+        .create_request(&create_test_request(Some(company_id), actor_id))
+        .await
+        .unwrap();
+
+    let audit_id = storage
+        .log_audit(
+            "request_created",
+            Some(request.id),
+            Some("policy"),
+            request.target_id.as_deref(),
+            PrincipalType::User,
+            Some(actor_id),
+            Some("auditor@example.com"),
+            json!({"title": request.title}),
+        )
+        .await
+        .unwrap();
+    assert!(!audit_id.is_nil());
+
+    let audit_entries = storage
+        .list_audit_logs(&storage::governance::AuditFilters {
+            action: Some("request_created".to_string()),
+            actor_id: Some(actor_id),
+            target_type: Some("policy".to_string()),
+            since: Utc::now() - chrono::Duration::hours(1),
+            limit: Some(10),
+        })
+        .await
+        .unwrap();
+    assert_eq!(audit_entries.len(), 1);
+    assert_eq!(audit_entries[0].request_id, Some(request.id));
+    assert_eq!(audit_entries[0].actor_type, PrincipalType::User);
+
+    let principal_id = Uuid::new_v4();
+    let granted_by = Uuid::new_v4();
+    let role_id = storage
+        .assign_role(&CreateGovernanceRole {
+            principal_type: PrincipalType::User,
+            principal_id,
+            role: "admin".to_string(),
+            company_id: Some(company_id),
+            org_id: None,
+            team_id: None,
+            project_id: None,
+            granted_by,
+            expires_at: None,
+        })
+        .await
+        .unwrap();
+    assert!(!role_id.is_nil());
+
+    let listed_before_revoke = storage
+        .list_roles(Some(company_id), None, None)
+        .await
+        .unwrap();
+    assert_eq!(listed_before_revoke.len(), 1);
+    assert_eq!(listed_before_revoke[0].principal_id, principal_id);
+    assert_eq!(listed_before_revoke[0].role, "admin");
+
+    storage
+        .revoke_role(principal_id, "admin", granted_by)
+        .await
+        .unwrap();
+
+    let listed_after_revoke = storage
+        .list_roles(Some(company_id), None, None)
+        .await
+        .unwrap();
+    assert!(listed_after_revoke.is_empty());
 }
 
 #[tokio::test]
@@ -341,7 +603,7 @@ async fn test_serde_roundtrip_approval_request() {
         resolved_at: None,
         resolution_reason: None,
         applied_at: None,
-        applied_by: None
+        applied_by: None,
     };
 
     let json = serde_json::to_string(&request).unwrap();
@@ -371,7 +633,7 @@ async fn test_serde_roundtrip_governance_role() {
         granted_at: Utc::now(),
         expires_at: Some(Utc::now() + chrono::Duration::days(365)),
         revoked_at: None,
-        revoked_by: None
+        revoked_by: None,
     };
 
     let json = serde_json::to_string(&role).unwrap();
@@ -395,7 +657,7 @@ async fn test_serde_roundtrip_approval_decision() {
         approver_email: Some("approver@example.com".to_string()),
         decision: Decision::Approve,
         comment: Some("Looks good".to_string()),
-        created_at: Utc::now()
+        created_at: Utc::now(),
     };
 
     let json = serde_json::to_string(&decision).unwrap();
@@ -420,7 +682,7 @@ async fn test_create_governance_role_struct() {
         team_id: None,
         project_id: None,
         granted_by: Uuid::new_v4(),
-        expires_at: Some(Utc::now() + chrono::Duration::days(365))
+        expires_at: Some(Utc::now() + chrono::Duration::days(365)),
     };
 
     assert_eq!(role.role, "admin");
@@ -436,7 +698,7 @@ async fn test_create_decision_struct() {
         approver_id: Uuid::new_v4(),
         approver_email: Some("approver@example.com".to_string()),
         decision: Decision::Approve,
-        comment: Some("Approved".to_string())
+        comment: Some("Approved".to_string()),
     };
 
     assert_eq!(decision.decision, Decision::Approve);
@@ -458,7 +720,7 @@ async fn test_governance_audit_entry_struct() {
         details: json!({"policy_name": "test"}),
         old_values: None,
         new_values: Some(json!({"status": "active"})),
-        created_at: Utc::now()
+        created_at: Utc::now(),
     };
 
     assert_eq!(audit_entry.action, "policy_created");

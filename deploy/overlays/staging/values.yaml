@@ -1,0 +1,28 @@
+# Staging environment overlay
+# Apply over base chart values: helm upgrade aeterna ... -f charts/aeterna/values.yaml -f deploy/overlays/staging/values.yaml
+
+deploymentMode: local
+
+aeterna:
+  enabled: true
+  replicaCount: 1
+  ingress:
+    enabled: true
+    className: "nginx"
+    hosts:
+      - host: aeterna.staging.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: aeterna-staging-tls
+        hosts:
+          - aeterna.staging.example.com
+
+observability:
+  logging:
+    level: debug
+    format: json
+
+networkPolicy:
+  enabled: true

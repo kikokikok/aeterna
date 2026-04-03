@@ -153,7 +153,7 @@ This specification explicitly does **not** cover:
 - **Agent orchestration**: How agents are scheduled or coordinated
 - **LLM selection**: Which models to use for embeddings or generation
 - **UI/UX**: User interfaces for managing memory or knowledge
-- **Authentication**: How users or agents authenticate (delegated to ecosystem)
+- **Authentication**: Identity provider integration (delegated to ecosystem; Aeterna uses Okta-backed oauth2-proxy for browser users and API keys for service clients)
 - **Billing**: Metering or cost allocation for storage
 
 ## Specification Index

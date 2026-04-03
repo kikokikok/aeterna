@@ -397,13 +397,15 @@ impl StorageBackend for MockStorageBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mk_core::types::{TenantContext, TenantId, UnitType, UserId};
+    use mk_core::types::{RecordSource, TenantContext, TenantId, UnitType, UserId};
 
     fn tenant_ctx(id: &str) -> TenantContext {
         TenantContext {
             tenant_id: TenantId::new(id.to_string()).unwrap(),
             user_id: UserId::new("user-1".to_string()).unwrap(),
             agent_id: None,
+            role: None,
+            target_tenant_id: None,
         }
     }
 
@@ -417,6 +419,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             created_at: 0,
             updated_at: 0,
+            source_owner: RecordSource::Admin,
         }
     }
 
@@ -464,7 +467,10 @@ mod tests {
         let backend = MockStorageBackend::new();
         let ctx_a = tenant_ctx("tenant-a");
         let ctx_b = tenant_ctx("tenant-b");
-        backend.store(ctx_a.clone(), "key", b"from-a").await.unwrap();
+        backend
+            .store(ctx_a.clone(), "key", b"from-a")
+            .await
+            .unwrap();
         let val_b = backend.retrieve(ctx_b, "key").await.unwrap();
         assert!(val_b.is_none(), "Tenant B should not see Tenant A's data");
     }
@@ -520,7 +526,10 @@ mod tests {
         assert!(ids.contains(&"c1"));
         assert!(ids.contains(&"c2"));
         assert!(ids.contains(&"gc"));
-        assert!(!ids.contains(&"root"), "Root should not be in its own descendants");
+        assert!(
+            !ids.contains(&"root"),
+            "Root should not be in its own descendants"
+        );
     }
 
     // -----------
@@ -569,7 +578,10 @@ mod tests {
             metadata: std::collections::HashMap::new(),
         };
 
-        backend.add_unit_policy(&ctx, "unit-x", &policy).await.unwrap();
+        backend
+            .add_unit_policy(&ctx, "unit-x", &policy)
+            .await
+            .unwrap();
         let policies = backend.get_unit_policies(ctx, "unit-x").await.unwrap();
         assert_eq!(policies.len(), 1);
         assert_eq!(policies[0].id, "p1");

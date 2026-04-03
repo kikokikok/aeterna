@@ -122,6 +122,7 @@ mod tests {
     use knowledge::governance::GovernanceEngine;
     use knowledge::manager::KnowledgeManager;
     use knowledge::repository::{GitRepository, RepositoryError};
+    use knowledge::tenant_repo_resolver::TenantRepositoryResolver;
     use memory::manager::MemoryManager;
     use memory::reasoning::ReflectiveReasoner;
     use mk_core::traits::{AuthorizationService, KnowledgeRepository};
@@ -132,6 +133,9 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
     use storage::postgres::PostgresBackend;
+    use storage::secret_provider::LocalSecretProvider;
+    use storage::tenant_config_provider::KubernetesTenantConfigProvider;
+    use storage::tenant_store::{TenantRepositoryBindingStore, TenantStore};
     use sync::bridge::SyncManager;
     use sync::state_persister::FilePersister;
     use sync::websocket::{AuthToken, TokenValidator, WsResult, WsServer};
@@ -329,6 +333,20 @@ mod tests {
             None,
         ));
         let (shutdown_tx, _) = tokio::sync::watch::channel(false);
+        let tenant_store = Arc::new(TenantStore::new(postgres.pool().clone()));
+        let tenant_repository_binding_store =
+            Arc::new(TenantRepositoryBindingStore::new(postgres.pool().clone()));
+        let git_provider_connection_registry = Arc::new(
+            storage::git_provider_connection_store::InMemoryGitProviderConnectionStore::new(),
+        );
+        let tenant_repo_resolver = Arc::new(
+            TenantRepositoryResolver::new(
+                tenant_repository_binding_store.clone(),
+                std::env::temp_dir(),
+                Arc::new(LocalSecretProvider::new(HashMap::new())),
+            )
+            .with_connection_registry(git_provider_connection_registry.clone()),
+        );
 
         Arc::new(AppState {
             config: Arc::new(config::Config::default()),
@@ -363,6 +381,13 @@ mod tests {
             idp_sync_service: None,
             idp_client: None,
             shutdown_tx: Arc::new(shutdown_tx),
+            tenant_store,
+            tenant_repository_binding_store,
+            tenant_repo_resolver,
+            tenant_config_provider: Arc::new(KubernetesTenantConfigProvider::new(
+                "default".to_string(),
+            )),
+            git_provider_connection_registry,
         })
     }
 
