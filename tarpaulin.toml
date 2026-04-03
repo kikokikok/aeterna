@@ -1,4 +1,5 @@
 [default]
+engine = "Llvm"
 all-features = true
 workspace = true
 timeout = "1200s"

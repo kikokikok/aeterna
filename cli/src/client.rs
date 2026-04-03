@@ -1,0 +1,1312 @@
+//! Shared authenticated CLI client.
+//!
+//! All backend-facing CLI commands use [`AeternaClient`] to:
+//! 1. Resolve the active profile → server URL.
+//! 2. Load stored credentials; refresh if expired (task 1.4).
+//! 3. Attach `Authorization: Bearer <token>` headers.
+//! 4. Provide a consistent error surface when auth is missing.
+
+use anyhow::{Context, Result, bail};
+use reqwest::{Client, Response};
+use serde::{Deserialize, Serialize};
+
+use crate::credentials::{self, StoredCredential};
+use crate::profile::ResolvedConfig;
+
+// ---------------------------------------------------------------------------
+// Auth bootstrap/refresh request/response types
+// (match the server-side plugin_auth.rs contracts)
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct BootstrapRequest {
+    provider: String,
+    github_access_token: String,
+}
+
+#[derive(Deserialize)]
+pub struct TokenResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires_in: u64,
+    pub token_type: String,
+    pub github_login: Option<String>,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemorySearchRequest {
+    pub query: String,
+    pub limit: usize,
+    pub threshold: f32,
+    #[serde(default)]
+    pub filters: serde_json::Map<String, serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_summary: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryAddRequest {
+    pub content: String,
+    pub layer: String,
+    #[serde(default)]
+    pub metadata: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryListRequest {
+    pub layer: String,
+    pub limit: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryDeleteRequest {
+    pub layer: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryFeedbackRequest {
+    pub memory_id: String,
+    pub layer: String,
+    pub reward_type: String,
+    pub score: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemorySearchResponse {
+    pub items: Vec<mk_core::types::MemoryEntry>,
+    pub total: usize,
+    pub reasoning: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryAddResponse {
+    pub memory_id: String,
+    pub layer: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MessageResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+#[derive(Serialize)]
+struct RefreshRequest {
+    refresh_token: String,
+}
+
+#[derive(Serialize)]
+struct LogoutRequest {
+    refresh_token: String,
+}
+
+// ---------------------------------------------------------------------------
+// Client
+// ---------------------------------------------------------------------------
+
+/// An authenticated HTTP client bound to one Aeterna server profile.
+pub struct AeternaClient {
+    inner: Client,
+    server_url: String,
+    profile_name: String,
+    /// Current access token (may be refreshed transparently).
+    access_token: String,
+    /// Optional explicit target tenant for PlatformAdmin cross-tenant operations.
+    /// When set, injected as `X-Admin-Target-Tenant` header on every request.
+    target_tenant: Option<String>,
+}
+
+impl AeternaClient {
+    /// Build a client for `profile_name`, loading and refreshing credentials
+    /// as necessary. Returns an error if no valid credentials exist.
+    pub async fn from_profile(resolved: &ResolvedConfig) -> Result<Self> {
+        let profile_name = &resolved.profile_name;
+        let server_url = resolved.server_url.trim_end_matches('/').to_string();
+
+        // Load stored credentials
+        let cred = credentials::load(profile_name)?
+            .with_context(|| not_logged_in_message(profile_name))?;
+
+        // Refresh if expired
+        let access_token = if cred.is_expired() {
+            let refreshed = refresh_token(&server_url, &cred.refresh_token).await?;
+            let new_cred = StoredCredential {
+                profile_name: profile_name.clone(),
+                access_token: refreshed.access_token.clone(),
+                refresh_token: refreshed.refresh_token.clone(),
+                expires_at: chrono::Utc::now().timestamp() + refreshed.expires_in as i64,
+                github_login: refreshed.github_login,
+                email: refreshed.email,
+            };
+            credentials::save(&new_cred).context("Failed to persist refreshed credentials")?;
+            refreshed.access_token
+        } else {
+            cred.access_token
+        };
+
+        Ok(Self {
+            inner: Client::new(),
+            server_url,
+            profile_name: profile_name.clone(),
+            access_token,
+            target_tenant: None,
+        })
+    }
+
+    pub fn server_url(&self) -> &str {
+        &self.server_url
+    }
+
+    pub fn profile_name(&self) -> &str {
+        &self.profile_name
+    }
+
+    /// Return a clone of this client with an explicit target tenant set.
+    pub fn with_target_tenant(mut self, tenant_id: impl Into<String>) -> Self {
+        self.target_tenant = Some(tenant_id.into());
+        self
+    }
+
+    /// Make an authenticated GET request.
+    pub async fn get(&self, path: &str) -> Result<Response> {
+        let mut req = self
+            .inner
+            .get(format!("{}{}", self.server_url, path))
+            .bearer_auth(&self.access_token);
+        if let Some(ref t) = self.target_tenant {
+            req = req.header("x-target-tenant-id", t.as_str());
+        }
+        req.send()
+            .await
+            .with_context(|| format!("GET {} failed", path))
+    }
+
+    /// Make an authenticated POST request with a JSON body.
+    pub async fn post<B: Serialize>(&self, path: &str, body: &B) -> Result<Response> {
+        let mut req = self
+            .inner
+            .post(format!("{}{}", self.server_url, path))
+            .bearer_auth(&self.access_token)
+            .json(body);
+        if let Some(ref t) = self.target_tenant {
+            req = req.header("x-target-tenant-id", t.as_str());
+        }
+        req.send()
+            .await
+            .with_context(|| format!("POST {} failed", path))
+    }
+
+    /// Make an authenticated DELETE request.
+    pub async fn delete(&self, path: &str) -> Result<Response> {
+        let mut req = self
+            .inner
+            .delete(format!("{}{}", self.server_url, path))
+            .bearer_auth(&self.access_token);
+        if let Some(ref t) = self.target_tenant {
+            req = req.header("x-target-tenant-id", t.as_str());
+        }
+        req.send()
+            .await
+            .with_context(|| format!("DELETE {} failed", path))
+    }
+
+    pub async fn delete_json<B: Serialize>(&self, path: &str, body: &B) -> Result<Response> {
+        let mut req = self
+            .inner
+            .delete(format!("{}{}", self.server_url, path))
+            .bearer_auth(&self.access_token)
+            .json(body);
+        if let Some(ref t) = self.target_tenant {
+            req = req.header("x-target-tenant-id", t.as_str());
+        }
+        req.send()
+            .await
+            .with_context(|| format!("DELETE {} failed", path))
+    }
+
+    pub async fn memory_search(&self, req: &MemorySearchRequest) -> Result<MemorySearchResponse> {
+        parse_json_response(self.post("/api/v1/memory/search", req).await?).await
+    }
+
+    pub async fn memory_add(&self, req: &MemoryAddRequest) -> Result<MemoryAddResponse> {
+        parse_json_response(self.post("/api/v1/memory/add", req).await?).await
+    }
+
+    pub async fn memory_list(&self, req: &MemoryListRequest) -> Result<MemorySearchResponse> {
+        parse_json_response(self.post("/api/v1/memory/list", req).await?).await
+    }
+
+    pub async fn memory_delete(
+        &self,
+        memory_id: &str,
+        req: &MemoryDeleteRequest,
+    ) -> Result<MessageResponse> {
+        parse_json_response(
+            self.delete_json(&format!("/api/v1/memory/{memory_id}"), req)
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn memory_feedback(&self, req: &MemoryFeedbackRequest) -> Result<MessageResponse> {
+        parse_json_response(self.post("/api/v1/memory/feedback", req).await?).await
+    }
+
+    // -----------------------------------------------------------------------
+    // HTTP primitive: PUT
+    // -----------------------------------------------------------------------
+
+    /// Make an authenticated PUT request with a JSON body.
+    pub async fn put<B: Serialize>(&self, path: &str, body: &B) -> Result<Response> {
+        let mut req = self
+            .inner
+            .put(format!("{}{}", self.server_url, path))
+            .bearer_auth(&self.access_token)
+            .json(body);
+        if let Some(ref t) = self.target_tenant {
+            req = req.header("x-target-tenant-id", t.as_str());
+        }
+        req.send()
+            .await
+            .with_context(|| format!("PUT {} failed", path))
+    }
+
+    // -----------------------------------------------------------------------
+    // HTTP primitive: PATCH
+    // -----------------------------------------------------------------------
+
+    /// Make an authenticated PATCH request with a JSON body.
+    pub async fn patch<B: Serialize>(&self, path: &str, body: &B) -> Result<Response> {
+        let mut req = self
+            .inner
+            .patch(format!("{}{}", self.server_url, path))
+            .bearer_auth(&self.access_token)
+            .json(body);
+        if let Some(ref t) = self.target_tenant {
+            req = req.header("x-target-tenant-id", t.as_str());
+        }
+        req.send()
+            .await
+            .with_context(|| format!("PATCH {} failed", path))
+    }
+
+    // -----------------------------------------------------------------------
+    // Tenant endpoints (PlatformAdmin)
+    // -----------------------------------------------------------------------
+
+    pub async fn tenant_list(&self, include_inactive: bool) -> Result<serde_json::Value> {
+        let path = if include_inactive {
+            "/api/v1/admin/tenants?include_inactive=true".to_string()
+        } else {
+            "/api/v1/admin/tenants".to_string()
+        };
+        parse_json_response(self.get(&path).await?).await
+    }
+
+    pub async fn tenant_create(&self, body: &serde_json::Value) -> Result<serde_json::Value> {
+        parse_json_response(self.post("/api/v1/admin/tenants", body).await?).await
+    }
+
+    pub async fn tenant_show(&self, tenant: &str) -> Result<serde_json::Value> {
+        parse_json_response(self.get(&format!("/api/v1/admin/tenants/{tenant}")).await?).await
+    }
+
+    pub async fn tenant_update(
+        &self,
+        tenant: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.patch(&format!("/api/v1/admin/tenants/{tenant}"), body)
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn tenant_deactivate(&self, tenant: &str) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(
+                &format!("/api/v1/admin/tenants/{tenant}/deactivate"),
+                &serde_json::Value::Null,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn tenant_add_domain_mapping(
+        &self,
+        tenant: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(
+                &format!("/api/v1/admin/tenants/{tenant}/domain-mappings"),
+                body,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn tenant_repo_binding_show(&self, tenant: &str) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.get(&format!(
+                "/api/v1/admin/tenants/{tenant}/repository-binding"
+            ))
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn tenant_repo_binding_set(
+        &self,
+        tenant: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.put(
+                &format!("/api/v1/admin/tenants/{tenant}/repository-binding"),
+                body,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn tenant_repo_binding_validate(
+        &self,
+        tenant: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(
+                &format!("/api/v1/admin/tenants/{tenant}/repository-binding/validate"),
+                body,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn tenant_config_inspect(&self, tenant: &str) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.get(&format!("/api/v1/admin/tenants/{tenant}/config"))
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn tenant_config_upsert(
+        &self,
+        tenant: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.put(&format!("/api/v1/admin/tenants/{tenant}/config"), body)
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn tenant_config_validate(
+        &self,
+        tenant: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(
+                &format!("/api/v1/admin/tenants/{tenant}/config/validate"),
+                body,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn tenant_secret_set(
+        &self,
+        tenant: &str,
+        logical_name: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.put(
+                &format!("/api/v1/admin/tenants/{tenant}/secrets/{logical_name}"),
+                body,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn tenant_secret_delete(
+        &self,
+        tenant: &str,
+        logical_name: &str,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.delete(&format!(
+                "/api/v1/admin/tenants/{tenant}/secrets/{logical_name}"
+            ))
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn my_tenant_config_inspect(&self) -> Result<serde_json::Value> {
+        parse_json_response(self.get("/api/v1/admin/tenant-config").await?).await
+    }
+
+    pub async fn my_tenant_config_upsert(
+        &self,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(self.put("/api/v1/admin/tenant-config", body).await?).await
+    }
+
+    pub async fn my_tenant_config_validate(
+        &self,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post("/api/v1/admin/tenant-config/validate", body)
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn my_tenant_secret_set(
+        &self,
+        logical_name: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.put(
+                &format!("/api/v1/admin/tenant-config/secrets/{logical_name}"),
+                body,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn my_tenant_secret_delete(&self, logical_name: &str) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.delete(&format!(
+                "/api/v1/admin/tenant-config/secrets/{logical_name}"
+            ))
+            .await?,
+        )
+        .await
+    }
+
+    // -----------------------------------------------------------------------
+    // Admin health
+    // -----------------------------------------------------------------------
+
+    /// GET /health — returns the raw server health payload.
+    pub async fn admin_health(&self) -> Result<serde_json::Value> {
+        parse_json_response(self.get("/health").await?).await
+    }
+
+    // -----------------------------------------------------------------------
+    // Knowledge endpoints
+    // -----------------------------------------------------------------------
+
+    /// POST /api/v1/knowledge/query — search knowledge items.
+    pub async fn knowledge_query(
+        &self,
+        query: &str,
+        layer: Option<&str>,
+        limit: usize,
+    ) -> Result<serde_json::Value> {
+        let mut body = serde_json::json!({
+            "query": query,
+            "limit": limit,
+        });
+        if let Some(l) = layer {
+            body["layer"] = serde_json::json!(l);
+        }
+        parse_json_response(self.post("/api/v1/knowledge/query", &body).await?).await
+    }
+
+    /// GET /api/v1/knowledge/{id}/metadata — get metadata for a knowledge item.
+    pub async fn knowledge_metadata(&self, id: &str) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.get(&format!("/api/v1/knowledge/{}/metadata", id))
+                .await?,
+        )
+        .await
+    }
+
+    /// POST /api/v1/knowledge/create — create a new knowledge item.
+    pub async fn knowledge_create(&self, body: &serde_json::Value) -> Result<serde_json::Value> {
+        parse_json_response(self.post("/api/v1/knowledge/create", body).await?).await
+    }
+
+    /// DELETE /api/v1/knowledge/{id} — delete a knowledge item.
+    pub async fn knowledge_delete(&self, id: &str) -> Result<serde_json::Value> {
+        // DELETE /api/v1/knowledge/{id} returns 204 No Content on success.
+        // We handle that by returning a synthetic success value.
+        let resp = self
+            .inner
+            .delete(format!("{}/api/v1/knowledge/{}", self.server_url, id))
+            .bearer_auth(&self.access_token)
+            .send()
+            .await
+            .with_context(|| format!("DELETE /api/v1/knowledge/{} failed", id))?;
+        if resp.status() == reqwest::StatusCode::NO_CONTENT {
+            return Ok(serde_json::json!({"success": true, "id": id}));
+        }
+        parse_json_response(resp).await
+    }
+
+    // -----------------------------------------------------------------------
+    // Agent endpoints
+    // -----------------------------------------------------------------------
+
+    pub async fn agent_list(
+        &self,
+        delegated_by: Option<&str>,
+        agent_type: Option<&str>,
+        all: bool,
+    ) -> Result<serde_json::Value> {
+        let mut params: Vec<(&str, String)> = Vec::new();
+        if let Some(d) = delegated_by {
+            params.push(("delegated_by", d.to_string()));
+        }
+        if let Some(t) = agent_type {
+            params.push(("type", t.to_string()));
+        }
+        if all {
+            params.push(("all", "true".to_string()));
+        }
+        let path = build_path("/api/v1/agent", &params);
+        parse_json_response(self.get(&path).await?).await
+    }
+
+    pub async fn agent_show(&self, agent_id: &str) -> Result<serde_json::Value> {
+        parse_json_response(self.get(&format!("/api/v1/agent/{agent_id}")).await?).await
+    }
+
+    pub async fn agent_register(&self, body: &serde_json::Value) -> Result<serde_json::Value> {
+        parse_json_response(self.post("/api/v1/agent", body).await?).await
+    }
+
+    pub async fn agent_permissions_list(&self, agent_id: &str) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.get(&format!("/api/v1/agent/{agent_id}/permissions"))
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn agent_permission_grant(
+        &self,
+        agent_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(&format!("/api/v1/agent/{agent_id}/permissions"), body)
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn agent_permission_revoke(
+        &self,
+        agent_id: &str,
+        permission: &str,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.delete(&format!(
+                "/api/v1/agent/{agent_id}/permissions/{permission}"
+            ))
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn agent_revoke(&self, agent_id: &str) -> Result<serde_json::Value> {
+        parse_json_response(self.delete(&format!("/api/v1/agent/{agent_id}")).await?).await
+    }
+
+    // -----------------------------------------------------------------------
+    // Org endpoints
+    // -----------------------------------------------------------------------
+
+    pub async fn org_list(&self, company: Option<&str>, all: bool) -> Result<serde_json::Value> {
+        let mut params: Vec<(&str, String)> = Vec::new();
+        if let Some(c) = company {
+            params.push(("company", c.to_string()));
+        }
+        if all {
+            params.push(("all", "true".to_string()));
+        }
+        let path = build_path("/api/v1/org", &params);
+        parse_json_response(self.get(&path).await?).await
+    }
+
+    pub async fn org_show(&self, org_id: &str) -> Result<serde_json::Value> {
+        parse_json_response(self.get(&format!("/api/v1/org/{org_id}")).await?).await
+    }
+
+    pub async fn org_create(&self, body: &serde_json::Value) -> Result<serde_json::Value> {
+        parse_json_response(self.post("/api/v1/org", body).await?).await
+    }
+
+    pub async fn org_members_list(&self, org_id: &str) -> Result<serde_json::Value> {
+        parse_json_response(self.get(&format!("/api/v1/org/{org_id}/members")).await?).await
+    }
+
+    pub async fn org_member_add(
+        &self,
+        org_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(&format!("/api/v1/org/{org_id}/members"), body)
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn org_member_remove(
+        &self,
+        org_id: &str,
+        user_id: &str,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.delete(&format!("/api/v1/org/{org_id}/members/{user_id}"))
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn org_member_set_role(
+        &self,
+        org_id: &str,
+        user_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.put(
+                &format!("/api/v1/org/{org_id}/members/{user_id}/role"),
+                body,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    // -----------------------------------------------------------------------
+    // Team endpoints
+    // -----------------------------------------------------------------------
+
+    pub async fn team_list(&self, org: Option<&str>, all: bool) -> Result<serde_json::Value> {
+        let mut params: Vec<(&str, String)> = Vec::new();
+        if let Some(o) = org {
+            params.push(("org", o.to_string()));
+        }
+        if all {
+            params.push(("all", "true".to_string()));
+        }
+        let path = build_path("/api/v1/team", &params);
+        parse_json_response(self.get(&path).await?).await
+    }
+
+    pub async fn team_show(&self, team_id: &str) -> Result<serde_json::Value> {
+        parse_json_response(self.get(&format!("/api/v1/team/{team_id}")).await?).await
+    }
+
+    pub async fn team_create(&self, body: &serde_json::Value) -> Result<serde_json::Value> {
+        parse_json_response(self.post("/api/v1/team", body).await?).await
+    }
+
+    pub async fn team_members_list(&self, team_id: &str) -> Result<serde_json::Value> {
+        parse_json_response(self.get(&format!("/api/v1/team/{team_id}/members")).await?).await
+    }
+
+    pub async fn team_member_add(
+        &self,
+        team_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(&format!("/api/v1/team/{team_id}/members"), body)
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn team_member_remove(
+        &self,
+        team_id: &str,
+        user_id: &str,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.delete(&format!("/api/v1/team/{team_id}/members/{user_id}"))
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn team_member_set_role(
+        &self,
+        team_id: &str,
+        user_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.put(
+                &format!("/api/v1/team/{team_id}/members/{user_id}/role"),
+                body,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    // -----------------------------------------------------------------------
+    // User endpoints
+    // -----------------------------------------------------------------------
+
+    pub async fn user_list(
+        &self,
+        org: Option<&str>,
+        team: Option<&str>,
+        role: Option<&str>,
+        all: bool,
+    ) -> Result<serde_json::Value> {
+        let mut params: Vec<(&str, String)> = Vec::new();
+        if let Some(o) = org {
+            params.push(("org", o.to_string()));
+        }
+        if let Some(t) = team {
+            params.push(("team", t.to_string()));
+        }
+        if let Some(r) = role {
+            params.push(("role", r.to_string()));
+        }
+        if all {
+            params.push(("all", "true".to_string()));
+        }
+        let path = build_path("/api/v1/user", &params);
+        parse_json_response(self.get(&path).await?).await
+    }
+
+    pub async fn user_show(&self, user_id: &str) -> Result<serde_json::Value> {
+        parse_json_response(self.get(&format!("/api/v1/user/{user_id}")).await?).await
+    }
+
+    pub async fn user_register(&self, body: &serde_json::Value) -> Result<serde_json::Value> {
+        parse_json_response(self.post("/api/v1/user", body).await?).await
+    }
+
+    pub async fn user_roles_list(&self, user_id: &str) -> Result<serde_json::Value> {
+        parse_json_response(self.get(&format!("/api/v1/user/{user_id}/roles")).await?).await
+    }
+
+    pub async fn user_role_grant(
+        &self,
+        user_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(&format!("/api/v1/user/{user_id}/roles"), body)
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn user_role_revoke(&self, user_id: &str, role: &str) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.delete(&format!("/api/v1/user/{user_id}/roles/{role}"))
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn user_invite(&self, body: &serde_json::Value) -> Result<serde_json::Value> {
+        parse_json_response(self.post("/api/v1/user/invite", body).await?).await
+    }
+
+    // -----------------------------------------------------------------------
+    // Govern endpoints
+    // -----------------------------------------------------------------------
+
+    pub async fn govern_status(&self) -> Result<serde_json::Value> {
+        parse_json_response(self.get("/api/v1/govern/status").await?).await
+    }
+
+    pub async fn govern_pending(
+        &self,
+        request_type: Option<&str>,
+        layer: Option<&str>,
+        requestor: Option<&str>,
+        mine: bool,
+    ) -> Result<serde_json::Value> {
+        let mut params: Vec<(&str, String)> = Vec::new();
+        if let Some(t) = request_type {
+            params.push(("type", t.to_string()));
+        }
+        if let Some(l) = layer {
+            params.push(("layer", l.to_string()));
+        }
+        if let Some(r) = requestor {
+            params.push(("requestor", r.to_string()));
+        }
+        if mine {
+            params.push(("mine", "true".to_string()));
+        }
+        let path = build_path("/api/v1/govern/pending", &params);
+        parse_json_response(self.get(&path).await?).await
+    }
+
+    pub async fn govern_approve(
+        &self,
+        request_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(&format!("/api/v1/govern/approve/{request_id}"), body)
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn govern_reject(
+        &self,
+        request_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(&format!("/api/v1/govern/reject/{request_id}"), body)
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn govern_config_show(&self) -> Result<serde_json::Value> {
+        parse_json_response(self.get("/api/v1/govern/config").await?).await
+    }
+
+    pub async fn govern_config_update(
+        &self,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(self.put("/api/v1/govern/config", body).await?).await
+    }
+
+    pub async fn govern_roles_list(&self) -> Result<serde_json::Value> {
+        parse_json_response(self.get("/api/v1/govern/roles").await?).await
+    }
+
+    pub async fn govern_role_assign(&self, body: &serde_json::Value) -> Result<serde_json::Value> {
+        parse_json_response(self.post("/api/v1/govern/roles", body).await?).await
+    }
+
+    pub async fn govern_role_revoke(
+        &self,
+        principal: &str,
+        role: &str,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.delete(&format!("/api/v1/govern/roles/{principal}/{role}"))
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn govern_audit(
+        &self,
+        action: Option<&str>,
+        since: Option<&str>,
+        actor: Option<&str>,
+        target_type: Option<&str>,
+        limit: usize,
+    ) -> Result<serde_json::Value> {
+        let mut params: Vec<(&str, String)> = Vec::new();
+        if let Some(a) = action {
+            params.push(("action", a.to_string()));
+        }
+        if let Some(s) = since {
+            params.push(("since", s.to_string()));
+        }
+        if let Some(a) = actor {
+            params.push(("actor", a.to_string()));
+        }
+        if let Some(t) = target_type {
+            params.push(("target_type", t.to_string()));
+        }
+        params.push(("limit", limit.to_string()));
+        let path = build_path("/api/v1/govern/audit", &params);
+        parse_json_response(self.get(&path).await?).await
+    }
+
+    // -----------------------------------------------------------------------
+    // Permission inspection endpoints
+    // -----------------------------------------------------------------------
+
+    pub async fn permissions_matrix(&self) -> Result<serde_json::Value> {
+        parse_json_response(self.get("/api/v1/admin/permissions/matrix").await?).await
+    }
+
+    pub async fn permissions_effective(
+        &self,
+        user_id: &str,
+        resource: Option<&str>,
+        actions: Option<&str>,
+        role: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let mut params: Vec<(&str, String)> = vec![("user_id", user_id.to_string())];
+        if let Some(r) = resource {
+            params.push(("resource", r.to_string()));
+        }
+        if let Some(a) = actions {
+            params.push(("actions", a.to_string()));
+        }
+        if let Some(ro) = role {
+            params.push(("role", ro.to_string()));
+        }
+        let path = build_path("/api/v1/admin/permissions/effective", &params);
+        parse_json_response(self.get(&path).await?).await
+    }
+
+    // -----------------------------------------------------------------------
+    // Git provider connection admin endpoints (task 3.4)
+    // -----------------------------------------------------------------------
+
+    pub async fn git_provider_connection_create(
+        &self,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post("/api/v1/admin/git-provider-connections", body)
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn git_provider_connection_list(&self) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.get("/api/v1/admin/git-provider-connections").await?,
+        )
+        .await
+    }
+
+    pub async fn git_provider_connection_show(&self, id: &str) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.get(&format!("/api/v1/admin/git-provider-connections/{id}"))
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn git_provider_connection_grant_tenant(
+        &self,
+        connection_id: &str,
+        tenant: &str,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(
+                &format!(
+                    "/api/v1/admin/git-provider-connections/{connection_id}/tenants/{tenant}"
+                ),
+                &serde_json::json!({}),
+            )
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn git_provider_connection_revoke_tenant(
+        &self,
+        connection_id: &str,
+        tenant: &str,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.delete(&format!(
+                "/api/v1/admin/git-provider-connections/{connection_id}/tenants/{tenant}"
+            ))
+            .await?,
+        )
+        .await
+    }
+
+    pub async fn tenant_git_provider_connections_list(
+        &self,
+        tenant: &str,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.get(&format!(
+                "/api/v1/admin/tenants/{tenant}/git-provider-connections"
+            ))
+            .await?,
+        )
+        .await
+    }
+
+}
+
+// ---------------------------------------------------------------------------
+// Bootstrap (login)
+// ---------------------------------------------------------------------------
+
+/// Call `POST /api/v1/auth/plugin/bootstrap` to exchange a GitHub access token
+/// for Aeterna session credentials.
+pub async fn bootstrap_github(
+    server_url: &str,
+    github_access_token: &str,
+) -> Result<TokenResponse> {
+    let url = format!(
+        "{}/api/v1/auth/plugin/bootstrap",
+        server_url.trim_end_matches('/')
+    );
+    let body = BootstrapRequest {
+        provider: "github".to_string(),
+        github_access_token: github_access_token.to_string(),
+    };
+    let client = Client::new();
+    let resp = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .context("Cannot reach Aeterna server")?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        bail!("Login failed (HTTP {}): {}", status, text);
+    }
+
+    resp.json::<TokenResponse>()
+        .await
+        .context("Invalid response from auth bootstrap endpoint")
+}
+
+// ---------------------------------------------------------------------------
+// Refresh (task 1.4)
+// ---------------------------------------------------------------------------
+
+/// Call `POST /api/v1/auth/plugin/refresh` to get a new token pair.
+pub async fn refresh_token(server_url: &str, refresh_token: &str) -> Result<TokenResponse> {
+    let url = format!(
+        "{}/api/v1/auth/plugin/refresh",
+        server_url.trim_end_matches('/')
+    );
+    let body = RefreshRequest {
+        refresh_token: refresh_token.to_string(),
+    };
+    let client = Client::new();
+    let resp = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .context("Cannot reach Aeterna server for token refresh")?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        bail!("Token refresh failed (HTTP {}): {}", status, text);
+    }
+
+    resp.json::<TokenResponse>()
+        .await
+        .context("Invalid response from token refresh endpoint")
+}
+
+// ---------------------------------------------------------------------------
+// Logout
+// ---------------------------------------------------------------------------
+
+/// Call `POST /api/v1/auth/plugin/logout` to revoke the refresh token.
+pub async fn server_logout(server_url: &str, refresh_token_val: &str) -> Result<()> {
+    let url = format!(
+        "{}/api/v1/auth/plugin/logout",
+        server_url.trim_end_matches('/')
+    );
+    let body = LogoutRequest {
+        refresh_token: refresh_token_val.to_string(),
+    };
+    let client = Client::new();
+    let resp = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .context("Cannot reach Aeterna server for logout")?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        // Treat 401/404 as already-logged-out (idempotent)
+        if status == 401 || status == 404 {
+            return Ok(());
+        }
+        bail!("Logout failed (HTTP {}): {}", status, text);
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+pub fn not_logged_in_message(profile_name: &str) -> String {
+    format!(
+        "Not logged in (profile: {profile_name}). Run: aeterna auth login --profile {profile_name}"
+    )
+}
+
+/// Check connectivity to a server URL by hitting `/health`.
+pub async fn check_reachability(server_url: &str) -> bool {
+    let client = Client::new();
+    client
+        .get(format!("{}/health", server_url.trim_end_matches('/')))
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false)
+}
+
+// ---------------------------------------------------------------------------
+// URL helpers
+// ---------------------------------------------------------------------------
+
+fn build_path(base: &str, params: &[(&str, String)]) -> String {
+    if params.is_empty() {
+        return base.to_string();
+    }
+    let qs: Vec<String> = params
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, urlencoding_simple(v)))
+        .collect();
+    format!("{}?{}", base, qs.join("&"))
+}
+
+fn urlencoding_simple(s: &str) -> String {
+    // Minimal percent-encoding: only encode characters unsafe in query values.
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => out.push(c),
+            _ => {
+                for byte in c.to_string().as_bytes() {
+                    out.push_str(&format!("%{:02X}", byte));
+                }
+            }
+        }
+    }
+    out
+}
+async fn parse_json_response<T: for<'de> Deserialize<'de>>(resp: Response) -> Result<T> {
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        bail!("Request failed (HTTP {}): {}", status, text);
+    }
+
+    resp.json::<T>()
+        .await
+        .context("Invalid JSON response from server")
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_not_logged_in_message() {
+        let msg = not_logged_in_message("production");
+        assert!(msg.contains("production"));
+        assert!(msg.contains("aeterna auth login"));
+        assert!(msg.contains("--profile production"));
+    }
+
+    #[test]
+    fn test_not_logged_in_message_default_profile() {
+        let msg = not_logged_in_message("default");
+        assert!(msg.contains("default"));
+        assert!(msg.contains("aeterna auth login"));
+    }
+
+    #[test]
+    fn test_token_response_deserialize() {
+        let json = r#"{
+            "access_token": "at123",
+            "refresh_token": "rt456",
+            "expires_in": 3600,
+            "token_type": "Bearer",
+            "github_login": "alice",
+            "email": "alice@example.com"
+        }"#;
+        let resp: TokenResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.access_token, "at123");
+        assert_eq!(resp.refresh_token, "rt456");
+        assert_eq!(resp.expires_in, 3600);
+        assert_eq!(resp.github_login, Some("alice".to_string()));
+        assert_eq!(resp.email, Some("alice@example.com".to_string()));
+    }
+
+    #[test]
+    fn test_token_response_deserialize_optional_fields_absent() {
+        let json = r#"{
+            "access_token": "at",
+            "refresh_token": "rt",
+            "expires_in": 900,
+            "token_type": "Bearer"
+        }"#;
+        let resp: TokenResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.github_login.is_none());
+        assert!(resp.email.is_none());
+    }
+
+    #[test]
+    fn test_bootstrap_request_serialization() {
+        let req = BootstrapRequest {
+            provider: "github".to_string(),
+            github_access_token: "gho_abc".to_string(),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"provider\":\"github\""));
+        assert!(json.contains("\"github_access_token\":\"gho_abc\""));
+    }
+
+    #[test]
+    fn test_refresh_request_serialization() {
+        let req = RefreshRequest {
+            refresh_token: "rt_xyz".to_string(),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"refresh_token\":\"rt_xyz\""));
+    }
+
+    #[test]
+    fn test_logout_request_serialization() {
+        let req = LogoutRequest {
+            refresh_token: "rt_abc".to_string(),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("rt_abc"));
+    }
+}

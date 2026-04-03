@@ -2,7 +2,6 @@
 //!
 //! End-to-end tests for OPAL/Cedar Agent integration.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -57,17 +56,17 @@ async fn test_e2e_project_detection_from_git_remote() {
         (
             "git@github.com:acme-corp/api-gateway.git",
             "api-gateway",
-            "acme-corp"
+            "acme-corp",
         ),
         (
             "https://github.com/acme-corp/frontend-app",
             "frontend-app",
-            "acme-corp"
+            "acme-corp",
         ),
         (
             "git@gitlab.com:engineering/platform/service-mesh.git",
             "service-mesh",
-            "engineering"
+            "engineering",
         ),
     ];
 
@@ -102,39 +101,39 @@ async fn test_e2e_authorization_permit_deny_scenarios() {
             "Aeterna::Action::\"ViewKnowledge\"",
             "Aeterna::Project::\"api-gateway\"",
             "permit",
-            "Developer viewing project knowledge"
+            "Developer viewing project knowledge",
         ),
         (
             "Aeterna::User::\"bob\"",
             "Aeterna::Action::\"EditKnowledge\"",
             "Aeterna::Project::\"api-gateway\"",
             "forbid",
-            "Viewer trying to edit knowledge"
+            "Viewer trying to edit knowledge",
         ),
         (
             "Aeterna::User::\"charlie\"",
             "Aeterna::Action::\"ApprovePolicy\"",
             "Aeterna::Project::\"api-gateway\"",
             "permit",
-            "Tech lead approving policy"
+            "Tech lead approving policy",
         ),
         (
             "Aeterna::Agent::\"ci-bot\"",
             "Aeterna::Action::\"ProposePolicy\"",
             "Aeterna::Project::\"api-gateway\"",
             "permit",
-            "CI agent proposing policy"
+            "CI agent proposing policy",
         ),
         (
             "Aeterna::Agent::\"ci-bot\"",
             "Aeterna::Action::\"ApprovePolicy\"",
             "Aeterna::Project::\"api-gateway\"",
             "forbid",
-            "CI agent trying to approve (no delegation)"
+            "CI agent trying to approve (no delegation)",
         ),
     ];
 
-    for (principal, action, resource, expected, description) in scenarios {
+    for (_principal, _action, _resource, expected, description) in scenarios {
         // Test: Check authorization
         // In real test:
         // let decision = cedar_client.check_authorization(principal, action, resource,
@@ -235,9 +234,9 @@ async fn test_e2e_realtime_data_sync_postgres_opal_cedar() {
     let events_clone = sync_events.clone();
     events_clone.write().await.push(SyncEvent {
         timestamp: chrono::Utc::now(),
-        source: "postgresql".to_string(),
+        _source: "postgresql".to_string(),
         event_type: "user_created".to_string(),
-        entity_id: new_user["id"].to_string()
+        _entity_id: new_user["id"].to_string(),
     });
 
     // Step 4: Wait for propagation (with timeout)
@@ -290,11 +289,11 @@ async fn test_e2e_idp_sync_creates_users_and_memberships() {
         // Create user entity
         sync_results.write().await.push(IdpSyncResult {
             user_email: email.to_string(),
-            created: true,
+            _created: true,
             memberships: groups
                 .iter()
                 .map(|g| g.as_str().unwrap().to_string())
-                .collect()
+                .collect(),
         });
     }
 
@@ -380,14 +379,6 @@ async fn test_e2e_load_1000_concurrent_authorization_requests() {
     // Spawn 1000 concurrent authorization requests
     for i in 0..num_requests {
         join_set.spawn(async move {
-            let principal = format!("Aeterna::User::\"user-{}\"", i % 100);
-            let action = "Aeterna::Action::\"ViewKnowledge\"";
-            let resource = format!("Aeterna::Project::\"project-{}\"", i % 10);
-
-            // Simulate authorization check
-            // In real test: cedar_client.check_authorization(&principal, action, &resource,
-            // None).await
-
             // Simulate latency
             sleep(Duration::from_micros(100)).await;
 
@@ -434,26 +425,26 @@ async fn test_e2e_load_1000_concurrent_authorization_requests() {
 #[derive(Debug, Clone)]
 struct SyncEvent {
     timestamp: chrono::DateTime<chrono::Utc>,
-    source: String,
+    _source: String,
     event_type: String,
-    entity_id: String
+    _entity_id: String,
 }
 
 /// IdP sync result.
 #[derive(Debug, Clone)]
 struct IdpSyncResult {
     user_email: String,
-    created: bool,
-    memberships: Vec<String>
+    _created: bool,
+    memberships: Vec<String>,
 }
 
 #[derive(Debug)]
 struct HeuristicResult {
-    tenant_id: String
+    _tenant_id: String,
 }
 
 fn resolve_heuristic_fallback() -> Result<HeuristicResult, String> {
     Ok(HeuristicResult {
-        tenant_id: "default".to_string()
+        _tenant_id: "default".to_string(),
     })
 }

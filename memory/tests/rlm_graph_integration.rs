@@ -1,8 +1,6 @@
 use knowledge::governance::GovernanceEngine;
 use knowledge::manager::KnowledgeManager;
 use knowledge::repository::GitRepository;
-#[cfg(feature = "llm-integration")]
-use memory::llm::mock::MockLlmService;
 use memory::manager::MemoryManager;
 use mk_core::traits::MemoryProviderAdapter;
 use mk_core::types::{MemoryEntry, MemoryLayer, TenantContext, TenantId, UserId};

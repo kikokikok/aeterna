@@ -2,11 +2,132 @@
 // Role-based permit policies for organizational access control.
 // 
 // Role Hierarchy (higher precedence = more permissions):
-//   Admin (4)     - Full system access
+//   PlatformAdmin (5) - Cross-tenant admin control-plane access
+//   Admin (4)     - Full tenant-scoped system access
 //   Architect (3) - Design policies, manage knowledge
 //   TechLead (2)  - Manage team resources
 //   Developer (1) - Standard development access
 //   Viewer (0)    - Read-only access
+
+// =============================================================================
+// PLATFORM ADMIN ROLE - Cross-Tenant Control Plane Access
+// =============================================================================
+
+// PlatformAdmin: Full access to all memory operations
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewMemory",
+        Aeterna::Action::"CreateMemory",
+        Aeterna::Action::"UpdateMemory",
+        Aeterna::Action::"DeleteMemory",
+        Aeterna::Action::"PromoteMemory"
+    ],
+    resource
+)
+when {
+    principal.role == "platformadmin" &&
+    principal.status == "active"
+};
+
+// PlatformAdmin: Full access to all knowledge operations
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewKnowledge",
+        Aeterna::Action::"ProposeKnowledge",
+        Aeterna::Action::"EditKnowledge",
+        Aeterna::Action::"ApproveKnowledge",
+        Aeterna::Action::"DeprecateKnowledge"
+    ],
+    resource
+)
+when {
+    principal.role == "platformadmin" &&
+    principal.status == "active"
+};
+
+// PlatformAdmin: Full access to all policy operations
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewPolicy",
+        Aeterna::Action::"CreatePolicy",
+        Aeterna::Action::"EditPolicy",
+        Aeterna::Action::"ApprovePolicy",
+        Aeterna::Action::"SimulatePolicy"
+    ],
+    resource
+)
+when {
+    principal.role == "platformadmin" &&
+    principal.status == "active"
+};
+
+// PlatformAdmin: Full access to governance
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewGovernanceRequest",
+        Aeterna::Action::"SubmitGovernanceRequest",
+        Aeterna::Action::"ApproveGovernanceRequest",
+        Aeterna::Action::"RejectGovernanceRequest"
+    ],
+    resource
+)
+when {
+    principal.role == "platformadmin" &&
+    principal.status == "active"
+};
+
+// PlatformAdmin: Full access to organization management
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewOrganization",
+        Aeterna::Action::"CreateOrganization",
+        Aeterna::Action::"CreateTeam",
+        Aeterna::Action::"CreateProject",
+        Aeterna::Action::"ManageMembers",
+        Aeterna::Action::"AssignRoles"
+    ],
+    resource
+)
+when {
+    principal.role == "platformadmin" &&
+    principal.status == "active"
+};
+
+// PlatformAdmin: Full access to agent management
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"RegisterAgent",
+        Aeterna::Action::"RevokeAgent",
+        Aeterna::Action::"DelegateToAgent"
+    ],
+    resource
+)
+when {
+    principal.role == "platformadmin" &&
+    principal.status == "active"
+};
+
+// PlatformAdmin: Full access to admin operations
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewAuditLog",
+        Aeterna::Action::"ExportData",
+        Aeterna::Action::"ImportData",
+        Aeterna::Action::"ConfigureGovernance"
+    ],
+    resource
+)
+when {
+    principal.role == "platformadmin" &&
+    principal.status == "active"
+};
 
 // =============================================================================
 // ADMIN ROLE - Full Access
@@ -258,7 +379,7 @@ permit (
     resource
 )
 when {
-    principal.role == "tech_lead" &&
+    principal.role == "techlead" &&
     principal.status == "active"
 };
 
@@ -275,7 +396,7 @@ permit (
     resource
 )
 when {
-    principal.role == "tech_lead" &&
+    principal.role == "techlead" &&
     principal.status == "active"
 };
 
@@ -290,7 +411,7 @@ permit (
     resource
 )
 when {
-    principal.role == "tech_lead" &&
+    principal.role == "techlead" &&
     principal.status == "active"
 };
 
@@ -306,7 +427,7 @@ permit (
     resource
 )
 when {
-    principal.role == "tech_lead" &&
+    principal.role == "techlead" &&
     principal.status == "active"
 };
 
@@ -321,7 +442,7 @@ permit (
     resource
 )
 when {
-    principal.role == "tech_lead" &&
+    principal.role == "techlead" &&
     principal.status == "active"
 };
 
@@ -336,7 +457,7 @@ permit (
     resource
 )
 when {
-    principal.role == "tech_lead" &&
+    principal.role == "techlead" &&
     principal.status == "active"
 };
 
@@ -347,7 +468,7 @@ permit (
     resource
 )
 when {
-    principal.role == "tech_lead" &&
+    principal.role == "techlead" &&
     principal.status == "active"
 };
 

@@ -1,6 +1,8 @@
 use clap::{Args, Subcommand};
 use context::ContextResolver;
-use serde_json::json;
+use serde_json::{Value, json};
+use std::fs;
+use std::path::Path;
 
 use crate::output;
 use crate::ux_error;
@@ -117,6 +119,87 @@ pub async fn run(cmd: OrgCommand) -> anyhow::Result<()> {
     }
 }
 
+fn org_server_required(operation: &str, message: &str) -> anyhow::Result<()> {
+    ux_error::UxError::new(message)
+        .why("This command requires a live control-plane backend")
+        .fix("Start the Aeterna server: aeterna serve")
+        .fix("Ensure AETERNA_SERVER_URL is set and the server is reachable")
+        .suggest("aeterna admin health")
+        .display();
+    anyhow::bail!("Aeterna server not connected for operation: {operation}")
+}
+
+async fn get_live_client() -> Option<crate::client::AeternaClient> {
+    crate::backend::connect()
+        .await
+        .ok()
+        .map(|(client, _)| client)
+}
+
+fn normalize_org_role(role: &str, suggestion: &str) -> anyhow::Result<String> {
+    let role = role.to_lowercase();
+    let valid_roles = ["developer", "techlead", "architect", "admin"];
+    if valid_roles.contains(&role.as_str()) {
+        Ok(role)
+    } else {
+        ux_error::UxError::new(format!("Invalid role: '{role}'"))
+            .why("Role determines user permissions within the organization")
+            .fix("Use one of: developer, techlead, architect, admin")
+            .suggest(suggestion)
+            .display();
+        anyhow::bail!("Invalid role")
+    }
+}
+
+fn resolve_current_org(explicit_org: Option<String>) -> anyhow::Result<String> {
+    if let Some(org_id) = explicit_org {
+        return Ok(org_id);
+    }
+
+    let resolver = ContextResolver::new();
+    let resolved = resolver.resolve()?;
+    if let Some(org) = resolved.org_id.as_ref() {
+        Ok(org.value.clone())
+    } else {
+        ux_error::UxError::new("No organization specified")
+            .why("This command needs an organization ID or an active org context")
+            .fix("Pass an org ID explicitly")
+            .suggest("aeterna org show <org-id>")
+            .display();
+        anyhow::bail!("No organization specified")
+    }
+}
+
+fn set_context_value(key: &str, value: &str) -> anyhow::Result<()> {
+    let aeterna_dir = Path::new(".aeterna");
+    let context_file = aeterna_dir.join("context.toml");
+
+    let mut config = if context_file.exists() {
+        let content = fs::read_to_string(&context_file)?;
+        toml::from_str::<toml::Value>(&content)
+            .unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()))
+    } else {
+        toml::Value::Table(toml::map::Map::new())
+    };
+
+    if let Some(table) = config.as_table_mut() {
+        table.insert(key.to_string(), toml::Value::String(value.to_string()));
+    }
+
+    fs::create_dir_all(aeterna_dir)?;
+    fs::write(&context_file, toml::to_string_pretty(&config)?)?;
+    Ok(())
+}
+
+fn get_str<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
+    for key in keys {
+        if let Some(found) = value.get(*key).and_then(|v| v.as_str()) {
+            return Some(found);
+        }
+    }
+    None
+}
+
 async fn run_create(args: OrgCreateArgs) -> anyhow::Result<()> {
     let resolver = ContextResolver::new();
     let resolved = resolver.resolve()?;
@@ -157,310 +240,485 @@ async fn run_create(args: OrgCreateArgs) -> anyhow::Result<()> {
             }
             println!("  Company:     {company_id}");
             println!();
-
-            output::header("What Would Happen");
-            println!(
-                "  1. Create organization '{}' under company '{}'",
-                args.name, company_id
-            );
-            println!("  2. Add you ({}) as org admin", resolved.user_id.value);
-            println!("  3. Inherit company-level policies");
-            println!();
-
-            output::header("Next Steps");
-            println!("  1. Run without --dry-run to create the organization");
-            println!("  2. Add members: aeterna org members --add <user-id>");
-            println!(
-                "  3. Create teams: aeterna team create <name> --org {}",
-                args.name
-            );
-            println!();
-
             output::info("Dry run mode - organization not created.");
         }
         return Ok(());
     }
 
-    let err = ux_error::server_not_connected();
-    err.display();
-    output::info("Run with --dry-run to see what would be created.");
+    if let Some(client) = get_live_client().await {
+        let body = json!({
+            "name": args.name,
+            "description": args.description,
+            "companyId": company_id,
+        });
+        let result = client.org_create(&body).await.map_err(|e| {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "error": e.to_string()})
+                    )
+                    .unwrap()
+                );
+            } else {
+                ux_error::UxError::new(&e.to_string())
+                    .fix("Run: aeterna auth login")
+                    .display();
+            }
+            e
+        })?;
 
-    Ok(())
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Organization Created");
+            println!();
+            println!("  ID:      {}", get_str(&result, &["id"]).unwrap_or("?"));
+            println!("  Name:    {}", get_str(&result, &["name"]).unwrap_or("?"));
+            println!(
+                "  Company: {}",
+                get_str(&result, &["parentId", "parent_id"]).unwrap_or("?")
+            );
+            if let Some(description) = result
+                .get("metadata")
+                .and_then(|v| v.get("description"))
+                .and_then(|v| v.as_str())
+            {
+                println!("  Description: {description}");
+            }
+            println!();
+            output::hint("Add members with 'aeterna org members --add <user-id> --role <role>'");
+        }
+        return Ok(());
+    }
+
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": false,
+                "error": "server_not_connected",
+                "operation": "org_create"
+            }))?
+        );
+        anyhow::bail!("Aeterna server not connected for operation: org_create");
+    }
+
+    org_server_required(
+        "org_create",
+        "Cannot create organization: server not connected",
+    )
 }
 
 async fn run_list(args: OrgListArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let resolved = resolver.resolve()?;
+    if let Some(client) = get_live_client().await {
+        let result = client
+            .org_list(args.company.as_deref(), args.all)
+            .await
+            .map_err(|e| {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &json!({"success": false, "error": e.to_string()})
+                        )
+                        .unwrap()
+                    );
+                } else {
+                    ux_error::UxError::new(&e.to_string())
+                        .fix("Run: aeterna auth login")
+                        .display();
+                }
+                e
+            })?;
 
-    if args.json {
-        let output = json!({
-            "operation": "org_list",
-            "filters": {
-                "company": args.company,
-                "all": args.all,
-            },
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-                "userId": resolved.user_id.value,
-            },
-            "status": "not_connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Organizations");
-        println!();
-
-        if args.all {
-            output::info("Showing all organizations you have access to.");
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Organizations");
+            println!();
+            if let Some(orgs) = result.as_array() {
+                if orgs.is_empty() {
+                    println!("  (no organizations found)");
+                } else {
+                    for org in orgs {
+                        let id = get_str(org, &["id"]).unwrap_or("?");
+                        let name = get_str(org, &["name"]).unwrap_or("?");
+                        let company = get_str(org, &["parentId", "parent_id"]).unwrap_or("-");
+                        println!("  {id:<24} {name:<32} {company}");
+                    }
+                }
+            } else {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
+            println!();
         }
-
-        if let Some(ref company) = args.company {
-            println!("  Filter: company = {company}");
-        }
-        println!();
-
-        output::header("Example Output (would show)");
-        println!("  ID                  NAME                 TEAMS  MEMBERS  ROLE");
-        println!("  platform-eng        Platform Engineering   3       12    admin");
-        println!("  product-eng         Product Engineering    2        8    member");
-        println!("  security            Security               1        4    member");
-        println!();
-
-        let err = ux_error::server_not_connected();
-        err.display();
+        return Ok(());
     }
 
-    Ok(())
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": false,
+                "error": "server_not_connected",
+                "operation": "org_list"
+            }))?
+        );
+        anyhow::bail!("Aeterna server not connected for operation: org_list");
+    }
+
+    org_server_required(
+        "org_list",
+        "Cannot list organizations: server not connected",
+    )
 }
 
 async fn run_show(args: OrgShowArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let resolved = resolver.resolve()?;
+    let org_id = resolve_current_org(args.org_id.clone())?;
 
-    let org_id = args.org_id.clone().unwrap_or_else(|| {
-        resolved
-            .org_id
-            .as_ref()
-            .map_or_else(|| "current".to_string(), |o| o.value.clone())
-    });
+    if let Some(client) = get_live_client().await {
+        let result = client.org_show(&org_id).await.map_err(|e| {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "error": e.to_string()})
+                    )
+                    .unwrap()
+                );
+            } else {
+                ux_error::UxError::new(&e.to_string())
+                    .fix("Run: aeterna auth login")
+                    .display();
+            }
+            e
+        })?;
 
-    if args.json {
-        let output = json!({
-            "operation": "org_show",
-            "orgId": org_id,
-            "verbose": args.verbose,
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-                "userId": resolved.user_id.value,
-            },
-            "status": "not_connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header(&format!("Organization: {org_id}"));
-        println!();
-
-        output::header("Would Show");
-        println!("  - Name and description");
-        println!("  - Parent company");
-        println!("  - Teams count");
-        println!("  - Members count and roles");
-        println!("  - Your role in this org");
-
-        if args.verbose {
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header(&format!("Organization: {org_id}"));
             println!();
-            output::header("Verbose Details");
-            println!("  - List of teams");
-            println!("  - Member list with roles");
-            println!("  - Active policies");
-            println!("  - Policy inheritance chain");
+            println!("  ID:       {}", get_str(&result, &["id"]).unwrap_or("?"));
+            println!("  Name:     {}", get_str(&result, &["name"]).unwrap_or("?"));
+            println!(
+                "  Company:  {}",
+                get_str(&result, &["parentId", "parent_id"]).unwrap_or("?")
+            );
+            println!(
+                "  Type:     {}",
+                get_str(&result, &["unitType", "unit_type"]).unwrap_or("organization")
+            );
+            if let Some(description) = result
+                .get("metadata")
+                .and_then(|v| v.get("description"))
+                .and_then(|v| v.as_str())
+            {
+                println!("  Description: {description}");
+            }
+            if args.verbose {
+                if let Some(source_owner) = get_str(&result, &["sourceOwner", "source_owner"]) {
+                    println!("  Source:   {source_owner}");
+                }
+                if let Some(metadata) = result.get("metadata") {
+                    println!("  Metadata: {}", serde_json::to_string_pretty(metadata)?);
+                }
+            }
+            println!();
         }
-        println!();
-
-        let err = ux_error::server_not_connected();
-        err.display();
+        return Ok(());
     }
 
-    Ok(())
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": false,
+                "error": "server_not_connected",
+                "operation": "org_show",
+                "orgId": org_id
+            }))?
+        );
+        anyhow::bail!("Aeterna server not connected for operation: org_show");
+    }
+
+    org_server_required(
+        "org_show",
+        &format!("Cannot show organization '{org_id}': server not connected"),
+    )
 }
 
 async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let resolved = resolver.resolve()?;
-
-    let org_id = args.org.clone().unwrap_or_else(|| {
-        resolved
-            .org_id
-            .as_ref()
-            .map_or_else(|| "current".to_string(), |o| o.value.clone())
-    });
+    let org_id = resolve_current_org(args.org.clone())?;
 
     if let Some(ref user_to_add) = args.add {
-        let role = args.role.clone().unwrap_or_else(|| "developer".to_string());
+        let role = normalize_org_role(
+            args.role.as_deref().unwrap_or("developer"),
+            &format!("aeterna org members --add {user_to_add} --role developer"),
+        )?;
 
-        let valid_roles = ["developer", "techlead", "architect", "admin"];
-        if !valid_roles.contains(&role.to_lowercase().as_str()) {
-            let err = ux_error::UxError::new(format!("Invalid role: '{role}'"))
-                .why("Role determines user permissions within the organization")
-                .fix("Use one of: developer, techlead, architect, admin")
-                .suggest(format!(
-                    "aeterna org members --add {user_to_add} --role developer"
-                ));
-            err.display();
-            return Err(anyhow::anyhow!("Invalid role"));
+        if let Some(client) = get_live_client().await {
+            let result = client
+                .org_member_add(&org_id, &json!({"userId": user_to_add, "role": role}))
+                .await
+                .map_err(|e| {
+                    if args.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(
+                                &json!({"success": false, "error": e.to_string()})
+                            )
+                            .unwrap()
+                        );
+                    } else {
+                        ux_error::UxError::new(&e.to_string())
+                            .fix("Run: aeterna auth login")
+                            .display();
+                    }
+                    e
+                })?;
+
+            if args.json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                output::header("Organization Member Added");
+                println!();
+                println!("  Organization: {org_id}");
+                println!(
+                    "  User:         {}",
+                    get_str(&result, &["userId", "user_id"]).unwrap_or(user_to_add)
+                );
+                println!(
+                    "  Role:         {}",
+                    get_str(&result, &["role"]).unwrap_or(role.as_str())
+                );
+                println!();
+            }
+            return Ok(());
         }
 
         if args.json {
-            let output = json!({
-                "operation": "org_member_add",
-                "orgId": org_id,
-                "userId": user_to_add,
-                "role": role,
-                "status": "not_connected"
-            });
-            println!("{}", serde_json::to_string_pretty(&output)?);
-        } else {
-            output::header("Add Organization Member");
-            println!();
-            println!("  Organization: {org_id}");
-            println!("  User:         {user_to_add}");
-            println!("  Role:         {role}");
-            println!();
-
-            output::header("Would Do");
-            println!("  1. Verify user '{user_to_add}' exists");
-            println!("  2. Check your permission to add members");
-            println!("  3. Add user with role '{role}'");
-            println!("  4. Grant access to org resources");
-            println!();
-
-            let err = ux_error::server_not_connected();
-            err.display();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "success": false,
+                    "error": "server_not_connected",
+                    "operation": "org_member_add",
+                    "orgId": org_id,
+                    "userId": user_to_add
+                }))?
+            );
+            anyhow::bail!("Aeterna server not connected for operation: org_member_add");
         }
-        return Ok(());
+
+        return org_server_required(
+            "org_member_add",
+            &format!("Cannot add member to organization '{org_id}': server not connected"),
+        );
     }
 
     if let Some(ref user_to_remove) = args.remove {
-        if args.json {
-            let output = json!({
-                "operation": "org_member_remove",
-                "orgId": org_id,
-                "userId": user_to_remove,
-                "status": "not_connected"
-            });
-            println!("{}", serde_json::to_string_pretty(&output)?);
-        } else {
-            output::header("Remove Organization Member");
-            println!();
-            println!("  Organization: {org_id}");
-            println!("  User:         {user_to_remove}");
-            println!();
+        if let Some(client) = get_live_client().await {
+            let result = client
+                .org_member_remove(&org_id, user_to_remove)
+                .await
+                .map_err(|e| {
+                    if args.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(
+                                &json!({"success": false, "error": e.to_string()})
+                            )
+                            .unwrap()
+                        );
+                    } else {
+                        ux_error::UxError::new(&e.to_string())
+                            .fix("Run: aeterna auth login")
+                            .display();
+                    }
+                    e
+                })?;
 
-            output::header("Would Do");
-            println!("  1. Check your permission to remove members");
-            println!("  2. Remove user from organization");
-            println!("  3. Revoke access to org resources");
-            println!("  4. Remove from all teams in this org");
-            println!();
-
-            let err = ux_error::server_not_connected();
-            err.display();
+            if args.json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                output::header("Organization Member Removed");
+                println!();
+                println!("  Organization: {org_id}");
+                println!("  User:         {user_to_remove}");
+                println!();
+            }
+            return Ok(());
         }
-        return Ok(());
+
+        if args.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "success": false,
+                    "error": "server_not_connected",
+                    "operation": "org_member_remove",
+                    "orgId": org_id,
+                    "userId": user_to_remove
+                }))?
+            );
+            anyhow::bail!("Aeterna server not connected for operation: org_member_remove");
+        }
+
+        return org_server_required(
+            "org_member_remove",
+            &format!("Cannot remove member from organization '{org_id}': server not connected"),
+        );
     }
 
     if let Some(ref user_id) = args.set_role {
-        let role = args.role.clone().ok_or_else(|| {
-            let err = ux_error::UxError::new("Missing --role for --set-role")
+        let role_value = args.role.clone().ok_or_else(|| {
+            ux_error::UxError::new("Missing --role for --set-role")
                 .why("Must specify which role to assign")
                 .fix("Add --role with the desired role")
                 .suggest(format!(
                     "aeterna org members --set-role {user_id} --role techlead"
-                ));
-            err.display();
+                ))
+                .display();
             anyhow::anyhow!("Missing role")
+        })?;
+        let role = normalize_org_role(
+            &role_value,
+            &format!("aeterna org members --set-role {user_id} --role techlead"),
+        )?;
+
+        if let Some(client) = get_live_client().await {
+            let result = client
+                .org_member_set_role(&org_id, user_id, &json!({"role": role}))
+                .await
+                .map_err(|e| {
+                    if args.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(
+                                &json!({"success": false, "error": e.to_string()})
+                            )
+                            .unwrap()
+                        );
+                    } else {
+                        ux_error::UxError::new(&e.to_string())
+                            .fix("Run: aeterna auth login")
+                            .display();
+                    }
+                    e
+                })?;
+
+            if args.json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                output::header("Organization Member Role Updated");
+                println!();
+                println!("  Organization: {org_id}");
+                println!(
+                    "  User:         {}",
+                    get_str(&result, &["userId", "user_id"]).unwrap_or(user_id)
+                );
+                println!(
+                    "  New Role:     {}",
+                    get_str(&result, &["role"]).unwrap_or(role.as_str())
+                );
+                println!();
+            }
+            return Ok(());
+        }
+
+        if args.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "success": false,
+                    "error": "server_not_connected",
+                    "operation": "org_member_set_role",
+                    "orgId": org_id,
+                    "userId": user_id
+                }))?
+            );
+            anyhow::bail!("Aeterna server not connected for operation: org_member_set_role");
+        }
+
+        return org_server_required(
+            "org_member_set_role",
+            &format!("Cannot update member role in organization '{org_id}': server not connected"),
+        );
+    }
+
+    if let Some(client) = get_live_client().await {
+        let result = client.org_members_list(&org_id).await.map_err(|e| {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "error": e.to_string()})
+                    )
+                    .unwrap()
+                );
+            } else {
+                ux_error::UxError::new(&e.to_string())
+                    .fix("Run: aeterna auth login")
+                    .display();
+            }
+            e
         })?;
 
         if args.json {
-            let output = json!({
-                "operation": "org_member_set_role",
-                "orgId": org_id,
-                "userId": user_id,
-                "newRole": role,
-                "status": "not_connected"
-            });
-            println!("{}", serde_json::to_string_pretty(&output)?);
+            println!("{}", serde_json::to_string_pretty(&result)?);
         } else {
-            output::header("Set Member Role");
+            output::header(&format!("Members of: {org_id}"));
             println!();
-            println!("  Organization: {org_id}");
-            println!("  User:         {user_id}");
-            println!("  New Role:     {role}");
+            if let Some(members) = result.as_array() {
+                if members.is_empty() {
+                    println!("  (no members found)");
+                } else {
+                    for member in members {
+                        let user = get_str(member, &["userId", "user_id"]).unwrap_or("?");
+                        let role = get_str(member, &["role"]).unwrap_or("?");
+                        println!("  {user:<36} {role}");
+                    }
+                }
+            } else {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
             println!();
-
-            let err = ux_error::server_not_connected();
-            err.display();
+            output::hint("Add member: aeterna org members --add <user> --role <role>");
+            output::hint("Change role: aeterna org members --set-role <user> --role <role>");
         }
         return Ok(());
     }
 
     if args.json {
-        let output = json!({
-            "operation": "org_members_list",
-            "orgId": org_id,
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-                "userId": resolved.user_id.value,
-            },
-            "status": "not_connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header(&format!("Members of: {org_id}"));
-        println!();
-
-        output::header("Example Output (would show)");
-        println!("  USER ID              NAME               ROLE        TEAMS");
-        println!("  alice@acme.com       Alice Smith        admin       api, data");
-        println!("  bob@acme.com         Bob Jones          techlead    api");
-        println!("  carol@acme.com       Carol Williams     developer   web");
-        println!();
-
-        output::header("Actions");
-        println!("  Add member:    aeterna org members --add <user> --role <role>");
-        println!("  Remove member: aeterna org members --remove <user>");
-        println!("  Change role:   aeterna org members --set-role <user> --role <role>");
-        println!();
-
-        let err = ux_error::server_not_connected();
-        err.display();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": false,
+                "error": "server_not_connected",
+                "operation": "org_members_list",
+                "orgId": org_id
+            }))?
+        );
+        anyhow::bail!("Aeterna server not connected for operation: org_members_list");
     }
 
-    Ok(())
+    org_server_required(
+        "org_members_list",
+        &format!("Cannot list members for organization '{org_id}': server not connected"),
+    )
 }
 
 async fn run_use(args: OrgUseArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let _resolved = resolver.resolve()?;
+    set_context_value("org_id", &args.org_id)?;
 
     output::header("Set Default Organization");
     println!();
     println!("  Setting default org: {}", args.org_id);
     println!();
-
-    output::header("Would Update");
-    println!("  File: .aeterna/context.toml");
+    println!("  ✓ Updated .aeterna/context.toml");
     println!("  org_id = \"{}\"", args.org_id);
-    println!();
-
-    output::header("Effect");
-    println!("  - All commands will use '{}' as default org", args.org_id);
-    println!("  - Team/project commands scoped to this org");
-    println!("  - Policies from this org will apply");
-    println!();
-
-    let err = ux_error::server_not_connected();
-    err.display();
 
     Ok(())
 }

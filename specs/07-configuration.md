@@ -10,6 +10,20 @@ related:
   - 08-deployment.md
 ---
 
+> **⚠️ SPEC PENDING REWRITE**
+> This document was authored for an earlier third-party configuration model (Mem0/Letta/Chroma)
+> and does not yet reflect Aeterna's actual configuration system.
+>
+> **Canonical configuration reference:**
+> - Config file: `config/aeterna.toml` (TOML format)
+> - Tenant config provider: `TenantConfigProvider` — Kubernetes-backed (`ConfigMap: aeterna-tenant-<tenant-id>`, `Secret: aeterna-tenant-<tenant-id>-secret`)
+> - Environment variable prefix: `AETERNA_` (not `MK_`)
+> - Helm value: `tenantConfigProvider.enabled`
+>
+> See [`docs/guides/tenant-admin-control-plane.md`](../../docs/guides/tenant-admin-control-plane.md) and `charts/aeterna/README.md` for the authoritative operator guide.
+
+
+
 # Configuration Specification
 
 This document specifies the configuration schema, environment variables, and validation rules for the Memory-Knowledge system.

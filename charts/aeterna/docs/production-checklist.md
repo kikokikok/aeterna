@@ -58,6 +58,13 @@ This checklist provides a set of actionable items to ensure the Aeterna Helm cha
 - [ ] Redis/Dragonfly cache sized appropriately for the workload
 - [ ] Sync settings tuned for low-latency memory-knowledge bridging
 
+## Tenancy Control Plane
+- [ ] `tenantConfigProvider.enabled: true` for multi-tenant deployments
+- [ ] Tenant ConfigMaps materialize as `aeterna-tenant-<tenant-id>`
+- [ ] Tenant Secrets materialize as `aeterna-tenant-<tenant-id>-secret`
+- [ ] Shared Git provider connection credential secrets are created before deploy
+- [ ] PlatformAdmin bootstrap flow documented for tenant creation, repo binding, and connection grants
+
 ## Pre-Deployment
 - [ ] `helm lint` passes without any errors or warnings
 - [ ] `helm template` renders successfully with production values
@@ -114,4 +121,16 @@ kubectl logs -n aeterna -l app.kubernetes.io/name=aeterna --tail=100
 
 # Check PostgreSQL cluster status (if using CloudNativePG)
 kubectl get cluster -n aeterna aeterna-postgresql
+```
+
+### 7. Verify Tenant Configuration Artifacts
+```bash
+# Replace <tenant-id> with a real tenant
+kubectl get configmap -n aeterna "aeterna-tenant-<tenant-id>"
+kubectl get secret -n aeterna "aeterna-tenant-<tenant-id>-secret"
+```
+
+### 8. Verify Shared Git Provider Connection Secrets
+```bash
+kubectl get secrets -n aeterna | grep git-provider
 ```

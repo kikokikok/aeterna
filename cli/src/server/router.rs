@@ -12,8 +12,8 @@ use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetReques
 use tower_http::trace::TraceLayer;
 
 use super::{
-    AppState, admin_sync, health, knowledge_api, mcp_transport, plugin_auth, sessions, sync,
-    webhooks,
+    AppState, admin_sync, govern_api, health, knowledge_api, mcp_transport, org_api, plugin_auth,
+    sessions, sync, team_api, tenant_api, user_api, webhooks,
 };
 
 pub fn build_router(state: Arc<AppState>) -> Router {
@@ -28,6 +28,11 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .nest("/api/v1", sessions::router(state.clone()))
         .nest("/api/v1", webhooks::router(state.clone()))
         .nest("/api/v1", admin_sync::router(state.clone()))
+        .nest("/api/v1", tenant_api::router(state.clone()))
+        .nest("/api/v1", org_api::router(state.clone()))
+        .nest("/api/v1", team_api::router(state.clone()))
+        .nest("/api/v1", user_api::router(state.clone()))
+        .nest("/api/v1", govern_api::router(state.clone()))
         .nest("/api/v1", sync::router(state.clone()))
         .nest("/openspec/v1", knowledge_api::router(state.clone()))
         .nest("/mcp", mcp_transport::router(state.mcp_server.clone()))

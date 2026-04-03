@@ -2,7 +2,7 @@
 
 **Fast command lookup for the Aeterna governance platform**
 
-This is a concise cheat sheet. For detailed explanations and workflows, see [UX-First Governance Guide](ux-first-governance.md).
+This is a concise cheat sheet. For detailed tenancy-management workflows, also see [Tenant Admin Control Plane](tenant-admin-control-plane.md).
 
 ---
 
@@ -24,11 +24,60 @@ export PATH="$PATH:$(pwd)/target/release"
 
 | Command | Description |
 |---------|-------------|
-| `aeterna init` | Initialize company (interactive) |
-| `aeterna init --company "Name" --admin email@example.com` | Initialize with defaults |
+| `aeterna profile login` | Authenticate to a live Aeterna control plane |
 | `aeterna status` | Show current context and status |
 | `aeterna whoami` | Show current user identity |
-| `aeterna check` | Quick health check |
+| `aeterna admin health` | Quick health check for the control plane |
+
+---
+
+## Tenant Control Plane
+
+### Tenant lifecycle
+
+| Command | Description |
+|---------|-------------|
+| `aeterna tenant create --slug acme --name "Acme Corp"` | Create tenant (PlatformAdmin) |
+| `aeterna tenant list` | List tenants (PlatformAdmin) |
+| `aeterna tenant show acme` | Show tenant by slug or ID |
+| `aeterna tenant update acme --name "Acme Corp EU"` | Update tenant metadata |
+| `aeterna tenant deactivate acme --yes` | Deactivate a tenant |
+| `aeterna tenant use acme` | Write the default tenant context locally |
+| `aeterna tenant domain-map acme --domain acme.example.com` | Add verified tenant domain mapping |
+
+### Repository bindings
+
+| Command | Description |
+|---------|-------------|
+| `aeterna tenant repo-binding show acme` | Inspect the tenant's canonical knowledge repo binding |
+| `aeterna tenant repo-binding set acme --kind github --remote-url URL --branch main --credential-kind githubApp --github-owner acme --github-repo knowledge` | Set the canonical repository binding |
+| `aeterna tenant repo-binding validate acme --kind github --remote-url URL --branch main --credential-kind githubApp --github-owner acme --github-repo knowledge` | Validate a binding without persisting |
+
+### Tenant config and secrets
+
+| Command | Description |
+|---------|-------------|
+| `aeterna tenant config inspect --tenant acme` | Inspect tenant config as PlatformAdmin |
+| `aeterna tenant config upsert --tenant acme --file tenant-config.json` | Upsert tenant config from JSON |
+| `aeterna tenant config validate --tenant acme --file tenant-config.json` | Validate tenant config JSON |
+| `aeterna tenant secret set --tenant acme repo.token --value '...'` | Set a tenant secret entry |
+| `aeterna tenant secret delete --tenant acme repo.token` | Delete a tenant secret entry |
+
+### Shared Git provider connections
+
+| Command | Description |
+|---------|-------------|
+| `aeterna tenant connection list acme` | List Git provider connections visible to a tenant |
+| `aeterna tenant connection grant acme --connection <id>` | Grant tenant visibility to a shared connection |
+| `aeterna tenant connection revoke acme --connection <id>` | Revoke tenant visibility |
+
+### Permissions and targeting
+
+| Command | Description |
+|---------|-------------|
+| `aeterna permissions matrix` | Show the role-permission matrix |
+| `aeterna permissions effective --user-id <id>` | Show effective permissions |
+| `--target-tenant <tenant-id>` | PlatformAdmin-only cross-tenant targeting for tenant-scoped commands |
 
 ---
 
@@ -412,7 +461,9 @@ Search precedence: agent → user → session → project → team → org → c
 
 | Role | Precedence | Capabilities |
 |------|------------|--------------|
-| `admin` | 4 | Full system access |
+| `platform_admin` | 6 | Cross-tenant tenant lifecycle, tenant config/secrets, shared Git connections |
+| `tenant_admin` | 5 | Tenant-scoped administration and governance |
+| `admin` | 4 | Full tenant access |
 | `architect` | 3 | Design policies, manage knowledge |
 | `tech_lead` | 2 | Manage team resources, approve proposals |
 | `developer` | 1 | Standard development, propose changes |
@@ -444,6 +495,7 @@ export AETERNA_AGENT_TOKEN=aeterna_agent_abc123xyz
 ## Further Reading
 
 - [UX-First Governance Guide](ux-first-governance.md) - Complete guide with workflows
+- [Tenant Admin Control Plane](tenant-admin-control-plane.md) - Ownership model, config/secrets, shared Git connections
 - [Strangler Fig Migration](../examples/strangler-fig-migration.md) - Real-world example
 - [Architecture Overview](../architecture-overview) - System architecture
 

@@ -75,6 +75,38 @@ export AETERNA_SYNC_ENABLED=true
 
 All modes support TOML configuration files. Create `config.toml` in your application directory or specify via `AETERNA_CONFIG_FILE` environment variable.
 
+## Tenant Bootstrap and Ownership Boundaries
+
+Before enabling governance features for a tenant, establish the control-plane
+ownership model:
+
+- `PlatformAdmin` creates tenants, manages tenant repository bindings, and
+  controls shared Git provider connections.
+- `TenantAdmin` manages tenant-owned config fields, secret references, and role
+  delegation within a single tenant.
+- Cross-tenant inspection and administration require
+  `--target-tenant <tenant-id>` and remain a `PlatformAdmin` capability.
+
+### Tenant Config Provider Contract
+
+For Kubernetes-backed deployments, tenant runtime configuration is materialized
+through the tenant config provider:
+
+- ConfigMap: `aeterna-tenant-<tenant-id>`
+- Secret: `aeterna-tenant-<tenant-id>-secret`
+
+Keep environment-specific overlays, bootstrap values, and customer-specific
+deployment data in a private deployment repository rather than this public repo.
+
+### Bootstrap Sequence
+
+1. Platform admin creates the tenant and binds its repository.
+2. Platform admin provisions or grants access to any shared Git provider
+   connection required by that tenant.
+3. Tenant admin populates tenant-owned config and secret references.
+4. Deploy the chart with `tenantConfigProvider.enabled: true` so the runtime can
+   resolve tenant-scoped configuration from Kubernetes.
+
 ## Local Mode Deployment
 
 ### Configuration

@@ -349,8 +349,8 @@ If one system is unavailable, the other continues:
 │  • Agent orchestration (how agents are scheduled)               │
 │  • LLM selection (which models to use)                          │
 │  • Embedding model selection (delegated to provider)            │
-│  • User authentication (delegated to ecosystem)                 │
-│  • Authorization/permissions (delegated to ecosystem)           │
+│  • User identity authentication (delegated to ecosystem; Aeterna uses Okta-backed oauth2-proxy for browser users)                 │
+│  • Authorization for external systems (Aeterna owns its internal Cedar/OPAL authorization stack)           │
 │  • User interface design                                        │
 │  • Billing and metering                                         │
 │  • Network transport protocols                                  │

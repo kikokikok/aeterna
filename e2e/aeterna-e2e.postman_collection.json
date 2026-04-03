@@ -11377,6 +11377,1212 @@
           ]
         }
       ]
+    },
+    {
+      "name": "29. Tenant Lifecycle — Platform Admin",
+      "item": [
+        {
+          "name": "29.1 Create Tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slug\": \"e2e-tenant\",\n  \"name\": \"E2E Tenant\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.success).to.eql(true);",
+                  "pm.collectionVariables.set('tenantSlug', json.tenant.slug);",
+                  "pm.collectionVariables.set('tenantId', json.tenant.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "29.2 List Tenants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.success).to.eql(true);",
+                  "pm.expect(json.tenants).to.be.an('array');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "29.3 Show Tenant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.tenant.slug).to.eql(pm.collectionVariables.get('tenantSlug'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "29.4 Update Tenant",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"E2E Tenant Updated\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.tenant.name).to.eql('E2E Tenant Updated');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "29.5 Add Verified Domain Mapping",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/domain-mappings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "domain-mappings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"domain\": \"e2e.example.com\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.verified).to.eql(true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "29.6 Deactivate Tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "deactivate"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.tenant.status).to.eql('inactive');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "29.7 Tenant Admin Cannot Create Tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "tenant-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "admin"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slug\": \"forbidden-tenant\",\n  \"name\": \"Forbidden Tenant\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.error).to.eql('forbidden');",
+                  "pm.expect(json.message).to.eql('PlatformAdmin role required');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "30. Tenant Repository Binding",
+      "item": [
+        {
+          "name": "30.1 Show Missing Binding",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/repository-binding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "repository-binding"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404 or 200 if already configured', () => pm.expect([404, 200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "30.2 Set Local Binding",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/repository-binding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "repository-binding"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"local\",\n  \"local_path\": \"/tmp/e2e-tenant-repo\",\n  \"branch\": \"main\",\n  \"branch_policy\": \"directCommit\",\n  \"credential_kind\": \"none\",\n  \"credential_ref\": null,\n  \"github_owner\": null,\n  \"github_repo\": null,\n  \"source_owner\": \"admin\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.binding.sourceOwner).to.eql('admin');",
+                  "pm.expect(json.binding.kind).to.eql('local');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "30.3 Validate Binding",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/repository-binding/validate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "repository-binding",
+                "validate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"local\",\n  \"local_path\": \"/tmp/e2e-tenant-repo\",\n  \"branch\": \"main\",\n  \"branch_policy\": \"directCommit\",\n  \"credential_kind\": \"none\",\n  \"credential_ref\": null,\n  \"github_owner\": null,\n  \"github_repo\": null,\n  \"source_owner\": \"admin\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.valid).to.eql(true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "30.4 Show Configured Binding",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/repository-binding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "repository-binding"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.binding.localPath).to.eql('/tmp/e2e-tenant-repo');",
+                  "pm.expect(json.binding.sourceOwner).to.eql('admin');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "30.5 Reject Invalid Credential Ref",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/repository-binding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "repository-binding"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"github\",\n  \"local_path\": null,\n  \"remote_url\": \"https://github.com/acme/knowledge.git\",\n  \"branch\": \"main\",\n  \"branch_policy\": \"requirePullRequest\",\n  \"credential_kind\": \"githubApp\",\n  \"credential_ref\": \"raw-secret-material\",\n  \"github_owner\": \"acme\",\n  \"github_repo\": \"knowledge\",\n  \"source_owner\": \"admin\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.error).to.eql('invalid_credential_ref');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "31. Permission Inspection",
+      "item": [
+        {
+          "name": "31.1 Role-to-Permission Matrix",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/permissions/matrix",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "permissions",
+                "matrix"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.matrix.platformAdmin).to.be.an('array');",
+                  "pm.expect(json.matrix.admin).to.be.an('array');",
+                  "pm.expect(json.matrix.architect).to.be.an('array');",
+                  "pm.expect(json.matrix.techLead).to.be.an('array');",
+                  "pm.expect(json.matrix.developer).to.be.an('array');",
+                  "pm.expect(json.matrix.viewer).to.be.an('array');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "31.2 Effective Permissions as Developer",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/permissions/effective?user_id=e2e-user&role=developer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "permissions",
+                "effective"
+              ],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "e2e-user"
+                },
+                {
+                  "key": "role",
+                  "value": "developer"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.userId).to.eql('e2e-user');",
+                  "pm.expect(json.granted).to.be.an('array');",
+                  "pm.expect(json.denied).to.be.an('array');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "31.3 Effective Permissions as Tenant Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "tenant-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "admin"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/permissions/effective?user_id=tenant-member&role=developer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "permissions",
+                "effective"
+              ],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "tenant-member"
+                },
+                {
+                  "key": "role",
+                  "value": "developer"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.userId).to.eql('tenant-member');",
+                  "pm.expect(json.granted).to.be.an('array');",
+                  "pm.expect(json.denied).to.be.an('array');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "32. Governance Role Administration",
+      "item": [
+        {
+          "name": "32.1 List Governance Roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/govern/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "govern",
+                "roles"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json()).to.be.an('array');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "32.2 Assign Governance Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/govern/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "govern",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"principal\": \"11111111-2222-3333-4444-555555555555\",\n  \"principalType\": \"user\",\n  \"role\": \"architect\",\n  \"scope\": \"company\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.principal).to.eql('11111111-2222-3333-4444-555555555555');",
+                  "pm.expect(json.principalType).to.eql('user');",
+                  "pm.expect(json.role).to.eql('architect');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "32.3 Revoke Governance Role",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/govern/roles/11111111-2222-3333-4444-555555555555/architect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "govern",
+                "roles",
+                "11111111-2222-3333-4444-555555555555",
+                "architect"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.success).to.eql(true);",
+                  "pm.expect(json.role).to.eql('architect');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "32.4 Reject Invalid Governance Principal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "platform-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "platform_admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/govern/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "govern",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"principal\": \"not-a-uuid\",\n  \"principalType\": \"user\",\n  \"role\": \"architect\",\n  \"scope\": \"company\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.error).to.eql('invalid_principal');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "33. Tenant Admin Hierarchy and Scoped Roles",
+      "item": [
+        {
+          "name": "33.1 Create Organization Unit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "tenant-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "admin"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/hierarchy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "hierarchy"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"E2E Organization\",\n  \"unit_type\": \"organization\",\n  \"parent_id\": null,\n  \"metadata\": {},\n  \"source_owner\": \"admin\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.success).to.eql(true);",
+                  "pm.expect(json.unit.unitType).to.eql('organization');",
+                  "pm.collectionVariables.set('orgUnitId', json.unit.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "33.2 Assign Scoped Developer Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "tenant-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "admin"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/hierarchy/{{orgUnitId}}/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "hierarchy",
+                "{{orgUnitId}}",
+                "members"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"tenant-member\",\n  \"role\": \"developer\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.success).to.eql(true);",
+                  "pm.expect(json.membership.userId).to.eql('tenant-member');",
+                  "pm.expect(json.membership.role).to.eql('developer');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "33.3 List Unit Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "tenant-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "admin"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/hierarchy/{{orgUnitId}}/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "hierarchy",
+                "{{orgUnitId}}",
+                "members"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.members).to.be.an('array');",
+                  "pm.expect(json.members.some((member) => member.user_id === 'tenant-member' && member.role === 'developer')).to.eql(true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "33.4 Revoke Scoped Developer Role",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "tenant-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "admin"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/hierarchy/{{orgUnitId}}/members/tenant-member/roles/developer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "hierarchy",
+                "{{orgUnitId}}",
+                "members",
+                "tenant-member",
+                "roles",
+                "developer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.success).to.eql(true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "33.5 Reject PlatformAdmin Scoped Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "tenant-admin"
+              },
+              {
+                "key": "X-User-Role",
+                "value": "admin"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/hierarchy/{{orgUnitId}}/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "hierarchy",
+                "{{orgUnitId}}",
+                "members"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"tenant-member\",\n  \"role\": \"platformAdmin\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.error).to.eql('invalid_role_assignment');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

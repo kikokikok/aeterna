@@ -1,5 +1,5 @@
 use memory::backends::{
-    BackendConfig, SearchQuery, VectorBackend, VectorBackendType, VectorRecord, create_backend
+    BackendConfig, SearchQuery, VectorBackend, VectorBackendType, VectorRecord, create_backend,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -9,12 +9,12 @@ struct BenchmarkResult {
     backend: String,
     operation: String,
     total_ops: usize,
-    total_time: Duration,
+    _total_time: Duration,
     avg_latency_ms: f64,
     p50_latency_ms: f64,
     p95_latency_ms: f64,
     p99_latency_ms: f64,
-    ops_per_sec: f64
+    ops_per_sec: f64,
 }
 
 impl BenchmarkResult {
@@ -58,7 +58,7 @@ async fn benchmark_upsert(
     tenant_id: &str,
     batch_size: usize,
     num_batches: usize,
-    dim: usize
+    dim: usize,
 ) -> BenchmarkResult {
     let mut latencies = Vec::with_capacity(num_batches);
     let start = Instant::now();
@@ -78,12 +78,12 @@ async fn benchmark_upsert(
         backend: backend.backend_name().to_string(),
         operation: "upsert".to_string(),
         total_ops,
-        total_time,
+        _total_time: total_time,
         avg_latency_ms: latencies.iter().sum::<f64>() / latencies.len() as f64,
         p50_latency_ms: calculate_percentile(&latencies, 50.0),
         p95_latency_ms: calculate_percentile(&latencies, 95.0),
         p99_latency_ms: calculate_percentile(&latencies, 99.0),
-        ops_per_sec: total_ops as f64 / total_time.as_secs_f64()
+        ops_per_sec: total_ops as f64 / total_time.as_secs_f64(),
     }
 }
 
@@ -92,7 +92,7 @@ async fn benchmark_search(
     tenant_id: &str,
     num_queries: usize,
     dim: usize,
-    limit: usize
+    limit: usize,
 ) -> BenchmarkResult {
     let mut latencies = Vec::with_capacity(num_queries);
     let start = Instant::now();
@@ -113,19 +113,19 @@ async fn benchmark_search(
         backend: backend.backend_name().to_string(),
         operation: "search".to_string(),
         total_ops: num_queries,
-        total_time,
+        _total_time: total_time,
         avg_latency_ms: latencies.iter().sum::<f64>() / latencies.len() as f64,
         p50_latency_ms: calculate_percentile(&latencies, 50.0),
         p95_latency_ms: calculate_percentile(&latencies, 95.0),
         p99_latency_ms: calculate_percentile(&latencies, 99.0),
-        ops_per_sec: num_queries as f64 / total_time.as_secs_f64()
+        ops_per_sec: num_queries as f64 / total_time.as_secs_f64(),
     }
 }
 
 async fn benchmark_get(
     backend: Arc<dyn VectorBackend>,
     tenant_id: &str,
-    ids: &[String]
+    ids: &[String],
 ) -> BenchmarkResult {
     let mut latencies = Vec::with_capacity(ids.len());
     let start = Instant::now();
@@ -143,12 +143,12 @@ async fn benchmark_get(
         backend: backend.backend_name().to_string(),
         operation: "get".to_string(),
         total_ops: ids.len(),
-        total_time,
+        _total_time: total_time,
         avg_latency_ms: latencies.iter().sum::<f64>() / latencies.len() as f64,
         p50_latency_ms: calculate_percentile(&latencies, 50.0),
         p95_latency_ms: calculate_percentile(&latencies, 95.0),
         p99_latency_ms: calculate_percentile(&latencies, 99.0),
-        ops_per_sec: ids.len() as f64 / total_time.as_secs_f64()
+        ops_per_sec: ids.len() as f64 / total_time.as_secs_f64(),
     }
 }
 
@@ -200,7 +200,7 @@ async fn benchmark_qdrant() {
         qdrant: Some(memory::backends::factory::QdrantConfig {
             url: std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6334".into()),
             api_key: std::env::var("QDRANT_API_KEY").ok(),
-            collection_prefix: "benchmark".into()
+            collection_prefix: "benchmark".into(),
         }),
         ..Default::default()
     };
@@ -219,7 +219,7 @@ async fn benchmark_pgvector() {
             connection_string: std::env::var("PGVECTOR_URL")
                 .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/aeterna".into()),
             schema: "public".into(),
-            table_name: "benchmark_vectors".into()
+            table_name: "benchmark_vectors".into(),
         }),
         ..Default::default()
     };
@@ -240,7 +240,7 @@ async fn benchmark_pinecone() {
         pinecone: Some(memory::backends::factory::PineconeConfig {
             api_key,
             environment,
-            index_name: "benchmark".into()
+            index_name: "benchmark".into(),
         }),
         ..Default::default()
     };
@@ -258,7 +258,7 @@ async fn benchmark_weaviate() {
         weaviate: Some(memory::backends::factory::WeaviateConfig {
             url: std::env::var("WEAVIATE_URL").unwrap_or_else(|_| "http://localhost:8080".into()),
             api_key: std::env::var("WEAVIATE_API_KEY").ok(),
-            class_name: "Benchmark".into()
+            class_name: "Benchmark".into(),
         }),
         ..Default::default()
     };
@@ -277,7 +277,7 @@ async fn benchmark_mongodb() {
             connection_string: std::env::var("MONGODB_URI").expect("MONGODB_URI required"),
             database: "benchmark".into(),
             collection: "vectors".into(),
-            index_name: "vector_index".into()
+            index_name: "vector_index".into(),
         }),
         ..Default::default()
     };
@@ -298,7 +298,7 @@ async fn benchmark_vertex_ai() {
             index_endpoint: std::env::var("VERTEX_AI_INDEX_ENDPOINT")
                 .expect("VERTEX_AI_INDEX_ENDPOINT required"),
             deployed_index_id: std::env::var("VERTEX_AI_DEPLOYED_INDEX_ID")
-                .expect("VERTEX_AI_DEPLOYED_INDEX_ID required")
+                .expect("VERTEX_AI_DEPLOYED_INDEX_ID required"),
         }),
         ..Default::default()
     };
@@ -317,7 +317,7 @@ async fn benchmark_databricks() {
             workspace_url: std::env::var("DATABRICKS_HOST").expect("DATABRICKS_HOST required"),
             token: std::env::var("DATABRICKS_TOKEN").expect("DATABRICKS_TOKEN required"),
             catalog: std::env::var("DATABRICKS_CATALOG").unwrap_or_else(|_| "main".into()),
-            schema: std::env::var("DATABRICKS_SCHEMA").unwrap_or_else(|_| "benchmark".into())
+            schema: std::env::var("DATABRICKS_SCHEMA").unwrap_or_else(|_| "benchmark".into()),
         }),
         ..Default::default()
     };

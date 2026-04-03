@@ -77,6 +77,13 @@ secrets:
   provider: helm          # helm (default), sops, external-secrets
 ```
 
+For multi-tenant deployments, keep these boundaries explicit:
+
+- **tenant config** is non-secret structured data
+- **tenant secrets** live in paired tenant Secrets (`aeterna-tenant-<tenant-id>-secret`)
+- **shared Git provider connections** store only secret references such as PEM/webhook refs, never inline secret material
+- **environment-specific overlays** belong in a private deployment repository, not in the public chart repo
+
 ## RBAC
 
 Aeterna creates a `ServiceAccount`, `Role`, and `RoleBinding` scoped to its namespace. The service account token is auto-mounted for in-cluster API access required by the migration job.
@@ -89,6 +96,8 @@ aeterna:
     create: false
     name: "my-existing-sa"
 ```
+
+When `tenantConfigProvider.enabled` is true, the chart grants the Aeterna service account permission to create/update/delete tenant-scoped ConfigMaps and Secrets in its namespace so the runtime provider can manage per-tenant config containers safely.
 
 ## TLS
 

@@ -1,8 +1,8 @@
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use mk_core::types::MemoryLayer;
 use serde_json::json;
 use sqlx::{Pool, Postgres};
-use storage::budget_storage::{BudgetStorage, BudgetStorageError, StoredBudget, StoredUsage};
+use storage::budget_storage::{BudgetStorage, StoredBudget};
 use testing::{postgres, unique_id};
 
 async fn create_test_budget_storage() -> Option<BudgetStorage> {
@@ -31,7 +31,7 @@ fn create_test_budget(tenant_id: &str) -> StoredBudget {
         critical_threshold_percent: 90,
         exhausted_action: "reject".to_string(),
         created_at: Utc::now().timestamp(),
-        updated_at: Utc::now().timestamp()
+        updated_at: Utc::now().timestamp(),
     }
 }
 
@@ -132,7 +132,7 @@ async fn test_record_and_get_usage() {
             MemoryLayer::Session,
             "hourly",
             5000,
-            window_start
+            window_start,
         )
         .await;
     assert!(result.is_ok(), "Should record usage");
@@ -142,7 +142,7 @@ async fn test_record_and_get_usage() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "hourly",
-            window_start
+            window_start,
         )
         .await;
     assert!(usage.is_ok(), "Should get usage");
@@ -160,7 +160,7 @@ async fn test_record_and_get_usage() {
             MemoryLayer::Session,
             "hourly",
             3000,
-            window_start
+            window_start,
         )
         .await
         .unwrap();
@@ -170,7 +170,7 @@ async fn test_record_and_get_usage() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "hourly",
-            window_start
+            window_start,
         )
         .await
         .unwrap();
@@ -186,7 +186,7 @@ async fn test_record_and_get_usage() {
             MemoryLayer::Session,
             "hourly",
             2000,
-            new_window_start
+            new_window_start,
         )
         .await
         .unwrap();
@@ -196,7 +196,7 @@ async fn test_record_and_get_usage() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "hourly",
-            new_window_start
+            new_window_start,
         )
         .await
         .unwrap();
@@ -207,7 +207,7 @@ async fn test_record_and_get_usage() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "hourly",
-            window_start
+            window_start,
         )
         .await
         .unwrap();
@@ -234,7 +234,7 @@ async fn test_get_all_layer_usage() {
             MemoryLayer::Session,
             "hourly",
             5000,
-            window_start
+            window_start,
         )
         .await
         .unwrap();
@@ -245,7 +245,7 @@ async fn test_get_all_layer_usage() {
             MemoryLayer::Project,
             "hourly",
             15000,
-            window_start
+            window_start,
         )
         .await
         .unwrap();
@@ -301,7 +301,7 @@ async fn test_reset_usage() {
             MemoryLayer::Session,
             "hourly",
             5000,
-            window_start
+            window_start,
         )
         .await
         .unwrap();
@@ -312,7 +312,7 @@ async fn test_reset_usage() {
             MemoryLayer::Session,
             "daily",
             15000,
-            window_start
+            window_start,
         )
         .await
         .unwrap();
@@ -322,7 +322,7 @@ async fn test_reset_usage() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "hourly",
-            window_start
+            window_start,
         )
         .await
         .unwrap();
@@ -333,7 +333,7 @@ async fn test_reset_usage() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "daily",
-            window_start
+            window_start,
         )
         .await
         .unwrap();
@@ -347,7 +347,7 @@ async fn test_reset_usage() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "hourly",
-            window_start
+            window_start,
         )
         .await
         .unwrap();
@@ -358,7 +358,7 @@ async fn test_reset_usage() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "daily",
-            window_start
+            window_start,
         )
         .await
         .unwrap();
@@ -391,7 +391,7 @@ async fn test_cleanup_old_usage() {
             MemoryLayer::Session,
             "hourly",
             3000,
-            current_window
+            current_window,
         )
         .await
         .unwrap();
@@ -414,7 +414,7 @@ async fn test_cleanup_old_usage() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "hourly",
-            current_window
+            current_window,
         )
         .await
         .unwrap();
@@ -442,7 +442,7 @@ async fn test_usage_with_different_window_types() {
             MemoryLayer::Session,
             "hourly",
             5000,
-            hourly_window
+            hourly_window,
         )
         .await
         .unwrap();
@@ -453,7 +453,7 @@ async fn test_usage_with_different_window_types() {
             MemoryLayer::Session,
             "daily",
             15000,
-            daily_window
+            daily_window,
         )
         .await
         .unwrap();
@@ -463,7 +463,7 @@ async fn test_usage_with_different_window_types() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "hourly",
-            hourly_window
+            hourly_window,
         )
         .await
         .unwrap();
@@ -474,7 +474,7 @@ async fn test_usage_with_different_window_types() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "daily",
-            daily_window
+            daily_window,
         )
         .await
         .unwrap();
@@ -540,7 +540,7 @@ async fn test_concurrent_usage_updates() {
             &tenant_id,
             Some(MemoryLayer::Session),
             "hourly",
-            window_start
+            window_start,
         )
         .await
         .unwrap();

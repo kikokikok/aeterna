@@ -1,0 +1,54 @@
+# Aeterna Tenant Config Provider + Git Provider Connection overlay
+#
+# This file demonstrates how to configure the tenant configuration provider
+# and declare platform-owned Git provider connections for deployment.
+#
+# Usage (layer on top of your base values):
+#   helm upgrade aeterna ./charts/aeterna \
+#     -f charts/aeterna/values.yaml \
+#     -f charts/aeterna/examples/values-tenant-config.yaml
+#
+# Prerequisites:
+#   1. Create the GitHub App PEM secret before deploying:
+#        kubectl create secret generic aeterna-github-app-pem \
+#          --from-file=pem-key=./path/to/private-key.pem
+#
+#   2. (Optional) Create the webhook secret:
+#        kubectl create secret generic aeterna-github-app-webhook \
+#          --from-literal=webhook-secret=<your-webhook-secret>
+#
+# The platform operator controls connection IDs and allowed-tenant lists.
+# Tenant administrators reference connection IDs only — no certificate
+# material is ever stored in tenant-owned configuration.
+
+# Enable the tenant config provider
+tenantConfigProvider:
+  enabled: true
+  # Tenants to seed with empty ConfigMap/Secret containers on first deploy.
+  # These are bootstrapped with {"tenantId":"<id>","fields":{},"secretReferences":{}}.
+  seedTenants:
+    - "acme-corp"
+    - "platform-default"
+
+# Platform-owned Git provider connections.
+# PEM material is referenced via pemSecretRef — never inlined.
+#
+# pemSecretRef format: "secret/<kubernetes-secret-name>/<secret-key>"
+# webhookSecretRef format: "secret/<kubernetes-secret-name>/<secret-key>"
+gitProviderConnections:
+  - id: "acme-github-app"
+    name: "Acme Corp GitHub App"
+    providerKind: GitHubApp
+    # GitHub App ID (from Settings > Developer settings > GitHub Apps)
+    appId: "123456"
+    # Installation ID (from the GitHub App installation URL)
+    installationId: "9876543"
+    # Reference to the Kubernetes Secret created in prerequisites step 1
+    pemSecretRef: "secret/aeterna-github-app-pem/pem-key"
+    # Optional: reference to webhook secret created in prerequisites step 2
+    webhookSecretRef: "secret/aeterna-github-app-webhook/webhook-secret"
+    # Tenants allowed to use this connection.  Empty = no tenants allowed yet.
+    # Use the platform API to grant visibility:
+    #   aeterna git-provider-connection grant acme-github-app --tenant acme-corp
+    allowedTenantIds:
+      - "acme-corp"

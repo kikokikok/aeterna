@@ -13,12 +13,21 @@ In local mode, Aeterna deploys all required components **in-cluster**:
 
 All components run in the same Kubernetes cluster. There is no external central server or cloud dependency.
 
+For multi-tenant deployments, keep tenant bootstrap overlays and any
+environment-specific customer data in a private deployment repository. The
+public chart documents the contract, while tenant-specific values should remain
+private.
+
 ### Configuration
 
 Enable local mode in `values.yaml`:
 
 ```yaml
 deploymentMode: local
+
+tenantConfigProvider:
+  enabled: true
+  namespace: aeterna
 
 # All components enabled by default
 postgresql:
@@ -188,6 +197,11 @@ Local mode scaling is limited by **cluster capacity**:
 # Deployment mode
 deploymentMode: local
 
+# Tenant runtime configuration
+tenantConfigProvider:
+  enabled: true
+  namespace: aeterna
+
 # Container registry
 image:
   repository: ghcr.io/kikokikok/aeterna
@@ -260,6 +274,15 @@ podSecurityPolicy:
   enforce: restricted
   readOnlyRootFilesystem: true
 ```
+
+When `tenantConfigProvider.enabled` is set, the runtime expects:
+
+- ConfigMap `aeterna-tenant-<tenant-id>` for non-secret tenant config
+- Secret `aeterna-tenant-<tenant-id>-secret` for tenant secret material
+
+If a tenant uses a shared Git provider connection, create the referenced
+credential secret before deployment and keep those values in your private
+deployment repository.
 
 ### Storage Configuration
 

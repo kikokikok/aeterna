@@ -56,7 +56,7 @@ Modern enterprises face critical challenges when deploying AI agents:
 │   │   GOVERNANCE ENGINE    │              │   AUTHORIZATION        │        │
 │   │                        │              │                        │        │
 │   │  • Policy inheritance  │              │  • Cedar policies      │        │
-│   │  • Drift detection     │              │  • RBAC (5 roles)      │        │
+│   │  • Drift detection     │              │  • RBAC (7 roles)      │        │
 │   │  • Merge strategies    │              │  • OPAL integration    │        │
 │   │  • Multi-tenant ReBAC  │              │  • Tenant isolation    │        │
 │   └────────────────────────┘              └────────────────────────┘        │
@@ -224,13 +224,15 @@ let team_policy = Policy {
 
 ### Role Hierarchy
 
-| Role | Precedence | Capabilities |
-|------|------------|--------------|
-| **Admin** | 4 | Full system access, manage all resources |
-| **Architect** | 3 | Design policies, manage knowledge repository |
-| **TechLead** | 2 | Manage team resources, enforce policies |
-| **Developer** | 1 | Standard development, knowledge access |
-| **Agent** | 0 | Delegated permissions from user context |
+| Role | Precedence | Scope | Capabilities |
+|------|------------|-------|--------------|
+| **PlatformAdmin** | 6 | Cross-tenant | Tenant lifecycle, shared Git provider connections, cross-tenant inspection |
+| **TenantAdmin** | 5 | Single tenant | Tenant-scoped administration, tenant config/secrets, role delegation within tenant |
+| **Admin** | 4 | Single tenant | Full tenant access, manage tenant resources |
+| **Architect** | 3 | Single tenant | Design policies, manage knowledge repository |
+| **TechLead** | 2 | Single tenant | Manage team resources, enforce policies |
+| **Developer** | 1 | Single tenant | Standard development, knowledge access |
+| **Agent** | 0 | Delegated | Delegated permissions from user context |
 
 ### Cedar Authorization + OPAL Integration
 
@@ -283,6 +285,22 @@ Important operational truth:
 - **Cedar files store authorization rules**
 - **Postgres-backed Aeterna data stores hold memberships, assignments, and hierarchy**
 - **OPAL + Cedar Agent synchronize and evaluate authorization data at runtime**
+
+### Tenant Configuration & Secrets
+
+Aeterna uses a tenant configuration provider to align tenant-scoped runtime configuration, control-plane workflows, and Kubernetes deployment artifacts.
+
+- non-secret tenant config is stored as a structured tenant document
+- secret values are stored separately and exposed only as logical references
+- the first provider implementation is Kubernetes-backed:
+  - ConfigMap: `aeterna-tenant-<tenant-id>`
+  - Secret: `aeterna-tenant-<tenant-id>-secret`
+- `TenantAdmin` can mutate only tenant-owned fields and secret entries
+- `PlatformAdmin` can manage platform-owned fields, tenant bootstrapping, and shared Git provider connections
+
+Shared GitHub App connectivity is modeled as a platform-owned Git provider connection. Tenants reference an allowed connection by ID instead of embedding PEM or webhook secret material in tenant config.
+
+For the end-to-end operator workflow, see [`docs/guides/tenant-admin-control-plane.md`](docs/guides/tenant-admin-control-plane.md).
 
 ---
 
@@ -416,21 +434,18 @@ Aeterna exposes 11 unified tools via Model Context Protocol:
 
 ## Roadmap: Active OpenSpec Changes
 
-The following 2 changes are currently in development:
+### Recently completed tenancy/runtime changes
 
-### 1. **add-helm-chart** - Kubernetes Deployment + CLI Setup Wizard
-- **Status**: Implementation Phase
-- **Key Features**: Helm chart with configurable dependencies, CLI setup wizard (`aeterna setup`)
-- **Implemented**: Chart.yaml, values.yaml, values.schema.json, core templates (deployment, service, ingress, configmap, secret, HPA, PDB, NetworkPolicy, ServiceMonitor, migration job)
-- **Remaining**: OPAL stack integration, deployment mode examples, testing, full documentation
-- **Impact**: Production-ready enterprise deployment
+- **add-tenant-admin-control-plane** — PlatformAdmin and TenantAdmin control-plane surfaces
+- **add-tenant-config-provider** — canonical tenant config/secrets model, Kubernetes ConfigMap/Secret provider, shared Git provider connections
+- **fix-authz-boundary-hardening** — stronger authorization boundary enforcement
+- **fix-runtime-security-hardening** — runtime secret handling and security controls
 
-### 2. **add-pluggable-vector-backends** - Enterprise Vector Database Support
-- **Status**: Implementation Phase (90% complete)
-- **Implemented Backends**: Qdrant, pgvector, Pinecone, Weaviate, MongoDB Atlas, Vertex AI, Databricks
-- **Key Features**: Pluggable `VectorBackend` trait, tenant isolation, circuit breaker, observability
-- **Remaining**: Integration tests (require live instances), backend-specific documentation
-- **Impact**: Enterprise flexibility with cloud-native vector stores
+### Still-active follow-on changes
+
+- **add-cli-control-plane** — broader CLI control-plane coverage and packaging
+- **fix-multi-tenant-fail-closed** — fail-closed tenant resolution and isolation hardening
+- **add-opencode-github-app-auth** — GitHub App authentication and end-to-end plugin path completion
 
 ---
 
@@ -448,6 +463,10 @@ The following changes have been archived (completed and deployed):
 | **add-reflective-reasoning** | Pre-retrieval reasoning, multi-hop retrieval | Jan 2026 |
 | **add-r1-graph-memory** | DuckDB graph layer, Memory-R1 optimization | Jan 2026 |
 | **add-multi-tenant-governance** | ReBAC with Permit.io + Cedar, drift detection | Jan 2026 |
+| **add-tenant-admin-control-plane** | Tenant lifecycle, repo-binding admin flows, cross-tenant targeting | Apr 2026 |
+| **add-tenant-config-provider** | Tenant config/secrets model, Kubernetes provider, shared Git provider connections | Apr 2026 |
+| **fix-authz-boundary-hardening** | Stronger control-plane authorization boundaries | Apr 2026 |
+| **fix-runtime-security-hardening** | Runtime secret and deployment hardening | Apr 2026 |
 
 ### OpenCode Plugin
 
@@ -529,6 +548,13 @@ path = "./data/graph.duckdb"
 [knowledge]
 backend = "git"
 repository_path = "./knowledge-repo"
+
+[tenant]
+id = "default"
+
+[tenant.config_provider]
+kind = "kubernetes"
+namespace = "aeterna"
 
 [governance]
 authorization = "cedar"

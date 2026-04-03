@@ -4,6 +4,12 @@
 **Change ID**: `add-production-improvements`  
 **Status**: Proposal Created, Awaiting Approval
 
+> **Historical snapshot**
+> This summary predates `add-tenant-admin-control-plane` and
+> `add-tenant-config-provider`. Treat its multi-tenancy statements as historical;
+> the current tenant ownership, config/secrets, and shared Git provider
+> connection model is documented in the April 2026 tenancy guides.
+
 ---
 
 ## Executive Summary

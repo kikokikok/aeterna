@@ -39,7 +39,7 @@ pub struct MigrationConfig {
     pub circuit_breaker_threshold: u32,
 
     /// Fallback to heuristic on Cedar failure.
-    pub fallback_enabled: bool
+    pub fallback_enabled: bool,
 }
 
 impl Default for MigrationConfig {
@@ -50,7 +50,7 @@ impl Default for MigrationConfig {
             primary_mode: ResolutionMode::Heuristic,
             audit_mode: true,
             circuit_breaker_threshold: 5,
-            fallback_enabled: true
+            fallback_enabled: true,
         }
     }
 }
@@ -69,7 +69,7 @@ impl MigrationConfig {
                 .map(|v| match v.as_str() {
                     "cedar" => ResolutionMode::Cedar,
                     "parallel" => ResolutionMode::Parallel,
-                    _ => ResolutionMode::Heuristic
+                    _ => ResolutionMode::Heuristic,
                 })
                 .unwrap_or(ResolutionMode::Heuristic),
             audit_mode: std::env::var("AETERNA_CEDAR_AUDIT_MODE")
@@ -81,7 +81,7 @@ impl MigrationConfig {
                 .unwrap_or(5),
             fallback_enabled: std::env::var("AETERNA_CEDAR_FALLBACK")
                 .map(|v| v != "false")
-                .unwrap_or(true)
+                .unwrap_or(true),
         }
     }
 }
@@ -96,7 +96,7 @@ pub enum ResolutionMode {
     Cedar,
 
     /// Use both and compare results.
-    Parallel
+    Parallel,
 }
 
 // ============================================================================
@@ -108,7 +108,7 @@ pub struct ParallelContextResolver {
     heuristic_resolver: ContextResolver,
     cedar_client: CedarClient,
     config: MigrationConfig,
-    comparison_log: Arc<RwLock<Vec<ResolutionComparison>>>
+    comparison_log: Arc<RwLock<Vec<ResolutionComparison>>>,
 }
 
 impl ParallelContextResolver {
@@ -116,13 +116,13 @@ impl ParallelContextResolver {
     pub fn new(
         heuristic_resolver: ContextResolver,
         cedar_client: CedarClient,
-        config: MigrationConfig
+        config: MigrationConfig,
     ) -> Self {
         Self {
             heuristic_resolver,
             cedar_client,
             config,
-            comparison_log: Arc::new(RwLock::new(Vec::new()))
+            comparison_log: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -131,7 +131,7 @@ impl ParallelContextResolver {
         match self.config.primary_mode {
             ResolutionMode::Heuristic => self.resolve_heuristic().await,
             ResolutionMode::Cedar => self.resolve_cedar().await,
-            ResolutionMode::Parallel => self.resolve_parallel().await
+            ResolutionMode::Parallel => self.resolve_parallel().await,
         }
     }
 
@@ -178,23 +178,23 @@ impl ParallelContextResolver {
         Ok(ResolvedContext {
             tenant_id: ResolvedValue {
                 value: tenant_id,
-                source: ContextSource::CedarAgent
+                source: ContextSource::CedarAgent,
             },
             user_id: ResolvedValue {
                 value: user_id,
-                source: ContextSource::CedarAgent
+                source: ContextSource::CedarAgent,
             },
             org_id: None,
             team_id: None,
             project_id: project_entity.map(|p| ResolvedValue {
                 value: p.uid.id.clone(),
-                source: ContextSource::CedarAgent
+                source: ContextSource::CedarAgent,
             }),
             agent_id: None,
             session_id: None,
             hints: ResolvedValue::new(OperationHints::default(), ContextSource::CedarAgent),
             context_root: None,
-            git_root: None
+            git_root: None,
         })
     }
 
@@ -226,7 +226,7 @@ impl ParallelContextResolver {
         &self,
         operation: &str,
         heuristic: &Result<T, ContextError>,
-        cedar: &Result<T, ContextError>
+        cedar: &Result<T, ContextError>,
     ) {
         let comparison = ResolutionComparison {
             timestamp: Utc::now(),
@@ -242,8 +242,8 @@ impl ParallelContextResolver {
                     }
                 }
                 (Err(_), Err(_)) => MatchStatus::BothFailed,
-                _ => MatchStatus::Partial
-            }
+                _ => MatchStatus::Partial,
+            },
         };
 
         match &comparison.match_status {
@@ -292,7 +292,7 @@ pub struct ResolutionComparison {
     pub operation: String,
     pub heuristic_result: String,
     pub cedar_result: String,
-    pub match_status: MatchStatus
+    pub match_status: MatchStatus,
 }
 
 /// Match status between two resolution methods.
@@ -301,7 +301,7 @@ pub enum MatchStatus {
     Match,
     Mismatch,
     Partial,
-    BothFailed
+    BothFailed,
 }
 
 // ============================================================================
@@ -312,7 +312,7 @@ pub enum MatchStatus {
 pub struct AuditableAuthorizer {
     cedar_client: CedarClient,
     config: MigrationConfig,
-    audit_log: Arc<RwLock<Vec<AuthorizationAuditEntry>>>
+    audit_log: Arc<RwLock<Vec<AuthorizationAuditEntry>>>,
 }
 
 impl AuditableAuthorizer {
@@ -321,7 +321,7 @@ impl AuditableAuthorizer {
         Self {
             cedar_client,
             config,
-            audit_log: Arc::new(RwLock::new(Vec::new()))
+            audit_log: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -331,7 +331,7 @@ impl AuditableAuthorizer {
         principal: &EntityUid,
         action: &str,
         resource: &EntityUid,
-        context: Option<serde_json::Value>
+        context: Option<serde_json::Value>,
     ) -> Result<AuthorizationDecision, CedarError> {
         let start = std::time::Instant::now();
 
@@ -359,7 +359,7 @@ impl AuditableAuthorizer {
             cedar_decision: audit_decision,
             cedar_error: cedar_result.as_ref().err().map(|e| e.to_string()),
             duration_ms: duration.as_millis() as u64,
-            audit_mode: self.config.audit_mode
+            audit_mode: self.config.audit_mode,
         };
 
         self.audit_log.write().await.push(entry);
@@ -377,7 +377,7 @@ impl AuditableAuthorizer {
                 } else {
                     AuthorizationDecision::Deny
                 }),
-                Err(_) => Ok(AuthorizationDecision::Allow)
+                Err(_) => Ok(AuthorizationDecision::Allow),
             }
         } else {
             cedar_result.map(|allowed| {
@@ -407,14 +407,14 @@ pub struct AuthorizationAuditEntry {
     pub cedar_decision: Option<AuditDecision>,
     pub cedar_error: Option<String>,
     pub duration_ms: u64,
-    pub audit_mode: bool
+    pub audit_mode: bool,
 }
 
 /// Serializable authorization decision for audit logging.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum AuditDecision {
     Allow,
-    Deny
+    Deny,
 }
 
 // ============================================================================
@@ -434,7 +434,7 @@ pub enum ContextError {
     ParallelError(String),
 
     #[error("Configuration error: {0}")]
-    ConfigError(String)
+    ConfigError(String),
 }
 
 // ============================================================================
@@ -457,7 +457,7 @@ impl DataMigration {
             projects_migrated: 0,
             users_migrated: 0,
             agents_migrated: 0,
-            errors: Vec::new()
+            errors: Vec::new(),
         };
 
         info!("Starting organizational data migration to OPAL format");
@@ -474,7 +474,7 @@ impl DataMigration {
         Ok(ValidationReport {
             timestamp: Utc::now(),
             valid: true,
-            issues: Vec::new()
+            issues: Vec::new(),
         })
     }
 }
@@ -489,7 +489,7 @@ pub struct MigrationReport {
     pub projects_migrated: u64,
     pub users_migrated: u64,
     pub agents_migrated: u64,
-    pub errors: Vec<String>
+    pub errors: Vec<String>,
 }
 
 /// Validation report.
@@ -497,7 +497,7 @@ pub struct MigrationReport {
 pub struct ValidationReport {
     pub timestamp: chrono::DateTime<Utc>,
     pub valid: bool,
-    pub issues: Vec<String>
+    pub issues: Vec<String>,
 }
 
 /// Migration error.
@@ -507,13 +507,19 @@ pub enum MigrationError {
     DatabaseError(String),
 
     #[error("Validation error: {0}")]
-    ValidationError(String)
+    ValidationError(String),
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::Utc;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     // ---------------------------------------------------------------------------
     // MigrationConfig — Default values
@@ -536,6 +542,7 @@ mod tests {
 
     #[test]
     fn test_migration_config_from_env_defaults_when_no_env() {
+        let _guard = env_lock().lock().unwrap();
         // Make sure none of the env vars are set in this test
         unsafe { std::env::remove_var("AETERNA_PARALLEL_RESOLUTION") }
         unsafe { std::env::remove_var("AETERNA_COMPARISON_LOGGING") }
@@ -555,6 +562,7 @@ mod tests {
 
     #[test]
     fn test_migration_config_from_env_parallel_resolution_true() {
+        let _guard = env_lock().lock().unwrap();
         unsafe { std::env::set_var("AETERNA_PARALLEL_RESOLUTION", "true") }
         let cfg = MigrationConfig::from_env();
         assert!(cfg.parallel_resolution_enabled);
@@ -563,6 +571,7 @@ mod tests {
 
     #[test]
     fn test_migration_config_from_env_comparison_logging_false() {
+        let _guard = env_lock().lock().unwrap();
         unsafe { std::env::set_var("AETERNA_COMPARISON_LOGGING", "false") }
         let cfg = MigrationConfig::from_env();
         assert!(!cfg.comparison_logging_enabled);
@@ -571,6 +580,7 @@ mod tests {
 
     #[test]
     fn test_migration_config_from_env_primary_mode_cedar() {
+        let _guard = env_lock().lock().unwrap();
         unsafe { std::env::set_var("AETERNA_PRIMARY_MODE", "cedar") }
         let cfg = MigrationConfig::from_env();
         assert_eq!(cfg.primary_mode, ResolutionMode::Cedar);
@@ -579,6 +589,7 @@ mod tests {
 
     #[test]
     fn test_migration_config_from_env_primary_mode_parallel() {
+        let _guard = env_lock().lock().unwrap();
         unsafe { std::env::set_var("AETERNA_PRIMARY_MODE", "parallel") }
         let cfg = MigrationConfig::from_env();
         assert_eq!(cfg.primary_mode, ResolutionMode::Parallel);
@@ -587,6 +598,7 @@ mod tests {
 
     #[test]
     fn test_migration_config_from_env_primary_mode_unknown_falls_back_to_heuristic() {
+        let _guard = env_lock().lock().unwrap();
         unsafe { std::env::set_var("AETERNA_PRIMARY_MODE", "something_weird") }
         let cfg = MigrationConfig::from_env();
         assert_eq!(cfg.primary_mode, ResolutionMode::Heuristic);
@@ -595,6 +607,7 @@ mod tests {
 
     #[test]
     fn test_migration_config_from_env_circuit_breaker_threshold() {
+        let _guard = env_lock().lock().unwrap();
         unsafe { std::env::set_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD", "10") }
         let cfg = MigrationConfig::from_env();
         assert_eq!(cfg.circuit_breaker_threshold, 10);
@@ -603,6 +616,7 @@ mod tests {
 
     #[test]
     fn test_migration_config_from_env_circuit_breaker_invalid_falls_back_to_5() {
+        let _guard = env_lock().lock().unwrap();
         unsafe { std::env::set_var("AETERNA_CIRCUIT_BREAKER_THRESHOLD", "not-a-number") }
         let cfg = MigrationConfig::from_env();
         assert_eq!(cfg.circuit_breaker_threshold, 5);
@@ -611,6 +625,7 @@ mod tests {
 
     #[test]
     fn test_migration_config_from_env_audit_mode_false() {
+        let _guard = env_lock().lock().unwrap();
         unsafe { std::env::set_var("AETERNA_CEDAR_AUDIT_MODE", "false") }
         let cfg = MigrationConfig::from_env();
         assert!(!cfg.audit_mode);
@@ -619,6 +634,7 @@ mod tests {
 
     #[test]
     fn test_migration_config_from_env_fallback_disabled() {
+        let _guard = env_lock().lock().unwrap();
         unsafe { std::env::set_var("AETERNA_CEDAR_FALLBACK", "false") }
         let cfg = MigrationConfig::from_env();
         assert!(!cfg.fallback_enabled);
@@ -659,7 +675,11 @@ mod tests {
 
     #[test]
     fn test_resolution_mode_serde_round_trip() {
-        for mode in [ResolutionMode::Heuristic, ResolutionMode::Cedar, ResolutionMode::Parallel] {
+        for mode in [
+            ResolutionMode::Heuristic,
+            ResolutionMode::Cedar,
+            ResolutionMode::Parallel,
+        ] {
             let json = serde_json::to_string(&mode).unwrap();
             let back: ResolutionMode = serde_json::from_str(&json).unwrap();
             assert_eq!(back, mode);
@@ -702,8 +722,14 @@ mod tests {
     fn test_audit_decision_serde() {
         let allow_json = serde_json::to_string(&AuditDecision::Allow).unwrap();
         let deny_json = serde_json::to_string(&AuditDecision::Deny).unwrap();
-        assert!(allow_json.contains("Allow"), "Expected 'Allow' in JSON: {allow_json}");
-        assert!(deny_json.contains("Deny"), "Expected 'Deny' in JSON: {deny_json}");
+        assert!(
+            allow_json.contains("Allow"),
+            "Expected 'Allow' in JSON: {allow_json}"
+        );
+        assert!(
+            deny_json.contains("Deny"),
+            "Expected 'Deny' in JSON: {deny_json}"
+        );
     }
 
     // ---------------------------------------------------------------------------

@@ -1,7 +1,9 @@
 //! Integration tests for the governance event system and multi-publisher.
 
 use mk_core::traits::{AuthorizationService, EventPublisher, StorageBackend};
-use mk_core::types::{GovernanceEvent, TenantContext, TenantId, UserId};
+use mk_core::types::{
+    GovernanceEvent, OrganizationalUnit, RecordSource, TenantContext, TenantId, UserId,
+};
 use std::sync::Arc;
 use storage::events::RedisPublisher;
 use storage::postgres::PostgresBackend;
@@ -30,7 +32,7 @@ async fn test_governance_event_propagation() {
         project_id: project_id.clone(),
         tenant_id: tenant_id.clone(),
         drift_score: 0.75,
-        timestamp: chrono::Utc::now().timestamp()
+        timestamp: chrono::Utc::now().timestamp(),
     };
 
     pg_backend.publish(event.clone()).await.unwrap();
@@ -67,7 +69,7 @@ async fn test_full_governance_workflow() {
     let team_id = unique_id("team");
     let proj_id = unique_id("proj");
 
-    let company = mk_core::types::OrganizationalUnit {
+    let company = OrganizationalUnit {
         id: comp_id.clone(),
         name: "Company 1".into(),
         unit_type: mk_core::types::UnitType::Company,
@@ -75,11 +77,12 @@ async fn test_full_governance_workflow() {
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
+        source_owner: RecordSource::Admin,
     };
     pg_backend.create_unit(&company).await.unwrap();
 
-    let org = mk_core::types::OrganizationalUnit {
+    let org = OrganizationalUnit {
         id: org_id.clone(),
         name: "Organization 1".into(),
         unit_type: mk_core::types::UnitType::Organization,
@@ -87,11 +90,12 @@ async fn test_full_governance_workflow() {
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
+        source_owner: RecordSource::Admin,
     };
     pg_backend.create_unit(&org).await.unwrap();
 
-    let team = mk_core::types::OrganizationalUnit {
+    let team = OrganizationalUnit {
         id: team_id.clone(),
         name: "Team 1".into(),
         unit_type: mk_core::types::UnitType::Team,
@@ -99,11 +103,12 @@ async fn test_full_governance_workflow() {
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
+        source_owner: RecordSource::Admin,
     };
     pg_backend.create_unit(&team).await.unwrap();
 
-    let project = mk_core::types::OrganizationalUnit {
+    let project = OrganizationalUnit {
         id: proj_id.clone(),
         name: "Project 1".into(),
         unit_type: mk_core::types::UnitType::Project,
@@ -111,7 +116,8 @@ async fn test_full_governance_workflow() {
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
         created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp()
+        updated_at: chrono::Utc::now().timestamp(),
+        source_owner: RecordSource::Admin,
     };
     pg_backend.create_unit(&project).await.unwrap();
 
@@ -144,7 +150,7 @@ async fn test_full_governance_workflow() {
             "completed",
             None,
             chrono::Utc::now().timestamp() - 100,
-            Some(chrono::Utc::now().timestamp())
+            Some(chrono::Utc::now().timestamp()),
         )
         .await
         .unwrap();
@@ -157,7 +163,7 @@ async fn test_full_governance_workflow() {
         violations: vec![],
         suppressed_violations: vec![],
         requires_manual_review: false,
-        timestamp: chrono::Utc::now().timestamp()
+        timestamp: chrono::Utc::now().timestamp(),
     };
     pg_backend.store_drift_result(drift).await.unwrap();
 
@@ -167,7 +173,7 @@ async fn test_full_governance_workflow() {
     let api = Arc::new(knowledge::api::GovernanceDashboardApi::new(
         engine,
         pg_backend.clone(),
-        deployment_config
+        deployment_config,
     ));
 
     let drift_status = knowledge::api::get_drift_status(api.clone(), &ctx, &proj_id)

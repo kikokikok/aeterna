@@ -1,5 +1,5 @@
 use memory::backends::{
-    BackendConfig, SearchQuery, VectorBackend, VectorBackendType, VectorRecord, create_backend
+    BackendConfig, SearchQuery, VectorBackendType, VectorRecord, create_backend,
 };
 use std::collections::HashMap;
 
@@ -11,14 +11,14 @@ fn qdrant_config() -> BackendConfig {
             url: std::env::var("QDRANT_URL")
                 .unwrap_or_else(|_| "http://localhost:6334".to_string()),
             api_key: std::env::var("QDRANT_API_KEY").ok(),
-            collection_prefix: "test_backends".to_string()
+            collection_prefix: "test_backends".to_string(),
         }),
         pinecone: None,
         pgvector: None,
         vertex_ai: None,
         databricks: None,
         weaviate: None,
-        mongodb: None
+        mongodb: None,
     }
 }
 
@@ -87,17 +87,17 @@ async fn test_qdrant_backend_search() {
         VectorRecord::new(
             "search-1",
             vec![1.0, 0.0, 0.0],
-            HashMap::from([("label".to_string(), serde_json::json!("a"))])
+            HashMap::from([("label".to_string(), serde_json::json!("a"))]),
         ),
         VectorRecord::new(
             "search-2",
             vec![0.0, 1.0, 0.0],
-            HashMap::from([("label".to_string(), serde_json::json!("b"))])
+            HashMap::from([("label".to_string(), serde_json::json!("b"))]),
         ),
         VectorRecord::new(
             "search-3",
             vec![0.0, 0.0, 1.0],
-            HashMap::from([("label".to_string(), serde_json::json!("c"))])
+            HashMap::from([("label".to_string(), serde_json::json!("c"))]),
         ),
     ];
 
@@ -118,7 +118,7 @@ async fn test_qdrant_backend_search() {
                 "search-1".to_string(),
                 "search-2".to_string(),
                 "search-3".to_string(),
-            ]
+            ],
         )
         .await
         .unwrap();
@@ -134,12 +134,12 @@ async fn test_qdrant_backend_search_with_filter() {
         VectorRecord::new(
             "filter-1",
             vec![1.0, 0.0, 0.0],
-            HashMap::from([("category".to_string(), serde_json::json!("important"))])
+            HashMap::from([("category".to_string(), serde_json::json!("important"))]),
         ),
         VectorRecord::new(
             "filter-2",
             vec![0.9, 0.1, 0.0],
-            HashMap::from([("category".to_string(), serde_json::json!("normal"))])
+            HashMap::from([("category".to_string(), serde_json::json!("normal"))]),
         ),
     ];
 
@@ -159,7 +159,7 @@ async fn test_qdrant_backend_search_with_filter() {
     backend
         .delete(
             tenant_id,
-            vec!["filter-1".to_string(), "filter-2".to_string()]
+            vec!["filter-1".to_string(), "filter-2".to_string()],
         )
         .await
         .unwrap();

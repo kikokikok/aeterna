@@ -5,6 +5,23 @@ use serde_json::json;
 use crate::output;
 use crate::ux_error;
 
+async fn get_live_client() -> Option<crate::client::AeternaClient> {
+    crate::backend::connect()
+        .await
+        .ok()
+        .map(|(client, _)| client)
+}
+
+fn user_server_required(operation: &str, message: &str) -> anyhow::Result<()> {
+    ux_error::UxError::new(message)
+        .why("This command requires a live control-plane backend")
+        .fix("Start the Aeterna server: aeterna serve")
+        .fix("Ensure AETERNA_SERVER_URL is set and the server is reachable")
+        .suggest("aeterna admin health")
+        .display();
+    anyhow::bail!("Aeterna server not connected for operation: {operation}")
+}
+
 #[derive(Subcommand)]
 pub enum UserCommand {
     #[command(about = "Register current user or show registration status")]
@@ -223,64 +240,128 @@ async fn run_register(args: UserRegisterArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let err = ux_error::server_not_connected();
-    err.display();
-    output::info("Run with --dry-run to see what would be created.");
+    if let Some(client) = get_live_client().await {
+        let body = json!({
+            "email": email,
+            "name": display_name,
+            "org": args.org,
+            "team": args.team,
+        });
+        let result = client.user_register(&body).await.map_err(|e| {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "error": e.to_string()})
+                    )
+                    .unwrap()
+                );
+            } else {
+                ux_error::UxError::new(&e.to_string())
+                    .fix("Run: aeterna auth login")
+                    .display();
+            }
+            e
+        })?;
 
-    Ok(())
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("User Registered");
+            println!();
+            println!("  ID:     {}", result["id"].as_str().unwrap_or("?"));
+            println!("  Email:  {}", result["email"].as_str().unwrap_or("?"));
+            println!("  Name:   {}", result["name"].as_str().unwrap_or("?"));
+            println!("  Status: {}", result["status"].as_str().unwrap_or("?"));
+            println!();
+        }
+        return Ok(());
+    }
+
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": false,
+                "error": "server_not_connected",
+                "operation": "user_register"
+            }))?
+        );
+        anyhow::bail!("Aeterna server not connected for operation: user_register");
+    }
+
+    user_server_required(
+        "user_register",
+        "Cannot register user: server not connected",
+    )
 }
 
 async fn run_list(args: UserListArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let resolved = resolver.resolve()?;
+    if let Some(client) = get_live_client().await {
+        let result = client
+            .user_list(
+                args.org.as_deref(),
+                args.team.as_deref(),
+                args.role.as_deref(),
+                args.all,
+            )
+            .await
+            .map_err(|e| {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &json!({"success": false, "error": e.to_string()})
+                        )
+                        .unwrap()
+                    );
+                } else {
+                    ux_error::UxError::new(&e.to_string())
+                        .fix("Run: aeterna auth login")
+                        .display();
+                }
+                e
+            })?;
 
-    if args.json {
-        let output = json!({
-            "operation": "user_list",
-            "filters": {
-                "org": args.org,
-                "team": args.team,
-                "role": args.role,
-                "all": args.all,
-            },
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-                "userId": resolved.user_id.value,
-            },
-            "status": "not_connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Users");
-        println!();
-
-        if args.all {
-            output::info("Showing all users you have access to.");
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Users");
+            println!();
+            if let Some(users) = result.as_array() {
+                if users.is_empty() {
+                    println!("  (no users found)");
+                } else {
+                    for user in users {
+                        println!(
+                            "  {:<36} {:<24} {}",
+                            user["email"].as_str().unwrap_or("?"),
+                            user["name"].as_str().unwrap_or("?"),
+                            user["status"].as_str().unwrap_or("?")
+                        );
+                    }
+                }
+            } else {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
+            println!();
         }
-
-        if let Some(ref org) = args.org {
-            println!("  Filter: org = {org}");
-        }
-        if let Some(ref team) = args.team {
-            println!("  Filter: team = {team}");
-        }
-        if let Some(ref role) = args.role {
-            println!("  Filter: role = {role}");
-        }
-        println!();
-
-        output::header("Example Output (would show)");
-        println!("  EMAIL                    NAME               ROLE        TEAMS");
-        println!("  alice@acme.com           Alice Smith        admin       api, data, web");
-        println!("  bob@acme.com             Bob Jones          techlead    api");
-        println!("  carol@acme.com           Carol Williams     developer   web, mobile");
-        println!();
-
-        let err = ux_error::server_not_connected();
-        err.display();
+        return Ok(());
     }
 
-    Ok(())
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": false,
+                "error": "server_not_connected",
+                "operation": "user_list"
+            }))?
+        );
+        anyhow::bail!("Aeterna server not connected for operation: user_list");
+    }
+
+    user_server_required("user_list", "Cannot list users: server not connected")
 }
 
 async fn run_show(args: UserShowArgs) -> anyhow::Result<()> {
@@ -292,44 +373,68 @@ async fn run_show(args: UserShowArgs) -> anyhow::Result<()> {
         .clone()
         .unwrap_or_else(|| resolved.user_id.value.clone());
 
-    if args.json {
-        let output = json!({
-            "operation": "user_show",
-            "userId": user_id,
-            "verbose": args.verbose,
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-                "userId": resolved.user_id.value,
-            },
-            "status": "not_connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header(&format!("User: {user_id}"));
-        println!();
+    if let Some(client) = get_live_client().await {
+        let result = client.user_show(&user_id).await.map_err(|e| {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "error": e.to_string()})
+                    )
+                    .unwrap()
+                );
+            } else {
+                ux_error::UxError::new(&e.to_string())
+                    .fix("Run: aeterna auth login")
+                    .display();
+            }
+            e
+        })?;
 
-        output::header("Would Show");
-        println!("  - Email and display name");
-        println!("  - Organization memberships");
-        println!("  - Team memberships");
-        println!("  - Roles at each level");
-        println!("  - Registration date");
-
-        if args.verbose {
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header(&format!("User: {user_id}"));
             println!();
-            output::header("Verbose Details");
-            println!("  - Full permission list");
-            println!("  - Recent activity");
-            println!("  - Associated agents");
-            println!("  - Audit trail");
+            println!("  ID:     {}", result["id"].as_str().unwrap_or("?"));
+            println!("  Email:  {}", result["email"].as_str().unwrap_or("?"));
+            println!("  Name:   {}", result["name"].as_str().unwrap_or("?"));
+            println!("  Status: {}", result["status"].as_str().unwrap_or("?"));
+            if args.verbose {
+                if let Some(roles) = result["roles"].as_array() {
+                    println!();
+                    output::subheader("Roles");
+                    for role in roles {
+                        println!(
+                            "  {}  {}",
+                            role["scope"].as_str().unwrap_or("?"),
+                            role["role"].as_str().unwrap_or("?")
+                        );
+                    }
+                }
+            }
+            println!();
         }
-        println!();
-
-        let err = ux_error::server_not_connected();
-        err.display();
+        return Ok(());
     }
 
-    Ok(())
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": false,
+                "error": "server_not_connected",
+                "operation": "user_show",
+                "userId": user_id
+            }))?
+        );
+        anyhow::bail!("Aeterna server not connected for operation: user_show");
+    }
+
+    user_server_required(
+        "user_show",
+        &format!("Cannot show user '{user_id}': server not connected"),
+    )
 }
 
 async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
@@ -356,32 +461,58 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
 
         let scope = args.scope.clone().unwrap_or_else(|| "company".to_string());
 
-        if args.json {
-            let output = json!({
-                "operation": "user_role_grant",
-                "userId": user_id,
-                "role": role_to_grant,
-                "scope": scope,
-                "status": "not_connected"
-            });
-            println!("{}", serde_json::to_string_pretty(&output)?);
+        if let Some(client) = get_live_client().await {
+            let result = client
+                .user_role_grant(&user_id, &json!({"role": role_to_grant, "scope": scope}))
+                .await
+                .map_err(|e| {
+                    if args.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(
+                                &json!({"success": false, "error": e.to_string()})
+                            )
+                            .unwrap()
+                        );
+                    } else {
+                        ux_error::UxError::new(&e.to_string())
+                            .fix("Run: aeterna auth login")
+                            .display();
+                    }
+                    e
+                })?;
+
+            if args.json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                output::header("Role Granted");
+                println!();
+                println!("  User:  {}", result["userId"].as_str().unwrap_or(&user_id));
+                println!(
+                    "  Role:  {}",
+                    result["role"].as_str().unwrap_or(role_to_grant)
+                );
+                println!("  Scope: {}", result["scope"].as_str().unwrap_or(&scope));
+                println!();
+            }
+        } else if args.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "success": false,
+                    "error": "server_not_connected",
+                    "operation": "user_role_grant",
+                    "userId": user_id,
+                    "role": role_to_grant,
+                    "scope": scope
+                }))?
+            );
+            anyhow::bail!("Aeterna server not connected for operation: user_role_grant");
         } else {
-            output::header("Grant Role");
-            println!();
-            println!("  User:  {user_id}");
-            println!("  Role:  {role_to_grant}");
-            println!("  Scope: {scope}");
-            println!();
-
-            output::header("Would Do");
-            println!("  1. Verify your admin permissions");
-            println!("  2. Grant '{role_to_grant}' role to '{user_id}' at {scope} level");
-            println!("  3. Update Cedar policies");
-            println!("  4. Log audit event");
-            println!();
-
-            let err = ux_error::server_not_connected();
-            err.display();
+            user_server_required(
+                "user_role_grant",
+                &format!("Cannot grant role to user '{user_id}': server not connected"),
+            )?;
         }
         return Ok(());
     }
@@ -389,78 +520,121 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
     if let Some(ref role_to_revoke) = args.revoke {
         let scope = args.scope.clone().unwrap_or_else(|| "company".to_string());
 
-        if args.json {
-            let output = json!({
-                "operation": "user_role_revoke",
-                "userId": user_id,
-                "role": role_to_revoke,
-                "scope": scope,
-                "status": "not_connected"
-            });
-            println!("{}", serde_json::to_string_pretty(&output)?);
+        if let Some(client) = get_live_client().await {
+            let result = client
+                .user_role_revoke(&user_id, role_to_revoke)
+                .await
+                .map_err(|e| {
+                    if args.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(
+                                &json!({"success": false, "error": e.to_string()})
+                            )
+                            .unwrap()
+                        );
+                    } else {
+                        ux_error::UxError::new(&e.to_string())
+                            .fix("Run: aeterna auth login")
+                            .display();
+                    }
+                    e
+                })?;
+
+            if args.json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                output::header("Role Revoked");
+                println!();
+                println!("  User:  {}", result["userId"].as_str().unwrap_or(&user_id));
+                println!(
+                    "  Role:  {}",
+                    result["role"].as_str().unwrap_or(role_to_revoke)
+                );
+                println!();
+            }
+        } else if args.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "success": false,
+                    "error": "server_not_connected",
+                    "operation": "user_role_revoke",
+                    "userId": user_id,
+                    "role": role_to_revoke,
+                    "scope": scope
+                }))?
+            );
+            anyhow::bail!("Aeterna server not connected for operation: user_role_revoke");
         } else {
-            output::header("Revoke Role");
-            println!();
-            println!("  User:  {user_id}");
-            println!("  Role:  {role_to_revoke}");
-            println!("  Scope: {scope}");
-            println!();
+            user_server_required(
+                "user_role_revoke",
+                &format!("Cannot revoke role from user '{user_id}': server not connected"),
+            )?;
+        }
+        return Ok(());
+    }
 
-            output::header("Would Do");
-            println!("  1. Verify your admin permissions");
-            println!("  2. Revoke '{role_to_revoke}' role from '{user_id}' at {scope} level");
-            println!("  3. Update Cedar policies");
-            println!("  4. Log audit event");
-            println!();
+    if let Some(client) = get_live_client().await {
+        let result = client.user_roles_list(&user_id).await.map_err(|e| {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "error": e.to_string()})
+                    )
+                    .unwrap()
+                );
+            } else {
+                ux_error::UxError::new(&e.to_string())
+                    .fix("Run: aeterna auth login")
+                    .display();
+            }
+            e
+        })?;
 
-            let err = ux_error::server_not_connected();
-            err.display();
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header(&format!("Roles for: {user_id}"));
+            println!();
+            if let Some(roles) = result.as_array() {
+                if roles.is_empty() {
+                    println!("  (no roles found)");
+                } else {
+                    for role in roles {
+                        println!(
+                            "  {:<24} {}",
+                            role["scope"].as_str().unwrap_or("?"),
+                            role["role"].as_str().unwrap_or("?")
+                        );
+                    }
+                }
+            } else {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
+            println!();
         }
         return Ok(());
     }
 
     if args.json {
-        let output = json!({
-            "operation": "user_roles_list",
-            "userId": user_id,
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-            },
-            "status": "not_connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header(&format!("Roles for: {user_id}"));
-        println!();
-
-        output::header("Example Output (would show)");
-        println!("  SCOPE          ROLE        GRANTED BY         DATE");
-        println!("  company        developer   system             2024-01-15");
-        println!("  platform-eng   techlead    alice@acme.com     2024-03-20");
-        println!("  api-team       architect   bob@acme.com       2024-06-01");
-        println!();
-
-        output::header("Role Hierarchy");
-        println!("  admin     (4) - Full system access");
-        println!("  architect (3) - Design policies, manage knowledge");
-        println!("  techlead  (2) - Manage team resources");
-        println!("  developer (1) - Standard development access");
-        println!();
-
-        output::header("Actions");
         println!(
-            "  Grant role:  aeterna user roles --user {user_id} --grant <role> --scope <scope>"
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": false,
+                "error": "server_not_connected",
+                "operation": "user_roles_list",
+                "userId": user_id,
+            }))?
         );
-        println!(
-            "  Revoke role: aeterna user roles --user {user_id} --revoke <role> --scope <scope>"
-        );
-        println!();
-
-        let err = ux_error::server_not_connected();
-        err.display();
+        anyhow::bail!("Aeterna server not connected for operation: user_roles_list");
     }
 
-    Ok(())
+    user_server_required(
+        "user_roles_list",
+        &format!("Cannot list roles for user '{user_id}': server not connected"),
+    )
 }
 
 async fn run_whoami(args: UserWhoamiArgs) -> anyhow::Result<()> {
@@ -669,57 +843,76 @@ async fn run_invite(args: UserInviteArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if args.json {
-        let output = json!({
-            "operation": "user_invite",
-            "invitation": {
-                "id": format!("inv_{}", generate_invitation_id()),
-                "email": args.email,
-                "org": org_name,
-                "team": target_team,
-                "role": role_lower,
-                "status": "pending",
-                "expiresAt": "2024-02-15T00:00:00Z",
-            },
-            "invitedBy": resolved.user_id.value,
-            "status": "not_connected"
+    if let Some(client) = get_live_client().await {
+        let body = json!({
+            "email": args.email,
+            "org": target_org,
+            "team": target_team,
+            "role": role_lower,
+            "message": args.message,
         });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Send Invitation");
-        println!();
-        println!("  Email:    {}", args.email);
-        println!("  Org:      {org_name}");
-        if let Some(ref team) = target_team {
-            println!("  Team:     {team}");
+        let result = client.user_invite(&body).await.map_err(|e| {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "error": e.to_string()})
+                    )
+                    .unwrap()
+                );
+            } else {
+                ux_error::UxError::new(&e.to_string())
+                    .fix("Run: aeterna auth login")
+                    .display();
+            }
+            e
+        })?;
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Invitation Sent");
+            println!();
+            println!(
+                "  Email:  {}",
+                result["invitation"]["email"]
+                    .as_str()
+                    .unwrap_or(&args.email)
+            );
+            println!(
+                "  Scope:  {}",
+                result["invitation"]["scope"].as_str().unwrap_or("?")
+            );
+            println!(
+                "  Role:   {}",
+                result["invitation"]["role"].as_str().unwrap_or(&role_lower)
+            );
+            println!(
+                "  Status: {}",
+                result["invitation"]["status"].as_str().unwrap_or("pending")
+            );
+            println!();
         }
-        println!("  Role:     {role_lower}");
-        println!();
-
-        output::header("Would Do");
-        println!("  1. Verify your permission to invite users");
-        println!("  2. Create invitation record (expires in 7 days)");
-        println!("  3. Send email to '{}'", args.email);
-        println!("  4. Log audit event");
-        println!();
-
-        output::header("After Sending");
-        println!("  - Track invitation: aeterna user invite --list");
-        println!(
-            "  - Resend if needed: aeterna user invite {} --resend",
-            args.email
-        );
-        println!(
-            "  - Cancel:           aeterna user invite {} --cancel",
-            args.email
-        );
-        println!();
-
-        let err = ux_error::server_not_connected();
-        err.display();
+        return Ok(());
     }
 
-    Ok(())
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": false,
+                "error": "server_not_connected",
+                "operation": "user_invite",
+                "email": args.email
+            }))?
+        );
+        anyhow::bail!("Aeterna server not connected for operation: user_invite");
+    }
+
+    user_server_required(
+        "user_invite",
+        &format!("Cannot invite user '{}': server not connected", args.email),
+    )
 }
 
 fn generate_invitation_id() -> String {

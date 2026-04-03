@@ -23,6 +23,9 @@ pub mod types;
 // Re-export commonly used types for convenience
 pub use hints::{HintPreset, HintsConfig, OperationHints};
 pub use types::{
-    ConstraintOperator, ConstraintSeverity, ConstraintTarget, HierarchyPath, KnowledgeLayer,
-    KnowledgeType, MemoryLayer, TenantContext, TenantId, UserId
+    BranchPolicy, ConstraintOperator, ConstraintSeverity, ConstraintTarget, CredentialKind,
+    HierarchyPath, KnowledgeLayer, KnowledgeType, MemoryLayer, RecordSource, RepositoryKind,
+    TenantConfigDocument, TenantConfigField, TenantConfigOwnership, TenantContext, TenantId,
+    TenantRecord, TenantRepositoryBinding, TenantSecretEntry, TenantSecretReference, TenantStatus,
+    UserId,
 };

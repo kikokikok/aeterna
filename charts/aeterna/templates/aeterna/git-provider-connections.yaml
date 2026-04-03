@@ -1,0 +1,43 @@
+{{- /*
+git-provider-connections.yaml
+
+Renders one Kubernetes ConfigMap entry per platform-owned Git provider connection
+declared in .Values.gitProviderConnections.  Each entry stores non-secret connection
+metadata (id, name, providerKind, appId, installationId, secret refs) so the
+aeterna control-plane init job can seed the InMemoryGitProviderConnectionStore on
+startup without embedding raw PEM material.
+
+PEM key material is intentionally NOT stored here — operators must supply a
+Kubernetes Secret externally (or via an ESO ExternalSecret) and reference it
+through pemSecretRef using the "secret/<secret-name>/<key>" URI format.
+*/ -}}
+{{- if and .Values.aeterna.enabled (gt (len .Values.gitProviderConnections) 0) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aeterna.fullname" . }}-git-provider-connections
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+    app.kubernetes.io/component: git-provider-connections
+  annotations:
+    aeterna.io/component: "git-provider-connections"
+    aeterna.io/managed-by: "helm"
+data:
+  connections.json: |
+    [
+      {{- $last := sub (len .Values.gitProviderConnections) 1 }}
+      {{- range $i, $conn := .Values.gitProviderConnections }}
+      {
+        "id": {{ $conn.id | quote }},
+        "name": {{ $conn.name | default $conn.id | quote }},
+        "providerKind": {{ $conn.providerKind | default "GitHubApp" | quote }},
+        "appId": {{ $conn.appId | int64 }},
+        "installationId": {{ $conn.installationId | int64 }},
+        "pemSecretRef": {{ $conn.pemSecretRef | quote }},
+        "webhookSecretRef": {{ $conn.webhookSecretRef | default "" | quote }},
+        "allowedTenantIds": {{ $conn.allowedTenantIds | default list | toJson }}
+      }{{ if lt $i $last }},{{ end }}
+      {{- end }}
+    ]
+{{- end }}
