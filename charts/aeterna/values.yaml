@@ -478,8 +478,7 @@ postgresql:
     ## PostgreSQL engine parameters
     postgresql:
       ## @param postgresql.cloudnativepg.postgresql.parameters Extra PostgreSQL parameters
-      parameters:
-        shared_preload_libraries: "vector"
+      parameters: {}
       ## @param postgresql.cloudnativepg.postgresql.pg_hba Custom pg_hba entries
       pg_hba: []
     ## Bootstrap configuration
