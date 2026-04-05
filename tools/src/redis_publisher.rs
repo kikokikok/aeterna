@@ -320,7 +320,7 @@ pub fn create_redis_publisher(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mk_core::types::{KnowledgeLayer, Role, UnitType, UserId};
+    use mk_core::types::{KnowledgeLayer, Role, RoleIdentifier, UnitType, UserId};
 
     #[test]
     fn test_redis_publisher_new_with_tenant_isolation() {
@@ -425,14 +425,14 @@ mod tests {
             GovernanceEvent::RoleAssigned {
                 user_id: user_id.clone(),
                 unit_id: "unit-1".to_string(),
-                role: Role::Admin,
+                role: Role::Admin.into(),
                 tenant_id: tenant_id.clone(),
                 timestamp: 1234567895,
             },
             GovernanceEvent::RoleRemoved {
                 user_id: user_id.clone(),
                 unit_id: "unit-1".to_string(),
-                role: Role::Admin,
+                role: Role::Admin.into(),
                 tenant_id: tenant_id.clone(),
                 timestamp: 1234567896,
             },
@@ -589,12 +589,15 @@ mod tests {
         let tenant_id = TenantId::new("test-tenant".to_string()).unwrap();
         let user_id = UserId::new("user-1".to_string()).unwrap();
 
-        let roles = vec![
-            Role::Admin,
-            Role::Architect,
-            Role::TechLead,
-            Role::Developer,
-            Role::Agent,
+        let roles: Vec<RoleIdentifier> = vec![
+            Role::Viewer.into(),
+            Role::Admin.into(),
+            Role::TenantAdmin.into(),
+            Role::Architect.into(),
+            Role::TechLead.into(),
+            Role::Developer.into(),
+            Role::Agent.into(),
+            Role::PlatformAdmin.into(),
         ];
 
         for role in roles {

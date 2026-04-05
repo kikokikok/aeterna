@@ -38,6 +38,17 @@ pub trait PolicyEvaluator: Send + Sync {
     ) -> Result<bool, CodeSearchError>;
 }
 
+/// Legacy Cedar evaluator for code-search subsystem policies.
+///
+/// Deprecated in favor of the primary runtime Cedar path through
+/// `adapters::auth::cedar::CedarAuthorizer` via `AuthorizationService`.
+///
+/// This type is kept temporarily for RepoManager integration and should be
+/// consolidated into the primary authorization path in a follow-up cleanup.
+#[deprecated(
+    since = "0.5.0",
+    note = "Use CedarAuthorizer via AuthorizationService trait instead"
+)]
 pub struct CedarPolicyEvaluator {
     policies: PolicySet,
 }

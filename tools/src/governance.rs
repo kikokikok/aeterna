@@ -250,7 +250,7 @@ impl Tool for UserRoleAssignTool {
         let role: Role = p.role.parse()?;
 
         self.backend
-            .assign_role(&user_id, &ctx.tenant_id, &p.unit_id, role.clone())
+            .assign_role(&user_id, &ctx.tenant_id, &p.unit_id, role.clone().into())
             .await?;
 
         let _ = self
@@ -258,7 +258,7 @@ impl Tool for UserRoleAssignTool {
             .publish_event(GovernanceEvent::RoleAssigned {
                 user_id: user_id.clone(),
                 unit_id: p.unit_id.clone(),
-                role,
+                role: role.into(),
                 tenant_id: ctx.tenant_id.clone(),
                 timestamp: chrono::Utc::now().timestamp(),
             })
@@ -333,7 +333,7 @@ impl Tool for UserRoleRemoveTool {
         let role: Role = p.role.parse()?;
 
         self.backend
-            .remove_role(&user_id, &ctx.tenant_id, &p.unit_id, role.clone())
+            .remove_role(&user_id, &ctx.tenant_id, &p.unit_id, role.clone().into())
             .await?;
 
         let _ = self
@@ -341,7 +341,7 @@ impl Tool for UserRoleRemoveTool {
             .publish_event(GovernanceEvent::RoleRemoved {
                 user_id: user_id.clone(),
                 unit_id: p.unit_id.clone(),
-                role,
+                role: role.into(),
                 tenant_id: ctx.tenant_id.clone(),
                 timestamp: chrono::Utc::now().timestamp(),
             })
@@ -1371,7 +1371,7 @@ pub struct GovernanceRoleAssignParams {
 #[async_trait]
 impl Tool for GovernanceRoleAssignTool {
     fn name(&self) -> &str {
-        "governance_role_assign"
+        "governance_principal_role_assign"
     }
 
     fn description(&self) -> &str {
@@ -1779,7 +1779,7 @@ mod tests {
             tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
             user_id: mk_core::types::UserId::new("u".to_string()).unwrap(),
             agent_id: None,
-            role: None,
+            roles: vec![],
             target_tenant_id: None,
         };
         let stored = backend.get_unit_policies(ctx, "unit-abc").await.unwrap();
@@ -1824,7 +1824,7 @@ mod tests {
         // Confirm role stored
         let key = "alice:t1:unit-x";
         let roles = backend.roles.get(key).unwrap();
-        assert!(roles.contains(&mk_core::types::Role::Developer));
+        assert!(roles.contains(&mk_core::types::Role::Developer.into()));
     }
 
     #[tokio::test]
@@ -1880,7 +1880,7 @@ mod tests {
                 .roles
                 .get(key)
                 .unwrap()
-                .contains(&mk_core::types::Role::TechLead)
+                .contains(&mk_core::types::Role::TechLead.into())
         );
 
         // Then remove

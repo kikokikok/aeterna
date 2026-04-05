@@ -80,12 +80,14 @@ const ROLE_SCHEMA: &str = r#"{
 
 fn role_precedence(role: &Role) -> u8 {
     match role {
+        Role::Viewer => 0,
         Role::Agent => 0,
         Role::Developer => 1,
         Role::TechLead => 2,
         Role::Architect => 3,
         Role::Admin => 4,
         Role::PlatformAdmin => 5,
+        Role::TenantAdmin => 6,
     }
 }
 
@@ -499,19 +501,25 @@ mod role_hierarchy_enforcement {
 
     #[test]
     fn test_role_precedence_order() {
+        assert!(role_precedence(&Role::Viewer) <= role_precedence(&Role::Agent));
         assert!(role_precedence(&Role::Agent) < role_precedence(&Role::Developer));
         assert!(role_precedence(&Role::Developer) < role_precedence(&Role::TechLead));
         assert!(role_precedence(&Role::TechLead) < role_precedence(&Role::Architect));
         assert!(role_precedence(&Role::Architect) < role_precedence(&Role::Admin));
+        assert!(role_precedence(&Role::Admin) < role_precedence(&Role::PlatformAdmin));
+        assert!(role_precedence(&Role::PlatformAdmin) < role_precedence(&Role::TenantAdmin));
     }
 
     #[test]
     fn test_role_precedence_values() {
+        assert_eq!(role_precedence(&Role::Viewer), 0);
         assert_eq!(role_precedence(&Role::Agent), 0);
         assert_eq!(role_precedence(&Role::Developer), 1);
         assert_eq!(role_precedence(&Role::TechLead), 2);
         assert_eq!(role_precedence(&Role::Architect), 3);
         assert_eq!(role_precedence(&Role::Admin), 4);
+        assert_eq!(role_precedence(&Role::PlatformAdmin), 5);
+        assert_eq!(role_precedence(&Role::TenantAdmin), 6);
     }
 
     #[tokio::test]

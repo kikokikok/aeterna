@@ -1237,7 +1237,7 @@ mod tests {
             tenant_id: TenantId::from_str("test-tenant").unwrap(),
             user_id: UserId::from_str("test-user").unwrap(),
             agent_id: None,
-            role: None,
+            roles: vec![],
             target_tenant_id: None,
         }
     }

@@ -138,6 +138,23 @@ namespace Aeterna {
         "submitted_by_agent"?: Agent,
     };
 
+    // Tenant: Tenant resource for tenant-scoped operations
+    entity Tenant = {
+        "name": String,
+        "slug": String,
+        // Status: "active", "inactive"
+        "status": String,
+    };
+
+    // Session: User or agent session
+    entity Session in [Tenant] = {
+        // Who owns this session
+        "owner_user"?: User,
+        "owner_agent"?: Agent,
+        // Status: "active", "ended"
+        "status": String,
+    };
+
     // =========================================================================
     // ACTIONS - What can be done
     // =========================================================================
@@ -264,12 +281,17 @@ namespace Aeterna {
     
     action ManageMembers appliesTo {
         principal: [User],
-        resource: [Team],
+        resource: [Team, Project],
     };
     
     action AssignRoles appliesTo {
         principal: [User],
-        resource: [Team, Organization, Company],
+        resource: [Team, Organization, Company, Project],
+    };
+
+    action ManageTeamAssignments appliesTo {
+        principal: [User],
+        resource: [Project],
     };
 
     // Agent Management Actions
@@ -307,6 +329,199 @@ namespace Aeterna {
     action ConfigureGovernance appliesTo {
         principal: [User],
         resource: [Team, Organization, Company],
+    };
+
+    // Tenant Management Actions
+    action ListTenants appliesTo {
+        principal: [User],
+        resource: [Tenant],
+    };
+
+    action CreateTenant appliesTo {
+        principal: [User],
+        resource: [Tenant],
+    };
+
+    action ViewTenant appliesTo {
+        principal: [User],
+        resource: [Tenant],
+    };
+
+    action UpdateTenant appliesTo {
+        principal: [User],
+        resource: [Tenant],
+    };
+
+    action DeactivateTenant appliesTo {
+        principal: [User],
+        resource: [Tenant],
+    };
+
+    // Tenant Config Actions
+    action ViewTenantConfig appliesTo {
+        principal: [User],
+        resource: [Tenant],
+    };
+
+    action UpdateTenantConfig appliesTo {
+        principal: [User],
+        resource: [Tenant],
+    };
+
+    action ManageTenantSecrets appliesTo {
+        principal: [User],
+        resource: [Tenant],
+    };
+
+    // Repository Binding Actions
+    action ViewRepositoryBinding appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    action UpdateRepositoryBinding appliesTo {
+        principal: [User],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    // Git Provider Actions
+    action ManageGitProviderConnections appliesTo {
+        principal: [User],
+        resource: [Tenant],
+    };
+
+    action ViewGitProviderConnections appliesTo {
+        principal: [User],
+        resource: [Tenant],
+    };
+
+    // Session Actions
+    action CreateSession appliesTo {
+        principal: [User, Agent],
+        resource: [Tenant],
+    };
+
+    action ViewSession appliesTo {
+        principal: [User, Agent],
+        resource: [Session, Tenant],
+    };
+
+    action EndSession appliesTo {
+        principal: [User, Agent],
+        resource: [Session],
+    };
+
+    // Sync Actions
+    action TriggerSync appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    action ViewSyncStatus appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    action ResolveConflict appliesTo {
+        principal: [User],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    // Extended Memory Actions
+    action SearchMemory appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    action ListMemory appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    action OptimizeMemory appliesTo {
+        principal: [User, Agent],
+        resource: [Memory, Project, Team, Organization, Company],
+    };
+
+    action ReasonMemory appliesTo {
+        principal: [User, Agent],
+        resource: [Memory, Project, Team, Organization, Company],
+    };
+
+    action CloseMemory appliesTo {
+        principal: [User, Agent],
+        resource: [Memory],
+    };
+
+    action FeedbackMemory appliesTo {
+        principal: [User, Agent],
+        resource: [Memory],
+    };
+
+    // Extended Knowledge Actions
+    action ListKnowledge appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    action SearchKnowledge appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    action BatchKnowledge appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    // Graph Actions
+    action QueryGraph appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    action ModifyGraph appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    // CCA Actions
+    action InvokeCCA appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    // MCP Actions
+    action InvokeMcpTool appliesTo {
+        principal: [User, Agent],
+        resource: [Project, Team, Organization, Company],
+    };
+
+    // User Management Actions
+    action ViewUser appliesTo {
+        principal: [User],
+        resource: [Team, Organization, Company],
+    };
+
+    action RegisterUser appliesTo {
+        principal: [User],
+        resource: [Team, Organization, Company],
+    };
+
+    action UpdateUser appliesTo {
+        principal: [User],
+        resource: [Team, Organization, Company],
+    };
+
+    action DeactivateUser appliesTo {
+        principal: [User],
+        resource: [Team, Organization, Company],
+    };
+
+    // Admin Actions
+    action AdminSyncGitHub appliesTo {
+        principal: [User],
+        resource: [Tenant, Company],
     };
 
     // =========================================================================

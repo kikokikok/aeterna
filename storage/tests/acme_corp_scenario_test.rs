@@ -370,7 +370,7 @@ async fn test_acme_corp_full_hierarchy_setup() {
         tenant_id: tenant_id.clone(),
         user_id: UserId::new("admin".to_string()).unwrap(),
         agent_id: None,
-        role: None,
+        roles: Vec::new(),
         target_tenant_id: None,
     };
 
@@ -418,7 +418,7 @@ async fn test_acme_corp_hierarchy_ancestors_from_project() {
         tenant_id: tenant_id.clone(),
         user_id: UserId::new("developer".to_string()).unwrap(),
         agent_id: None,
-        role: None,
+        roles: Vec::new(),
         target_tenant_id: None,
     };
 
@@ -453,7 +453,7 @@ async fn test_acme_corp_platform_engineering_descendants() {
         tenant_id: tenant_id.clone(),
         user_id: UserId::new("architect".to_string()).unwrap(),
         agent_id: None,
-        role: None,
+        roles: Vec::new(),
         target_tenant_id: None,
     };
 
@@ -509,7 +509,7 @@ async fn test_tenant_isolation_different_tenants_cannot_see_each_other() {
         tenant_id: tenant2_id.clone(),
         user_id: UserId::new("user".to_string()).unwrap(),
         agent_id: None,
-        role: None,
+        roles: Vec::new(),
         target_tenant_id: None,
     };
 

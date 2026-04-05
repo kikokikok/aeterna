@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use knowledge::repository::GitRepository;
 use memory::providers::MockProvider;
 use mk_core::traits::{AuthorizationService, MemoryProviderAdapter, StorageBackend};
-use mk_core::types::{OrganizationalUnit, Policy, Role, TenantContext, TenantId, UserId};
+use mk_core::types::{OrganizationalUnit, Policy, RoleIdentifier, TenantContext, TenantId, UserId};
 use serde_json::json;
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -31,14 +31,14 @@ impl AuthorizationService for MockAuthService {
         }
     }
 
-    async fn get_user_roles(&self, _ctx: &TenantContext) -> anyhow::Result<Vec<Role>> {
+    async fn get_user_roles(&self, _ctx: &TenantContext) -> anyhow::Result<Vec<RoleIdentifier>> {
         Ok(vec![])
     }
     async fn assign_role(
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -46,7 +46,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -116,7 +116,7 @@ impl StorageBackend for MockStorage {
         _user_id: &UserId,
         _tenant_id: &TenantId,
         _unit_id: &str,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -125,7 +125,7 @@ impl StorageBackend for MockStorage {
         _user_id: &UserId,
         _tenant_id: &TenantId,
         _unit_id: &str,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -264,6 +264,66 @@ impl StorageBackend for MockStorage {
         _metrics: mk_core::types::EventDeliveryMetrics,
     ) -> Result<(), Self::Error> {
         Ok(())
+    }
+
+    async fn get_unit_by_id(
+        &self,
+        _unit_id: &str,
+        _tenant_id: &str,
+    ) -> Result<Option<OrganizationalUnit>, Self::Error> {
+        Ok(None)
+    }
+
+    async fn update_unit(&self, _unit: &OrganizationalUnit) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn delete_unit(&self, _unit_id: &str, _tenant_id: &str) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn list_unit_members(
+        &self,
+        _unit_id: &str,
+        _tenant_id: &str,
+    ) -> Result<Vec<(UserId, RoleIdentifier)>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn assign_team_to_project(
+        &self,
+        _project_id: &str,
+        _team_id: &str,
+        _tenant_id: &str,
+        _assignment_type: &str,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn remove_team_from_project(
+        &self,
+        _project_id: &str,
+        _team_id: &str,
+        _tenant_id: &str,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn list_project_team_assignments(
+        &self,
+        _project_id: &str,
+        _tenant_id: &str,
+    ) -> Result<Vec<(String, String)>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn get_effective_roles_at_scope(
+        &self,
+        _user_id: &UserId,
+        _tenant_id: &TenantId,
+        _unit_id: &str,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+        Ok(Vec::new())
     }
 }
 

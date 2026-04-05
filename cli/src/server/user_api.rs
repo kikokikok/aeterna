@@ -6,7 +6,7 @@ use axum::response::IntoResponse;
 use axum::routing::{delete, get};
 use axum::{Json, Router};
 use mk_core::traits::StorageBackend;
-use mk_core::types::{Role, TenantContext, UnitType};
+use mk_core::types::{Role, RoleIdentifier, TenantContext, UnitType};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
@@ -52,7 +52,7 @@ struct GrantRoleRequest {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UserRoleResponse {
-    role: Role,
+    role: RoleIdentifier,
     scope: String,
     unit_id: String,
 }
@@ -320,7 +320,12 @@ async fn register_user(
         }
         if let Err(err) = state
             .postgres
-            .assign_role(&membership_user_id, &ctx.tenant_id, org, Role::Developer)
+            .assign_role(
+                &membership_user_id,
+                &ctx.tenant_id,
+                org,
+                Role::Developer.into(),
+            )
             .await
         {
             return error_response(
@@ -337,7 +342,12 @@ async fn register_user(
         }
         if let Err(err) = state
             .postgres
-            .assign_role(&membership_user_id, &ctx.tenant_id, team, Role::Developer)
+            .assign_role(
+                &membership_user_id,
+                &ctx.tenant_id,
+                team,
+                Role::Developer.into(),
+            )
             .await
         {
             return error_response(
@@ -838,10 +848,7 @@ async fn load_roles_for_user(
     for row in rows {
         let unit_id: String = row.get("unit_id");
         let role_str: String = row.get("role");
-        let role = match role_str.parse::<Role>() {
-            Ok(role) => role,
-            Err(_) => continue,
-        };
+        let role = RoleIdentifier::from_str_flexible(&role_str);
         let scope = resolve_unit_scope(state, ctx, &unit_id).await?;
         out.push(json!({
             "userId": row.get::<String, _>("user_id"),
@@ -876,7 +883,9 @@ fn derive_name_from_email(email: &str) -> String {
 }
 
 fn is_self_or_admin(ctx: &TenantContext, target: &str) -> bool {
-    ctx.user_id.as_str() == target || matches!(ctx.role, Some(Role::PlatformAdmin | Role::Admin))
+    ctx.user_id.as_str() == target
+        || ctx.has_known_role(&Role::PlatformAdmin)
+        || ctx.has_known_role(&Role::Admin)
 }
 
 async fn ensure_unit_type(
@@ -910,7 +919,7 @@ async fn require_admin_context(
     headers: &HeaderMap,
 ) -> Result<TenantContext, axum::response::Response> {
     let ctx = tenant_scoped_context(state, headers).await?;
-    if matches!(ctx.role, Some(Role::PlatformAdmin | Role::Admin)) {
+    if ctx.has_known_role(&Role::PlatformAdmin) || ctx.has_known_role(&Role::Admin) {
         Ok(ctx)
     } else {
         Err(error_response(
@@ -921,11 +930,9 @@ async fn require_admin_context(
     }
 }
 
-fn parse_tenant_role(value: &str) -> Result<Role, axum::response::Response> {
-    let role = value
-        .parse::<Role>()
-        .map_err(|_| error_response(StatusCode::BAD_REQUEST, "invalid_role", "Unsupported role"))?;
-    if role == Role::PlatformAdmin {
+fn parse_tenant_role(value: &str) -> Result<RoleIdentifier, axum::response::Response> {
+    let role = RoleIdentifier::from_str_flexible(value);
+    if matches!(role, RoleIdentifier::Known(Role::PlatformAdmin)) {
         return Err(error_response(
             StatusCode::BAD_REQUEST,
             "invalid_role",

@@ -285,17 +285,27 @@ async fn test_postgres_backend_role_management() {
     backend.create_unit(&company).await.unwrap();
 
     backend
-        .assign_role(&user_id, &tenant_id, &comp_id, mk_core::types::Role::Admin)
+        .assign_role(
+            &user_id,
+            &tenant_id,
+            &comp_id,
+            mk_core::types::Role::Admin.into(),
+        )
         .await
         .unwrap();
 
     let roles = backend.get_user_roles(&user_id, &tenant_id).await.unwrap();
     assert_eq!(roles.len(), 1);
     assert_eq!(roles[0].0, comp_id);
-    assert_eq!(roles[0].1, mk_core::types::Role::Admin);
+    assert_eq!(roles[0].1, mk_core::types::Role::Admin.into());
 
     backend
-        .remove_role(&user_id, &tenant_id, &comp_id, mk_core::types::Role::Admin)
+        .remove_role(
+            &user_id,
+            &tenant_id,
+            &comp_id,
+            mk_core::types::Role::Admin.into(),
+        )
         .await
         .unwrap();
 
@@ -414,14 +424,14 @@ async fn test_postgres_backend_governance_event_types() {
         mk_core::types::GovernanceEvent::RoleAssigned {
             user_id: mk_core::types::UserId::new("user-1".to_string()).unwrap(),
             unit_id: "unit-1".to_string(),
-            role: mk_core::types::Role::Admin,
+            role: mk_core::types::Role::Admin.into(),
             tenant_id: tenant_id.clone(),
             timestamp: chrono::Utc::now().timestamp(),
         },
         mk_core::types::GovernanceEvent::RoleRemoved {
             user_id: mk_core::types::UserId::new("user-1".to_string()).unwrap(),
             unit_id: "unit-1".to_string(),
-            role: mk_core::types::Role::Admin,
+            role: mk_core::types::Role::Admin.into(),
             tenant_id: tenant_id.clone(),
             timestamp: chrono::Utc::now().timestamp(),
         },

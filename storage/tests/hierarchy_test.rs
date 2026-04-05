@@ -22,7 +22,7 @@ async fn test_recursive_hierarchy_queries() {
         tenant_id: tenant_id.clone(),
         user_id: UserId::new("u1".to_string()).unwrap(),
         agent_id: None,
-        role: None,
+        roles: Vec::new(),
         target_tenant_id: None,
     };
 
@@ -111,7 +111,7 @@ async fn test_recursive_hierarchy_queries() {
         tenant_id: tenant2_id.clone(),
         user_id: UserId::new("u2".to_string()).unwrap(),
         agent_id: None,
-        role: None,
+        roles: Vec::new(),
         target_tenant_id: None,
     };
 

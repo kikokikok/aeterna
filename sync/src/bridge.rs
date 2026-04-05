@@ -1384,7 +1384,7 @@ mod tests {
             _user_id: &mk_core::types::UserId,
             _tenant_id: &mk_core::types::TenantId,
             _unit_id: &str,
-            _role: mk_core::types::Role,
+            _role: mk_core::types::RoleIdentifier,
         ) -> std::result::Result<(), Self::Error> {
             Ok(())
         }
@@ -1393,7 +1393,7 @@ mod tests {
             _user_id: &mk_core::types::UserId,
             _tenant_id: &mk_core::types::TenantId,
             _unit_id: &str,
-            _role: mk_core::types::Role,
+            _role: mk_core::types::RoleIdentifier,
         ) -> std::result::Result<(), Self::Error> {
             Ok(())
         }
@@ -1521,6 +1521,68 @@ mod tests {
             _metrics: mk_core::types::EventDeliveryMetrics,
         ) -> std::result::Result<(), Self::Error> {
             Ok(())
+        }
+        async fn get_unit_by_id(
+            &self,
+            _unit_id: &str,
+            _tenant_id: &str,
+        ) -> std::result::Result<Option<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(None)
+        }
+        async fn update_unit(
+            &self,
+            _unit: &mk_core::types::OrganizationalUnit,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn delete_unit(
+            &self,
+            _unit_id: &str,
+            _tenant_id: &str,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn list_unit_members(
+            &self,
+            _unit_id: &str,
+            _tenant_id: &str,
+        ) -> std::result::Result<
+            Vec<(mk_core::types::UserId, mk_core::types::RoleIdentifier)>,
+            Self::Error,
+        > {
+            Ok(Vec::new())
+        }
+        async fn assign_team_to_project(
+            &self,
+            _project_id: &str,
+            _team_id: &str,
+            _tenant_id: &str,
+            _assignment_type: &str,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn remove_team_from_project(
+            &self,
+            _project_id: &str,
+            _team_id: &str,
+            _tenant_id: &str,
+        ) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn list_project_team_assignments(
+            &self,
+            _project_id: &str,
+            _tenant_id: &str,
+        ) -> std::result::Result<Vec<(String, String)>, Self::Error> {
+            Ok(Vec::new())
+        }
+        async fn get_effective_roles_at_scope(
+            &self,
+            _user_id: &mk_core::types::UserId,
+            _tenant_id: &mk_core::types::TenantId,
+            _unit_id: &str,
+        ) -> std::result::Result<Vec<mk_core::types::RoleIdentifier>, Self::Error> {
+            Ok(Vec::new())
         }
     }
 

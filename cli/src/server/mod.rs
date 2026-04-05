@@ -1,4 +1,5 @@
 pub mod admin_sync;
+pub mod auth_middleware;
 pub mod bootstrap;
 pub mod govern_api;
 pub mod health;
@@ -7,6 +8,8 @@ pub mod mcp_transport;
 pub mod metrics;
 pub mod org_api;
 pub mod plugin_auth;
+pub mod project_api;
+pub mod role_grants;
 pub mod router;
 pub mod sessions;
 pub mod sync;
@@ -33,14 +36,12 @@ use knowledge::repository::RepositoryError;
 use knowledge::tenant_repo_resolver::TenantRepositoryResolver;
 use memory::manager::MemoryManager;
 use memory::reasoning::ReflectiveReasoner;
-use mk_core::traits::{AuthorizationService, EventPublisher, KnowledgeRepository};
-use mk_core::types::{Role, TenantContext, TenantId, UserId};
-use serde_json::json;
 use mk_core::traits::GitProviderConnectionRegistry;
+use mk_core::traits::{AuthorizationService, EventPublisher, KnowledgeRepository};
+use mk_core::types::{RoleIdentifier, TenantContext, TenantId, UserId};
+use serde_json::json;
 use storage::events::EventError;
-use storage::git_provider_connection_store::{
-    GitProviderConnectionError,
-};
+use storage::git_provider_connection_store::GitProviderConnectionError;
 use storage::governance::GovernanceStorage;
 use storage::graph_duckdb::DuckDbGraphStore;
 use storage::postgres::PostgresBackend;
@@ -115,7 +116,7 @@ fn error_json(status: StatusCode, code: &str, message: &str) -> axum::response::
 ///
 /// - `X-Tenant-ID` header → `TenantContext::tenant_id`
 /// - `X-User-ID` header (or plugin bearer JWT sub) → `TenantContext::user_id`
-/// - `X-User-Role` header (optional) → `TenantContext::role`
+/// - `X-User-Role` header (optional) → `TenantContext::roles`
 /// - `X-Target-Tenant-ID` header (optional, PlatformAdmin ops) → `TenantContext::target_tenant_id`
 ///
 /// When plugin-auth is enabled the bearer token is validated; otherwise the
@@ -179,11 +180,13 @@ pub fn authenticated_tenant_context(
         )
     })?;
 
-    // --- Optional role -----------------------------------------------------------
-    let role: Option<Role> = headers
+    // --- Optional roles ----------------------------------------------------------
+    let roles = headers
         .get("x-user-role")
         .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.parse().ok());
+        .filter(|s| !s.is_empty())
+        .map(|s| vec![RoleIdentifier::from_str_flexible(s)])
+        .unwrap_or_default();
 
     // --- Optional PlatformAdmin target tenant ------------------------------------
     let target_tenant_id: Option<TenantId> = headers
@@ -196,7 +199,7 @@ pub fn authenticated_tenant_context(
         tenant_id,
         user_id,
         agent_id: None,
-        role,
+        roles,
         target_tenant_id,
     })
 }

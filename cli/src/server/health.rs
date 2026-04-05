@@ -127,8 +127,8 @@ mod tests {
     use memory::reasoning::ReflectiveReasoner;
     use mk_core::traits::{AuthorizationService, KnowledgeRepository};
     use mk_core::types::{
-        KnowledgeEntry, KnowledgeLayer, ReasoningStrategy, ReasoningTrace, Role, TenantContext,
-        UserId,
+        KnowledgeEntry, KnowledgeLayer, ReasoningStrategy, ReasoningTrace, Role, RoleIdentifier,
+        TenantContext, UserId,
     };
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -156,15 +156,18 @@ mod tests {
             Ok(true)
         }
 
-        async fn get_user_roles(&self, _ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
-            Ok(vec![Role::Developer])
+        async fn get_user_roles(
+            &self,
+            _ctx: &TenantContext,
+        ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+            Ok(vec![Role::Developer.into()])
         }
 
         async fn assign_role(
             &self,
             _ctx: &TenantContext,
             _user_id: &UserId,
-            _role: Role,
+            _role: RoleIdentifier,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -173,7 +176,7 @@ mod tests {
             &self,
             _ctx: &TenantContext,
             _user_id: &UserId,
-            _role: Role,
+            _role: RoleIdentifier,
         ) -> Result<(), Self::Error> {
             Ok(())
         }

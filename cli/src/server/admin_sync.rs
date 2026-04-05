@@ -2,15 +2,16 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Json, Router};
 use idp_sync::config::GitHubConfig;
+use mk_core::types::Role;
 use serde_json::json;
 use uuid::Uuid;
 
-use super::AppState;
+use super::{AppState, authenticated_tenant_context};
 
 static SYNC_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
@@ -21,7 +22,23 @@ pub fn router(state: Arc<AppState>) -> Router {
 }
 
 #[tracing::instrument(skip_all)]
-async fn handle_github_sync(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn handle_github_sync(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    // --- Authorization: PlatformAdmin only -----------------------------------
+    let ctx = match authenticated_tenant_context(&state, &headers) {
+        Ok(ctx) => ctx,
+        Err(resp) => return resp,
+    };
+    if !ctx.has_known_role(&Role::PlatformAdmin) {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "PlatformAdmin role required",
+        );
+    }
+
     if SYNC_IN_PROGRESS
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
@@ -156,6 +173,10 @@ pub(crate) async fn resolve_tenant_id_from_pool(pool: &sqlx::PgPool) -> anyhow::
     }
 }
 
+fn error_response(status: StatusCode, error: &str, message: &str) -> axum::response::Response {
+    (status, Json(json!({"error": error, "message": message}))).into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,5 +195,15 @@ mod tests {
                 .is_err()
         );
         SYNC_IN_PROGRESS.store(false, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn error_response_helper_produces_correct_json() {
+        let resp = error_response(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "PlatformAdmin role required",
+        );
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
 }

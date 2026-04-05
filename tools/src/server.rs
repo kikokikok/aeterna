@@ -33,7 +33,78 @@ use storage::governance::GovernanceStorage;
 use storage::graph_duckdb::DuckDbGraphStore;
 use sync::bridge::SyncManager;
 use tokio::time::timeout;
-use tracing::{Span, debug, error, info, instrument};
+use tracing::{Span, debug, error, info, instrument, warn};
+
+pub fn tool_to_cedar_action(tool_name: &str) -> &'static str {
+    match tool_name {
+        "memory_add" => "AddMemory",
+        "memory_search" => "SearchMemory",
+        "memory_delete" => "DeleteMemory",
+        "memory_reason" => "ReasonMemory",
+        "memory_close" => "CloseMemory",
+        "memory_feedback" => "FeedbackMemory",
+        "memory_optimize" => "OptimizeMemory",
+        "aeterna_memory_promote" => "AddMemory",
+        "aeterna_memory_auto_promote" => "OptimizeMemory",
+
+        "graph_query" => "QueryGraph",
+        "graph_neighbors" => "QueryGraph",
+        "graph_path" => "QueryGraph",
+        "graph_link" => "ModifyGraph",
+        "graph_unlink" => "ModifyGraph",
+        "graph_traverse" => "QueryGraph",
+        "graph_find_path" => "QueryGraph",
+        "graph_violations" => "QueryGraph",
+        "graph_implementations" => "QueryGraph",
+        "graph_context" => "QueryGraph",
+        "graph_related" => "QueryGraph",
+
+        "knowledge_get" => "SearchKnowledge",
+        "knowledge_list" => "ListKnowledge",
+        "knowledge_query" => "SearchKnowledge",
+        "aeterna_knowledge_propose" => "BatchKnowledge",
+        "aeterna_knowledge_submit" => "BatchKnowledge",
+        "aeterna_knowledge_pending" => "ListKnowledge",
+
+        "sync_now" => "TriggerSync",
+        "sync_status" => "ViewSyncStatus",
+        "knowledge_resolve_conflict" => "ResolveConflict",
+
+        "context_assemble" => "InvokeCCA",
+        "note_capture" => "InvokeCCA",
+        "hindsight_query" => "InvokeCCA",
+        "meta_loop_status" => "InvokeCCA",
+
+        "governance_unit_create" => "CreateOrganization",
+        "governance_policy_add" => "EditPolicy",
+        "governance_role_assign" => "AssignRoles",
+        "governance_role_remove" => "AssignRoles",
+        "governance_hierarchy_navigate" => "ViewGovernance",
+        "governance_configure" => "EditPolicy",
+        "governance_config_get" => "ViewGovernance",
+        "governance_request_create" => "SubmitGovernance",
+        "governance_approve" => "ApprovePolicy",
+        "governance_reject" => "ApprovePolicy",
+        "governance_request_list" => "ViewGovernance",
+        "governance_request_get" => "ViewGovernance",
+        "governance_audit_list" => "ViewAuditLog",
+        "governance_principal_role_assign" => "AssignRoles",
+        "governance_role_revoke" => "AssignRoles",
+        "governance_role_list" => "ViewGovernance",
+
+        "aeterna_policy_propose" => "EditPolicy",
+        "aeterna_policy_list_pending" => "ViewGovernance",
+
+        "codesearch_search" => "InvokeMcpTool",
+        "codesearch_trace_callers" => "InvokeMcpTool",
+        "codesearch_trace_callees" => "InvokeMcpTool",
+        "codesearch_graph" => "InvokeMcpTool",
+        "codesearch_index_status" => "InvokeMcpTool",
+        "codesearch_repo_request" => "InvokeMcpTool",
+
+        _ => "InvokeMcpTool",
+    }
+}
 
 /// MCP JSON-RPC server for tool orchestration.
 ///
@@ -352,9 +423,14 @@ impl McpServer {
                 Span::current().record("tool_name", &name);
                 info!(tool = %name, "Calling tool");
 
+                let cedar_action = tool_to_cedar_action(&name);
+                if cedar_action == "InvokeMcpTool" && !name.starts_with("codesearch_") {
+                    warn!(tool = %name, "No specific Cedar action mapping; using InvokeMcpTool fallback");
+                }
+
                 let auth_result = self
                     .auth_service
-                    .check_permission(&tenant_context, "call_tool", &name)
+                    .check_permission(&tenant_context, cedar_action, &name)
                     .await;
 
                 match auth_result {
@@ -426,7 +502,7 @@ impl McpServer {
                                             .unwrap_or_default()
                                             .to_string(),
                                         role: serde_json::from_value(result["role"].clone())
-                                            .unwrap_or(mk_core::types::Role::Developer),
+                                            .unwrap_or(mk_core::types::Role::Developer.into()),
                                         tenant_id: tenant_context.tenant_id.clone(),
                                         timestamp,
                                     })
@@ -440,7 +516,7 @@ impl McpServer {
                                             .unwrap_or_default()
                                             .to_string(),
                                         role: serde_json::from_value(result["role"].clone())
-                                            .unwrap_or(mk_core::types::Role::Developer),
+                                            .unwrap_or(mk_core::types::Role::Developer.into()),
                                         tenant_id: tenant_context.tenant_id.clone(),
                                         timestamp,
                                     })
@@ -541,6 +617,58 @@ impl McpServer {
 
         Ok((name, tool_params))
     }
+
+    /// Handle a JSON-RPC request with an authenticated caller tenant constraint.
+    ///
+    /// When `caller_tenant` is `Some`, validates that the `tenantContext.tenant_id`
+    /// in the payload matches the authenticated caller's tenant.  This prevents a
+    /// caller from self-asserting an arbitrary tenant scope in the JSON-RPC payload.
+    ///
+    /// When `caller_tenant` is `None` (plugin auth disabled / dev mode), the payload
+    /// `tenantContext` is accepted verbatim — same behaviour as `handle_request`.
+    pub async fn handle_request_with_caller(
+        &self,
+        mut request: JsonRpcRequest,
+        caller_tenant: Option<&str>,
+    ) -> JsonRpcResponse {
+        if let Some(caller) = caller_tenant {
+            if request.method == "tools/call" {
+                if let Some(ref params) = request.params {
+                    let payload_tenant = params["tenantContext"]["tenant_id"]
+                        .as_str()
+                        .or_else(|| params["tenantContext"]["tenantId"].as_str());
+
+                    if let Some(payload) = payload_tenant {
+                        if payload != caller {
+                            tracing::warn!(
+                                caller_tenant = %caller,
+                                payload_tenant = %payload,
+                                "MCP tenantContext mismatch: payload tenant exceeds authenticated scope"
+                            );
+                            return JsonRpcResponse {
+                                jsonrpc: "2.0".to_string(),
+                                id: request.id,
+                                result: None,
+                                error: Some(JsonRpcError::unauthorized(
+                                    "tenantContext in payload does not match authenticated caller tenant",
+                                )),
+                            };
+                        }
+                    } else {
+                        // No tenantContext provided: inject caller's tenant so tools
+                        // operate in the correct tenant scope.
+                        let params_mut = request.params.get_or_insert(serde_json::json!({}));
+                        if let Some(obj) = params_mut.as_object_mut() {
+                            obj.entry("tenantContext").or_insert_with(
+                                || serde_json::json!({"tenant_id": caller, "user_id": "system"}),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        self.handle_request(request).await
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -589,6 +717,14 @@ impl JsonRpcError {
     pub fn request_timeout(message: impl Into<String>) -> Self {
         Self {
             code: -32001,
+            message: message.into(),
+            data: None,
+        }
+    }
+
+    pub fn unauthorized(message: impl Into<String>) -> Self {
+        Self {
+            code: -32003,
             message: message.into(),
             data: None,
         }
@@ -647,14 +783,14 @@ mod tests {
         async fn get_user_roles(
             &self,
             _ctx: &mk_core::types::TenantContext,
-        ) -> anyhow::Result<Vec<mk_core::types::Role>> {
+        ) -> anyhow::Result<Vec<mk_core::types::RoleIdentifier>> {
             Ok(vec![])
         }
         async fn assign_role(
             &self,
             _ctx: &mk_core::types::TenantContext,
             _user_id: &mk_core::types::UserId,
-            _role: mk_core::types::Role,
+            _role: mk_core::types::RoleIdentifier,
         ) -> anyhow::Result<()> {
             Ok(())
         }
@@ -662,7 +798,7 @@ mod tests {
             &self,
             _ctx: &mk_core::types::TenantContext,
             _user_id: &mk_core::types::UserId,
-            _role: mk_core::types::Role,
+            _role: mk_core::types::RoleIdentifier,
         ) -> anyhow::Result<()> {
             Ok(())
         }
@@ -741,7 +877,7 @@ mod tests {
             _user_id: &mk_core::types::UserId,
             _tenant_id: &mk_core::types::TenantId,
             _unit_id: &str,
-            _role: mk_core::types::Role,
+            _role: mk_core::types::RoleIdentifier,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -750,7 +886,7 @@ mod tests {
             _user_id: &mk_core::types::UserId,
             _tenant_id: &mk_core::types::TenantId,
             _unit_id: &str,
-            _role: mk_core::types::Role,
+            _role: mk_core::types::RoleIdentifier,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -878,6 +1014,62 @@ mod tests {
             _metrics: mk_core::types::EventDeliveryMetrics,
         ) -> Result<(), Self::Error> {
             Ok(())
+        }
+        async fn get_unit_by_id(
+            &self,
+            _unit_id: &str,
+            _tenant_id: &str,
+        ) -> Result<Option<mk_core::types::OrganizationalUnit>, Self::Error> {
+            Ok(None)
+        }
+        async fn update_unit(
+            &self,
+            _unit: &mk_core::types::OrganizationalUnit,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn delete_unit(&self, _unit_id: &str, _tenant_id: &str) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn list_unit_members(
+            &self,
+            _unit_id: &str,
+            _tenant_id: &str,
+        ) -> Result<Vec<(mk_core::types::UserId, mk_core::types::RoleIdentifier)>, Self::Error>
+        {
+            Ok(Vec::new())
+        }
+        async fn assign_team_to_project(
+            &self,
+            _project_id: &str,
+            _team_id: &str,
+            _tenant_id: &str,
+            _assignment_type: &str,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn remove_team_from_project(
+            &self,
+            _project_id: &str,
+            _team_id: &str,
+            _tenant_id: &str,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn list_project_team_assignments(
+            &self,
+            _project_id: &str,
+            _tenant_id: &str,
+        ) -> Result<Vec<(String, String)>, Self::Error> {
+            Ok(Vec::new())
+        }
+        async fn get_effective_roles_at_scope(
+            &self,
+            _user_id: &mk_core::types::UserId,
+            _tenant_id: &mk_core::types::TenantId,
+            _unit_id: &str,
+        ) -> Result<Vec<mk_core::types::RoleIdentifier>, Self::Error> {
+            Ok(Vec::new())
         }
     }
 
@@ -1191,5 +1383,148 @@ mod tests {
         let response = server.handle_request(request).await;
         assert!(response.error.is_some());
         assert_eq!(response.error.unwrap().code, -32602);
+    }
+
+    // ── Task 4.2: MCP handle_request_with_caller tenant scope enforcement ─────
+
+    #[tokio::test]
+    async fn handle_request_with_caller_rejects_mismatched_tenant_context() {
+        let server = setup_server().await;
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(1),
+            method: "tools/call".to_string(),
+            params: Some(json!({
+                "name": "memory_add",
+                "tenantContext": {
+                    "tenant_id": "attacker-tenant",
+                    "user_id": "evil"
+                },
+                "arguments": {
+                    "content": "injected",
+                    "layer": "company"
+                }
+            })),
+        };
+
+        let response = server
+            .handle_request_with_caller(request, Some("legitimate-tenant"))
+            .await;
+
+        assert!(
+            response.error.is_some(),
+            "MUST return an error when payload tenantContext does not match authenticated caller tenant"
+        );
+        let err = response.error.unwrap();
+        assert_eq!(
+            err.code, -32003,
+            "Error code MUST be -32003 (unauthorized) for tenant scope violation"
+        );
+        assert!(
+            err.message.contains("tenantContext"),
+            "Error message MUST mention tenantContext"
+        );
+    }
+
+    #[tokio::test]
+    async fn handle_request_with_caller_accepts_matching_tenant_context() {
+        let server = setup_server().await;
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(2),
+            method: "tools/call".to_string(),
+            params: Some(json!({
+                "name": "memory_add",
+                "tenantContext": {
+                    "tenant_id": "my-tenant",
+                    "user_id": "alice"
+                },
+                "arguments": {
+                    "content": "hello",
+                    "layer": "project"
+                }
+            })),
+        };
+
+        let response = server
+            .handle_request_with_caller(request, Some("my-tenant"))
+            .await;
+
+        // The request may succeed or fail on business logic, but MUST NOT
+        // return a tenant-scope (-32003) error.
+        if let Some(ref err) = response.error {
+            assert_ne!(
+                err.code, -32003,
+                "MUST NOT reject a matching tenantContext with a tenant-scope error"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn handle_request_with_caller_injects_tenant_when_context_absent() {
+        let server = setup_server().await;
+        // Deliberately omit tenantContext from params.
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(3),
+            method: "tools/call".to_string(),
+            params: Some(json!({
+                "name": "memory_add",
+                "arguments": {
+                    "content": "hello",
+                    "layer": "project"
+                }
+            })),
+        };
+
+        let response = server
+            .handle_request_with_caller(request, Some("injected-tenant"))
+            .await;
+
+        // Must NOT return a tenant-scope error; the caller tenant was injected.
+        if let Some(ref err) = response.error {
+            assert_ne!(
+                err.code, -32003,
+                "MUST NOT return tenant-scope error when tenantContext was absent (it should be injected)"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn handle_request_with_caller_passes_through_when_no_caller() {
+        let server = setup_server().await;
+        // caller_tenant = None simulates dev / auth-disabled mode.
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: json!(4),
+            method: "tools/call".to_string(),
+            params: Some(json!({
+                "name": "memory_add",
+                "tenantContext": {
+                    "tenant_id": "any-tenant",
+                    "user_id": "dev"
+                },
+                "arguments": {
+                    "content": "hello",
+                    "layer": "project"
+                }
+            })),
+        };
+
+        let response = server.handle_request_with_caller(request, None).await;
+
+        if let Some(ref err) = response.error {
+            assert_ne!(
+                err.code, -32003,
+                "MUST NOT apply tenant scope enforcement when caller_tenant is None (dev mode)"
+            );
+        }
+    }
+
+    #[test]
+    fn json_rpc_error_unauthorized_has_correct_code() {
+        let err = JsonRpcError::unauthorized("denied");
+        assert_eq!(err.code, -32003, "Unauthorized error MUST use code -32003");
+        assert_eq!(err.message, "denied");
     }
 }

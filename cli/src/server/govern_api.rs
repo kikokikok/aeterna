@@ -29,6 +29,12 @@ struct PendingQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct ScopeQuery {
+    scope: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ApproveRejectBody {
     comment: Option<String>,
     reason: Option<String>,
@@ -91,7 +97,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-async fn status(State(state): State<Arc<AppState>>, headers: HeaderMap) -> impl IntoResponse {
+async fn status(
+    State(state): State<Arc<AppState>>,
+    Query(scope_q): Query<ScopeQuery>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
     let ctx = match require_admin_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
@@ -104,10 +114,11 @@ async fn status(State(state): State<Arc<AppState>>, headers: HeaderMap) -> impl 
         );
     };
 
-    let (company_id, org_id, team_id, project_id) = match current_scope_ids(&state, &ctx).await {
-        Ok(ids) => ids,
-        Err(response) => return response,
-    };
+    let (company_id, org_id, team_id, project_id) =
+        match current_scope_ids(&state, &ctx, scope_q.scope.as_deref()).await {
+            Ok(ids) => ids,
+            Err(response) => return response,
+        };
 
     let config = match storage
         .get_effective_config(company_id, org_id, team_id, project_id)
@@ -359,7 +370,11 @@ async fn reject_request(
     Json(request).into_response()
 }
 
-async fn show_config(State(state): State<Arc<AppState>>, headers: HeaderMap) -> impl IntoResponse {
+async fn show_config(
+    State(state): State<Arc<AppState>>,
+    Query(scope_q): Query<ScopeQuery>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
     let ctx = match require_admin_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
@@ -371,10 +386,11 @@ async fn show_config(State(state): State<Arc<AppState>>, headers: HeaderMap) -> 
             "Governance storage is not configured",
         );
     };
-    let (company_id, org_id, team_id, project_id) = match current_scope_ids(&state, &ctx).await {
-        Ok(ids) => ids,
-        Err(response) => return response,
-    };
+    let (company_id, org_id, team_id, project_id) =
+        match current_scope_ids(&state, &ctx, scope_q.scope.as_deref()).await {
+            Ok(ids) => ids,
+            Err(response) => return response,
+        };
 
     match storage
         .get_effective_config(company_id, org_id, team_id, project_id)
@@ -391,6 +407,7 @@ async fn show_config(State(state): State<Arc<AppState>>, headers: HeaderMap) -> 
 
 async fn update_config(
     State(state): State<Arc<AppState>>,
+    Query(scope_q): Query<ScopeQuery>,
     headers: HeaderMap,
     Json(req): Json<UpdateGovernConfigRequest>,
 ) -> impl IntoResponse {
@@ -405,10 +422,11 @@ async fn update_config(
             "Governance storage is not configured",
         );
     };
-    let (company_id, org_id, team_id, project_id) = match current_scope_ids(&state, &ctx).await {
-        Ok(ids) => ids,
-        Err(response) => return response,
-    };
+    let (company_id, org_id, team_id, project_id) =
+        match current_scope_ids(&state, &ctx, scope_q.scope.as_deref()).await {
+            Ok(ids) => ids,
+            Err(response) => return response,
+        };
 
     let mut config = match storage
         .get_effective_config(company_id, org_id, team_id, project_id)
@@ -673,7 +691,7 @@ async fn require_admin_context(
     headers: &HeaderMap,
 ) -> Result<TenantContext, axum::response::Response> {
     let ctx = tenant_scoped_context(state, headers).await?;
-    if matches!(ctx.role, Some(Role::PlatformAdmin | Role::Admin)) {
+    if ctx.has_known_role(&Role::PlatformAdmin) || ctx.has_known_role(&Role::Admin) {
         Ok(ctx)
     } else {
         Err(error_response(
@@ -687,13 +705,9 @@ async fn require_admin_context(
 async fn current_scope_ids(
     state: &AppState,
     ctx: &TenantContext,
+    scope: Option<&str>,
 ) -> Result<(Option<Uuid>, Option<Uuid>, Option<Uuid>, Option<Uuid>), axum::response::Response> {
-    Ok((
-        Some(resolve_company_scope(state, ctx).await?),
-        None,
-        None,
-        None,
-    ))
+    scope_ids_for_layer(state, ctx, scope).await
 }
 
 async fn scope_ids_for_layer(

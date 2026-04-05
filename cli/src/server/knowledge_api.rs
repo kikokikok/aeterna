@@ -10,7 +10,10 @@ use std::convert::Infallible;
 use std::sync::Arc;
 
 use super::AppState;
-use super::plugin_auth::{tenant_context_from_plugin_bearer, validate_plugin_bearer};
+use super::plugin_auth::{
+    tenant_context_from_plugin_bearer, tenant_context_from_plugin_bearer_or_default,
+    validate_plugin_bearer,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct KnowledgeQueryRequest {
@@ -201,7 +204,10 @@ async fn query_handler(
         return response;
     }
 
-    let ctx = tenant_context_from_request(&state, &headers);
+    let ctx = match tenant_context_from_request(&state, &headers) {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
     let layer =
         parse_layer(req.layer.as_deref()).unwrap_or(mk_core::types::KnowledgeLayer::Project);
 
@@ -237,7 +243,10 @@ async fn create_handler(
         return response;
     }
 
-    let ctx = tenant_context_from_request(&state, &headers);
+    let ctx = match tenant_context_from_request(&state, &headers) {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
     let layer = match parse_layer(Some(&req.layer)) {
         Some(l) => l,
         None => {
@@ -301,7 +310,10 @@ async fn update_handler(
         return response;
     }
 
-    let ctx = tenant_context_from_request(&state, &headers);
+    let ctx = match tenant_context_from_request(&state, &headers) {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
 
     let existing = find_entry_by_id(&state, &ctx, &id).await;
     let mut entry = match existing {
@@ -361,7 +373,10 @@ async fn delete_handler(
         return response;
     }
 
-    let ctx = tenant_context_from_request(&state, &headers);
+    let ctx = match tenant_context_from_request(&state, &headers) {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
 
     let existing = find_entry_by_id(&state, &ctx, &id).await;
     match existing {
@@ -397,7 +412,10 @@ async fn batch_handler(
         return response;
     }
 
-    let ctx = tenant_context_from_request(&state, &headers);
+    let ctx = match tenant_context_from_request(&state, &headers) {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
     let mut results = Vec::with_capacity(req.operations.len());
 
     for (index, op) in req.operations.into_iter().enumerate() {
@@ -503,7 +521,10 @@ async fn metadata_handler(
         return response;
     }
 
-    let ctx = tenant_context_from_request(&state, &headers);
+    let ctx = match tenant_context_from_request(&state, &headers) {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
 
     match find_entry_by_id(&state, &ctx, &id).await {
         Some(entry) => {
@@ -538,26 +559,53 @@ async fn metadata_handler(
     }
 }
 
-fn default_tenant_context() -> mk_core::types::TenantContext {
-    mk_core::types::TenantContext::new(
-        mk_core::types::TenantId::new("default".to_string()).expect("default tenant id"),
-        mk_core::types::UserId::new("system".to_string()).expect("default user id"),
-    )
-}
-
 /// Derive the caller's `TenantContext` from a validated Aeterna plugin bearer
-/// token.  Falls back to the default system context when no valid token is
-/// present (e.g. unauthenticated or static-token callers).
+/// token.
+///
+/// When plugin auth is **enabled**: requires a valid bearer token.  Because
+/// `reject_invalid_plugin_bearer` has already blocked requests without a valid
+/// token, the `None` branch here is a defensive guard only.  If it somehow
+/// fires, the request is rejected rather than silently promoted to the default
+/// tenant.
+///
+/// When plugin auth is **disabled** (development / service-to-service mode):
+/// falls back to the synthetic `default/system` context with an explicit debug
+/// log.  This fallback is intentional and must NOT be used in production.
 fn tenant_context_from_request(
     state: &AppState,
     headers: &HeaderMap,
-) -> mk_core::types::TenantContext {
-    if let Some(secret) = state.plugin_auth_state.config.jwt_secret.as_deref() {
-        if state.plugin_auth_state.config.enabled {
-            return tenant_context_from_plugin_bearer(headers, secret);
-        }
+) -> Result<mk_core::types::TenantContext, axum::response::Response> {
+    if state.plugin_auth_state.config.enabled {
+        let secret = state
+            .plugin_auth_state
+            .config
+            .jwt_secret
+            .as_deref()
+            .ok_or_else(|| {
+                error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "configuration_error",
+                    "Plugin auth JWT secret is not configured",
+                )
+            })?;
+        return tenant_context_from_plugin_bearer(headers, secret).ok_or_else(|| {
+            error_response(
+                StatusCode::UNAUTHORIZED,
+                "invalid_plugin_token",
+                "Valid plugin bearer token required",
+            )
+        });
     }
-    default_tenant_context()
+    // Development / service-to-service fallback (plugin auth disabled).
+    Ok(tenant_context_from_plugin_bearer_or_default(
+        headers,
+        state
+            .plugin_auth_state
+            .config
+            .jwt_secret
+            .as_deref()
+            .unwrap_or(""),
+    ))
 }
 
 fn reject_invalid_plugin_bearer(
@@ -709,7 +757,7 @@ mod tests {
     use mk_core::traits::{AuthorizationService, KnowledgeRepository};
     use mk_core::types::{
         KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, ReasoningStrategy,
-        ReasoningTrace, Role, TenantContext, UserId,
+        ReasoningTrace, Role, RoleIdentifier, TenantContext, UserId,
     };
     use std::collections::HashMap;
     use storage::postgres::PostgresBackend;
@@ -737,15 +785,18 @@ mod tests {
             Ok(true)
         }
 
-        async fn get_user_roles(&self, _ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
-            Ok(vec![Role::Developer])
+        async fn get_user_roles(
+            &self,
+            _ctx: &TenantContext,
+        ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+            Ok(vec![Role::Developer.into()])
         }
 
         async fn assign_role(
             &self,
             _ctx: &TenantContext,
             _user_id: &UserId,
-            _role: Role,
+            _role: RoleIdentifier,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -754,7 +805,7 @@ mod tests {
             &self,
             _ctx: &TenantContext,
             _user_id: &UserId,
-            _role: Role,
+            _role: RoleIdentifier,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -1278,5 +1329,183 @@ mod tests {
             .and_then(|value| value.to_str().ok())
             .unwrap_or_default();
         assert!(content_type.contains("text/event-stream"));
+    }
+
+    async fn app_with_plugin_auth_enabled(repo: Arc<MockRepo>) -> Option<Router> {
+        let auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error> + Send + Sync> =
+            Arc::new(MockAuth);
+        let fixture = postgres().await?;
+        let postgres = Arc::new(PostgresBackend::new(fixture.url()).await.ok()?);
+        postgres.initialize_schema().await.ok()?;
+        let governance_engine = Arc::new(GovernanceEngine::new());
+        let knowledge_manager = Arc::new(KnowledgeManager::new(
+            Arc::new(
+                knowledge::repository::GitRepository::new(tempfile::tempdir().unwrap().path())
+                    .unwrap(),
+            ),
+            governance_engine.clone(),
+        ));
+        let memory_manager = Arc::new(MemoryManager::new());
+        let sync_manager = Arc::new(
+            SyncManager::new(
+                memory_manager.clone(),
+                knowledge_manager.clone(),
+                config::config::DeploymentConfig::default(),
+                None,
+                Arc::new(sync::state_persister::FilePersister::new(
+                    std::env::temp_dir(),
+                )),
+                None,
+            )
+            .await
+            .unwrap(),
+        );
+        let dashboard = Arc::new(GovernanceDashboardApi::new(
+            governance_engine.clone(),
+            postgres.clone(),
+            config::config::DeploymentConfig::default(),
+        ));
+        let mcp_server = Arc::new(McpServer::new(
+            memory_manager.clone(),
+            sync_manager.clone(),
+            repo.clone(),
+            postgres.clone(),
+            governance_engine.clone(),
+            Arc::new(TestNoopReasoner),
+            auth_service.clone(),
+            None,
+            None,
+            None,
+        ));
+        let (shutdown_tx, _) = tokio::sync::watch::channel(false);
+        let tenant_store = Arc::new(TenantStore::new(postgres.pool().clone()));
+        let tenant_repository_binding_store =
+            Arc::new(TenantRepositoryBindingStore::new(postgres.pool().clone()));
+        let git_provider_connection_registry = Arc::new(
+            storage::git_provider_connection_store::InMemoryGitProviderConnectionStore::new(),
+        );
+        let tenant_repo_resolver = Arc::new(
+            TenantRepositoryResolver::new(
+                tenant_repository_binding_store.clone(),
+                std::env::temp_dir(),
+                Arc::new(LocalSecretProvider::new(HashMap::new())),
+            )
+            .with_connection_registry(git_provider_connection_registry.clone()),
+        );
+
+        Some(router(Arc::new(AppState {
+            config: Arc::new(config::Config::default()),
+            postgres,
+            memory_manager,
+            knowledge_manager,
+            knowledge_repository: repo,
+            governance_engine,
+            governance_dashboard: dashboard,
+            auth_service,
+            mcp_server,
+            sync_manager,
+            git_provider: None,
+            webhook_secret: None,
+            event_publisher: None,
+            graph_store: None,
+            governance_storage: None,
+            reasoner: None,
+            ws_server: Arc::new(WsServer::new(Arc::new(MockTokenValidator))),
+            a2a_config: Arc::new(agent_a2a::Config::default()),
+            a2a_auth_state: Arc::new(agent_a2a::AuthState {
+                api_key: None,
+                jwt_secret: None,
+                enabled: false,
+                trusted_identity: TrustedIdentityConfig::default(),
+            }),
+            plugin_auth_state: Arc::new(PluginAuthState {
+                config: config::PluginAuthConfig {
+                    enabled: true,
+                    jwt_secret: Some("test-jwt-secret-at-least-32-chars-long!!".to_string()),
+                    ..Default::default()
+                },
+                refresh_store: RefreshTokenStore::new(),
+            }),
+            idp_config: None,
+            idp_sync_service: None,
+            idp_client: None,
+            shutdown_tx: Arc::new(shutdown_tx),
+            tenant_store,
+            tenant_repository_binding_store,
+            tenant_repo_resolver,
+            tenant_config_provider: Arc::new(KubernetesTenantConfigProvider::new(
+                "default".to_string(),
+            )),
+            git_provider_connection_registry,
+        })))
+    }
+
+    // ── Task 4.1: knowledge API fail-closed when plugin auth enabled ──────────
+
+    #[tokio::test]
+    async fn knowledge_query_rejected_without_bearer_when_plugin_auth_enabled() {
+        let repo = Arc::new(MockRepo::new());
+        let Some(app) = app_with_plugin_auth_enabled(repo).await else {
+            eprintln!("Skipping: Docker not available");
+            return;
+        };
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/knowledge/query")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&serde_json::json!({
+                            "query": "anything",
+                            "limit": 5
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "Knowledge query MUST be rejected (401) when plugin auth is enabled and no bearer is present"
+        );
+    }
+
+    #[tokio::test]
+    async fn knowledge_create_rejected_without_bearer_when_plugin_auth_enabled() {
+        let repo = Arc::new(MockRepo::new());
+        let Some(app) = app_with_plugin_auth_enabled(repo).await else {
+            eprintln!("Skipping: Docker not available");
+            return;
+        };
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/knowledge/create")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&serde_json::json!({
+                            "content": "test",
+                            "path": "specs/t.md",
+                            "layer": "project"
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "Knowledge create MUST be rejected (401) when plugin auth is enabled and no bearer is present"
+        );
     }
 }

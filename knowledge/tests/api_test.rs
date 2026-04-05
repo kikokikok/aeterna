@@ -57,7 +57,7 @@ async fn test_governance_dashboard_api_get_drift_status() {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new(unique_id("u")).unwrap(),
         agent_id: Some(unique_id("a")),
-        role: None,
+        roles: vec![],
         target_tenant_id: None,
     };
 
@@ -115,7 +115,7 @@ async fn test_governance_dashboard_api_get_org_report() {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new(unique_id("u")).unwrap(),
         agent_id: Some(unique_id("a")),
-        role: None,
+        roles: vec![],
         target_tenant_id: None,
     };
 
@@ -222,7 +222,7 @@ async fn test_governance_dashboard_api_proposals() {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new(user_id.clone()).unwrap(),
         agent_id: Some(unique_id("a")),
-        role: None,
+        roles: vec![],
         target_tenant_id: None,
     };
 
@@ -308,7 +308,7 @@ async fn test_governance_dashboard_api_get_job_status() {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new(unique_id("u")).unwrap(),
         agent_id: Some(unique_id("a")),
-        role: None,
+        roles: vec![],
         target_tenant_id: None,
     };
 
@@ -366,7 +366,7 @@ async fn test_governance_dashboard_api_replay_events() {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new(unique_id("u")).unwrap(),
         agent_id: Some(unique_id("a")),
-        role: None,
+        roles: vec![],
         target_tenant_id: None,
     };
 

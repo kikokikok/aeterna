@@ -2,18 +2,19 @@
 // Role-based permit policies for organizational access control.
 // 
 // Role Hierarchy (higher precedence = more permissions):
-//   PlatformAdmin (5) - Cross-tenant admin control-plane access
-//   Admin (4)     - Full tenant-scoped system access
-//   Architect (3) - Design policies, manage knowledge
-//   TechLead (2)  - Manage team resources
-//   Developer (1) - Standard development access
-//   Viewer (0)    - Read-only access
+//   TenantAdmin (6)    - Explicit tenant-scoped administration
+//   PlatformAdmin (5)  - Cross-tenant admin control-plane access
+//   Admin (4)          - Full tenant-scoped system access (legacy alias for TenantAdmin)
+//   Architect (3)      - Design policies, manage knowledge
+//   TechLead (2)       - Manage team resources
+//   Developer (1)      - Standard development access
+//   Viewer (0)         - Read-only access
+//   Agent (0)          - Delegated permissions from user context
 
 // =============================================================================
 // PLATFORM ADMIN ROLE - Cross-Tenant Control Plane Access
 // =============================================================================
 
-// PlatformAdmin: Full access to all memory operations
 permit (
     principal is Aeterna::User,
     action in [
@@ -21,16 +22,21 @@ permit (
         Aeterna::Action::"CreateMemory",
         Aeterna::Action::"UpdateMemory",
         Aeterna::Action::"DeleteMemory",
-        Aeterna::Action::"PromoteMemory"
+        Aeterna::Action::"PromoteMemory",
+        Aeterna::Action::"SearchMemory",
+        Aeterna::Action::"ListMemory",
+        Aeterna::Action::"OptimizeMemory",
+        Aeterna::Action::"ReasonMemory",
+        Aeterna::Action::"CloseMemory",
+        Aeterna::Action::"FeedbackMemory"
     ],
     resource
 )
 when {
-    principal.role == "platformadmin" &&
+    principal in Aeterna::Role::"PlatformAdmin" &&
     principal.status == "active"
 };
 
-// PlatformAdmin: Full access to all knowledge operations
 permit (
     principal is Aeterna::User,
     action in [
@@ -38,16 +44,18 @@ permit (
         Aeterna::Action::"ProposeKnowledge",
         Aeterna::Action::"EditKnowledge",
         Aeterna::Action::"ApproveKnowledge",
-        Aeterna::Action::"DeprecateKnowledge"
+        Aeterna::Action::"DeprecateKnowledge",
+        Aeterna::Action::"ListKnowledge",
+        Aeterna::Action::"SearchKnowledge",
+        Aeterna::Action::"BatchKnowledge"
     ],
     resource
 )
 when {
-    principal.role == "platformadmin" &&
+    principal in Aeterna::Role::"PlatformAdmin" &&
     principal.status == "active"
 };
 
-// PlatformAdmin: Full access to all policy operations
 permit (
     principal is Aeterna::User,
     action in [
@@ -60,11 +68,10 @@ permit (
     resource
 )
 when {
-    principal.role == "platformadmin" &&
+    principal in Aeterna::Role::"PlatformAdmin" &&
     principal.status == "active"
 };
 
-// PlatformAdmin: Full access to governance
 permit (
     principal is Aeterna::User,
     action in [
@@ -76,11 +83,10 @@ permit (
     resource
 )
 when {
-    principal.role == "platformadmin" &&
+    principal in Aeterna::Role::"PlatformAdmin" &&
     principal.status == "active"
 };
 
-// PlatformAdmin: Full access to organization management
 permit (
     principal is Aeterna::User,
     action in [
@@ -89,16 +95,16 @@ permit (
         Aeterna::Action::"CreateTeam",
         Aeterna::Action::"CreateProject",
         Aeterna::Action::"ManageMembers",
-        Aeterna::Action::"AssignRoles"
+        Aeterna::Action::"AssignRoles",
+        Aeterna::Action::"ManageTeamAssignments"
     ],
     resource
 )
 when {
-    principal.role == "platformadmin" &&
+    principal in Aeterna::Role::"PlatformAdmin" &&
     principal.status == "active"
 };
 
-// PlatformAdmin: Full access to agent management
 permit (
     principal is Aeterna::User,
     action in [
@@ -109,11 +115,10 @@ permit (
     resource
 )
 when {
-    principal.role == "platformadmin" &&
+    principal in Aeterna::Role::"PlatformAdmin" &&
     principal.status == "active"
 };
 
-// PlatformAdmin: Full access to admin operations
 permit (
     principal is Aeterna::User,
     action in [
@@ -125,15 +130,129 @@ permit (
     resource
 )
 when {
-    principal.role == "platformadmin" &&
+    principal in Aeterna::Role::"PlatformAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ListTenants",
+        Aeterna::Action::"CreateTenant",
+        Aeterna::Action::"ViewTenant",
+        Aeterna::Action::"UpdateTenant",
+        Aeterna::Action::"DeactivateTenant",
+        Aeterna::Action::"ViewTenantConfig",
+        Aeterna::Action::"UpdateTenantConfig",
+        Aeterna::Action::"ManageTenantSecrets",
+        Aeterna::Action::"ManageGitProviderConnections",
+        Aeterna::Action::"ViewGitProviderConnections"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"PlatformAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewRepositoryBinding",
+        Aeterna::Action::"UpdateRepositoryBinding"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"PlatformAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"CreateSession",
+        Aeterna::Action::"ViewSession",
+        Aeterna::Action::"EndSession"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"PlatformAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"TriggerSync",
+        Aeterna::Action::"ViewSyncStatus",
+        Aeterna::Action::"ResolveConflict"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"PlatformAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"QueryGraph",
+        Aeterna::Action::"ModifyGraph"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"PlatformAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"InvokeCCA",
+        Aeterna::Action::"InvokeMcpTool"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"PlatformAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewUser",
+        Aeterna::Action::"RegisterUser",
+        Aeterna::Action::"UpdateUser",
+        Aeterna::Action::"DeactivateUser"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"PlatformAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"AdminSyncGitHub",
+    resource
+)
+when {
+    principal in Aeterna::Role::"PlatformAdmin" &&
     principal.status == "active"
 };
 
 // =============================================================================
-// ADMIN ROLE - Full Access
+// TENANT ADMIN ROLE - Full Tenant-Scoped Administration
+// Identical to Admin permissions plus explicit tenant config/secrets management.
+// Excludes cross-tenant actions: ListTenants, CreateTenant, ManageGitProviderConnections, AdminSyncGitHub
 // =============================================================================
 
-// Admin: Full access to all memory operations
 permit (
     principal is Aeterna::User,
     action in [
@@ -141,16 +260,21 @@ permit (
         Aeterna::Action::"CreateMemory",
         Aeterna::Action::"UpdateMemory",
         Aeterna::Action::"DeleteMemory",
-        Aeterna::Action::"PromoteMemory"
+        Aeterna::Action::"PromoteMemory",
+        Aeterna::Action::"SearchMemory",
+        Aeterna::Action::"ListMemory",
+        Aeterna::Action::"OptimizeMemory",
+        Aeterna::Action::"ReasonMemory",
+        Aeterna::Action::"CloseMemory",
+        Aeterna::Action::"FeedbackMemory"
     ],
     resource
 )
 when {
-    principal.role == "admin" &&
+    principal in Aeterna::Role::"TenantAdmin" &&
     principal.status == "active"
 };
 
-// Admin: Full access to all knowledge operations
 permit (
     principal is Aeterna::User,
     action in [
@@ -158,16 +282,18 @@ permit (
         Aeterna::Action::"ProposeKnowledge",
         Aeterna::Action::"EditKnowledge",
         Aeterna::Action::"ApproveKnowledge",
-        Aeterna::Action::"DeprecateKnowledge"
+        Aeterna::Action::"DeprecateKnowledge",
+        Aeterna::Action::"ListKnowledge",
+        Aeterna::Action::"SearchKnowledge",
+        Aeterna::Action::"BatchKnowledge"
     ],
     resource
 )
 when {
-    principal.role == "admin" &&
+    principal in Aeterna::Role::"TenantAdmin" &&
     principal.status == "active"
 };
 
-// Admin: Full access to all policy operations
 permit (
     principal is Aeterna::User,
     action in [
@@ -180,11 +306,10 @@ permit (
     resource
 )
 when {
-    principal.role == "admin" &&
+    principal in Aeterna::Role::"TenantAdmin" &&
     principal.status == "active"
 };
 
-// Admin: Full access to governance
 permit (
     principal is Aeterna::User,
     action in [
@@ -196,11 +321,10 @@ permit (
     resource
 )
 when {
-    principal.role == "admin" &&
+    principal in Aeterna::Role::"TenantAdmin" &&
     principal.status == "active"
 };
 
-// Admin: Full access to organization management
 permit (
     principal is Aeterna::User,
     action in [
@@ -209,16 +333,16 @@ permit (
         Aeterna::Action::"CreateTeam",
         Aeterna::Action::"CreateProject",
         Aeterna::Action::"ManageMembers",
-        Aeterna::Action::"AssignRoles"
+        Aeterna::Action::"AssignRoles",
+        Aeterna::Action::"ManageTeamAssignments"
     ],
     resource
 )
 when {
-    principal.role == "admin" &&
+    principal in Aeterna::Role::"TenantAdmin" &&
     principal.status == "active"
 };
 
-// Admin: Full access to agent management
 permit (
     principal is Aeterna::User,
     action in [
@@ -229,11 +353,10 @@ permit (
     resource
 )
 when {
-    principal.role == "admin" &&
+    principal in Aeterna::Role::"TenantAdmin" &&
     principal.status == "active"
 };
 
-// Admin: Full access to admin operations
 permit (
     principal is Aeterna::User,
     action in [
@@ -245,7 +368,330 @@ permit (
     resource
 )
 when {
-    principal.role == "admin" &&
+    principal in Aeterna::Role::"TenantAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewTenant",
+        Aeterna::Action::"UpdateTenant",
+        Aeterna::Action::"DeactivateTenant",
+        Aeterna::Action::"ViewTenantConfig",
+        Aeterna::Action::"UpdateTenantConfig",
+        Aeterna::Action::"ManageTenantSecrets",
+        Aeterna::Action::"ViewGitProviderConnections"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TenantAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewRepositoryBinding",
+        Aeterna::Action::"UpdateRepositoryBinding"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TenantAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"CreateSession",
+        Aeterna::Action::"ViewSession",
+        Aeterna::Action::"EndSession"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TenantAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"TriggerSync",
+        Aeterna::Action::"ViewSyncStatus",
+        Aeterna::Action::"ResolveConflict"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TenantAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"QueryGraph",
+        Aeterna::Action::"ModifyGraph"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TenantAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"InvokeCCA",
+        Aeterna::Action::"InvokeMcpTool"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TenantAdmin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewUser",
+        Aeterna::Action::"RegisterUser",
+        Aeterna::Action::"UpdateUser",
+        Aeterna::Action::"DeactivateUser"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TenantAdmin" &&
+    principal.status == "active"
+};
+
+// =============================================================================
+// ADMIN ROLE - Full Tenant Access (legacy alias for TenantAdmin)
+// =============================================================================
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewMemory",
+        Aeterna::Action::"CreateMemory",
+        Aeterna::Action::"UpdateMemory",
+        Aeterna::Action::"DeleteMemory",
+        Aeterna::Action::"PromoteMemory",
+        Aeterna::Action::"SearchMemory",
+        Aeterna::Action::"ListMemory",
+        Aeterna::Action::"OptimizeMemory",
+        Aeterna::Action::"ReasonMemory",
+        Aeterna::Action::"CloseMemory",
+        Aeterna::Action::"FeedbackMemory"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewKnowledge",
+        Aeterna::Action::"ProposeKnowledge",
+        Aeterna::Action::"EditKnowledge",
+        Aeterna::Action::"ApproveKnowledge",
+        Aeterna::Action::"DeprecateKnowledge",
+        Aeterna::Action::"ListKnowledge",
+        Aeterna::Action::"SearchKnowledge",
+        Aeterna::Action::"BatchKnowledge"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewPolicy",
+        Aeterna::Action::"CreatePolicy",
+        Aeterna::Action::"EditPolicy",
+        Aeterna::Action::"ApprovePolicy",
+        Aeterna::Action::"SimulatePolicy"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewGovernanceRequest",
+        Aeterna::Action::"SubmitGovernanceRequest",
+        Aeterna::Action::"ApproveGovernanceRequest",
+        Aeterna::Action::"RejectGovernanceRequest"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewOrganization",
+        Aeterna::Action::"CreateOrganization",
+        Aeterna::Action::"CreateTeam",
+        Aeterna::Action::"CreateProject",
+        Aeterna::Action::"ManageMembers",
+        Aeterna::Action::"AssignRoles",
+        Aeterna::Action::"ManageTeamAssignments"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"RegisterAgent",
+        Aeterna::Action::"RevokeAgent",
+        Aeterna::Action::"DelegateToAgent"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewAuditLog",
+        Aeterna::Action::"ExportData",
+        Aeterna::Action::"ImportData",
+        Aeterna::Action::"ConfigureGovernance"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewTenant",
+        Aeterna::Action::"UpdateTenant",
+        Aeterna::Action::"DeactivateTenant",
+        Aeterna::Action::"ViewTenantConfig",
+        Aeterna::Action::"UpdateTenantConfig",
+        Aeterna::Action::"ManageTenantSecrets",
+        Aeterna::Action::"ViewGitProviderConnections"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewRepositoryBinding",
+        Aeterna::Action::"UpdateRepositoryBinding"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"CreateSession",
+        Aeterna::Action::"ViewSession",
+        Aeterna::Action::"EndSession"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"TriggerSync",
+        Aeterna::Action::"ViewSyncStatus",
+        Aeterna::Action::"ResolveConflict"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"QueryGraph",
+        Aeterna::Action::"ModifyGraph"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"InvokeCCA",
+        Aeterna::Action::"InvokeMcpTool"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewUser",
+        Aeterna::Action::"RegisterUser",
+        Aeterna::Action::"UpdateUser",
+        Aeterna::Action::"DeactivateUser"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Admin" &&
     principal.status == "active"
 };
 
@@ -253,7 +699,6 @@ when {
 // ARCHITECT ROLE - Design & Knowledge Management
 // =============================================================================
 
-// Architect: Full memory access
 permit (
     principal is Aeterna::User,
     action in [
@@ -261,16 +706,21 @@ permit (
         Aeterna::Action::"CreateMemory",
         Aeterna::Action::"UpdateMemory",
         Aeterna::Action::"DeleteMemory",
-        Aeterna::Action::"PromoteMemory"
+        Aeterna::Action::"PromoteMemory",
+        Aeterna::Action::"SearchMemory",
+        Aeterna::Action::"ListMemory",
+        Aeterna::Action::"OptimizeMemory",
+        Aeterna::Action::"ReasonMemory",
+        Aeterna::Action::"CloseMemory",
+        Aeterna::Action::"FeedbackMemory"
     ],
     resource
 )
 when {
-    principal.role == "architect" &&
+    principal in Aeterna::Role::"Architect" &&
     principal.status == "active"
 };
 
-// Architect: Full knowledge access
 permit (
     principal is Aeterna::User,
     action in [
@@ -278,16 +728,18 @@ permit (
         Aeterna::Action::"ProposeKnowledge",
         Aeterna::Action::"EditKnowledge",
         Aeterna::Action::"ApproveKnowledge",
-        Aeterna::Action::"DeprecateKnowledge"
+        Aeterna::Action::"DeprecateKnowledge",
+        Aeterna::Action::"ListKnowledge",
+        Aeterna::Action::"SearchKnowledge",
+        Aeterna::Action::"BatchKnowledge"
     ],
     resource
 )
 when {
-    principal.role == "architect" &&
+    principal in Aeterna::Role::"Architect" &&
     principal.status == "active"
 };
 
-// Architect: Full policy access
 permit (
     principal is Aeterna::User,
     action in [
@@ -300,11 +752,10 @@ permit (
     resource
 )
 when {
-    principal.role == "architect" &&
+    principal in Aeterna::Role::"Architect" &&
     principal.status == "active"
 };
 
-// Architect: View and submit governance requests
 permit (
     principal is Aeterna::User,
     action in [
@@ -316,27 +767,26 @@ permit (
     resource
 )
 when {
-    principal.role == "architect" &&
+    principal in Aeterna::Role::"Architect" &&
     principal.status == "active"
 };
 
-// Architect: View organization structure and manage teams
 permit (
     principal is Aeterna::User,
     action in [
         Aeterna::Action::"ViewOrganization",
         Aeterna::Action::"CreateTeam",
         Aeterna::Action::"CreateProject",
-        Aeterna::Action::"ManageMembers"
+        Aeterna::Action::"ManageMembers",
+        Aeterna::Action::"ManageTeamAssignments"
     ],
     resource
 )
 when {
-    principal.role == "architect" &&
+    principal in Aeterna::Role::"Architect" &&
     principal.status == "active"
 };
 
-// Architect: Manage agents
 permit (
     principal is Aeterna::User,
     action in [
@@ -347,18 +797,96 @@ permit (
     resource
 )
 when {
-    principal.role == "architect" &&
+    principal in Aeterna::Role::"Architect" &&
     principal.status == "active"
 };
 
-// Architect: View audit logs
 permit (
     principal is Aeterna::User,
     action == Aeterna::Action::"ViewAuditLog",
     resource
 )
 when {
-    principal.role == "architect" &&
+    principal in Aeterna::Role::"Architect" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewTenant",
+        Aeterna::Action::"ViewTenantConfig",
+        Aeterna::Action::"ViewGitProviderConnections",
+        Aeterna::Action::"ViewRepositoryBinding"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Architect" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"CreateSession",
+        Aeterna::Action::"ViewSession",
+        Aeterna::Action::"EndSession"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Architect" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"TriggerSync",
+        Aeterna::Action::"ViewSyncStatus",
+        Aeterna::Action::"ResolveConflict"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Architect" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"QueryGraph",
+        Aeterna::Action::"ModifyGraph"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Architect" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"InvokeCCA",
+        Aeterna::Action::"InvokeMcpTool"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Architect" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"ViewUser",
+    resource
+)
+when {
+    principal in Aeterna::Role::"Architect" &&
     principal.status == "active"
 };
 
@@ -366,7 +894,6 @@ when {
 // TECH LEAD ROLE - Team Resource Management
 // =============================================================================
 
-// TechLead: Full memory access within hierarchy
 permit (
     principal is Aeterna::User,
     action in [
@@ -374,16 +901,21 @@ permit (
         Aeterna::Action::"CreateMemory",
         Aeterna::Action::"UpdateMemory",
         Aeterna::Action::"DeleteMemory",
-        Aeterna::Action::"PromoteMemory"
+        Aeterna::Action::"PromoteMemory",
+        Aeterna::Action::"SearchMemory",
+        Aeterna::Action::"ListMemory",
+        Aeterna::Action::"OptimizeMemory",
+        Aeterna::Action::"ReasonMemory",
+        Aeterna::Action::"CloseMemory",
+        Aeterna::Action::"FeedbackMemory"
     ],
     resource
 )
 when {
-    principal.role == "techlead" &&
+    principal in Aeterna::Role::"TechLead" &&
     principal.status == "active"
 };
 
-// TechLead: Full knowledge access (can't approve at company/org level)
 permit (
     principal is Aeterna::User,
     action in [
@@ -391,16 +923,18 @@ permit (
         Aeterna::Action::"ProposeKnowledge",
         Aeterna::Action::"EditKnowledge",
         Aeterna::Action::"ApproveKnowledge",
-        Aeterna::Action::"DeprecateKnowledge"
+        Aeterna::Action::"DeprecateKnowledge",
+        Aeterna::Action::"ListKnowledge",
+        Aeterna::Action::"SearchKnowledge",
+        Aeterna::Action::"BatchKnowledge"
     ],
     resource
 )
 when {
-    principal.role == "techlead" &&
+    principal in Aeterna::Role::"TechLead" &&
     principal.status == "active"
 };
 
-// TechLead: Policy view, create, simulate (not edit/approve at high levels)
 permit (
     principal is Aeterna::User,
     action in [
@@ -411,11 +945,10 @@ permit (
     resource
 )
 when {
-    principal.role == "techlead" &&
+    principal in Aeterna::Role::"TechLead" &&
     principal.status == "active"
 };
 
-// TechLead: Governance participation
 permit (
     principal is Aeterna::User,
     action in [
@@ -427,26 +960,25 @@ permit (
     resource
 )
 when {
-    principal.role == "techlead" &&
+    principal in Aeterna::Role::"TechLead" &&
     principal.status == "active"
 };
 
-// TechLead: Team and project management
 permit (
     principal is Aeterna::User,
     action in [
         Aeterna::Action::"ViewOrganization",
         Aeterna::Action::"CreateProject",
-        Aeterna::Action::"ManageMembers"
+        Aeterna::Action::"ManageMembers",
+        Aeterna::Action::"ManageTeamAssignments"
     ],
     resource
 )
 when {
-    principal.role == "techlead" &&
+    principal in Aeterna::Role::"TechLead" &&
     principal.status == "active"
 };
 
-// TechLead: Agent management
 permit (
     principal is Aeterna::User,
     action in [
@@ -457,18 +989,95 @@ permit (
     resource
 )
 when {
-    principal.role == "techlead" &&
+    principal in Aeterna::Role::"TechLead" &&
     principal.status == "active"
 };
 
-// TechLead: View audit logs
 permit (
     principal is Aeterna::User,
     action == Aeterna::Action::"ViewAuditLog",
     resource
 )
 when {
-    principal.role == "techlead" &&
+    principal in Aeterna::Role::"TechLead" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewTenant",
+        Aeterna::Action::"ViewTenantConfig",
+        Aeterna::Action::"ViewRepositoryBinding",
+        Aeterna::Action::"ViewGitProviderConnections"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TechLead" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"CreateSession",
+        Aeterna::Action::"ViewSession",
+        Aeterna::Action::"EndSession"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TechLead" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"TriggerSync",
+        Aeterna::Action::"ViewSyncStatus"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TechLead" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"QueryGraph",
+        Aeterna::Action::"ModifyGraph"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TechLead" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"InvokeCCA",
+        Aeterna::Action::"InvokeMcpTool"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"TechLead" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"ViewUser",
+    resource
+)
+when {
+    principal in Aeterna::Role::"TechLead" &&
     principal.status == "active"
 };
 
@@ -476,46 +1085,38 @@ when {
 // DEVELOPER ROLE - Standard Access
 // =============================================================================
 
-// Developer: Read and create memories
 permit (
     principal is Aeterna::User,
     action in [
         Aeterna::Action::"ViewMemory",
-        Aeterna::Action::"CreateMemory"
+        Aeterna::Action::"CreateMemory",
+        Aeterna::Action::"UpdateMemory",
+        Aeterna::Action::"SearchMemory",
+        Aeterna::Action::"ListMemory",
+        Aeterna::Action::"FeedbackMemory"
     ],
     resource
 )
 when {
-    principal.role == "developer" &&
+    principal in Aeterna::Role::"Developer" &&
     principal.status == "active"
 };
 
-// Developer: Update own memories (requires additional context check in app)
-permit (
-    principal is Aeterna::User,
-    action == Aeterna::Action::"UpdateMemory",
-    resource
-)
-when {
-    principal.role == "developer" &&
-    principal.status == "active"
-};
-
-// Developer: View knowledge, propose new knowledge
 permit (
     principal is Aeterna::User,
     action in [
         Aeterna::Action::"ViewKnowledge",
-        Aeterna::Action::"ProposeKnowledge"
+        Aeterna::Action::"ProposeKnowledge",
+        Aeterna::Action::"ListKnowledge",
+        Aeterna::Action::"SearchKnowledge"
     ],
     resource
 )
 when {
-    principal.role == "developer" &&
+    principal in Aeterna::Role::"Developer" &&
     principal.status == "active"
 };
 
-// Developer: View and simulate policies
 permit (
     principal is Aeterna::User,
     action in [
@@ -525,11 +1126,10 @@ permit (
     resource
 )
 when {
-    principal.role == "developer" &&
+    principal in Aeterna::Role::"Developer" &&
     principal.status == "active"
 };
 
-// Developer: View and submit governance requests
 permit (
     principal is Aeterna::User,
     action in [
@@ -539,22 +1139,20 @@ permit (
     resource
 )
 when {
-    principal.role == "developer" &&
+    principal in Aeterna::Role::"Developer" &&
     principal.status == "active"
 };
 
-// Developer: View organization structure
 permit (
     principal is Aeterna::User,
     action == Aeterna::Action::"ViewOrganization",
     resource
 )
 when {
-    principal.role == "developer" &&
+    principal in Aeterna::Role::"Developer" &&
     principal.status == "active"
 };
 
-// Developer: Register and delegate to agents
 permit (
     principal is Aeterna::User,
     action in [
@@ -564,7 +1162,79 @@ permit (
     resource
 )
 when {
-    principal.role == "developer" &&
+    principal in Aeterna::Role::"Developer" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"CreateSession",
+        Aeterna::Action::"ViewSession",
+        Aeterna::Action::"EndSession"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Developer" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"ViewSyncStatus",
+    resource
+)
+when {
+    principal in Aeterna::Role::"Developer" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"QueryGraph",
+    resource
+)
+when {
+    principal in Aeterna::Role::"Developer" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"InvokeCCA",
+        Aeterna::Action::"InvokeMcpTool"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Developer" &&
+    principal.status == "active"
+};
+
+    permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewTenant",
+        Aeterna::Action::"ViewTenantConfig",
+        Aeterna::Action::"ViewRepositoryBinding",
+        Aeterna::Action::"ViewGitProviderConnections"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Developer" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"ViewUser",
+    resource
+)
+when {
+    principal in Aeterna::Role::"Developer" &&
     principal.status == "active"
 };
 
@@ -572,29 +1242,34 @@ when {
 // VIEWER ROLE - Read-Only Access
 // =============================================================================
 
-// Viewer: Read-only memory access
 permit (
     principal is Aeterna::User,
-    action == Aeterna::Action::"ViewMemory",
+    action in [
+        Aeterna::Action::"ViewMemory",
+        Aeterna::Action::"SearchMemory",
+        Aeterna::Action::"ListMemory"
+    ],
     resource
 )
 when {
-    principal.role == "viewer" &&
+    principal in Aeterna::Role::"Viewer" &&
     principal.status == "active"
 };
 
-// Viewer: Read-only knowledge access
 permit (
     principal is Aeterna::User,
-    action == Aeterna::Action::"ViewKnowledge",
+    action in [
+        Aeterna::Action::"ViewKnowledge",
+        Aeterna::Action::"ListKnowledge",
+        Aeterna::Action::"SearchKnowledge"
+    ],
     resource
 )
 when {
-    principal.role == "viewer" &&
+    principal in Aeterna::Role::"Viewer" &&
     principal.status == "active"
 };
 
-// Viewer: Read-only policy access
 permit (
     principal is Aeterna::User,
     action in [
@@ -604,28 +1279,81 @@ permit (
     resource
 )
 when {
-    principal.role == "viewer" &&
+    principal in Aeterna::Role::"Viewer" &&
     principal.status == "active"
 };
 
-// Viewer: Read-only governance access
 permit (
     principal is Aeterna::User,
     action == Aeterna::Action::"ViewGovernanceRequest",
     resource
 )
 when {
-    principal.role == "viewer" &&
+    principal in Aeterna::Role::"Viewer" &&
     principal.status == "active"
 };
 
-// Viewer: Read-only organization access
 permit (
     principal is Aeterna::User,
     action == Aeterna::Action::"ViewOrganization",
     resource
 )
 when {
-    principal.role == "viewer" &&
+    principal in Aeterna::Role::"Viewer" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"ViewSyncStatus",
+    resource
+)
+when {
+    principal in Aeterna::Role::"Viewer" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"ViewSession",
+    resource
+)
+when {
+    principal in Aeterna::Role::"Viewer" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action in [
+        Aeterna::Action::"ViewTenant",
+        Aeterna::Action::"ViewTenantConfig",
+        Aeterna::Action::"ViewRepositoryBinding",
+        Aeterna::Action::"ViewGitProviderConnections"
+    ],
+    resource
+)
+when {
+    principal in Aeterna::Role::"Viewer" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"QueryGraph",
+    resource
+)
+when {
+    principal in Aeterna::Role::"Viewer" &&
+    principal.status == "active"
+};
+
+permit (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"ViewUser",
+    resource
+)
+when {
+    principal in Aeterna::Role::"Viewer" &&
     principal.status == "active"
 };

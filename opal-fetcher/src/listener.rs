@@ -22,13 +22,13 @@ pub struct ReferentialChangeNotification {
     /// The ID of the changed entity.
     pub id: String,
     /// Unix timestamp of the change.
-    pub timestamp: f64
+    pub timestamp: f64,
 }
 
 /// `PostgreSQL` LISTEN/NOTIFY listener for referential changes.
 pub struct ReferentialListener {
     state: Arc<AppState>,
-    pg_listener: PgListener
+    pg_listener: PgListener,
 }
 
 impl ReferentialListener {
@@ -92,8 +92,9 @@ impl ReferentialListener {
             "projects" => Some("hierarchy"),
             "users" => Some("users"),
             "memberships" => Some("users"),
+            "role_assignments" => Some("users"),
             "agents" => Some("agents"),
-            _ => None
+            _ => None,
         };
 
         if let Some(entity_type) = entity_type {
@@ -117,7 +118,7 @@ impl ReferentialListener {
         &self,
         opal_url: &str,
         entity_type: &str,
-        notification: &ReferentialChangeNotification
+        notification: &ReferentialChangeNotification,
     ) -> Result<()> {
         let update_url = format!("{opal_url}/data/config");
 
@@ -186,7 +187,7 @@ mod tests {
             table: "agents".to_string(),
             operation: "UPDATE".to_string(),
             id: "test-id".to_string(),
-            timestamp: 1234567890.0
+            timestamp: 1234567890.0,
         };
 
         let json = serde_json::to_string(&notification).unwrap();
@@ -205,6 +206,7 @@ mod tests {
             ("projects", Some("hierarchy")),
             ("users", Some("users")),
             ("memberships", Some("users")),
+            ("role_assignments", Some("users")),
             ("agents", Some("agents")),
             ("unknown_table", None),
         ];
@@ -212,9 +214,9 @@ mod tests {
         for (table, expected) in mappings {
             let result = match table {
                 "companies" | "organizations" | "teams" | "projects" => Some("hierarchy"),
-                "users" | "memberships" => Some("users"),
+                "users" | "memberships" | "role_assignments" => Some("users"),
                 "agents" => Some("agents"),
-                _ => None
+                _ => None,
             };
             assert_eq!(
                 result, expected,

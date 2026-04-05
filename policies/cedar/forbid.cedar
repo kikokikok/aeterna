@@ -105,6 +105,80 @@ when {
 };
 
 // =============================================================================
+// CROSS-TENANT ACCESS RESTRICTIONS - PlatformAdmin Only
+// =============================================================================
+// These actions operate across tenant boundaries and are restricted to
+// PlatformAdmin role only. The rbac.cedar permit rules only grant these to
+// platformadmin, but forbid rules provide defense-in-depth: even if a
+// misconfigured permit rule were added, the forbid would still block.
+
+// FORBID: Non-PlatformAdmin users cannot list tenants (cross-tenant visibility)
+@id("forbid-cross-tenant-list-tenants")
+forbid (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"ListTenants",
+    resource
+)
+unless {
+    principal in Aeterna::Role::"PlatformAdmin"
+};
+
+// FORBID: Non-PlatformAdmin users cannot create tenants
+@id("forbid-cross-tenant-create-tenant")
+forbid (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"CreateTenant",
+    resource
+)
+unless {
+    principal in Aeterna::Role::"PlatformAdmin"
+};
+
+// FORBID: Non-PlatformAdmin users cannot manage shared git provider connections
+@id("forbid-cross-tenant-manage-git-providers")
+forbid (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"ManageGitProviderConnections",
+    resource
+)
+unless {
+    principal in Aeterna::Role::"PlatformAdmin"
+};
+
+// FORBID: Non-PlatformAdmin users cannot trigger admin-level GitHub sync
+@id("forbid-cross-tenant-admin-sync-github")
+forbid (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"AdminSyncGitHub",
+    resource
+)
+unless {
+    principal in Aeterna::Role::"PlatformAdmin"
+};
+
+// =============================================================================
+// PRIVILEGE ESCALATION RESTRICTIONS
+// =============================================================================
+// Prevent users from assigning roles with higher precedence than their own.
+// This is enforced at the policy level as defense-in-depth; the API layer
+// should also validate role precedence before processing grant requests.
+
+// FORBID: Non-admin users cannot assign roles (only Admin+ can)
+// Developers, Viewers, TechLeads, and Architects lack AssignRoles in their
+// permit rules, but this forbid provides an explicit safety net.
+@id("forbid-privilege-escalation-assign-roles")
+forbid (
+    principal is Aeterna::User,
+    action == Aeterna::Action::"AssignRoles",
+    resource
+)
+when {
+    !(principal in Aeterna::Role::"Admin") &&
+    !(principal in Aeterna::Role::"TenantAdmin") &&
+    !(principal in Aeterna::Role::"PlatformAdmin")
+};
+
+// =============================================================================
 // SCHEMA-ENFORCED RESTRICTIONS (Documentation)
 // =============================================================================
 // The following restrictions are enforced at the SCHEMA level in aeterna.cedarschema.
@@ -128,6 +202,12 @@ when {
 // - CreateOrganization (only User principal)
 // - CreateTeam (only User principal)
 // - CreateProject (only User principal)
+//
+// Cross-tenant actions also schema-enforced for agents (User-only principal):
+// - ListTenants (only User principal)
+// - CreateTenant (only User principal)
+// - ManageGitProviderConnections (only User principal)
+// - AdminSyncGitHub (only User principal)
 //
 // This is the preferred approach - enforce at schema level when possible,
 // use forbid policies only for runtime conditions (status, delegation depth, etc.)

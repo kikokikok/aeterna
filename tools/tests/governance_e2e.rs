@@ -3,8 +3,8 @@ use knowledge::governance::GovernanceEngine;
 use mk_core::traits::StorageBackend;
 use mk_core::types::{
     ConstraintOperator, ConstraintSeverity, ConstraintTarget, KnowledgeLayer, OrganizationalUnit,
-    Policy, PolicyMode, PolicyRule, RecordSource, Role, RuleMergeStrategy, RuleType, TenantContext,
-    TenantId, UnitType, UserId,
+    Policy, PolicyMode, PolicyRule, RecordSource, RoleIdentifier, RuleMergeStrategy, RuleType,
+    TenantContext, TenantId, UnitType, UserId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -133,7 +133,7 @@ impl StorageBackend for MockGovernanceStorage {
         _user_id: &UserId,
         _tenant_id: &TenantId,
         _unit_id: &str,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -143,7 +143,7 @@ impl StorageBackend for MockGovernanceStorage {
         _user_id: &UserId,
         _tenant_id: &TenantId,
         _unit_id: &str,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -301,6 +301,66 @@ impl StorageBackend for MockGovernanceStorage {
             .await
             .insert(unit.id.clone(), unit.clone());
         Ok(())
+    }
+
+    async fn get_unit_by_id(
+        &self,
+        _unit_id: &str,
+        _tenant_id: &str,
+    ) -> Result<Option<OrganizationalUnit>, Self::Error> {
+        Ok(None)
+    }
+
+    async fn update_unit(&self, _unit: &OrganizationalUnit) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn delete_unit(&self, _unit_id: &str, _tenant_id: &str) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn list_unit_members(
+        &self,
+        _unit_id: &str,
+        _tenant_id: &str,
+    ) -> Result<Vec<(UserId, RoleIdentifier)>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn assign_team_to_project(
+        &self,
+        _project_id: &str,
+        _team_id: &str,
+        _tenant_id: &str,
+        _assignment_type: &str,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn remove_team_from_project(
+        &self,
+        _project_id: &str,
+        _team_id: &str,
+        _tenant_id: &str,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn list_project_team_assignments(
+        &self,
+        _project_id: &str,
+        _tenant_id: &str,
+    ) -> Result<Vec<(String, String)>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn get_effective_roles_at_scope(
+        &self,
+        _user_id: &UserId,
+        _tenant_id: &TenantId,
+        _unit_id: &str,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+        Ok(Vec::new())
     }
 }
 
