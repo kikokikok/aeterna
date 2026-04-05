@@ -943,6 +943,7 @@ backup:
 ## CloudNativePG subchart (aliased as cnpg)
 cnpg:
   enabled: true
+  nameOverride: cloudnative-pg
 
 ## Dragonfly subchart
 dragonfly:
