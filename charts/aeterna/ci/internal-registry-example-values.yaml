@@ -40,10 +40,6 @@ cache:
   valkey:
     enabled: true
 
-cnpg:
-  image:
-    repository: "${INTERNAL_REGISTRY}/ghcrio/cloudnative-pg/cloudnative-pg"
-
 qdrant:
   image:
     repository: "${INTERNAL_REGISTRY}/dockerhub/qdrant/qdrant"

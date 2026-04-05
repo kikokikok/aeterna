@@ -28,12 +28,6 @@ annotations:
   artifacthub.io/category: ai-machine-learning
 
 dependencies:
-  - name: cloudnative-pg
-    version: "0.23.*"
-    repository: https://cloudnative-pg.github.io/charts
-    condition: cnpg.enabled
-    alias: cnpg
-
   - name: dragonfly
     version: "v1.37.0"
     repository: oci://ghcr.io/dragonflydb/dragonfly/helm

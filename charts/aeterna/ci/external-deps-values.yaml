@@ -90,9 +90,6 @@ observability:
 networkPolicy:
   enabled: false
 
-cnpg:
-  enabled: false
-
 dragonfly:
   enabled: false
 

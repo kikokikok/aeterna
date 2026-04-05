@@ -22,12 +22,6 @@ aeterna:
     enabled: true
     minAvailable: 1
 
-cnpg:
-  enabled: true
-  instances: 2
-  storage:
-    size: 20Gi
-
 postgresql:
   bundled: true
   cloudnativepg:

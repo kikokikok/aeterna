@@ -152,9 +152,6 @@ networkPolicy:
   enabled: true
 
 # Subcharts with HA
-cnpg:
-  enabled: true
-
 dragonfly:
   enabled: true
   resources:

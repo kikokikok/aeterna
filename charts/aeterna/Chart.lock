@@ -1,7 +1,4 @@
 dependencies:
-- name: cloudnative-pg
-  repository: https://cloudnative-pg.github.io/charts
-  version: 0.23.2
 - name: dragonfly
   repository: oci://ghcr.io/dragonflydb/dragonfly/helm
   version: v1.37.0
@@ -17,5 +14,5 @@ dependencies:
 - name: valkey
   repository: https://valkey.io/valkey-helm/
   version: 0.9.3
-digest: sha256:542ca9f6f1b8dd67cf9daf670e0b4c696101c058bef680ef913b08ad772ea40a
-generated: "2026-03-16T17:55:18.156661+01:00"
+digest: sha256:69a4ec0221c49546a89a0782bf329015492b8696a7363ebf94dc61095fd6c4b9
+generated: "2026-04-05T12:54:51.362551+02:00"

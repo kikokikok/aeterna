@@ -35,12 +35,6 @@ aeterna:
                     - aeterna
             topologyKey: topology.kubernetes.io/zone
 
-cnpg:
-  enabled: true
-  postgresql:
-    parameters:
-      max_connections: "500"
-
 postgresql:
   bundled: true
   cloudnativepg:

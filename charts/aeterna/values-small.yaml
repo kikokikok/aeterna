@@ -18,12 +18,6 @@ aeterna:
   pdb:
     enabled: false
 
-cnpg:
-  enabled: true
-  instances: 1
-  storage:
-    size: 5Gi
-
 postgresql:
   bundled: true
   cloudnativepg:

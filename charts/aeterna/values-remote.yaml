@@ -18,9 +18,6 @@ aeterna:
       cpu: 50m
       memory: 128Mi
 
-cnpg:
-  enabled: false
-
 postgresql:
   bundled: false
   external:

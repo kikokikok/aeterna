@@ -87,9 +87,6 @@ networkPolicy:
   enabled: false
 
 # Enable subcharts
-cnpg:
-  enabled: true
-
 dragonfly:
   enabled: true
   resources:

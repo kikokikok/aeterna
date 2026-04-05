@@ -102,9 +102,6 @@ networkPolicy:
   enabled: true
 
 # Subcharts - only local cache components
-cnpg:
-  enabled: false
-
 dragonfly:
   enabled: true
   resources:

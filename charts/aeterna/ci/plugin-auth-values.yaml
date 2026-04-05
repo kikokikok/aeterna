@@ -1,0 +1,32 @@
+deploymentMode: local
+
+aeterna:
+  enabled: true
+  replicaCount: 1
+
+pluginAuth:
+  enabled: true
+  jwtSecret: "ci-test-jwt-secret-32chars-long!"
+  github:
+    clientId: "Iv1.abc123def456"
+    clientSecret: "ci-test-github-client-secret"
+    appId: "123456"
+    appName: "aeterna-ci-test"
+    appPem: "-----BEGIN RSA PRIVATE KEY-----\nci-test-pem\n-----END RSA PRIVATE KEY-----"
+  redirectBaseUrl: "https://aeterna.ci.local"
+  tokenIssuer: "aeterna-ci"
+  accessTokenTtlSeconds: 1800
+  refreshTokenTtlSeconds: 86400
+  defaultTenantId: "ci-tenant-001"
+  existingSecret: "aeterna-plugin-auth-secret"
+
+opal:
+  enabled: true
+
+llm:
+  provider: none
+
+observability:
+  logging:
+    level: debug
+    format: pretty

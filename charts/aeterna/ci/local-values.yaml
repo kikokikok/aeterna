@@ -76,9 +76,6 @@ observability:
 networkPolicy:
   enabled: false
 
-cnpg:
-  enabled: true
-
 dragonfly:
   enabled: true
   resources:
