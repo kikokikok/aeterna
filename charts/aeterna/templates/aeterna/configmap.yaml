@@ -45,6 +45,7 @@ data:
   {{- end }}
   {{- if .Values.opal.enabled }}
   AETERNA_OPAL_ENABLED: "true"
+  AETERNA_AUTH_BACKEND: "cedar"
   AETERNA_CEDAR_AGENT_HOST: {{ printf "%s-cedar-agent" (include "aeterna.fullname" .) | quote }}
   AETERNA_CEDAR_AGENT_PORT: "8180"
   {{- end }}
