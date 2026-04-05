@@ -21,7 +21,7 @@
 ## 4. Compatibility and migration behavior
 
 - [x] 4.1 Preserve static token support for non-interactive/service use while preferring interactive auth for normal plugin sign-in
-- [ ] 4.2 Ensure browser-based Okta auth behavior remains unchanged for protected Aeterna product endpoints
+- [x] 4.2 Ensure browser-based Okta auth behavior remains unchanged for protected Aeterna product endpoints
 - [x] 4.3 Ensure plugin-auth changes do not alter knowledge-repository GitHub App behavior or existing service-to-service auth flows
 
 ## 5. Verification and documentation
@@ -29,4 +29,4 @@
 - [x] 5.1 Add automated tests for server auth bootstrap, token refresh, token validation, and invalid-token rejection paths
 - [x] 5.2 Add automated tests for plugin sign-in, session reuse, refresh, and explicit re-auth requirements after refresh failure
 - [x] 5.3 Update plugin and server documentation to describe the supported auth flow, configuration, and migration from static interactive tokens
-- [ ] 5.4 Verify the end-to-end OpenCode plugin flow against a real server path with authenticated user identity resolution
+- [x] 5.4 Verify the end-to-end OpenCode plugin flow against a real server path with authenticated user identity resolution
