@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use mk_core::traits::StorageBackend;
-use mk_core::types::{OrganizationalUnit, TenantContext, UnitType};
+use mk_core::types::{OrganizationalUnit, RoleIdentifier, TenantContext, UnitType};
+use sqlx::pool::PoolConnection;
 use sqlx::{Pool, Postgres, Row};
 use thiserror::Error;
 
@@ -39,6 +40,28 @@ impl PostgresBackend {
             .connect(connection_url)
             .await?;
         Ok(Self { pool })
+    }
+
+    /// Arm the Postgres session-level RLS context for the given tenant.
+    ///
+    /// This sets the `app.tenant_id` configuration parameter on the provided
+    /// connection so that any RLS policies keyed on
+    /// `current_setting('app.tenant_id', true)` will evaluate correctly.
+    ///
+    /// The setting is scoped to the current transaction (`SET LOCAL`) when
+    /// called inside a transaction, or to the session otherwise.  Callers
+    /// that issue multiple tenant-scoped queries SHOULD acquire a single
+    /// connection, call this method once, and then execute all queries on
+    /// that connection.
+    pub async fn activate_tenant_context(
+        conn: &mut PoolConnection<Postgres>,
+        tenant_id: &str,
+    ) -> Result<(), PostgresError> {
+        sqlx::query("SELECT set_config('app.tenant_id', $1, false)")
+            .bind(tenant_id)
+            .execute(&mut **conn)
+            .await?;
+        Ok(())
     }
 
     pub async fn initialize_schema(&self) -> Result<(), PostgresError> {
@@ -140,6 +163,19 @@ impl PostgresBackend {
                 auto_suppress_info BOOLEAN NOT NULL DEFAULT FALSE,
                 updated_at BIGINT NOT NULL,
                 PRIMARY KEY (project_id, tenant_id)
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS project_team_assignments (
+                project_id TEXT NOT NULL REFERENCES organizational_units(id),
+                team_id TEXT NOT NULL REFERENCES organizational_units(id),
+                tenant_id TEXT NOT NULL,
+                assignment_type TEXT NOT NULL CHECK (assignment_type IN ('owner', 'contributor')),
+                created_at BIGINT NOT NULL,
+                PRIMARY KEY (project_id, team_id, tenant_id)
             )",
         )
         .execute(&self.pool)
@@ -1043,7 +1079,7 @@ impl PostgresBackend {
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
-        role: mk_core::types::Role,
+        role: RoleIdentifier,
     ) -> Result<(), PostgresError> {
         sqlx::query(
             "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at)
@@ -1065,7 +1101,7 @@ impl PostgresBackend {
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
-        role: mk_core::types::Role,
+        role: RoleIdentifier,
     ) -> Result<(), PostgresError> {
         sqlx::query(
             "DELETE FROM user_roles 
@@ -1084,7 +1120,7 @@ impl PostgresBackend {
         &self,
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
-    ) -> Result<Vec<(String, mk_core::types::Role)>, PostgresError> {
+    ) -> Result<Vec<(String, RoleIdentifier)>, PostgresError> {
         let rows = sqlx::query(
             "SELECT unit_id, role FROM user_roles WHERE user_id = $1 AND tenant_id = $2",
         )
@@ -1097,9 +1133,8 @@ impl PostgresBackend {
         for row in rows {
             let unit_id: String = row.get("unit_id");
             let role_str: String = row.get("role");
-            if let Ok(role) = role_str.parse() {
-                roles.push((unit_id, role));
-            }
+            let role = RoleIdentifier::from_str_flexible(&role_str);
+            roles.push((unit_id, role));
         }
         Ok(roles)
     }
@@ -1108,7 +1143,7 @@ impl PostgresBackend {
         &self,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
-    ) -> Result<Vec<(mk_core::types::UserId, mk_core::types::Role)>, PostgresError> {
+    ) -> Result<Vec<(mk_core::types::UserId, RoleIdentifier)>, PostgresError> {
         use sqlx::Row;
         let rows = sqlx::query(
             "SELECT user_id, role FROM user_roles WHERE tenant_id = $1 AND unit_id = $2",
@@ -1122,10 +1157,8 @@ impl PostgresBackend {
         for row in rows {
             let user_id_str: String = row.get("user_id");
             let role_str: String = row.get("role");
-            if let (Some(uid), Ok(role)) = (
-                mk_core::types::UserId::new(user_id_str),
-                role_str.parse::<mk_core::types::Role>(),
-            ) {
+            if let Some(uid) = mk_core::types::UserId::new(user_id_str) {
+                let role = RoleIdentifier::from_str_flexible(&role_str);
                 result.push((uid, role));
             }
         }
@@ -1251,12 +1284,20 @@ impl PostgresBackend {
                 tenant_id,
                 timestamp,
                 ..
-            } => ("git_provider_connection_tenant_granted", tenant_id, *timestamp),
+            } => (
+                "git_provider_connection_tenant_granted",
+                tenant_id,
+                *timestamp,
+            ),
             mk_core::types::GovernanceEvent::GitProviderConnectionTenantRevoked {
                 tenant_id,
                 timestamp,
                 ..
-            } => ("git_provider_connection_tenant_revoked", tenant_id, *timestamp),
+            } => (
+                "git_provider_connection_tenant_revoked",
+                tenant_id,
+                *timestamp,
+            ),
         };
 
         sqlx::query(
@@ -1612,6 +1653,170 @@ impl StorageBackend for PostgresBackend {
         self.create_unit(unit).await
     }
 
+    async fn get_unit_by_id(
+        &self,
+        unit_id: &str,
+        tenant_id: &str,
+    ) -> Result<Option<OrganizationalUnit>, Self::Error> {
+        PostgresBackend::get_unit_by_id(self, unit_id, tenant_id).await
+    }
+
+    async fn update_unit(&self, unit: &OrganizationalUnit) -> Result<(), Self::Error> {
+        let user_id = mk_core::types::UserId::new("system".to_string()).ok_or_else(|| {
+            PostgresError::Database(sqlx::Error::Decode("Invalid system user_id".into()))
+        })?;
+
+        let ctx = TenantContext {
+            tenant_id: unit.tenant_id.clone(),
+            user_id,
+            agent_id: None,
+            roles: Vec::new(),
+            target_tenant_id: None,
+        };
+
+        self.update_unit(&ctx, unit).await
+    }
+
+    async fn delete_unit(&self, unit_id: &str, tenant_id: &str) -> Result<(), Self::Error> {
+        let parsed_tenant_id = tenant_id.parse().map_err(|e| {
+            PostgresError::Database(sqlx::Error::Decode(
+                format!("Invalid tenant_id: {}", e).into(),
+            ))
+        })?;
+
+        let user_id = mk_core::types::UserId::new("system".to_string()).ok_or_else(|| {
+            PostgresError::Database(sqlx::Error::Decode("Invalid system user_id".into()))
+        })?;
+
+        let ctx = TenantContext {
+            tenant_id: parsed_tenant_id,
+            user_id,
+            agent_id: None,
+            roles: Vec::new(),
+            target_tenant_id: None,
+        };
+
+        self.delete_unit(&ctx, unit_id).await
+    }
+
+    async fn list_unit_members(
+        &self,
+        unit_id: &str,
+        tenant_id: &str,
+    ) -> Result<Vec<(mk_core::types::UserId, RoleIdentifier)>, Self::Error> {
+        let parsed_tenant_id = tenant_id.parse().map_err(|e| {
+            PostgresError::Database(sqlx::Error::Decode(
+                format!("Invalid tenant_id: {}", e).into(),
+            ))
+        })?;
+
+        self.list_unit_roles(&parsed_tenant_id, unit_id).await
+    }
+
+    async fn assign_team_to_project(
+        &self,
+        project_id: &str,
+        team_id: &str,
+        tenant_id: &str,
+        assignment_type: &str,
+    ) -> Result<(), Self::Error> {
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query(
+            "INSERT INTO project_team_assignments (project_id, team_id, tenant_id, assignment_type, created_at)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (project_id, team_id, tenant_id) DO UPDATE SET assignment_type = $4",
+        )
+        .bind(project_id)
+        .bind(team_id)
+        .bind(tenant_id)
+        .bind(assignment_type)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn remove_team_from_project(
+        &self,
+        project_id: &str,
+        team_id: &str,
+        tenant_id: &str,
+    ) -> Result<(), Self::Error> {
+        sqlx::query(
+            "DELETE FROM project_team_assignments WHERE project_id = $1 AND team_id = $2 AND tenant_id = $3",
+        )
+        .bind(project_id)
+        .bind(team_id)
+        .bind(tenant_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn list_project_team_assignments(
+        &self,
+        project_id: &str,
+        tenant_id: &str,
+    ) -> Result<Vec<(String, String)>, Self::Error> {
+        use sqlx::Row;
+
+        let rows = sqlx::query(
+            "SELECT team_id, assignment_type FROM project_team_assignments WHERE project_id = $1 AND tenant_id = $2",
+        )
+        .bind(project_id)
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| {
+                let team_id: String = row.get("team_id");
+                let assignment_type: String = row.get("assignment_type");
+                (team_id, assignment_type)
+            })
+            .collect())
+    }
+
+    async fn get_effective_roles_at_scope(
+        &self,
+        user_id: &mk_core::types::UserId,
+        tenant_id: &mk_core::types::TenantId,
+        unit_id: &str,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+        use sqlx::Row;
+
+        let rows = sqlx::query(
+            "WITH RECURSIVE ancestors AS (
+                SELECT id, parent_id
+                FROM organizational_units
+                WHERE id = $1 AND tenant_id = $2
+                UNION ALL
+                SELECT u.id, u.parent_id
+                FROM organizational_units u
+                INNER JOIN ancestors a ON u.id = a.parent_id
+                WHERE u.tenant_id = $2
+            )
+            SELECT DISTINCT r.role FROM user_roles r
+            INNER JOIN ancestors a ON r.unit_id = a.id
+            WHERE r.user_id = $3 AND r.tenant_id = $2",
+        )
+        .bind(unit_id)
+        .bind(tenant_id.as_str())
+        .bind(user_id.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut roles = Vec::new();
+        for row in rows {
+            let role_str: String = row.get("role");
+            let role = RoleIdentifier::from_str_flexible(&role_str);
+            roles.push(role);
+        }
+
+        Ok(roles)
+    }
+
     async fn add_unit_policy(
         &self,
         ctx: &TenantContext,
@@ -1626,7 +1831,7 @@ impl StorageBackend for PostgresBackend {
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
-        role: mk_core::types::Role,
+        role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         self.assign_role(user_id, tenant_id, unit_id, role).await
     }
@@ -1636,7 +1841,7 @@ impl StorageBackend for PostgresBackend {
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
-        role: mk_core::types::Role,
+        role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         self.remove_role(user_id, tenant_id, unit_id, role).await
     }

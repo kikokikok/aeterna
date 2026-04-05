@@ -177,7 +177,7 @@ mod tests {
             tenant_id: mk_core::types::TenantId::from_str("test-tenant").unwrap(),
             user_id: mk_core::types::UserId::from_str("test-user").unwrap(),
             agent_id: None,
-            role: None,
+            roles: vec![],
             target_tenant_id: None,
         }
     }

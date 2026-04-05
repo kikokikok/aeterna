@@ -50,6 +50,51 @@ pub trait StorageBackend: Send + Sync {
     async fn create_unit(&self, unit: &crate::types::OrganizationalUnit)
     -> Result<(), Self::Error>;
 
+    async fn get_unit_by_id(
+        &self,
+        unit_id: &str,
+        tenant_id: &str,
+    ) -> Result<Option<crate::types::OrganizationalUnit>, Self::Error>;
+
+    async fn update_unit(&self, unit: &crate::types::OrganizationalUnit)
+    -> Result<(), Self::Error>;
+
+    async fn delete_unit(&self, unit_id: &str, tenant_id: &str) -> Result<(), Self::Error>;
+
+    async fn list_unit_members(
+        &self,
+        unit_id: &str,
+        tenant_id: &str,
+    ) -> Result<Vec<(crate::types::UserId, crate::types::RoleIdentifier)>, Self::Error>;
+
+    async fn assign_team_to_project(
+        &self,
+        project_id: &str,
+        team_id: &str,
+        tenant_id: &str,
+        assignment_type: &str,
+    ) -> Result<(), Self::Error>;
+
+    async fn remove_team_from_project(
+        &self,
+        project_id: &str,
+        team_id: &str,
+        tenant_id: &str,
+    ) -> Result<(), Self::Error>;
+
+    async fn list_project_team_assignments(
+        &self,
+        project_id: &str,
+        tenant_id: &str,
+    ) -> Result<Vec<(String, String)>, Self::Error>;
+
+    async fn get_effective_roles_at_scope(
+        &self,
+        user_id: &crate::types::UserId,
+        tenant_id: &crate::types::TenantId,
+        unit_id: &str,
+    ) -> Result<Vec<crate::types::RoleIdentifier>, Self::Error>;
+
     async fn add_unit_policy(
         &self,
         ctx: &crate::types::TenantContext,
@@ -62,7 +107,7 @@ pub trait StorageBackend: Send + Sync {
         user_id: &crate::types::UserId,
         tenant_id: &crate::types::TenantId,
         unit_id: &str,
-        role: crate::types::Role,
+        role: crate::types::RoleIdentifier,
     ) -> Result<(), Self::Error>;
 
     async fn remove_role(
@@ -70,7 +115,7 @@ pub trait StorageBackend: Send + Sync {
         user_id: &crate::types::UserId,
         tenant_id: &crate::types::TenantId,
         unit_id: &str,
-        role: crate::types::Role,
+        role: crate::types::RoleIdentifier,
     ) -> Result<(), Self::Error>;
 
     async fn store_drift_result(
@@ -318,20 +363,20 @@ pub trait AuthorizationService: Send + Sync {
     async fn get_user_roles(
         &self,
         ctx: &crate::types::TenantContext,
-    ) -> Result<Vec<crate::types::Role>, Self::Error>;
+    ) -> Result<Vec<crate::types::RoleIdentifier>, Self::Error>;
 
     async fn assign_role(
         &self,
         ctx: &crate::types::TenantContext,
         user_id: &crate::types::UserId,
-        role: crate::types::Role,
+        role: crate::types::RoleIdentifier,
     ) -> Result<(), Self::Error>;
 
     async fn remove_role(
         &self,
         ctx: &crate::types::TenantContext,
         user_id: &crate::types::UserId,
-        role: crate::types::Role,
+        role: crate::types::RoleIdentifier,
     ) -> Result<(), Self::Error>;
 }
 

@@ -464,6 +464,10 @@ impl AeternaClient {
         .await
     }
 
+    pub async fn tenant_provision(&self, body: &serde_json::Value) -> Result<serde_json::Value> {
+        parse_json_response(self.post("/api/v1/admin/tenants/provision", body).await?).await
+    }
+
     pub async fn my_tenant_config_inspect(&self) -> Result<serde_json::Value> {
         parse_json_response(self.get("/api/v1/admin/tenant-config").await?).await
     }
@@ -1000,10 +1004,7 @@ impl AeternaClient {
     }
 
     pub async fn git_provider_connection_list(&self) -> Result<serde_json::Value> {
-        parse_json_response(
-            self.get("/api/v1/admin/git-provider-connections").await?,
-        )
-        .await
+        parse_json_response(self.get("/api/v1/admin/git-provider-connections").await?).await
     }
 
     pub async fn git_provider_connection_show(&self, id: &str) -> Result<serde_json::Value> {
@@ -1021,9 +1022,7 @@ impl AeternaClient {
     ) -> Result<serde_json::Value> {
         parse_json_response(
             self.post(
-                &format!(
-                    "/api/v1/admin/git-provider-connections/{connection_id}/tenants/{tenant}"
-                ),
+                &format!("/api/v1/admin/git-provider-connections/{connection_id}/tenants/{tenant}"),
                 &serde_json::json!({}),
             )
             .await?,
@@ -1057,7 +1056,6 @@ impl AeternaClient {
         )
         .await
     }
-
 }
 
 // ---------------------------------------------------------------------------

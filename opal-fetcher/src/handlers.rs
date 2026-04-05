@@ -5,8 +5,9 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use crate::entities::{
-    AgentPermissionRow, CedarEntitiesResponse, HierarchyRow, UserPermissionRow, transform_agents,
-    transform_hierarchy, transform_users
+    AgentPermissionRow, CedarEntitiesResponse, HierarchyRow, ProjectTeamAssignmentRow,
+    UserPermissionRow, augment_projects_with_team_assignments, collect_project_team_assignments,
+    transform_agents, transform_hierarchy, transform_roles, transform_users,
 };
 use crate::error::Result;
 use crate::state::AppState;
@@ -15,7 +16,7 @@ use crate::state::AppState;
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub status: String,
-    pub database: String
+    pub database: String,
 }
 
 /// Health check endpoint.
@@ -31,8 +32,8 @@ pub async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(HealthResponse {
                     status: "unhealthy".to_string(),
-                    database: "disconnected".to_string()
-                })
+                    database: "disconnected".to_string(),
+                }),
             );
         }
     };
@@ -41,8 +42,8 @@ pub async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         StatusCode::OK,
         Json(HealthResponse {
             status: "healthy".to_string(),
-            database: db_status.to_string()
-        })
+            database: db_status.to_string(),
+        }),
     )
 }
 
@@ -70,7 +71,7 @@ opal_fetcher_up 1
 /// Returns the organizational hierarchy (Company → Organization → Team →
 /// Project) as Cedar entities for OPAL consumption.
 pub async fn get_hierarchy(
-    State(state): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<CedarEntitiesResponse>> {
     tracing::debug!("Fetching organizational hierarchy");
 
@@ -91,7 +92,7 @@ pub async fn get_hierarchy(
             project_name,
             git_remote
         FROM v_hierarchy
-        "
+        ",
     )
     .fetch_all(&state.pool)
     .await?;
@@ -99,7 +100,18 @@ pub async fn get_hierarchy(
     let count = rows.len();
     tracing::debug!(row_count = count, "Fetched hierarchy rows");
 
-    let entities = transform_hierarchy(rows)?;
+    let mut entities = transform_hierarchy(rows)?;
+    let assignment_rows: Vec<ProjectTeamAssignmentRow> = sqlx::query_as(
+        r"
+        SELECT project_id, team_id, tenant_id, assignment_type
+        FROM project_team_assignments
+        ",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    let assignments = collect_project_team_assignments(assignment_rows);
+    augment_projects_with_team_assignments(&mut entities, assignments);
+
     let response = CedarEntitiesResponse::new(entities);
 
     tracing::info!(
@@ -132,7 +144,7 @@ pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<Json<CedarE
             org_slug,
             team_slug
         FROM v_user_permissions
-        "
+        ",
     )
     .fetch_all(&state.pool)
     .await?;
@@ -140,7 +152,9 @@ pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<Json<CedarE
     let count = rows.len();
     tracing::debug!(row_count = count, "Fetched user permission rows");
 
-    let entities = transform_users(rows)?;
+    let role_entities = transform_roles(&rows);
+    let mut entities = transform_users(rows)?;
+    entities.extend(role_entities);
     let response = CedarEntitiesResponse::new(entities);
 
     tracing::info!(entity_count = response.count, "Returning user entities");
@@ -173,7 +187,7 @@ pub async fn get_agents(State(state): State<Arc<AppState>>) -> Result<Json<Cedar
             delegating_user_email,
             delegating_user_name
         FROM v_agent_permissions
-        "
+        ",
     )
     .fetch_all(&state.pool)
     .await?;
@@ -193,11 +207,13 @@ pub async fn get_agents(State(state): State<Arc<AppState>>) -> Result<Json<Cedar
 ///
 /// Returns all entities (hierarchy, users, agents, and Code Search) in a single response.
 /// Useful for initial full sync.
-pub async fn get_all_entities(State(state): State<Arc<AppState>>) -> Result<Json<CedarEntitiesResponse>> {
+pub async fn get_all_entities(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<CedarEntitiesResponse>> {
     tracing::debug!("Fetching all entities");
 
     // Fetch all entity types in parallel
-    let (hierarchy_rows, user_rows, agent_rows, codesearch_repo_rows, codesearch_req_rows, codesearch_id_rows) = tokio::try_join!(
+    let (hierarchy_rows, user_rows, agent_rows, assignment_rows, codesearch_repo_rows, codesearch_req_rows, codesearch_id_rows) = tokio::try_join!(
         sqlx::query_as::<_, HierarchyRow>(
             r"SELECT company_id, company_slug, company_name, org_id, org_slug, org_name, team_id, team_slug, team_name, project_id, project_slug, project_name, git_remote FROM v_hierarchy"
         ).fetch_all(&state.pool),
@@ -206,6 +222,9 @@ pub async fn get_all_entities(State(state): State<Arc<AppState>>) -> Result<Json
         ).fetch_all(&state.pool),
         sqlx::query_as::<_, AgentPermissionRow>(
             r"SELECT agent_id, agent_name, agent_type, delegated_by_user_id, delegated_by_agent_id, delegation_depth, capabilities, allowed_company_ids, allowed_org_ids, allowed_team_ids, allowed_project_ids, agent_status, delegating_user_email, delegating_user_name FROM v_agent_permissions"
+        ).fetch_all(&state.pool),
+        sqlx::query_as::<_, ProjectTeamAssignmentRow>(
+            r"SELECT project_id, team_id, tenant_id, assignment_type FROM project_team_assignments"
         ).fetch_all(&state.pool),
         sqlx::query_as::<_, crate::entities::CodeSearchRepositoryRow>(
             r"SELECT id, tenant_id, name, status, sync_strategy, current_branch FROM v_code_search_repositories"
@@ -220,17 +239,30 @@ pub async fn get_all_entities(State(state): State<Arc<AppState>>) -> Result<Json
 
     // Transform all entities
     let mut all_entities = transform_hierarchy(hierarchy_rows)?;
+    let assignments = collect_project_team_assignments(assignment_rows);
+    augment_projects_with_team_assignments(&mut all_entities, assignments);
+    let role_entities = transform_roles(&user_rows);
     all_entities.extend(transform_users(user_rows)?);
+    all_entities.extend(role_entities);
     all_entities.extend(transform_agents(agent_rows)?);
-    
+
     // Add Code Search entities
-    all_entities.extend(crate::entities::transform_code_search_repositories(codesearch_repo_rows));
-    all_entities.extend(crate::entities::transform_code_search_requests(codesearch_req_rows));
-    all_entities.extend(crate::entities::transform_code_search_identities(codesearch_id_rows));
+    all_entities.extend(crate::entities::transform_code_search_repositories(
+        codesearch_repo_rows,
+    ));
+    all_entities.extend(crate::entities::transform_code_search_requests(
+        codesearch_req_rows,
+    ));
+    all_entities.extend(crate::entities::transform_code_search_identities(
+        codesearch_id_rows,
+    ));
 
     let response = CedarEntitiesResponse::new(all_entities);
 
-    tracing::info!(entity_count = response.count, "Returning all entities (including Code Search)");
+    tracing::info!(
+        entity_count = response.count,
+        "Returning all entities (including Code Search)"
+    );
 
     Ok(Json(response))
 }
@@ -243,7 +275,7 @@ mod tests {
     fn test_health_response_serialization() {
         let response = HealthResponse {
             status: "healthy".to_string(),
-            database: "connected".to_string()
+            database: "connected".to_string(),
         };
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("healthy"));

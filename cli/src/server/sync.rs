@@ -8,7 +8,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use super::AppState;
-use super::plugin_auth::{tenant_context_from_plugin_bearer, validate_plugin_bearer};
+use super::plugin_auth::{
+    tenant_context_from_plugin_bearer, tenant_context_from_plugin_bearer_or_default,
+    validate_plugin_bearer,
+};
+use storage::postgres::PostgresBackend;
 
 #[derive(Debug, Deserialize)]
 pub struct SyncPushRequest {
@@ -109,8 +113,33 @@ async fn push_handler(
         return response;
     }
 
-    let ctx = tenant_context_from_request(&state, &headers);
+    let ctx = match tenant_context_from_request(&state, &headers) {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
     let pool = state.postgres.pool();
+
+    let mut conn = match pool.acquire().await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("Failed to acquire database connection: {e}");
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "database_error",
+                "Failed to acquire database connection",
+            );
+        }
+    };
+    if let Err(e) =
+        PostgresBackend::activate_tenant_context(&mut conn, ctx.tenant_id.as_str()).await
+    {
+        tracing::error!("Failed to activate tenant RLS context: {e}");
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "database_error",
+            "Failed to activate tenant context",
+        );
+    }
 
     let mut conflicts = Vec::new();
     let embeddings = HashMap::new();
@@ -125,7 +154,7 @@ async fn push_handler(
         )
         .bind(&entry.id)
         .bind(ctx.tenant_id.as_str())
-        .fetch_optional(pool)
+        .fetch_optional(&mut *conn)
         .await
         .unwrap_or(None);
 
@@ -153,7 +182,7 @@ async fn push_handler(
             .bind(&req.device_id)
             .bind(&entry.id)
             .bind(ctx.tenant_id.as_str())
-            .execute(pool)
+            .execute(&mut *conn)
             .await
             .ok();
         } else {
@@ -173,7 +202,7 @@ async fn push_handler(
             .bind(&req.device_id)
             .bind(created_at)
             .bind(updated_at)
-            .execute(pool)
+            .execute(&mut *conn)
             .await
             .ok();
         }
@@ -209,8 +238,33 @@ async fn pull_handler(
         return response;
     }
 
-    let ctx = tenant_context_from_request(&state, &headers);
+    let ctx = match tenant_context_from_request(&state, &headers) {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
     let pool = state.postgres.pool();
+
+    let mut conn = match pool.acquire().await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("Failed to acquire database connection: {e}");
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "database_error",
+                "Failed to acquire database connection",
+            );
+        }
+    };
+    if let Err(e) =
+        PostgresBackend::activate_tenant_context(&mut conn, ctx.tenant_id.as_str()).await
+    {
+        tracing::error!("Failed to activate tenant RLS context: {e}");
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "database_error",
+            "Failed to activate tenant context",
+        );
+    }
 
     let since_cursor = query
         .since_cursor
@@ -245,7 +299,7 @@ async fn pull_handler(
         .bind(ctx.tenant_id.as_str())
         .bind(since_cursor)
         .bind(fetch_limit * 2)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await
         .unwrap_or_default();
 
@@ -305,16 +359,50 @@ fn extract_auth_token(headers: &HeaderMap) -> Option<String> {
         .map(ToString::to_string)
 }
 
+/// Derive the caller's `TenantContext` from a validated Aeterna plugin bearer
+/// token.
+///
+/// When plugin auth is **enabled**: requires a valid bearer token and fails
+/// closed (returns `Err`) when none is present or valid.
+///
+/// When plugin auth is **disabled** (development / service-to-service mode):
+/// falls back to the synthetic `default/system` context with an explicit debug
+/// log.  This fallback is intentional and MUST NOT be used in production.
 fn tenant_context_from_request(
     state: &AppState,
     headers: &HeaderMap,
-) -> mk_core::types::TenantContext {
-    if let Some(secret) = state.plugin_auth_state.config.jwt_secret.as_deref() {
-        if state.plugin_auth_state.config.enabled {
-            return tenant_context_from_plugin_bearer(headers, secret);
-        }
+) -> Result<mk_core::types::TenantContext, axum::response::Response> {
+    if state.plugin_auth_state.config.enabled {
+        let secret = state
+            .plugin_auth_state
+            .config
+            .jwt_secret
+            .as_deref()
+            .ok_or_else(|| {
+                error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "configuration_error",
+                    "Plugin auth JWT secret is not configured",
+                )
+            })?;
+        return tenant_context_from_plugin_bearer(headers, secret).ok_or_else(|| {
+            error_response(
+                StatusCode::UNAUTHORIZED,
+                "invalid_plugin_token",
+                "Valid plugin bearer token required",
+            )
+        });
     }
-    default_tenant_context()
+    // Development / service-to-service fallback (plugin auth disabled).
+    Ok(tenant_context_from_plugin_bearer_or_default(
+        headers,
+        state
+            .plugin_auth_state
+            .config
+            .jwt_secret
+            .as_deref()
+            .unwrap_or(""),
+    ))
 }
 
 fn reject_invalid_plugin_bearer(
@@ -342,13 +430,6 @@ fn reject_invalid_plugin_bearer(
     }
 
     None
-}
-
-fn default_tenant_context() -> mk_core::types::TenantContext {
-    mk_core::types::TenantContext::new(
-        mk_core::types::TenantId::new("default".to_string()).expect("default tenant id"),
-        mk_core::types::UserId::new("system".to_string()).expect("default user id"),
-    )
 }
 
 fn parse_timestamp(s: &str) -> Option<i64> {

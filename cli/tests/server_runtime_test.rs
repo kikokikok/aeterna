@@ -18,7 +18,7 @@ use memory::reasoning::ReflectiveReasoner;
 use mk_core::traits::{AuthorizationService, KnowledgeRepository};
 use mk_core::types::{
     KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, ReasoningStrategy,
-    ReasoningTrace, Role, TenantContext, TenantId, UserId,
+    ReasoningTrace, Role, RoleIdentifier, TenantContext, TenantId, UserId,
 };
 use serde_json::json;
 use storage::governance::GovernanceStorage;
@@ -49,15 +49,18 @@ impl AuthorizationService for MockAuth {
         Ok(true)
     }
 
-    async fn get_user_roles(&self, _ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
-        Ok(vec![Role::Developer])
+    async fn get_user_roles(
+        &self,
+        _ctx: &TenantContext,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+        Ok(vec![Role::Developer.into()])
     }
 
     async fn assign_role(
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -66,7 +69,7 @@ impl AuthorizationService for MockAuth {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -1122,12 +1125,12 @@ async fn user_role_revoke_fails_closed_when_assignment_scope_is_ambiguous() {
         .unwrap();
     state
         .postgres
-        .assign_role(&user_id, &tenant_id, &org_unit_id, Role::Developer)
+        .assign_role(&user_id, &tenant_id, &org_unit_id, Role::Developer.into())
         .await
         .unwrap();
     state
         .postgres
-        .assign_role(&user_id, &tenant_id, &team_unit_id, Role::Developer)
+        .assign_role(&user_id, &tenant_id, &team_unit_id, Role::Developer.into())
         .await
         .unwrap();
 

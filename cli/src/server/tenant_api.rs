@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
+use adapters::auth::matrix::{ALL_ACTIONS, role_permission_matrix};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
@@ -10,9 +11,9 @@ use knowledge::tenant_repo_resolver::RepoResolutionError;
 use mk_core::traits::{StorageBackend, TenantConfigProvider};
 use mk_core::types::{
     BranchPolicy, CredentialKind, GitProviderConnection, GitProviderKind, GovernanceEvent,
-    OrganizationalUnit, PersistentEvent, RecordSource, RepositoryKind, Role, TenantConfigDocument,
-    TenantConfigField, TenantConfigOwnership, TenantContext, TenantSecretEntry,
-    TenantSecretReference, UnitType,
+    OrganizationalUnit, PersistentEvent, RecordSource, RepositoryKind, Role, RoleIdentifier,
+    TenantConfigDocument, TenantConfigField, TenantConfigOwnership, TenantContext,
+    TenantSecretEntry, TenantSecretReference, UnitType,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -126,7 +127,7 @@ pub struct UpdateHierarchyUnitRequest {
 #[derive(Debug, Deserialize)]
 pub struct AssignUnitRoleRequest {
     pub user_id: String,
-    pub role: Role,
+    pub role: RoleIdentifier,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,13 +138,13 @@ pub struct UserRoleListQuery {
 #[derive(Debug, Serialize)]
 struct UnitMemberRoleResponse {
     user_id: String,
-    role: Role,
+    role: RoleIdentifier,
 }
 
 #[derive(Debug, Serialize)]
 struct UserScopedRoleResponse {
     unit_id: String,
-    role: Role,
+    role: RoleIdentifier,
 }
 
 #[derive(Debug, Serialize)]
@@ -246,6 +247,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/admin/tenants/{tenant}/git-provider-connections",
             get(list_tenant_git_provider_connections),
+        )
+        .route(
+            "/admin/tenants/provision",
+            post(provision_tenant),
         )
         .with_state(state)
 }
@@ -516,7 +521,7 @@ async fn delete_tenant_secret(
 
     // Guard: TenantAdmin cannot delete a platform-owned secret entry.
     // Resolve the existing config to check ownership before proceeding.
-    if ctx.role != Some(Role::PlatformAdmin) {
+    if !ctx.has_known_role(&Role::PlatformAdmin) {
         match state
             .tenant_config_provider
             .get_config(&tenant_record.id)
@@ -799,7 +804,7 @@ async fn delete_my_tenant_secret(
         .and_then(|config| config.secret_references.get(&logical_name))
     {
         if reference.ownership == TenantConfigOwnership::Platform
-            && ctx.role != Some(Role::PlatformAdmin)
+            && !ctx.has_known_role(&Role::PlatformAdmin)
         {
             return error_response(
                 StatusCode::FORBIDDEN,
@@ -1734,7 +1739,7 @@ async fn assign_unit_role(
         }
     }
 
-    if req.role == Role::PlatformAdmin {
+    if matches!(req.role, RoleIdentifier::Known(Role::PlatformAdmin)) {
         return error_response(
             StatusCode::BAD_REQUEST,
             "invalid_role_assignment",
@@ -1885,18 +1890,9 @@ async fn remove_unit_role(
             );
         }
     };
-    let role: Role = match role.parse() {
-        Ok(role) => role,
-        Err(_) => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "invalid_role_assignment",
-                "Unsupported role",
-            );
-        }
-    };
+    let role = RoleIdentifier::from_str_flexible(&role);
 
-    if role == Role::PlatformAdmin {
+    if matches!(role, RoleIdentifier::Known(Role::PlatformAdmin)) {
         return error_response(
             StatusCode::BAD_REQUEST,
             "invalid_role_assignment",
@@ -1999,7 +1995,7 @@ fn require_platform_admin(
     headers: &HeaderMap,
 ) -> Result<TenantContext, axum::response::Response> {
     let ctx = authenticated_tenant_context(state, headers)?;
-    if ctx.role != Some(Role::PlatformAdmin) {
+    if !ctx.has_known_role(&Role::PlatformAdmin) {
         return Err(error_response(
             StatusCode::FORBIDDEN,
             "forbidden",
@@ -2015,26 +2011,26 @@ async fn require_tenant_admin_context(
     headers: &HeaderMap,
 ) -> Result<TenantContext, axum::response::Response> {
     let ctx = tenant_scoped_context(state, headers).await?;
-    match ctx.role {
-        Some(Role::PlatformAdmin) => Ok(ctx),
-        Some(Role::Admin) => {
-            // TenantAdmin is self-scoped: they MUST NOT target a different tenant.
-            if let Some(ref target) = ctx.target_tenant_id {
-                if target != &ctx.tenant_id {
-                    return Err(error_response(
-                        StatusCode::FORBIDDEN,
-                        "forbidden",
-                        "TenantAdmin cannot target a different tenant",
-                    ));
-                }
-            }
-            Ok(ctx)
+    if ctx.has_known_role(&Role::PlatformAdmin) {
+        Ok(ctx)
+    } else if ctx.has_known_role(&Role::Admin) {
+        // TenantAdmin is self-scoped: they MUST NOT target a different tenant.
+        if let Some(ref target) = ctx.target_tenant_id
+            && target != &ctx.tenant_id
+        {
+            return Err(error_response(
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                "TenantAdmin cannot target a different tenant",
+            ));
         }
-        _ => Err(error_response(
+        Ok(ctx)
+    } else {
+        Err(error_response(
             StatusCode::FORBIDDEN,
             "forbidden",
             "Admin or PlatformAdmin role required",
-        )),
+        ))
     }
 }
 
@@ -2151,163 +2147,6 @@ fn error_response(status: StatusCode, error: &str, message: &str) -> axum::respo
 // Task 2.3 — Permission inspection
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// All actions recognised by the active Cedar policy bundle.
-const ALL_ACTIONS: &[&str] = &[
-    "ViewMemory",
-    "CreateMemory",
-    "UpdateMemory",
-    "DeleteMemory",
-    "PromoteMemory",
-    "ViewKnowledge",
-    "ProposeKnowledge",
-    "EditKnowledge",
-    "ApproveKnowledge",
-    "DeprecateKnowledge",
-    "ViewPolicy",
-    "CreatePolicy",
-    "EditPolicy",
-    "ApprovePolicy",
-    "SimulatePolicy",
-    "ViewGovernanceRequest",
-    "SubmitGovernanceRequest",
-    "ApproveGovernanceRequest",
-    "RejectGovernanceRequest",
-    "ViewOrganization",
-    "CreateOrganization",
-    "CreateTeam",
-    "CreateProject",
-    "ManageMembers",
-    "AssignRoles",
-    "RegisterAgent",
-    "RevokeAgent",
-    "DelegateToAgent",
-    "ViewAuditLog",
-    "ExportData",
-    "ImportData",
-    "ConfigureGovernance",
-];
-
-/// Role → permitted actions map derived from the Cedar RBAC policy file.
-///
-/// This is a static, authoritative matrix that mirrors `policies/cedar/rbac.cedar`.
-/// It is intentionally kept in sync with the Cedar file; when the Cedar file
-/// changes this map must be updated in the same commit.
-fn role_permission_matrix() -> std::collections::HashMap<String, Vec<String>> {
-    use std::collections::HashMap;
-
-    let platform_admin: Vec<&str> = ALL_ACTIONS.to_vec(); // full access
-
-    let admin: Vec<&str> = ALL_ACTIONS.to_vec(); // full access
-
-    let architect: Vec<&str> = vec![
-        "ViewMemory",
-        "CreateMemory",
-        "UpdateMemory",
-        "DeleteMemory",
-        "PromoteMemory",
-        "ViewKnowledge",
-        "ProposeKnowledge",
-        "EditKnowledge",
-        "ApproveKnowledge",
-        "DeprecateKnowledge",
-        "ViewPolicy",
-        "CreatePolicy",
-        "EditPolicy",
-        "ApprovePolicy",
-        "SimulatePolicy",
-        "ViewGovernanceRequest",
-        "SubmitGovernanceRequest",
-        "ApproveGovernanceRequest",
-        "RejectGovernanceRequest",
-        "ViewOrganization",
-        "CreateTeam",
-        "CreateProject",
-        "ManageMembers",
-        "RegisterAgent",
-        "RevokeAgent",
-        "DelegateToAgent",
-        "ViewAuditLog",
-    ];
-
-    let tech_lead: Vec<&str> = vec![
-        "ViewMemory",
-        "CreateMemory",
-        "UpdateMemory",
-        "DeleteMemory",
-        "PromoteMemory",
-        "ViewKnowledge",
-        "ProposeKnowledge",
-        "EditKnowledge",
-        "ApproveKnowledge",
-        "DeprecateKnowledge",
-        "ViewPolicy",
-        "CreatePolicy",
-        "SimulatePolicy",
-        "ViewGovernanceRequest",
-        "SubmitGovernanceRequest",
-        "ApproveGovernanceRequest",
-        "RejectGovernanceRequest",
-        "ViewOrganization",
-        "CreateProject",
-        "ManageMembers",
-        "RegisterAgent",
-        "RevokeAgent",
-        "DelegateToAgent",
-        "ViewAuditLog",
-    ];
-
-    let developer: Vec<&str> = vec![
-        "ViewMemory",
-        "CreateMemory",
-        "UpdateMemory",
-        "ViewKnowledge",
-        "ProposeKnowledge",
-        "ViewPolicy",
-        "SimulatePolicy",
-        "ViewGovernanceRequest",
-        "SubmitGovernanceRequest",
-        "ViewOrganization",
-        "RegisterAgent",
-        "DelegateToAgent",
-    ];
-
-    let viewer: Vec<&str> = vec![
-        "ViewMemory",
-        "ViewKnowledge",
-        "ViewPolicy",
-        "SimulatePolicy",
-        "ViewGovernanceRequest",
-        "ViewOrganization",
-    ];
-
-    let mut map: HashMap<String, Vec<String>> = HashMap::new();
-    map.insert(
-        "platformAdmin".to_string(),
-        platform_admin.iter().map(|s| s.to_string()).collect(),
-    );
-    map.insert(
-        "admin".to_string(),
-        admin.iter().map(|s| s.to_string()).collect(),
-    );
-    map.insert(
-        "architect".to_string(),
-        architect.iter().map(|s| s.to_string()).collect(),
-    );
-    map.insert(
-        "techLead".to_string(),
-        tech_lead.iter().map(|s| s.to_string()).collect(),
-    );
-    map.insert(
-        "developer".to_string(),
-        developer.iter().map(|s| s.to_string()).collect(),
-    );
-    map.insert(
-        "viewer".to_string(),
-        viewer.iter().map(|s| s.to_string()).collect(),
-    );
-    map
-}
-
 /// `GET /api/v1/admin/permissions/matrix`
 ///
 /// Returns the role-to-permission matrix derived from the active Cedar RBAC policy.
@@ -2337,7 +2176,7 @@ struct EffectivePermissionsQuery {
     user_id: String,
     resource: Option<String>,
     actions: Option<String>,
-    role: Option<Role>,
+    role: Option<RoleIdentifier>,
 }
 
 /// `GET /api/v1/admin/permissions/effective?role=<role>`
@@ -2390,7 +2229,7 @@ async fn get_effective_permissions(
     let mut principal_ctx = TenantContext::new(admin_ctx.tenant_id.clone(), user_id.clone());
 
     let roles = if let Some(role) = query.role.clone() {
-        principal_ctx.role = Some(role.clone());
+        principal_ctx.roles = vec![role.clone()];
         vec![role]
     } else {
         match state.auth_service.get_user_roles(&principal_ctx).await {
@@ -2428,7 +2267,7 @@ async fn get_effective_permissions(
             let mut allowed = false;
             for role in &roles {
                 let mut scoped_ctx = principal_ctx.clone();
-                scoped_ctx.role = Some(role.clone());
+                scoped_ctx.roles = vec![role.clone()];
                 match state
                     .auth_service
                     .check_permission(&scoped_ctx, action, &resource)
@@ -2481,7 +2320,7 @@ async fn require_platform_or_admin(
         Ok(ctx) => ctx,
         Err(response) => return Err(response),
     };
-    if matches!(ctx.role, Some(Role::PlatformAdmin | Role::Admin)) {
+    if ctx.has_known_role(&Role::PlatformAdmin) || ctx.has_known_role(&Role::Admin) {
         Ok(ctx)
     } else {
         Err(error_response(
@@ -2747,7 +2586,7 @@ async fn list_tenant_git_provider_connections(
         };
 
     // TenantAdmin can only list for their own tenant.
-    if ctx.role != Some(Role::PlatformAdmin) && tenant_record.id != ctx.tenant_id {
+    if !ctx.has_known_role(&Role::PlatformAdmin) && tenant_record.id != ctx.tenant_id {
         return error_response(
             StatusCode::FORBIDDEN,
             "forbidden",
@@ -2770,6 +2609,795 @@ async fn list_tenant_git_provider_connections(
         }
         Err(err) => map_connection_error("list_for_tenant", err),
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 10.1–10.5: Tenant Provisioning Manifest
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Versioned manifest schema.  `apiVersion` must be `"aeterna.io/v1"` and
+/// `kind` must be `"TenantManifest"`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantManifest {
+    pub api_version: String,
+    pub kind: String,
+    pub tenant: ManifestTenant,
+    #[serde(default)]
+    pub config: Option<ManifestConfig>,
+    #[serde(default)]
+    pub secrets: Option<Vec<ManifestSecret>>,
+    #[serde(default)]
+    pub repository: Option<SetTenantRepositoryBindingRequest>,
+    #[serde(default)]
+    pub hierarchy: Option<Vec<ManifestCompany>>,
+    #[serde(default)]
+    pub roles: Option<Vec<ManifestRoleAssignment>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestTenant {
+    pub slug: String,
+    pub name: String,
+    #[serde(default)]
+    pub domain_mappings: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestConfig {
+    #[serde(default)]
+    pub fields: BTreeMap<String, TenantConfigField>,
+    #[serde(default)]
+    pub secret_references: BTreeMap<String, TenantSecretReference>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestSecret {
+    pub logical_name: String,
+    #[serde(default = "default_tenant_ownership")]
+    pub ownership: TenantConfigOwnership,
+    pub secret_value: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestCompany {
+    pub name: String,
+    #[serde(default)]
+    pub orgs: Option<Vec<ManifestOrg>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestOrg {
+    pub name: String,
+    #[serde(default)]
+    pub teams: Option<Vec<ManifestTeam>>,
+    #[serde(default)]
+    pub members: Option<Vec<ManifestMember>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestTeam {
+    pub name: String,
+    #[serde(default)]
+    pub members: Option<Vec<ManifestMember>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestMember {
+    pub user_id: String,
+    pub role: RoleIdentifier,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestRoleAssignment {
+    pub user_id: String,
+    pub role: RoleIdentifier,
+    /// Hierarchy unit name or ID to scope the role to (optional — tenant-wide if absent).
+    pub unit: Option<String>,
+}
+
+/// Per-step status returned in the provision response.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProvisionStep {
+    step: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+impl ProvisionStep {
+    fn ok(step: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self {
+            step: step.into(),
+            detail: Some(detail.into()),
+            ok: true,
+            error: None,
+        }
+    }
+    fn fail(step: impl Into<String>, err: impl Into<String>) -> Self {
+        Self {
+            step: step.into(),
+            detail: None,
+            ok: false,
+            error: Some(err.into()),
+        }
+    }
+}
+
+/// Validate a manifest before processing any steps.
+/// Returns a list of human-readable error strings; empty means valid.
+fn validate_manifest(m: &TenantManifest) -> Vec<String> {
+    let mut errors: Vec<String> = Vec::new();
+
+    if m.api_version != "aeterna.io/v1" {
+        errors.push(format!(
+            "apiVersion must be 'aeterna.io/v1', got '{}'",
+            m.api_version
+        ));
+    }
+    if m.kind != "TenantManifest" {
+        errors.push(format!("kind must be 'TenantManifest', got '{}'", m.kind));
+    }
+
+    // Validate slug is kebab-case (lowercase alphanumeric + hyphens, no leading/trailing hyphen)
+    let slug = &m.tenant.slug;
+    if slug.is_empty() {
+        errors.push("tenant.slug is required and must not be empty".into());
+    } else if !slug
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        || slug.starts_with('-')
+        || slug.ends_with('-')
+    {
+        errors.push(format!(
+            "tenant.slug '{}' must be kebab-case (lowercase letters, digits, hyphens; no leading/trailing hyphens)",
+            slug
+        ));
+    }
+
+    if m.tenant.name.trim().is_empty() {
+        errors.push("tenant.name is required and must not be empty".into());
+    }
+
+    // Validate role names in hierarchy members
+    if let Some(companies) = &m.hierarchy {
+        for company in companies {
+            if company.name.trim().is_empty() {
+                errors.push("hierarchy company name must not be empty".into());
+            }
+            if let Some(orgs) = &company.orgs {
+                for org in orgs {
+                    if org.name.trim().is_empty() {
+                        errors.push("hierarchy org name must not be empty".into());
+                    }
+                    if let Some(teams) = &org.teams {
+                        for team in teams {
+                            if team.name.trim().is_empty() {
+                                errors.push("hierarchy team name must not be empty".into());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Validate roles section
+    if let Some(roles) = &m.roles {
+        for assignment in roles {
+            if assignment.user_id.trim().is_empty() {
+                errors.push("roles[].userId must not be empty".into());
+            }
+            if matches!(assignment.role, RoleIdentifier::Known(Role::PlatformAdmin)) {
+                errors.push(
+                    "PlatformAdmin cannot be assigned as a tenant-scoped role in a manifest".into(),
+                );
+            }
+        }
+    }
+
+    errors
+}
+
+/// `POST /api/v1/admin/tenants/provision`
+///
+/// PlatformAdmin-only.  Accepts a `TenantManifest` (JSON), processes it
+/// step-by-step and returns a per-step status.  The operation is idempotent:
+/// re-submitting for an existing slug will update existing resources.
+async fn provision_tenant(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(manifest): Json<TenantManifest>,
+) -> impl IntoResponse {
+    let ctx = match require_platform_admin(&state, &headers) {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+
+    // ── Pre-flight validation ─────────────────────────────────────────────
+    let validation_errors = validate_manifest(&manifest);
+    if !validation_errors.is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({
+                "success": false,
+                "error": "manifest_validation_failed",
+                "validationErrors": validation_errors,
+            })),
+        )
+            .into_response();
+    }
+
+    let mut steps: Vec<ProvisionStep> = Vec::new();
+    let mut overall_ok = true;
+
+    // ── Step 1: Create or ensure tenant ──────────────────────────────────
+    let tenant_record = match state
+        .tenant_store
+        .ensure_tenant_with_source(&manifest.tenant.slug, mk_core::types::RecordSource::Admin)
+        .await
+    {
+        Ok(record) => {
+            let now = chrono::Utc::now().timestamp();
+            // Only fire TenantCreated event when this is a brand-new tenant.
+            // `ensure_tenant_with_source` is idempotent; we distinguish by checking
+            // whether created_at ≈ updated_at (i.e. just created).
+            if record.created_at == record.updated_at {
+                persist_governance_event(
+                    state.as_ref(),
+                    &GovernanceEvent::TenantCreated {
+                        record_id: record.id.as_str().to_string(),
+                        slug: record.slug.clone(),
+                        tenant_id: record.id.clone(),
+                        timestamp: now,
+                    },
+                )
+                .await;
+            }
+            audit_tenant_action(
+                state.as_ref(),
+                &ctx,
+                "tenant_provision_tenant",
+                Some(record.id.as_str()),
+                json!({ "slug": record.slug, "name": record.name }),
+            )
+            .await;
+            steps.push(ProvisionStep::ok(
+                "tenant",
+                format!(
+                    "Tenant '{}' ensured (id={})",
+                    record.slug,
+                    record.id.as_str()
+                ),
+            ));
+            record
+        }
+        Err(err) => {
+            steps.push(ProvisionStep::fail("tenant", err.to_string()));
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "success": false,
+                    "tenantId": null,
+                    "steps": steps,
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let tenant_id = tenant_record.id.clone();
+
+    // ── Step 2: Domain mappings ───────────────────────────────────────────
+    if let Some(domains) = &manifest.tenant.domain_mappings {
+        let mut domain_errors: Vec<String> = Vec::new();
+        for domain in domains {
+            match state
+                .tenant_store
+                .add_verified_domain_mapping(tenant_id.as_str(), domain)
+                .await
+            {
+                Ok(_) => {}
+                Err(err) => domain_errors.push(format!("{domain}: {err}")),
+            }
+        }
+        if domain_errors.is_empty() {
+            steps.push(ProvisionStep::ok(
+                "domain_mappings",
+                format!("{} domain(s) mapped", domains.len()),
+            ));
+        } else {
+            steps.push(ProvisionStep::fail(
+                "domain_mappings",
+                domain_errors.join("; "),
+            ));
+            overall_ok = false;
+        }
+    }
+
+    // ── Step 3: Config fields ─────────────────────────────────────────────
+    if let Some(cfg) = &manifest.config {
+        if !cfg.fields.is_empty() || !cfg.secret_references.is_empty() {
+            let doc = TenantConfigDocument {
+                tenant_id: tenant_id.clone(),
+                fields: cfg.fields.clone(),
+                secret_references: cfg.secret_references.clone(),
+            };
+            match state.tenant_config_provider.upsert_config(doc).await {
+                Ok(config) => {
+                    audit_tenant_action(
+                        state.as_ref(),
+                        &ctx,
+                        "tenant_provision_config",
+                        Some(tenant_id.as_str()),
+                        json!({
+                            "tenantId": tenant_id.as_str(),
+                            "fieldCount": config.fields.len(),
+                        }),
+                    )
+                    .await;
+                    steps.push(ProvisionStep::ok(
+                        "config",
+                        format!("{} field(s) applied", config.fields.len()),
+                    ));
+                }
+                Err(err) => {
+                    steps.push(ProvisionStep::fail("config", err.to_string()));
+                    overall_ok = false;
+                }
+            }
+        }
+    }
+
+    // ── Step 4: Secrets ───────────────────────────────────────────────────
+    if let Some(secrets) = &manifest.secrets {
+        let mut secret_errors: Vec<String> = Vec::new();
+        let mut secrets_ok: usize = 0;
+        for s in secrets {
+            let entry = TenantSecretEntry {
+                logical_name: s.logical_name.clone(),
+                ownership: s.ownership.clone(),
+                secret_value: s.secret_value.clone(),
+            };
+            match state
+                .tenant_config_provider
+                .set_secret_entry(&tenant_id, entry)
+                .await
+            {
+                Ok(_) => secrets_ok += 1,
+                Err(err) => secret_errors.push(format!("{}: {}", s.logical_name, err)),
+            }
+        }
+        if secret_errors.is_empty() {
+            steps.push(ProvisionStep::ok(
+                "secrets",
+                format!("{secrets_ok} secret(s) stored"),
+            ));
+        } else {
+            steps.push(ProvisionStep::fail("secrets", secret_errors.join("; ")));
+            overall_ok = false;
+        }
+    }
+
+    // ── Step 5: Repository binding ────────────────────────────────────────
+    if let Some(repo) = &manifest.repository {
+        // Validate credential ref
+        let candidate = mk_core::types::TenantRepositoryBinding {
+            id: String::new(),
+            tenant_id: tenant_id.clone(),
+            kind: repo.kind.clone(),
+            local_path: repo.local_path.clone(),
+            remote_url: repo.remote_url.clone(),
+            branch: repo.branch.clone(),
+            branch_policy: repo.branch_policy.clone(),
+            credential_kind: repo.credential_kind.clone(),
+            credential_ref: repo.credential_ref.clone(),
+            github_owner: repo.github_owner.clone(),
+            github_repo: repo.github_repo.clone(),
+            source_owner: repo.source_owner.clone(),
+            git_provider_connection_id: repo.git_provider_connection_id.clone(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        let repo_step = if let Err(reason) = candidate.validate_credential_ref() {
+            ProvisionStep::fail("repository", format!("invalid_credential_ref: {reason}"))
+        } else {
+            // Check git provider connection access
+            let conn_allowed = if let Some(ref conn_id) = repo.git_provider_connection_id {
+                match state
+                    .git_provider_connection_registry
+                    .tenant_can_use(conn_id, &tenant_id)
+                    .await
+                {
+                    Ok(allowed) => {
+                        if !allowed {
+                            Err(format!(
+                                "Tenant '{}' is not in the allow-list for connection '{conn_id}'",
+                                tenant_id.as_str()
+                            ))
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    Err(e) => Err(e.to_string()),
+                }
+            } else {
+                Ok(())
+            };
+
+            match conn_allowed {
+                Err(msg) => ProvisionStep::fail("repository", msg),
+                Ok(()) => {
+                    let binding_request = UpsertTenantRepositoryBinding {
+                        tenant_id: tenant_id.clone(),
+                        kind: repo.kind.clone(),
+                        local_path: repo.local_path.clone(),
+                        remote_url: repo.remote_url.clone(),
+                        branch: repo.branch.clone(),
+                        branch_policy: repo.branch_policy.clone(),
+                        credential_kind: repo.credential_kind.clone(),
+                        credential_ref: repo.credential_ref.clone(),
+                        github_owner: repo.github_owner.clone(),
+                        github_repo: repo.github_repo.clone(),
+                        source_owner: repo.source_owner.clone(),
+                        git_provider_connection_id: repo.git_provider_connection_id.clone(),
+                    };
+                    match state
+                        .tenant_repository_binding_store
+                        .upsert_binding(binding_request)
+                        .await
+                    {
+                        Ok(binding) => {
+                            let now = chrono::Utc::now().timestamp();
+                            persist_governance_event(
+                                state.as_ref(),
+                                &GovernanceEvent::RepositoryBindingCreated {
+                                    binding_id: binding.id.clone(),
+                                    tenant_id: tenant_id.clone(),
+                                    timestamp: now,
+                                },
+                            )
+                            .await;
+                            state.tenant_repo_resolver.invalidate(&tenant_id);
+                            audit_tenant_action(
+                                state.as_ref(),
+                                &ctx,
+                                "tenant_provision_repository",
+                                Some(binding.id.as_str()),
+                                json!({
+                                    "tenantId": tenant_id.as_str(),
+                                    "kind": binding.kind,
+                                    "branch": binding.branch,
+                                }),
+                            )
+                            .await;
+                            ProvisionStep::ok("repository", format!("binding id={}", binding.id))
+                        }
+                        Err(err) => ProvisionStep::fail("repository", err.to_string()),
+                    }
+                }
+            }
+        };
+        if !repo_step.ok {
+            overall_ok = false;
+        }
+        steps.push(repo_step);
+    }
+
+    // ── Step 6: Organizational hierarchy ─────────────────────────────────
+    // We build a TenantContext from the platform-admin ctx but scoped to the
+    // newly provisioned tenant so that get_unit / create_unit work correctly.
+    let tenant_ctx = mk_core::types::TenantContext {
+        tenant_id: tenant_id.clone(),
+        user_id: ctx.user_id.clone(),
+        roles: ctx.roles.clone(),
+        target_tenant_id: Some(tenant_id.clone()),
+        agent_id: ctx.agent_id.clone(),
+    };
+
+    if let Some(companies) = &manifest.hierarchy {
+        let mut hierarchy_errors: Vec<String> = Vec::new();
+        let mut units_created: usize = 0;
+        let now = chrono::Utc::now().timestamp();
+
+        for company in companies {
+            // Create company unit
+            let company_unit = OrganizationalUnit {
+                id: Uuid::new_v4().to_string(),
+                name: company.name.clone(),
+                unit_type: UnitType::Company,
+                parent_id: None,
+                tenant_id: tenant_id.clone(),
+                metadata: HashMap::new(),
+                source_owner: RecordSource::Admin,
+                created_at: now,
+                updated_at: now,
+            };
+            match state.postgres.create_unit(&company_unit).await {
+                Err(err) => {
+                    hierarchy_errors.push(format!("company '{}': {err}", company_unit.name));
+                    continue;
+                }
+                Ok(()) => {
+                    persist_governance_event(
+                        state.as_ref(),
+                        &GovernanceEvent::UnitCreated {
+                            unit_id: company_unit.id.clone(),
+                            unit_type: company_unit.unit_type,
+                            tenant_id: tenant_id.clone(),
+                            parent_id: None,
+                            timestamp: now,
+                        },
+                    )
+                    .await;
+                    units_created += 1;
+                }
+            }
+
+            let company_id = company_unit.id.clone();
+
+            for org in company.orgs.iter().flatten() {
+                let org_unit = OrganizationalUnit {
+                    id: Uuid::new_v4().to_string(),
+                    name: org.name.clone(),
+                    unit_type: UnitType::Organization,
+                    parent_id: Some(company_id.clone()),
+                    tenant_id: tenant_id.clone(),
+                    metadata: HashMap::new(),
+                    source_owner: RecordSource::Admin,
+                    created_at: now,
+                    updated_at: now,
+                };
+                match state.postgres.create_unit(&org_unit).await {
+                    Err(err) => {
+                        hierarchy_errors.push(format!("org '{}': {err}", org_unit.name));
+                        continue;
+                    }
+                    Ok(()) => {
+                        persist_governance_event(
+                            state.as_ref(),
+                            &GovernanceEvent::UnitCreated {
+                                unit_id: org_unit.id.clone(),
+                                unit_type: org_unit.unit_type,
+                                tenant_id: tenant_id.clone(),
+                                parent_id: Some(company_id.clone()),
+                                timestamp: now,
+                            },
+                        )
+                        .await;
+                        units_created += 1;
+                    }
+                }
+
+                let org_id = org_unit.id.clone();
+
+                // Assign org-level members
+                for member in org.members.iter().flatten() {
+                    let user_id = match mk_core::types::UserId::new(member.user_id.clone()) {
+                        Some(id) => id,
+                        None => {
+                            hierarchy_errors.push(format!(
+                                "org '{}' member: invalid user_id '{}'",
+                                org.name, member.user_id
+                            ));
+                            continue;
+                        }
+                    };
+                    if let Err(err) = state
+                        .postgres
+                        .assign_role(&user_id, &tenant_id, &org_id, member.role.clone())
+                        .await
+                    {
+                        hierarchy_errors.push(format!(
+                            "org '{}' member '{}': {err}",
+                            org.name, member.user_id
+                        ));
+                    } else {
+                        persist_governance_event(
+                            state.as_ref(),
+                            &GovernanceEvent::RoleAssigned {
+                                user_id: user_id.clone(),
+                                unit_id: org_id.clone(),
+                                role: member.role.clone(),
+                                tenant_id: tenant_id.clone(),
+                                timestamp: now,
+                            },
+                        )
+                        .await;
+                    }
+                }
+
+                for team in org.teams.iter().flatten() {
+                    let team_unit = OrganizationalUnit {
+                        id: Uuid::new_v4().to_string(),
+                        name: team.name.clone(),
+                        unit_type: UnitType::Team,
+                        parent_id: Some(org_id.clone()),
+                        tenant_id: tenant_id.clone(),
+                        metadata: HashMap::new(),
+                        source_owner: RecordSource::Admin,
+                        created_at: now,
+                        updated_at: now,
+                    };
+                    match state.postgres.create_unit(&team_unit).await {
+                        Err(err) => {
+                            hierarchy_errors.push(format!("team '{}': {err}", team_unit.name));
+                            continue;
+                        }
+                        Ok(()) => {
+                            persist_governance_event(
+                                state.as_ref(),
+                                &GovernanceEvent::UnitCreated {
+                                    unit_id: team_unit.id.clone(),
+                                    unit_type: team_unit.unit_type,
+                                    tenant_id: tenant_id.clone(),
+                                    parent_id: Some(org_id.clone()),
+                                    timestamp: now,
+                                },
+                            )
+                            .await;
+                            units_created += 1;
+                        }
+                    }
+
+                    let team_id = team_unit.id.clone();
+
+                    // Assign team-level members
+                    for member in team.members.iter().flatten() {
+                        let user_id = match mk_core::types::UserId::new(member.user_id.clone()) {
+                            Some(id) => id,
+                            None => {
+                                hierarchy_errors.push(format!(
+                                    "team '{}' member: invalid user_id '{}'",
+                                    team.name, member.user_id
+                                ));
+                                continue;
+                            }
+                        };
+                        if let Err(err) = state
+                            .postgres
+                            .assign_role(&user_id, &tenant_id, &team_id, member.role.clone())
+                            .await
+                        {
+                            hierarchy_errors.push(format!(
+                                "team '{}' member '{}': {err}",
+                                team.name, member.user_id
+                            ));
+                        } else {
+                            persist_governance_event(
+                                state.as_ref(),
+                                &GovernanceEvent::RoleAssigned {
+                                    user_id: user_id.clone(),
+                                    unit_id: team_id.clone(),
+                                    role: member.role.clone(),
+                                    tenant_id: tenant_id.clone(),
+                                    timestamp: now,
+                                },
+                            )
+                            .await;
+                        }
+                    }
+                }
+            }
+        }
+
+        if hierarchy_errors.is_empty() {
+            steps.push(ProvisionStep::ok(
+                "hierarchy",
+                format!("{units_created} unit(s) created"),
+            ));
+        } else {
+            steps.push(ProvisionStep::fail(
+                "hierarchy",
+                hierarchy_errors.join("; "),
+            ));
+            overall_ok = false;
+        }
+    }
+
+    // ── Step 7: Top-level role assignments ────────────────────────────────
+    if let Some(role_assignments) = &manifest.roles {
+        let mut role_errors: Vec<String> = Vec::new();
+        let mut roles_ok: usize = 0;
+        let now = chrono::Utc::now().timestamp();
+
+        for assignment in role_assignments {
+            let user_id = match mk_core::types::UserId::new(assignment.user_id.clone()) {
+                Some(id) => id,
+                None => {
+                    role_errors.push(format!("invalid user_id '{}'", assignment.user_id));
+                    continue;
+                }
+            };
+
+            // Resolve unit: if a unit name/id is given look it up; otherwise use
+            // the tenant's root by using the tenant_id string as the unit scope.
+            let unit_id: String = if let Some(unit_ref) = &assignment.unit {
+                match state.postgres.get_unit(&tenant_ctx, unit_ref).await {
+                    Ok(Some(u)) => u.id,
+                    Ok(None) => {
+                        role_errors.push(format!(
+                            "unit '{unit_ref}' not found for user '{}'",
+                            assignment.user_id
+                        ));
+                        continue;
+                    }
+                    Err(err) => {
+                        role_errors.push(format!("unit '{unit_ref}' lookup error: {err}"));
+                        continue;
+                    }
+                }
+            } else {
+                // No unit specified — scope to tenant root (use tenant_id as unit)
+                tenant_id.as_str().to_string()
+            };
+
+            match state
+                .postgres
+                .assign_role(&user_id, &tenant_id, &unit_id, assignment.role.clone())
+                .await
+            {
+                Ok(()) => {
+                    persist_governance_event(
+                        state.as_ref(),
+                        &GovernanceEvent::RoleAssigned {
+                            user_id: user_id.clone(),
+                            unit_id: unit_id.clone(),
+                            role: assignment.role.clone(),
+                            tenant_id: tenant_id.clone(),
+                            timestamp: now,
+                        },
+                    )
+                    .await;
+                    roles_ok += 1;
+                }
+                Err(err) => {
+                    role_errors.push(format!(
+                        "user '{}' on unit '{unit_id}': {err}",
+                        assignment.user_id
+                    ));
+                }
+            }
+        }
+
+        if role_errors.is_empty() {
+            steps.push(ProvisionStep::ok(
+                "roles",
+                format!("{roles_ok} role(s) assigned"),
+            ));
+        } else {
+            steps.push(ProvisionStep::fail("roles", role_errors.join("; ")));
+            overall_ok = false;
+        }
+    }
+
+    // ── Final response ────────────────────────────────────────────────────
+    let status = if overall_ok {
+        StatusCode::OK
+    } else {
+        StatusCode::MULTI_STATUS
+    };
+    (
+        status,
+        Json(json!({
+            "success": overall_ok,
+            "tenantId": tenant_id.as_str(),
+            "slug": tenant_record.slug,
+            "steps": steps,
+        })),
+    )
+        .into_response()
 }
 
 #[cfg(test)]
@@ -2818,15 +3446,18 @@ mod tests {
             Ok(true)
         }
 
-        async fn get_user_roles(&self, _ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
-            Ok(vec![Role::Developer])
+        async fn get_user_roles(
+            &self,
+            _ctx: &TenantContext,
+        ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+            Ok(vec![Role::Developer.into()])
         }
 
         async fn assign_role(
             &self,
             _ctx: &TenantContext,
             _user_id: &UserId,
-            _role: Role,
+            _role: RoleIdentifier,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -2835,7 +3466,7 @@ mod tests {
             &self,
             _ctx: &TenantContext,
             _user_id: &UserId,
-            _role: Role,
+            _role: RoleIdentifier,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -3985,5 +4616,643 @@ mod tests {
             conn_id,
             "visible connection id must match the granted one"
         );
+    }
+
+    #[test]
+    fn validate_manifest_accepts_valid_minimal() {
+        let m = TenantManifest {
+            api_version: "aeterna.io/v1".into(),
+            kind: "TenantManifest".into(),
+            tenant: ManifestTenant {
+                slug: "my-tenant".into(),
+                name: "My Tenant".into(),
+                domain_mappings: None,
+            },
+            config: None,
+            secrets: None,
+            repository: None,
+            hierarchy: None,
+            roles: None,
+        };
+        let errors = validate_manifest(&m);
+        assert!(errors.is_empty(), "expected no errors, got: {errors:?}");
+    }
+
+    #[test]
+    fn validate_manifest_rejects_bad_api_version() {
+        let m = TenantManifest {
+            api_version: "v2".into(),
+            kind: "TenantManifest".into(),
+            tenant: ManifestTenant {
+                slug: "ok".into(),
+                name: "Ok".into(),
+                domain_mappings: None,
+            },
+            config: None,
+            secrets: None,
+            repository: None,
+            hierarchy: None,
+            roles: None,
+        };
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("apiVersion")),
+            "expected apiVersion error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_bad_kind() {
+        let m = TenantManifest {
+            api_version: "aeterna.io/v1".into(),
+            kind: "WrongKind".into(),
+            tenant: ManifestTenant {
+                slug: "ok".into(),
+                name: "Ok".into(),
+                domain_mappings: None,
+            },
+            config: None,
+            secrets: None,
+            repository: None,
+            hierarchy: None,
+            roles: None,
+        };
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("kind")),
+            "expected kind error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_empty_slug() {
+        let m = TenantManifest {
+            api_version: "aeterna.io/v1".into(),
+            kind: "TenantManifest".into(),
+            tenant: ManifestTenant {
+                slug: "".into(),
+                name: "Ok".into(),
+                domain_mappings: None,
+            },
+            config: None,
+            secrets: None,
+            repository: None,
+            hierarchy: None,
+            roles: None,
+        };
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("slug")),
+            "expected slug error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_non_kebab_slug() {
+        let m = TenantManifest {
+            api_version: "aeterna.io/v1".into(),
+            kind: "TenantManifest".into(),
+            tenant: ManifestTenant {
+                slug: "My_Tenant".into(),
+                name: "My Tenant".into(),
+                domain_mappings: None,
+            },
+            config: None,
+            secrets: None,
+            repository: None,
+            hierarchy: None,
+            roles: None,
+        };
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("kebab-case")),
+            "expected kebab-case error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_slug_leading_hyphen() {
+        let m = TenantManifest {
+            api_version: "aeterna.io/v1".into(),
+            kind: "TenantManifest".into(),
+            tenant: ManifestTenant {
+                slug: "-leading".into(),
+                name: "Ok".into(),
+                domain_mappings: None,
+            },
+            config: None,
+            secrets: None,
+            repository: None,
+            hierarchy: None,
+            roles: None,
+        };
+        let errors = validate_manifest(&m);
+        assert!(!errors.is_empty(), "expected slug error for leading hyphen");
+    }
+
+    #[test]
+    fn validate_manifest_rejects_empty_name() {
+        let m = TenantManifest {
+            api_version: "aeterna.io/v1".into(),
+            kind: "TenantManifest".into(),
+            tenant: ManifestTenant {
+                slug: "ok".into(),
+                name: "   ".into(),
+                domain_mappings: None,
+            },
+            config: None,
+            secrets: None,
+            repository: None,
+            hierarchy: None,
+            roles: None,
+        };
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("name")),
+            "expected name error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_platform_admin_in_roles() {
+        let m = TenantManifest {
+            api_version: "aeterna.io/v1".into(),
+            kind: "TenantManifest".into(),
+            tenant: ManifestTenant {
+                slug: "ok".into(),
+                name: "Ok".into(),
+                domain_mappings: None,
+            },
+            config: None,
+            secrets: None,
+            repository: None,
+            hierarchy: None,
+            roles: Some(vec![ManifestRoleAssignment {
+                user_id: "alice".into(),
+                role: Role::PlatformAdmin.into(),
+                unit: None,
+            }]),
+        };
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("PlatformAdmin")),
+            "expected PlatformAdmin error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_empty_hierarchy_names() {
+        let m = TenantManifest {
+            api_version: "aeterna.io/v1".into(),
+            kind: "TenantManifest".into(),
+            tenant: ManifestTenant {
+                slug: "ok".into(),
+                name: "Ok".into(),
+                domain_mappings: None,
+            },
+            config: None,
+            secrets: None,
+            repository: None,
+            hierarchy: Some(vec![ManifestCompany {
+                name: "".into(),
+                orgs: Some(vec![ManifestOrg {
+                    name: "".into(),
+                    teams: Some(vec![ManifestTeam {
+                        name: "".into(),
+                        members: None,
+                    }]),
+                    members: None,
+                }]),
+            }]),
+            roles: None,
+        };
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.len() >= 3,
+            "expected at least 3 errors for empty hierarchy names, got: {errors:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn provision_tenant_happy_path() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping provision test: Docker not available");
+            return;
+        };
+
+        let manifest = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": {
+                "slug": "provision-test",
+                "name": "Provision Test Tenant"
+            }
+        });
+
+        let response = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&manifest).unwrap()),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], true);
+        assert!(
+            json["tenantId"].as_str().is_some(),
+            "tenantId must be present"
+        );
+        assert_eq!(json["slug"], "provision-test");
+    }
+
+    #[tokio::test]
+    async fn provision_tenant_idempotent_reapply() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping provision idempotent test: Docker not available");
+            return;
+        };
+
+        let manifest = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": {
+                "slug": "idempotent-test",
+                "name": "Idempotent Test"
+            }
+        });
+
+        let r1 = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&manifest).unwrap()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(r1.status(), StatusCode::OK);
+        let b1 = axum::body::to_bytes(r1.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let j1: serde_json::Value = serde_json::from_slice(&b1).unwrap();
+        let tenant_id_1 = j1["tenantId"].as_str().unwrap().to_string();
+
+        let r2 = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&manifest).unwrap()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(r2.status(), StatusCode::OK);
+        let b2 = axum::body::to_bytes(r2.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let j2: serde_json::Value = serde_json::from_slice(&b2).unwrap();
+        assert_eq!(j2["success"], true);
+        assert_eq!(
+            j2["tenantId"].as_str().unwrap(),
+            tenant_id_1,
+            "tenant ID must be same on re-apply"
+        );
+    }
+
+    #[tokio::test]
+    async fn provision_tenant_rejects_invalid_manifest() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping provision validation test: Docker not available");
+            return;
+        };
+
+        let manifest = serde_json::json!({
+            "apiVersion": "wrong",
+            "kind": "TenantManifest",
+            "tenant": {
+                "slug": "My_Bad_Slug",
+                "name": "Test"
+            }
+        });
+
+        let response = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&manifest).unwrap()),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert!(
+            json["validationErrors"].as_array().unwrap().len() >= 2,
+            "expected at least 2 validation errors"
+        );
+    }
+
+    #[tokio::test]
+    async fn provision_tenant_requires_platform_admin() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping provision auth test: Docker not available");
+            return;
+        };
+
+        let manifest = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": {
+                "slug": "auth-test",
+                "name": "Auth Test"
+            }
+        });
+
+        let response = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "developer",
+                Body::from(serde_json::to_vec(&manifest).unwrap()),
+            ))
+            .await
+            .unwrap();
+
+        assert!(
+            response.status() == StatusCode::FORBIDDEN
+                || response.status() == StatusCode::UNAUTHORIZED,
+            "expected 403 or 401, got {}",
+            response.status()
+        );
+    }
+
+    mod permission_matrix_tests {
+        use adapters::auth::matrix::{ALL_ACTIONS, role_permission_matrix};
+        use std::collections::HashSet;
+
+        #[test]
+        fn all_actions_has_68_entries() {
+            assert_eq!(
+                ALL_ACTIONS.len(),
+                68,
+                "ALL_ACTIONS must have exactly 68 Cedar domain actions"
+            );
+        }
+
+        #[test]
+        fn all_actions_has_no_duplicates() {
+            let set: HashSet<&str> = ALL_ACTIONS.iter().copied().collect();
+            assert_eq!(
+                set.len(),
+                ALL_ACTIONS.len(),
+                "ALL_ACTIONS must not contain duplicates"
+            );
+        }
+
+        #[test]
+        fn matrix_has_all_seven_user_roles() {
+            let matrix = role_permission_matrix();
+            let expected_roles = [
+                "platformAdmin",
+                "tenantAdmin",
+                "admin",
+                "architect",
+                "techLead",
+                "developer",
+                "viewer",
+            ];
+            for role in &expected_roles {
+                assert!(matrix.contains_key(*role), "matrix missing role '{}'", role);
+            }
+            assert_eq!(
+                matrix.len(),
+                expected_roles.len(),
+                "matrix has unexpected extra roles"
+            );
+        }
+
+        #[test]
+        fn all_role_actions_exist_in_all_actions() {
+            let matrix = role_permission_matrix();
+            let valid: HashSet<&str> = ALL_ACTIONS.iter().copied().collect();
+            for (role, actions) in &matrix {
+                for action in actions {
+                    assert!(
+                        valid.contains(action.as_str()),
+                        "role '{}' references unknown action '{}'",
+                        role,
+                        action
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn platform_admin_has_all_actions() {
+            let matrix = role_permission_matrix();
+            let pa = &matrix["platformAdmin"];
+            assert_eq!(
+                pa.len(),
+                ALL_ACTIONS.len(),
+                "PlatformAdmin must have ALL {} actions, got {}",
+                ALL_ACTIONS.len(),
+                pa.len()
+            );
+        }
+
+        const CROSS_TENANT_ACTIONS: &[&str] = &[
+            "ListTenants",
+            "CreateTenant",
+            "ManageGitProviderConnections",
+            "AdminSyncGitHub",
+        ];
+
+        #[test]
+        fn tenant_admin_excludes_cross_tenant_actions() {
+            let matrix = role_permission_matrix();
+            let ta = &matrix["tenantAdmin"];
+            for action in CROSS_TENANT_ACTIONS {
+                assert!(
+                    !ta.contains(&action.to_string()),
+                    "TenantAdmin must NOT have cross-tenant action '{}'",
+                    action
+                );
+            }
+        }
+
+        #[test]
+        fn admin_matches_tenant_admin() {
+            let matrix = role_permission_matrix();
+            let mut admin: Vec<String> = matrix["admin"].clone();
+            let mut tenant_admin: Vec<String> = matrix["tenantAdmin"].clone();
+            admin.sort();
+            tenant_admin.sort();
+            assert_eq!(
+                admin, tenant_admin,
+                "Admin and TenantAdmin must have identical permissions"
+            );
+        }
+
+        #[test]
+        fn viewer_is_read_only() {
+            let matrix = role_permission_matrix();
+            let viewer = &matrix["viewer"];
+            let write_actions: HashSet<&str> = [
+                "CreateMemory",
+                "UpdateMemory",
+                "DeleteMemory",
+                "PromoteMemory",
+                "OptimizeMemory",
+                "ReasonMemory",
+                "CloseMemory",
+                "FeedbackMemory",
+                "ProposeKnowledge",
+                "EditKnowledge",
+                "ApproveKnowledge",
+                "DeprecateKnowledge",
+                "BatchKnowledge",
+                "CreatePolicy",
+                "EditPolicy",
+                "ApprovePolicy",
+                "SubmitGovernanceRequest",
+                "ApproveGovernanceRequest",
+                "RejectGovernanceRequest",
+                "CreateOrganization",
+                "CreateTeam",
+                "CreateProject",
+                "ManageMembers",
+                "AssignRoles",
+                "RegisterAgent",
+                "RevokeAgent",
+                "DelegateToAgent",
+                "ExportData",
+                "ImportData",
+                "ConfigureGovernance",
+                "CreateTenant",
+                "UpdateTenant",
+                "DeactivateTenant",
+                "UpdateTenantConfig",
+                "ManageTenantSecrets",
+                "UpdateRepositoryBinding",
+                "ManageGitProviderConnections",
+                "CreateSession",
+                "EndSession",
+                "TriggerSync",
+                "ResolveConflict",
+                "ModifyGraph",
+                "InvokeCCA",
+                "InvokeMcpTool",
+                "RegisterUser",
+                "UpdateUser",
+                "DeactivateUser",
+                "ListTenants",
+                "AdminSyncGitHub",
+            ]
+            .into_iter()
+            .collect();
+
+            for action in viewer {
+                assert!(
+                    !write_actions.contains(action.as_str()),
+                    "Viewer must NOT have write action '{}'",
+                    action
+                );
+            }
+        }
+
+        #[test]
+        fn no_role_below_admin_has_cross_tenant_actions() {
+            let matrix = role_permission_matrix();
+            let non_admin_roles = ["architect", "techLead", "developer", "viewer"];
+            for role in &non_admin_roles {
+                let actions = &matrix[*role];
+                for ct_action in CROSS_TENANT_ACTIONS {
+                    assert!(
+                        !actions.contains(&ct_action.to_string()),
+                        "Role '{}' must NOT have cross-tenant action '{}'",
+                        role,
+                        ct_action
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn only_admin_plus_has_assign_roles() {
+            let matrix = role_permission_matrix();
+            let assign = "AssignRoles".to_string();
+            let roles_with_assign: Vec<&str> = matrix
+                .iter()
+                .filter(|(_, actions)| actions.contains(&assign))
+                .map(|(role, _)| role.as_str())
+                .collect();
+
+            for role in &roles_with_assign {
+                assert!(
+                    matches!(*role, "platformAdmin" | "tenantAdmin" | "admin"),
+                    "Only Admin+ roles may have AssignRoles, but '{}' has it",
+                    role
+                );
+            }
+        }
+
+        #[test]
+        fn role_action_counts() {
+            let matrix = role_permission_matrix();
+            assert_eq!(matrix["platformAdmin"].len(), 68);
+            assert_eq!(matrix["tenantAdmin"].len(), 64);
+            assert_eq!(matrix["admin"].len(), 64);
+            assert_eq!(matrix["architect"].len(), 51);
+            assert_eq!(matrix["techLead"].len(), 47);
+            assert_eq!(matrix["developer"].len(), 29);
+            assert_eq!(matrix["viewer"].len(), 18);
+        }
+
+        #[test]
+        fn higher_role_is_superset_of_lower() {
+            let matrix = role_permission_matrix();
+            let hierarchy: Vec<(&str, &str)> = vec![
+                ("developer", "viewer"),
+                ("techLead", "developer"),
+                ("architect", "techLead"),
+                ("admin", "architect"),
+                ("tenantAdmin", "admin"),
+                ("platformAdmin", "tenantAdmin"),
+            ];
+
+            for (higher, lower) in &hierarchy {
+                let higher_set: HashSet<&str> =
+                    matrix[*higher].iter().map(|s| s.as_str()).collect();
+                let lower_set: HashSet<&str> = matrix[*lower].iter().map(|s| s.as_str()).collect();
+                let missing: Vec<&&str> = lower_set
+                    .iter()
+                    .filter(|a| !higher_set.contains(**a))
+                    .collect();
+                assert!(
+                    missing.is_empty(),
+                    "Role '{}' must be a superset of '{}', but is missing: {:?}",
+                    higher,
+                    lower,
+                    missing
+                );
+            }
+        }
     }
 }

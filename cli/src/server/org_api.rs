@@ -8,7 +8,8 @@ use axum::routing::{delete, get, put};
 use axum::{Json, Router};
 use mk_core::traits::StorageBackend;
 use mk_core::types::{
-    GovernanceEvent, OrganizationalUnit, PersistentEvent, Role, TenantContext, UnitType,
+    GovernanceEvent, OrganizationalUnit, PersistentEvent, Role, RoleIdentifier, TenantContext,
+    UnitType,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -50,7 +51,7 @@ struct RoleBody {
 #[serde(rename_all = "camelCase")]
 struct MemberResponse {
     user_id: String,
-    role: Role,
+    role: RoleIdentifier,
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -316,7 +317,7 @@ async fn remove_member(
         }
     };
 
-    let current_roles: Vec<Role> = existing
+    let current_roles: Vec<RoleIdentifier> = existing
         .into_iter()
         .filter(|(candidate, _)| candidate.as_str() == user_id.as_str())
         .map(|(_, role)| role)
@@ -442,7 +443,7 @@ async fn require_admin_context(
     headers: &HeaderMap,
 ) -> Result<TenantContext, axum::response::Response> {
     let ctx = tenant_scoped_context(state, headers).await?;
-    if matches!(ctx.role, Some(Role::PlatformAdmin | Role::Admin)) {
+    if ctx.has_known_role(&Role::PlatformAdmin) || ctx.has_known_role(&Role::Admin) {
         Ok(ctx)
     } else {
         Err(error_response(
@@ -503,11 +504,9 @@ async fn get_unit_of_type(
     }
 }
 
-fn parse_tenant_role(value: &str) -> Result<Role, axum::response::Response> {
-    let role = value
-        .parse::<Role>()
-        .map_err(|_| error_response(StatusCode::BAD_REQUEST, "invalid_role", "Unsupported role"))?;
-    if role == Role::PlatformAdmin {
+fn parse_tenant_role(value: &str) -> Result<RoleIdentifier, axum::response::Response> {
+    let role = RoleIdentifier::from_str_flexible(value);
+    if matches!(role, RoleIdentifier::Known(Role::PlatformAdmin)) {
         return Err(error_response(
             StatusCode::BAD_REQUEST,
             "invalid_role",

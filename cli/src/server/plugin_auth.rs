@@ -220,7 +220,19 @@ async fn bootstrap_handler(
         .token_issuer
         .clone()
         .unwrap_or_else(|| "aeterna".to_string());
-    let tenant_id = default_tenant_claim();
+    let tenant_id = match resolve_tenant_for_github_user(&github_user.login, cfg) {
+        Some(t) => t,
+        None => {
+            tracing::error!(login = %github_user.login, "No tenant configured for plugin auth bootstrap");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "tenant_not_configured",
+                    "message": "No tenant configured for plugin authentication. Set AETERNA_PLUGIN_AUTH_TENANT or configure default_tenant_id."
+                })),
+            );
+        }
+    };
 
     let access_token =
         match mint_access_token(&jwt_secret, &issuer, &tenant_id, &github_user, access_ttl) {
@@ -433,18 +445,45 @@ pub fn validate_plugin_token(token: &str, jwt_secret: &str) -> Option<PluginIden
 /// Derive a `TenantContext` from a plugin bearer token.
 ///
 /// If the `Authorization: Bearer <token>` header is present and the token
-/// validates, the GitHub login is used as the user identifier.  Falls back
-/// to a default `"default" / "system"` context when no valid token is found.
-pub fn tenant_context_from_plugin_bearer(headers: &HeaderMap, jwt_secret: &str) -> TenantContext {
-    if let Some(identity) = validate_plugin_bearer(headers, jwt_secret) {
-        let tenant = sanitize_identifier(&identity.tenant_id, "default");
-        let login = identity.github_login.chars().take(100).collect::<String>();
-        if let (Some(tenant_id), Some(user_id)) = (TenantId::new(tenant), UserId::new(login)) {
-            return TenantContext::new(tenant_id, user_id);
+/// validates, the GitHub login and tenant claim are used as the caller identity.
+///
+/// Returns `None` when no valid bearer token is present, allowing callers to
+/// enforce fail-closed behaviour rather than silently falling back to a synthetic
+/// default context.  Use [`tenant_context_from_plugin_bearer_or_default`] only in
+/// contexts where an unauthenticated / development fallback is explicitly intended.
+pub fn tenant_context_from_plugin_bearer(
+    headers: &HeaderMap,
+    jwt_secret: &str,
+) -> Option<TenantContext> {
+    let identity = validate_plugin_bearer(headers, jwt_secret)?;
+    let tenant = sanitize_identifier(&identity.tenant_id, "");
+    let login = identity.github_login.chars().take(100).collect::<String>();
+    match (TenantId::new(tenant), UserId::new(login)) {
+        (Some(tenant_id), Some(user_id)) => Some(TenantContext::new(tenant_id, user_id)),
+        _ => {
+            tracing::warn!("Plugin token carried invalid tenant_id or user_id; rejecting context");
+            None
         }
     }
+}
 
-    // Fallback: unauthenticated / service context
+/// Derive a `TenantContext` from a plugin bearer token, falling back to a
+/// synthetic `"default" / "system"` context when no valid token is present.
+///
+/// **This fallback is intentional for development/service-to-service mode only.**
+/// It MUST NOT be used when plugin auth is enabled in a production-capable
+/// deployment; use [`tenant_context_from_plugin_bearer`] and enforce the `None`
+/// case explicitly.
+pub fn tenant_context_from_plugin_bearer_or_default(
+    headers: &HeaderMap,
+    jwt_secret: &str,
+) -> TenantContext {
+    if let Some(ctx) = tenant_context_from_plugin_bearer(headers, jwt_secret) {
+        return ctx;
+    }
+    tracing::debug!(
+        "No valid plugin bearer token found; using unauthenticated dev context (default/system).          This fallback must only occur in development or service-to-service mode."
+    );
     TenantContext::new(
         TenantId::new("default".to_string()).expect("static tenant id"),
         UserId::new("system".to_string()).expect("static user id"),
@@ -556,8 +595,43 @@ async fn fetch_github_primary_email(
         .map(|email| email.email))
 }
 
-fn default_tenant_claim() -> String {
-    "default".to_string()
+/// Resolve a tenant ID for the given GitHub login using the plugin auth config.
+///
+/// Returns  if no tenant mapping is configured, which callers MUST treat
+/// as a fail-closed condition (reject the request).
+///
+/// Resolution order:
+/// 1.  map entry for this specific login (not yet supported in
+///    config schema; reserved for future per-login routing).
+/// 2.  from the plugin auth config.
+/// 3.  environment variable (operator override for
+///    simple single-tenant deployments without full config reload).
+///
+/// The synthetic hardcoded  string is intentionally NOT in this list.
+pub(crate) fn resolve_tenant_for_github_user(
+    _github_login: &str,
+    cfg: &config::PluginAuthConfig,
+) -> Option<String> {
+    // Priority 1: explicit per-login mapping (config schema extension point).
+    // Not yet wired; reserved.
+
+    // Priority 2: default_tenant_id from config.
+    if let Some(ref tenant_id) = cfg.default_tenant_id {
+        let trimmed = tenant_id.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    // Priority 3: env override for operator convenience.
+    if let Ok(env_tenant) = std::env::var("AETERNA_PLUGIN_AUTH_TENANT") {
+        let trimmed = env_tenant.trim().to_string();
+        if !trimmed.is_empty() {
+            return Some(trimmed);
+        }
+    }
+
+    None
 }
 
 fn sanitize_identifier(value: &str, fallback: &str) -> String {
@@ -656,7 +730,7 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
 
-        let ctx = tenant_context_from_plugin_bearer(&headers, &secret());
+        let ctx = tenant_context_from_plugin_bearer(&headers, &secret()).unwrap();
         assert_eq!(ctx.tenant_id.as_str(), "tenant-42");
         assert_eq!(ctx.user_id.as_str(), "testuser");
     }
@@ -715,5 +789,91 @@ mod tests {
             )
             .await;
         assert!(store.take("tok").await.is_none());
+    }
+
+    // ── Task 4.1: bootstrap fail-closed – resolve_tenant_for_github_user ──────
+
+    #[test]
+    fn resolve_tenant_returns_none_when_no_config_and_no_env() {
+        // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
+        unsafe { std::env::remove_var("AETERNA_PLUGIN_AUTH_TENANT") };
+        let cfg = config::PluginAuthConfig {
+            enabled: true,
+            jwt_secret: Some("s".to_string()),
+            default_tenant_id: None,
+            ..Default::default()
+        };
+        assert!(
+            resolve_tenant_for_github_user("anyuser", &cfg).is_none(),
+            "MUST return None when no config field and no env var are set"
+        );
+    }
+
+    #[test]
+    fn resolve_tenant_prefers_config_field_over_env() {
+        // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
+        unsafe { std::env::set_var("AETERNA_PLUGIN_AUTH_TENANT", "env-tenant") };
+        let cfg = config::PluginAuthConfig {
+            enabled: true,
+            jwt_secret: Some("s".to_string()),
+            default_tenant_id: Some("config-tenant".to_string()),
+            ..Default::default()
+        };
+        let result = resolve_tenant_for_github_user("alice", &cfg);
+        unsafe { std::env::remove_var("AETERNA_PLUGIN_AUTH_TENANT") };
+        assert_eq!(result.as_deref(), Some("config-tenant"));
+    }
+
+    #[test]
+    fn resolve_tenant_falls_back_to_env_when_config_absent() {
+        // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
+        unsafe { std::env::set_var("AETERNA_PLUGIN_AUTH_TENANT", "env-tenant") };
+        let cfg = config::PluginAuthConfig {
+            enabled: true,
+            jwt_secret: Some("s".to_string()),
+            default_tenant_id: None,
+            ..Default::default()
+        };
+        let result = resolve_tenant_for_github_user("alice", &cfg);
+        unsafe { std::env::remove_var("AETERNA_PLUGIN_AUTH_TENANT") };
+        assert_eq!(result.as_deref(), Some("env-tenant"));
+    }
+
+    #[test]
+    fn resolve_tenant_ignores_blank_config_field() {
+        // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
+        unsafe { std::env::remove_var("AETERNA_PLUGIN_AUTH_TENANT") };
+        let cfg = config::PluginAuthConfig {
+            enabled: true,
+            jwt_secret: Some("s".to_string()),
+            default_tenant_id: Some("   ".to_string()),
+            ..Default::default()
+        };
+        assert!(
+            resolve_tenant_for_github_user("alice", &cfg).is_none(),
+            "Whitespace-only tenant id MUST be treated as absent"
+        );
+    }
+
+    // ── Task 4.1: tenant_context_from_plugin_bearer returns None on bad token ──
+
+    #[test]
+    fn tenant_context_from_plugin_bearer_returns_none_without_token() {
+        let headers = HeaderMap::new();
+        assert!(
+            tenant_context_from_plugin_bearer(&headers, &secret()).is_none(),
+            "MUST return None when no Authorization header is present"
+        );
+    }
+
+    #[test]
+    fn tenant_context_from_plugin_bearer_returns_none_on_wrong_secret() {
+        let token = mint_access_token(&secret(), "aeterna", "t1", &user(), 3600).unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        assert!(
+            tenant_context_from_plugin_bearer(&headers, "wrong-secret").is_none(),
+            "MUST return None when token was signed with a different secret"
+        );
     }
 }

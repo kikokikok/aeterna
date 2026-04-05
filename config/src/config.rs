@@ -256,6 +256,14 @@ pub struct PluginAuthConfig {
     pub access_token_ttl_seconds: Option<u64>,
     #[serde(default)]
     pub refresh_token_ttl_seconds: Option<u64>,
+    /// The tenant ID to embed in plugin-issued tokens.
+    ///
+    /// Required for the plugin auth bootstrap to succeed.  When absent the
+    /// server fails closed rather than defaulting to the synthetic "default"
+    /// tenant.  Operators may also set `AETERNA_PLUGIN_AUTH_TENANT` as an
+    /// environment override.
+    #[serde(default)]
+    pub default_tenant_id: Option<String>,
 }
 
 fn default_branch() -> String {

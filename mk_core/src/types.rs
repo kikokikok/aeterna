@@ -20,10 +20,12 @@ use validator::Validate;
 #[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum Role {
+    Viewer,
     Developer,
     TechLead,
     Architect,
     Admin,
+    TenantAdmin,
     Agent,
     PlatformAdmin,
 }
@@ -382,9 +384,8 @@ pub struct TenantContext {
     pub tenant_id: TenantId,
     pub user_id: UserId,
     pub agent_id: Option<String>,
-    /// The role of the caller in this context, set during authentication.
-    pub role: Option<Role>,
-    /// For PlatformAdmin operations: the tenant being administered (may differ from tenant_id).
+    #[serde(default)]
+    pub roles: Vec<RoleIdentifier>,
     pub target_tenant_id: Option<TenantId>,
 }
 
@@ -437,7 +438,7 @@ impl TenantContext {
             tenant_id,
             user_id,
             agent_id: None,
-            role: None,
+            roles: Vec::new(),
             target_tenant_id: None,
         }
     }
@@ -447,9 +448,34 @@ impl TenantContext {
             tenant_id,
             user_id,
             agent_id: Some(agent_id),
-            role: None,
+            roles: Vec::new(),
             target_tenant_id: None,
         }
+    }
+
+    pub fn with_role(mut self, role: impl Into<RoleIdentifier>) -> Self {
+        self.roles.push(role.into());
+        self
+    }
+
+    pub fn with_roles(mut self, roles: Vec<RoleIdentifier>) -> Self {
+        self.roles = roles;
+        self
+    }
+
+    pub fn has_role(&self, role: &RoleIdentifier) -> bool {
+        self.roles.contains(role)
+    }
+
+    pub fn has_known_role(&self, role: &Role) -> bool {
+        self.roles.contains(&RoleIdentifier::Known(role.clone()))
+    }
+
+    pub fn highest_precedence_role(&self) -> Option<&RoleIdentifier> {
+        self.roles.iter().max_by_key(|r| match r {
+            RoleIdentifier::Known(role) => role.precedence(),
+            RoleIdentifier::Custom(_) => 0,
+        })
     }
 }
 
@@ -525,26 +551,121 @@ impl HierarchyPath {
     }
 }
 
+/// Wraps [`Role`] (built-in) or an arbitrary string (custom/dynamic).
+/// Stored as `TEXT` in the database; mapped to Cedar `Role::"<name>"` entities.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(untagged)]
+pub enum RoleIdentifier {
+    Known(Role),
+    Custom(String),
+}
+
+impl From<Role> for RoleIdentifier {
+    fn from(role: Role) -> Self {
+        Self::Known(role)
+    }
+}
+
+impl RoleIdentifier {
+    pub fn from_str_flexible(s: &str) -> Self {
+        match s.parse::<Role>() {
+            Ok(role) => Self::Known(role),
+            Err(_) => Self::Custom(s.to_string()),
+        }
+    }
+
+    #[must_use]
+    pub fn is_known(&self) -> bool {
+        matches!(self, Self::Known(_))
+    }
+
+    #[must_use]
+    pub fn is_custom(&self) -> bool {
+        matches!(self, Self::Custom(_))
+    }
+
+    #[must_use]
+    pub fn as_known(&self) -> Option<&Role> {
+        match self {
+            Self::Known(r) => Some(r),
+            Self::Custom(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_cedar_entity_id(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl std::fmt::Display for RoleIdentifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Known(role) => write!(f, "{role}"),
+            Self::Custom(name) => write!(f, "{name}"),
+        }
+    }
+}
+
+impl PartialEq for RoleIdentifier {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Known(a), Self::Known(b)) => a == b,
+            (Self::Custom(a), Self::Custom(b)) => a == b,
+            (Self::Known(role), Self::Custom(s)) | (Self::Custom(s), Self::Known(role)) => {
+                role.to_string().eq_ignore_ascii_case(s)
+            }
+        }
+    }
+}
+
+impl Eq for RoleIdentifier {}
+
+impl std::hash::Hash for RoleIdentifier {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // PartialEq treats Known("Admin") == Custom("admin"), so hash must normalize.
+        self.to_string().to_ascii_lowercase().hash(state);
+    }
+}
+
+impl std::str::FromStr for RoleIdentifier {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from_str_flexible(s))
+    }
+}
+
+impl Default for RoleIdentifier {
+    fn default() -> Self {
+        Self::Known(Role::Viewer)
+    }
+}
+
 impl Role {
     #[must_use]
     pub fn precedence(&self) -> u8 {
         match self {
+            Role::Viewer => 0,
+            Role::Agent => 0,
+            Role::Developer => 1,
+            Role::TechLead => 2,
+            Role::Architect => 3,
             Role::Admin => 4,
             Role::PlatformAdmin => 5,
-            Role::Architect => 3,
-            Role::TechLead => 2,
-            Role::Developer => 1,
-            Role::Agent => 0,
+            Role::TenantAdmin => 6,
         }
     }
 
     #[must_use]
     pub fn display_name(&self) -> &'static str {
         match self {
+            Role::Viewer => "Viewer",
             Role::Developer => "Developer",
             Role::TechLead => "Tech Lead",
             Role::Architect => "Architect",
             Role::Admin => "Admin",
+            Role::TenantAdmin => "Tenant Admin",
             Role::Agent => "Agent",
             Role::PlatformAdmin => "Platform Admin",
         }
@@ -1164,7 +1285,7 @@ pub enum GovernanceEvent {
     RoleAssigned {
         user_id: UserId,
         unit_id: String,
-        role: Role,
+        role: RoleIdentifier,
         tenant_id: TenantId,
         timestamp: i64,
     },
@@ -1173,7 +1294,7 @@ pub enum GovernanceEvent {
     RoleRemoved {
         user_id: UserId,
         unit_id: String,
-        role: Role,
+        role: RoleIdentifier,
         tenant_id: TenantId,
         timestamp: i64,
     },
@@ -2236,11 +2357,14 @@ mod tests {
 
     #[test]
     fn test_role_precedence() {
-        assert_eq!(Role::Admin.precedence(), 4);
-        assert_eq!(Role::Architect.precedence(), 3);
-        assert_eq!(Role::TechLead.precedence(), 2);
-        assert_eq!(Role::Developer.precedence(), 1);
+        assert_eq!(Role::Viewer.precedence(), 0);
         assert_eq!(Role::Agent.precedence(), 0);
+        assert_eq!(Role::Developer.precedence(), 1);
+        assert_eq!(Role::TechLead.precedence(), 2);
+        assert_eq!(Role::Architect.precedence(), 3);
+        assert_eq!(Role::Admin.precedence(), 4);
+        assert_eq!(Role::PlatformAdmin.precedence(), 5);
+        assert_eq!(Role::TenantAdmin.precedence(), 6);
     }
 
     #[test]
@@ -2390,14 +2514,14 @@ mod tests {
             GovernanceEvent::RoleAssigned {
                 user_id: user_id.clone(),
                 unit_id: "u1".to_string(),
-                role: Role::Admin,
+                role: Role::Admin.into(),
                 tenant_id: tenant_id.clone(),
                 timestamp: 0,
             },
             GovernanceEvent::RoleRemoved {
                 user_id: user_id.clone(),
                 unit_id: "u1".to_string(),
-                role: Role::Admin,
+                role: Role::Admin.into(),
                 tenant_id: tenant_id.clone(),
                 timestamp: 0,
             },
@@ -2427,11 +2551,14 @@ mod tests {
 
     #[test]
     fn test_role_display_name() {
+        assert_eq!(Role::Viewer.display_name(), "Viewer");
         assert_eq!(Role::Developer.display_name(), "Developer");
         assert_eq!(Role::TechLead.display_name(), "Tech Lead");
         assert_eq!(Role::Architect.display_name(), "Architect");
         assert_eq!(Role::Admin.display_name(), "Admin");
+        assert_eq!(Role::TenantAdmin.display_name(), "Tenant Admin");
         assert_eq!(Role::Agent.display_name(), "Agent");
+        assert_eq!(Role::PlatformAdmin.display_name(), "Platform Admin");
     }
 
     #[test]
@@ -3696,6 +3823,218 @@ mod tests {
             note.error_signature.error_type
         );
         assert_eq!(parsed.tags, note.tags);
+    }
+
+    mod role_identifier_tests {
+        use super::*;
+        use std::collections::HashSet;
+        use std::hash::{Hash, Hasher};
+        use std::str::FromStr;
+
+        #[test]
+        fn test_role_identifier_serde_roundtrip_known_variant_expected() {
+            let role = RoleIdentifier::Known(Role::Admin);
+            let json = serde_json::to_string(&role).unwrap();
+            assert_eq!(json, "\"admin\"");
+
+            let deserialized: RoleIdentifier = serde_json::from_str(&json).unwrap();
+            assert_eq!(deserialized, RoleIdentifier::Known(Role::Admin));
+        }
+
+        #[test]
+        fn test_role_identifier_serde_roundtrip_custom_variant_expected() {
+            let role = RoleIdentifier::Custom("billingOwner".to_string());
+            let json = serde_json::to_string(&role).unwrap();
+            assert_eq!(json, "\"billingOwner\"");
+
+            let deserialized: RoleIdentifier = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                deserialized,
+                RoleIdentifier::Custom("billingOwner".to_string())
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_partial_eq_cross_variant_case_insensitive_expected() {
+            assert_eq!(
+                RoleIdentifier::Known(Role::Admin),
+                RoleIdentifier::Custom("admin".to_string())
+            );
+            assert_eq!(
+                RoleIdentifier::Known(Role::Admin),
+                RoleIdentifier::Custom("AdMiN".to_string())
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_hash_consistency_equal_values_same_hash_expected() {
+            let known = RoleIdentifier::Known(Role::Admin);
+            let custom = RoleIdentifier::Custom("admin".to_string());
+
+            let mut hasher_known = std::collections::hash_map::DefaultHasher::new();
+            known.hash(&mut hasher_known);
+            let known_hash = hasher_known.finish();
+
+            let mut hasher_custom = std::collections::hash_map::DefaultHasher::new();
+            custom.hash(&mut hasher_custom);
+            let custom_hash = hasher_custom.finish();
+
+            assert_eq!(known_hash, custom_hash);
+        }
+
+        #[test]
+        fn test_role_identifier_display_known_and_custom_expected() {
+            assert_eq!(RoleIdentifier::Known(Role::Admin).to_string(), "Admin");
+            assert_eq!(
+                RoleIdentifier::Custom("billingOwner".to_string()).to_string(),
+                "billingOwner"
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_from_str_flexible_known_and_custom_expected() {
+            assert_eq!(
+                RoleIdentifier::from_str_flexible("admin"),
+                RoleIdentifier::Known(Role::Admin)
+            );
+            assert_eq!(
+                RoleIdentifier::from_str_flexible("BillingOwner"),
+                RoleIdentifier::Custom("BillingOwner".to_string())
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_as_cedar_entity_id_known_and_custom_expected() {
+            assert_eq!(
+                RoleIdentifier::Known(Role::Admin).as_cedar_entity_id(),
+                "Admin"
+            );
+            assert_eq!(
+                RoleIdentifier::Custom("billingOwner".to_string()).as_cedar_entity_id(),
+                "billingOwner"
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_from_role_conversion_expected() {
+            let role_identifier: RoleIdentifier = Role::TechLead.into();
+            assert_eq!(role_identifier, RoleIdentifier::Known(Role::TechLead));
+        }
+
+        #[test]
+        fn test_role_identifier_helpers_known_and_custom_expected() {
+            let known = RoleIdentifier::Known(Role::Architect);
+            assert!(known.is_known());
+            assert!(!known.is_custom());
+            assert_eq!(known.as_known(), Some(&Role::Architect));
+
+            let custom = RoleIdentifier::Custom("billingOwner".to_string());
+            assert!(!custom.is_known());
+            assert!(custom.is_custom());
+            assert_eq!(custom.as_known(), None);
+        }
+
+        #[test]
+        fn test_tenant_context_role_helpers_with_role_and_with_roles_expected() {
+            let tenant_id = TenantId::new("tenant-1".to_string()).unwrap();
+            let user_id = UserId::new("user-1".to_string()).unwrap();
+
+            let ctx = TenantContext::new(tenant_id.clone(), user_id.clone())
+                .with_role(Role::Developer)
+                .with_role(RoleIdentifier::Custom("BillingOwner".to_string()));
+
+            assert!(ctx.has_role(&RoleIdentifier::Known(Role::Developer)));
+            assert!(ctx.has_known_role(&Role::Developer));
+            assert!(ctx.has_role(&RoleIdentifier::Custom("BillingOwner".to_string())));
+
+            let replaced = TenantContext::new(tenant_id, user_id).with_roles(vec![
+                RoleIdentifier::Known(Role::Viewer),
+                RoleIdentifier::Custom("Support".to_string()),
+            ]);
+
+            assert!(replaced.has_known_role(&Role::Viewer));
+            assert!(replaced.has_role(&RoleIdentifier::Custom("Support".to_string())));
+            assert!(!replaced.has_known_role(&Role::Developer));
+        }
+
+        #[test]
+        fn test_tenant_context_highest_precedence_role_mixed_roles_expected() {
+            let ctx = TenantContext::new(
+                TenantId::new("tenant-1".to_string()).unwrap(),
+                UserId::new("user-1".to_string()).unwrap(),
+            )
+            .with_roles(vec![
+                RoleIdentifier::Custom("customRole".to_string()),
+                RoleIdentifier::Known(Role::Admin),
+                RoleIdentifier::Known(Role::TenantAdmin),
+            ]);
+
+            assert_eq!(
+                ctx.highest_precedence_role(),
+                Some(&RoleIdentifier::Known(Role::TenantAdmin))
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_backward_compat_old_json_known_role_expected() {
+            let json = r#"{"tenant_id":"tenant-1","user_id":"user-1","roles":["admin"]}"#;
+            let ctx: TenantContext = serde_json::from_str(json).unwrap();
+
+            assert_eq!(ctx.roles, vec![RoleIdentifier::Known(Role::Admin)]);
+        }
+
+        #[test]
+        fn test_role_identifier_backward_compat_unknown_string_custom_expected() {
+            let json = r#"{"tenant_id":"tenant-1","user_id":"user-1","roles":["billingOwner"]}"#;
+            let ctx: TenantContext = serde_json::from_str(json).unwrap();
+
+            assert_eq!(
+                ctx.roles,
+                vec![RoleIdentifier::Custom("billingOwner".to_string())]
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_all_known_variants_roundtrip_expected() {
+            let known_roles = [
+                Role::Viewer,
+                Role::Developer,
+                Role::TechLead,
+                Role::Architect,
+                Role::Admin,
+                Role::TenantAdmin,
+                Role::Agent,
+                Role::PlatformAdmin,
+            ];
+
+            for role in known_roles {
+                let wrapped = RoleIdentifier::Known(role);
+                let json = serde_json::to_string(&wrapped).unwrap();
+                let deserialized: RoleIdentifier = serde_json::from_str(&json).unwrap();
+                assert_eq!(deserialized, wrapped);
+            }
+        }
+
+        #[test]
+        fn test_role_identifier_hash_set_dedup_known_and_custom_case_expected() {
+            let mut set = HashSet::new();
+            set.insert(RoleIdentifier::Known(Role::Admin));
+            set.insert(RoleIdentifier::Custom("admin".to_string()));
+
+            assert_eq!(set.len(), 1);
+        }
+
+        #[test]
+        fn test_role_identifier_from_str_trait_known_and_custom_expected() {
+            assert_eq!(
+                RoleIdentifier::from_str("admin").unwrap(),
+                RoleIdentifier::Known(Role::Admin)
+            );
+            assert_eq!(
+                RoleIdentifier::from_str("billingOwner").unwrap(),
+                RoleIdentifier::Custom("billingOwner".to_string())
+            );
+        }
     }
 }
 

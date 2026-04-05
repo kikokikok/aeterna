@@ -28,6 +28,30 @@ pub enum AdminCommand {
 
     #[command(about = "Sync organizational data from identity provider")]
     Sync(AdminSyncArgs),
+
+    #[command(subcommand, about = "Tenant provisioning operations (PlatformAdmin)")]
+    Tenant(AdminTenantCommand),
+}
+
+#[derive(Subcommand)]
+pub enum AdminTenantCommand {
+    #[command(about = "Provision a tenant from a YAML/JSON manifest file")]
+    Provision(AdminTenantProvisionArgs),
+}
+
+#[derive(Args)]
+pub struct AdminTenantProvisionArgs {
+    /// Path to the tenant manifest file (YAML or JSON)
+    #[arg(short, long)]
+    pub file: PathBuf,
+
+    /// Dry run - validate manifest without provisioning
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -205,6 +229,18 @@ pub async fn run(cmd: AdminCommand) -> anyhow::Result<()> {
         AdminCommand::Export(args) => run_export(args).await,
         AdminCommand::Import(args) => run_import(args).await,
         AdminCommand::Sync(args) => run_sync(args).await,
+        AdminCommand::Tenant(sub) => match sub {
+            AdminTenantCommand::Provision(args) => run_tenant_provision(args).await,
+        },
+    }
+}
+
+async fn get_live_client() -> Option<crate::client::AeternaClient> {
+    let resolved = crate::profile::load_resolved(None, None);
+    if let Ok(ref r) = resolved {
+        crate::client::AeternaClient::from_profile(r).await.ok()
+    } else {
+        None
     }
 }
 
@@ -816,6 +852,120 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
             return Err(anyhow::anyhow!(
                 "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running."
             ));
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_tenant_provision(args: AdminTenantProvisionArgs) -> anyhow::Result<()> {
+    let raw = std::fs::read_to_string(&args.file).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read manifest file '{}': {}",
+            args.file.display(),
+            e
+        )
+    })?;
+
+    let manifest: serde_json::Value = serde_yaml::from_str(&raw).map_err(|e| {
+        anyhow::anyhow!("Failed to parse manifest '{}': {}", args.file.display(), e)
+    })?;
+
+    if args.dry_run {
+        if args.json {
+            let out = serde_json::json!({
+                "dryRun": true,
+                "operation": "tenant_provision",
+                "file": args.file.display().to_string(),
+                "manifest": manifest,
+            });
+            println!("{}", serde_json::to_string_pretty(&out)?);
+        } else {
+            output::header("Tenant Provision (Dry Run)");
+            println!();
+            println!("  File:    {}", args.file.display());
+            if let Some(slug) = manifest
+                .get("tenant")
+                .and_then(|t| t.get("slug"))
+                .and_then(|s| s.as_str())
+            {
+                println!("  Tenant:  {}", slug);
+            }
+            if let Some(name) = manifest
+                .get("tenant")
+                .and_then(|t| t.get("name"))
+                .and_then(|s| s.as_str())
+            {
+                println!("  Name:    {}", name);
+            }
+            println!();
+            println!("  Manifest parsed successfully. Run without --dry-run to provision.");
+        }
+        return Ok(());
+    }
+
+    let Some(client) = get_live_client().await else {
+        ux_error::UxError::new("Could not connect to Aeterna server")
+            .why("Authentication or connection failed")
+            .fix("Ensure AETERNA_SERVER_URL is set and the server is reachable")
+            .suggest("aeterna admin health")
+            .display();
+        anyhow::bail!("Aeterna server not connected for tenant provisioning");
+    };
+
+    let result = client.tenant_provision(&manifest).await?;
+
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+    } else {
+        let success = result
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let slug = result
+            .get("slug")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let tenant_id = result
+            .get("tenantId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+
+        if success {
+            output::header("Tenant Provisioned Successfully");
+        } else {
+            output::header("Tenant Provisioning Completed with Errors");
+        }
+        println!();
+        println!("  Tenant ID: {tenant_id}");
+        println!("  Slug:      {slug}");
+        println!();
+
+        if let Some(steps) = result.get("steps").and_then(|v| v.as_array()) {
+            println!("  Steps:");
+            for step in steps {
+                let name = step.get("step").and_then(|v| v.as_str()).unwrap_or("?");
+                let ok = step.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+                let icon = if ok { "✓" } else { "✗" };
+                let detail = step.get("detail").and_then(|v| v.as_str()).unwrap_or("");
+                let error = step.get("error").and_then(|v| v.as_str()).unwrap_or("");
+                if ok {
+                    println!("    {icon} {name}: {detail}");
+                } else {
+                    println!("    {icon} {name}: {error}");
+                }
+            }
+            println!();
+        }
+
+        if let Some(errors) = result.get("validationErrors").and_then(|v| v.as_array()) {
+            println!("  Validation Errors:");
+            for err in errors {
+                if let Some(msg) = err.as_str() {
+                    println!("    • {msg}");
+                }
+            }
+            println!();
         }
     }
 

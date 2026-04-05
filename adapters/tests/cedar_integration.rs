@@ -68,14 +68,14 @@ const TEST_SCHEMA: &str = r#"{
 fn create_tenant_context(tenant: &str, user: &str) -> TenantContext {
     TenantContext::new(
         TenantId::new(tenant.into()).unwrap(),
-        UserId::new(user.into()).unwrap()
+        UserId::new(user.into()).unwrap(),
     )
 }
 
 fn create_agent_context(tenant: &str, user: &str, agent: &str) -> TenantContext {
     let mut ctx = TenantContext::new(
         TenantId::new(tenant.into()).unwrap(),
-        UserId::new(user.into()).unwrap()
+        UserId::new(user.into()).unwrap(),
     );
     ctx.agent_id = Some(agent.to_string());
     ctx
@@ -746,7 +746,7 @@ mod edge_cases {
             .check_permission(
                 &ctx,
                 "View",
-                "Unit::\"a3bb189e-8bf9-3888-9912-ace4e6543002\""
+                "Unit::\"a3bb189e-8bf9-3888-9912-ace4e6543002\"",
             )
             .await
             .unwrap();
@@ -1118,5 +1118,143 @@ mod performance {
                 .unwrap();
             assert!(allowed);
         }
+    }
+}
+
+mod role_membership {
+    use super::*;
+    use mk_core::types::{Role, RoleIdentifier};
+
+    const MEMBERSHIP_SCHEMA: &str = r#"{
+        "": {
+            "entityTypes": {
+                "User": {
+                    "memberOfTypes": ["Aeterna::Role"]
+                },
+                "Unit": {}
+            },
+            "actions": {
+                "View": {
+                    "appliesTo": {
+                        "principalTypes": ["User"],
+                        "resourceTypes": ["Unit"]
+                    }
+                }
+            }
+        },
+        "Aeterna": {
+            "entityTypes": {
+                "Role": {}
+            },
+            "actions": {}
+        }
+    }"#;
+
+    #[tokio::test]
+    async fn test_known_role_grants_membership_access_expected() {
+        let policies = r#"
+            permit(principal in Aeterna::Role::"Admin", action == Action::"View", resource == Unit::"secure-data");
+        "#;
+        let authorizer = CedarAuthorizer::new(policies, MEMBERSHIP_SCHEMA).unwrap();
+        let ctx = create_tenant_context("tenant1", "known-admin");
+
+        authorizer
+            .assign_role(&ctx, &ctx.user_id, RoleIdentifier::Known(Role::Admin))
+            .await
+            .unwrap();
+
+        let allowed = authorizer
+            .check_permission(&ctx, "View", "Unit::\"secure-data\"")
+            .await
+            .unwrap();
+        assert!(allowed);
+    }
+
+    #[tokio::test]
+    async fn test_custom_role_grants_membership_access_expected() {
+        let policies = r#"
+            permit(principal in Aeterna::Role::"billingOwner", action == Action::"View", resource == Unit::"finance-data");
+        "#;
+        let authorizer = CedarAuthorizer::new(policies, MEMBERSHIP_SCHEMA).unwrap();
+        let ctx = create_tenant_context("tenant1", "billing-user");
+
+        authorizer
+            .assign_role(
+                &ctx,
+                &ctx.user_id,
+                RoleIdentifier::Custom("billingOwner".to_string()),
+            )
+            .await
+            .unwrap();
+
+        let allowed = authorizer
+            .check_permission(&ctx, "View", "Unit::\"finance-data\"")
+            .await
+            .unwrap();
+        assert!(allowed);
+    }
+
+    #[tokio::test]
+    async fn test_no_role_denies_membership_expected() {
+        let policies = r#"
+            permit(principal in Aeterna::Role::"Admin", action == Action::"View", resource == Unit::"secure-data");
+        "#;
+        let authorizer = CedarAuthorizer::new(policies, MEMBERSHIP_SCHEMA).unwrap();
+        let ctx = create_tenant_context("tenant1", "no-role-user");
+
+        let denied = authorizer
+            .check_permission(&ctx, "View", "Unit::\"secure-data\"")
+            .await
+            .unwrap();
+        assert!(!denied);
+    }
+
+    #[tokio::test]
+    async fn test_wrong_role_denies_membership_expected() {
+        let policies = r#"
+            permit(principal in Aeterna::Role::"Admin", action == Action::"View", resource == Unit::"secure-data");
+        "#;
+        let authorizer = CedarAuthorizer::new(policies, MEMBERSHIP_SCHEMA).unwrap();
+        let ctx = create_tenant_context("tenant1", "developer-user");
+
+        authorizer
+            .assign_role(&ctx, &ctx.user_id, RoleIdentifier::Known(Role::Developer))
+            .await
+            .unwrap();
+
+        let denied = authorizer
+            .check_permission(&ctx, "View", "Unit::\"secure-data\"")
+            .await
+            .unwrap();
+        assert!(!denied);
+    }
+
+    #[tokio::test]
+    async fn test_remove_role_revokes_membership_expected() {
+        let policies = r#"
+            permit(principal in Aeterna::Role::"Admin", action == Action::"View", resource == Unit::"secure-data");
+        "#;
+        let authorizer = CedarAuthorizer::new(policies, MEMBERSHIP_SCHEMA).unwrap();
+        let ctx = create_tenant_context("tenant1", "revoked-user");
+
+        authorizer
+            .assign_role(&ctx, &ctx.user_id, RoleIdentifier::Known(Role::Admin))
+            .await
+            .unwrap();
+        let allowed_before = authorizer
+            .check_permission(&ctx, "View", "Unit::\"secure-data\"")
+            .await
+            .unwrap();
+        assert!(allowed_before);
+
+        authorizer
+            .remove_role(&ctx, &ctx.user_id, RoleIdentifier::Known(Role::Admin))
+            .await
+            .unwrap();
+        let denied_after = authorizer
+            .check_permission(&ctx, "View", "Unit::\"secure-data\"")
+            .await
+            .unwrap();
+        assert!(!denied_after);
     }
 }

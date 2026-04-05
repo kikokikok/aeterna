@@ -22,7 +22,9 @@ use memory::llm::create_llm_service_from_env;
 use memory::manager::MemoryManager;
 use memory::reasoning::{DefaultReflectiveReasoner, ReflectiveReasoner};
 use mk_core::traits::AuthorizationService;
-use mk_core::types::{ReasoningStrategy, ReasoningTrace, Role, TenantContext, UserId};
+use mk_core::types::{
+    ReasoningStrategy, ReasoningTrace, Role, RoleIdentifier, TenantContext, UserId,
+};
 use storage::git_provider_connection_store::InMemoryGitProviderConnectionStore;
 use storage::governance::GovernanceStorage;
 use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore};
@@ -410,7 +412,23 @@ fn build_anyhow_auth_service()
                 inner: PermitAuthorizationService::new(&api_key, &pdp_url),
             }))
         }
-        _ => Ok(Arc::new(AllowAllAuthService)),
+        _ => {
+            // Allow-all is only safe in local development or test environments.
+            // Emit a warning so operators know this is active.  To suppress this
+            // warning in a legitimate dev environment, set
+            // AETERNA_ALLOW_PERMISSIVE_AUTH=dev.
+            let permissive_mode =
+                std::env::var("AETERNA_ALLOW_PERMISSIVE_AUTH").unwrap_or_default();
+            if permissive_mode != "dev" {
+                tracing::warn!(
+                    backend = %backend,
+                    "Using allow-all authorization service.                      This grants every caller full access and MUST NOT be used in production.                      Set AETERNA_AUTH_BACKEND=cedar or AETERNA_AUTH_BACKEND=permit,                      or set AETERNA_ALLOW_PERMISSIVE_AUTH=dev to silence this warning."
+                );
+            } else {
+                tracing::debug!("Allow-all auth active (AETERNA_ALLOW_PERMISSIVE_AUTH=dev)");
+            }
+            Ok(Arc::new(AllowAllAuthService))
+        }
     }
 }
 
@@ -529,7 +547,10 @@ where
             .map_err(anyhow::Error::from)
     }
 
-    async fn get_user_roles(&self, ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
+    async fn get_user_roles(
+        &self,
+        ctx: &TenantContext,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
         self.inner
             .get_user_roles(ctx)
             .await
@@ -540,7 +561,7 @@ where
         &self,
         ctx: &TenantContext,
         user_id: &UserId,
-        role: Role,
+        role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         self.inner
             .assign_role(ctx, user_id, role)
@@ -552,7 +573,7 @@ where
         &self,
         ctx: &TenantContext,
         user_id: &UserId,
-        role: Role,
+        role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         self.inner
             .remove_role(ctx, user_id, role)
@@ -576,15 +597,18 @@ impl AuthorizationService for AllowAllAuthService {
         Ok(true)
     }
 
-    async fn get_user_roles(&self, _ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
-        Ok(vec![Role::Developer])
+    async fn get_user_roles(
+        &self,
+        _ctx: &TenantContext,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+        Ok(vec![Role::Developer.into()])
     }
 
     async fn assign_role(
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -593,7 +617,7 @@ impl AuthorizationService for AllowAllAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -614,15 +638,18 @@ impl AuthorizationService for AllowAllBoxedAuthService {
         Ok(true)
     }
 
-    async fn get_user_roles(&self, _ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
-        Ok(vec![Role::Developer])
+    async fn get_user_roles(
+        &self,
+        _ctx: &TenantContext,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+        Ok(vec![Role::Developer.into()])
     }
 
     async fn assign_role(
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -631,7 +658,7 @@ impl AuthorizationService for AllowAllBoxedAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }

@@ -240,7 +240,7 @@ async fn test_concurrent_sync_cycles_one_skipped() {
         tenant_id: tenant_id.clone(),
         user_id: mk_core::types::UserId::new("test-user".to_string()).unwrap(),
         agent_id: None,
-        role: None,
+        roles: Vec::new(),
         target_tenant_id: None,
     };
 
