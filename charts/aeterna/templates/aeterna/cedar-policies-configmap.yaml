@@ -1,0 +1,22 @@
+{{- if and .Values.aeterna.enabled .Values.opal.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aeterna.fullname" . }}-cedar-policies
+  labels:
+    {{- include "aeterna.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cedar-policies
+data:
+  {{- if .Values.opal.cedar.policyText }}
+  policy-text: |
+    {{- .Values.opal.cedar.policyText | nindent 4 }}
+  {{- else }}
+  policy-text: ""
+  {{- end }}
+  {{- if .Values.opal.cedar.schemaText }}
+  schema-text: |
+    {{- .Values.opal.cedar.schemaText | nindent 4 }}
+  {{- else }}
+  schema-text: ""
+  {{- end }}
+{{- end }}

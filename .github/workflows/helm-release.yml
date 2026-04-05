@@ -55,6 +55,52 @@ jobs:
         run: |
           sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" ${{ env.CHART_PATH }}/Chart.yaml
 
+      - name: Embed Cedar policies into chart values
+        env:
+          VALUES_PATH: ${{ env.CHART_PATH }}/values.yaml
+        run: |
+          cat policies/cedar/*.cedar > /tmp/cedar-policy-text.txt
+          cat policies/cedar/*.cedarschema > /tmp/cedar-schema-text.txt
+
+          python3 << 'PYEOF'
+          import os
+
+          values_path = os.environ["VALUES_PATH"]
+
+          with open("/tmp/cedar-policy-text.txt") as f:
+              policy_text = f.read()
+          with open("/tmp/cedar-schema-text.txt") as f:
+              schema_text = f.read()
+
+          with open(values_path) as f:
+              content = f.read()
+
+          lines = content.split('\n')
+          new_lines = []
+          i = 0
+          while i < len(lines):
+              line = lines[i]
+              stripped = line.lstrip()
+              if stripped.startswith('policyText:') and 'cedar:' in '\n'.join(lines[max(0,i-5):i]):
+                  indent = len(line) - len(stripped)
+                  new_lines.append(' ' * indent + 'policyText: |')
+                  for pline in policy_text.rstrip('\n').split('\n'):
+                      new_lines.append(' ' * (indent + 2) + pline)
+              elif stripped.startswith('schemaText:') and 'cedar:' in '\n'.join(lines[max(0,i-5):i]):
+                  indent = len(line) - len(stripped)
+                  new_lines.append(' ' * indent + 'schemaText: |')
+                  for sline in schema_text.rstrip('\n').split('\n'):
+                      new_lines.append(' ' * (indent + 2) + sline)
+              else:
+                  new_lines.append(line)
+              i += 1
+
+          with open(values_path, 'w') as f:
+              f.write('\n'.join(new_lines))
+
+          print(f"Cedar policies embedded: {len(policy_text)} bytes policy, {len(schema_text)} bytes schema")
+          PYEOF
+
       - name: Add dependency repos
         run: |
           helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts

@@ -184,6 +184,18 @@ spec:
             - name: OTEL_TRACES_SAMPLER_ARG
               value: {{ .Values.observability.tracing.samplingRatio | default "1.0" | quote }}
             {{- end }}
+            {{- if .Values.opal.enabled }}
+            - name: AETERNA_CEDAR_POLICY_TEXT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "aeterna.fullname" . }}-cedar-policies
+                  key: policy-text
+            - name: AETERNA_CEDAR_SCHEMA_TEXT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "aeterna.fullname" . }}-cedar-policies
+                  key: schema-text
+            {{- end }}
             - name: RUST_LOG
               value: {{ .Values.observability.logging.level | default "info" | quote }}
             - name: LOG_FORMAT
