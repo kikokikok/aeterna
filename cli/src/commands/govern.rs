@@ -1,5 +1,4 @@
 use clap::{Args, Subcommand, ValueEnum};
-use context::ContextResolver;
 use serde_json::json;
 
 use crate::output;
@@ -229,271 +228,349 @@ pub async fn run(cmd: GovernCommand) -> anyhow::Result<()> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Live client helpers (mirrors tenant.rs / permissions.rs pattern)
+// ---------------------------------------------------------------------------
+
+async fn get_live_client() -> Option<crate::client::AeternaClient> {
+    crate::backend::connect()
+        .await
+        .ok()
+        .map(|(client, _)| client)
+}
+
+fn govern_server_required(operation: &str, message: &str) -> anyhow::Result<()> {
+    ux_error::UxError::new(message)
+        .why("This governance command requires a live control-plane backend")
+        .fix("Start the Aeterna server: aeterna serve")
+        .fix("Ensure AETERNA_SERVER_URL is set and the server is reachable")
+        .suggest("aeterna auth login")
+        .display();
+    anyhow::bail!("Aeterna server not connected for operation: {operation}")
+}
+
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
+
 async fn run_status(args: GovernStatusArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let ctx = resolver.resolve()?;
-
-    // Simulated governance status
-    let status = GovernanceStatus {
-        approval_mode: "quorum".to_string(),
-        min_approvers: 2,
-        timeout_hours: 72,
-        auto_approve_enabled: true,
-        pending_requests: 3,
-        approved_today: 7,
-        rejected_today: 1,
-        escalated: 0,
-        your_pending_approvals: 2,
-    };
-
-    if args.json {
-        let output = json!({
-            "context": {
-                "tenant_id": ctx.tenant_id.value,
-                "user_id": ctx.user_id.value,
-            },
-            "config": {
-                "approval_mode": status.approval_mode,
-                "min_approvers": status.min_approvers,
-                "timeout_hours": status.timeout_hours,
-                "auto_approve_enabled": status.auto_approve_enabled,
-            },
-            "metrics": {
-                "pending_requests": status.pending_requests,
-                "approved_today": status.approved_today,
-                "rejected_today": status.rejected_today,
-                "escalated": status.escalated,
-                "your_pending_approvals": status.your_pending_approvals,
-            },
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Governance Status");
-        println!();
-
-        output::subheader("Configuration");
-        println!("  Approval Mode:    {}", status.approval_mode);
-        println!("  Min Approvers:    {}", status.min_approvers);
-        println!("  Timeout:          {} hours", status.timeout_hours);
-        println!(
-            "  Auto-approve:     {}",
-            if status.auto_approve_enabled {
-                "enabled (low-risk)"
+    if let Some(client) = get_live_client().await {
+        let result = client.govern_status().await.map_err(|e| {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "error": e.to_string(), "operation": "govern_status"})
+                    )
+                    .unwrap()
+                );
             } else {
-                "disabled"
+                ux_error::UxError::new(&e.to_string())
+                    .fix("Run: aeterna auth login")
+                    .display();
             }
-        );
-        println!();
+            e
+        })?;
 
-        output::subheader("Activity (Today)");
-        println!("  Pending Requests: {}", status.pending_requests);
-        println!("  Approved:         {}", status.approved_today);
-        println!("  Rejected:         {}", status.rejected_today);
-        println!("  Escalated:        {}", status.escalated);
-        println!();
-
-        if status.your_pending_approvals > 0 {
-            println!(
-                "  ⚡ You have {} request(s) awaiting your approval",
-                status.your_pending_approvals
-            );
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Governance Status");
             println!();
-            output::hint("Run 'aeterna govern pending --mine' to see your pending approvals");
-        }
 
-        if args.verbose {
-            output::subheader("Recent Activity");
-            println!("  • alice approved policy 'security-baseline' (2h ago)");
-            println!("  • bob requested knowledge promotion 'ADR-042' (4h ago)");
-            println!("  • system auto-approved memory feedback (6h ago)");
+            output::subheader("Configuration");
+            if let Some(config) = result.get("config").or(Some(&result)) {
+                println!(
+                    "  Approval Mode:    {}",
+                    config["approval_mode"].as_str().unwrap_or("?")
+                );
+                println!(
+                    "  Min Approvers:    {}",
+                    config["min_approvers"]
+                        .as_u64()
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "?".to_string())
+                );
+                println!(
+                    "  Timeout:          {} hours",
+                    config["timeout_hours"]
+                        .as_u64()
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "?".to_string())
+                );
+                let auto = config["auto_approve_enabled"].as_bool().unwrap_or(false);
+                println!(
+                    "  Auto-approve:     {}",
+                    if auto {
+                        "enabled (low-risk)"
+                    } else {
+                        "disabled"
+                    }
+                );
+            }
+            println!();
+
+            if let Some(metrics) = result.get("metrics").or(Some(&result)) {
+                output::subheader("Activity (Today)");
+                println!(
+                    "  Pending Requests: {}",
+                    metrics["pending_requests"].as_u64().unwrap_or(0)
+                );
+                println!(
+                    "  Approved:         {}",
+                    metrics["approved_today"].as_u64().unwrap_or(0)
+                );
+                println!(
+                    "  Rejected:         {}",
+                    metrics["rejected_today"].as_u64().unwrap_or(0)
+                );
+                println!(
+                    "  Escalated:        {}",
+                    metrics["escalated"].as_u64().unwrap_or(0)
+                );
+                println!();
+
+                let your_pending = metrics["your_pending_approvals"].as_u64().unwrap_or(0);
+                if your_pending > 0 {
+                    println!(
+                        "  ⚡ You have {} request(s) awaiting your approval",
+                        your_pending
+                    );
+                    println!();
+                    output::hint(
+                        "Run 'aeterna govern pending --mine' to see your pending approvals",
+                    );
+                }
+            }
+
+            if args.verbose {
+                if let Some(recent) = result.get("recent_activity").and_then(|v| v.as_array()) {
+                    output::subheader("Recent Activity");
+                    for item in recent {
+                        println!("  • {}", item.as_str().unwrap_or("?"));
+                    }
+                }
+            }
         }
+        return Ok(());
     }
 
-    Ok(())
+    if args.json {
+        let out = json!({
+            "success": false,
+            "error": "server_not_connected",
+            "operation": "govern_status"
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        anyhow::bail!("Aeterna server not connected for operation: govern_status");
+    }
+    govern_server_required(
+        "govern_status",
+        "Cannot show governance status: server not connected",
+    )
 }
 
 async fn run_pending(args: GovernPendingArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let _ctx = resolver.resolve()?;
-
-    // Simulated pending requests
-    let requests = [
-        PendingRequest {
-            id: "req_abc123".to_string(),
-            request_type: "policy".to_string(),
-            title: "Add security-baseline policy".to_string(),
-            requestor: "alice".to_string(),
-            layer: "org".to_string(),
-            created_at: "2024-01-15T10:30:00Z".to_string(),
-            approvals: 1,
-            required_approvals: 2,
-            status: "pending".to_string(),
-        },
-        PendingRequest {
-            id: "req_def456".to_string(),
-            request_type: "knowledge".to_string(),
-            title: "Promote ADR-042 to company layer".to_string(),
-            requestor: "bob".to_string(),
-            layer: "company".to_string(),
-            created_at: "2024-01-15T08:15:00Z".to_string(),
-            approvals: 0,
-            required_approvals: 2,
-            status: "pending".to_string(),
-        },
-        PendingRequest {
-            id: "req_ghi789".to_string(),
-            request_type: "memory".to_string(),
-            title: "Promote high-value learning to team".to_string(),
-            requestor: "agent_codex".to_string(),
-            layer: "team".to_string(),
-            created_at: "2024-01-15T06:00:00Z".to_string(),
-            approvals: 1,
-            required_approvals: 1,
-            status: "ready".to_string(),
-        },
-    ];
-
-    // Apply filters
-    let filtered: Vec<_> = requests
-        .iter()
-        .filter(|r| args.request_type == "all" || r.request_type == args.request_type)
-        .filter(|r| args.layer.as_ref().is_none_or(|l| &r.layer == l))
-        .filter(|r| {
-            args.requestor
-                .as_ref()
-                .is_none_or(|req| &r.requestor == req)
-        })
-        .collect();
-
-    if args.json {
-        let output = json!({
-            "total": filtered.len(),
-            "requests": filtered.iter().map(|r| json!({
-                "id": r.id,
-                "type": r.request_type,
-                "title": r.title,
-                "requestor": r.requestor,
-                "layer": r.layer,
-                "created_at": r.created_at,
-                "approvals": r.approvals,
-                "required_approvals": r.required_approvals,
-                "status": r.status,
-            })).collect::<Vec<_>>(),
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header(&format!("Pending Requests ({})", filtered.len()));
-        println!();
-
-        if filtered.is_empty() {
-            println!("  ✓ No pending requests matching your filters");
-            println!();
+    if let Some(client) = get_live_client().await {
+        let type_filter = if args.request_type == "all" {
+            None
         } else {
-            for req in &filtered {
-                let status_icon = match req.status.as_str() {
-                    "ready" => "✓",
-                    "pending" => "○",
-                    _ => "?",
-                };
+            Some(args.request_type.as_str())
+        };
+        let result = client
+            .govern_pending(
+                type_filter,
+                args.layer.as_deref(),
+                args.requestor.as_deref(),
+                args.mine,
+            )
+            .await
+            .map_err(|e| {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &json!({"success": false, "error": e.to_string(), "operation": "govern_pending"})
+                        )
+                        .unwrap()
+                    );
+                } else {
+                    ux_error::UxError::new(&e.to_string())
+                        .fix("Run: aeterna auth login")
+                        .display();
+                }
+                e
+            })?;
 
-                println!(
-                    "  {} [{}] {} ({})",
-                    status_icon, req.id, req.title, req.request_type
-                );
-                println!(
-                    "      Requestor: {}  |  Layer: {}  |  Approvals: {}/{}",
-                    req.requestor, req.layer, req.approvals, req.required_approvals
-                );
-                println!("      Created: {}", req.created_at);
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            let requests = result["requests"].as_array();
+            let count = requests.map(|r| r.len()).unwrap_or(0);
+
+            output::header(&format!("Pending Requests ({})", count));
+            println!();
+
+            if count == 0 {
+                println!("  ✓ No pending requests matching your filters");
                 println!();
-            }
+            } else if let Some(reqs) = requests {
+                for req in reqs {
+                    let status = req["status"].as_str().unwrap_or("?");
+                    let status_icon = match status {
+                        "ready" => "✓",
+                        "pending" => "○",
+                        _ => "?",
+                    };
+                    let id = req["id"].as_str().unwrap_or("?");
+                    let title = req["title"].as_str().unwrap_or("?");
+                    let rtype = req["type"]
+                        .as_str()
+                        .or_else(|| req["request_type"].as_str())
+                        .unwrap_or("?");
+                    let requestor = req["requestor"].as_str().unwrap_or("?");
+                    let layer = req["layer"].as_str().unwrap_or("?");
+                    let approvals = req["approvals"].as_u64().unwrap_or(0);
+                    let required = req["required_approvals"].as_u64().unwrap_or(0);
+                    let created = req["created_at"].as_str().unwrap_or("?");
 
-            output::hint(
-                "Use 'aeterna govern approve <id>' or 'aeterna govern reject <id>' to act",
-            );
+                    println!("  {} [{}] {} ({})", status_icon, id, title, rtype);
+                    println!(
+                        "      Requestor: {}  |  Layer: {}  |  Approvals: {}/{}",
+                        requestor, layer, approvals, required
+                    );
+                    println!("      Created: {}", created);
+                    println!();
+                }
+
+                output::hint(
+                    "Use 'aeterna govern approve <id>' or 'aeterna govern reject <id>' to act",
+                );
+            }
         }
+        return Ok(());
     }
 
-    Ok(())
+    if args.json {
+        let out = json!({
+            "success": false,
+            "error": "server_not_connected",
+            "operation": "govern_pending"
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        anyhow::bail!("Aeterna server not connected for operation: govern_pending");
+    }
+    govern_server_required(
+        "govern_pending",
+        "Cannot list pending requests: server not connected",
+    )
 }
 
 async fn run_approve(args: GovernApproveArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let _ctx = resolver.resolve()?;
-
-    // Simulated request lookup
-    let request = PendingRequest {
-        id: args.request_id.clone(),
-        request_type: "policy".to_string(),
-        title: "Add security-baseline policy".to_string(),
-        requestor: "alice".to_string(),
-        layer: "org".to_string(),
-        created_at: "2024-01-15T10:30:00Z".to_string(),
-        approvals: 1,
-        required_approvals: 2,
-        status: "pending".to_string(),
-    };
-
-    if args.json {
-        let output = json!({
-            "success": true,
-            "request_id": args.request_id,
-            "action": "approved",
-            "comment": args.comment,
-            "new_approval_count": request.approvals + 1,
-            "required_approvals": request.required_approvals,
-            "fully_approved": request.approvals + 1 >= request.required_approvals,
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Approve Request");
-        println!();
-
-        println!("  Request ID: {}", request.id);
-        println!("  Type:       {}", request.request_type);
-        println!("  Title:      {}", request.title);
-        println!("  Requestor:  {}", request.requestor);
-        println!("  Layer:      {}", request.layer);
-        println!();
-
-        if !args.yes {
-            // In real implementation, would prompt for confirmation
-            println!("  ℹ Would prompt for confirmation (use --yes to skip)");
-        }
-
-        println!("  ✓ Request approved");
-        if let Some(comment) = &args.comment {
-            println!("    Comment: {comment}");
-        }
-        println!();
-
-        let new_count = request.approvals + 1;
-        if new_count >= request.required_approvals {
-            println!(
-                "  ⚡ Request is now fully approved ({}/{})",
-                new_count, request.required_approvals
-            );
-            println!("    The change will be applied automatically.");
-        } else {
-            println!(
-                "  ○ Approval recorded ({}/{})",
-                new_count, request.required_approvals
-            );
-            println!(
-                "    Waiting for {} more approval(s).",
-                request.required_approvals - new_count
-            );
-        }
-        println!();
+    if !args.yes {
+        eprintln!(
+            "This will approve request '{}'. Use --yes to confirm.",
+            args.request_id
+        );
+        eprintln!("Use --yes to skip this confirmation.");
+        return Ok(());
     }
 
-    Ok(())
+    if let Some(client) = get_live_client().await {
+        let mut body = json!({});
+        if let Some(ref comment) = args.comment {
+            body["comment"] = json!(comment);
+        }
+
+        let result = client
+            .govern_approve(&args.request_id, &body)
+            .await
+            .map_err(|e| {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &json!({"success": false, "error": e.to_string(), "operation": "govern_approve", "request_id": args.request_id})
+                        )
+                        .unwrap()
+                    );
+                } else {
+                    ux_error::UxError::new(&e.to_string())
+                        .fix("Run: aeterna auth login")
+                        .display();
+                }
+                e
+            })?;
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Approve Request");
+            println!();
+
+            println!("  Request ID: {}", args.request_id);
+            if let Some(title) = result["title"].as_str() {
+                println!("  Title:      {}", title);
+            }
+            if let Some(rtype) = result["type"]
+                .as_str()
+                .or_else(|| result["request_type"].as_str())
+            {
+                println!("  Type:       {}", rtype);
+            }
+            println!();
+
+            println!("  ✓ Request approved");
+            if let Some(comment) = &args.comment {
+                println!("    Comment: {comment}");
+            }
+            println!();
+
+            let fully_approved = result["fully_approved"].as_bool().unwrap_or(false);
+            if fully_approved {
+                let approvals = result["new_approval_count"]
+                    .as_u64()
+                    .or_else(|| result["approvals"].as_u64())
+                    .unwrap_or(0);
+                let required = result["required_approvals"].as_u64().unwrap_or(0);
+                println!(
+                    "  ⚡ Request is now fully approved ({}/{})",
+                    approvals, required
+                );
+                println!("    The change will be applied automatically.");
+            } else {
+                let approvals = result["new_approval_count"]
+                    .as_u64()
+                    .or_else(|| result["approvals"].as_u64())
+                    .unwrap_or(0);
+                let required = result["required_approvals"].as_u64().unwrap_or(0);
+                println!("  ○ Approval recorded ({}/{})", approvals, required);
+                if required > approvals {
+                    println!("    Waiting for {} more approval(s).", required - approvals);
+                }
+            }
+            println!();
+        }
+        return Ok(());
+    }
+
+    if args.json {
+        let out = json!({
+            "success": false,
+            "error": "server_not_connected",
+            "operation": "govern_approve",
+            "request_id": args.request_id
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        anyhow::bail!("Aeterna server not connected for operation: govern_approve");
+    }
+    govern_server_required(
+        "govern_approve",
+        "Cannot approve request: server not connected",
+    )
 }
 
 async fn run_reject(args: GovernRejectArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let _ctx = resolver.resolve()?;
-
     if args.reason.is_empty() {
         ux_error::UxError::new("Rejection reason is required")
             .why("Requestors need feedback to understand why their request was rejected")
@@ -506,57 +583,89 @@ async fn run_reject(args: GovernRejectArgs) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    // Simulated request lookup
-    let request = PendingRequest {
-        id: args.request_id.clone(),
-        request_type: "policy".to_string(),
-        title: "Add security-baseline policy".to_string(),
-        requestor: "alice".to_string(),
-        layer: "org".to_string(),
-        created_at: "2024-01-15T10:30:00Z".to_string(),
-        approvals: 1,
-        required_approvals: 2,
-        status: "pending".to_string(),
-    };
-
-    if args.json {
-        let output = json!({
-            "success": true,
-            "request_id": args.request_id,
-            "action": "rejected",
-            "reason": args.reason,
-            "requestor_notified": true,
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Reject Request");
-        println!();
-
-        println!("  Request ID: {}", request.id);
-        println!("  Type:       {}", request.request_type);
-        println!("  Title:      {}", request.title);
-        println!("  Requestor:  {}", request.requestor);
-        println!();
-
-        if !args.yes {
-            // In real implementation, would prompt for confirmation
-            println!("  ℹ Would prompt for confirmation (use --yes to skip)");
-        }
-
-        println!("  ✗ Request rejected");
-        println!("    Reason: {}", args.reason);
-        println!();
-        println!("  ℹ Requestor '{}' has been notified", request.requestor);
-        println!();
+    if !args.yes {
+        eprintln!(
+            "This will reject request '{}'. Use --yes to confirm.",
+            args.request_id
+        );
+        eprintln!("Use --yes to skip this confirmation.");
+        return Ok(());
     }
 
-    Ok(())
+    if let Some(client) = get_live_client().await {
+        let body = json!({ "reason": args.reason });
+
+        let result = client
+            .govern_reject(&args.request_id, &body)
+            .await
+            .map_err(|e| {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &json!({"success": false, "error": e.to_string(), "operation": "govern_reject", "request_id": args.request_id})
+                        )
+                        .unwrap()
+                    );
+                } else {
+                    ux_error::UxError::new(&e.to_string())
+                        .fix("Run: aeterna auth login")
+                        .display();
+                }
+                e
+            })?;
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Reject Request");
+            println!();
+
+            println!("  Request ID: {}", args.request_id);
+            if let Some(title) = result["title"].as_str() {
+                println!("  Title:      {}", title);
+            }
+            if let Some(rtype) = result["type"]
+                .as_str()
+                .or_else(|| result["request_type"].as_str())
+            {
+                println!("  Type:       {}", rtype);
+            }
+            if let Some(requestor) = result["requestor"].as_str() {
+                println!("  Requestor:  {}", requestor);
+            }
+            println!();
+
+            println!("  ✗ Request rejected");
+            println!("    Reason: {}", args.reason);
+            println!();
+            if let Some(requestor) = result["requestor"].as_str() {
+                println!("  ℹ Requestor '{}' has been notified", requestor);
+            } else {
+                println!("  ℹ Requestor has been notified");
+            }
+            println!();
+        }
+        return Ok(());
+    }
+
+    if args.json {
+        let out = json!({
+            "success": false,
+            "error": "server_not_connected",
+            "operation": "govern_reject",
+            "request_id": args.request_id
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        anyhow::bail!("Aeterna server not connected for operation: govern_reject");
+    }
+    govern_server_required(
+        "govern_reject",
+        "Cannot reject request: server not connected",
+    )
 }
 
 async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let _ctx = resolver.resolve()?;
-
     if args.list_templates {
         let templates = [
             (
@@ -624,37 +733,6 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let mut config = GovernanceConfig {
-        approval_mode: "quorum".to_string(),
-        min_approvers: 2,
-        timeout_hours: 72,
-        auto_approve_enabled: true,
-        escalation_contact: Some("security-team@acme.com".to_string()),
-    };
-
-    if let Some(ref cli_template) = args.template {
-        match cli_template {
-            GovernanceTemplate::Standard => {
-                config.approval_mode = "quorum".to_string();
-                config.min_approvers = 2;
-                config.timeout_hours = 72;
-                config.auto_approve_enabled = false;
-            }
-            GovernanceTemplate::Strict => {
-                config.approval_mode = "unanimous".to_string();
-                config.min_approvers = 3;
-                config.timeout_hours = 24;
-                config.auto_approve_enabled = false;
-            }
-            GovernanceTemplate::Permissive => {
-                config.approval_mode = "single".to_string();
-                config.min_approvers = 1;
-                config.timeout_hours = 168;
-                config.auto_approve_enabled = true;
-            }
-        }
-    }
-
     let has_changes = args.approval_mode.is_some()
         || args.min_approvers.is_some()
         || args.timeout_hours.is_some()
@@ -663,43 +741,107 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
         || args.template.is_some();
 
     if args.show || !has_changes {
-        // Just show current config
-        if args.json {
-            let output = json!({
-                "approval_mode": config.approval_mode,
-                "min_approvers": config.min_approvers,
-                "timeout_hours": config.timeout_hours,
-                "auto_approve_enabled": config.auto_approve_enabled,
-                "escalation_contact": config.escalation_contact,
-            });
-            println!("{}", serde_json::to_string_pretty(&output)?);
-        } else {
-            output::header("Governance Configuration");
-            println!();
-
-            println!("  Approval Mode:       {}", config.approval_mode);
-            println!("  Min Approvers:       {}", config.min_approvers);
-            println!("  Timeout:             {} hours", config.timeout_hours);
-            println!(
-                "  Auto-approve:        {}",
-                if config.auto_approve_enabled {
-                    "enabled"
+        if let Some(client) = get_live_client().await {
+            let result = client.govern_config_show().await.map_err(|e| {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &json!({"success": false, "error": e.to_string(), "operation": "govern_config_show"})
+                        )
+                        .unwrap()
+                    );
                 } else {
-                    "disabled"
+                    ux_error::UxError::new(&e.to_string())
+                        .fix("Run: aeterna auth login")
+                        .display();
                 }
-            );
-            println!(
-                "  Escalation Contact:  {}",
-                config.escalation_contact.as_deref().unwrap_or("(not set)")
-            );
-            println!();
-            output::hint("Use --approval-mode, --min-approvers, etc. to change settings");
+                e
+            })?;
+
+            if args.json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                output::header("Governance Configuration");
+                println!();
+
+                let cfg = if result.get("config").is_some() {
+                    &result["config"]
+                } else {
+                    &result
+                };
+                println!(
+                    "  Approval Mode:       {}",
+                    cfg["approval_mode"].as_str().unwrap_or("?")
+                );
+                println!(
+                    "  Min Approvers:       {}",
+                    cfg["min_approvers"]
+                        .as_u64()
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "?".to_string())
+                );
+                println!(
+                    "  Timeout:             {} hours",
+                    cfg["timeout_hours"]
+                        .as_u64()
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "?".to_string())
+                );
+                let auto = cfg["auto_approve_enabled"].as_bool().unwrap_or(false);
+                println!(
+                    "  Auto-approve:        {}",
+                    if auto { "enabled" } else { "disabled" }
+                );
+                println!(
+                    "  Escalation Contact:  {}",
+                    cfg["escalation_contact"].as_str().unwrap_or("(not set)")
+                );
+                println!();
+                output::hint("Use --approval-mode, --min-approvers, etc. to change settings");
+            }
+            return Ok(());
         }
-        return Ok(());
+
+        if args.json {
+            let out = json!({
+                "success": false,
+                "error": "server_not_connected",
+                "operation": "govern_config_show"
+            });
+            println!("{}", serde_json::to_string_pretty(&out)?);
+            anyhow::bail!("Aeterna server not connected for operation: govern_config_show");
+        }
+        return govern_server_required(
+            "govern_config_show",
+            "Cannot show governance config: server not connected",
+        );
     }
 
-    // Apply changes
-    let mut changes: Vec<String> = Vec::new();
+    let mut body = json!({});
+
+    if let Some(ref cli_template) = args.template {
+        match cli_template {
+            GovernanceTemplate::Standard => {
+                body["approval_mode"] = json!("quorum");
+                body["min_approvers"] = json!(2);
+                body["timeout_hours"] = json!(72);
+                body["auto_approve_enabled"] = json!(false);
+            }
+            GovernanceTemplate::Strict => {
+                body["approval_mode"] = json!("unanimous");
+                body["min_approvers"] = json!(3);
+                body["timeout_hours"] = json!(24);
+                body["auto_approve_enabled"] = json!(false);
+            }
+            GovernanceTemplate::Permissive => {
+                body["approval_mode"] = json!("single");
+                body["min_approvers"] = json!(1);
+                body["timeout_hours"] = json!(168);
+                body["auto_approve_enabled"] = json!(true);
+            }
+        }
+    }
 
     if let Some(mode) = args.approval_mode {
         let mode_str = match mode {
@@ -707,136 +849,137 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
             ApprovalMode::Quorum => "quorum",
             ApprovalMode::Unanimous => "unanimous",
         };
-        changes.push(format!(
-            "approval_mode: {} → {}",
-            config.approval_mode, mode_str
-        ));
-        config.approval_mode = mode_str.to_string();
+        body["approval_mode"] = json!(mode_str);
     }
 
     if let Some(min) = args.min_approvers {
-        changes.push(format!("min_approvers: {} → {}", config.min_approvers, min));
-        config.min_approvers = min;
+        body["min_approvers"] = json!(min);
     }
 
     if let Some(timeout) = args.timeout_hours {
-        changes.push(format!(
-            "timeout_hours: {} → {}",
-            config.timeout_hours, timeout
-        ));
-        config.timeout_hours = timeout;
+        body["timeout_hours"] = json!(timeout);
     }
 
     if let Some(auto) = args.auto_approve {
-        changes.push(format!(
-            "auto_approve: {} → {}",
-            config.auto_approve_enabled, auto
-        ));
-        config.auto_approve_enabled = auto;
+        body["auto_approve_enabled"] = json!(auto);
     }
 
     if let Some(contact) = args.escalation_contact {
-        changes.push(format!(
-            "escalation_contact: {} → {}",
-            config.escalation_contact.as_deref().unwrap_or("(none)"),
-            contact
-        ));
-        config.escalation_contact = Some(contact);
+        body["escalation_contact"] = json!(contact);
+    }
+
+    if let Some(client) = get_live_client().await {
+        let result = client.govern_config_update(&body).await.map_err(|e| {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "error": e.to_string(), "operation": "govern_config_update"})
+                    )
+                    .unwrap()
+                );
+            } else {
+                ux_error::UxError::new(&e.to_string())
+                    .fix("Run: aeterna auth login")
+                    .display();
+            }
+            e
+        })?;
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Update Governance Configuration");
+            println!();
+
+            if let Some(changes) = result["changes"].as_array() {
+                output::subheader("Changes Applied");
+                for change in changes {
+                    println!("  ✓ {}", change.as_str().unwrap_or("?"));
+                }
+                println!();
+            }
+
+            println!("  Configuration updated successfully.");
+            println!();
+        }
+        return Ok(());
     }
 
     if args.json {
-        let output = json!({
-            "success": true,
-            "changes": changes,
-            "new_config": {
-                "approval_mode": config.approval_mode,
-                "min_approvers": config.min_approvers,
-                "timeout_hours": config.timeout_hours,
-                "auto_approve_enabled": config.auto_approve_enabled,
-                "escalation_contact": config.escalation_contact,
-            },
+        let out = json!({
+            "success": false,
+            "error": "server_not_connected",
+            "operation": "govern_config_update"
         });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Update Governance Configuration");
-        println!();
-
-        output::subheader("Changes Applied");
-        for change in &changes {
-            println!("  ✓ {change}");
-        }
-        println!();
-
-        println!("  Configuration updated successfully.");
-        println!();
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        anyhow::bail!("Aeterna server not connected for operation: govern_config_update");
     }
-
-    Ok(())
+    govern_server_required(
+        "govern_config_update",
+        "Cannot update governance config: server not connected",
+    )
 }
 
 async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let _ctx = resolver.resolve()?;
-
     match args.action.as_str() {
         "list" => {
-            // Simulated role assignments
-            let roles = vec![
-                RoleAssignment {
-                    principal: "alice".to_string(),
-                    principal_type: "user".to_string(),
-                    role: "admin".to_string(),
-                    scope: "company:acme".to_string(),
-                },
-                RoleAssignment {
-                    principal: "bob".to_string(),
-                    principal_type: "user".to_string(),
-                    role: "architect".to_string(),
-                    scope: "org:platform".to_string(),
-                },
-                RoleAssignment {
-                    principal: "charlie".to_string(),
-                    principal_type: "user".to_string(),
-                    role: "techlead".to_string(),
-                    scope: "team:api".to_string(),
-                },
-                RoleAssignment {
-                    principal: "agent_codex".to_string(),
-                    principal_type: "agent".to_string(),
-                    role: "developer".to_string(),
-                    scope: "project:payments".to_string(),
-                },
-            ];
+            if let Some(client) = get_live_client().await {
+                let result = client.govern_roles_list().await.map_err(|e| {
+                    if args.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(
+                                &json!({"success": false, "error": e.to_string(), "operation": "govern_roles_list"})
+                            )
+                            .unwrap()
+                        );
+                    } else {
+                        ux_error::UxError::new(&e.to_string())
+                            .fix("Run: aeterna auth login")
+                            .display();
+                    }
+                    e
+                })?;
 
-            if args.json {
+                if args.json {
+                    println!("{}", serde_json::to_string_pretty(&result)?);
+                } else {
+                    output::header("Role Assignments");
+                    println!();
+                    if let Some(roles) = result.as_array() {
+                        println!("  {:<38} {:<10} {:<12} Scope", "Principal", "Type", "Role");
+                        println!("  {}", "-".repeat(88));
+                        for role in roles {
+                            println!(
+                                "  {:<38} {:<10} {:<12} {}",
+                                role["principal"].as_str().unwrap_or("?"),
+                                role["principalType"]
+                                    .as_str()
+                                    .or_else(|| role["principal_type"].as_str())
+                                    .unwrap_or("?"),
+                                role["role"].as_str().unwrap_or("?"),
+                                role["scope"].as_str().unwrap_or("?")
+                            );
+                        }
+                    } else {
+                        println!("{}", serde_json::to_string_pretty(&result)?);
+                    }
+                    println!();
+                }
+            } else if args.json {
                 let output = json!({
-                    "roles": roles.iter().map(|r| json!({
-                        "principal": r.principal,
-                        "principal_type": r.principal_type,
-                        "role": r.role,
-                        "scope": r.scope,
-                    })).collect::<Vec<_>>(),
+                    "success": false,
+                    "error": "server_not_connected",
+                    "operation": "govern_roles_list"
                 });
                 println!("{}", serde_json::to_string_pretty(&output)?);
+                anyhow::bail!("Aeterna server not connected for operation: govern_roles_list");
             } else {
-                output::header("Role Assignments");
-                println!();
-
-                println!("  {:<20} {:<10} {:<12} Scope", "Principal", "Type", "Role");
-                println!("  {}", "-".repeat(60));
-
-                for role in &roles {
-                    println!(
-                        "  {:<20} {:<10} {:<12} {}",
-                        role.principal, role.principal_type, role.role, role.scope
-                    );
-                }
-                println!();
-
-                output::hint(
-                    "Use 'aeterna govern roles assign --principal <id> --role <role> --scope \
-                     <scope>'",
-                );
+                govern_server_required(
+                    "govern_roles_list",
+                    "Cannot list governance roles: server not connected",
+                )?;
             }
         }
         "assign" => {
@@ -850,20 +993,57 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("--role is required for assign action"))?;
             let scope = args.scope.as_deref().unwrap_or("project");
 
-            if args.json {
+            if let Some(client) = get_live_client().await {
+                let result = client
+                    .govern_role_assign(&json!({
+                        "principal": principal,
+                        "role": role,
+                        "scope": scope,
+                    }))
+                    .await
+                    .map_err(|e| {
+                        if args.json {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(
+                                    &json!({"success": false, "error": e.to_string(), "operation": "govern_role_assign"})
+                                )
+                                .unwrap()
+                            );
+                        } else {
+                            ux_error::UxError::new(&e.to_string())
+                                .fix("Run: aeterna auth login")
+                                .display();
+                        }
+                        e
+                    })?;
+
+                if args.json {
+                    println!("{}", serde_json::to_string_pretty(&result)?);
+                } else {
+                    output::header("Assign Role");
+                    println!();
+                    println!(
+                        "  ✓ Assigned role '{}' to '{}' at scope '{}'",
+                        result["role"].as_str().unwrap_or(role),
+                        result["principal"].as_str().unwrap_or(principal),
+                        result["scope"].as_str().unwrap_or(scope)
+                    );
+                    println!();
+                }
+            } else if args.json {
                 let output = json!({
-                    "success": true,
-                    "action": "assign",
-                    "principal": principal,
-                    "role": role,
-                    "scope": scope,
+                    "success": false,
+                    "error": "server_not_connected",
+                    "operation": "govern_role_assign"
                 });
                 println!("{}", serde_json::to_string_pretty(&output)?);
+                anyhow::bail!("Aeterna server not connected for operation: govern_role_assign");
             } else {
-                output::header("Assign Role");
-                println!();
-                println!("  ✓ Assigned role '{role}' to '{principal}' at scope '{scope}'");
-                println!();
+                govern_server_required(
+                    "govern_role_assign",
+                    "Cannot assign governance role: server not connected",
+                )?;
             }
         }
         "revoke" => {
@@ -876,19 +1056,49 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("--role is required for revoke action"))?;
 
-            if args.json {
+            if let Some(client) = get_live_client().await {
+                let result = client.govern_role_revoke(principal, role).await.map_err(|e| {
+                    if args.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(
+                                &json!({"success": false, "error": e.to_string(), "operation": "govern_role_revoke"})
+                            )
+                            .unwrap()
+                        );
+                    } else {
+                        ux_error::UxError::new(&e.to_string())
+                            .fix("Run: aeterna auth login")
+                            .display();
+                    }
+                    e
+                })?;
+
+                if args.json {
+                    println!("{}", serde_json::to_string_pretty(&result)?);
+                } else {
+                    output::header("Revoke Role");
+                    println!();
+                    println!(
+                        "  ✓ Revoked role '{}' from '{}'",
+                        result["role"].as_str().unwrap_or(role),
+                        result["principal"].as_str().unwrap_or(principal)
+                    );
+                    println!();
+                }
+            } else if args.json {
                 let output = json!({
-                    "success": true,
-                    "action": "revoke",
-                    "principal": principal,
-                    "role": role,
+                    "success": false,
+                    "error": "server_not_connected",
+                    "operation": "govern_role_revoke"
                 });
                 println!("{}", serde_json::to_string_pretty(&output)?);
+                anyhow::bail!("Aeterna server not connected for operation: govern_role_revoke");
             } else {
-                output::header("Revoke Role");
-                println!();
-                println!("  ✓ Revoked role '{role}' from '{principal}'");
-                println!();
+                govern_server_required(
+                    "govern_role_revoke",
+                    "Cannot revoke governance role: server not connected",
+                )?;
             }
         }
         _ => {
@@ -904,160 +1114,158 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
 }
 
 async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let _ctx = resolver.resolve()?;
-
-    // Simulated audit entries
-    let entries = [
-        AuditEntry {
-            id: "aud_001".to_string(),
-            timestamp: "2024-01-15T14:30:00Z".to_string(),
-            action: "approve".to_string(),
-            actor: "alice".to_string(),
-            target_type: "policy".to_string(),
-            target_id: "req_abc123".to_string(),
-            details: "Approved security-baseline policy".to_string(),
-        },
-        AuditEntry {
-            id: "aud_002".to_string(),
-            timestamp: "2024-01-15T12:15:00Z".to_string(),
-            action: "reject".to_string(),
-            actor: "bob".to_string(),
-            target_type: "knowledge".to_string(),
-            target_id: "req_xyz789".to_string(),
-            details: "Rejected: needs more context".to_string(),
-        },
-        AuditEntry {
-            id: "aud_003".to_string(),
-            timestamp: "2024-01-15T10:00:00Z".to_string(),
-            action: "approve".to_string(),
-            actor: "system".to_string(),
-            target_type: "memory".to_string(),
-            target_id: "req_auto001".to_string(),
-            details: "Auto-approved low-risk memory feedback".to_string(),
-        },
-        AuditEntry {
-            id: "aud_004".to_string(),
-            timestamp: "2024-01-14T16:45:00Z".to_string(),
-            action: "escalate".to_string(),
-            actor: "system".to_string(),
-            target_type: "policy".to_string(),
-            target_id: "req_esc001".to_string(),
-            details: "Escalated due to timeout (72h)".to_string(),
-        },
-    ];
-
-    // Apply filters
-    let filtered: Vec<_> = entries
-        .iter()
-        .filter(|e| args.action == "all" || e.action == args.action)
-        .filter(|e| args.actor.as_ref().is_none_or(|a| &e.actor == a))
-        .filter(|e| {
-            args.target_type
-                .as_ref()
-                .is_none_or(|t| &e.target_type == t)
-        })
-        .take(args.limit)
-        .collect();
-
-    match args.export {
-        ExportFormat::None => {
-            if args.json {
-                let output = json!({
-                    "since": args.since,
-                    "total": filtered.len(),
-                    "entries": filtered.iter().map(|e| json!({
-                        "id": e.id,
-                        "timestamp": e.timestamp,
-                        "action": e.action,
-                        "actor": e.actor,
-                        "target_type": e.target_type,
-                        "target_id": e.target_id,
-                        "details": e.details,
-                    })).collect::<Vec<_>>(),
-                });
-                println!("{}", serde_json::to_string_pretty(&output)?);
-            } else {
-                output::header(&format!("Governance Audit Trail (last {})", args.since));
-                println!();
-
-                if filtered.is_empty() {
-                    println!("  No audit entries matching your filters");
+    if let Some(client) = get_live_client().await {
+        let action = if args.action == "all" {
+            None
+        } else {
+            Some(args.action.as_str())
+        };
+        let result = client
+            .govern_audit(
+                action,
+                Some(args.since.as_str()),
+                args.actor.as_deref(),
+                args.target_type.as_deref(),
+                args.limit,
+            )
+            .await
+            .map_err(|e| {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &json!({"success": false, "error": e.to_string(), "operation": "govern_audit"})
+                        )
+                        .unwrap()
+                    );
                 } else {
-                    for entry in &filtered {
-                        let icon = match entry.action.as_str() {
-                            "approve" => "✓",
-                            "reject" => "✗",
-                            "escalate" => "↑",
-                            "expire" => "⏱",
-                            _ => "•",
-                        };
+                    ux_error::UxError::new(&e.to_string())
+                        .fix("Run: aeterna auth login")
+                        .display();
+                }
+                e
+            })?;
 
-                        println!(
-                            "  {} [{}] {} by {}",
-                            icon,
-                            entry.timestamp,
-                            entry.action.to_uppercase(),
-                            entry.actor
-                        );
-                        println!(
-                            "      {} {} - {}",
-                            entry.target_type, entry.target_id, entry.details
-                        );
-                        println!();
+        let filtered: Vec<_> = result.as_array().cloned().unwrap_or_default();
+
+        match args.export {
+            ExportFormat::None => {
+                if args.json {
+                    let output = json!({
+                        "since": args.since,
+                        "total": filtered.len(),
+                        "entries": filtered,
+                    });
+                    println!("{}", serde_json::to_string_pretty(&output)?);
+                } else {
+                    output::header(&format!("Governance Audit Trail (last {})", args.since));
+                    println!();
+
+                    if filtered.is_empty() {
+                        println!("  No audit entries matching your filters");
+                    } else {
+                        for entry in &filtered {
+                            let action = entry["action"].as_str().unwrap_or("?");
+                            let icon = match action {
+                                "approve" => "✓",
+                                "reject" => "✗",
+                                "escalate" => "↑",
+                                "expire" => "⏱",
+                                _ => "•",
+                            };
+                            let created_at = entry["created_at"]
+                                .as_str()
+                                .or_else(|| entry["timestamp"].as_str())
+                                .unwrap_or("?");
+                            let actor = entry["actor_email"]
+                                .as_str()
+                                .or_else(|| entry["actor"].as_str())
+                                .unwrap_or("system");
+                            let target_type = entry["target_type"].as_str().unwrap_or("?");
+                            let target_id = entry["target_id"].as_str().unwrap_or("?");
+                            let details = entry["details"].to_string();
+
+                            println!(
+                                "  {} [{}] {} by {}",
+                                icon,
+                                created_at,
+                                action.to_uppercase(),
+                                actor
+                            );
+                            println!("      {} {} - {}", target_type, target_id, details);
+                            println!();
+                        }
                     }
+
+                    output::hint("Use --export json or --export csv to export audit data");
+                }
+            }
+            ExportFormat::Json => {
+                let output = json!({
+                    "exported_at": chrono::Utc::now().to_rfc3339(),
+                    "since": args.since,
+                    "entries": filtered,
+                });
+
+                if let Some(path) = args.output {
+                    std::fs::write(&path, serde_json::to_string_pretty(&output)?)?;
+                    println!(
+                        "Exported {} entries to {}",
+                        output["entries"].as_array().map(|v| v.len()).unwrap_or(0),
+                        path
+                    );
+                } else {
+                    println!("{}", serde_json::to_string_pretty(&output)?);
+                }
+            }
+            ExportFormat::Csv => {
+                let mut csv =
+                    String::from("id,timestamp,action,actor,target_type,target_id,details\n");
+                for entry in &filtered {
+                    csv.push_str(&format!(
+                        "{},{},{},{},{},{},\"{}\"\n",
+                        entry["id"].as_str().unwrap_or(""),
+                        entry["created_at"]
+                            .as_str()
+                            .or_else(|| entry["timestamp"].as_str())
+                            .unwrap_or(""),
+                        entry["action"].as_str().unwrap_or(""),
+                        entry["actor_email"]
+                            .as_str()
+                            .or_else(|| entry["actor"].as_str())
+                            .unwrap_or(""),
+                        entry["target_type"].as_str().unwrap_or(""),
+                        entry["target_id"].as_str().unwrap_or(""),
+                        entry["details"].to_string().replace('"', "\"\"")
+                    ));
                 }
 
-                output::hint("Use --export json or --export csv to export audit data");
+                if let Some(path) = args.output {
+                    std::fs::write(&path, &csv)?;
+                    println!("Exported {} entries to {}", filtered.len(), path);
+                } else {
+                    print!("{csv}");
+                }
             }
         }
-        ExportFormat::Json => {
-            let output = json!({
-                "exported_at": chrono::Utc::now().to_rfc3339(),
-                "since": args.since,
-                "entries": filtered.iter().map(|e| json!({
-                    "id": e.id,
-                    "timestamp": e.timestamp,
-                    "action": e.action,
-                    "actor": e.actor,
-                    "target_type": e.target_type,
-                    "target_id": e.target_id,
-                    "details": e.details,
-                })).collect::<Vec<_>>(),
-            });
 
-            if let Some(path) = args.output {
-                std::fs::write(&path, serde_json::to_string_pretty(&output)?)?;
-                println!("Exported {} entries to {}", filtered.len(), path);
-            } else {
-                println!("{}", serde_json::to_string_pretty(&output)?);
-            }
-        }
-        ExportFormat::Csv => {
-            let mut csv = String::from("id,timestamp,action,actor,target_type,target_id,details\n");
-            for entry in &filtered {
-                csv.push_str(&format!(
-                    "{},{},{},{},{},{},\"{}\"\n",
-                    entry.id,
-                    entry.timestamp,
-                    entry.action,
-                    entry.actor,
-                    entry.target_type,
-                    entry.target_id,
-                    entry.details.replace('"', "\"\"")
-                ));
-            }
-
-            if let Some(path) = args.output {
-                std::fs::write(&path, &csv)?;
-                println!("Exported {} entries to {}", filtered.len(), path);
-            } else {
-                print!("{csv}");
-            }
-        }
+        return Ok(());
     }
 
-    Ok(())
+    if args.json {
+        let output = json!({
+            "success": false,
+            "error": "server_not_connected",
+            "operation": "govern_audit"
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+        anyhow::bail!("Aeterna server not connected for operation: govern_audit");
+    }
+
+    govern_server_required(
+        "govern_audit",
+        "Cannot list governance audit entries: server not connected",
+    )
 }
 
 // Helper types

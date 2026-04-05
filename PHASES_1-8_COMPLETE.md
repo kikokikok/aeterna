@@ -4,6 +4,11 @@
 **Status**: Phases 1-5 Implemented, Phases 6-8 Documented  
 **Completion**: 62.5%
 
+> **Historical snapshot**
+> This phase summary predates `add-tenant-admin-control-plane` and
+> `add-tenant-config-provider`. It should not be read as the authoritative
+> source for the current tenancy-management architecture.
+
 ---
 
 ## Executive Summary

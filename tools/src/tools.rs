@@ -261,11 +261,19 @@ impl ToolRegistry {
     }
 
     pub fn register(&mut self, tool: Box<dyn Tool>) {
-        self.tools.insert(tool.name().to_string(), tool.into());
+        let name = tool.name().to_string();
+        if self.tools.contains_key(&name) {
+            panic!("Duplicate MCP tool registration: '{name}'. Each tool must have a unique name.");
+        }
+        self.tools.insert(name, tool.into());
     }
 
     pub fn register_arc(&mut self, tool: Arc<dyn Tool>) {
-        self.tools.insert(tool.name().to_string(), tool);
+        let name = tool.name().to_string();
+        if self.tools.contains_key(&name) {
+            panic!("Duplicate MCP tool registration: '{name}'. Each tool must have a unique name.");
+        }
+        self.tools.insert(name, tool);
     }
 
     pub async fn call(
@@ -381,7 +389,8 @@ mod tests {
     }
 
     #[test]
-    fn test_tool_registry_duplicate_registration() {
+    #[should_panic(expected = "Duplicate MCP tool registration")]
+    fn test_tool_registry_duplicate_registration_panics() {
         let mut registry = ToolRegistry::new();
 
         registry.register(Box::new(TestTool {
@@ -390,9 +399,6 @@ mod tests {
         registry.register(Box::new(TestTool {
             name: "same".to_string(),
         }));
-
-        let tools = registry.list_tools();
-        assert_eq!(tools.len(), 1);
     }
 
     #[test]

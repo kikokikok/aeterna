@@ -1,7 +1,20 @@
+//! Cedar authorization adapter.
+//!
+//! `CedarAuthorizer` is the primary Cedar evaluation path for runtime
+//! authorization decisions in Aeterna. It implements
+//! `mk_core::traits::AuthorizationService` and is wired into application state
+//! bootstrap as the canonical in-process authorizer.
+//!
+//! Other Cedar-related components may exist for specialized concerns (for
+//! example, sidecar-based entity resolution or legacy code-search evaluators),
+//! but permission checks for core API/runtime flows SHOULD go through
+//! `CedarAuthorizer`.
+
 use async_trait::async_trait;
 use cedar_policy::*;
 use mk_core::traits::AuthorizationService;
-use mk_core::types::{Role, TenantContext, UserId};
+use mk_core::types::{RoleIdentifier, TenantContext, UserId};
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -25,12 +38,17 @@ struct CachedEntities {
     fetched_at: Instant,
 }
 
+// Role assignments overlay: merged into OPAL entities at eval time for
+// immediate consistency (canonical data lives in Postgres via StorageBackend).
+type RoleAssignments = Arc<RwLock<HashMap<UserId, HashSet<RoleIdentifier>>>>;
+
 pub struct CedarAuthorizer {
     policies: PolicySet,
     entity_cache: Arc<RwLock<Option<CachedEntities>>>,
     opal_fetcher_url: Option<String>,
     cache_ttl: Duration,
     http_client: reqwest::Client,
+    role_assignments: RoleAssignments,
 }
 
 impl CedarAuthorizer {
@@ -47,6 +65,7 @@ impl CedarAuthorizer {
                 .timeout(Duration::from_secs(5))
                 .build()
                 .unwrap_or_default(),
+            role_assignments: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -196,6 +215,89 @@ impl CedarAuthorizer {
         Entities::from_entities(entity_vec, None)
             .map_err(|e| CedarError::EntityFetch(format!("Entity collection failed: {e}")))
     }
+
+    async fn get_entities_with_role_overlay(
+        &self,
+        ctx: &TenantContext,
+    ) -> Result<Entities, CedarError> {
+        let base_entities = self.get_entities().await?;
+        let assignments = self.role_assignments.read().await;
+
+        let user_roles = assignments.get(&ctx.user_id);
+        if user_roles.map_or(true, |r| r.is_empty()) {
+            return Ok(base_entities);
+        }
+
+        let roles = user_roles.unwrap();
+        let mut entity_vec: Vec<Entity> = base_entities.iter().cloned().collect();
+
+        let user_uid_str = format!("User::\"{}\"", ctx.user_id.as_str());
+        let user_uid = EntityUid::from_str(&user_uid_str)
+            .map_err(|e| CedarError::Evaluation(e.to_string()))?;
+
+        let mut role_parent_uids = std::collections::HashSet::new();
+
+        for role in roles {
+            let role_entity_id = role.as_cedar_entity_id();
+            let role_uid_str = format!("Aeterna::Role::\"{role_entity_id}\"");
+            let role_uid = EntityUid::from_str(&role_uid_str)
+                .map_err(|e| CedarError::Evaluation(e.to_string()))?;
+
+            let already_exists = entity_vec.iter().any(|e| e.uid() == role_uid);
+            if !already_exists {
+                let mut attrs = std::collections::HashMap::new();
+                attrs.insert(
+                    "name".to_string(),
+                    RestrictedExpression::from_str(&format!("\"{role_entity_id}\"")).unwrap(),
+                );
+                let role_entity =
+                    Entity::new(role_uid.clone(), attrs, std::collections::HashSet::new())
+                        .map_err(|e| {
+                            CedarError::Evaluation(format!("Role entity construction failed: {e}"))
+                        })?;
+                entity_vec.push(role_entity);
+            }
+
+            role_parent_uids.insert(role_uid);
+        }
+
+        let user_exists = entity_vec.iter().any(|e| e.uid() == user_uid);
+        if !user_exists {
+            let mut attrs = std::collections::HashMap::new();
+            attrs.insert(
+                "email".to_string(),
+                RestrictedExpression::from_str(&format!("\"{}@local\"", ctx.user_id.as_str()))
+                    .unwrap(),
+            );
+            attrs.insert(
+                "status".to_string(),
+                RestrictedExpression::from_str("\"active\"").unwrap(),
+            );
+            attrs.insert(
+                "role".to_string(),
+                RestrictedExpression::from_str(&format!(
+                    "\"{}\"",
+                    roles
+                        .iter()
+                        .next()
+                        .map(|r| r.to_string().to_lowercase())
+                        .unwrap_or_default()
+                ))
+                .unwrap(),
+            );
+            attrs.insert(
+                "tenant_id".to_string(),
+                RestrictedExpression::from_str(&format!("\"{}\"", ctx.tenant_id.as_str())).unwrap(),
+            );
+            let user_entity = Entity::new(user_uid, attrs, role_parent_uids).map_err(|e| {
+                CedarError::Evaluation(format!("User entity construction failed: {e}"))
+            })?;
+            entity_vec.push(user_entity);
+        }
+
+        Entities::from_entities(entity_vec, None)
+            .map_err(|e| CedarError::EntityFetch(format!("Entity merge failed: {e}")))
+    }
 }
 
 #[async_trait]
@@ -209,7 +311,7 @@ impl AuthorizationService for CedarAuthorizer {
         action: &str,
         resource: &str,
     ) -> Result<bool, Self::Error> {
-        let entities = self.get_entities().await?;
+        let entities = self.get_entities_with_role_overlay(ctx).await?;
 
         if let Some(agent_id) = &ctx.agent_id {
             let agent_principal = EntityUid::from_str(&format!("User::\"{}\"", agent_id))
@@ -255,25 +357,41 @@ impl AuthorizationService for CedarAuthorizer {
         Ok(answer.decision() == Decision::Allow)
     }
 
-    async fn get_user_roles(&self, _ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
-        Ok(vec![])
+    async fn get_user_roles(
+        &self,
+        ctx: &TenantContext,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+        let assignments = self.role_assignments.read().await;
+        Ok(assignments
+            .get(&ctx.user_id)
+            .map(|roles| roles.iter().cloned().collect())
+            .unwrap_or_default())
     }
 
     async fn assign_role(
         &self,
         _ctx: &TenantContext,
-        _user_id: &UserId,
-        _role: Role,
+        user_id: &UserId,
+        role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
+        let mut assignments = self.role_assignments.write().await;
+        assignments.entry(user_id.clone()).or_default().insert(role);
         Ok(())
     }
 
     async fn remove_role(
         &self,
         _ctx: &TenantContext,
-        _user_id: &UserId,
-        _role: Role,
+        user_id: &UserId,
+        role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
+        let mut assignments = self.role_assignments.write().await;
+        if let Some(roles) = assignments.get_mut(user_id) {
+            roles.remove(&role);
+            if roles.is_empty() {
+                assignments.remove(user_id);
+            }
+        }
         Ok(())
     }
 }

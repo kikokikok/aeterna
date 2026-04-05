@@ -16,6 +16,7 @@ pub mod setup;
 pub mod status;
 pub mod sync;
 pub mod team;
+pub mod tenant;
 pub mod user;
 
 use clap::{Parser, Subcommand};
@@ -69,6 +70,9 @@ pub enum Commands {
 
     #[command(subcommand, about = "Manage teams")]
     Team(team::TeamCommand),
+
+    #[command(subcommand, about = "Manage tenants and tenant repository bindings")]
+    Tenant(tenant::TenantCommand),
 
     #[command(subcommand, about = "Manage users and roles")]
     User(user::UserCommand),

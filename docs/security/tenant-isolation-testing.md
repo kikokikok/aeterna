@@ -47,6 +47,18 @@ Location: `storage/tests/rls_policy_test.rs`
 | `test_tenant_context_isolation` | Contexts are independent | TenantContext |
 | `test_rls_cross_tenant_access_blocked` | Database-level RLS | PostgreSQL policies |
 
+### 5. Control-plane and deployment isolation tests
+
+Location: `cli/tests/server_runtime_test.rs`, `cli/src/server/tenant_api.rs` tests, and provider tests under `storage/src/tenant_config_provider.rs`
+
+| Test Area | Isolation Property |
+|-----------|--------------------|
+| Tenant config provider validation | Rejects cross-tenant secret references and raw secret material in config fields |
+| Tenant config API | TenantAdmin cannot mutate platform-owned fields or secrets |
+| Shared Git provider connections | Tenant can reference a connection only after explicit grant |
+| Repository binding validation | Shared connection visibility fails closed when missing |
+| Helm/deployment contract | Tenant config materializes as one ConfigMap and one paired Secret per tenant UUID |
+
 ## Running Tests
 
 ```bash

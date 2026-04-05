@@ -80,25 +80,28 @@ const ROLE_SCHEMA: &str = r#"{
 
 fn role_precedence(role: &Role) -> u8 {
     match role {
+        Role::Viewer => 0,
         Role::Agent => 0,
         Role::Developer => 1,
         Role::TechLead => 2,
         Role::Architect => 3,
-        Role::Admin => 4
+        Role::Admin => 4,
+        Role::PlatformAdmin => 5,
+        Role::TenantAdmin => 6,
     }
 }
 
 fn create_ctx(tenant: &str, user: &str) -> TenantContext {
     TenantContext::new(
         TenantId::new(tenant.into()).unwrap(),
-        UserId::new(user.into()).unwrap()
+        UserId::new(user.into()).unwrap(),
     )
 }
 
 fn create_agent_ctx(tenant: &str, user: &str, agent: &str) -> TenantContext {
     let mut ctx = TenantContext::new(
         TenantId::new(tenant.into()).unwrap(),
-        UserId::new(user.into()).unwrap()
+        UserId::new(user.into()).unwrap(),
     );
     ctx.agent_id = Some(agent.to_string());
     ctx
@@ -378,7 +381,7 @@ mod rbac_matrix {
         let ctx = create_ctx("tenant1", "admin");
 
         let actions = [
-            "View", "Create", "Edit", "Delete", "Promote", "Approve", "Admin"
+            "View", "Create", "Edit", "Delete", "Promote", "Approve", "Admin",
         ];
         for action in actions {
             let result = authorizer
@@ -498,19 +501,25 @@ mod role_hierarchy_enforcement {
 
     #[test]
     fn test_role_precedence_order() {
+        assert!(role_precedence(&Role::Viewer) <= role_precedence(&Role::Agent));
         assert!(role_precedence(&Role::Agent) < role_precedence(&Role::Developer));
         assert!(role_precedence(&Role::Developer) < role_precedence(&Role::TechLead));
         assert!(role_precedence(&Role::TechLead) < role_precedence(&Role::Architect));
         assert!(role_precedence(&Role::Architect) < role_precedence(&Role::Admin));
+        assert!(role_precedence(&Role::Admin) < role_precedence(&Role::PlatformAdmin));
+        assert!(role_precedence(&Role::PlatformAdmin) < role_precedence(&Role::TenantAdmin));
     }
 
     #[test]
     fn test_role_precedence_values() {
+        assert_eq!(role_precedence(&Role::Viewer), 0);
         assert_eq!(role_precedence(&Role::Agent), 0);
         assert_eq!(role_precedence(&Role::Developer), 1);
         assert_eq!(role_precedence(&Role::TechLead), 2);
         assert_eq!(role_precedence(&Role::Architect), 3);
         assert_eq!(role_precedence(&Role::Admin), 4);
+        assert_eq!(role_precedence(&Role::PlatformAdmin), 5);
+        assert_eq!(role_precedence(&Role::TenantAdmin), 6);
     }
 
     #[tokio::test]
@@ -591,7 +600,7 @@ mod resource_action_matrix {
         role: &'static str,
         action: &'static str,
         resource: &'static str,
-        expected: bool
+        expected: bool,
     }
 
     const COMPREHENSIVE_POLICIES: &str = r#"
@@ -628,143 +637,143 @@ mod resource_action_matrix {
                 role: "developer",
                 action: "View",
                 resource: "Memory::\"user\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "developer",
                 action: "Create",
                 resource: "Memory::\"user\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "developer",
                 action: "Edit",
                 resource: "Memory::\"user\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "developer",
                 action: "Delete",
                 resource: "Memory::\"user\"",
-                expected: false
+                expected: false,
             },
             TestCase {
                 role: "developer",
                 action: "Promote",
                 resource: "Memory::\"user\"",
-                expected: false
+                expected: false,
             },
             // Developer + Knowledge
             TestCase {
                 role: "developer",
                 action: "View",
                 resource: "Knowledge::\"spec\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "developer",
                 action: "Create",
                 resource: "Knowledge::\"spec\"",
-                expected: false
+                expected: false,
             },
             TestCase {
                 role: "developer",
                 action: "Edit",
                 resource: "Knowledge::\"spec\"",
-                expected: false
+                expected: false,
             },
             TestCase {
                 role: "developer",
                 action: "Approve",
                 resource: "Knowledge::\"spec\"",
-                expected: false
+                expected: false,
             },
             // TechLead + Memory
             TestCase {
                 role: "techlead",
                 action: "View",
                 resource: "Memory::\"team\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "techlead",
                 action: "Create",
                 resource: "Memory::\"team\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "techlead",
                 action: "Edit",
                 resource: "Memory::\"team\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "techlead",
                 action: "Promote",
                 resource: "Memory::\"team\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "techlead",
                 action: "Delete",
                 resource: "Memory::\"team\"",
-                expected: false
+                expected: false,
             },
             // Architect + Knowledge
             TestCase {
                 role: "architect",
                 action: "View",
                 resource: "Knowledge::\"spec\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "architect",
                 action: "Create",
                 resource: "Knowledge::\"spec\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "architect",
                 action: "Edit",
                 resource: "Knowledge::\"spec\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "architect",
                 action: "Approve",
                 resource: "Knowledge::\"spec\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "architect",
                 action: "Admin",
                 resource: "Unit::\"org\"",
-                expected: false
+                expected: false,
             },
             // Admin + Governance
             TestCase {
                 role: "admin",
                 action: "View",
                 resource: "GovernanceEvent::\"event\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "admin",
                 action: "Approve",
                 resource: "GovernanceEvent::\"event\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "admin",
                 action: "Admin",
                 resource: "Unit::\"org\"",
-                expected: true
+                expected: true,
             },
             TestCase {
                 role: "admin",
                 action: "ManageRoles",
                 resource: "Unit::\"org\"",
-                expected: true
+                expected: true,
             },
         ];
 

@@ -14,6 +14,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::AppState;
+use super::plugin_auth::resolve_tenant_for_github_user;
 
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
@@ -314,9 +315,36 @@ async fn trigger_incremental_sync(state: &Arc<AppState>, org_name: &str) {
     });
 }
 
+/// Derive the `TenantContext` for webhook-triggered governance events.
+///
+/// Webhook requests are authenticated via HMAC signature at the HTTP layer
+/// (`parse_webhook` enforces signature validity), not via per-user bearer tokens.
+/// The tenant for webhook events is resolved from the server's plugin auth
+/// configuration in the same order as bootstrap: explicit `default_tenant_id`,
+/// then the `AETERNA_PLUGIN_AUTH_TENANT` environment variable.
+///
+/// If no tenant is configured, the webhook event is published under the
+/// hardcoded `"default"` tenant only as a last-resort operational fallback,
+/// and a warning is emitted so operators know the deployment needs configuration.
+fn webhook_tenant_context(state: &Arc<AppState>) -> TenantContext {
+    let cfg = &state.plugin_auth_state.config;
+    if let Some(tenant_id) = resolve_tenant_for_github_user("", cfg) {
+        if let (Some(tid), Some(uid)) = (
+            mk_core::types::TenantId::new(tenant_id.clone()),
+            mk_core::types::UserId::new("github-webhook".to_string()),
+        ) {
+            return TenantContext::new(tid, uid);
+        }
+    }
+    tracing::warn!(
+        "No tenant configured for webhook events; using default tenant.          Set AETERNA_PLUGIN_AUTH_TENANT or configure plugin_auth.default_tenant_id."
+    );
+    TenantContext::default()
+}
+
 #[tracing::instrument(skip_all)]
 async fn handle_event(state: &Arc<AppState>, event: WebhookEvent) {
-    let ctx = TenantContext::default();
+    let ctx = webhook_tenant_context(state);
 
     match event {
         WebhookEvent::PullRequestOpened { pr } => {
@@ -402,11 +430,17 @@ mod tests {
     use knowledge::governance::GovernanceEngine;
     use knowledge::manager::KnowledgeManager;
     use knowledge::repository::{GitRepository, RepositoryError};
+    use knowledge::tenant_repo_resolver::TenantRepositoryResolver;
     use memory::manager::MemoryManager;
     use memory::reasoning::ReflectiveReasoner;
     use mk_core::traits::{AuthorizationService, KnowledgeRepository};
-    use mk_core::types::{KnowledgeEntry, KnowledgeLayer, ReasoningTrace, Role, UserId};
+    use mk_core::types::{
+        KnowledgeEntry, KnowledgeLayer, ReasoningTrace, Role, RoleIdentifier, UserId,
+    };
     use std::collections::HashMap;
+    use storage::secret_provider::LocalSecretProvider;
+    use storage::tenant_config_provider::KubernetesTenantConfigProvider;
+    use storage::tenant_store::{TenantRepositoryBindingStore, TenantStore};
     use sync::state_persister::FilePersister;
     use sync::websocket::{AuthToken, TokenValidator, WsResult, WsServer};
     use tower::ServiceExt;
@@ -607,15 +641,18 @@ mod tests {
             Ok(true)
         }
 
-        async fn get_user_roles(&self, _ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
-            Ok(vec![Role::Admin])
+        async fn get_user_roles(
+            &self,
+            _ctx: &TenantContext,
+        ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+            Ok(vec![Role::Admin.into()])
         }
 
         async fn assign_role(
             &self,
             _ctx: &TenantContext,
             _user_id: &UserId,
-            _role: Role,
+            _role: RoleIdentifier,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -624,7 +661,7 @@ mod tests {
             &self,
             _ctx: &TenantContext,
             _user_id: &UserId,
-            _role: Role,
+            _role: RoleIdentifier,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -714,6 +751,20 @@ mod tests {
             None,
         ));
         let (shutdown_tx, _) = tokio::sync::watch::channel(false);
+        let tenant_store = Arc::new(TenantStore::new(postgres.pool().clone()));
+        let tenant_repository_binding_store =
+            Arc::new(TenantRepositoryBindingStore::new(postgres.pool().clone()));
+        let git_provider_connection_registry = Arc::new(
+            storage::git_provider_connection_store::InMemoryGitProviderConnectionStore::new(),
+        );
+        let tenant_repo_resolver = Arc::new(
+            TenantRepositoryResolver::new(
+                tenant_repository_binding_store.clone(),
+                std::env::temp_dir(),
+                Arc::new(LocalSecretProvider::new(HashMap::new())),
+            )
+            .with_connection_registry(git_provider_connection_registry.clone()),
+        );
 
         Arc::new(AppState {
             config: Arc::new(config::Config::default()),
@@ -748,6 +799,13 @@ mod tests {
             idp_sync_service: None,
             idp_client: None,
             shutdown_tx: Arc::new(shutdown_tx),
+            tenant_store,
+            tenant_repository_binding_store,
+            tenant_repo_resolver,
+            tenant_config_provider: Arc::new(KubernetesTenantConfigProvider::new(
+                "default".to_string(),
+            )),
+            git_provider_connection_registry,
         })
     }
 

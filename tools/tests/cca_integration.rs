@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use memory::manager::MemoryManager;
 use memory::providers::MockProvider;
 use mk_core::traits::{AuthorizationService, MemoryProviderAdapter};
-use mk_core::types::{MemoryLayer, Role, TenantContext, UserId};
+use mk_core::types::{MemoryLayer, RoleIdentifier, TenantContext, UserId};
 use serde_json::json;
 use std::sync::Arc;
 use sync::bridge::SyncManager;
@@ -26,12 +26,12 @@ impl AuthorizationService for MockAuthService {
         &self,
         _ctx: &TenantContext,
         _action: &str,
-        _resource: &str
+        _resource: &str,
     ) -> anyhow::Result<bool> {
         Ok(true)
     }
 
-    async fn get_user_roles(&self, _ctx: &TenantContext) -> anyhow::Result<Vec<Role>> {
+    async fn get_user_roles(&self, _ctx: &TenantContext) -> anyhow::Result<Vec<RoleIdentifier>> {
         Ok(vec![])
     }
 
@@ -39,7 +39,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role
+        _role: RoleIdentifier,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -48,7 +48,7 @@ impl AuthorizationService for MockAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role
+        _role: RoleIdentifier,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -71,7 +71,7 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
     // Create mock memory provider for compilation (real tests would use Qdrant)
     let memory_manager = Arc::new(MemoryManager::new());
     let provider: Arc<
-        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync
+        dyn MemoryProviderAdapter<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
     > = Arc::new(MockProvider::new());
 
     memory_manager
@@ -83,7 +83,7 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
     let storage_backend = Arc::new(
         PostgresBackend::new(postgres_fixture.url())
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to create PostgreSQL backend: {}", e))?
+            .map_err(|e| anyhow::anyhow!("Failed to create PostgreSQL backend: {}", e))?,
     );
 
     // Create real Redis storage
@@ -91,7 +91,7 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
     let _redis_storage = Arc::new(
         RedisStorage::new(redis_fixture.url())
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to create Redis storage: {}", e))?
+            .map_err(|e| anyhow::anyhow!("Failed to create Redis storage: {}", e))?,
     );
 
     // Log Qdrant URL for debugging
@@ -104,19 +104,19 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
         .map_err(|e| anyhow::anyhow!("Failed to create temp directory: {}", e))?;
     let knowledge_repo = Arc::new(
         GitRepository::new(temp_dir.path())
-            .map_err(|e| anyhow::anyhow!("Failed to create Git repository: {}", e))?
+            .map_err(|e| anyhow::anyhow!("Failed to create Git repository: {}", e))?,
     );
     let governance_engine = Arc::new(knowledge::governance::GovernanceEngine::new());
     let knowledge_manager = Arc::new(KnowledgeManager::new(
         knowledge_repo.clone(),
-        governance_engine.clone()
+        governance_engine.clone(),
     ));
 
     // Create real sync persister
     use sync::state_persister::DatabasePersister;
     let persister = Arc::new(DatabasePersister::new(
         storage_backend.clone(),
-        "cca_sync_state".to_string()
+        "cca_sync_state".to_string(),
     ));
 
     let sync_manager = Arc::new(
@@ -126,10 +126,10 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
             config::config::DeploymentConfig::default(),
             None,
             persister,
-            None
+            None,
         )
         .await
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?,
     );
 
     let server = Arc::new(McpServer::new(
@@ -139,12 +139,12 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
         storage_backend,
         governance_engine,
         Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
-            memory::llm::mock::MockLlmService::new()
+            memory::llm::mock::MockLlmService::new(),
         ))),
         Arc::new(MockAuthService),
         None,
         None,
-        None
+        None,
     ));
 
     Ok(server)
@@ -177,7 +177,7 @@ async fn test_context_assembly_hierarchical_compression() -> anyhow::Result<()> 
                 "tokenBudget": 4000,
                 "layers": ["user", "project", "team"]
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;
@@ -229,7 +229,7 @@ async fn test_note_generation_from_trajectory() -> anyhow::Result<()> {
                 "toolName": "context_assemble",
                 "success": true
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;
@@ -272,7 +272,7 @@ async fn test_hindsight_capture_and_retrieval() -> anyhow::Result<()> {
                 "messagePattern": "database connection",
                 "contextPatterns": ["migration", "script"]
             }
-        }))
+        })),
     };
 
     let query_response = server.handle_request(query_request).await;
@@ -314,7 +314,7 @@ async fn test_meta_agent_loop_failure_recovery() -> anyhow::Result<()> {
                 "loopId": "test-build-123",
                 "includeDetails": true
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;
@@ -357,7 +357,7 @@ async fn test_extension_callback_chain() -> anyhow::Result<()> {
                 "tokenBudget": 500,
                 "layers": ["user", "project"]
             }
-        }))
+        })),
     };
 
     let response = server.handle_request(request).await;

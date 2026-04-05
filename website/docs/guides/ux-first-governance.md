@@ -327,6 +327,18 @@ Project (lowest precedence)
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         ROLE HIERARCHY                                       │
 │                                                                              │
+│ PlatformAdmin (precedence: 6)                                                │
+│ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━                                                │
+│ • Cross-tenant tenant lifecycle and bootstrap                               │
+│ • Shared Git provider connection management                                 │
+│ • Cross-tenant inspection via `--target-tenant`                             │
+│                                                                              │
+│      TenantAdmin (precedence: 5)                                             │
+│      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━                                           │
+│      • Tenant-scoped admin surface                                           │
+│      • Tenant config and secret management                                   │
+│      • Role delegation inside one tenant                                     │
+│                                                                              │
 │   Admin (precedence: 4)                                                      │
 │   ━━━━━━━━━━━━━━━━━━━━━                                                      │
 │   • Full system access                                                       │
@@ -359,6 +371,17 @@ Project (lowest precedence)
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Tenant Ownership Boundaries
+
+- `PlatformAdmin` owns tenant bootstrap, shared Git provider connections, and
+  cross-tenant targeting with `--target-tenant <tenant-id>`.
+- `TenantAdmin` owns tenant-scoped config, secret references, and role
+  delegation within a single tenant.
+- Runtime tenant configuration is enforced through the tenant config provider.
+  The Kubernetes-backed implementation stores non-secret values in
+  `aeterna-tenant-<tenant-id>` and secret values in
+  `aeterna-tenant-<tenant-id>-secret`.
 
 ### Approval Workflow State Machine
 

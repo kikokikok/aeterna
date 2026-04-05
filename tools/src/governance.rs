@@ -89,6 +89,7 @@ impl Tool for UnitCreateTool {
             metadata: p.metadata,
             created_at: chrono::Utc::now().timestamp(),
             updated_at: chrono::Utc::now().timestamp(),
+            source_owner: mk_core::types::RecordSource::Admin,
         };
 
         self.backend.create_unit(&unit).await?;
@@ -249,7 +250,7 @@ impl Tool for UserRoleAssignTool {
         let role: Role = p.role.parse()?;
 
         self.backend
-            .assign_role(&user_id, &ctx.tenant_id, &p.unit_id, role.clone())
+            .assign_role(&user_id, &ctx.tenant_id, &p.unit_id, role.clone().into())
             .await?;
 
         let _ = self
@@ -257,7 +258,7 @@ impl Tool for UserRoleAssignTool {
             .publish_event(GovernanceEvent::RoleAssigned {
                 user_id: user_id.clone(),
                 unit_id: p.unit_id.clone(),
-                role,
+                role: role.into(),
                 tenant_id: ctx.tenant_id.clone(),
                 timestamp: chrono::Utc::now().timestamp(),
             })
@@ -332,7 +333,7 @@ impl Tool for UserRoleRemoveTool {
         let role: Role = p.role.parse()?;
 
         self.backend
-            .remove_role(&user_id, &ctx.tenant_id, &p.unit_id, role.clone())
+            .remove_role(&user_id, &ctx.tenant_id, &p.unit_id, role.clone().into())
             .await?;
 
         let _ = self
@@ -340,7 +341,7 @@ impl Tool for UserRoleRemoveTool {
             .publish_event(GovernanceEvent::RoleRemoved {
                 user_id: user_id.clone(),
                 unit_id: p.unit_id.clone(),
-                role,
+                role: role.into(),
                 tenant_id: ctx.tenant_id.clone(),
                 timestamp: chrono::Utc::now().timestamp(),
             })
@@ -1370,7 +1371,7 @@ pub struct GovernanceRoleAssignParams {
 #[async_trait]
 impl Tool for GovernanceRoleAssignTool {
     fn name(&self) -> &str {
-        "governance_role_assign"
+        "governance_principal_role_assign"
     }
 
     fn description(&self) -> &str {
@@ -1609,6 +1610,7 @@ impl Tool for GovernanceRoleListTool {
 mod tests {
     use super::*;
     use mk_core::traits::StorageBackend;
+    use mk_core::types::RecordSource;
     use std::sync::Arc;
     use testing::mock_storage::MockStorageBackend;
 
@@ -1777,6 +1779,8 @@ mod tests {
             tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
             user_id: mk_core::types::UserId::new("u".to_string()).unwrap(),
             agent_id: None,
+            roles: vec![],
+            target_tenant_id: None,
         };
         let stored = backend.get_unit_policies(ctx, "unit-abc").await.unwrap();
         assert_eq!(stored.len(), 1);
@@ -1820,7 +1824,7 @@ mod tests {
         // Confirm role stored
         let key = "alice:t1:unit-x";
         let roles = backend.roles.get(key).unwrap();
-        assert!(roles.contains(&mk_core::types::Role::Developer));
+        assert!(roles.contains(&mk_core::types::Role::Developer.into()));
     }
 
     #[tokio::test]
@@ -1871,7 +1875,13 @@ mod tests {
             .unwrap();
 
         let key = "bob:t1:unit-y";
-        assert!(backend.roles.get(key).unwrap().contains(&mk_core::types::Role::TechLead));
+        assert!(
+            backend
+                .roles
+                .get(key)
+                .unwrap()
+                .contains(&mk_core::types::Role::TechLead.into())
+        );
 
         // Then remove
         let result = remove_tool
@@ -1903,7 +1913,9 @@ mod tests {
         assert!(required.iter().any(|v| v == "unit_id"));
         assert!(required.iter().any(|v| v == "direction"));
         // Verify direction enum values
-        let direction_enum = schema["properties"]["direction"]["enum"].as_array().unwrap();
+        let direction_enum = schema["properties"]["direction"]["enum"]
+            .as_array()
+            .unwrap();
         assert!(direction_enum.iter().any(|v| v == "ancestors"));
         assert!(direction_enum.iter().any(|v| v == "descendants"));
     }
@@ -1922,6 +1934,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             created_at: 0,
             updated_at: 0,
+            source_owner: RecordSource::Admin,
         };
         let parent = mk_core::types::OrganizationalUnit {
             id: "parent".to_string(),
@@ -1932,6 +1945,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             created_at: 0,
             updated_at: 0,
+            source_owner: RecordSource::Admin,
         };
         let child = mk_core::types::OrganizationalUnit {
             id: "child".to_string(),
@@ -1942,6 +1956,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             created_at: 0,
             updated_at: 0,
+            source_owner: RecordSource::Admin,
         };
         backend.create_unit(&gp).await.unwrap();
         backend.create_unit(&parent).await.unwrap();
@@ -1959,10 +1974,7 @@ mod tests {
 
         assert_eq!(result["success"], true);
         let units = result["units"].as_array().unwrap();
-        let ids: Vec<&str> = units
-            .iter()
-            .map(|u| u["id"].as_str().unwrap())
-            .collect();
+        let ids: Vec<&str> = units.iter().map(|u| u["id"].as_str().unwrap()).collect();
         assert!(ids.contains(&"child"));
         assert!(ids.contains(&"parent"));
         assert!(ids.contains(&"gp"));
@@ -1981,6 +1993,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             created_at: 0,
             updated_at: 0,
+            source_owner: RecordSource::Admin,
         };
         let child1 = mk_core::types::OrganizationalUnit {
             id: "c1".to_string(),
@@ -1991,6 +2004,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             created_at: 0,
             updated_at: 0,
+            source_owner: RecordSource::Admin,
         };
         let child2 = mk_core::types::OrganizationalUnit {
             id: "c2".to_string(),
@@ -2001,6 +2015,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             created_at: 0,
             updated_at: 0,
+            source_owner: RecordSource::Admin,
         };
         backend.create_unit(&root).await.unwrap();
         backend.create_unit(&child1).await.unwrap();
@@ -2019,10 +2034,7 @@ mod tests {
         assert_eq!(result["success"], true);
         let units = result["units"].as_array().unwrap();
         assert_eq!(units.len(), 2);
-        let ids: Vec<&str> = units
-            .iter()
-            .map(|u| u["id"].as_str().unwrap())
-            .collect();
+        let ids: Vec<&str> = units.iter().map(|u| u["id"].as_str().unwrap()).collect();
         assert!(ids.contains(&"c1"));
         assert!(ids.contains(&"c2"));
     }

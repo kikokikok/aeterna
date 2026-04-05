@@ -1,0 +1,28 @@
+{{- if and .Values.aeterna.enabled .Values.tenantConfigProvider.enabled }}
+{{- range $tenantId := .Values.tenantConfigProvider.seedTenants }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aeterna.tenantConfigMapName" $tenantId }}
+  labels:
+    {{- include "aeterna.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: tenant-config
+  annotations:
+    aeterna.io/tenant-id: {{ $tenantId | quote }}
+data:
+  tenant-config.json: |
+    {"tenantId":"{{ $tenantId }}","fields":{},"secretReferences":{}}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "aeterna.tenantSecretName" $tenantId }}
+  labels:
+    {{- include "aeterna.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: tenant-config
+  annotations:
+    aeterna.io/tenant-id: {{ $tenantId | quote }}
+type: Opaque
+{{- end }}
+{{- end }}

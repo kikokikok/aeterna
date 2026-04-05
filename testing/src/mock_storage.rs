@@ -24,8 +24,8 @@ use dashmap::DashMap;
 use mk_core::traits::StorageBackend;
 use mk_core::types::{
     ConsumerState, DriftConfig, DriftResult, DriftSuppression, EventDeliveryMetrics, EventStatus,
-    GovernanceEvent, OrganizationalUnit, PersistentEvent, Policy, Role, TenantContext, TenantId,
-    UserId,
+    GovernanceEvent, OrganizationalUnit, PersistentEvent, Policy, RoleIdentifier, TenantContext,
+    TenantId, UserId,
 };
 use storage::postgres::PostgresError;
 
@@ -37,7 +37,7 @@ pub struct MockStorageBackend {
     pub kv: DashMap<String, Vec<u8>>,
     pub units: DashMap<String, OrganizationalUnit>,
     pub policies: DashMap<String, Vec<Policy>>, // key = unit_id
-    pub roles: DashMap<String, Vec<Role>>,      // key = "{user_id}:{tenant_id}:{unit_id}"
+    pub roles: DashMap<String, Vec<RoleIdentifier>>, // key = "{user_id}:{tenant_id}:{unit_id}"
     pub drift_results: DashMap<String, DriftResult>, // key = project_id
     pub drift_configs: DashMap<String, DriftConfig>, // key = project_id
     pub suppressions: DashMap<String, Vec<DriftSuppression>>, // key = project_id
@@ -202,7 +202,7 @@ impl StorageBackend for MockStorageBackend {
         user_id: &UserId,
         tenant_id: &TenantId,
         unit_id: &str,
-        role: Role,
+        role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         let key = format!("{}:{}:{}", user_id.as_str(), tenant_id.as_str(), unit_id);
         self.roles.entry(key).or_default().push(role);
@@ -214,7 +214,7 @@ impl StorageBackend for MockStorageBackend {
         user_id: &UserId,
         tenant_id: &TenantId,
         unit_id: &str,
-        role: Role,
+        role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         let key = format!("{}:{}:{}", user_id.as_str(), tenant_id.as_str(), unit_id);
         if let Some(mut roles) = self.roles.get_mut(&key) {
@@ -388,6 +388,66 @@ impl StorageBackend for MockStorageBackend {
         self.metrics.insert(metrics.event_type.clone(), metrics);
         Ok(())
     }
+
+    async fn get_unit_by_id(
+        &self,
+        _unit_id: &str,
+        _tenant_id: &str,
+    ) -> Result<Option<OrganizationalUnit>, Self::Error> {
+        Ok(None)
+    }
+
+    async fn update_unit(&self, _unit: &OrganizationalUnit) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn delete_unit(&self, _unit_id: &str, _tenant_id: &str) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn list_unit_members(
+        &self,
+        _unit_id: &str,
+        _tenant_id: &str,
+    ) -> Result<Vec<(UserId, RoleIdentifier)>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn assign_team_to_project(
+        &self,
+        _project_id: &str,
+        _team_id: &str,
+        _tenant_id: &str,
+        _assignment_type: &str,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn remove_team_from_project(
+        &self,
+        _project_id: &str,
+        _team_id: &str,
+        _tenant_id: &str,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn list_project_team_assignments(
+        &self,
+        _project_id: &str,
+        _tenant_id: &str,
+    ) -> Result<Vec<(String, String)>, Self::Error> {
+        Ok(Vec::new())
+    }
+
+    async fn get_effective_roles_at_scope(
+        &self,
+        _user_id: &UserId,
+        _tenant_id: &TenantId,
+        _unit_id: &str,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+        Ok(Vec::new())
+    }
 }
 
 // =============================================================================
@@ -397,13 +457,15 @@ impl StorageBackend for MockStorageBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mk_core::types::{TenantContext, TenantId, UnitType, UserId};
+    use mk_core::types::{RecordSource, Role, TenantContext, TenantId, UnitType, UserId};
 
     fn tenant_ctx(id: &str) -> TenantContext {
         TenantContext {
             tenant_id: TenantId::new(id.to_string()).unwrap(),
             user_id: UserId::new("user-1".to_string()).unwrap(),
             agent_id: None,
+            roles: Vec::new(),
+            target_tenant_id: None,
         }
     }
 
@@ -417,6 +479,7 @@ mod tests {
             metadata: std::collections::HashMap::new(),
             created_at: 0,
             updated_at: 0,
+            source_owner: RecordSource::Admin,
         }
     }
 
@@ -464,7 +527,10 @@ mod tests {
         let backend = MockStorageBackend::new();
         let ctx_a = tenant_ctx("tenant-a");
         let ctx_b = tenant_ctx("tenant-b");
-        backend.store(ctx_a.clone(), "key", b"from-a").await.unwrap();
+        backend
+            .store(ctx_a.clone(), "key", b"from-a")
+            .await
+            .unwrap();
         let val_b = backend.retrieve(ctx_b, "key").await.unwrap();
         assert!(val_b.is_none(), "Tenant B should not see Tenant A's data");
     }
@@ -520,7 +586,10 @@ mod tests {
         assert!(ids.contains(&"c1"));
         assert!(ids.contains(&"c2"));
         assert!(ids.contains(&"gc"));
-        assert!(!ids.contains(&"root"), "Root should not be in its own descendants");
+        assert!(
+            !ids.contains(&"root"),
+            "Root should not be in its own descendants"
+        );
     }
 
     // -----------
@@ -534,15 +603,21 @@ mod tests {
         let tenant = TenantId::new("t1".to_string()).unwrap();
 
         backend
-            .assign_role(&user, &tenant, "unit-1", Role::Developer)
+            .assign_role(&user, &tenant, "unit-1", Role::Developer.into())
             .await
             .unwrap();
 
         let key = "user-alice:t1:unit-1";
-        assert!(backend.roles.get(key).unwrap().contains(&Role::Developer));
+        assert!(
+            backend
+                .roles
+                .get(key)
+                .unwrap()
+                .contains(&RoleIdentifier::from(Role::Developer))
+        );
 
         backend
-            .remove_role(&user, &tenant, "unit-1", Role::Developer)
+            .remove_role(&user, &tenant, "unit-1", Role::Developer.into())
             .await
             .unwrap();
         assert!(backend.roles.get(key).unwrap().is_empty());
@@ -569,7 +644,10 @@ mod tests {
             metadata: std::collections::HashMap::new(),
         };
 
-        backend.add_unit_policy(&ctx, "unit-x", &policy).await.unwrap();
+        backend
+            .add_unit_policy(&ctx, "unit-x", &policy)
+            .await
+            .unwrap();
         let policies = backend.get_unit_policies(ctx, "unit-x").await.unwrap();
         assert_eq!(policies.len(), 1);
         assert_eq!(policies[0].id, "p1");

@@ -16,15 +16,22 @@ use knowledge::git_provider::{GitHubProvider, GitProvider};
 use knowledge::governance::GovernanceEngine;
 use knowledge::manager::KnowledgeManager;
 use knowledge::repository::{GitRepository, RemoteConfig};
+use knowledge::tenant_repo_resolver::TenantRepositoryResolver;
 use memory::embedding::create_embedding_service_from_env;
 use memory::llm::create_llm_service_from_env;
 use memory::manager::MemoryManager;
 use memory::reasoning::{DefaultReflectiveReasoner, ReflectiveReasoner};
 use mk_core::traits::AuthorizationService;
-use mk_core::types::{ReasoningStrategy, ReasoningTrace, Role, TenantContext, UserId};
+use mk_core::types::{
+    ReasoningStrategy, ReasoningTrace, Role, RoleIdentifier, TenantContext, UserId,
+};
+use storage::git_provider_connection_store::InMemoryGitProviderConnectionStore;
 use storage::governance::GovernanceStorage;
 use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore};
 use storage::postgres::PostgresBackend;
+use storage::secret_provider::LocalSecretProvider;
+use storage::tenant_config_provider::KubernetesTenantConfigProvider;
+use storage::tenant_store::{TenantRepositoryBindingStore, TenantStore};
 use sync::bridge::SyncManager;
 use sync::state_persister::DatabasePersister;
 use sync::websocket::{AuthToken, TokenValidator, WsResult, WsServer};
@@ -221,6 +228,24 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
 
     let (shutdown_tx, _) = tokio::sync::watch::channel(false);
 
+    // Tenant stores and repository resolver
+    let tenant_store = Arc::new(TenantStore::new(postgres.pool().clone()));
+    let tenant_repository_binding_store =
+        Arc::new(TenantRepositoryBindingStore::new(postgres.pool().clone()));
+    let secret_provider = Arc::new(LocalSecretProvider::new(std::collections::HashMap::new()));
+    let git_provider_connection_registry = Arc::new(InMemoryGitProviderConnectionStore::new());
+    let tenant_repo_resolver = Arc::new(
+        TenantRepositoryResolver::new(
+            tenant_repository_binding_store.clone(),
+            knowledge_repo_path(),
+            secret_provider,
+        )
+        .with_connection_registry(git_provider_connection_registry.clone()),
+    );
+    let tenant_config_provider = Arc::new(KubernetesTenantConfigProvider::new(
+        tenant_config_provider_namespace(),
+    ));
+
     Ok(Arc::new(AppState {
         config,
         postgres,
@@ -246,6 +271,11 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         idp_sync_service,
         idp_client,
         shutdown_tx: Arc::new(shutdown_tx),
+        tenant_store,
+        tenant_repository_binding_store,
+        tenant_repo_resolver,
+        tenant_config_provider,
+        git_provider_connection_registry,
     }))
 }
 
@@ -313,6 +343,10 @@ fn knowledge_repo_path() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("./knowledge-repo"))
 }
 
+fn tenant_config_provider_namespace() -> String {
+    std::env::var("AETERNA_K8S_NAMESPACE").unwrap_or_else(|_| "default".to_string())
+}
+
 fn create_graph_store(config: &config::Config) -> anyhow::Result<Option<Arc<DuckDbGraphStore>>> {
     if !config.providers.graph.enabled {
         return Ok(None);
@@ -378,7 +412,23 @@ fn build_anyhow_auth_service()
                 inner: PermitAuthorizationService::new(&api_key, &pdp_url),
             }))
         }
-        _ => Ok(Arc::new(AllowAllAuthService)),
+        _ => {
+            // Allow-all is only safe in local development or test environments.
+            // Emit a warning so operators know this is active.  To suppress this
+            // warning in a legitimate dev environment, set
+            // AETERNA_ALLOW_PERMISSIVE_AUTH=dev.
+            let permissive_mode =
+                std::env::var("AETERNA_ALLOW_PERMISSIVE_AUTH").unwrap_or_default();
+            if permissive_mode != "dev" {
+                tracing::warn!(
+                    backend = %backend,
+                    "Using allow-all authorization service.                      This grants every caller full access and MUST NOT be used in production.                      Set AETERNA_AUTH_BACKEND=cedar or AETERNA_AUTH_BACKEND=permit,                      or set AETERNA_ALLOW_PERMISSIVE_AUTH=dev to silence this warning."
+                );
+            } else {
+                tracing::debug!("Allow-all auth active (AETERNA_ALLOW_PERMISSIVE_AUTH=dev)");
+            }
+            Ok(Arc::new(AllowAllAuthService))
+        }
     }
 }
 
@@ -497,7 +547,10 @@ where
             .map_err(anyhow::Error::from)
     }
 
-    async fn get_user_roles(&self, ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
+    async fn get_user_roles(
+        &self,
+        ctx: &TenantContext,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
         self.inner
             .get_user_roles(ctx)
             .await
@@ -508,7 +561,7 @@ where
         &self,
         ctx: &TenantContext,
         user_id: &UserId,
-        role: Role,
+        role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         self.inner
             .assign_role(ctx, user_id, role)
@@ -520,7 +573,7 @@ where
         &self,
         ctx: &TenantContext,
         user_id: &UserId,
-        role: Role,
+        role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         self.inner
             .remove_role(ctx, user_id, role)
@@ -544,15 +597,18 @@ impl AuthorizationService for AllowAllAuthService {
         Ok(true)
     }
 
-    async fn get_user_roles(&self, _ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
-        Ok(vec![Role::Developer])
+    async fn get_user_roles(
+        &self,
+        _ctx: &TenantContext,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+        Ok(vec![Role::Developer.into()])
     }
 
     async fn assign_role(
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -561,7 +617,7 @@ impl AuthorizationService for AllowAllAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -582,15 +638,18 @@ impl AuthorizationService for AllowAllBoxedAuthService {
         Ok(true)
     }
 
-    async fn get_user_roles(&self, _ctx: &TenantContext) -> Result<Vec<Role>, Self::Error> {
-        Ok(vec![Role::Developer])
+    async fn get_user_roles(
+        &self,
+        _ctx: &TenantContext,
+    ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+        Ok(vec![Role::Developer.into()])
     }
 
     async fn assign_role(
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -599,7 +658,7 @@ impl AuthorizationService for AllowAllBoxedAuthService {
         &self,
         _ctx: &TenantContext,
         _user_id: &UserId,
-        _role: Role,
+        _role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -686,6 +745,21 @@ mod tests {
             std::env::remove_var("AETERNA_KNOWLEDGE_REPO_PATH");
         }
         assert_eq!(knowledge_repo_path(), PathBuf::from("./knowledge-repo"));
+    }
+
+    #[test]
+    #[serial]
+    fn tenant_config_provider_namespace_uses_env_override() {
+        set_env("AETERNA_K8S_NAMESPACE", "aeterna");
+        assert_eq!(tenant_config_provider_namespace(), "aeterna");
+        remove_env("AETERNA_K8S_NAMESPACE");
+    }
+
+    #[test]
+    #[serial]
+    fn tenant_config_provider_namespace_defaults_to_default() {
+        remove_env("AETERNA_K8S_NAMESPACE");
+        assert_eq!(tenant_config_provider_namespace(), "default");
     }
 
     #[test]

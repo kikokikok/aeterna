@@ -114,7 +114,7 @@ Assigns a role to a user within a specific organizational unit.
 **Parameters:**
 - `user_id` (string, required): User ID
 - `unit_id` (string, required): Unit ID
-- `role` (string, required): Role to assign. Values: `developer`, `techlead`, `architect`, `admin`, `agent`
+- `role` (string, required): Role to assign. Values: `platform_admin`, `tenant_admin`, `admin`, `architect`, `tech_lead`, `developer`, `viewer`, `agent`
 - `tenantContext` (TenantContext, optional): Tenant context information
 
 **Response:**
@@ -146,7 +146,7 @@ Removes a role from a user within a specific organizational unit.
 **Parameters:**
 - `user_id` (string, required): User ID
 - `unit_id` (string, required): Unit ID
-- `role` (string, required): Role to remove. Values: `developer`, `techlead`, `architect`, `admin`, `agent`
+- `role` (string, required): Role to remove. Values: `platform_admin`, `tenant_admin`, `admin`, `architect`, `tech_lead`, `developer`, `viewer`, `agent`
 - `tenantContext` (TenantContext, optional): Tenant context information
 
 **Response:**
@@ -436,6 +436,9 @@ pub struct OrganizationalUnit {
 - `Config`: Target is configuration
 
 ### Role
+- `PlatformAdmin`: Cross-tenant admin role (precedence: 6)
+- `TenantAdmin`: Tenant-scoped admin role (precedence: 5)
+- `Viewer`: Read-only tenant role
 - `Developer`: Basic developer role (precedence: 1)
 - `TechLead`: Tech lead role (precedence: 2)
 - `Architect`: Architect role (precedence: 3)

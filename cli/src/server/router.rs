@@ -11,26 +11,48 @@ use tower_http::cors::CorsLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::trace::TraceLayer;
 
+use super::auth_middleware::AuthenticationLayer;
 use super::{
-    AppState, admin_sync, health, knowledge_api, mcp_transport, plugin_auth, sessions, sync,
-    webhooks,
+    AppState, admin_sync, govern_api, health, knowledge_api, mcp_transport, org_api, plugin_auth,
+    project_api, role_grants, sessions, sync, team_api, tenant_api, user_api, webhooks,
 };
 
 pub fn build_router(state: Arc<AppState>) -> Router {
-    let mut app = Router::new()
+    let auth_layer = AuthenticationLayer::new(state.plugin_auth_state.clone());
+
+    // Routes excluded from the global auth layer:
+    // - Health probes: /health, /live, /ready
+    // - Auth bootstrap: /api/v1/auth/plugin/{bootstrap,refresh,logout}
+    let unauthenticated = Router::new()
         .merge(health::router(state.clone()))
-        .nest("/api/v1", knowledge_api::router(state.clone()))
-        .nest(
-            "/api/v1",
-            knowledge::api::router(state.governance_dashboard.clone()),
-        )
-        .nest("/api/v1", plugin_auth::router(state.clone()))
-        .nest("/api/v1", sessions::router(state.clone()))
-        .nest("/api/v1", webhooks::router(state.clone()))
-        .nest("/api/v1", admin_sync::router(state.clone()))
-        .nest("/api/v1", sync::router(state.clone()))
-        .nest("/openspec/v1", knowledge_api::router(state.clone()))
-        .nest("/mcp", mcp_transport::router(state.mcp_server.clone()))
+        .nest("/api/v1", plugin_auth::router(state.clone()));
+
+    // All other /api/v1/* routes go through the auth layer.
+    let protected_api = Router::new()
+        .merge(knowledge_api::router(state.clone()))
+        .merge(knowledge::api::router(state.governance_dashboard.clone()))
+        .merge(sessions::router(state.clone()))
+        .merge(webhooks::router(state.clone()))
+        .merge(admin_sync::router(state.clone()))
+        .merge(tenant_api::router(state.clone()))
+        .merge(org_api::router(state.clone()))
+        .merge(team_api::router(state.clone()))
+        .merge(project_api::router(state.clone()))
+        .merge(user_api::router(state.clone()))
+        .nest("/admin", role_grants::router(state.clone()))
+        .merge(govern_api::router(state.clone()))
+        .merge(sync::router(state.clone()))
+        .layer(auth_layer.clone());
+
+    let protected_mcp =
+        mcp_transport::router(state.mcp_server.clone(), state.clone()).layer(auth_layer.clone());
+
+    let protected_openspec = knowledge_api::router(state.clone()).layer(auth_layer);
+
+    let mut app = unauthenticated
+        .nest("/api/v1", protected_api)
+        .nest("/mcp", protected_mcp)
+        .nest("/openspec/v1", protected_openspec)
         .nest("/ws", state.ws_server.clone().router())
         .nest(
             "/a2a",

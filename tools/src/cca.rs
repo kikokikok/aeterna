@@ -46,6 +46,9 @@ impl ContextAssembleTool {
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct ContextAssembleParams {
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: mk_core::types::TenantContext,
+
     #[serde(default)]
     pub query: Option<String>,
 
@@ -87,6 +90,7 @@ impl Tool for ContextAssembleTool {
         json!({
             "type": "object",
             "properties": {
+                "tenantContext": { "$ref": "#/definitions/TenantContext" },
                 "query": { "type": "string" },
                 "tokenBudget": { "type": "integer", "minimum": 100, "maximum": 32000 },
                 "layers": {
@@ -94,7 +98,7 @@ impl Tool for ContextAssembleTool {
                     "items": { "type": "string" }
                 }
             },
-            "required": []
+            "required": ["tenantContext"]
         })
     }
 
@@ -134,6 +138,9 @@ impl NoteCaptureTool {
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct NoteCaptureParams {
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: mk_core::types::TenantContext,
+
     pub description: String,
 
     #[serde(default)]
@@ -164,6 +171,7 @@ impl Tool for NoteCaptureTool {
         json!({
             "type": "object",
             "properties": {
+                "tenantContext": { "$ref": "#/definitions/TenantContext" },
                 "description": { "type": "string" },
                 "tags": {
                     "type": "array",
@@ -172,7 +180,7 @@ impl Tool for NoteCaptureTool {
                 "toolName": { "type": "string" },
                 "success": { "type": "boolean" }
             },
-            "required": ["description"]
+            "required": ["tenantContext", "description"]
         })
     }
 
@@ -230,6 +238,9 @@ impl HindsightQueryTool {
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct HindsightQueryParams {
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: mk_core::types::TenantContext,
+
     #[serde(rename = "errorType")]
     pub error_type: String,
 
@@ -254,6 +265,7 @@ impl Tool for HindsightQueryTool {
         json!({
             "type": "object",
             "properties": {
+                "tenantContext": { "$ref": "#/definitions/TenantContext" },
                 "errorType": { "type": "string" },
                 "messagePattern": { "type": "string" },
                 "contextPatterns": {
@@ -261,7 +273,7 @@ impl Tool for HindsightQueryTool {
                     "items": { "type": "string" }
                 }
             },
-            "required": ["errorType", "messagePattern"]
+            "required": ["tenantContext", "errorType", "messagePattern"]
         })
     }
 
@@ -337,6 +349,9 @@ impl MetaLoopStatusTool {
 
 #[derive(Serialize, Deserialize, JsonSchema, Validate)]
 pub struct MetaLoopStatusParams {
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: mk_core::types::TenantContext,
+
     #[serde(rename = "loopId", default)]
     pub loop_id: Option<String>,
 
@@ -358,10 +373,11 @@ impl Tool for MetaLoopStatusTool {
         json!({
             "type": "object",
             "properties": {
+                "tenantContext": { "$ref": "#/definitions/TenantContext" },
                 "loopId": { "type": "string" },
                 "includeDetails": { "type": "boolean" }
             },
-            "required": []
+            "required": ["tenantContext"]
         })
     }
 
@@ -423,7 +439,16 @@ mod tests {
         let assembler = Arc::new(ContextAssembler::new(AssemblerConfig::default()));
         let tool = ContextAssembleTool::with_default_provider(assembler);
 
-        let result = tool.call(json!({"tokenBudget": 2000})).await.unwrap();
+        let result = tool
+            .call(json!({
+                "tenantContext": {
+                    "tenant_id": "test-tenant",
+                    "user_id": "test-user"
+                },
+                "tokenBudget": 2000
+            }))
+            .await
+            .unwrap();
 
         assert_eq!(result["success"], true);
         assert!(result["context"]["totalTokens"].is_number());
@@ -438,6 +463,10 @@ mod tests {
 
         let result = tool
             .call(json!({
+                "tenantContext": {
+                    "tenant_id": "test-tenant",
+                    "user_id": "test-user"
+                },
                 "description": "Test capture",
                 "tags": ["test"],
                 "success": true
@@ -456,6 +485,10 @@ mod tests {
 
         let result = tool
             .call(json!({
+                "tenantContext": {
+                    "tenant_id": "test-tenant",
+                    "user_id": "test-user"
+                },
                 "errorType": "TypeError",
                 "messagePattern": "cannot read property"
             }))
@@ -470,7 +503,15 @@ mod tests {
     async fn test_meta_loop_status_tool() {
         let tool = MetaLoopStatusTool::with_default_provider();
 
-        let result = tool.call(json!({})).await.unwrap();
+        let result = tool
+            .call(json!({
+                "tenantContext": {
+                    "tenant_id": "test-tenant",
+                    "user_id": "test-user"
+                }
+            }))
+            .await
+            .unwrap();
 
         assert_eq!(result["success"], true);
         assert_eq!(result["status"], "idle");

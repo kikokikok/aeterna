@@ -253,7 +253,7 @@ drift_detection_enabled = true
 policy_cache_ttl = 300
 
 [governance.rbac]
-roles = ["admin", "architect", "developer", "viewer", "guest"]
+roles = ["platform_admin", "tenant_admin", "admin", "architect", "tech_lead", "developer", "agent"]
 default_role = "developer"
 
 [integrations.opencode]

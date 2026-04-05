@@ -50,6 +50,51 @@ pub trait StorageBackend: Send + Sync {
     async fn create_unit(&self, unit: &crate::types::OrganizationalUnit)
     -> Result<(), Self::Error>;
 
+    async fn get_unit_by_id(
+        &self,
+        unit_id: &str,
+        tenant_id: &str,
+    ) -> Result<Option<crate::types::OrganizationalUnit>, Self::Error>;
+
+    async fn update_unit(&self, unit: &crate::types::OrganizationalUnit)
+    -> Result<(), Self::Error>;
+
+    async fn delete_unit(&self, unit_id: &str, tenant_id: &str) -> Result<(), Self::Error>;
+
+    async fn list_unit_members(
+        &self,
+        unit_id: &str,
+        tenant_id: &str,
+    ) -> Result<Vec<(crate::types::UserId, crate::types::RoleIdentifier)>, Self::Error>;
+
+    async fn assign_team_to_project(
+        &self,
+        project_id: &str,
+        team_id: &str,
+        tenant_id: &str,
+        assignment_type: &str,
+    ) -> Result<(), Self::Error>;
+
+    async fn remove_team_from_project(
+        &self,
+        project_id: &str,
+        team_id: &str,
+        tenant_id: &str,
+    ) -> Result<(), Self::Error>;
+
+    async fn list_project_team_assignments(
+        &self,
+        project_id: &str,
+        tenant_id: &str,
+    ) -> Result<Vec<(String, String)>, Self::Error>;
+
+    async fn get_effective_roles_at_scope(
+        &self,
+        user_id: &crate::types::UserId,
+        tenant_id: &crate::types::TenantId,
+        unit_id: &str,
+    ) -> Result<Vec<crate::types::RoleIdentifier>, Self::Error>;
+
     async fn add_unit_policy(
         &self,
         ctx: &crate::types::TenantContext,
@@ -62,7 +107,7 @@ pub trait StorageBackend: Send + Sync {
         user_id: &crate::types::UserId,
         tenant_id: &crate::types::TenantId,
         unit_id: &str,
-        role: crate::types::Role,
+        role: crate::types::RoleIdentifier,
     ) -> Result<(), Self::Error>;
 
     async fn remove_role(
@@ -70,7 +115,7 @@ pub trait StorageBackend: Send + Sync {
         user_id: &crate::types::UserId,
         tenant_id: &crate::types::TenantId,
         unit_id: &str,
-        role: crate::types::Role,
+        role: crate::types::RoleIdentifier,
     ) -> Result<(), Self::Error>;
 
     async fn store_drift_result(
@@ -318,20 +363,20 @@ pub trait AuthorizationService: Send + Sync {
     async fn get_user_roles(
         &self,
         ctx: &crate::types::TenantContext,
-    ) -> Result<Vec<crate::types::Role>, Self::Error>;
+    ) -> Result<Vec<crate::types::RoleIdentifier>, Self::Error>;
 
     async fn assign_role(
         &self,
         ctx: &crate::types::TenantContext,
         user_id: &crate::types::UserId,
-        role: crate::types::Role,
+        role: crate::types::RoleIdentifier,
     ) -> Result<(), Self::Error>;
 
     async fn remove_role(
         &self,
         ctx: &crate::types::TenantContext,
         user_id: &crate::types::UserId,
-        role: crate::types::Role,
+        role: crate::types::RoleIdentifier,
     ) -> Result<(), Self::Error>;
 }
 
@@ -450,6 +495,40 @@ pub trait RlmAssemblyService: Send + Sync {
     ) -> Result<RlmAssemblyResult, anyhow::Error>;
 }
 
+#[async_trait]
+pub trait TenantConfigProvider: Send + Sync {
+    type Error;
+
+    async fn get_config(
+        &self,
+        tenant_id: &crate::types::TenantId,
+    ) -> Result<Option<crate::types::TenantConfigDocument>, Self::Error>;
+
+    async fn list_configs(&self) -> Result<Vec<crate::types::TenantConfigDocument>, Self::Error>;
+
+    async fn upsert_config(
+        &self,
+        config: crate::types::TenantConfigDocument,
+    ) -> Result<crate::types::TenantConfigDocument, Self::Error>;
+
+    async fn set_secret_entry(
+        &self,
+        tenant_id: &crate::types::TenantId,
+        secret: crate::types::TenantSecretEntry,
+    ) -> Result<crate::types::TenantSecretReference, Self::Error>;
+
+    async fn delete_secret_entry(
+        &self,
+        tenant_id: &crate::types::TenantId,
+        logical_name: &str,
+    ) -> Result<bool, Self::Error>;
+
+    async fn validate(
+        &self,
+        config: &crate::types::TenantConfigDocument,
+    ) -> Result<(), Self::Error>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -518,4 +597,59 @@ mod tests {
         let json = serde_json::to_string(&healthy).unwrap();
         assert!(json.contains("Healthy"));
     }
+}
+
+/// Registry of platform-owned Git provider connections.
+///
+/// A connection stores GitHub App identity (app_id, installation_id, PEM ref)
+/// once at the platform level.  Tenants are granted visibility by a
+/// PlatformAdmin and reference the connection by ID in their repository
+/// binding.  No certificate material is duplicated per tenant.
+#[async_trait]
+pub trait GitProviderConnectionRegistry: Send + Sync {
+    type Error;
+
+    /// Create a new platform-owned connection.
+    async fn create_connection(
+        &self,
+        connection: crate::types::GitProviderConnection,
+    ) -> Result<crate::types::GitProviderConnection, Self::Error>;
+
+    /// Fetch a connection by its stable ID.
+    async fn get_connection(
+        &self,
+        id: &str,
+    ) -> Result<Option<crate::types::GitProviderConnection>, Self::Error>;
+
+    /// List all platform-owned connections (PlatformAdmin view).
+    async fn list_connections(
+        &self,
+    ) -> Result<Vec<crate::types::GitProviderConnection>, Self::Error>;
+
+    /// List connections visible to a specific tenant.
+    async fn list_connections_for_tenant(
+        &self,
+        tenant_id: &crate::types::TenantId,
+    ) -> Result<Vec<crate::types::GitProviderConnection>, Self::Error>;
+
+    /// Grant a tenant visibility of a connection.
+    async fn grant_tenant_visibility(
+        &self,
+        connection_id: &str,
+        tenant_id: &crate::types::TenantId,
+    ) -> Result<(), Self::Error>;
+
+    /// Revoke a tenant's visibility of a connection.
+    async fn revoke_tenant_visibility(
+        &self,
+        connection_id: &str,
+        tenant_id: &crate::types::TenantId,
+    ) -> Result<(), Self::Error>;
+
+    /// Returns `true` when the tenant is allowed to use the connection.
+    async fn tenant_can_use(
+        &self,
+        connection_id: &str,
+        tenant_id: &crate::types::TenantId,
+    ) -> Result<bool, Self::Error>;
 }

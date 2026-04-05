@@ -1,0 +1,23 @@
+# Production tenant config + Git provider connections overlay
+# Apply after values.yaml and production/values.yaml
+
+tenantConfigProvider:
+  enabled: true
+  seedTenants:
+    - "acme-corp"
+    - "platform-default"
+
+# Production GitHub App connection
+# Prerequisites:
+#   kubectl create secret generic aeterna-github-app-pem --from-file=pem-key=./prod-key.pem -n aeterna
+#   kubectl create secret generic aeterna-github-app-webhook --from-literal=webhook-secret=<secret> -n aeterna
+gitProviderConnections:
+  - id: "acme-github-app"
+    name: "Acme Corp GitHub App"
+    providerKind: GitHubApp
+    appId: "123456"
+    installationId: "9876543"
+    pemSecretRef: "secret/aeterna-github-app-pem/pem-key"
+    webhookSecretRef: "secret/aeterna-github-app-webhook/webhook-secret"
+    allowedTenantIds:
+      - "acme-corp"

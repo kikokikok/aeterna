@@ -5,16 +5,309 @@ use utoipa::ToSchema;
 use validator::Validate;
 
 #[derive(
-    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    ToSchema,
+    JsonSchema,
+    EnumString,
+    Display,
 )]
 #[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum Role {
+    Viewer,
     Developer,
     TechLead,
     Architect,
     Admin,
-    Agent
+    TenantAdmin,
+    Agent,
+    PlatformAdmin,
+}
+
+// ---------------------------------------------------------------------------
+// Tenant record and repository binding types
+// ---------------------------------------------------------------------------
+
+/// Whether a tenant is active or has been deactivated.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum TenantStatus {
+    Active,
+    Inactive,
+}
+
+impl Default for TenantStatus {
+    fn default() -> Self {
+        Self::Active
+    }
+}
+
+/// Who owns/manages a record: a human admin or an automated sync process.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum RecordSource {
+    Admin,
+    Sync,
+}
+
+impl Default for RecordSource {
+    fn default() -> Self {
+        Self::Admin
+    }
+}
+
+/// Canonical kind of backing repository for a tenant knowledge binding.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum RepositoryKind {
+    Local,
+    GitHub,
+    GitRemote,
+}
+
+/// Branch protection policy for a tenant knowledge repository.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum BranchPolicy {
+    DirectCommit,
+    RequirePullRequest,
+}
+
+/// Credential type stored in the tenant repository binding.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum CredentialKind {
+    None,
+    PersonalAccessToken,
+    SshKey,
+    GitHubApp,
+}
+
+/// Canonical tenant record as persisted in the database.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantRecord {
+    pub id: TenantId,
+    pub slug: String,
+    pub name: String,
+    pub status: TenantStatus,
+    pub source_owner: RecordSource,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deactivated_at: Option<i64>,
+}
+
+/// Canonical per-tenant repository binding record.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantRepositoryBinding {
+    pub id: String,
+    pub tenant_id: TenantId,
+    pub kind: RepositoryKind,
+    pub local_path: Option<String>,
+    pub remote_url: Option<String>,
+    pub branch: String,
+    pub branch_policy: BranchPolicy,
+    pub credential_kind: CredentialKind,
+    pub credential_ref: Option<String>,
+    pub github_owner: Option<String>,
+    pub github_repo: Option<String>,
+    pub source_owner: RecordSource,
+    /// When set, the repository resolver looks up this platform-owned
+    /// connection by ID instead of parsing `credential_ref` directly.
+    /// Tenant visibility is enforced at resolution time.
+    pub git_provider_connection_id: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+impl TenantRepositoryBinding {
+    fn is_secret_reference(value: &str) -> bool {
+        value.starts_with("local/") || value.starts_with("secret/") || value.starts_with("arn:aws:")
+    }
+
+    /// Returns `true` when the binding has all required fields for its `kind`.
+    #[must_use]
+    pub fn is_structurally_valid(&self) -> bool {
+        match self.kind {
+            RepositoryKind::Local => self.local_path.is_some() && self.remote_url.is_none(),
+            RepositoryKind::GitHub => {
+                self.remote_url.is_some()
+                    && self.github_owner.is_some()
+                    && self.github_repo.is_some()
+                    && self.local_path.is_none()
+            }
+            RepositoryKind::GitRemote => self.remote_url.is_some() && self.local_path.is_none(),
+        }
+    }
+
+    /// Returns a JSON representation of the binding with `credential_ref` redacted.
+    #[must_use]
+    pub fn redacted(&self) -> serde_json::Value {
+        serde_json::json!({
+            "id": self.id,
+            "tenantId": self.tenant_id.as_str(),
+            "kind": self.kind.to_string(),
+            "localPath": self.local_path,
+            "remoteUrl": self.remote_url,
+            "branch": self.branch,
+            "branchPolicy": self.branch_policy.to_string(),
+            "credentialKind": self.credential_kind.to_string(),
+            "credentialRef": self.credential_ref.as_deref().map(|_| "[redacted]"),
+            "gitProviderConnectionId": self.git_provider_connection_id,
+            "githubOwner": self.github_owner,
+            "githubRepo": self.github_repo,
+            "sourceOwner": self.source_owner.to_string(),
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+        })
+    }
+
+    /// Validates that a credential reference is provided when the credential kind requires one.
+    pub fn validate_credential_ref(&self) -> Result<(), String> {
+        match self.credential_kind {
+            CredentialKind::None => Ok(()),
+            CredentialKind::PersonalAccessToken | CredentialKind::SshKey => {
+                let credential_ref = self.credential_ref.as_deref().unwrap_or_default();
+                if credential_ref.is_empty() {
+                    Err(format!(
+                        "credential_ref is required for credential_kind={}",
+                        self.credential_kind
+                    ))
+                } else if Self::is_secret_reference(credential_ref) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "credential_ref must be a supported secret reference (local/, secret/, arn:aws:) for credential_kind={}",
+                        self.credential_kind
+                    ))
+                }
+            }
+            CredentialKind::GitHubApp => {
+                // When a platform-owned connection is referenced, credential_ref
+                // is not required — the resolver will look up the connection registry.
+                if self.git_provider_connection_id.is_some() {
+                    return Ok(());
+                }
+                let credential_ref = self.credential_ref.as_deref().unwrap_or_default();
+                if credential_ref.is_empty() {
+                    return Err(format!(
+                        "credential_ref or git_provider_connection_id is required for credential_kind={}",
+                        self.credential_kind
+                    ));
+                }
+
+                let parts: Vec<&str> = credential_ref.splitn(3, ':').collect();
+                if parts.len() != 3 || parts[0].is_empty() || parts[1].is_empty() {
+                    return Err(
+                        "credential_ref must use app_id:installation_id:pem_ref format for credential_kind=githubApp"
+                            .to_string(),
+                    );
+                }
+
+                if !Self::is_secret_reference(parts[2]) {
+                    return Err(
+                        "credential_ref pem_ref must be a supported secret reference (local/, secret/, arn:aws:) for credential_kind=githubApp"
+                            .to_string(),
+                    );
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum TenantConfigOwnership {
+    Platform,
+    Tenant,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantConfigField {
+    pub ownership: TenantConfigOwnership,
+    pub value: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantSecretReference {
+    pub logical_name: String,
+    pub ownership: TenantConfigOwnership,
+    pub secret_name: String,
+    pub secret_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantConfigDocument {
+    pub tenant_id: TenantId,
+    pub fields: std::collections::BTreeMap<String, TenantConfigField>,
+    pub secret_references: std::collections::BTreeMap<String, TenantSecretReference>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantSecretEntry {
+    pub logical_name: String,
+    pub ownership: TenantConfigOwnership,
+    pub secret_value: String,
+}
+
+impl TenantConfigDocument {
+    #[must_use]
+    pub fn contains_raw_secret_material(&self) -> bool {
+        self.fields
+            .iter()
+            .any(|(key, field)| contains_raw_secret_material(key, &field.value))
+    }
+}
+
+fn contains_raw_secret_material(field_name: &str, value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(map) => map.iter().any(|(k, v)| {
+            let composite = format!("{field_name}.{k}");
+            contains_raw_secret_material(&composite, v)
+        }),
+        serde_json::Value::Array(values) => values
+            .iter()
+            .any(|v| contains_raw_secret_material(field_name, v)),
+        serde_json::Value::String(text) => {
+            let lower = field_name.to_ascii_lowercase();
+            let suspicious_key = ["secret", "password", "token", "api_key", "private_key"]
+                .iter()
+                .any(|needle| lower.contains(needle));
+            suspicious_key && !text.trim().is_empty()
+        }
+        _ => false,
+    }
 }
 
 #[derive(
@@ -26,7 +319,7 @@ pub enum UnitType {
     Company,
     Organization,
     Team,
-    Project
+    Project,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -39,7 +332,8 @@ pub struct OrganizationalUnit {
     pub tenant_id: TenantId,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub created_at: i64,
-    pub updated_at: i64
+    pub updated_at: i64,
+    pub source_owner: RecordSource,
 }
 
 #[derive(
@@ -89,7 +383,10 @@ impl std::str::FromStr for TenantId {
 pub struct TenantContext {
     pub tenant_id: TenantId,
     pub user_id: UserId,
-    pub agent_id: Option<String>
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub roles: Vec<RoleIdentifier>,
+    pub target_tenant_id: Option<TenantId>,
 }
 
 #[derive(
@@ -140,7 +437,9 @@ impl TenantContext {
         Self {
             tenant_id,
             user_id,
-            agent_id: None
+            agent_id: None,
+            roles: Vec::new(),
+            target_tenant_id: None,
         }
     }
 
@@ -148,8 +447,35 @@ impl TenantContext {
         Self {
             tenant_id,
             user_id,
-            agent_id: Some(agent_id)
+            agent_id: Some(agent_id),
+            roles: Vec::new(),
+            target_tenant_id: None,
         }
+    }
+
+    pub fn with_role(mut self, role: impl Into<RoleIdentifier>) -> Self {
+        self.roles.push(role.into());
+        self
+    }
+
+    pub fn with_roles(mut self, roles: Vec<RoleIdentifier>) -> Self {
+        self.roles = roles;
+        self
+    }
+
+    pub fn has_role(&self, role: &RoleIdentifier) -> bool {
+        self.roles.contains(role)
+    }
+
+    pub fn has_known_role(&self, role: &Role) -> bool {
+        self.roles.contains(&RoleIdentifier::Known(role.clone()))
+    }
+
+    pub fn highest_precedence_role(&self) -> Option<&RoleIdentifier> {
+        self.roles.iter().max_by_key(|r| match r {
+            RoleIdentifier::Known(role) => role.precedence(),
+            RoleIdentifier::Custom(_) => 0,
+        })
     }
 }
 
@@ -158,7 +484,7 @@ pub struct HierarchyPath {
     pub company: String,
     pub org: Option<String>,
     pub team: Option<String>,
-    pub project: Option<String>
+    pub project: Option<String>,
 }
 
 impl HierarchyPath {
@@ -167,7 +493,7 @@ impl HierarchyPath {
             company: id,
             org: None,
             team: None,
-            project: None
+            project: None,
         }
     }
 
@@ -176,7 +502,7 @@ impl HierarchyPath {
             company,
             org: Some(id),
             team: None,
-            project: None
+            project: None,
         }
     }
 
@@ -185,7 +511,7 @@ impl HierarchyPath {
             company,
             org: Some(org),
             team: Some(id),
-            project: None
+            project: None,
         }
     }
 
@@ -194,7 +520,7 @@ impl HierarchyPath {
             company,
             org: Some(org),
             team: Some(team),
-            project: Some(id)
+            project: Some(id),
         }
     }
 
@@ -225,26 +551,123 @@ impl HierarchyPath {
     }
 }
 
+/// Wraps [`Role`] (built-in) or an arbitrary string (custom/dynamic).
+/// Stored as `TEXT` in the database; mapped to Cedar `Role::"<name>"` entities.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(untagged)]
+pub enum RoleIdentifier {
+    Known(Role),
+    Custom(String),
+}
+
+impl From<Role> for RoleIdentifier {
+    fn from(role: Role) -> Self {
+        Self::Known(role)
+    }
+}
+
+impl RoleIdentifier {
+    pub fn from_str_flexible(s: &str) -> Self {
+        match s.parse::<Role>() {
+            Ok(role) => Self::Known(role),
+            Err(_) => Self::Custom(s.to_string()),
+        }
+    }
+
+    #[must_use]
+    pub fn is_known(&self) -> bool {
+        matches!(self, Self::Known(_))
+    }
+
+    #[must_use]
+    pub fn is_custom(&self) -> bool {
+        matches!(self, Self::Custom(_))
+    }
+
+    #[must_use]
+    pub fn as_known(&self) -> Option<&Role> {
+        match self {
+            Self::Known(r) => Some(r),
+            Self::Custom(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_cedar_entity_id(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl std::fmt::Display for RoleIdentifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Known(role) => write!(f, "{role}"),
+            Self::Custom(name) => write!(f, "{name}"),
+        }
+    }
+}
+
+impl PartialEq for RoleIdentifier {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Known(a), Self::Known(b)) => a == b,
+            (Self::Custom(a), Self::Custom(b)) => a == b,
+            (Self::Known(role), Self::Custom(s)) | (Self::Custom(s), Self::Known(role)) => {
+                role.to_string().eq_ignore_ascii_case(s)
+            }
+        }
+    }
+}
+
+impl Eq for RoleIdentifier {}
+
+impl std::hash::Hash for RoleIdentifier {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // PartialEq treats Known("Admin") == Custom("admin"), so hash must normalize.
+        self.to_string().to_ascii_lowercase().hash(state);
+    }
+}
+
+impl std::str::FromStr for RoleIdentifier {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from_str_flexible(s))
+    }
+}
+
+impl Default for RoleIdentifier {
+    fn default() -> Self {
+        Self::Known(Role::Viewer)
+    }
+}
+
 impl Role {
     #[must_use]
     pub fn precedence(&self) -> u8 {
         match self {
-            Role::Admin => 4,
-            Role::Architect => 3,
-            Role::TechLead => 2,
+            Role::Viewer => 0,
+            Role::Agent => 0,
             Role::Developer => 1,
-            Role::Agent => 0
+            Role::TechLead => 2,
+            Role::Architect => 3,
+            Role::Admin => 4,
+            Role::PlatformAdmin => 5,
+            Role::TenantAdmin => 6,
         }
     }
 
     #[must_use]
     pub fn display_name(&self) -> &'static str {
         match self {
+            Role::Viewer => "Viewer",
             Role::Developer => "Developer",
             Role::TechLead => "Tech Lead",
             Role::Architect => "Architect",
             Role::Admin => "Admin",
-            Role::Agent => "Agent"
+            Role::TenantAdmin => "Tenant Admin",
+            Role::Agent => "Agent",
+            Role::PlatformAdmin => "Platform Admin",
         }
     }
 }
@@ -257,7 +680,7 @@ pub enum KnowledgeType {
     Policy,
     Pattern,
     Spec,
-    Hindsight
+    Hindsight,
 }
 
 /// Knowledge status
@@ -268,7 +691,7 @@ pub enum KnowledgeStatus {
     Proposed,
     Accepted,
     Deprecated,
-    Superseded
+    Superseded,
 }
 
 #[derive(
@@ -290,7 +713,7 @@ pub enum KnowledgeLayer {
     Company,
     Org,
     Team,
-    Project
+    Project,
 }
 
 impl From<MemoryLayer> for Option<KnowledgeLayer> {
@@ -300,7 +723,7 @@ impl From<MemoryLayer> for Option<KnowledgeLayer> {
             MemoryLayer::Org => Some(KnowledgeLayer::Org),
             MemoryLayer::Team => Some(KnowledgeLayer::Team),
             MemoryLayer::Project => Some(KnowledgeLayer::Project),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -324,7 +747,7 @@ impl From<MemoryLayer> for Option<KnowledgeLayer> {
 pub enum ConstraintSeverity {
     Info,
     Warn,
-    Block
+    Block,
 }
 
 /// Constraint operators
@@ -336,7 +759,7 @@ pub enum ConstraintOperator {
     MustMatch,
     MustNotMatch,
     MustExist,
-    MustNotExist
+    MustNotExist,
 }
 
 /// Constraint targets
@@ -347,7 +770,7 @@ pub enum ConstraintTarget {
     Code,
     Dependency,
     Import,
-    Config
+    Config,
 }
 
 /// Memory layers for hierarchical storage
@@ -373,7 +796,7 @@ pub enum MemoryLayer {
     Project,
     Team,
     Org,
-    Company
+    Company,
 }
 
 impl MemoryLayer {
@@ -386,7 +809,7 @@ impl MemoryLayer {
             MemoryLayer::Project => 4,
             MemoryLayer::Team => 5,
             MemoryLayer::Org => 6,
-            MemoryLayer::Company => 7
+            MemoryLayer::Company => 7,
         }
     }
 
@@ -399,7 +822,7 @@ impl MemoryLayer {
             MemoryLayer::Project => "Project",
             MemoryLayer::Team => "Team",
             MemoryLayer::Org => "Organization",
-            MemoryLayer::Company => "Company"
+            MemoryLayer::Company => "Company",
         }
     }
 }
@@ -422,7 +845,7 @@ pub struct LayerIdentifiers {
     #[validate(custom(function = "validate_org_id"))]
     pub org_id: Option<String>,
     #[validate(custom(function = "validate_company_id"))]
-    pub company_id: Option<String>
+    pub company_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -430,7 +853,7 @@ pub struct LayerIdentifiers {
 pub enum SummaryDepth {
     Sentence,
     Paragraph,
-    Detailed
+    Detailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -443,7 +866,7 @@ pub struct LayerSummary {
     pub source_hash: String,
     pub content_hash: Option<String>,
     pub personalized: bool,
-    pub personalization_context: Option<String>
+    pub personalization_context: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -454,7 +877,7 @@ pub struct SummaryConfig {
     pub update_on_changes: Option<u32>,
     pub skip_if_unchanged: bool,
     pub personalized: bool,
-    pub depths: Vec<SummaryDepth>
+    pub depths: Vec<SummaryDepth>,
 }
 
 pub type ContextVector = Vec<f32>;
@@ -466,7 +889,7 @@ pub struct ErrorSignature {
     pub message_pattern: String,
     pub stack_patterns: Vec<String>,
     pub context_patterns: Vec<String>,
-    pub embedding: Option<Vec<f32>>
+    pub embedding: Option<Vec<f32>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -474,7 +897,7 @@ pub struct ErrorSignature {
 pub struct CodeChange {
     pub file_path: String,
     pub diff: String,
-    pub description: Option<String>
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -486,7 +909,7 @@ pub struct Resolution {
     pub changes: Vec<CodeChange>,
     pub success_rate: f32,
     pub application_count: u32,
-    pub last_success_at: i64
+    pub last_success_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -498,7 +921,7 @@ pub struct HindsightNote {
     pub content: String,
     pub tags: Vec<String>,
     pub created_at: i64,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 #[derive(
@@ -520,7 +943,7 @@ pub struct HindsightNote {
 pub enum ReasoningStrategy {
     Exhaustive,
     Targeted,
-    SemanticOnly
+    SemanticOnly,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -538,7 +961,7 @@ pub struct ReasoningTrace {
     /// Duration of the reasoning step in milliseconds
     #[serde(default)]
     pub duration_ms: u64,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -553,7 +976,7 @@ pub struct MemoryEntry {
     pub importance_score: Option<f32>,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub created_at: i64,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 impl Default for MemoryEntry {
@@ -568,7 +991,7 @@ impl Default for MemoryEntry {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         }
     }
 }
@@ -627,7 +1050,7 @@ pub enum MemoryOperation {
     Retrieve,
     Prune,
     Compress,
-    Noop
+    Noop,
 }
 
 #[derive(
@@ -651,7 +1074,7 @@ pub enum RewardType {
     Irrelevant,
     Outdated,
     Inaccurate,
-    Duplicate
+    Duplicate,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -661,7 +1084,7 @@ pub struct RewardSignal {
     pub score: f32, // -1.0 to 1.0
     pub reasoning: Option<String>,
     pub agent_id: Option<String>,
-    pub timestamp: i64
+    pub timestamp: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -671,7 +1094,7 @@ pub struct SearchQuery {
     pub target_layers: Vec<MemoryLayer>,
     pub filters: std::collections::HashMap<String, serde_json::Value>,
     pub limit: usize,
-    pub threshold: f32
+    pub threshold: f32,
 }
 
 impl Default for SearchQuery {
@@ -681,7 +1104,7 @@ impl Default for SearchQuery {
             target_layers: Vec::new(),
             filters: std::collections::HashMap::new(),
             limit: 10,
-            threshold: 0.5
+            threshold: 0.5,
         }
     }
 }
@@ -693,7 +1116,7 @@ pub struct SearchResult {
     pub content: String,
     pub score: f32,
     pub layer: MemoryLayer,
-    pub metadata: serde_json::Value
+    pub metadata: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -703,7 +1126,7 @@ pub struct MemoryTrajectoryEvent {
     pub entry_id: String,
     pub reward: Option<RewardSignal>,
     pub reasoning: Option<String>,
-    pub timestamp: i64
+    pub timestamp: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -714,7 +1137,7 @@ pub struct Entity {
     pub entity_type: String,
     pub description: Option<String>,
     pub embedding: Option<Vec<f32>>,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -726,7 +1149,7 @@ pub struct Relationship {
     pub relation_type: String,
     pub weight: f32,
     pub description: Option<String>,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -737,7 +1160,7 @@ pub struct Community {
     pub summary: String,
     pub level: u32,
     pub entity_ids: Vec<String>,
-    pub relationship_ids: Vec<String>
+    pub relationship_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -752,7 +1175,7 @@ pub struct KnowledgeEntry {
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
     pub commit_hash: Option<String>,
     pub author: Option<String>,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 #[derive(
@@ -762,7 +1185,7 @@ pub struct KnowledgeEntry {
 pub enum PolicyMode {
     #[default]
     Optional,
-    Mandatory
+    Mandatory,
 }
 
 #[derive(
@@ -773,7 +1196,7 @@ pub enum RuleMergeStrategy {
     #[default]
     Override,
     Merge,
-    Intersect
+    Intersect,
 }
 
 #[derive(
@@ -783,7 +1206,7 @@ pub enum RuleMergeStrategy {
 pub enum RuleType {
     #[default]
     Allow,
-    Deny
+    Deny,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -798,7 +1221,7 @@ pub struct Policy {
     #[serde(default)]
     pub merge_strategy: RuleMergeStrategy,
     pub rules: Vec<PolicyRule>,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -811,14 +1234,14 @@ pub struct PolicyRule {
     pub operator: ConstraintOperator,
     pub value: serde_json::Value,
     pub severity: ConstraintSeverity,
-    pub message: String
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationResult {
     pub is_valid: bool,
-    pub violations: Vec<PolicyViolation>
+    pub violations: Vec<PolicyViolation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
@@ -828,7 +1251,7 @@ pub struct PolicyViolation {
     pub policy_id: String,
     pub severity: ConstraintSeverity,
     pub message: String,
-    pub context: std::collections::HashMap<String, serde_json::Value>
+    pub context: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Governance event types for auditing and real-time updates
@@ -841,39 +1264,39 @@ pub enum GovernanceEvent {
         unit_type: UnitType,
         tenant_id: TenantId,
         parent_id: Option<String>,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Organizational unit updated
     UnitUpdated {
         unit_id: String,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Organizational unit deleted
     UnitDeleted {
         unit_id: String,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Role assigned to a user for a specific unit
     RoleAssigned {
         user_id: UserId,
         unit_id: String,
-        role: Role,
+        role: RoleIdentifier,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Role removed from a user
     RoleRemoved {
         user_id: UserId,
         unit_id: String,
-        role: Role,
+        role: RoleIdentifier,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Policy created or updated
@@ -881,14 +1304,14 @@ pub enum GovernanceEvent {
         policy_id: String,
         layer: KnowledgeLayer,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Policy deleted
     PolicyDeleted {
         policy_id: String,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Drift detected in a project
@@ -896,7 +1319,7 @@ pub enum GovernanceEvent {
         project_id: String,
         tenant_id: TenantId,
         drift_score: f32,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Governance configuration updated
@@ -904,7 +1327,7 @@ pub enum GovernanceEvent {
         config_id: String,
         scope: String,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Governance approval request created
@@ -913,7 +1336,7 @@ pub enum GovernanceEvent {
         request_type: String,
         title: String,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Governance approval request approved
@@ -922,7 +1345,7 @@ pub enum GovernanceEvent {
         approver_id: String,
         fully_approved: bool,
         tenant_id: TenantId,
-        timestamp: i64
+        timestamp: i64,
     },
 
     /// Governance approval request rejected
@@ -931,8 +1354,73 @@ pub enum GovernanceEvent {
         rejector_id: String,
         reason: String,
         tenant_id: TenantId,
-        timestamp: i64
-    }
+        timestamp: i64,
+    },
+
+    /// Tenant lifecycle: tenant record created
+    TenantCreated {
+        record_id: String,
+        slug: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Tenant lifecycle: tenant record updated
+    TenantUpdated {
+        record_id: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Tenant lifecycle: tenant deactivated
+    TenantDeactivated {
+        record_id: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Repository binding created for a tenant
+    RepositoryBindingCreated {
+        binding_id: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Repository binding updated for a tenant
+    RepositoryBindingUpdated {
+        binding_id: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Git provider connection created (platform-level event)
+    GitProviderConnectionCreated {
+        connection_id: String,
+        /// Platform-level events use a synthetic sentinel TenantId.
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Git provider connection updated (platform-level event)
+    GitProviderConnectionUpdated {
+        connection_id: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Tenant granted visibility of a Git provider connection
+    GitProviderConnectionTenantGranted {
+        connection_id: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Tenant revoked from a Git provider connection
+    GitProviderConnectionTenantRevoked {
+        connection_id: String,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
 }
 
 impl GovernanceEvent {
@@ -950,7 +1438,16 @@ impl GovernanceEvent {
             GovernanceEvent::ConfigUpdated { tenant_id, .. } => tenant_id,
             GovernanceEvent::RequestCreated { tenant_id, .. } => tenant_id,
             GovernanceEvent::RequestApproved { tenant_id, .. } => tenant_id,
-            GovernanceEvent::RequestRejected { tenant_id, .. } => tenant_id
+            GovernanceEvent::RequestRejected { tenant_id, .. } => tenant_id,
+            GovernanceEvent::TenantCreated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::TenantUpdated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::TenantDeactivated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RepositoryBindingCreated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::RepositoryBindingUpdated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::GitProviderConnectionCreated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::GitProviderConnectionUpdated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::GitProviderConnectionTenantGranted { tenant_id, .. } => tenant_id,
+            GovernanceEvent::GitProviderConnectionTenantRevoked { tenant_id, .. } => tenant_id,
         }
     }
 }
@@ -966,7 +1463,7 @@ pub struct DriftResult {
     pub violations: Vec<PolicyViolation>,
     pub suppressed_violations: Vec<PolicyViolation>,
     pub requires_manual_review: bool,
-    pub timestamp: i64
+    pub timestamp: i64,
 }
 
 impl DriftResult {
@@ -980,7 +1477,7 @@ impl DriftResult {
             violations,
             suppressed_violations: Vec::new(),
             requires_manual_review: false,
-            timestamp: chrono::Utc::now().timestamp()
+            timestamp: chrono::Utc::now().timestamp(),
         }
     }
 
@@ -1004,7 +1501,7 @@ impl DriftResult {
             .map(|v| match v.severity {
                 ConstraintSeverity::Block => 1.0,
                 ConstraintSeverity::Warn => 0.5,
-                ConstraintSeverity::Info => 0.1
+                ConstraintSeverity::Info => 0.1,
             })
             .sum::<f32>()
             .min(1.0)
@@ -1031,7 +1528,7 @@ pub struct DriftSuppression {
     pub reason: String,
     pub created_by: UserId,
     pub expires_at: Option<i64>,
-    pub created_at: i64
+    pub created_at: i64,
 }
 
 impl DriftSuppression {
@@ -1040,7 +1537,7 @@ impl DriftSuppression {
         tenant_id: TenantId,
         policy_id: String,
         reason: String,
-        created_by: UserId
+        created_by: UserId,
     ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -1051,7 +1548,7 @@ impl DriftSuppression {
             reason,
             created_by,
             expires_at: None,
-            created_at: chrono::Utc::now().timestamp()
+            created_at: chrono::Utc::now().timestamp(),
         }
     }
 
@@ -1095,7 +1592,7 @@ pub struct DriftConfig {
     pub threshold: f32,
     pub low_confidence_threshold: f32,
     pub auto_suppress_info: bool,
-    pub updated_at: i64
+    pub updated_at: i64,
 }
 
 impl Default for DriftConfig {
@@ -1106,7 +1603,7 @@ impl Default for DriftConfig {
             threshold: 0.2,
             low_confidence_threshold: 0.7,
             auto_suppress_info: false,
-            updated_at: chrono::Utc::now().timestamp()
+            updated_at: chrono::Utc::now().timestamp(),
         }
     }
 }
@@ -1143,7 +1640,7 @@ pub fn validate_user_id(id: &&String) -> Result<(), validator::ValidationError> 
 pub fn validate_session_id(id: &&String) -> Result<(), validator::ValidationError> {
     if id.is_empty() {
         return Err(validator::ValidationError::new(
-            "Session ID cannot be empty"
+            "Session ID cannot be empty",
         ));
     }
     Ok(())
@@ -1152,7 +1649,7 @@ pub fn validate_session_id(id: &&String) -> Result<(), validator::ValidationErro
 pub fn validate_project_id(id: &&String) -> Result<(), validator::ValidationError> {
     if id.is_empty() {
         return Err(validator::ValidationError::new(
-            "Project ID cannot be empty"
+            "Project ID cannot be empty",
         ));
     }
     Ok(())
@@ -1175,7 +1672,7 @@ pub fn validate_org_id(id: &&String) -> Result<(), validator::ValidationError> {
 pub fn validate_company_id(id: &&String) -> Result<(), validator::ValidationError> {
     if id.is_empty() {
         return Err(validator::ValidationError::new(
-            "Company ID cannot be empty"
+            "Company ID cannot be empty",
         ));
     }
     Ok(())
@@ -1197,7 +1694,7 @@ pub enum EventStatus {
     Pending,
     Published,
     Acknowledged,
-    DeadLettered
+    DeadLettered,
 }
 
 impl std::fmt::Display for EventStatus {
@@ -1206,7 +1703,7 @@ impl std::fmt::Display for EventStatus {
             EventStatus::Pending => write!(f, "pending"),
             EventStatus::Published => write!(f, "published"),
             EventStatus::Acknowledged => write!(f, "acknowledged"),
-            EventStatus::DeadLettered => write!(f, "dead_lettered")
+            EventStatus::DeadLettered => write!(f, "dead_lettered"),
         }
     }
 }
@@ -1227,7 +1724,7 @@ pub struct PersistentEvent {
     pub created_at: i64,
     pub published_at: Option<i64>,
     pub acknowledged_at: Option<i64>,
-    pub dead_lettered_at: Option<i64>
+    pub dead_lettered_at: Option<i64>,
 }
 
 impl PersistentEvent {
@@ -1252,7 +1749,7 @@ impl PersistentEvent {
             created_at: timestamp,
             published_at: None,
             acknowledged_at: None,
-            dead_lettered_at: None
+            dead_lettered_at: None,
         }
     }
 
@@ -1276,7 +1773,28 @@ impl PersistentEvent {
             GovernanceEvent::ConfigUpdated { .. } => "config_updated".to_string(),
             GovernanceEvent::RequestCreated { .. } => "request_created".to_string(),
             GovernanceEvent::RequestApproved { .. } => "request_approved".to_string(),
-            GovernanceEvent::RequestRejected { .. } => "request_rejected".to_string()
+            GovernanceEvent::RequestRejected { .. } => "request_rejected".to_string(),
+            GovernanceEvent::TenantCreated { .. } => "tenant_created".to_string(),
+            GovernanceEvent::TenantUpdated { .. } => "tenant_updated".to_string(),
+            GovernanceEvent::TenantDeactivated { .. } => "tenant_deactivated".to_string(),
+            GovernanceEvent::RepositoryBindingCreated { .. } => {
+                "repository_binding_created".to_string()
+            }
+            GovernanceEvent::RepositoryBindingUpdated { .. } => {
+                "repository_binding_updated".to_string()
+            }
+            GovernanceEvent::GitProviderConnectionCreated { .. } => {
+                "git_provider_connection_created".to_string()
+            }
+            GovernanceEvent::GitProviderConnectionUpdated { .. } => {
+                "git_provider_connection_updated".to_string()
+            }
+            GovernanceEvent::GitProviderConnectionTenantGranted { .. } => {
+                "git_provider_connection_tenant_granted".to_string()
+            }
+            GovernanceEvent::GitProviderConnectionTenantRevoked { .. } => {
+                "git_provider_connection_tenant_revoked".to_string()
+            }
         }
     }
 
@@ -1320,7 +1838,7 @@ pub struct EventDeliveryMetrics {
     pub delivered_events: i64,
     pub retried_events: i64,
     pub dead_lettered_events: i64,
-    pub avg_delivery_time_ms: Option<f64>
+    pub avg_delivery_time_ms: Option<f64>,
 }
 
 impl EventDeliveryMetrics {
@@ -1328,7 +1846,7 @@ impl EventDeliveryMetrics {
         tenant_id: TenantId,
         event_type: String,
         period_start: i64,
-        period_end: i64
+        period_end: i64,
     ) -> Self {
         Self {
             tenant_id,
@@ -1339,7 +1857,7 @@ impl EventDeliveryMetrics {
             delivered_events: 0,
             retried_events: 0,
             dead_lettered_events: 0,
-            avg_delivery_time_ms: None
+            avg_delivery_time_ms: None,
         }
     }
 
@@ -1356,7 +1874,7 @@ pub struct ConsumerState {
     pub consumer_group: String,
     pub idempotency_key: String,
     pub tenant_id: TenantId,
-    pub processed_at: i64
+    pub processed_at: i64,
 }
 
 impl ConsumerState {
@@ -1365,7 +1883,7 @@ impl ConsumerState {
             consumer_group,
             idempotency_key,
             tenant_id,
-            processed_at: chrono::Utc::now().timestamp()
+            processed_at: chrono::Utc::now().timestamp(),
         }
     }
 }
@@ -1382,7 +1900,7 @@ pub struct JobCoordinationMetrics {
     pub timeout_count: u64,
     pub total_duration_ms: u64,
     pub last_run_at: Option<i64>,
-    pub last_success_at: Option<i64>
+    pub last_success_at: Option<i64>,
 }
 
 impl JobCoordinationMetrics {
@@ -1397,7 +1915,7 @@ impl JobCoordinationMetrics {
             timeout_count: 0,
             total_duration_ms: 0,
             last_run_at: None,
-            last_success_at: None
+            last_success_at: None,
         }
     }
 
@@ -1449,7 +1967,7 @@ pub struct PartialJobResult {
     pub total_count: Option<usize>,
     pub last_processed_id: Option<String>,
     pub partial_data: serde_json::Value,
-    pub created_at: i64
+    pub created_at: i64,
 }
 
 impl PartialJobResult {
@@ -1462,7 +1980,7 @@ impl PartialJobResult {
             total_count: None,
             last_processed_id: None,
             partial_data: serde_json::Value::Null,
-            created_at: chrono::Utc::now().timestamp()
+            created_at: chrono::Utc::now().timestamp(),
         }
     }
 
@@ -1576,7 +2094,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1234567890,
-            updated_at: 1234567890
+            updated_at: 1234567890,
         };
 
         assert_eq!(entry.id, "test_id");
@@ -1597,7 +2115,7 @@ mod tests {
             commit_hash: Some("abc123".to_string()),
             author: Some("Alice".to_string()),
             status: KnowledgeStatus::Accepted,
-            updated_at: 1234567890
+            updated_at: 1234567890,
         };
 
         assert_eq!(entry.path, "docs/adr/001.md");
@@ -1615,7 +2133,7 @@ mod tests {
             operator: ConstraintOperator::MustNotUse,
             value: serde_json::json!("unsafe-lib"),
             severity: ConstraintSeverity::Block,
-            message: "Do not use unsafe libraries".to_string()
+            message: "Do not use unsafe libraries".to_string(),
         };
 
         let policy = Policy {
@@ -1626,7 +2144,7 @@ mod tests {
             mode: PolicyMode::Mandatory,
             merge_strategy: RuleMergeStrategy::Merge,
             rules: vec![rule],
-            metadata: std::collections::HashMap::new()
+            metadata: std::collections::HashMap::new(),
         };
 
         assert_eq!(policy.id, "policy_1");
@@ -1642,12 +2160,12 @@ mod tests {
             policy_id: "policy_1".to_string(),
             severity: ConstraintSeverity::Warn,
             message: "Warning message".to_string(),
-            context: std::collections::HashMap::new()
+            context: std::collections::HashMap::new(),
         };
 
         let result = ValidationResult {
             is_valid: false,
-            violations: vec![violation]
+            violations: vec![violation],
         };
 
         assert!(!result.is_valid);
@@ -1720,7 +2238,7 @@ mod tests {
             project_id: Some("project_789".to_string()),
             team_id: Some("team_abc".to_string()),
             org_id: Some("org_xyz".to_string()),
-            company_id: Some("company_123".to_string())
+            company_id: Some("company_123".to_string()),
         };
 
         let result = identifiers.validate();
@@ -1736,7 +2254,7 @@ mod tests {
             project_id: None,
             team_id: None,
             org_id: None,
-            company_id: None
+            company_id: None,
         };
 
         let result = identifiers.validate();
@@ -1839,11 +2357,14 @@ mod tests {
 
     #[test]
     fn test_role_precedence() {
-        assert_eq!(Role::Admin.precedence(), 4);
-        assert_eq!(Role::Architect.precedence(), 3);
-        assert_eq!(Role::TechLead.precedence(), 2);
-        assert_eq!(Role::Developer.precedence(), 1);
+        assert_eq!(Role::Viewer.precedence(), 0);
         assert_eq!(Role::Agent.precedence(), 0);
+        assert_eq!(Role::Developer.precedence(), 1);
+        assert_eq!(Role::TechLead.precedence(), 2);
+        assert_eq!(Role::Architect.precedence(), 3);
+        assert_eq!(Role::Admin.precedence(), 4);
+        assert_eq!(Role::PlatformAdmin.precedence(), 5);
+        assert_eq!(Role::TenantAdmin.precedence(), 6);
     }
 
     #[test]
@@ -1891,7 +2412,7 @@ mod tests {
             "c1".to_string(),
             "o1".to_string(),
             "t1".to_string(),
-            "p1".to_string()
+            "p1".to_string(),
         );
         assert_eq!(project.depth(), 4);
     }
@@ -1902,7 +2423,7 @@ mod tests {
             "c1".to_string(),
             "o1".to_string(),
             "t1".to_string(),
-            "p1".to_string()
+            "p1".to_string(),
         );
         assert_eq!(project.path_string(), "c1 > o1 > t1 > p1");
     }
@@ -1978,48 +2499,48 @@ mod tests {
                 unit_type: UnitType::Company,
                 tenant_id: tenant_id.clone(),
                 parent_id: None,
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::UnitUpdated {
                 unit_id: "u1".to_string(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::UnitDeleted {
                 unit_id: "u1".to_string(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::RoleAssigned {
                 user_id: user_id.clone(),
                 unit_id: "u1".to_string(),
-                role: Role::Admin,
+                role: Role::Admin.into(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::RoleRemoved {
                 user_id: user_id.clone(),
                 unit_id: "u1".to_string(),
-                role: Role::Admin,
+                role: Role::Admin.into(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::PolicyUpdated {
                 policy_id: "p1".to_string(),
                 layer: KnowledgeLayer::Company,
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::PolicyDeleted {
                 policy_id: "p1".to_string(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
             GovernanceEvent::DriftDetected {
                 project_id: "proj-1".to_string(),
                 tenant_id: tenant_id.clone(),
                 drift_score: 0.5,
-                timestamp: 0
+                timestamp: 0,
             },
         ];
 
@@ -2030,11 +2551,14 @@ mod tests {
 
     #[test]
     fn test_role_display_name() {
+        assert_eq!(Role::Viewer.display_name(), "Viewer");
         assert_eq!(Role::Developer.display_name(), "Developer");
         assert_eq!(Role::TechLead.display_name(), "Tech Lead");
         assert_eq!(Role::Architect.display_name(), "Architect");
         assert_eq!(Role::Admin.display_name(), "Admin");
+        assert_eq!(Role::TenantAdmin.display_name(), "Tenant Admin");
         assert_eq!(Role::Agent.display_name(), "Agent");
+        assert_eq!(Role::PlatformAdmin.display_name(), "Platform Admin");
     }
 
     #[test]
@@ -2047,7 +2571,7 @@ mod tests {
             tenant_id.clone(),
             "policy-1".to_string(),
             "False positive".to_string(),
-            user_id.clone()
+            user_id.clone(),
         );
 
         assert_eq!(suppression.project_id, "proj-1");
@@ -2069,7 +2593,7 @@ mod tests {
             tenant_id,
             "policy-1".to_string(),
             "Known issue".to_string(),
-            user_id
+            user_id,
         )
         .with_pattern(".*test.*".to_string());
 
@@ -2087,7 +2611,7 @@ mod tests {
             tenant_id,
             "policy-1".to_string(),
             "Temporary".to_string(),
-            user_id
+            user_id,
         )
         .with_expiry(future_time);
 
@@ -2104,7 +2628,7 @@ mod tests {
             tenant_id.clone(),
             "policy-1".to_string(),
             "Not expired".to_string(),
-            user_id.clone()
+            user_id.clone(),
         );
         assert!(!not_expired.is_expired());
 
@@ -2113,7 +2637,7 @@ mod tests {
             tenant_id.clone(),
             "policy-1".to_string(),
             "Future".to_string(),
-            user_id.clone()
+            user_id.clone(),
         )
         .with_expiry(chrono::Utc::now().timestamp() + 86400);
         assert!(!future_expiry.is_expired());
@@ -2123,7 +2647,7 @@ mod tests {
             tenant_id,
             "policy-1".to_string(),
             "Expired".to_string(),
-            user_id
+            user_id,
         )
         .with_expiry(chrono::Utc::now().timestamp() - 86400);
         assert!(past_expiry.is_expired());
@@ -2139,7 +2663,7 @@ mod tests {
             policy_id: "policy-1".to_string(),
             severity: ConstraintSeverity::Warn,
             message: "Test violation message".to_string(),
-            context: std::collections::HashMap::new()
+            context: std::collections::HashMap::new(),
         };
 
         let suppression_match = DriftSuppression::new(
@@ -2147,7 +2671,7 @@ mod tests {
             tenant_id.clone(),
             "policy-1".to_string(),
             "Match all".to_string(),
-            user_id.clone()
+            user_id.clone(),
         );
         assert!(suppression_match.matches(&violation));
 
@@ -2156,7 +2680,7 @@ mod tests {
             tenant_id.clone(),
             "policy-2".to_string(),
             "Different policy".to_string(),
-            user_id.clone()
+            user_id.clone(),
         );
         assert!(!suppression_no_match.matches(&violation));
 
@@ -2165,7 +2689,7 @@ mod tests {
             tenant_id.clone(),
             "policy-1".to_string(),
             "Pattern match".to_string(),
-            user_id.clone()
+            user_id.clone(),
         )
         .with_pattern(".*violation.*".to_string());
         assert!(suppression_pattern_match.matches(&violation));
@@ -2175,7 +2699,7 @@ mod tests {
             tenant_id,
             "policy-1".to_string(),
             "Pattern no match".to_string(),
-            user_id
+            user_id,
         )
         .with_pattern(".*xyz.*".to_string());
         assert!(!suppression_pattern_no_match.matches(&violation));
@@ -2238,14 +2762,14 @@ mod tests {
                 policy_id: "p1".to_string(),
                 severity: ConstraintSeverity::Warn,
                 message: "Warning".to_string(),
-                context: std::collections::HashMap::new()
+                context: std::collections::HashMap::new(),
             },
             PolicyViolation {
                 rule_id: "r2".to_string(),
                 policy_id: "p1".to_string(),
                 severity: ConstraintSeverity::Block,
                 message: "Blocking".to_string(),
-                context: std::collections::HashMap::new()
+                context: std::collections::HashMap::new(),
             },
         ];
 
@@ -2262,7 +2786,7 @@ mod tests {
             policy_id: "p1".to_string(),
             severity: ConstraintSeverity::Info,
             message: "Suppressed".to_string(),
-            context: std::collections::HashMap::new()
+            context: std::collections::HashMap::new(),
         }];
 
         assert_eq!(result.suppressed_count(), 1);
@@ -2420,7 +2944,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         let mut persistent = PersistentEvent::new(event);
@@ -2440,7 +2964,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         let mut persistent = PersistentEvent::new(event);
@@ -2458,7 +2982,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         let mut persistent = PersistentEvent::new(event);
@@ -2481,7 +3005,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         let mut persistent = PersistentEvent::new(event);
@@ -2502,7 +3026,7 @@ mod tests {
             unit_type: UnitType::Company,
             tenant_id: tenant_id.clone(),
             parent_id: None,
-            timestamp: 0
+            timestamp: 0,
         };
 
         let mut persistent = PersistentEvent::new(event);
@@ -2551,7 +3075,7 @@ mod tests {
         let state = ConsumerState::new(
             "drift_processor".to_string(),
             "idempotency-key-123".to_string(),
-            tenant_id.clone()
+            tenant_id.clone(),
         );
 
         assert_eq!(state.consumer_group, "drift_processor");
@@ -2614,7 +3138,7 @@ mod tests {
             source_hash: "abc123def456".to_string(),
             content_hash: None,
             personalized: false,
-            personalization_context: None
+            personalization_context: None,
         };
 
         assert_eq!(summary.depth, SummaryDepth::Sentence);
@@ -2635,7 +3159,7 @@ mod tests {
             source_hash: "hash789".to_string(),
             content_hash: None,
             personalized: true,
-            personalization_context: Some("backend developer, Rust experience".to_string())
+            personalization_context: Some("backend developer, Rust experience".to_string()),
         };
 
         assert!(summary.personalized);
@@ -2655,7 +3179,7 @@ mod tests {
             source_hash: "source_hash_value".to_string(),
             content_hash: None,
             personalized: true,
-            personalization_context: Some("security focus".to_string())
+            personalization_context: Some("security focus".to_string()),
         };
 
         let json = serde_json::to_string(&summary).unwrap();
@@ -2674,7 +3198,7 @@ mod tests {
             source_hash: "hash".to_string(),
             content_hash: None,
             personalized: false,
-            personalization_context: None
+            personalization_context: None,
         };
 
         let json: serde_json::Value = serde_json::to_value(&summary).unwrap();
@@ -2696,7 +3220,7 @@ mod tests {
             update_on_changes: Some(10),
             skip_if_unchanged: true,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph]
+            depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph],
         };
 
         assert_eq!(config.layer, MemoryLayer::Project);
@@ -2715,7 +3239,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: true,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         assert!(config.update_interval_secs.is_some());
@@ -2730,7 +3254,7 @@ mod tests {
             update_on_changes: Some(5),
             skip_if_unchanged: false,
             personalized: true,
-            depths: vec![SummaryDepth::Detailed]
+            depths: vec![SummaryDepth::Detailed],
         };
 
         assert!(config.update_interval_secs.is_none());
@@ -2749,7 +3273,7 @@ mod tests {
                 SummaryDepth::Sentence,
                 SummaryDepth::Paragraph,
                 SummaryDepth::Detailed,
-            ]
+            ],
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -2766,7 +3290,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: false,
             personalized: true,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         let json: serde_json::Value = serde_json::to_value(&config).unwrap();
@@ -2799,8 +3323,8 @@ mod tests {
                 source_hash: "hash1".to_string(),
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
         summaries.insert(
             SummaryDepth::Paragraph,
@@ -2812,8 +3336,8 @@ mod tests {
                 source_hash: "hash1".to_string(),
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let entry = MemoryEntry {
@@ -2826,7 +3350,7 @@ mod tests {
             importance_score: Some(0.85),
             metadata: std::collections::HashMap::new(),
             created_at: 1705500000,
-            updated_at: 1705500000
+            updated_at: 1705500000,
         };
 
         assert_eq!(entry.summaries.len(), 2);
@@ -2848,7 +3372,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1705500000,
-            updated_at: 1705500000
+            updated_at: 1705500000,
         };
 
         assert!(entry.summaries.is_empty());
@@ -2868,8 +3392,8 @@ mod tests {
                 source_hash: "hash_abc".to_string(),
                 content_hash: None,
                 personalized: true,
-                personalization_context: Some("developer".to_string())
-            }
+                personalization_context: Some("developer".to_string()),
+            },
         );
 
         let entry = MemoryEntry {
@@ -2882,7 +3406,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let json = serde_json::to_string(&entry).unwrap();
@@ -2912,7 +3436,7 @@ mod tests {
                 update_on_changes: None,
                 skip_if_unchanged: true,
                 personalized: false,
-                depths: vec![SummaryDepth::Sentence]
+                depths: vec![SummaryDepth::Sentence],
             };
 
             let json = serde_json::to_string(&config).unwrap();
@@ -2933,7 +3457,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1000,
-            updated_at: 1000
+            updated_at: 1000,
         };
 
         let config = SummaryConfig {
@@ -2942,7 +3466,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: true,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         assert!(entry.needs_summary_update(&config, 2000));
@@ -2967,8 +3491,8 @@ mod tests {
                 source_hash: content_hash,
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let entry = MemoryEntry {
@@ -2981,7 +3505,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1000,
-            updated_at: 1000
+            updated_at: 1000,
         };
 
         let config = SummaryConfig {
@@ -2990,7 +3514,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: false,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         assert!(!entry.needs_summary_update(&config, 2000));
@@ -3010,8 +3534,8 @@ mod tests {
                 source_hash: "old_hash".to_string(),
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let entry = MemoryEntry {
@@ -3024,7 +3548,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1000,
-            updated_at: 2000
+            updated_at: 2000,
         };
 
         let config = SummaryConfig {
@@ -3033,7 +3557,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: true,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         assert!(entry.needs_summary_update(&config, 1500));
@@ -3058,8 +3582,8 @@ mod tests {
                 source_hash: content_hash,
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let entry = MemoryEntry {
@@ -3072,7 +3596,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 1000,
-            updated_at: 1000
+            updated_at: 1000,
         };
 
         let config = SummaryConfig {
@@ -3081,7 +3605,7 @@ mod tests {
             update_on_changes: None,
             skip_if_unchanged: true,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence]
+            depths: vec![SummaryDepth::Sentence],
         };
 
         assert!(!entry.needs_summary_update(&config, 2000));
@@ -3099,7 +3623,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let hash = entry.compute_content_hash();
@@ -3122,7 +3646,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         let entry2 = MemoryEntry {
@@ -3135,7 +3659,7 @@ mod tests {
             importance_score: None,
             metadata: std::collections::HashMap::new(),
             created_at: 0,
-            updated_at: 0
+            updated_at: 0,
         };
 
         assert_ne!(entry1.compute_content_hash(), entry2.compute_content_hash());
@@ -3158,7 +3682,7 @@ mod tests {
             message_pattern: "Cannot read property '.*' of undefined".to_string(),
             stack_patterns: vec!["at UserService".to_string(), "at AuthHandler".to_string()],
             context_patterns: vec!["typescript".to_string(), "react".to_string()],
-            embedding: Some(vec![0.1, 0.2, 0.3])
+            embedding: Some(vec![0.1, 0.2, 0.3]),
         };
 
         assert_eq!(sig.error_type, "NullPointerException");
@@ -3173,7 +3697,7 @@ mod tests {
             message_pattern: ".*is not a function".to_string(),
             stack_patterns: vec![],
             context_patterns: vec!["javascript".to_string()],
-            embedding: None
+            embedding: None,
         };
 
         let json = serde_json::to_string(&sig).unwrap();
@@ -3189,7 +3713,7 @@ mod tests {
         let change = CodeChange {
             file_path: "src/auth.rs".to_string(),
             diff: "+ if let Some(token) = token_option {\n+     // handle\n+ }".to_string(),
-            description: Some("Added null check for token".to_string())
+            description: Some("Added null check for token".to_string()),
         };
 
         assert_eq!(change.file_path, "src/auth.rs");
@@ -3205,11 +3729,11 @@ mod tests {
             changes: vec![CodeChange {
                 file_path: "src/auth.rs".to_string(),
                 diff: "+ if token.is_some()".to_string(),
-                description: None
+                description: None,
             }],
             success_rate: 0.95,
             application_count: 12,
-            last_success_at: 1705500000
+            last_success_at: 1705500000,
         };
 
         assert_eq!(resolution.success_rate, 0.95);
@@ -3226,7 +3750,7 @@ mod tests {
             changes: vec![],
             success_rate: 1.0,
             application_count: 5,
-            last_success_at: 1705600000
+            last_success_at: 1705600000,
         };
 
         let json = serde_json::to_string(&resolution).unwrap();
@@ -3246,7 +3770,7 @@ mod tests {
                 message_pattern: "missing lifetime specifier".to_string(),
                 stack_patterns: vec![],
                 context_patterns: vec!["rust".to_string()],
-                embedding: None
+                embedding: None,
             },
             resolutions: vec![Resolution {
                 id: "res_001".to_string(),
@@ -3255,7 +3779,7 @@ mod tests {
                 changes: vec![],
                 success_rate: 0.88,
                 application_count: 8,
-                last_success_at: 1705500000
+                last_success_at: 1705500000,
             }],
             content: "# Rust Lifetime Error\n\nWhen encountering...".to_string(),
             tags: vec![
@@ -3264,7 +3788,7 @@ mod tests {
                 "borrow-checker".to_string(),
             ],
             created_at: 1705400000,
-            updated_at: 1705500000
+            updated_at: 1705500000,
         };
 
         assert_eq!(note.id, "hn_001");
@@ -3281,13 +3805,13 @@ mod tests {
                 message_pattern: "index out of bounds".to_string(),
                 stack_patterns: vec!["at main".to_string()],
                 context_patterns: vec!["rust".to_string()],
-                embedding: Some(vec![0.5, 0.6])
+                embedding: Some(vec![0.5, 0.6]),
             },
             resolutions: vec![],
             content: "# Array Bounds Error".to_string(),
             tags: vec!["rust".to_string()],
             created_at: 1705400000,
-            updated_at: 1705400000
+            updated_at: 1705400000,
         };
 
         let json = serde_json::to_string(&note).unwrap();
@@ -3299,5 +3823,292 @@ mod tests {
             note.error_signature.error_type
         );
         assert_eq!(parsed.tags, note.tags);
+    }
+
+    mod role_identifier_tests {
+        use super::*;
+        use std::collections::HashSet;
+        use std::hash::{Hash, Hasher};
+        use std::str::FromStr;
+
+        #[test]
+        fn test_role_identifier_serde_roundtrip_known_variant_expected() {
+            let role = RoleIdentifier::Known(Role::Admin);
+            let json = serde_json::to_string(&role).unwrap();
+            assert_eq!(json, "\"admin\"");
+
+            let deserialized: RoleIdentifier = serde_json::from_str(&json).unwrap();
+            assert_eq!(deserialized, RoleIdentifier::Known(Role::Admin));
+        }
+
+        #[test]
+        fn test_role_identifier_serde_roundtrip_custom_variant_expected() {
+            let role = RoleIdentifier::Custom("billingOwner".to_string());
+            let json = serde_json::to_string(&role).unwrap();
+            assert_eq!(json, "\"billingOwner\"");
+
+            let deserialized: RoleIdentifier = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                deserialized,
+                RoleIdentifier::Custom("billingOwner".to_string())
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_partial_eq_cross_variant_case_insensitive_expected() {
+            assert_eq!(
+                RoleIdentifier::Known(Role::Admin),
+                RoleIdentifier::Custom("admin".to_string())
+            );
+            assert_eq!(
+                RoleIdentifier::Known(Role::Admin),
+                RoleIdentifier::Custom("AdMiN".to_string())
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_hash_consistency_equal_values_same_hash_expected() {
+            let known = RoleIdentifier::Known(Role::Admin);
+            let custom = RoleIdentifier::Custom("admin".to_string());
+
+            let mut hasher_known = std::collections::hash_map::DefaultHasher::new();
+            known.hash(&mut hasher_known);
+            let known_hash = hasher_known.finish();
+
+            let mut hasher_custom = std::collections::hash_map::DefaultHasher::new();
+            custom.hash(&mut hasher_custom);
+            let custom_hash = hasher_custom.finish();
+
+            assert_eq!(known_hash, custom_hash);
+        }
+
+        #[test]
+        fn test_role_identifier_display_known_and_custom_expected() {
+            assert_eq!(RoleIdentifier::Known(Role::Admin).to_string(), "Admin");
+            assert_eq!(
+                RoleIdentifier::Custom("billingOwner".to_string()).to_string(),
+                "billingOwner"
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_from_str_flexible_known_and_custom_expected() {
+            assert_eq!(
+                RoleIdentifier::from_str_flexible("admin"),
+                RoleIdentifier::Known(Role::Admin)
+            );
+            assert_eq!(
+                RoleIdentifier::from_str_flexible("BillingOwner"),
+                RoleIdentifier::Custom("BillingOwner".to_string())
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_as_cedar_entity_id_known_and_custom_expected() {
+            assert_eq!(
+                RoleIdentifier::Known(Role::Admin).as_cedar_entity_id(),
+                "Admin"
+            );
+            assert_eq!(
+                RoleIdentifier::Custom("billingOwner".to_string()).as_cedar_entity_id(),
+                "billingOwner"
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_from_role_conversion_expected() {
+            let role_identifier: RoleIdentifier = Role::TechLead.into();
+            assert_eq!(role_identifier, RoleIdentifier::Known(Role::TechLead));
+        }
+
+        #[test]
+        fn test_role_identifier_helpers_known_and_custom_expected() {
+            let known = RoleIdentifier::Known(Role::Architect);
+            assert!(known.is_known());
+            assert!(!known.is_custom());
+            assert_eq!(known.as_known(), Some(&Role::Architect));
+
+            let custom = RoleIdentifier::Custom("billingOwner".to_string());
+            assert!(!custom.is_known());
+            assert!(custom.is_custom());
+            assert_eq!(custom.as_known(), None);
+        }
+
+        #[test]
+        fn test_tenant_context_role_helpers_with_role_and_with_roles_expected() {
+            let tenant_id = TenantId::new("tenant-1".to_string()).unwrap();
+            let user_id = UserId::new("user-1".to_string()).unwrap();
+
+            let ctx = TenantContext::new(tenant_id.clone(), user_id.clone())
+                .with_role(Role::Developer)
+                .with_role(RoleIdentifier::Custom("BillingOwner".to_string()));
+
+            assert!(ctx.has_role(&RoleIdentifier::Known(Role::Developer)));
+            assert!(ctx.has_known_role(&Role::Developer));
+            assert!(ctx.has_role(&RoleIdentifier::Custom("BillingOwner".to_string())));
+
+            let replaced = TenantContext::new(tenant_id, user_id).with_roles(vec![
+                RoleIdentifier::Known(Role::Viewer),
+                RoleIdentifier::Custom("Support".to_string()),
+            ]);
+
+            assert!(replaced.has_known_role(&Role::Viewer));
+            assert!(replaced.has_role(&RoleIdentifier::Custom("Support".to_string())));
+            assert!(!replaced.has_known_role(&Role::Developer));
+        }
+
+        #[test]
+        fn test_tenant_context_highest_precedence_role_mixed_roles_expected() {
+            let ctx = TenantContext::new(
+                TenantId::new("tenant-1".to_string()).unwrap(),
+                UserId::new("user-1".to_string()).unwrap(),
+            )
+            .with_roles(vec![
+                RoleIdentifier::Custom("customRole".to_string()),
+                RoleIdentifier::Known(Role::Admin),
+                RoleIdentifier::Known(Role::TenantAdmin),
+            ]);
+
+            assert_eq!(
+                ctx.highest_precedence_role(),
+                Some(&RoleIdentifier::Known(Role::TenantAdmin))
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_backward_compat_old_json_known_role_expected() {
+            let json = r#"{"tenant_id":"tenant-1","user_id":"user-1","roles":["admin"]}"#;
+            let ctx: TenantContext = serde_json::from_str(json).unwrap();
+
+            assert_eq!(ctx.roles, vec![RoleIdentifier::Known(Role::Admin)]);
+        }
+
+        #[test]
+        fn test_role_identifier_backward_compat_unknown_string_custom_expected() {
+            let json = r#"{"tenant_id":"tenant-1","user_id":"user-1","roles":["billingOwner"]}"#;
+            let ctx: TenantContext = serde_json::from_str(json).unwrap();
+
+            assert_eq!(
+                ctx.roles,
+                vec![RoleIdentifier::Custom("billingOwner".to_string())]
+            );
+        }
+
+        #[test]
+        fn test_role_identifier_all_known_variants_roundtrip_expected() {
+            let known_roles = [
+                Role::Viewer,
+                Role::Developer,
+                Role::TechLead,
+                Role::Architect,
+                Role::Admin,
+                Role::TenantAdmin,
+                Role::Agent,
+                Role::PlatformAdmin,
+            ];
+
+            for role in known_roles {
+                let wrapped = RoleIdentifier::Known(role);
+                let json = serde_json::to_string(&wrapped).unwrap();
+                let deserialized: RoleIdentifier = serde_json::from_str(&json).unwrap();
+                assert_eq!(deserialized, wrapped);
+            }
+        }
+
+        #[test]
+        fn test_role_identifier_hash_set_dedup_known_and_custom_case_expected() {
+            let mut set = HashSet::new();
+            set.insert(RoleIdentifier::Known(Role::Admin));
+            set.insert(RoleIdentifier::Custom("admin".to_string()));
+
+            assert_eq!(set.len(), 1);
+        }
+
+        #[test]
+        fn test_role_identifier_from_str_trait_known_and_custom_expected() {
+            assert_eq!(
+                RoleIdentifier::from_str("admin").unwrap(),
+                RoleIdentifier::Known(Role::Admin)
+            );
+            assert_eq!(
+                RoleIdentifier::from_str("billingOwner").unwrap(),
+                RoleIdentifier::Custom("billingOwner".to_string())
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Git provider connection types (task 3.4)
+// ---------------------------------------------------------------------------
+
+/// The kind of Git provider backing a platform-owned connection.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum GitProviderKind {
+    GitHubApp,
+}
+
+/// A platform-owned GitHub App connection record.
+///
+/// The PEM private key is never stored inline; `pem_secret_ref` holds a
+/// secret-provider reference (e.g. `local/...`, `secret/...`, `arn:aws:...`).
+/// One connection can be shared with multiple tenants via `allowed_tenant_ids`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GitProviderConnection {
+    /// Stable UUID for this connection.
+    pub id: String,
+    /// Human-readable label.
+    pub name: String,
+    /// Provider kind (currently only GitHubApp).
+    pub provider_kind: GitProviderKind,
+    /// GitHub App ID.
+    pub app_id: u64,
+    /// GitHub App installation ID.
+    pub installation_id: u64,
+    /// Secret-provider reference to the PEM private key.
+    pub pem_secret_ref: String,
+    /// Optional secret-provider reference to the webhook secret.
+    pub webhook_secret_ref: Option<String>,
+    /// Tenants allowed to reference this connection in their repository binding.
+    pub allowed_tenant_ids: Vec<TenantId>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+impl GitProviderConnection {
+    /// Returns `true` if the PEM reference uses a supported secret-provider prefix.
+    #[must_use]
+    pub fn has_valid_pem_ref(&self) -> bool {
+        self.pem_secret_ref.starts_with("local/")
+            || self.pem_secret_ref.starts_with("secret/")
+            || self.pem_secret_ref.starts_with("arn:aws:")
+    }
+
+    /// Returns `true` when `tenant_id` is in the allow-list.
+    #[must_use]
+    pub fn is_visible_to(&self, tenant_id: &TenantId) -> bool {
+        self.allowed_tenant_ids.contains(tenant_id)
+    }
+
+    /// Returns a redacted JSON view of this connection (PEM ref masked).
+    #[must_use]
+    pub fn redacted(&self) -> serde_json::Value {
+        serde_json::json!({
+            "id": self.id,
+            "name": self.name,
+            "providerKind": self.provider_kind.to_string(),
+            "appId": self.app_id,
+            "installationId": self.installation_id,
+            "pemSecretRef": "[redacted]",
+            "webhookSecretRef": self.webhook_secret_ref.as_deref().map(|_| "[redacted]"),
+            "allowedTenantIds": self.allowed_tenant_ids.iter().map(|t| t.as_str()).collect::<Vec<_>>(),
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+        })
     }
 }

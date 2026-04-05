@@ -1624,4 +1624,142 @@ mod tests {
                 .contains(&AgentCapability::GovernanceApprove)
         );
     }
+
+    #[test]
+    fn test_role_level_display_parse_and_invalid() {
+        assert_eq!(RoleLevel::Viewer.to_string(), "viewer");
+        assert_eq!(RoleLevel::Developer.to_string(), "developer");
+        assert_eq!(RoleLevel::TechLead.to_string(), "techlead");
+        assert_eq!(RoleLevel::Architect.to_string(), "architect");
+        assert_eq!(RoleLevel::Admin.to_string(), "admin");
+
+        assert_eq!("viewer".parse::<RoleLevel>().unwrap(), RoleLevel::Viewer);
+        assert_eq!(
+            "developer".parse::<RoleLevel>().unwrap(),
+            RoleLevel::Developer
+        );
+        assert_eq!(
+            "tech_lead".parse::<RoleLevel>().unwrap(),
+            RoleLevel::TechLead
+        );
+        assert_eq!(
+            "architect".parse::<RoleLevel>().unwrap(),
+            RoleLevel::Architect
+        );
+        assert_eq!("admin".parse::<RoleLevel>().unwrap(), RoleLevel::Admin);
+        assert!("owner".parse::<RoleLevel>().is_err());
+    }
+
+    #[test]
+    fn test_governance_action_type_display_parse_and_invalid() {
+        let cases = [
+            (GovernanceActionType::RejectPolicy, "reject_policy"),
+            (GovernanceActionType::DeletePolicy, "delete_policy"),
+            (GovernanceActionType::ApproveKnowledge, "approve_knowledge"),
+            (GovernanceActionType::EditKnowledge, "edit_knowledge"),
+            (GovernanceActionType::DeleteKnowledge, "delete_knowledge"),
+            (GovernanceActionType::DeleteMemory, "delete_memory"),
+            (GovernanceActionType::AssignRole, "assign_role"),
+            (GovernanceActionType::RevokeRole, "revoke_role"),
+            (
+                GovernanceActionType::ModifyGovernanceConfig,
+                "modify_governance_config",
+            ),
+        ];
+
+        for (action, value) in cases {
+            assert_eq!(action.to_string(), value);
+            assert_eq!(value.parse::<GovernanceActionType>().unwrap(), action);
+        }
+
+        assert!("launch_missiles".parse::<GovernanceActionType>().is_err());
+    }
+
+    #[test]
+    fn test_agent_capability_display_parse_fuller_matrix() {
+        let cases = [
+            (AgentCapability::MemoryWrite, "memory:write"),
+            (AgentCapability::MemoryDelete, "memory:delete"),
+            (AgentCapability::MemoryPromote, "memory:promote"),
+            (AgentCapability::KnowledgeRead, "knowledge:read"),
+            (AgentCapability::KnowledgeEdit, "knowledge:edit"),
+            (AgentCapability::PolicyCreate, "policy:create"),
+            (AgentCapability::GovernanceRead, "governance:read"),
+            (AgentCapability::GovernanceSubmit, "governance:submit"),
+            (AgentCapability::OrgRead, "org:read"),
+            (AgentCapability::AgentRegister, "agent:register"),
+            (AgentCapability::AgentDelegate, "agent:delegate"),
+        ];
+
+        for (capability, value) in cases {
+            assert_eq!(capability.to_string(), value);
+            assert_eq!(value.parse::<AgentCapability>().unwrap(), capability);
+        }
+
+        assert!("agent:teleport".parse::<AgentCapability>().is_err());
+    }
+
+    #[test]
+    fn test_escalation_defaults_cover_all_tiers_and_limits() {
+        let config = EscalationConfig::default();
+
+        assert!(config.enabled);
+        assert_eq!(config.initial_timeout_hours, 24);
+        assert_eq!(config.reminder_intervals_hours, vec![12, 18, 23]);
+        assert_eq!(config.tiers.len(), 3);
+        assert_eq!(config.tiers[0].name, "Team Lead Escalation");
+        assert_eq!(config.tiers[0].timeout_hours, 12);
+        assert!(matches!(
+            config.tiers[0].escalate_to,
+            EscalationTarget::RoleInScope(RoleLevel::TechLead)
+        ));
+        assert_eq!(
+            config.tiers[0].notification_channels,
+            vec![NotificationChannel::Email]
+        );
+        assert_eq!(config.tiers[1].name, "Architect Escalation");
+        assert_eq!(
+            config.tiers[1].notification_channels,
+            vec![NotificationChannel::Email, NotificationChannel::Slack]
+        );
+        assert_eq!(config.tiers[2].name, "Admin Escalation");
+        assert_eq!(
+            config.tiers[2].notification_channels,
+            vec![
+                NotificationChannel::Email,
+                NotificationChannel::Slack,
+                NotificationChannel::PagerDuty,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_agent_rate_limits_default_includes_memory_limit() {
+        let limits = AgentRateLimits::default();
+        assert_eq!(limits.memory_writes_per_hour, 100);
+    }
+
+    #[test]
+    fn test_confirmation_reason_display_all_remaining_variants() {
+        assert_eq!(
+            ConfirmationReason::DelegationDepthWarning.to_string(),
+            "Agent delegation depth near limit"
+        );
+        assert_eq!(
+            ConfirmationReason::RateLimitWarning.to_string(),
+            "Agent approaching rate limit"
+        );
+        assert_eq!(
+            ConfirmationReason::CrossScopeAction.to_string(),
+            "Action affects multiple scopes"
+        );
+        assert_eq!(
+            ConfirmationReason::FirstTimeAction.to_string(),
+            "First time agent performs this action"
+        );
+        assert_eq!(
+            ConfirmationReason::AgentRequested.to_string(),
+            "Agent requested human oversight"
+        );
+    }
 }

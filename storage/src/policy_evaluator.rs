@@ -38,6 +38,17 @@ pub trait PolicyEvaluator: Send + Sync {
     ) -> Result<bool, CodeSearchError>;
 }
 
+/// Legacy Cedar evaluator for code-search subsystem policies.
+///
+/// Deprecated in favor of the primary runtime Cedar path through
+/// `adapters::auth::cedar::CedarAuthorizer` via `AuthorizationService`.
+///
+/// This type is kept temporarily for RepoManager integration and should be
+/// consolidated into the primary authorization path in a follow-up cleanup.
+#[deprecated(
+    since = "0.5.0",
+    note = "Use CedarAuthorizer via AuthorizationService trait instead"
+)]
 pub struct CedarPolicyEvaluator {
     policies: PolicySet,
 }
@@ -364,7 +375,10 @@ permit(
     #[test]
     fn test_cedar_evaluator_bad_policy_returns_error() {
         let result = CedarPolicyEvaluator::new("this is not valid cedar syntax !!!");
-        assert!(result.is_err(), "Expected parse error for invalid Cedar policy");
+        assert!(
+            result.is_err(),
+            "Expected parse error for invalid Cedar policy"
+        );
     }
 
     #[test]
@@ -381,9 +395,16 @@ permit(
     async fn test_evaluate_request_allow_all() {
         let evaluator = CedarPolicyEvaluator::new(allow_all_policy()).unwrap();
         let ctx = make_context("user-1", &["developer"], "tenant-a");
-        let repo = make_repo("00000000-0000-0000-0000-000000000001", "tenant-a", "my-repo");
+        let repo = make_repo(
+            "00000000-0000-0000-0000-000000000001",
+            "tenant-a",
+            "my-repo",
+        );
 
-        let allowed = evaluator.evaluate_request(&ctx, "ReadCode", &repo).await.unwrap();
+        let allowed = evaluator
+            .evaluate_request(&ctx, "ReadCode", &repo)
+            .await
+            .unwrap();
         assert!(allowed, "allow-all policy should allow the request");
     }
 
@@ -391,9 +412,16 @@ permit(
     async fn test_evaluate_request_deny_all() {
         let evaluator = CedarPolicyEvaluator::new(deny_all_policy()).unwrap();
         let ctx = make_context("user-1", &["admin"], "tenant-a");
-        let repo = make_repo("00000000-0000-0000-0000-000000000002", "tenant-a", "my-repo");
+        let repo = make_repo(
+            "00000000-0000-0000-0000-000000000002",
+            "tenant-a",
+            "my-repo",
+        );
 
-        let allowed = evaluator.evaluate_request(&ctx, "WriteCode", &repo).await.unwrap();
+        let allowed = evaluator
+            .evaluate_request(&ctx, "WriteCode", &repo)
+            .await
+            .unwrap();
         assert!(!allowed, "deny-all (forbid) policy should deny the request");
     }
 
@@ -402,13 +430,29 @@ permit(
         let evaluator = CedarPolicyEvaluator::new(allow_admin_only_policy()).unwrap();
         let admin_ctx = make_context("alice", &["admin"], "tenant-a");
         let dev_ctx = make_context("bob", &["developer"], "tenant-a");
-        let repo = make_repo("00000000-0000-0000-0000-000000000003", "tenant-a", "my-repo");
+        let repo = make_repo(
+            "00000000-0000-0000-0000-000000000003",
+            "tenant-a",
+            "my-repo",
+        );
 
-        let admin_allowed = evaluator.evaluate_request(&admin_ctx, "ManageRepo", &repo).await.unwrap();
-        let dev_allowed = evaluator.evaluate_request(&dev_ctx, "ManageRepo", &repo).await.unwrap();
+        let admin_allowed = evaluator
+            .evaluate_request(&admin_ctx, "ManageRepo", &repo)
+            .await
+            .unwrap();
+        let dev_allowed = evaluator
+            .evaluate_request(&dev_ctx, "ManageRepo", &repo)
+            .await
+            .unwrap();
 
-        assert!(admin_allowed, "admin role should be allowed by admin-only policy");
-        assert!(!dev_allowed, "developer role should not be allowed by admin-only policy");
+        assert!(
+            admin_allowed,
+            "admin role should be allowed by admin-only policy"
+        );
+        assert!(
+            !dev_allowed,
+            "developer role should not be allowed by admin-only policy"
+        );
     }
 
     // ---------------------------------------------------------------------------
@@ -451,7 +495,10 @@ permit(
         let entry = CacheEntry::new(false, Duration::from_millis(0));
         // Give the CPU a tiny bit so Instant::now() > expires_at
         std::thread::sleep(Duration::from_millis(5));
-        assert!(!entry.is_valid(), "Entry with 0 TTL should immediately expire");
+        assert!(
+            !entry.is_valid(),
+            "Entry with 0 TTL should immediately expire"
+        );
         assert!(!entry.allowed);
     }
 
@@ -506,7 +553,10 @@ permit(
         assert!(!cached.cache.read().is_empty(), "Cache should be populated");
 
         cached.invalidate();
-        assert!(cached.cache.read().is_empty(), "Cache should be empty after invalidate()");
+        assert!(
+            cached.cache.read().is_empty(),
+            "Cache should be empty after invalidate()"
+        );
     }
 
     #[tokio::test]
@@ -523,7 +573,10 @@ permit(
         std::thread::sleep(Duration::from_millis(10));
 
         cached.evict_expired();
-        assert!(cached.cache.read().is_empty(), "Expired entries should be removed by evict_expired()");
+        assert!(
+            cached.cache.read().is_empty(),
+            "Expired entries should be removed by evict_expired()"
+        );
     }
 
     #[tokio::test]

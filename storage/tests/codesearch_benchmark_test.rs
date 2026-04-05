@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use storage::policy_evaluator::{CachedPolicyEvaluator, PolicyContext, PolicyEvaluator};
 use storage::repo_manager::{
-    RepoRequest, RepoRequestStatus, Repository, RepositoryStatus, RepositoryType, SyncStrategy,
+    RepoRequest, Repository, RepositoryStatus, RepositoryType, SyncStrategy,
 };
 use storage::secret_provider::LocalSecretProvider;
 use storage::secret_provider::SecretProvider;

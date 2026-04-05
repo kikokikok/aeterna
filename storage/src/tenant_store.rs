@@ -1,0 +1,631 @@
+use chrono::Utc;
+use mk_core::types::{
+    BranchPolicy, CredentialKind, RecordSource, RepositoryKind, TenantId, TenantRecord,
+    TenantRepositoryBinding, TenantStatus,
+};
+use sqlx::FromRow;
+
+use crate::postgres::PostgresError;
+
+#[derive(Debug, Clone, FromRow)]
+struct TenantRow {
+    id: String,
+    slug: String,
+    name: String,
+    status: String,
+    source_owner: String,
+    created_at: chrono::DateTime<Utc>,
+    updated_at: chrono::DateTime<Utc>,
+    deactivated_at: Option<chrono::DateTime<Utc>>,
+}
+
+impl TryFrom<TenantRow> for TenantRecord {
+    type Error = PostgresError;
+
+    fn try_from(row: TenantRow) -> Result<Self, Self::Error> {
+        let id = TenantId::new(row.id)
+            .ok_or_else(|| PostgresError::NotFound("invalid tenant id in row".to_string()))?;
+        let status = match row.status.as_str() {
+            "active" => TenantStatus::Active,
+            "inactive" => TenantStatus::Inactive,
+            other => {
+                return Err(PostgresError::NotFound(format!(
+                    "invalid tenant status: {other}"
+                )));
+            }
+        };
+
+        Ok(TenantRecord {
+            id,
+            slug: row.slug,
+            name: row.name,
+            status,
+            source_owner: row.source_owner.parse().unwrap_or(RecordSource::Admin),
+            created_at: row.created_at.timestamp(),
+            updated_at: row.updated_at.timestamp(),
+            deactivated_at: row.deactivated_at.map(|ts| ts.timestamp()),
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct TenantStore {
+    pool: sqlx::PgPool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TenantResolutionSource {
+    Explicit,
+    VerifiedDomain,
+}
+
+#[derive(Debug, Clone)]
+pub struct TenantResolution {
+    pub tenant: TenantRecord,
+    pub source: TenantResolutionSource,
+    pub mapping_domain: Option<String>,
+}
+
+#[derive(Debug)]
+pub enum TenantResolutionError {
+    MissingExplicitSelection,
+    TenantNotFound(String),
+    MissingVerifiedMapping,
+    AmbiguousVerifiedMapping(Vec<String>),
+    InvalidEmail,
+    Storage(PostgresError),
+}
+
+impl std::fmt::Display for TenantResolutionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TenantResolutionError::MissingExplicitSelection => {
+                write!(f, "Explicit tenant selection is required")
+            }
+            TenantResolutionError::TenantNotFound(value) => write!(f, "Tenant not found: {value}"),
+            TenantResolutionError::MissingVerifiedMapping => {
+                write!(f, "No verified tenant mapping found")
+            }
+            TenantResolutionError::AmbiguousVerifiedMapping(values) => {
+                write!(
+                    f,
+                    "Ambiguous verified tenant mapping: {}",
+                    values.join(", ")
+                )
+            }
+            TenantResolutionError::InvalidEmail => {
+                write!(f, "Invalid email address for tenant resolution")
+            }
+            TenantResolutionError::Storage(err) => write!(f, "{err}"),
+        }
+    }
+}
+
+impl std::error::Error for TenantResolutionError {}
+
+impl From<PostgresError> for TenantResolutionError {
+    fn from(value: PostgresError) -> Self {
+        Self::Storage(value)
+    }
+}
+
+impl From<sqlx::Error> for TenantResolutionError {
+    fn from(value: sqlx::Error) -> Self {
+        Self::Storage(PostgresError::Database(value))
+    }
+}
+
+#[derive(Debug, Clone, FromRow)]
+struct TenantDomainRow {
+    tenant_id: String,
+}
+
+impl TenantStore {
+    pub fn new(pool: sqlx::PgPool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn create_tenant(
+        &self,
+        slug: &str,
+        name: &str,
+    ) -> Result<TenantRecord, PostgresError> {
+        self.create_tenant_with_source(slug, name, RecordSource::Admin)
+            .await
+    }
+
+    /// Like [`create_tenant`] but lets the caller specify the `source_owner`.
+    ///
+    /// Use `RecordSource::Sync` when a tenant row is being created automatically
+    /// by an IdP/sync flow so that it is distinguishable from admin-created tenants.
+    pub async fn create_tenant_with_source(
+        &self,
+        slug: &str,
+        name: &str,
+        source_owner: RecordSource,
+    ) -> Result<TenantRecord, PostgresError> {
+        let row: TenantRow = sqlx::query_as(
+            r#"
+            INSERT INTO tenants (slug, name, status, source_owner)
+            VALUES ($1, $2, 'active', $3)
+            RETURNING id::text AS id, slug, name, status, source_owner, created_at, updated_at, deactivated_at
+            "#,
+        )
+        .bind(slug)
+        .bind(name)
+        .bind(source_owner.to_string())
+        .fetch_one(&self.pool)
+        .await?;
+
+        row.try_into()
+    }
+
+    pub async fn list_tenants(
+        &self,
+        include_inactive: bool,
+    ) -> Result<Vec<TenantRecord>, PostgresError> {
+        let rows: Vec<TenantRow> = sqlx::query_as(
+            r#"
+            SELECT id::text AS id, slug, name, status, source_owner, created_at, updated_at, deactivated_at
+            FROM tenants
+            WHERE ($1::bool = true OR status = 'active')
+            ORDER BY created_at ASC
+            "#,
+        )
+        .bind(include_inactive)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(TryInto::try_into).collect()
+    }
+
+    pub async fn get_tenant(
+        &self,
+        tenant_ref: &str,
+    ) -> Result<Option<TenantRecord>, PostgresError> {
+        let row: Option<TenantRow> = sqlx::query_as(
+            r#"
+            SELECT id::text AS id, slug, name, status, source_owner, created_at, updated_at, deactivated_at
+            FROM tenants
+            WHERE id::text = $1 OR slug = $1 OR name = $1
+            LIMIT 1
+            "#,
+        )
+        .bind(tenant_ref)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(TryInto::try_into).transpose()
+    }
+
+    pub async fn update_tenant(
+        &self,
+        tenant_ref: &str,
+        slug: Option<&str>,
+        name: Option<&str>,
+    ) -> Result<Option<TenantRecord>, PostgresError> {
+        let row: Option<TenantRow> = sqlx::query_as(
+            r#"
+            UPDATE tenants
+            SET slug = COALESCE($2, slug),
+                name = COALESCE($3, name),
+                updated_at = NOW()
+            WHERE id::text = $1 OR slug = $1 OR name = $1
+            RETURNING id::text AS id, slug, name, status, source_owner, created_at, updated_at, deactivated_at
+            "#,
+        )
+        .bind(tenant_ref)
+        .bind(slug)
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(TryInto::try_into).transpose()
+    }
+
+    pub async fn deactivate_tenant(
+        &self,
+        tenant_ref: &str,
+    ) -> Result<Option<TenantRecord>, PostgresError> {
+        let row: Option<TenantRow> = sqlx::query_as(
+            r#"
+            UPDATE tenants
+            SET status = 'inactive',
+                deactivated_at = COALESCE(deactivated_at, NOW()),
+                updated_at = NOW()
+            WHERE id::text = $1 OR slug = $1 OR name = $1
+            RETURNING id::text AS id, slug, name, status, source_owner, created_at, updated_at, deactivated_at
+            "#,
+        )
+        .bind(tenant_ref)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(TryInto::try_into).transpose()
+    }
+
+    pub async fn resolve_tenant_id(
+        &self,
+        tenant_ref: &str,
+    ) -> Result<Option<TenantId>, PostgresError> {
+        Ok(self.get_tenant(tenant_ref).await?.map(|record| record.id))
+    }
+
+    pub async fn ensure_tenant(&self, tenant_ref: &str) -> Result<TenantRecord, PostgresError> {
+        self.ensure_tenant_with_source(tenant_ref, RecordSource::Admin)
+            .await
+    }
+
+    /// Like [`ensure_tenant`] but tags new tenant rows with `source_owner`.
+    ///
+    /// Call with `RecordSource::Sync` from IdP/sync bootstrap paths so that
+    /// sync-created tenants are distinguishable from admin-created ones.
+    pub async fn ensure_tenant_with_source(
+        &self,
+        tenant_ref: &str,
+        source_owner: RecordSource,
+    ) -> Result<TenantRecord, PostgresError> {
+        if let Some(record) = self.get_tenant(tenant_ref).await? {
+            return Ok(record);
+        }
+
+        self.create_tenant_with_source(tenant_ref, tenant_ref, source_owner)
+            .await
+    }
+
+    pub async fn add_verified_domain_mapping(
+        &self,
+        tenant_ref: &str,
+        domain: &str,
+    ) -> Result<TenantRecord, PostgresError> {
+        self.add_verified_domain_mapping_with_source(tenant_ref, domain, RecordSource::Admin)
+            .await
+    }
+
+    pub async fn add_verified_domain_mapping_with_source(
+        &self,
+        tenant_ref: &str,
+        domain: &str,
+        source_owner: RecordSource,
+    ) -> Result<TenantRecord, PostgresError> {
+        let tenant = self
+            .get_tenant(tenant_ref)
+            .await?
+            .ok_or_else(|| PostgresError::NotFound(format!("tenant not found: {tenant_ref}")))?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO tenant_domain_mappings (tenant_id, domain, verified, source)
+            VALUES ($1::uuid, lower($2), TRUE, $3)
+            ON CONFLICT (tenant_id, domain)
+            DO UPDATE SET
+                verified = CASE
+                    WHEN tenant_domain_mappings.source = 'admin' AND EXCLUDED.source <> 'admin'
+                        THEN tenant_domain_mappings.verified
+                    ELSE EXCLUDED.verified
+                END,
+                source = CASE
+                    WHEN tenant_domain_mappings.source = 'admin' AND EXCLUDED.source <> 'admin'
+                        THEN tenant_domain_mappings.source
+                    ELSE EXCLUDED.source
+                END,
+                updated_at = CASE
+                    WHEN tenant_domain_mappings.source = 'admin' AND EXCLUDED.source <> 'admin'
+                        THEN tenant_domain_mappings.updated_at
+                    ELSE NOW()
+                END
+            "#,
+        )
+        .bind(tenant.id.as_str())
+        .bind(domain.trim())
+        .bind(source_owner.to_string())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(tenant)
+    }
+
+    pub async fn resolve_verified_tenant(
+        &self,
+        explicit_tenant: Option<&str>,
+        email: Option<&str>,
+    ) -> Result<TenantResolution, TenantResolutionError> {
+        if let Some(explicit) = explicit_tenant {
+            let tenant = self
+                .get_tenant(explicit)
+                .await?
+                .ok_or_else(|| TenantResolutionError::TenantNotFound(explicit.to_string()))?;
+            return Ok(TenantResolution {
+                tenant,
+                source: TenantResolutionSource::Explicit,
+                mapping_domain: None,
+            });
+        }
+
+        let email = email.ok_or(TenantResolutionError::MissingExplicitSelection)?;
+        let domain = email
+            .split('@')
+            .nth(1)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or(TenantResolutionError::InvalidEmail)?
+            .to_lowercase();
+
+        let rows: Vec<TenantDomainRow> = sqlx::query_as(
+            r#"
+            SELECT tdm.tenant_id::text AS tenant_id, tdm.domain
+            FROM tenant_domain_mappings tdm
+            JOIN tenants t ON t.id = tdm.tenant_id
+            WHERE tdm.verified = TRUE
+              AND lower(tdm.domain) = $1
+              AND t.status = 'active'
+            ORDER BY t.created_at ASC
+            "#,
+        )
+        .bind(&domain)
+        .fetch_all(&self.pool)
+        .await?;
+
+        if rows.is_empty() {
+            return Err(TenantResolutionError::MissingVerifiedMapping);
+        }
+        if rows.len() > 1 {
+            return Err(TenantResolutionError::AmbiguousVerifiedMapping(
+                rows.into_iter().map(|row| row.tenant_id).collect(),
+            ));
+        }
+
+        let row = &rows[0];
+        let tenant = self
+            .get_tenant(&row.tenant_id)
+            .await?
+            .ok_or_else(|| TenantResolutionError::TenantNotFound(row.tenant_id.clone()))?;
+
+        Ok(TenantResolution {
+            tenant,
+            source: TenantResolutionSource::VerifiedDomain,
+            mapping_domain: Some(domain),
+        })
+    }
+
+    pub fn pool(&self) -> &sqlx::PgPool {
+        &self.pool
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tenant repository binding store (task 3.1)
+// ---------------------------------------------------------------------------
+
+/// Private row type for `tenant_repository_bindings`.
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct TenantRepositoryBindingRow {
+    id: String,
+    tenant_id: String,
+    kind: String,
+    local_path: Option<String>,
+    remote_url: Option<String>,
+    branch: String,
+    branch_policy: String,
+    credential_kind: String,
+    credential_ref: Option<String>,
+    github_owner: Option<String>,
+    github_repo: Option<String>,
+    source_owner: String,
+    created_at: chrono::DateTime<Utc>,
+    updated_at: chrono::DateTime<Utc>,
+    // Added in task 3.4; the column may not yet exist in existing deployments.
+    // sqlx will return None when the column is absent.
+    #[sqlx(default)]
+    git_provider_connection_id: Option<String>,
+}
+
+impl TryFrom<TenantRepositoryBindingRow> for TenantRepositoryBinding {
+    type Error = PostgresError;
+
+    fn try_from(row: TenantRepositoryBindingRow) -> Result<Self, Self::Error> {
+        let tenant_id = TenantId::new(row.tenant_id).ok_or_else(|| {
+            PostgresError::NotFound("invalid tenant_id in binding row".to_string())
+        })?;
+
+        let kind: RepositoryKind = row.kind.parse().map_err(|_| {
+            PostgresError::NotFound(format!("unknown repository kind: {}", row.kind))
+        })?;
+
+        let branch_policy: BranchPolicy = row.branch_policy.parse().map_err(|_| {
+            PostgresError::NotFound(format!("unknown branch policy: {}", row.branch_policy))
+        })?;
+
+        let credential_kind: CredentialKind = row.credential_kind.parse().map_err(|_| {
+            PostgresError::NotFound(format!("unknown credential kind: {}", row.credential_kind))
+        })?;
+
+        Ok(TenantRepositoryBinding {
+            id: row.id,
+            tenant_id,
+            kind,
+            local_path: row.local_path,
+            remote_url: row.remote_url,
+            branch: row.branch,
+            branch_policy,
+            credential_kind,
+            credential_ref: row.credential_ref,
+            github_owner: row.github_owner,
+            github_repo: row.github_repo,
+            source_owner: row.source_owner.parse().unwrap_or(RecordSource::Admin),
+            git_provider_connection_id: row.git_provider_connection_id,
+            created_at: row.created_at.timestamp(),
+            updated_at: row.updated_at.timestamp(),
+        })
+    }
+}
+
+/// Request payload for creating or replacing a tenant repository binding.
+#[derive(Debug, Clone)]
+pub struct UpsertTenantRepositoryBinding {
+    pub tenant_id: TenantId,
+    pub kind: RepositoryKind,
+    pub local_path: Option<String>,
+    pub remote_url: Option<String>,
+    pub branch: String,
+    pub branch_policy: BranchPolicy,
+    pub credential_kind: CredentialKind,
+    /// Opaque secret-provider reference — never the raw credential value.
+    pub credential_ref: Option<String>,
+    pub github_owner: Option<String>,
+    pub github_repo: Option<String>,
+    pub source_owner: RecordSource,
+    /// When set, reference a platform-owned Git provider connection by ID
+    /// instead of embedding App credentials directly in `credential_ref`.
+    pub git_provider_connection_id: Option<String>,
+}
+
+/// Storage operations for canonical per-tenant repository bindings.
+pub struct TenantRepositoryBindingStore {
+    pool: sqlx::PgPool,
+}
+
+impl TenantRepositoryBindingStore {
+    pub fn new(pool: sqlx::PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Returns the single canonical binding for `tenant_id`, or `None` if not
+    /// yet configured.
+    pub async fn get_binding(
+        &self,
+        tenant_id: &TenantId,
+    ) -> Result<Option<TenantRepositoryBinding>, PostgresError> {
+        let row: Option<TenantRepositoryBindingRow> = sqlx::query_as(
+            r#"
+            SELECT
+                id::text       AS id,
+                tenant_id::text AS tenant_id,
+                kind,
+                local_path,
+                remote_url,
+                branch,
+                branch_policy,
+                credential_kind,
+                credential_ref,
+                github_owner,
+                github_repo,
+                source_owner,
+                created_at,
+                updated_at
+            FROM tenant_repository_bindings
+            WHERE tenant_id = $1::uuid
+            LIMIT 1
+            "#,
+        )
+        .bind(tenant_id.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(TryInto::try_into).transpose()
+    }
+
+    /// Upserts (insert-or-replace) the canonical binding for a tenant.
+    ///
+    /// **Ownership guard**: when the existing row has `source_owner = 'admin'`
+    /// and the incoming request carries `source_owner = 'sync'` (or any
+    /// non-admin value), every field of the existing row is preserved unchanged.
+    /// This prevents IdP/sync runs from overwriting admin-managed bindings.
+    ///
+    /// Admin-originated requests (`source_owner = 'admin'`) always overwrite
+    /// regardless of what the existing row holds.
+    pub async fn upsert_binding(
+        &self,
+        req: UpsertTenantRepositoryBinding,
+    ) -> Result<TenantRepositoryBinding, PostgresError> {
+        let row: TenantRepositoryBindingRow = sqlx::query_as(
+            r#"
+            INSERT INTO tenant_repository_bindings
+                (tenant_id, kind, local_path, remote_url, branch,
+                 branch_policy, credential_kind, credential_ref,
+                 github_owner, github_repo, source_owner)
+            VALUES
+                ($1::uuid, $2, $3, $4, $5,
+                 $6, $7, $8,
+                 $9, $10, $11)
+            ON CONFLICT (tenant_id) DO UPDATE SET
+                kind            = CASE WHEN tenant_repository_bindings.source_owner = 'admin' AND EXCLUDED.source_owner <> 'admin'
+                                       THEN tenant_repository_bindings.kind
+                                       ELSE EXCLUDED.kind            END,
+                local_path      = CASE WHEN tenant_repository_bindings.source_owner = 'admin' AND EXCLUDED.source_owner <> 'admin'
+                                       THEN tenant_repository_bindings.local_path
+                                       ELSE EXCLUDED.local_path      END,
+                remote_url      = CASE WHEN tenant_repository_bindings.source_owner = 'admin' AND EXCLUDED.source_owner <> 'admin'
+                                       THEN tenant_repository_bindings.remote_url
+                                       ELSE EXCLUDED.remote_url      END,
+                branch          = CASE WHEN tenant_repository_bindings.source_owner = 'admin' AND EXCLUDED.source_owner <> 'admin'
+                                       THEN tenant_repository_bindings.branch
+                                       ELSE EXCLUDED.branch          END,
+                branch_policy   = CASE WHEN tenant_repository_bindings.source_owner = 'admin' AND EXCLUDED.source_owner <> 'admin'
+                                       THEN tenant_repository_bindings.branch_policy
+                                       ELSE EXCLUDED.branch_policy   END,
+                credential_kind = CASE WHEN tenant_repository_bindings.source_owner = 'admin' AND EXCLUDED.source_owner <> 'admin'
+                                       THEN tenant_repository_bindings.credential_kind
+                                       ELSE EXCLUDED.credential_kind END,
+                credential_ref  = CASE WHEN tenant_repository_bindings.source_owner = 'admin' AND EXCLUDED.source_owner <> 'admin'
+                                       THEN tenant_repository_bindings.credential_ref
+                                       ELSE EXCLUDED.credential_ref  END,
+                github_owner    = CASE WHEN tenant_repository_bindings.source_owner = 'admin' AND EXCLUDED.source_owner <> 'admin'
+                                       THEN tenant_repository_bindings.github_owner
+                                       ELSE EXCLUDED.github_owner    END,
+                github_repo     = CASE WHEN tenant_repository_bindings.source_owner = 'admin' AND EXCLUDED.source_owner <> 'admin'
+                                       THEN tenant_repository_bindings.github_repo
+                                       ELSE EXCLUDED.github_repo     END,
+                source_owner    = CASE WHEN tenant_repository_bindings.source_owner = 'admin' AND EXCLUDED.source_owner <> 'admin'
+                                       THEN tenant_repository_bindings.source_owner
+                                       ELSE EXCLUDED.source_owner    END,
+                updated_at      = CASE WHEN tenant_repository_bindings.source_owner = 'admin' AND EXCLUDED.source_owner <> 'admin'
+                                       THEN tenant_repository_bindings.updated_at
+                                       ELSE NOW()                    END
+            RETURNING
+                id::text        AS id,
+                tenant_id::text AS tenant_id,
+                kind,
+                local_path,
+                remote_url,
+                branch,
+                branch_policy,
+                credential_kind,
+                credential_ref,
+                github_owner,
+                github_repo,
+                source_owner,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(req.tenant_id.as_str())
+        .bind(req.kind.to_string())
+        .bind(&req.local_path)
+        .bind(&req.remote_url)
+        .bind(&req.branch)
+        .bind(req.branch_policy.to_string())
+        .bind(req.credential_kind.to_string())
+        .bind(&req.credential_ref)
+        .bind(&req.github_owner)
+        .bind(&req.github_repo)
+        .bind(req.source_owner.to_string())
+        .fetch_one(&self.pool)
+        .await?;
+
+        row.try_into()
+    }
+
+    /// Deletes the canonical binding for `tenant_id`.
+    ///
+    /// Returns `true` if a row was deleted, `false` if no binding existed.
+    pub async fn delete_binding(&self, tenant_id: &TenantId) -> Result<bool, PostgresError> {
+        let result =
+            sqlx::query("DELETE FROM tenant_repository_bindings WHERE tenant_id = $1::uuid")
+                .bind(tenant_id.as_str())
+                .execute(&self.pool)
+                .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+}

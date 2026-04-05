@@ -1851,4 +1851,234 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_policy_action_display_and_invalid_parse() {
+        assert_eq!(PolicyAction::Allow.to_string(), "allow");
+        assert_eq!(PolicyAction::Deny.to_string(), "deny");
+        assert!("maybe".parse::<PolicyAction>().is_err());
+    }
+
+    #[test]
+    fn test_target_type_display_roundtrip_and_invalid_parse() {
+        let cases = [
+            (TargetType::Dependency, "dependency"),
+            (TargetType::File, "file"),
+            (TargetType::Code, "code"),
+            (TargetType::Import, "import"),
+            (TargetType::Config, "config"),
+        ];
+
+        for (target_type, value) in cases {
+            assert_eq!(target_type.to_string(), value);
+            assert_eq!(value.parse::<TargetType>().unwrap(), target_type);
+        }
+
+        assert_eq!("route".parse::<TargetType>().unwrap(), TargetType::Config);
+        assert!("database-row".parse::<TargetType>().is_err());
+    }
+
+    #[test]
+    fn test_constraint_target_conversion_roundtrip() {
+        let cases = [
+            ConstraintTarget::Dependency,
+            ConstraintTarget::File,
+            ConstraintTarget::Code,
+            ConstraintTarget::Import,
+            ConstraintTarget::Config,
+        ];
+
+        for target in cases {
+            let translated: TargetType = target.into();
+            let back: ConstraintTarget = translated.into();
+            assert_eq!(back, target);
+        }
+    }
+
+    #[test]
+    fn test_policy_severity_display_conversion_and_invalid_parse() {
+        assert_eq!(PolicySeverity::Info.to_string(), "info");
+        assert_eq!(PolicySeverity::Warn.to_string(), "warn");
+        assert_eq!(PolicySeverity::Block.to_string(), "block");
+        assert_eq!(
+            "critical".parse::<PolicySeverity>().unwrap(),
+            PolicySeverity::Block
+        );
+        assert_eq!(PolicySeverity::Warn, ConstraintSeverity::Warn.into());
+        let converted: ConstraintSeverity = PolicySeverity::Block.into();
+        assert_eq!(converted, ConstraintSeverity::Block);
+        assert!("fatalish".parse::<PolicySeverity>().is_err());
+    }
+
+    #[test]
+    fn test_policy_scope_display_aliases_and_invalid_parse() {
+        assert_eq!(PolicyScope::Company.to_string(), "company");
+        assert_eq!(PolicyScope::Org.to_string(), "org");
+        assert_eq!(PolicyScope::Team.to_string(), "team");
+        assert_eq!(PolicyScope::Project.to_string(), "project");
+        assert_eq!(
+            "enterprise".parse::<PolicyScope>().unwrap(),
+            PolicyScope::Company
+        );
+        assert_eq!(
+            "department".parse::<PolicyScope>().unwrap(),
+            PolicyScope::Org
+        );
+        assert_eq!("repo".parse::<PolicyScope>().unwrap(), PolicyScope::Project);
+        assert!("workspace".parse::<PolicyScope>().is_err());
+    }
+
+    #[test]
+    fn test_policy_translator_config_default_values() {
+        let config = PolicyTranslatorConfig::default();
+        assert!(config.use_templates);
+        assert_eq!(config.min_confidence, 0.7);
+        assert_eq!(config.max_retries, 3);
+        assert!(config.strict_validation);
+        assert_eq!(config.few_shot_count, 10);
+        assert!(config.include_schema);
+        assert!(config.enable_cache);
+        assert_eq!(config.cache_ttl_secs, 3600);
+        assert_eq!(config.cache_max_entries, 1000);
+    }
+
+    #[test]
+    fn test_parse_intent_response_handles_plain_code_block_and_invalid_json() {
+        let client = Arc::new(MockLlmClient::new(vec![]));
+        let translator = PolicyTranslator::new(client, PolicyTranslatorConfig::default());
+
+        let response = r#"```
+{
+    "action": "allow",
+    "target_type": "file",
+    "target_value": "README.md",
+    "condition": null,
+    "severity": "info",
+    "interpreted": "Require README",
+    "confidence": 0.91
+}
+```"#;
+
+        let intent = translator
+            .parse_intent_response(response, "Require README")
+            .unwrap();
+        assert_eq!(intent.action, PolicyAction::Allow);
+        assert_eq!(intent.target_type, TargetType::File);
+        assert_eq!(intent.severity, PolicySeverity::Info);
+
+        let err = translator
+            .parse_intent_response("{ definitely not json", "broken")
+            .unwrap_err();
+        assert!(matches!(err, PolicyTranslatorError::ParseError(_)));
+    }
+
+    #[test]
+    fn test_explain_syntax_error_additional_branches() {
+        let client = Arc::new(MockLlmClient::new(vec![]));
+        let translator = PolicyTranslator::new(client, PolicyTranslatorConfig::default());
+
+        assert!(
+            translator
+                .explain_syntax_error("Missing parenthesis around condition")
+                .contains("parentheses")
+        );
+        assert!(
+            translator
+                .explain_syntax_error("Quote string literal properly")
+                .contains("double quotes")
+        );
+        assert!(
+            translator
+                .explain_syntax_error("Unexpected token near resource")
+                .contains("Syntax error:")
+        );
+    }
+
+    #[test]
+    fn test_explain_semantic_error_additional_branches() {
+        let client = Arc::new(MockLlmClient::new(vec![]));
+        let translator = PolicyTranslator::new(client, PolicyTranslatorConfig::default());
+
+        assert!(
+            translator
+                .explain_semantic_error("when condition must evaluate to bool")
+                .contains("when")
+        );
+        assert!(
+            translator
+                .explain_semantic_error("variable not defined in scope")
+                .contains("hasn't been defined")
+        );
+        assert!(
+            translator
+                .explain_semantic_error("contradictory rule semantics")
+                .contains("Policy logic error")
+        );
+    }
+
+    #[test]
+    fn test_explain_warning_additional_branches() {
+        let client = Arc::new(MockLlmClient::new(vec![]));
+        let translator = PolicyTranslator::new(client, PolicyTranslatorConfig::default());
+
+        assert!(
+            translator
+                .explain_warning("Policy does not reference resource")
+                .contains("resource")
+        );
+        assert!(
+            translator
+                .explain_warning("Missing semicolon for consistency")
+                .contains("semicolon")
+        );
+        assert!(
+            translator
+                .explain_warning("Custom warning text")
+                .contains("Note:")
+        );
+    }
+
+    #[test]
+    fn test_cache_stats_and_ttl_expiry_behavior() {
+        let client = Arc::new(MockLlmClient::new(vec![]));
+        let mut config = PolicyTranslatorConfig::default();
+        config.cache_ttl_secs = 0;
+        let translator = PolicyTranslator::new(client, config);
+
+        let ctx = TranslationContext::default();
+        let key = CacheKey::from_context("Block mysql", &ctx);
+        let draft = PolicyDraft {
+            draft_id: "draft-1".to_string(),
+            status: DraftStatus::Validated,
+            name: "no-mysql".to_string(),
+            intent: StructuredIntent {
+                original: "Block mysql".to_string(),
+                interpreted: "Block mysql".to_string(),
+                action: PolicyAction::Deny,
+                target_type: TargetType::Dependency,
+                target_value: "mysql".to_string(),
+                condition: None,
+                severity: PolicySeverity::Block,
+                confidence: 0.9,
+            },
+            rules: vec![],
+            explanation: "test".to_string(),
+            validation: ValidationResult {
+                is_valid: true,
+                errors: vec![],
+                warnings: vec![],
+            },
+        };
+
+        translator.cache.write().unwrap().insert(
+            key,
+            CacheEntry {
+                draft,
+                created_at: Instant::now(),
+            },
+        );
+
+        assert_eq!(translator.cache_stats(), (1, 1000));
+        assert!(translator.get_cached("Block mysql", &ctx).is_none());
+    }
 }

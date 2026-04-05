@@ -3,6 +3,7 @@ pub mod budget_storage;
 pub mod code_graph;
 pub mod encryption;
 pub mod events;
+pub mod git_provider_connection_store;
 pub mod gdpr;
 pub mod governance;
 pub mod graph;
@@ -21,7 +22,9 @@ pub mod rls_migration;
 pub mod secret_provider;
 pub mod shard_manager;
 pub mod shard_router;
+pub mod tenant_config_provider;
 pub mod tenant_router;
+pub mod tenant_store;
 
 // Re-export Redis lock types for job coordination
 pub use redis::{JobSkipReason, LockResult};
@@ -50,6 +53,11 @@ pub use meta_governance::{
     EscalationTier, GovernanceActionType, GovernanceLayer, HumanConfirmationRequest,
     MetaGovernancePolicy, MetaGovernanceStorage, NotificationChannel, RoleLevel,
     create_default_policies,
+};
+
+// Re-export Git provider connection store types
+pub use git_provider_connection_store::{
+    GitProviderConnectionError, InMemoryGitProviderConnectionStore,
 };
 
 // Re-export RLM weight storage types

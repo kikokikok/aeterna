@@ -161,6 +161,7 @@ fn load_plugin_auth_from_env() -> anyhow::Result<PluginAuthConfig> {
         refresh_token_ttl_seconds: env::var("AETERNA_PLUGIN_AUTH_REFRESH_TOKEN_TTL_SECONDS")
             .ok()
             .and_then(|v| v.parse::<u64>().ok()),
+        default_tenant_id: env::var("AETERNA_PLUGIN_AUTH_TENANT").ok(),
     })
 }
 

@@ -154,7 +154,7 @@ jobs:
       # Minimum 80% line coverage enforced. The --fail-under flag exits non-zero
       # if the measured coverage is below the threshold, failing the CI job.
       - name: Run tarpaulin with coverage gate
-        run: cargo tarpaulin --out Html --out Json --timeout 300 --workspace --fail-under 80
+        run: cargo tarpaulin --config tarpaulin.toml
 
       - name: Upload coverage report
         if: always()

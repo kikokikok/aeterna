@@ -65,7 +65,12 @@ mod setup_subcommand {
         // run_validate returns Ok(()) even when config is missing (prints error msg)
         let temp = TempDir::new().unwrap();
         aeterna()
-            .args(["setup", "--validate", "--output", temp.path().to_str().unwrap()])
+            .args([
+                "setup",
+                "--validate",
+                "--output",
+                temp.path().to_str().unwrap(),
+            ])
             .assert()
             .success()
             .stderr(
@@ -126,8 +131,7 @@ mod setup_subcommand {
             .assert()
             .failure()
             .stderr(
-                predicate::str::contains("--mode is required")
-                    .or(predicate::str::contains("mode")),
+                predicate::str::contains("--mode is required").or(predicate::str::contains("mode")),
             );
     }
 
@@ -170,9 +174,10 @@ mod setup_subcommand {
             ])
             .assert()
             .success()
-            .stdout(predicate::str::contains("generated successfully").or(
-                predicate::str::contains("Configuration generated"),
-            ));
+            .stdout(
+                predicate::str::contains("generated successfully")
+                    .or(predicate::str::contains("Configuration generated")),
+            );
 
         assert!(
             temp.path().join(".aeterna").join("config.toml").exists(),
@@ -201,8 +206,7 @@ mod setup_subcommand {
             .assert()
             .success();
 
-        let config =
-            fs::read_to_string(temp.path().join(".aeterna").join("config.toml")).unwrap();
+        let config = fs::read_to_string(temp.path().join(".aeterna").join("config.toml")).unwrap();
         assert!(
             config.contains("docker-compose") || config.contains("local"),
             "config.toml should reflect deployment mode"
@@ -261,13 +265,15 @@ mod setup_subcommand {
 
         // Then validate it
         aeterna()
-            .args(["setup", "--validate", "--output", temp.path().to_str().unwrap()])
+            .args([
+                "setup",
+                "--validate",
+                "--output",
+                temp.path().to_str().unwrap(),
+            ])
             .assert()
             .success()
-            .stdout(
-                predicate::str::contains("valid")
-                    .or(predicate::str::contains("Validating")),
-            );
+            .stdout(predicate::str::contains("valid").or(predicate::str::contains("Validating")));
     }
 
     // ── --show with existing config ───────────────────────────────────────────
@@ -340,9 +346,7 @@ mode = "local"
             .args(["setup", "--non-interactive", "--mode", "cloud-only"])
             .assert()
             .failure()
-            .stderr(
-                predicate::str::contains("invalid").or(predicate::str::contains("cloud-only")),
-            );
+            .stderr(predicate::str::contains("invalid").or(predicate::str::contains("cloud-only")));
     }
 
     #[test]
@@ -462,13 +466,15 @@ mod context_set_and_clear {
             .assert()
             .success()
             .stdout(
-                predicate::str::contains("tenant-id")
-                    .or(predicate::str::contains("acme-corp")),
+                predicate::str::contains("tenant-id").or(predicate::str::contains("acme-corp")),
             );
 
         let content =
             fs::read_to_string(temp.path().join(".aeterna").join("context.toml")).unwrap();
-        assert!(content.contains("acme-corp"), "tenant-id value must be in context.toml");
+        assert!(
+            content.contains("acme-corp"),
+            "tenant-id value must be in context.toml"
+        );
     }
 
     #[test]
@@ -501,7 +507,10 @@ mod context_set_and_clear {
 
         let content =
             fs::read_to_string(temp.path().join(".aeterna").join("context.toml")).unwrap();
-        assert!(content.contains("t1"), "tenant-id must persist after second set");
+        assert!(
+            content.contains("t1"),
+            "tenant-id must persist after second set"
+        );
         assert!(content.contains("o1"), "org-id must be written");
     }
 
@@ -521,8 +530,14 @@ mod context_set_and_clear {
 
         let content =
             fs::read_to_string(temp.path().join(".aeterna").join("context.toml")).unwrap();
-        assert!(content.contains("second-value"), "overwritten value must be present");
-        assert!(!content.contains("first-value"), "old value must not remain");
+        assert!(
+            content.contains("second-value"),
+            "overwritten value must be present"
+        );
+        assert!(
+            !content.contains("first-value"),
+            "old value must not remain"
+        );
     }
 
     // ── context clear ─────────────────────────────────────────────────────────
@@ -541,8 +556,7 @@ mod context_set_and_clear {
             .assert()
             .success()
             .stdout(
-                predicate::str::contains("Removed")
-                    .or(predicate::str::contains("context.toml")),
+                predicate::str::contains("Removed").or(predicate::str::contains("context.toml")),
             );
 
         assert!(
@@ -826,7 +840,9 @@ mod code_search_subcommand {
             .args(["code-search", "trace"])
             .assert()
             .failure()
-            .stderr(predicate::str::contains("subcommand").or(predicate::str::contains("required")));
+            .stderr(
+                predicate::str::contains("subcommand").or(predicate::str::contains("required")),
+            );
     }
 
     // ── status ────────────────────────────────────────────────────────────────
@@ -837,10 +853,7 @@ mod code_search_subcommand {
             .args(["code-search", "status", "--help"])
             .assert()
             .success()
-            .stdout(
-                predicate::str::contains("status")
-                    .or(predicate::str::contains("Status")),
-            )
+            .stdout(predicate::str::contains("status").or(predicate::str::contains("Status")))
             .stdout(predicate::str::contains("--project"))
             .stdout(predicate::str::contains("--watch"));
     }
@@ -919,9 +932,9 @@ mod code_search_subcommand {
             String::from_utf8_lossy(&output.stdout)
         );
         assert!(
-            combined.contains("Cannot connect to Aeterna server")
-                || combined.contains("live Aeterna backend")
-                || combined.contains("AETERNA_SERVER_URL"),
+            combined.contains("no longer shells out to the legacy `codesearch` binary")
+                || combined.contains("MCP-compatible code intelligence backend")
+                || combined.contains("JetBrains Code Intelligence MCP"),
             "got: {combined}"
         );
     }
@@ -982,7 +995,10 @@ mod code_search_subcommand {
             .args(["code-search", "index", "--help"])
             .assert()
             .success()
-            .stdout(predicate::str::contains("--incremental").or(predicate::str::contains("incremental")));
+            .stdout(
+                predicate::str::contains("--incremental")
+                    .or(predicate::str::contains("incremental")),
+            );
     }
 }
 
@@ -1162,7 +1178,7 @@ mod additional_coverage {
     fn test_govern_audit_export_json_to_file() {
         let temp = TempDir::new().unwrap();
         let out_path = temp.path().join("audit.json");
-        aeterna()
+        let output = aeterna()
             .args([
                 "govern",
                 "audit",
@@ -1171,23 +1187,31 @@ mod additional_coverage {
                 "--output",
                 out_path.to_str().unwrap(),
             ])
-            .assert()
-            .success();
-        assert!(
-            out_path.exists(),
-            "audit export --output should write to the specified file"
+            .output()
+            .expect("process ran");
+        assert!(!output.status.success());
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
         );
-        let content = fs::read_to_string(&out_path).unwrap();
-        // Validate it is parseable JSON
-        let _: serde_json::Value = serde_json::from_str(&content)
-            .expect("audit export --json --output must produce valid JSON");
+        assert!(
+            combined.contains("Cannot list governance audit entries: server not connected")
+                || combined.contains("No Aeterna server URL is configured")
+                || combined.contains("AETERNA_SERVER_URL"),
+            "Expected govern audit export to fail closed without a server, got: {combined}"
+        );
+        assert!(
+            !out_path.exists(),
+            "audit export should not write a file when the server is not connected"
+        );
     }
 
     #[test]
     fn test_govern_audit_export_csv_to_file() {
         let temp = TempDir::new().unwrap();
         let out_path = temp.path().join("audit.csv");
-        aeterna()
+        let output = aeterna()
             .args([
                 "govern",
                 "audit",
@@ -1196,17 +1220,23 @@ mod additional_coverage {
                 "--output",
                 out_path.to_str().unwrap(),
             ])
-            .assert()
-            .success();
-        assert!(
-            out_path.exists(),
-            "audit export csv --output should write to the specified file"
+            .output()
+            .expect("process ran");
+        assert!(!output.status.success());
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
         );
-        let content = fs::read_to_string(&out_path).unwrap();
-        // CSV has a header row
         assert!(
-            content.contains("action") || content.contains("actor") || content.contains(","),
-            "CSV output should contain column headers, got: {content}"
+            combined.contains("Cannot list governance audit entries: server not connected")
+                || combined.contains("No Aeterna server URL is configured")
+                || combined.contains("AETERNA_SERVER_URL"),
+            "Expected govern audit export to fail closed without a server, got: {combined}"
+        );
+        assert!(
+            !out_path.exists(),
+            "audit export should not write a file when the server is not connected"
         );
     }
 }

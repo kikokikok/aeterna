@@ -7,6 +7,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::collections::{BTreeSet, HashMap};
 use uuid::Uuid;
 
 use crate::error::Result;
@@ -30,7 +31,7 @@ pub struct HierarchyRow {
     pub project_id: Option<Uuid>,
     pub project_slug: Option<String>,
     pub project_name: Option<String>,
-    pub git_remote: Option<String>
+    pub git_remote: Option<String>,
 }
 
 /// Row from the `v_user_permissions` view.
@@ -47,7 +48,7 @@ pub struct UserPermissionRow {
     pub company_id: Uuid,
     pub company_slug: String,
     pub org_slug: String,
-    pub team_slug: String
+    pub team_slug: String,
 }
 
 /// Row from the `v_agent_permissions` view.
@@ -66,7 +67,7 @@ pub struct AgentPermissionRow {
     pub allowed_project_ids: Option<Vec<Uuid>>,
     pub agent_status: String,
     pub delegating_user_email: Option<String>,
-    pub delegating_user_name: Option<String>
+    pub delegating_user_name: Option<String>,
 }
 
 /// Row from the `codesearch_repositories` table.
@@ -99,6 +100,14 @@ pub struct CodeSearchIdentityRow {
     pub provider: String,
 }
 
+#[derive(Debug, Clone, FromRow)]
+pub struct ProjectTeamAssignmentRow {
+    pub project_id: String,
+    pub team_id: String,
+    pub tenant_id: String,
+    pub assignment_type: String,
+}
+
 // ============================================================================
 // Cedar Entity Types
 // ============================================================================
@@ -111,7 +120,7 @@ pub struct CedarEntity {
     /// Entity attributes.
     pub attrs: serde_json::Value,
     /// Parent entity UIDs (for hierarchy).
-    pub parents: Vec<CedarEntityUid>
+    pub parents: Vec<CedarEntityUid>,
 }
 
 /// Cedar entity UID structure.
@@ -119,7 +128,7 @@ pub struct CedarEntity {
 pub struct CedarEntityUid {
     #[serde(rename = "type")]
     pub entity_type: String,
-    pub id: String
+    pub id: String,
 }
 
 impl CedarEntityUid {
@@ -128,7 +137,7 @@ impl CedarEntityUid {
     pub fn new(entity_type: impl Into<String>, id: impl Into<String>) -> Self {
         Self {
             entity_type: entity_type.into(),
-            id: id.into()
+            id: id.into(),
         }
     }
 }
@@ -141,7 +150,7 @@ pub struct CedarEntitiesResponse {
     /// Timestamp of the response.
     pub timestamp: DateTime<Utc>,
     /// Number of entities.
-    pub count: usize
+    pub count: usize,
 }
 
 impl CedarEntitiesResponse {
@@ -152,7 +161,7 @@ impl CedarEntitiesResponse {
         Self {
             entities,
             timestamp: Utc::now(),
-            count
+            count,
         }
     }
 }
@@ -184,7 +193,7 @@ pub fn transform_hierarchy(rows: Vec<HierarchyRow>) -> Result<Vec<CedarEntity>> 
                     "slug": slug,
                     "name": name,
                 }),
-                parents: vec![]
+                parents: vec![],
             });
         }
 
@@ -201,8 +210,8 @@ pub fn transform_hierarchy(rows: Vec<HierarchyRow>) -> Result<Vec<CedarEntity>> 
                 }),
                 parents: vec![CedarEntityUid::new(
                     "Aeterna::Company",
-                    company_id.to_string()
-                )]
+                    company_id.to_string(),
+                )],
             });
         }
 
@@ -219,8 +228,8 @@ pub fn transform_hierarchy(rows: Vec<HierarchyRow>) -> Result<Vec<CedarEntity>> 
                 }),
                 parents: vec![CedarEntityUid::new(
                     "Aeterna::Organization",
-                    org_id.to_string()
-                )]
+                    org_id.to_string(),
+                )],
             });
         }
 
@@ -229,7 +238,7 @@ pub fn transform_hierarchy(rows: Vec<HierarchyRow>) -> Result<Vec<CedarEntity>> 
             &row.project_id,
             &row.project_slug,
             &row.project_name,
-            &row.team_id
+            &row.team_id,
         ) && seen_projects.insert(*id)
         {
             let mut attrs = serde_json::json!({
@@ -242,7 +251,7 @@ pub fn transform_hierarchy(rows: Vec<HierarchyRow>) -> Result<Vec<CedarEntity>> 
             entities.push(CedarEntity {
                 uid: CedarEntityUid::new("Aeterna::Project", id.to_string()),
                 attrs,
-                parents: vec![CedarEntityUid::new("Aeterna::Team", team_id.to_string())]
+                parents: vec![CedarEntityUid::new("Aeterna::Team", team_id.to_string())],
             });
         }
     }
@@ -250,29 +259,111 @@ pub fn transform_hierarchy(rows: Vec<HierarchyRow>) -> Result<Vec<CedarEntity>> 
     Ok(entities)
 }
 
+pub fn collect_project_team_assignments(
+    rows: Vec<ProjectTeamAssignmentRow>,
+) -> std::collections::HashMap<String, Vec<(String, String)>> {
+    let mut map: std::collections::HashMap<String, Vec<(String, String)>> =
+        std::collections::HashMap::new();
+    for row in rows {
+        let ProjectTeamAssignmentRow {
+            project_id,
+            team_id,
+            assignment_type,
+            ..
+        } = row;
+        map.entry(project_id)
+            .or_default()
+            .push((team_id, assignment_type));
+    }
+    map
+}
+
+pub fn augment_projects_with_team_assignments(
+    entities: &mut Vec<CedarEntity>,
+    assignments: std::collections::HashMap<String, Vec<(String, String)>>,
+) {
+    for entity in entities.iter_mut() {
+        if entity.uid.entity_type == "Aeterna::Project"
+            && let Some(team_assignments) = assignments.get(&entity.uid.id)
+        {
+            for (team_id, _) in team_assignments {
+                let team_uid = CedarEntityUid::new("Aeterna::Team", team_id.clone());
+                if !entity.parents.contains(&team_uid) {
+                    entity.parents.push(team_uid);
+                }
+            }
+            let assignments_json: Vec<serde_json::Value> = team_assignments
+                .iter()
+                .map(|(tid, atype)| serde_json::json!({"team_id": tid, "assignment_type": atype}))
+                .collect();
+            entity.attrs["team_assignments"] = serde_json::json!(assignments_json);
+        }
+    }
+}
+
+/// Transforms user permission rows into Cedar entities.
+///
+/// Creates User entities with role and membership information.
+#[must_use]
+pub fn normalize_role_to_entity_id(role: &str) -> String {
+    match role {
+        "platformadmin" => "PlatformAdmin".to_string(),
+        "tenantadmin" => "TenantAdmin".to_string(),
+        "admin" => "Admin".to_string(),
+        "architect" => "Architect".to_string(),
+        "techlead" => "TechLead".to_string(),
+        "developer" => "Developer".to_string(),
+        "viewer" => "Viewer".to_string(),
+        _ => role.to_string(),
+    }
+}
+
+#[must_use]
+pub fn transform_roles(rows: &[UserPermissionRow]) -> Vec<CedarEntity> {
+    let unique_roles: BTreeSet<String> = rows
+        .iter()
+        .map(|row| normalize_role_to_entity_id(&row.role))
+        .collect();
+
+    unique_roles
+        .into_iter()
+        .map(|normalized_role| CedarEntity {
+            uid: CedarEntityUid::new("Aeterna::Role", normalized_role.clone()),
+            attrs: serde_json::json!({
+                "name": normalized_role,
+            }),
+            parents: vec![],
+        })
+        .collect()
+}
+
 /// Transforms user permission rows into Cedar entities.
 ///
 /// Creates User entities with role and membership information.
 pub fn transform_users(rows: Vec<UserPermissionRow>) -> Result<Vec<CedarEntity>> {
     let mut entities: Vec<CedarEntity> = Vec::new();
-    let mut user_teams: std::collections::HashMap<Uuid, Vec<CedarEntityUid>> =
-        std::collections::HashMap::new();
-    let mut user_info: std::collections::HashMap<Uuid, (String, Option<String>, String)> =
-        std::collections::HashMap::new();
+    let mut user_teams: HashMap<Uuid, Vec<CedarEntityUid>> = HashMap::new();
+    let mut user_roles: HashMap<Uuid, BTreeSet<String>> = HashMap::new();
+    let mut user_info: HashMap<Uuid, (String, Option<String>, String)> = HashMap::new();
 
     // Collect all team memberships per user
     for row in &rows {
         let team_uid = CedarEntityUid::new("Aeterna::Team", row.team_id.to_string());
         user_teams.entry(row.user_id).or_default().push(team_uid);
+        let normalized_role = normalize_role_to_entity_id(&row.role);
+        user_roles
+            .entry(row.user_id)
+            .or_default()
+            .insert(normalized_role);
         user_info.entry(row.user_id).or_insert((
             row.email.clone(),
             row.user_name.clone(),
-            row.user_status.clone()
+            row.user_status.clone(),
         ));
     }
 
     // Create User entities with all their team memberships as parents
-    for (user_id, parents) in user_teams {
+    for (user_id, mut parents) in user_teams {
         let (email, name, status) = user_info.get(&user_id).cloned().unwrap_or_default();
 
         // Collect roles for this user
@@ -281,6 +372,12 @@ pub fn transform_users(rows: Vec<UserPermissionRow>) -> Result<Vec<CedarEntity>>
             .filter(|r| r.user_id == user_id)
             .map(|r| r.role.clone())
             .collect();
+
+        if let Some(role_ids) = user_roles.get(&user_id) {
+            for role_id in role_ids {
+                parents.push(CedarEntityUid::new("Aeterna::Role", role_id.clone()));
+            }
+        }
 
         let mut attrs = serde_json::json!({
             "email": email,
@@ -294,7 +391,7 @@ pub fn transform_users(rows: Vec<UserPermissionRow>) -> Result<Vec<CedarEntity>>
         entities.push(CedarEntity {
             uid: CedarEntityUid::new("Aeterna::User", user_id.to_string()),
             attrs,
-            parents
+            parents,
         });
     }
 
@@ -370,7 +467,7 @@ pub fn transform_agents(rows: Vec<AgentPermissionRow>) -> Result<Vec<CedarEntity
         entities.push(CedarEntity {
             uid: CedarEntityUid::new("Aeterna::Agent", row.agent_id.to_string()),
             attrs,
-            parents
+            parents,
         });
     }
 
@@ -429,6 +526,23 @@ pub fn transform_code_search_identities(rows: Vec<CodeSearchIdentityRow>) -> Vec
 mod tests {
     use super::*;
 
+    fn sample_user_row() -> UserPermissionRow {
+        UserPermissionRow {
+            user_id: Uuid::new_v4(),
+            email: "alice@acme.com".to_string(),
+            user_name: Some("Alice".to_string()),
+            user_status: "active".to_string(),
+            team_id: Uuid::new_v4(),
+            role: "developer".to_string(),
+            permissions: serde_json::json!([]),
+            org_id: Uuid::new_v4(),
+            company_id: Uuid::new_v4(),
+            company_slug: "acme-corp".to_string(),
+            org_slug: "platform-engineering".to_string(),
+            team_slug: "api-team".to_string(),
+        }
+    }
+
     fn sample_hierarchy_row() -> HierarchyRow {
         HierarchyRow {
             company_id: Some(Uuid::new_v4()),
@@ -443,7 +557,20 @@ mod tests {
             project_id: Some(Uuid::new_v4()),
             project_slug: Some("payments-service".to_string()),
             project_name: Some("Payments Service".to_string()),
-            git_remote: Some("git@github.com:acme/payments.git".to_string())
+            git_remote: Some("git@github.com:acme/payments.git".to_string()),
+        }
+    }
+
+    fn sample_project_team_assignment(
+        project_id: &str,
+        team_id: &str,
+        assignment_type: &str,
+    ) -> ProjectTeamAssignmentRow {
+        ProjectTeamAssignmentRow {
+            project_id: project_id.to_string(),
+            team_id: team_id.to_string(),
+            tenant_id: "acme-corp".to_string(),
+            assignment_type: assignment_type.to_string(),
         }
     }
 
@@ -511,23 +638,9 @@ mod tests {
 
     #[test]
     fn test_transform_users() {
-        let user_id = Uuid::new_v4();
-        let team_id = Uuid::new_v4();
-
-        let row = UserPermissionRow {
-            user_id,
-            email: "alice@acme.com".to_string(),
-            user_name: Some("Alice".to_string()),
-            user_status: "active".to_string(),
-            team_id,
-            role: "developer".to_string(),
-            permissions: serde_json::json!([]),
-            org_id: Uuid::new_v4(),
-            company_id: Uuid::new_v4(),
-            company_slug: "acme-corp".to_string(),
-            org_slug: "platform-engineering".to_string(),
-            team_slug: "api-team".to_string()
-        };
+        let row = sample_user_row();
+        let user_id = row.user_id;
+        let team_id = row.team_id;
 
         let entities = transform_users(vec![row]).unwrap();
 
@@ -537,30 +650,22 @@ mod tests {
         assert_eq!(user.uid.id, user_id.to_string());
         assert_eq!(user.attrs["email"], "alice@acme.com");
         assert_eq!(user.attrs["status"], "active");
-        assert_eq!(user.parents.len(), 1);
-        assert_eq!(user.parents[0].entity_type, "Aeterna::Team");
+        assert_eq!(user.parents.len(), 2);
+        assert!(user.parents.iter().any(
+            |parent| parent.entity_type == "Aeterna::Team" && parent.id == team_id.to_string()
+        ));
+        assert!(
+            user.parents
+                .iter()
+                .any(|parent| parent.entity_type == "Aeterna::Role" && parent.id == "Developer")
+        );
     }
 
     #[test]
     fn test_transform_users_multiple_teams() {
-        let user_id = Uuid::new_v4();
-        let team1_id = Uuid::new_v4();
+        let row1 = sample_user_row();
+        let team1_id = row1.team_id;
         let team2_id = Uuid::new_v4();
-
-        let row1 = UserPermissionRow {
-            user_id,
-            email: "alice@acme.com".to_string(),
-            user_name: Some("Alice".to_string()),
-            user_status: "active".to_string(),
-            team_id: team1_id,
-            role: "developer".to_string(),
-            permissions: serde_json::json!([]),
-            org_id: Uuid::new_v4(),
-            company_id: Uuid::new_v4(),
-            company_slug: "acme-corp".to_string(),
-            org_slug: "platform-engineering".to_string(),
-            team_slug: "api-team".to_string()
-        };
 
         let row2 = UserPermissionRow {
             team_id: team2_id,
@@ -573,12 +678,118 @@ mod tests {
 
         assert_eq!(entities.len(), 1);
         let user = &entities[0];
-        // Should have 2 parent teams
-        assert_eq!(user.parents.len(), 2);
+        assert_eq!(user.parents.len(), 4);
+        assert!(user.parents.iter().any(
+            |parent| parent.entity_type == "Aeterna::Team" && parent.id == team1_id.to_string()
+        ));
+        assert!(user.parents.iter().any(
+            |parent| parent.entity_type == "Aeterna::Team" && parent.id == team2_id.to_string()
+        ));
+        assert!(
+            user.parents
+                .iter()
+                .any(|parent| parent.entity_type == "Aeterna::Role" && parent.id == "Developer")
+        );
+        assert!(
+            user.parents
+                .iter()
+                .any(|parent| parent.entity_type == "Aeterna::Role" && parent.id == "tech_lead")
+        );
         // Should have both roles
         let roles: Vec<String> = serde_json::from_value(user.attrs["roles"].clone()).unwrap();
         assert!(roles.contains(&"developer".to_string()));
         assert!(roles.contains(&"tech_lead".to_string()));
+    }
+
+    #[test]
+    fn test_normalize_role_to_entity_id_known_role_mappings() {
+        let known_mappings = vec![
+            ("platformadmin", "PlatformAdmin"),
+            ("tenantadmin", "TenantAdmin"),
+            ("admin", "Admin"),
+            ("architect", "Architect"),
+            ("techlead", "TechLead"),
+            ("developer", "Developer"),
+            ("viewer", "Viewer"),
+        ];
+
+        for (input, expected) in known_mappings {
+            assert_eq!(normalize_role_to_entity_id(input), expected);
+        }
+    }
+
+    #[test]
+    fn test_transform_roles_emits_role_entities_with_deduplication() {
+        let user_one = sample_user_row();
+        let user_two = UserPermissionRow {
+            user_id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            role: "developer".to_string(),
+            ..sample_user_row()
+        };
+        let user_three = UserPermissionRow {
+            user_id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            role: "viewer".to_string(),
+            ..sample_user_row()
+        };
+
+        let role_entities = transform_roles(&[user_one, user_two, user_three]);
+
+        assert_eq!(role_entities.len(), 2);
+        assert!(role_entities.iter().any(|entity| {
+            entity.uid == CedarEntityUid::new("Aeterna::Role", "Developer")
+                && entity.attrs["name"] == "Developer"
+                && entity.parents.is_empty()
+        }));
+        assert!(role_entities.iter().any(|entity| {
+            entity.uid == CedarEntityUid::new("Aeterna::Role", "Viewer")
+                && entity.attrs["name"] == "Viewer"
+                && entity.parents.is_empty()
+        }));
+    }
+
+    #[test]
+    fn test_transform_users_adds_role_parent_memberships() {
+        let row = UserPermissionRow {
+            role: "platformadmin".to_string(),
+            ..sample_user_row()
+        };
+        let user_id = row.user_id.to_string();
+
+        let users = transform_users(vec![row]).unwrap();
+
+        assert_eq!(users.len(), 1);
+        let user = users.first().unwrap();
+        assert_eq!(user.uid, CedarEntityUid::new("Aeterna::User", user_id));
+        assert!(
+            user.parents
+                .iter()
+                .any(|parent| parent == &CedarEntityUid::new("Aeterna::Role", "PlatformAdmin"))
+        );
+        assert!(
+            user.parents
+                .iter()
+                .any(|parent| parent.entity_type == "Aeterna::Team")
+        );
+    }
+
+    #[test]
+    fn test_transform_roles_custom_roles_pass_through() {
+        let custom_role = "super-operator".to_string();
+        let row = UserPermissionRow {
+            role: custom_role.clone(),
+            ..sample_user_row()
+        };
+
+        let roles = transform_roles(&[row]);
+
+        assert_eq!(roles.len(), 1);
+        assert_eq!(
+            roles[0].uid,
+            CedarEntityUid::new("Aeterna::Role", custom_role)
+        );
+        assert_eq!(roles[0].attrs["name"], "super-operator");
     }
 
     #[test]
@@ -601,7 +812,7 @@ mod tests {
             allowed_project_ids: None,
             agent_status: "active".to_string(),
             delegating_user_email: Some("alice@acme.com".to_string()),
-            delegating_user_name: Some("Alice".to_string())
+            delegating_user_name: Some("Alice".to_string()),
         };
 
         let entities = transform_agents(vec![row]).unwrap();
@@ -644,7 +855,7 @@ mod tests {
             allowed_project_ids: None,
             agent_status: "active".to_string(),
             delegating_user_email: None,
-            delegating_user_name: None
+            delegating_user_name: None,
         };
 
         let entities = transform_agents(vec![row]).unwrap();
@@ -661,12 +872,158 @@ mod tests {
         let entities = vec![CedarEntity {
             uid: CedarEntityUid::new("Aeterna::User", "123"),
             attrs: serde_json::json!({"email": "test@test.com"}),
-            parents: vec![]
+            parents: vec![],
         }];
 
         let response = CedarEntitiesResponse::new(entities);
 
         assert_eq!(response.count, 1);
         assert_eq!(response.entities.len(), 1);
+    }
+
+    #[test]
+    fn test_collect_project_team_assignments_single() {
+        let row = sample_project_team_assignment("proj-1", "team-1", "owner");
+
+        let assignments = collect_project_team_assignments(vec![row]);
+
+        assert_eq!(assignments.len(), 1);
+        let project_assignments = assignments.get("proj-1").unwrap();
+        assert_eq!(project_assignments.len(), 1);
+        assert_eq!(
+            project_assignments[0],
+            ("team-1".to_string(), "owner".to_string())
+        );
+    }
+
+    #[test]
+    fn test_collect_project_team_assignments_multiple_teams() {
+        let row1 = sample_project_team_assignment("proj-1", "team-1", "owner");
+        let row2 = sample_project_team_assignment("proj-1", "team-2", "contributor");
+
+        let assignments = collect_project_team_assignments(vec![row1, row2]);
+
+        assert_eq!(assignments.len(), 1);
+        let project_assignments = assignments.get("proj-1").unwrap();
+        assert_eq!(project_assignments.len(), 2);
+        assert!(project_assignments.contains(&("team-1".to_string(), "owner".to_string())));
+        assert!(project_assignments.contains(&("team-2".to_string(), "contributor".to_string())));
+    }
+
+    #[test]
+    fn test_collect_project_team_assignments_multiple_projects() {
+        let row1 = sample_project_team_assignment("proj-1", "team-1", "owner");
+        let row2 = sample_project_team_assignment("proj-2", "team-2", "contributor");
+
+        let assignments = collect_project_team_assignments(vec![row1, row2]);
+
+        assert_eq!(assignments.len(), 2);
+        assert_eq!(assignments.get("proj-1").unwrap().len(), 1);
+        assert_eq!(assignments.get("proj-2").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_collect_project_team_assignments_empty() {
+        let assignments = collect_project_team_assignments(vec![]);
+
+        assert!(assignments.is_empty());
+    }
+
+    #[test]
+    fn test_augment_projects_adds_team_parents() {
+        let row = sample_hierarchy_row();
+        let mut entities = transform_hierarchy(vec![row]).unwrap();
+
+        let project_id = entities
+            .iter()
+            .find(|e| e.uid.entity_type == "Aeterna::Project")
+            .unwrap()
+            .uid
+            .id
+            .clone();
+        let original_parent_count = entities
+            .iter()
+            .find(|e| e.uid.entity_type == "Aeterna::Project")
+            .unwrap()
+            .parents
+            .len();
+
+        let assignments = std::collections::HashMap::from([(
+            project_id.clone(),
+            vec![("extra-team-99".to_string(), "owner".to_string())],
+        )]);
+
+        augment_projects_with_team_assignments(&mut entities, assignments);
+
+        let project = entities
+            .iter()
+            .find(|e| e.uid.entity_type == "Aeterna::Project" && e.uid.id == project_id)
+            .unwrap();
+        assert_eq!(project.parents.len(), original_parent_count + 1);
+        assert!(
+            project
+                .parents
+                .iter()
+                .any(|p| p.id == "extra-team-99" && p.entity_type == "Aeterna::Team")
+        );
+
+        let team_assignments = project
+            .attrs
+            .get("team_assignments")
+            .and_then(serde_json::Value::as_array)
+            .unwrap();
+        assert_eq!(team_assignments.len(), 1);
+    }
+
+    #[test]
+    fn test_augment_projects_no_duplicate_parents() {
+        let row = sample_hierarchy_row();
+        let mut entities = transform_hierarchy(vec![row]).unwrap();
+
+        let project = entities
+            .iter()
+            .find(|e| e.uid.entity_type == "Aeterna::Project")
+            .unwrap();
+        let project_id = project.uid.id.clone();
+        let existing_team_id = project.parents[0].id.clone();
+        let parent_count_before = project.parents.len();
+
+        let assignments = std::collections::HashMap::from([(
+            project_id.clone(),
+            vec![(existing_team_id.clone(), "owner".to_string())],
+        )]);
+
+        augment_projects_with_team_assignments(&mut entities, assignments);
+
+        let updated_project = entities
+            .iter()
+            .find(|e| e.uid.entity_type == "Aeterna::Project" && e.uid.id == project_id)
+            .unwrap();
+
+        assert_eq!(updated_project.parents.len(), parent_count_before);
+        assert_eq!(
+            updated_project
+                .parents
+                .iter()
+                .filter(|p| p.entity_type == "Aeterna::Team" && p.id == existing_team_id)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_augment_projects_unrelated_project_unaffected() {
+        let row = sample_hierarchy_row();
+        let mut entities = transform_hierarchy(vec![row]).unwrap();
+        let original_entities = entities.clone();
+
+        let assignments = std::collections::HashMap::from([(
+            "non-existent-project".to_string(),
+            vec![("extra-team-99".to_string(), "owner".to_string())],
+        )]);
+
+        augment_projects_with_team_assignments(&mut entities, assignments);
+
+        assert_eq!(entities, original_entities);
     }
 }

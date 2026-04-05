@@ -369,6 +369,54 @@ kubectl create secret generic postgres-credentials \
   --from-literal=postgres-password='...'
 ```
 
+## Multi-Tenant Administration
+
+Aeterna supports hierarchical multi-tenancy. Two administrative roles operate at distinct scopes:
+
+| Role | Scope | Key Capabilities |
+|------|-------|-----------------|
+| **PlatformAdmin** | Cross-tenant | Tenant lifecycle, shared Git provider connections, cross-tenant inspection via `--target-tenant` |
+| **TenantAdmin** | Single tenant | Tenant config/secrets, role delegation within tenant |
+
+### Tenant Configuration Helm Value
+
+Enable the Kubernetes-backed tenant config provider:
+
+```yaml
+tenantConfigProvider:
+  enabled: true
+  namespace: aeterna   # namespace where ConfigMaps/Secrets are created
+```
+
+Each tenant's runtime configuration is stored as:
+- **ConfigMap**: `aeterna-tenant-<tenant-id>` — non-secret tenant config
+- **Secret**: `aeterna-tenant-<tenant-id>-secret` — sensitive tenant values
+
+### Bootstrapping a Tenant (CLI)
+
+```bash
+# Platform admin creates a tenant
+aeterna tenant create --tenant-id acme-corp --display-name "Acme Corp"
+
+# Inspect a tenant's config from the control plane
+aeterna tenant config show --target-tenant acme-corp
+
+# Assign a TenantAdmin
+aeterna tenant role assign --tenant-id acme-corp --user-id alice@acme.com --role tenant_admin
+```
+
+### Cross-Tenant Operations
+
+The `--target-tenant` flag is available only to `PlatformAdmin` users:
+
+```bash
+aeterna memory list --target-tenant acme-corp
+aeterna permissions matrix --target-tenant acme-corp
+```
+
+For the full operator workflow, see
+[`docs/guides/tenant-admin-control-plane.md`](../../docs/guides/tenant-admin-control-plane.md).
+
 ## Resource Sizing Guide
 
 | Size | Memories | Aeterna | PostgreSQL | Qdrant |

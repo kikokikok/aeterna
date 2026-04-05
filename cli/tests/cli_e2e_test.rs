@@ -604,7 +604,8 @@ mod user_subcommand {
                 "--json",
             ])
             .assert()
-            .success()
+            .failure()
+            .stdout(predicate::str::contains("server_not_connected"))
             .stdout(predicate::str::contains("user_role_grant"))
             .stdout(predicate::str::contains("alice@example.com"));
     }
@@ -624,7 +625,8 @@ mod user_subcommand {
                 "--json",
             ])
             .assert()
-            .success()
+            .failure()
+            .stdout(predicate::str::contains("server_not_connected"))
             .stdout(predicate::str::contains("user_role_revoke"))
             .stdout(predicate::str::contains("alice@example.com"));
     }
@@ -632,11 +634,12 @@ mod user_subcommand {
     #[test]
     fn test_user_roles_list_json() {
         aeterna()
-            .args(["user", "roles", "--json"])
+            .args(["user", "roles", "--user", "alice@example.com", "--json"])
             .assert()
-            .success()
+            .failure()
             .stdout(predicate::str::contains("user_roles_list"))
-            .stdout(predicate::str::contains("not_connected"));
+            .stdout(predicate::str::contains("server_not_connected"))
+            .stdout(predicate::str::contains("alice@example.com"));
     }
 
     #[test]
@@ -1193,8 +1196,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "status"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Governance Status"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot show governance status"));
     }
 
     #[test]
@@ -1202,13 +1205,13 @@ mod govern_subcommand {
         let output = aeterna()
             .args(["govern", "status", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert!(json.get("config").is_some());
-        assert!(json.get("metrics").is_some());
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "govern_status");
     }
 
     #[test]
@@ -1216,9 +1219,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "status", "--verbose"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Governance Status"))
-            .stdout(predicate::str::contains("Recent Activity"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot show governance status"));
     }
 
     #[test]
@@ -1226,8 +1228,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "pending"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Pending Requests"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot list pending requests"));
     }
 
     #[test]
@@ -1235,13 +1237,13 @@ mod govern_subcommand {
         let output = aeterna()
             .args(["govern", "pending", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert!(json.get("total").is_some());
-        assert!(json.get("requests").is_some());
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "govern_pending");
     }
 
     #[test]
@@ -1249,8 +1251,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "pending", "-t", "policy"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Pending Requests"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot list pending requests"));
     }
 
     #[test]
@@ -1258,8 +1260,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "pending", "--layer", "org"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Pending Requests"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot list pending requests"));
     }
 
     #[test]
@@ -1267,8 +1269,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "pending", "--requestor", "alice"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Pending Requests"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot list pending requests"));
     }
 
     #[test]
@@ -1276,9 +1278,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "approve", "req_test123", "--yes"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Approve Request"))
-            .stdout(predicate::str::contains("approved"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot approve request"));
     }
 
     #[test]
@@ -1286,16 +1287,14 @@ mod govern_subcommand {
         let output = aeterna()
             .args(["govern", "approve", "req_test123", "--yes", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(json.get("success").and_then(|v| v.as_bool()), Some(true));
-        assert_eq!(
-            json.get("action").and_then(|v| v.as_str()),
-            Some("approved")
-        );
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "govern_approve");
+        assert_eq!(json["request_id"], "req_test123");
     }
 
     #[test]
@@ -1310,9 +1309,8 @@ mod govern_subcommand {
                 "LGTM",
             ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Approve Request"))
-            .stdout(predicate::str::contains("Comment: LGTM"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot approve request"));
     }
 
     #[test]
@@ -1327,9 +1325,8 @@ mod govern_subcommand {
                 "--yes",
             ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Reject Request"))
-            .stdout(predicate::str::contains("rejected"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot reject request"));
     }
 
     #[test]
@@ -1345,16 +1342,14 @@ mod govern_subcommand {
                 "--json",
             ])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(json.get("success").and_then(|v| v.as_bool()), Some(true));
-        assert_eq!(
-            json.get("action").and_then(|v| v.as_str()),
-            Some("rejected")
-        );
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "govern_reject");
+        assert_eq!(json["request_id"], "req_test123");
     }
 
     #[test]
@@ -1370,8 +1365,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "configure", "--show"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Governance Configuration"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot show governance config"));
     }
 
     #[test]
@@ -1379,13 +1374,13 @@ mod govern_subcommand {
         let output = aeterna()
             .args(["govern", "configure", "--show", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert!(json.get("approval_mode").is_some());
-        assert!(json.get("min_approvers").is_some());
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "govern_config_show");
     }
 
     #[test]
@@ -1405,8 +1400,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "configure", "--template", "standard"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Update Governance Configuration"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot update governance config"));
     }
 
     #[test]
@@ -1414,8 +1409,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "configure", "--template", "strict"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Update Governance Configuration"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot update governance config"));
     }
 
     #[test]
@@ -1423,8 +1418,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "configure", "--template", "permissive"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Update Governance Configuration"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot update governance config"));
     }
 
     #[test]
@@ -1432,8 +1427,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "configure", "--approval-mode", "quorum"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("quorum"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot update governance config"));
     }
 
     #[test]
@@ -1441,8 +1436,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "configure", "--min-approvers", "3"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("min_approvers"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot update governance config"));
     }
 
     #[test]
@@ -1450,8 +1445,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "configure", "--timeout-hours", "48"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("timeout_hours"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot update governance config"));
     }
 
     #[test]
@@ -1459,8 +1454,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "configure", "--auto-approve", "true"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("auto_approve"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot update governance config"));
     }
 
     #[test]
@@ -1473,8 +1468,8 @@ mod govern_subcommand {
                 "security-team@example.com",
             ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("escalation_contact"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot update governance config"));
     }
 
     #[test]
@@ -1482,12 +1477,13 @@ mod govern_subcommand {
         let output = aeterna()
             .args(["govern", "configure", "--approval-mode", "single", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(json.get("success").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "govern_config_update");
     }
 
     #[test]
@@ -1495,8 +1491,8 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "roles", "list"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Role Assignments"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot list governance roles"));
     }
 
     #[test]
@@ -1504,12 +1500,13 @@ mod govern_subcommand {
         let output = aeterna()
             .args(["govern", "roles", "list", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert!(json.get("roles").is_some());
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "govern_roles_list");
     }
 
     #[test]
@@ -1527,8 +1524,8 @@ mod govern_subcommand {
                 "org",
             ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Assign Role"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot assign governance role"));
     }
 
     #[test]
@@ -1546,8 +1543,8 @@ mod govern_subcommand {
                 "org",
             ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Revoke Role"));
+            .failure()
+            .stderr(predicate::str::contains("Cannot revoke governance role"));
     }
 
     #[test]
@@ -1566,13 +1563,38 @@ mod govern_subcommand {
                 "--json",
             ])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(json.get("success").and_then(|v| v.as_bool()), Some(true));
-        assert_eq!(json.get("action").and_then(|v| v.as_str()), Some("assign"));
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "govern_role_assign");
+    }
+
+    #[test]
+    fn test_govern_roles_revoke_json() {
+        let output = aeterna()
+            .args([
+                "govern",
+                "roles",
+                "revoke",
+                "--principal",
+                "bob",
+                "--role",
+                "admin",
+                "--scope",
+                "company",
+                "--json",
+            ])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "govern_role_revoke");
     }
 
     #[test]
@@ -1580,8 +1602,10 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "audit"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Governance Audit Trail"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list governance audit entries",
+            ));
     }
 
     #[test]
@@ -1589,13 +1613,13 @@ mod govern_subcommand {
         let output = aeterna()
             .args(["govern", "audit", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert!(json.get("total").is_some());
-        assert!(json.get("entries").is_some());
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "govern_audit");
     }
 
     #[test]
@@ -1603,8 +1627,10 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "audit", "--action", "approve"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Governance Audit Trail"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list governance audit entries",
+            ));
     }
 
     #[test]
@@ -1612,8 +1638,10 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "audit", "--since", "24h"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Governance Audit Trail"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list governance audit entries",
+            ));
     }
 
     #[test]
@@ -1621,8 +1649,10 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "audit", "--actor", "alice"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Governance Audit Trail"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list governance audit entries",
+            ));
     }
 
     #[test]
@@ -1630,8 +1660,10 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "audit", "--target-type", "policy"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Governance Audit Trail"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list governance audit entries",
+            ));
     }
 
     #[test]
@@ -1639,8 +1671,10 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "audit", "--limit", "10"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Governance Audit Trail"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list governance audit entries",
+            ));
     }
 
     #[test]
@@ -1648,7 +1682,10 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "audit", "--export", "csv"])
             .assert()
-            .success();
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list governance audit entries",
+            ));
     }
 
     #[test]
@@ -1656,7 +1693,533 @@ mod govern_subcommand {
         aeterna()
             .args(["govern", "audit", "--export", "json"])
             .assert()
-            .success();
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list governance audit entries",
+            ));
+    }
+}
+
+mod tenant_subcommand {
+    use super::*;
+    use predicates::prelude::predicate;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_tenant_help() {
+        aeterna()
+            .args(["tenant", "--help"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("tenant"))
+            .stdout(predicate::str::contains("create"))
+            .stdout(predicate::str::contains("repo-binding"));
+    }
+
+    #[test]
+    fn test_tenant_create_dry_run() {
+        aeterna()
+            .args([
+                "tenant",
+                "create",
+                "--slug",
+                "acme",
+                "--name",
+                "Acme Corp",
+                "--dry-run",
+            ])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Tenant Create (Dry Run)"))
+            .stdout(predicate::str::contains("acme"));
+    }
+
+    #[test]
+    fn test_tenant_create_dry_run_json() {
+        let output = aeterna()
+            .args([
+                "tenant",
+                "create",
+                "--slug",
+                "acme",
+                "--name",
+                "Acme Corp",
+                "--dry-run",
+                "--json",
+            ])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["dryRun"], true);
+        assert_eq!(json["operation"], "tenant_create");
+        assert_eq!(json["tenant"]["slug"], "acme");
+    }
+
+    #[test]
+    fn test_tenant_list_json_not_connected() {
+        let output = aeterna()
+            .args(["tenant", "list", "--json"])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "tenant_list");
+    }
+
+    #[test]
+    fn test_tenant_show_json_not_connected() {
+        let output = aeterna()
+            .args(["tenant", "show", "acme", "--json"])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "tenant_show");
+        assert_eq!(json["tenant"], "acme");
+    }
+
+    #[test]
+    fn test_tenant_update_dry_run_json() {
+        let output = aeterna()
+            .args([
+                "tenant",
+                "update",
+                "acme",
+                "--name",
+                "Acme Corporation",
+                "--dry-run",
+                "--json",
+            ])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["dryRun"], true);
+        assert_eq!(json["operation"], "tenant_update");
+        assert_eq!(json["tenant"], "acme");
+        assert_eq!(json["changes"]["name"], "Acme Corporation");
+    }
+
+    #[test]
+    fn test_tenant_deactivate_requires_yes() {
+        aeterna()
+            .args(["tenant", "deactivate", "acme"])
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("Use --yes to confirm"));
+    }
+
+    #[test]
+    fn test_tenant_deactivate_yes_json_not_connected() {
+        let output = aeterna()
+            .args(["tenant", "deactivate", "acme", "--yes", "--json"])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "tenant_deactivate");
+        assert_eq!(json["tenant"], "acme");
+    }
+
+    #[test]
+    fn test_tenant_use_writes_context() {
+        let temp = TempDir::new().unwrap();
+        aeterna()
+            .current_dir(temp.path())
+            .args(["tenant", "use", "acme"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Updated .aeterna/context.toml"));
+
+        let content =
+            fs::read_to_string(temp.path().join(".aeterna").join("context.toml")).unwrap();
+        assert!(content.contains("tenant_id = \"acme\""));
+    }
+
+    #[test]
+    fn test_tenant_domain_map_json_not_connected() {
+        let output = aeterna()
+            .args([
+                "tenant",
+                "domain-map",
+                "acme",
+                "--domain",
+                "acme.example.com",
+                "--json",
+            ])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "tenant_domain_map");
+        assert_eq!(json["tenant"], "acme");
+    }
+
+    #[test]
+    fn test_tenant_repo_binding_set_dry_run_json() {
+        let output = aeterna()
+            .args([
+                "tenant",
+                "repo-binding",
+                "set",
+                "acme",
+                "--kind",
+                "local",
+                "--local-path",
+                "/tmp/repo",
+                "--branch",
+                "main",
+                "--dry-run",
+                "--json",
+            ])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["dryRun"], true);
+        assert_eq!(json["operation"], "tenant_repo_binding_set");
+        assert_eq!(json["binding"]["kind"], "local");
+        assert_eq!(json["binding"]["sourceOwner"], "admin");
+    }
+
+    #[test]
+    fn test_tenant_repo_binding_set_invalid_kind() {
+        aeterna()
+            .args(["tenant", "repo-binding", "set", "acme", "--kind", "invalid"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Invalid repository kind"));
+    }
+
+    #[test]
+    fn test_tenant_repo_binding_validate_invalid_kind() {
+        aeterna()
+            .args([
+                "tenant",
+                "repo-binding",
+                "validate",
+                "acme",
+                "--kind",
+                "invalid",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Invalid repository kind"));
+    }
+
+    #[test]
+    fn test_tenant_repo_binding_show_json_not_connected() {
+        let output = aeterna()
+            .args(["tenant", "repo-binding", "show", "acme", "--json"])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "tenant_repo_binding_show");
+        assert_eq!(json["tenant"], "acme");
+    }
+
+    #[test]
+    fn test_tenant_repo_binding_validate_json_not_connected() {
+        let output = aeterna()
+            .args([
+                "tenant",
+                "repo-binding",
+                "validate",
+                "acme",
+                "--kind",
+                "local",
+                "--local-path",
+                "/tmp/repo",
+                "--branch",
+                "main",
+                "--json",
+            ])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "tenant_repo_binding_validate");
+        assert_eq!(json["tenant"], "acme");
+    }
+
+    #[test]
+    fn test_tenant_config_help_includes_subcommands() {
+        aeterna()
+            .args(["tenant", "config", "--help"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("inspect"))
+            .stdout(predicate::str::contains("upsert"))
+            .stdout(predicate::str::contains("validate"));
+    }
+
+    #[test]
+    fn test_tenant_secret_help_includes_subcommands() {
+        aeterna()
+            .args(["tenant", "secret", "--help"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("set"))
+            .stdout(predicate::str::contains("delete"));
+    }
+
+    #[test]
+    fn test_tenant_config_inspect_json_not_connected_for_platform_flow() {
+        let output = aeterna()
+            .args(["tenant", "config", "inspect", "--tenant", "acme", "--json"])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "tenant_config_inspect");
+        assert_eq!(json["tenant"], "acme");
+    }
+
+    #[test]
+    fn test_tenant_config_upsert_dry_run_json_redacts_secret_value() {
+        let temp = TempDir::new().unwrap();
+        let config_path = temp.path().join("tenant-config.json");
+        fs::write(
+            &config_path,
+            r#"{
+  "fields": {},
+  "secretReferences": {},
+  "secretValue": "plain-secret"
+}"#,
+        )
+        .unwrap();
+
+        let output = aeterna()
+            .args([
+                "tenant",
+                "config",
+                "upsert",
+                "--tenant",
+                "acme",
+                "--file",
+                config_path.to_string_lossy().as_ref(),
+                "--dry-run",
+                "--json",
+            ])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["dryRun"], true);
+        assert_eq!(json["operation"], "tenant_config_upsert");
+        assert_eq!(json["payload"]["secretValue"], "[REDACTED]");
+    }
+
+    #[test]
+    fn test_tenant_config_validate_json_not_connected_for_platform_flow() {
+        let temp = TempDir::new().unwrap();
+        let config_path = temp.path().join("tenant-config.json");
+        fs::write(
+            &config_path,
+            r#"{
+  "fields": {},
+  "secretReferences": {}
+}"#,
+        )
+        .unwrap();
+
+        let output = aeterna()
+            .args([
+                "tenant",
+                "config",
+                "validate",
+                "--tenant",
+                "acme",
+                "--file",
+                config_path.to_string_lossy().as_ref(),
+                "--json",
+            ])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "tenant_config_validate");
+        assert_eq!(json["tenant"], "acme");
+    }
+
+    #[test]
+    fn test_tenant_secret_set_json_not_connected_for_platform_flow() {
+        let output = aeterna()
+            .args([
+                "tenant",
+                "secret",
+                "set",
+                "--tenant",
+                "acme",
+                "repo.token",
+                "--value",
+                "super-secret",
+                "--json",
+            ])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "tenant_secret_set");
+        assert_eq!(json["tenant"], "acme");
+        assert_eq!(json["logicalName"], "repo.token");
+        assert!(!String::from_utf8_lossy(&output).contains("super-secret"));
+    }
+
+    #[test]
+    fn test_tenant_secret_set_invalid_ownership_fails() {
+        aeterna()
+            .args([
+                "tenant",
+                "secret",
+                "set",
+                "--tenant",
+                "acme",
+                "repo.token",
+                "--value",
+                "super-secret",
+                "--ownership",
+                "invalid",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Invalid ownership"));
+    }
+
+    #[test]
+    fn test_tenant_secret_delete_json_not_connected_for_platform_flow() {
+        let output = aeterna()
+            .args([
+                "tenant",
+                "secret",
+                "delete",
+                "--tenant",
+                "acme",
+                "repo.token",
+                "--json",
+            ])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "tenant_secret_delete");
+        assert_eq!(json["tenant"], "acme");
+        assert_eq!(json["logicalName"], "repo.token");
+    }
+
+    #[test]
+    fn test_tenant_connection_help_includes_subcommands() {
+        aeterna()
+            .args(["tenant", "connection", "--help"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("list"))
+            .stdout(predicate::str::contains("grant"))
+            .stdout(predicate::str::contains("revoke"));
+    }
+
+    #[test]
+    fn test_tenant_connection_list_json_not_connected() {
+        let output = aeterna()
+            .args(["tenant", "connection", "list", "acme", "--json"])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "connection_list");
+        assert_eq!(json["tenant"], "acme");
+    }
+
+    #[test]
+    fn test_tenant_connection_grant_json_not_connected() {
+        let output = aeterna()
+            .args([
+                "tenant",
+                "connection",
+                "grant",
+                "acme",
+                "--connection",
+                "conn-123",
+                "--json",
+            ])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "connection_grant");
+        assert_eq!(json["tenant"], "acme");
+        assert_eq!(json["connection"], "conn-123");
+    }
+
+    #[test]
+    fn test_tenant_connection_revoke_json_not_connected() {
+        let output = aeterna()
+            .args([
+                "tenant",
+                "connection",
+                "revoke",
+                "acme",
+                "--connection",
+                "conn-123",
+                "--json",
+            ])
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "connection_revoke");
+        assert_eq!(json["tenant"], "acme");
+        assert_eq!(json["connection"], "conn-123");
     }
 }
 
@@ -2157,8 +2720,10 @@ mod org_subcommand {
         aeterna()
             .args(["org", "list"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Organizations"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list organizations: server not connected",
+            ));
     }
 
     #[test]
@@ -2166,12 +2731,13 @@ mod org_subcommand {
         let output = aeterna()
             .args(["org", "list", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert!(json.get("operation").is_some());
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "org_list");
     }
 
     #[test]
@@ -2179,8 +2745,10 @@ mod org_subcommand {
         aeterna()
             .args(["org", "list", "--all"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Organizations"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list organizations: server not connected",
+            ));
     }
 
     #[test]
@@ -2188,8 +2756,10 @@ mod org_subcommand {
         aeterna()
             .args(["org", "list", "--company", "acme-corp"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("acme-corp"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list organizations: server not connected",
+            ));
     }
 
     #[test]
@@ -2207,8 +2777,10 @@ mod org_subcommand {
         aeterna()
             .args(["org", "show", "platform-eng"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Organization: platform-eng"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot show organization 'platform-eng': server not connected",
+            ));
     }
 
     #[test]
@@ -2216,15 +2788,14 @@ mod org_subcommand {
         let output = aeterna()
             .args(["org", "show", "platform-eng", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(
-            json.get("orgId").and_then(|v| v.as_str()),
-            Some("platform-eng")
-        );
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "org_show");
+        assert_eq!(json["orgId"], "platform-eng");
     }
 
     #[test]
@@ -2232,9 +2803,10 @@ mod org_subcommand {
         aeterna()
             .args(["org", "show", "platform-eng", "--verbose"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Organization: platform-eng"))
-            .stdout(predicate::str::contains("Verbose Details"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot show organization 'platform-eng': server not connected",
+            ));
     }
 
     #[test]
@@ -2242,8 +2814,8 @@ mod org_subcommand {
         aeterna()
             .args(["org", "show"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Organization:"));
+            .failure()
+            .stderr(predicate::str::contains("No organization specified"));
     }
 
     #[test]
@@ -2259,48 +2831,69 @@ mod org_subcommand {
     #[test]
     fn test_org_members_list() {
         aeterna()
-            .args(["org", "members"])
+            .args(["org", "members", "--org", "platform-eng"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Members"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list members for organization 'platform-eng': server not connected",
+            ));
     }
 
     #[test]
     fn test_org_members_list_json() {
         let output = aeterna()
-            .args(["org", "members", "--json"])
+            .args(["org", "members", "--org", "platform-eng", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert!(json.get("operation").is_some());
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "org_members_list");
+        assert_eq!(json["orgId"], "platform-eng");
     }
 
     #[test]
     fn test_org_members_add() {
         aeterna()
-            .args(["org", "members", "--add", "alice@acme.com"])
+            .args([
+                "org",
+                "members",
+                "--org",
+                "platform-eng",
+                "--add",
+                "alice@acme.com",
+            ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Add Organization Member"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot add member to organization 'platform-eng': server not connected",
+            ));
     }
 
     #[test]
     fn test_org_members_add_json() {
         let output = aeterna()
-            .args(["org", "members", "--add", "bob@acme.com", "--json"])
+            .args([
+                "org",
+                "members",
+                "--org",
+                "platform-eng",
+                "--add",
+                "bob@acme.com",
+                "--json",
+            ])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(
-            json.get("operation").and_then(|v| v.as_str()),
-            Some("org_member_add")
-        );
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "org_member_add");
+        assert_eq!(json["orgId"], "platform-eng");
+        assert_eq!(json["userId"], "bob@acme.com");
     }
 
     #[test]
@@ -2309,14 +2902,18 @@ mod org_subcommand {
             .args([
                 "org",
                 "members",
+                "--org",
+                "platform-eng",
                 "--add",
                 "carol@acme.com",
                 "--role",
                 "techlead",
             ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("techlead"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot add member to organization 'platform-eng': server not connected",
+            ));
     }
 
     #[test]
@@ -2325,13 +2922,16 @@ mod org_subcommand {
             .args([
                 "org",
                 "members",
+                "--org",
+                "platform-eng",
                 "--add",
                 "dave@acme.com",
                 "--role",
                 "invalid-role",
             ])
             .assert()
-            .failure();
+            .failure()
+            .stderr(predicate::str::contains("Invalid role"));
     }
 
     #[test]
@@ -2346,33 +2946,52 @@ mod org_subcommand {
                 "eve@acme.com",
             ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("platform-eng"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot add member to organization 'platform-eng': server not connected",
+            ));
     }
 
     #[test]
     fn test_org_members_remove() {
         aeterna()
-            .args(["org", "members", "--remove", "alice@acme.com"])
+            .args([
+                "org",
+                "members",
+                "--org",
+                "platform-eng",
+                "--remove",
+                "alice@acme.com",
+            ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Remove Organization Member"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot remove member from organization 'platform-eng': server not connected",
+            ));
     }
 
     #[test]
     fn test_org_members_remove_json() {
         let output = aeterna()
-            .args(["org", "members", "--remove", "bob@acme.com", "--json"])
+            .args([
+                "org",
+                "members",
+                "--org",
+                "platform-eng",
+                "--remove",
+                "bob@acme.com",
+                "--json",
+            ])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(
-            json.get("operation").and_then(|v| v.as_str()),
-            Some("org_member_remove")
-        );
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "org_member_remove");
+        assert_eq!(json["orgId"], "platform-eng");
+        assert_eq!(json["userId"], "bob@acme.com");
     }
 
     #[test]
@@ -2381,14 +3000,18 @@ mod org_subcommand {
             .args([
                 "org",
                 "members",
+                "--org",
+                "platform-eng",
                 "--set-role",
                 "alice@acme.com",
                 "--role",
                 "architect",
             ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Set Member Role"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot update member role in organization 'platform-eng': server not connected",
+            ));
     }
 
     #[test]
@@ -2397,6 +3020,8 @@ mod org_subcommand {
             .args([
                 "org",
                 "members",
+                "--org",
+                "platform-eng",
                 "--set-role",
                 "bob@acme.com",
                 "--role",
@@ -2404,23 +3029,31 @@ mod org_subcommand {
                 "--json",
             ])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(
-            json.get("operation").and_then(|v| v.as_str()),
-            Some("org_member_set_role")
-        );
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "org_member_set_role");
+        assert_eq!(json["orgId"], "platform-eng");
+        assert_eq!(json["userId"], "bob@acme.com");
     }
 
     #[test]
     fn test_org_members_set_role_missing_role() {
         aeterna()
-            .args(["org", "members", "--set-role", "alice@acme.com"])
+            .args([
+                "org",
+                "members",
+                "--org",
+                "platform-eng",
+                "--set-role",
+                "alice@acme.com",
+            ])
             .assert()
-            .failure();
+            .failure()
+            .stderr(predicate::str::contains("Missing --role"));
     }
 
     #[test]
@@ -2477,7 +3110,7 @@ mod team_subcommand {
             .success()
             .stdout(predicate::str::contains("Team Create (Dry Run)"))
             .stdout(predicate::str::contains("api-team"))
-            .stdout(predicate::str::contains("What Would Happen"));
+            .stderr(predicate::str::contains("Dry run mode - team not created."));
     }
 
     #[test]
@@ -2568,9 +3201,10 @@ mod team_subcommand {
         aeterna()
             .args(["team", "list"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Teams"))
-            .stdout(predicate::str::contains("Example Output"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list teams: server not connected",
+            ));
     }
 
     #[test]
@@ -2578,14 +3212,14 @@ mod team_subcommand {
         let output = aeterna()
             .args(["team", "list", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
 
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
         assert_eq!(json["operation"], "team_list");
-        assert!(json.get("filters").is_some());
     }
 
     #[test]
@@ -2593,8 +3227,10 @@ mod team_subcommand {
         aeterna()
             .args(["team", "list", "--all"])
             .assert()
-            .success()
-            .stderr(predicate::str::contains("all teams"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list teams: server not connected",
+            ));
     }
 
     #[test]
@@ -2602,8 +3238,10 @@ mod team_subcommand {
         aeterna()
             .args(["team", "list", "--org", "platform-eng"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Filter: org = platform-eng"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list teams: server not connected",
+            ));
     }
 
     #[test]
@@ -2611,13 +3249,14 @@ mod team_subcommand {
         let output = aeterna()
             .args(["team", "list", "--org", "platform-eng", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
 
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(json["filters"]["org"], "platform-eng");
+        assert_eq!(json["error"], "server_not_connected");
+        assert_eq!(json["operation"], "team_list");
     }
 
     #[test]
@@ -2636,9 +3275,10 @@ mod team_subcommand {
         aeterna()
             .args(["team", "show", "api-team"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Team: api-team"))
-            .stdout(predicate::str::contains("Would Show"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot show team 'api-team': server not connected",
+            ));
     }
 
     #[test]
@@ -2646,12 +3286,13 @@ mod team_subcommand {
         let output = aeterna()
             .args(["team", "show", "api-team", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
 
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
         assert_eq!(json["operation"], "team_show");
         assert_eq!(json["teamId"], "api-team");
     }
@@ -2661,9 +3302,10 @@ mod team_subcommand {
         aeterna()
             .args(["team", "show", "api-team", "--verbose"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Verbose Details"))
-            .stdout(predicate::str::contains("Policy inheritance"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot show team 'api-team': server not connected",
+            ));
     }
 
     #[test]
@@ -2671,8 +3313,8 @@ mod team_subcommand {
         aeterna()
             .args(["team", "show"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Team:"));
+            .failure()
+            .stderr(predicate::str::contains("No team specified"));
     }
 
     #[test]
@@ -2690,25 +3332,28 @@ mod team_subcommand {
     #[test]
     fn test_team_members_list() {
         aeterna()
-            .args(["team", "members"])
+            .args(["team", "members", "--team", "api-team"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Members of:"))
-            .stdout(predicate::str::contains("Example Output"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list members for team 'api-team': server not connected",
+            ));
     }
 
     #[test]
     fn test_team_members_list_json() {
         let output = aeterna()
-            .args(["team", "members", "--json"])
+            .args(["team", "members", "--team", "api-team", "--json"])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
 
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
         assert_eq!(json["operation"], "team_members_list");
+        assert_eq!(json["teamId"], "api-team");
     }
 
     #[test]
@@ -2716,35 +3361,53 @@ mod team_subcommand {
         aeterna()
             .args(["team", "members", "--team", "api-team"])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Members of: api-team"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot list members for team 'api-team': server not connected",
+            ));
     }
 
     #[test]
     fn test_team_members_add() {
         aeterna()
-            .args(["team", "members", "--add", "alice@example.com"])
+            .args([
+                "team",
+                "members",
+                "--team",
+                "api-team",
+                "--add",
+                "alice@example.com",
+            ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Add Team Member"))
-            .stdout(predicate::str::contains("alice@example.com"))
-            .stdout(predicate::str::contains("Role: developer"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot add member to team 'api-team': server not connected",
+            ));
     }
 
     #[test]
     fn test_team_members_add_json() {
         let output = aeterna()
-            .args(["team", "members", "--add", "alice@example.com", "--json"])
+            .args([
+                "team",
+                "members",
+                "--team",
+                "api-team",
+                "--add",
+                "alice@example.com",
+                "--json",
+            ])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
 
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
         assert_eq!(json["operation"], "team_member_add");
+        assert_eq!(json["teamId"], "api-team");
         assert_eq!(json["userId"], "alice@example.com");
-        assert_eq!(json["role"], "developer");
     }
 
     #[test]
@@ -2753,14 +3416,18 @@ mod team_subcommand {
             .args([
                 "team",
                 "members",
+                "--team",
+                "api-team",
                 "--add",
                 "alice@example.com",
                 "--role",
                 "techlead",
             ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Role: techlead"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot add member to team 'api-team': server not connected",
+            ));
     }
 
     #[test]
@@ -2775,9 +3442,10 @@ mod team_subcommand {
                 "alice@example.com",
             ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Team: api-team"))
-            .stdout(predicate::str::contains("alice@example.com"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot add member to team 'api-team': server not connected",
+            ));
     }
 
     #[test]
@@ -2786,6 +3454,8 @@ mod team_subcommand {
             .args([
                 "team",
                 "members",
+                "--team",
+                "api-team",
                 "--add",
                 "alice@example.com",
                 "--role",
@@ -2800,25 +3470,43 @@ mod team_subcommand {
     #[test]
     fn test_team_members_remove() {
         aeterna()
-            .args(["team", "members", "--remove", "bob@example.com"])
+            .args([
+                "team",
+                "members",
+                "--team",
+                "api-team",
+                "--remove",
+                "bob@example.com",
+            ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Remove Team Member"))
-            .stdout(predicate::str::contains("bob@example.com"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot remove member from team 'api-team': server not connected",
+            ));
     }
 
     #[test]
     fn test_team_members_remove_json() {
         let output = aeterna()
-            .args(["team", "members", "--remove", "bob@example.com", "--json"])
+            .args([
+                "team",
+                "members",
+                "--team",
+                "api-team",
+                "--remove",
+                "bob@example.com",
+                "--json",
+            ])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
 
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
         assert_eq!(json["operation"], "team_member_remove");
+        assert_eq!(json["teamId"], "api-team");
         assert_eq!(json["userId"], "bob@example.com");
     }
 
@@ -2828,16 +3516,18 @@ mod team_subcommand {
             .args([
                 "team",
                 "members",
+                "--team",
+                "api-team",
                 "--set-role",
                 "alice@example.com",
                 "--role",
                 "architect",
             ])
             .assert()
-            .success()
-            .stdout(predicate::str::contains("Set Member Role"))
-            .stdout(predicate::str::contains("alice@example.com"))
-            .stdout(predicate::str::contains("architect"));
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot update member role in team 'api-team': server not connected",
+            ));
     }
 
     #[test]
@@ -2846,6 +3536,8 @@ mod team_subcommand {
             .args([
                 "team",
                 "members",
+                "--team",
+                "api-team",
                 "--set-role",
                 "alice@example.com",
                 "--role",
@@ -2853,21 +3545,29 @@ mod team_subcommand {
                 "--json",
             ])
             .assert()
-            .success()
+            .failure()
             .get_output()
             .stdout
             .clone();
 
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
+        assert_eq!(json["error"], "server_not_connected");
         assert_eq!(json["operation"], "team_member_set_role");
+        assert_eq!(json["teamId"], "api-team");
         assert_eq!(json["userId"], "alice@example.com");
-        assert_eq!(json["newRole"], "techlead");
     }
 
     #[test]
     fn test_team_members_set_role_missing_role() {
         aeterna()
-            .args(["team", "members", "--set-role", "alice@example.com"])
+            .args([
+                "team",
+                "members",
+                "--team",
+                "api-team",
+                "--set-role",
+                "alice@example.com",
+            ])
             .assert()
             .failure()
             .stderr(predicate::str::contains("Missing --role"));

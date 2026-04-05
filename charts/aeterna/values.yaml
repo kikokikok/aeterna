@@ -263,6 +263,29 @@ githubOrgSync:
         cpu: 100m
         memory: 128Mi
 
+tenantConfigProvider:
+  enabled: true
+  seedTenants: []
+
+## Shared Git provider connections (platform-owned GitHub App connectivity)
+## Each entry renders a Kubernetes Secret holding the PEM reference and
+## seeds the platform connection registry via an init Job.
+## Secret material (PEM keys) MUST be stored in separate Kubernetes Secrets
+## referenced by pemSecretRef — never inlined here.
+##
+## Example:
+##   gitProviderConnections:
+##     - id: "acme-github-app"
+##       name: "Acme GitHub App"
+##       providerKind: GitHubApp
+##       appId: "123456"
+##       installationId: "9876543"
+##       pemSecretRef: "secret/aeterna-github-app-pem/pem-key"
+##       webhookSecretRef: "secret/aeterna-github-app-webhook/webhook-secret"
+##       allowedTenantIds: []
+gitProviderConnections: []
+
+
 ## Shared knowledge repository configuration
 ## Enables multi-replica consistency via a remote Git repository (GitHub)
 ## and PR-based governance for knowledge mutations at higher layers.

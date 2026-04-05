@@ -198,6 +198,51 @@ aeterna:
     privateKeySecret: aeterna-github-app-pem
 ```
 
+### Tenant-scoped config and secrets
+
+For multi-tenant deployments, Aeterna materializes one Kubernetes ConfigMap and one paired Secret per tenant:
+
+- `aeterna-tenant-<tenant-id>`
+- `aeterna-tenant-<tenant-id>-secret`
+
+The Helm chart can seed empty tenant containers via `tenantConfigProvider.seedTenants`, but the canonical tenant config content is managed through the control plane.
+
+```yaml
+tenantConfigProvider:
+  enabled: true
+  seedTenants:
+    - "11111111-1111-1111-1111-111111111111"
+```
+
+### Tenant bootstrap workflow
+
+Use the control plane to bootstrap tenants, then keep environment-specific overlays in a **private deployment repository**.
+
+```bash
+# authenticate as PlatformAdmin
+aeterna profile login
+
+# create tenant record
+aeterna tenant create --slug acme --name "Acme Corp"
+
+# configure the tenant repository binding
+aeterna tenant repo-binding set acme \
+  --kind github \
+  --remote-url https://github.com/acme/knowledge.git \
+  --branch main \
+  --credential-kind githubApp \
+  --github-owner acme \
+  --github-repo knowledge
+
+# inspect and validate tenant config
+aeterna tenant config inspect --tenant acme
+aeterna tenant config validate --tenant acme --file tenant-config.json
+```
+
+For the full ownership model, shared Git provider connections, and tenant-admin workflows, see:
+
+- [`docs/guides/tenant-admin-control-plane.md`](docs/guides/tenant-admin-control-plane.md)
+
 ---
 
 ## Ingress & TLS

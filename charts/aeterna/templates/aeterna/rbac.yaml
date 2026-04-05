@@ -10,10 +10,20 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list", "watch"]
+  {{- if .Values.tenantConfigProvider.enabled }}
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "update", "patch", "delete"]
+  {{- end }}
   # Allow reading Secrets for credentials
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list", "watch"]
+  {{- if .Values.tenantConfigProvider.enabled }}
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "update", "patch", "delete"]
+  {{- end }}
   # Allow reading own pod information
   - apiGroups: [""]
     resources: ["pods"]
