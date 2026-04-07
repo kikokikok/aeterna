@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS layer_summary_cache (
     personalization_context TEXT,
     generated_at BIGINT NOT NULL,
     expires_at BIGINT,
-    FOREIGN KEY (tenant_id) REFERENCES organizational_units(id),
     FOREIGN KEY (entry_id) REFERENCES memory_entries(id) ON DELETE CASCADE,
     UNIQUE (tenant_id, entry_id, depth)
 );

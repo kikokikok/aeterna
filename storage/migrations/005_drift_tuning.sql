@@ -29,6 +29,15 @@ CREATE TABLE IF NOT EXISTS drift_configs (
     PRIMARY KEY (tenant_id, project_id)
 );
 
-ALTER TABLE drift_results ADD COLUMN IF NOT EXISTS confidence REAL DEFAULT 1.0;
-ALTER TABLE drift_results ADD COLUMN IF NOT EXISTS requires_manual_review BOOLEAN DEFAULT FALSE;
-ALTER TABLE drift_results ADD COLUMN IF NOT EXISTS suppressed_violations JSONB DEFAULT '[]';
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'drift_results'
+    ) THEN
+        ALTER TABLE drift_results ADD COLUMN IF NOT EXISTS confidence REAL DEFAULT 1.0;
+        ALTER TABLE drift_results ADD COLUMN IF NOT EXISTS requires_manual_review BOOLEAN DEFAULT FALSE;
+        ALTER TABLE drift_results ADD COLUMN IF NOT EXISTS suppressed_violations JSONB DEFAULT '[]';
+    END IF;
+END $$;

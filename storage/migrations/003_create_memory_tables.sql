@@ -10,8 +10,7 @@ CREATE TABLE IF NOT EXISTS memory_entries (
     properties JSONB DEFAULT '{}',
     created_at BIGINT NOT NULL,
     updated_at BIGINT NOT NULL,
-    deleted_at BIGINT,
-    FOREIGN KEY (tenant_id) REFERENCES organizational_units(id)
+    deleted_at BIGINT
 );
 
 -- Create knowledge_items table
@@ -24,6 +23,5 @@ CREATE TABLE IF NOT EXISTS knowledge_items (
     tags TEXT[],
     properties JSONB DEFAULT '{}',
     created_at BIGINT NOT NULL,
-    updated_at BIGINT NOT NULL,
-    FOREIGN KEY (tenant_id) REFERENCES organizational_units(id)
+    updated_at BIGINT NOT NULL
 );

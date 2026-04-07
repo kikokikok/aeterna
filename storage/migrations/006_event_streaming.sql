@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS governance_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id VARCHAR(255) NOT NULL,
     idempotency_key VARCHAR(255) NOT NULL UNIQUE,
-    tenant_id VARCHAR(255) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    tenant_id VARCHAR(255) NOT NULL,
     event_type VARCHAR(100) NOT NULL,
     payload JSONB NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'pending',
@@ -49,7 +49,7 @@ WHERE status = 'dead_lettered';
 -- Event delivery metrics table
 CREATE TABLE IF NOT EXISTS event_delivery_metrics (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id VARCHAR(255) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    tenant_id VARCHAR(255) NOT NULL,
     event_type VARCHAR(100) NOT NULL,
     period_start TIMESTAMPTZ NOT NULL,
     period_end TIMESTAMPTZ NOT NULL,
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS event_consumer_state (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     consumer_group VARCHAR(255) NOT NULL,
     idempotency_key VARCHAR(255) NOT NULL,
-    tenant_id VARCHAR(255) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    tenant_id VARCHAR(255) NOT NULL,
     processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(consumer_group, idempotency_key)
 );
@@ -84,21 +84,53 @@ CREATE INDEX IF NOT EXISTS idx_consumer_state_cleanup
     ON event_consumer_state(processed_at);
 
 -- Enable RLS on new tables
-ALTER TABLE governance_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE event_delivery_metrics ENABLE ROW LEVEL SECURITY;
-ALTER TABLE event_consumer_state ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'governance_events'
+    ) THEN
+        ALTER TABLE governance_events ENABLE ROW LEVEL SECURITY;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'event_delivery_metrics'
+    ) THEN
+        ALTER TABLE event_delivery_metrics ENABLE ROW LEVEL SECURITY;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'event_consumer_state'
+    ) THEN
+        ALTER TABLE event_consumer_state ENABLE ROW LEVEL SECURITY;
+    END IF;
+END $$;
 
 -- RLS policies for governance_events
+DROP POLICY IF EXISTS governance_events_tenant_isolation ON governance_events;
 CREATE POLICY governance_events_tenant_isolation ON governance_events
     FOR ALL
     USING (tenant_id = current_setting('app.current_tenant_id', true));
 
 -- RLS policies for event_delivery_metrics
+DROP POLICY IF EXISTS event_metrics_tenant_isolation ON event_delivery_metrics;
 CREATE POLICY event_metrics_tenant_isolation ON event_delivery_metrics
     FOR ALL
     USING (tenant_id = current_setting('app.current_tenant_id', true));
 
 -- RLS policies for event_consumer_state
+DROP POLICY IF EXISTS consumer_state_tenant_isolation ON event_consumer_state;
 CREATE POLICY consumer_state_tenant_isolation ON event_consumer_state
     FOR ALL
     USING (tenant_id = current_setting('app.current_tenant_id', true));
