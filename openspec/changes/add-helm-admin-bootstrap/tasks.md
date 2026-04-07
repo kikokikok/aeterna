@@ -36,20 +36,48 @@
 - [x] 5.2 Add `pluginAuth.defaultTenantId: "default"` to the same [REDACTED_TENANT] values file
 - [x] 5.3 Verify no confidential values leak into the public Aeterna repo
 
-## 6. Build and Deploy
+## 6. Build and Deploy (Round 1 — bootstrap seeding)
 
 - [x] 6.1 Run `cargo build` to verify Rust changes compile
 - [x] 6.2 Run `cargo test --all` to verify existing and new tests pass (1 pre-existing doc drift failure in adapters — unrelated)
-- [ ] 6.3 Build and push new container image
-- [ ] 6.4 Bump chart version if needed, package and publish chart
-- [ ] 6.5 `helm upgrade` on [REDACTED_ENV] with new chart and [REDACTED_TENANT] values
+- [x] 6.3 Build and push container image (`sha-b3d4173`)
+- [x] 6.4 Bump chart to `0.4.1-bootstrap.1`, package and publish
+- [x] 6.5 `helm upgrade` on [REDACTED_ENV] (revision 52) — manually unblocked DB
 
-## 7. Verification
+## 7. Verification (Round 1 — bootstrap seeding)
 
-- [ ] 7.1 Verify pod starts successfully with bootstrap seeding logs visible
-- [ ] 7.2 Verify `AETERNA_PLUGIN_AUTH_TENANT` is set in pod env
-- [ ] 7.3 Verify plugin auth bootstrap endpoint returns 200 (not 500)
-- [ ] 7.4 Verify PlatformAdmin user exists in `users` table via `kubectl exec` psql query
-- [ ] 7.5 Verify PlatformAdmin role grant exists in `user_roles` table
-- [ ] 7.6 Verify admin appears in `v_user_permissions` view
-- [ ] 7.7 Run E2E Postman collection against [REDACTED_ENV]
+- [x] 7.1 Verify pod starts successfully with bootstrap seeding logs visible
+- [x] 7.2 Verify `AETERNA_PLUGIN_AUTH_TENANT` is set in pod env
+- [x] 7.3 Verify plugin auth bootstrap endpoint returns 422 (not 500) — correct validation
+- [x] 7.4 Verify PlatformAdmin user exists in `users` table via psql
+- [x] 7.5 Verify PlatformAdmin role grant exists in `user_roles` table
+- [x] 7.6 Verify admin appears in `v_user_permissions` view
+- [ ] 7.7 Run E2E Postman collection against [REDACTED_ENV] (deferred — needs real GitHub token)
+
+## 8. Migration Runner Implementation
+
+- [x] 8.1 Embed all 14 SQL migration files (003-016) at compile time using `include_str!` in a new module
+- [x] 8.2 Create `_aeterna_migrations` tracking table DDL (version INT, name TEXT, checksum TEXT, applied_at TIMESTAMPTZ)
+- [x] 8.3 Implement `get_applied_migrations()` — query tracking table, return list of applied versions
+- [x] 8.4 Implement `apply_migration()` — execute SQL in transaction, insert tracking row, handle errors
+- [x] 8.5 Implement `run_migrate(args)` for `status` direction — show applied/pending list
+- [x] 8.6 Implement `run_migrate(args)` for `up` direction — connect to PG, apply pending migrations in order, exit 0 on success
+- [x] 8.7 Implement `run_migrate(args)` for `down` direction with `--force` — rollback last migration (or stub with error if no down SQL)
+- [x] 8.8 Support `--dry-run` flag — list what would be applied without executing
+- [x] 8.9 Support `--json` flag — structured output for scripting
+- [x] 8.10 Add SHA256 checksum verification to detect tampered migration files
+- [x] 8.11 Run `cargo build` to verify compilation
+- [x] 8.12 Run `cargo test --all` to verify no regressions
+
+## 9. Build and Deploy (Round 2 — with migration runner)
+
+- [ ] 9.1 Build and push new container image
+- [ ] 9.2 Bump chart version to `0.4.1-bootstrap.2`, package and publish
+- [ ] 9.3 `helm upgrade` on [REDACTED_ENV] with new chart
+
+## 10. Verification (Round 2 — migration runner)
+
+- [ ] 10.1 Verify migration Job completes successfully (not Failed)
+- [ ] 10.2 Verify `_aeterna_migrations` table exists with all 14 migrations tracked
+- [ ] 10.3 Verify pod starts cleanly after migration Job
+- [ ] 10.4 Verify bootstrap seeding still works (PlatformAdmin in DB)

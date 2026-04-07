@@ -54,6 +54,7 @@ futures-util.workspace = true
 octocrab.workspace = true
 jsonwebtoken.workspace = true
 reqwest.workspace = true
+sha2.workspace = true
 
 colored = "3.0"
 console = "0.15"

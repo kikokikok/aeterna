@@ -1,7 +1,13 @@
 use clap::{Args, Subcommand, ValueEnum};
 use context::ContextResolver;
+use serde::Serialize;
 use serde_json::json;
 use std::path::PathBuf;
+use std::time::Duration;
+
+use sha2::{Digest, Sha256};
+use sqlx::postgres::PgPoolOptions;
+use sqlx::{FromRow, PgPool};
 
 use crate::output;
 use crate::ux_error;
@@ -453,160 +459,421 @@ async fn run_validate(args: AdminValidateArgs) -> anyhow::Result<()> {
 }
 
 async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let _ctx = resolver.resolve()?;
+    let mut migrations = embedded_migrations();
+    migrations.sort_by_key(|m| m.version);
 
-    // Migration status simulation
-    let current_version = "2024.1.0";
-    let target_version = args.target.as_deref().unwrap_or("2024.2.0");
-
-    let migrations = vec![
-        Migration {
-            version: "2024.1.1".to_string(),
-            name: "Add agent delegation table".to_string(),
-            status: "pending".to_string(),
-            reversible: true,
-        },
-        Migration {
-            version: "2024.1.2".to_string(),
-            name: "Add policy audit columns".to_string(),
-            status: "pending".to_string(),
-            reversible: true,
-        },
-        Migration {
-            version: "2024.2.0".to_string(),
-            name: "Cedar schema v2 upgrade".to_string(),
-            status: "pending".to_string(),
-            reversible: false,
-        },
-    ];
-
-    let pending_count = migrations.iter().filter(|m| m.status == "pending").count();
-
-    if args.json {
-        let output = json!({
-            "current_version": current_version,
-            "target_version": target_version,
-            "direction": args.direction,
-            "dry_run": args.dry_run,
-            "pending_migrations": pending_count,
-            "migrations": migrations.iter().map(|m| json!({
-                "version": m.version,
-                "name": m.name,
-                "status": m.status,
-                "reversible": m.reversible,
-            })).collect::<Vec<_>>(),
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Database Migration");
-        println!();
-
-        println!("  Current Version: {current_version}");
-        println!("  Target Version:  {target_version}");
-        println!("  Direction:       {}", args.direction);
-        if args.dry_run {
-            println!("  Mode:            DRY RUN (no changes will be made)");
+    match args.direction.as_str() {
+        "status" => {
+            let pool = connect_migration_pool().await?;
+            ensure_migration_table(&pool).await?;
+            let applied = get_applied_migrations(&pool).await?;
+            verify_applied_checksums(&migrations, &applied)?;
+            let report = build_migration_report(&migrations, &applied);
+            print_migration_report("status", args.dry_run, args.json, &report)?;
         }
-        println!();
+        "up" => {
+            let target_version = parse_target_version(args.target.as_deref())?;
 
-        match args.direction.as_str() {
-            "status" => {
-                output::subheader("Migration Status");
-                for migration in &migrations {
-                    let icon = match migration.status.as_str() {
-                        "applied" => "✓",
-                        "pending" => "○",
-                        "failed" => "✗",
-                        _ => "?",
-                    };
-                    let reversible = if migration.reversible {
-                        ""
-                    } else {
-                        " (irreversible)"
-                    };
-                    println!(
-                        "  {} {} - {}{}",
-                        icon, migration.version, migration.name, reversible
-                    );
-                }
-                println!();
-                println!("  {pending_count} pending migration(s)");
-            }
-            "up" => {
-                output::subheader("Migrations to Apply");
-                let to_apply: Vec<_> = migrations
+            if args.dry_run {
+                let selected: Vec<&EmbeddedMigration> = migrations
                     .iter()
-                    .filter(|m| m.status == "pending")
+                    .filter(|m| target_version.map_or(true, |target| m.version <= target))
                     .collect();
-
-                if to_apply.is_empty() {
-                    println!("  ✓ Database is up to date");
-                } else {
-                    for migration in &to_apply {
-                        let reversible = if migration.reversible {
-                            ""
-                        } else {
-                            " ⚠ IRREVERSIBLE"
-                        };
-                        println!(
-                            "  → {} - {}{}",
-                            migration.version, migration.name, reversible
-                        );
-                    }
-                    println!();
-
-                    if args.dry_run {
-                        output::hint("Remove --dry-run to apply migrations");
-                    } else {
-                        // Non-dry-run migration requires a live database connection.
-                        ux_error::UxError::new("Cannot apply migrations: database not connected")
-                            .why("The Aeterna server and database must be running to apply migrations")
-                            .fix("Start the Aeterna server: aeterna serve")
-                            .fix("Ensure DATABASE_URL is set and the database is reachable")
-                            .fix("Use --dry-run to preview migrations without connecting")
-                            .suggest("aeterna admin migrate --dry-run")
-                            .display();
-                        std::process::exit(1);
-                    }
-                }
+                let report = build_dry_run_report(&selected);
+                print_migration_report("up", true, args.json, &report)?;
+                return Ok(());
             }
-            "down" => {
-                if !args.force {
-                    ux_error::UxError::new("Rollback requires --force flag")
-                        .why("Rolling back migrations may cause data loss")
-                        .fix("Add --force if you're sure you want to rollback")
-                        .suggest("aeterna admin migrate down --force")
-                        .display();
-                    std::process::exit(1);
-                }
 
-                output::subheader("Migrations to Rollback");
-                println!("  ← Rolling back to {target_version}");
-                if args.dry_run {
-                    output::hint("Remove --dry-run to execute rollback");
-                } else {
-                    // Non-dry-run rollback requires a live database connection.
-                    ux_error::UxError::new("Cannot rollback migrations: database not connected")
-                        .why("The Aeterna server and database must be running to roll back migrations")
-                        .fix("Start the Aeterna server: aeterna serve")
-                        .fix("Ensure DATABASE_URL is set and the database is reachable")
-                        .suggest("aeterna admin migrate down --dry-run --force")
-                        .display();
-                    std::process::exit(1);
-                }
+            let pool = connect_migration_pool().await?;
+            ensure_migration_table(&pool).await?;
+            let applied = get_applied_migrations(&pool).await?;
+            verify_applied_checksums(&migrations, &applied)?;
+
+            let mut pending: Vec<&EmbeddedMigration> = migrations
+                .iter()
+                .filter(|m| !applied.iter().any(|a| a.version == m.version))
+                .filter(|m| target_version.map_or(true, |target| m.version <= target))
+                .collect();
+            pending.sort_by_key(|m| m.version);
+
+            for migration in pending {
+                apply_migration(&pool, migration).await?;
+                tracing::info!(
+                    "Applied migration {}: {}",
+                    migration.version,
+                    migration.name
+                );
             }
-            _ => {
-                ux_error::UxError::new(format!("Invalid migration direction: {}", args.direction))
-                    .fix("Use one of: up, down, status")
-                    .suggest("aeterna admin migrate status")
+
+            let applied_after = get_applied_migrations(&pool).await?;
+            let report = build_migration_report(&migrations, &applied_after);
+            print_migration_report("up", false, args.json, &report)?;
+        }
+        "down" => {
+            if !args.force {
+                ux_error::UxError::new("Rollback requires --force flag")
+                    .why("Rolling back migrations may cause data loss")
+                    .fix("Add --force if you're sure you want to rollback")
+                    .suggest("aeterna admin migrate down --force")
                     .display();
                 std::process::exit(1);
             }
+
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "success": false,
+                        "direction": "down",
+                        "error": "down_migrations_not_supported",
+                        "message": "Down migrations are not supported: no rollback SQL is available for embedded migrations 003-016",
+                    }))?
+                );
+            } else {
+                ux_error::UxError::new("Down migrations are not supported")
+                    .why("No rollback SQL is defined for migrations 003-016")
+                    .fix("Restore from backup if rollback is required")
+                    .display();
+            }
+            std::process::exit(1);
         }
-        println!();
+        _ => {
+            ux_error::UxError::new(format!("Invalid migration direction: {}", args.direction))
+                .fix("Use one of: up, down, status")
+                .suggest("aeterna admin migrate status")
+                .display();
+            std::process::exit(1);
+        }
     }
 
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct EmbeddedMigration {
+    version: i32,
+    name: &'static str,
+    sql: &'static str,
+}
+
+#[derive(Debug, FromRow)]
+struct AppliedMigration {
+    version: i32,
+    name: String,
+    checksum: String,
+    applied_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Serialize)]
+struct MigrationReportEntry {
+    version: i32,
+    name: String,
+    status: String,
+    checksum: String,
+    applied_at: Option<String>,
+}
+
+struct MigrationReport {
+    current_version: Option<i32>,
+    pending_count: usize,
+    migrations: Vec<MigrationReportEntry>,
+}
+
+fn embedded_migrations() -> Vec<EmbeddedMigration> {
+    vec![
+        EmbeddedMigration {
+            version: 3,
+            name: "003_create_memory_tables",
+            sql: include_str!("../../../storage/migrations/003_create_memory_tables.sql"),
+        },
+        EmbeddedMigration {
+            version: 4,
+            name: "004_enable_rls",
+            sql: include_str!("../../../storage/migrations/004_enable_rls.sql"),
+        },
+        EmbeddedMigration {
+            version: 5,
+            name: "005_drift_tuning",
+            sql: include_str!("../../../storage/migrations/005_drift_tuning.sql"),
+        },
+        EmbeddedMigration {
+            version: 6,
+            name: "006_event_streaming",
+            sql: include_str!("../../../storage/migrations/006_event_streaming.sql"),
+        },
+        EmbeddedMigration {
+            version: 7,
+            name: "007_cca_summaries",
+            sql: include_str!("../../../storage/migrations/007_cca_summaries.sql"),
+        },
+        EmbeddedMigration {
+            version: 8,
+            name: "008_hindsight_tables",
+            sql: include_str!("../../../storage/migrations/008_hindsight_tables.sql"),
+        },
+        EmbeddedMigration {
+            version: 9,
+            name: "009_organizational_referential",
+            sql: include_str!("../../../storage/migrations/009_organizational_referential.sql"),
+        },
+        EmbeddedMigration {
+            version: 10,
+            name: "010_governance_workflow",
+            sql: include_str!("../../../storage/migrations/010_governance_workflow.sql"),
+        },
+        EmbeddedMigration {
+            version: 11,
+            name: "011_meta_governance",
+            sql: include_str!("../../../storage/migrations/011_meta_governance.sql"),
+        },
+        EmbeddedMigration {
+            version: 12,
+            name: "012_decomposition_weights",
+            sql: include_str!("../../../storage/migrations/012_decomposition_weights.sql"),
+        },
+        EmbeddedMigration {
+            version: 13,
+            name: "013_referential_integrity",
+            sql: include_str!("../../../storage/migrations/013_referential_integrity.sql"),
+        },
+        EmbeddedMigration {
+            version: 14,
+            name: "014_grepai_repo_management",
+            sql: include_str!("../../../storage/migrations/014_grepai_repo_management.sql"),
+        },
+        EmbeddedMigration {
+            version: 15,
+            name: "015_add_device_id_to_memory",
+            sql: include_str!("../../../storage/migrations/015_add_device_id_to_memory.sql"),
+        },
+        EmbeddedMigration {
+            version: 16,
+            name: "016_governance_rls",
+            sql: include_str!("../../../storage/migrations/016_governance_rls.sql"),
+        },
+    ]
+}
+
+fn postgres_connection_url(config: &config::Config) -> String {
+    let pg = &config.providers.postgres;
+    format!(
+        "postgres://{}:{}@{}:{}/{}",
+        pg.username, pg.password, pg.host, pg.port, pg.database
+    )
+}
+
+async fn connect_migration_pool() -> anyhow::Result<PgPool> {
+    let cfg = config::load_from_env()?;
+    let url = postgres_connection_url(&cfg);
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .min_connections(0)
+        .acquire_timeout(Duration::from_secs(30))
+        .connect(&url)
+        .await?;
+    Ok(pool)
+}
+
+async fn ensure_migration_table(pool: &PgPool) -> anyhow::Result<()> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS _aeterna_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            checksum TEXT NOT NULL,
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn get_applied_migrations(pool: &PgPool) -> anyhow::Result<Vec<AppliedMigration>> {
+    let rows = sqlx::query_as::<_, AppliedMigration>(
+        "SELECT version, name, checksum, applied_at FROM _aeterna_migrations ORDER BY version",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+fn migration_checksum(sql: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(sql.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+fn verify_applied_checksums(
+    embedded: &[EmbeddedMigration],
+    applied: &[AppliedMigration],
+) -> anyhow::Result<()> {
+    let embedded_by_version: std::collections::HashMap<i32, &EmbeddedMigration> =
+        embedded.iter().map(|m| (m.version, m)).collect();
+
+    for existing in applied {
+        if let Some(expected) = embedded_by_version.get(&existing.version) {
+            let expected_checksum = migration_checksum(expected.sql);
+            if existing.checksum != expected_checksum {
+                anyhow::bail!(
+                    "Migration checksum mismatch for version {} ({}): expected {}, found {}",
+                    existing.version,
+                    expected.name,
+                    expected_checksum,
+                    existing.checksum
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn apply_migration(pool: &PgPool, migration: &EmbeddedMigration) -> anyhow::Result<()> {
+    let checksum = migration_checksum(migration.sql);
+    let mut tx = pool.begin().await?;
+
+    sqlx::query(migration.sql).execute(&mut *tx).await?;
+    sqlx::query(
+        "INSERT INTO _aeterna_migrations (version, name, checksum) VALUES ($1, $2, $3) ON CONFLICT (version) DO NOTHING",
+    )
+    .bind(migration.version)
+    .bind(migration.name)
+    .bind(checksum)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+fn parse_target_version(target: Option<&str>) -> anyhow::Result<Option<i32>> {
+    match target {
+        Some(raw) => {
+            let parsed = raw.parse::<i32>().map_err(|_| {
+                anyhow::anyhow!(
+                    "Invalid --target value '{}'. Expected integer migration version (e.g. 16).",
+                    raw
+                )
+            })?;
+            Ok(Some(parsed))
+        }
+        None => Ok(None),
+    }
+}
+
+fn build_dry_run_report(migrations: &[&EmbeddedMigration]) -> MigrationReport {
+    let entries = migrations
+        .iter()
+        .map(|migration| MigrationReportEntry {
+            version: migration.version,
+            name: migration.name.to_string(),
+            status: "pending".to_string(),
+            checksum: migration_checksum(migration.sql),
+            applied_at: None,
+        })
+        .collect::<Vec<_>>();
+
+    MigrationReport {
+        current_version: None,
+        pending_count: entries.len(),
+        migrations: entries,
+    }
+}
+
+fn build_migration_report(
+    embedded: &[EmbeddedMigration],
+    applied: &[AppliedMigration],
+) -> MigrationReport {
+    let applied_by_version: std::collections::HashMap<i32, &AppliedMigration> =
+        applied.iter().map(|m| (m.version, m)).collect();
+
+    let mut entries = Vec::with_capacity(embedded.len());
+    for migration in embedded {
+        if let Some(applied_migration) = applied_by_version.get(&migration.version) {
+            entries.push(MigrationReportEntry {
+                version: migration.version,
+                name: applied_migration.name.clone(),
+                status: "applied".to_string(),
+                checksum: applied_migration.checksum.clone(),
+                applied_at: Some(applied_migration.applied_at.to_rfc3339()),
+            });
+        } else {
+            entries.push(MigrationReportEntry {
+                version: migration.version,
+                name: migration.name.to_string(),
+                status: "pending".to_string(),
+                checksum: migration_checksum(migration.sql),
+                applied_at: None,
+            });
+        }
+    }
+
+    entries.sort_by_key(|m| m.version);
+
+    let current_version = applied.iter().map(|m| m.version).max();
+    let pending_count = entries.iter().filter(|m| m.status == "pending").count();
+
+    MigrationReport {
+        current_version,
+        pending_count,
+        migrations: entries,
+    }
+}
+
+fn print_migration_report(
+    direction: &str,
+    dry_run: bool,
+    json_output: bool,
+    report: &MigrationReport,
+) -> anyhow::Result<()> {
+    if json_output {
+        let output = json!({
+            "direction": direction,
+            "dry_run": dry_run,
+            "current_version": report.current_version,
+            "pending_count": report.pending_count,
+            "migrations": report.migrations,
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+        return Ok(());
+    }
+
+    output::header("Database Migration");
+    println!();
+    println!(
+        "  Current Version: {}",
+        report
+            .current_version
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "none".to_string())
+    );
+    println!("  Direction:       {direction}");
+    if dry_run {
+        println!("  Mode:            DRY RUN");
+    }
+    println!();
+
+    output::subheader("Migration Status");
+    for migration in &report.migrations {
+        let icon = if migration.status == "applied" {
+            "✓"
+        } else {
+            "○"
+        };
+        if let Some(applied_at) = &migration.applied_at {
+            println!(
+                "  {} {:03} - {} (applied at {})",
+                icon, migration.version, migration.name, applied_at
+            );
+        } else {
+            println!("  {} {:03} - {}", icon, migration.version, migration.name);
+        }
+    }
+    println!();
+    println!("  {} pending migration(s)", report.pending_count);
+    println!();
     Ok(())
 }
 
