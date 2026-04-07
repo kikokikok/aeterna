@@ -41,6 +41,16 @@ tool-interface.png
 node_modules/
 build_rs_cov.profraw
 
+# Helm packages
+*.tgz
+
+# Aeterna local cache/state
+.aeterna/cache/
+cli/.aeterna/
+
+# Claude worktrees
+.claude/worktrees/
+
 website/node_modules/
 website/build/
 website/.docusaurus/
