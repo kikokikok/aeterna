@@ -10,10 +10,15 @@ keywords = ["aeterna", "memory", "knowledge", "cli"]
 name = "aeterna"
 path = "src/main.rs"
 
+[features]
+default = []
+vendored-openssl = ["openssl/vendored"]
+
 [lints]
 workspace = true
 
 [dependencies]
+openssl = { version = "0.10", optional = true }
 mk_core.workspace = true
 context.workspace = true
 config.workspace = true

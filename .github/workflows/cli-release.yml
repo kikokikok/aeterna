@@ -46,11 +46,12 @@ jobs:
         if: contains(matrix.target, 'linux-musl')
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y musl-tools
+          sudo apt-get install -y musl-tools perl make
           # aarch64 cross-compiler
           if [ "${{ matrix.target }}" = "aarch64-unknown-linux-musl" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
+            sudo apt-get install -y gcc-aarch64-linux-gnu musl-dev
             echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+            echo "CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
           fi
 
       - name: Cache cargo registry
@@ -65,7 +66,7 @@ jobs:
             ${{ runner.os }}-${{ matrix.target }}-cargo-
 
       - name: Build release binary
-        run: cargo build --release --package aeterna --target ${{ matrix.target }}
+        run: cargo build --release --package aeterna --target ${{ matrix.target }} --features vendored-openssl
 
       - name: Package archive
         shell: bash
