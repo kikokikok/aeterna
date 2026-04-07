@@ -138,6 +138,13 @@ fn merge_with_logging(mut base: Config, override_config: Config, source_name: &s
         changes.extend(obs_changes);
     }
 
+    if override_config.admin_bootstrap.email.is_some()
+        && override_config.admin_bootstrap != base.admin_bootstrap
+    {
+        changes.push("admin_bootstrap = <overridden>".to_string());
+        base.admin_bootstrap = override_config.admin_bootstrap;
+    }
+
     if !changes.is_empty() {
         tracing::info!("Configuration from {}: {:?}", source_name, changes);
     }

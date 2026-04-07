@@ -79,6 +79,9 @@ pub struct Config {
     #[serde(default)]
     pub plugin_auth: PluginAuthConfig,
 
+    #[serde(default)]
+    pub admin_bootstrap: AdminBootstrapConfig,
+
     /// CCA (Confucius Code Agent) capabilities configuration
     #[serde(default)]
     pub cca: CcaConfig,
@@ -264,6 +267,32 @@ pub struct PluginAuthConfig {
     /// environment override.
     #[serde(default)]
     pub default_tenant_id: Option<String>,
+}
+
+/// Configuration for the one-time PlatformAdmin bootstrap seeding.
+///
+/// When `email` is set, the bootstrap routine creates (or updates) a
+/// PlatformAdmin user on startup.  This runs idempotently inside a
+/// transaction so repeated restarts are safe.
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default, PartialEq)]
+pub struct AdminBootstrapConfig {
+    /// Email of the initial PlatformAdmin.  When `None` the seeding is
+    /// skipped entirely.
+    #[serde(default)]
+    pub email: Option<String>,
+
+    /// Identity provider name (e.g. "github", "okta").  Defaults to "github".
+    #[serde(default = "default_admin_bootstrap_provider")]
+    pub provider: String,
+
+    /// Provider-specific subject identifier (e.g. GitHub login).
+    /// When `None` the email is used as subject.
+    #[serde(default)]
+    pub provider_subject: Option<String>,
+}
+
+fn default_admin_bootstrap_provider() -> String {
+    "github".to_string()
 }
 
 fn default_branch() -> String {

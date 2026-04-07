@@ -280,6 +280,20 @@ spec:
                   key: webhook-secret
             {{- end }}
             {{- end }}
+            {{- if .Values.pluginAuth.defaultTenantId }}
+            - name: AETERNA_PLUGIN_AUTH_TENANT
+              value: {{ .Values.pluginAuth.defaultTenantId | quote }}
+            {{- end }}
+            {{- if .Values.adminBootstrap.email }}
+            - name: AETERNA_ADMIN_BOOTSTRAP_EMAIL
+              value: {{ .Values.adminBootstrap.email | quote }}
+            - name: AETERNA_ADMIN_BOOTSTRAP_PROVIDER
+              value: {{ .Values.adminBootstrap.provider | default "github" | quote }}
+            {{- if .Values.adminBootstrap.providerSubject }}
+            - name: AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT
+              value: {{ .Values.adminBootstrap.providerSubject | quote }}
+            {{- end }}
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.aeterna.livenessProbe | nindent 12 }}
           readinessProbe:

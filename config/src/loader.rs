@@ -99,6 +99,7 @@ pub fn load_from_env() -> anyhow::Result<Config> {
         job: load_job_from_env()?,
         knowledge_repo: load_knowledge_repo_from_env()?,
         plugin_auth: load_plugin_auth_from_env()?,
+        admin_bootstrap: load_admin_bootstrap_from_env()?,
         cca: crate::cca::CcaConfig::default(),
     };
 
@@ -162,6 +163,15 @@ fn load_plugin_auth_from_env() -> anyhow::Result<PluginAuthConfig> {
             .ok()
             .and_then(|v| v.parse::<u64>().ok()),
         default_tenant_id: env::var("AETERNA_PLUGIN_AUTH_TENANT").ok(),
+    })
+}
+
+fn load_admin_bootstrap_from_env() -> anyhow::Result<crate::config::AdminBootstrapConfig> {
+    Ok(crate::config::AdminBootstrapConfig {
+        email: env::var("AETERNA_ADMIN_BOOTSTRAP_EMAIL").ok(),
+        provider: env::var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER")
+            .unwrap_or_else(|_| "github".to_string()),
+        provider_subject: env::var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT").ok(),
     })
 }
 
@@ -462,5 +472,62 @@ mod tests {
             env::remove_var("RD_POOL_SIZE");
             env::remove_var("RD_TIMEOUT_SECONDS");
         }
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_admin_bootstrap_defaults() {
+        unsafe {
+            env::remove_var("AETERNA_ADMIN_BOOTSTRAP_EMAIL");
+            env::remove_var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER");
+            env::remove_var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT");
+        }
+
+        let cfg = load_admin_bootstrap_from_env().unwrap();
+        assert_eq!(cfg.email, None);
+        assert_eq!(cfg.provider, "github");
+        assert_eq!(cfg.provider_subject, None);
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_admin_bootstrap_from_env_all_set() {
+        unsafe {
+            env::set_var("AETERNA_ADMIN_BOOTSTRAP_EMAIL", "admin@example.com");
+            env::set_var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER", "okta");
+            env::set_var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT", "admin-subject");
+        }
+
+        let cfg = load_admin_bootstrap_from_env().unwrap();
+
+        unsafe {
+            env::remove_var("AETERNA_ADMIN_BOOTSTRAP_EMAIL");
+            env::remove_var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER");
+            env::remove_var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT");
+        }
+
+        assert_eq!(cfg.email, Some("admin@example.com".to_string()));
+        assert_eq!(cfg.provider, "okta");
+        assert_eq!(cfg.provider_subject, Some("admin-subject".to_string()));
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_admin_bootstrap_email_only() {
+        unsafe {
+            env::set_var("AETERNA_ADMIN_BOOTSTRAP_EMAIL", "admin@example.com");
+            env::remove_var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER");
+            env::remove_var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT");
+        }
+
+        let cfg = load_admin_bootstrap_from_env().unwrap();
+
+        unsafe {
+            env::remove_var("AETERNA_ADMIN_BOOTSTRAP_EMAIL");
+        }
+
+        assert_eq!(cfg.email, Some("admin@example.com".to_string()));
+        assert_eq!(cfg.provider, "github");
+        assert_eq!(cfg.provider_subject, None);
     }
 }

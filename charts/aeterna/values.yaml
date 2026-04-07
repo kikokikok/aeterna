@@ -267,6 +267,22 @@ tenantConfigProvider:
   enabled: true
   seedTenants: []
 
+## Plugin auth configuration
+## Configures the OpenCode plugin authentication boundary (GitHub OAuth)
+pluginAuth:
+  ## @param pluginAuth.defaultTenantId Default tenant ID for plugin auth user resolution (maps to AETERNA_PLUGIN_AUTH_TENANT)
+  defaultTenantId: ""
+
+## Admin bootstrap configuration
+## Seeds an initial PlatformAdmin user on first startup so the system is operational without manual DB intervention
+adminBootstrap:
+  ## @param adminBootstrap.email Email of the initial PlatformAdmin user (empty = skip bootstrap)
+  email: ""
+  ## @param adminBootstrap.provider Identity provider name for the admin user
+  provider: "github"
+  ## @param adminBootstrap.providerSubject Provider-specific subject identifier (e.g. GitHub login)
+  providerSubject: ""
+
 ## Shared Git provider connections (platform-owned GitHub App connectivity)
 ## Each entry renders a Kubernetes Secret holding the PEM reference and
 ## seeds the platform connection registry via an init Job.

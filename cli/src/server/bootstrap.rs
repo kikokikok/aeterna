@@ -47,6 +47,10 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     let postgres = Arc::new(PostgresBackend::new(&postgres_connection_url(&config)).await?);
     postgres.initialize_schema().await?;
 
+    if config.admin_bootstrap.email.is_some() {
+        seed_platform_admin(postgres.pool(), &config.admin_bootstrap).await?;
+    }
+
     let governance_storage = Some(Arc::new(GovernanceStorage::new(postgres.pool().clone())));
 
     let git_provider: Option<Arc<dyn GitProvider>> = if let (Some(owner), Some(repo)) = (
@@ -699,6 +703,141 @@ impl TokenValidator for AllowAllTokenValidator {
             expires_at: Utc::now().timestamp() + 3600,
         })
     }
+}
+
+async fn seed_platform_admin(
+    pool: &sqlx::Pool<sqlx::Postgres>,
+    cfg: &config::AdminBootstrapConfig,
+) -> anyhow::Result<()> {
+    let email = match &cfg.email {
+        Some(e) => e,
+        None => {
+            tracing::warn!("admin bootstrap skipped: AETERNA_ADMIN_BOOTSTRAP_EMAIL not set");
+            return Ok(());
+        }
+    };
+
+    let provider = &cfg.provider;
+    let subject = cfg.provider_subject.as_deref().unwrap_or(email.as_str());
+    let now_epoch = chrono::Utc::now().timestamp();
+
+    let mut tx = pool.begin().await.context("begin seed transaction")?;
+
+    let company_id = "default";
+    sqlx::query(
+        "INSERT INTO organizational_units (id, name, type, parent_id, tenant_id, metadata, created_at, updated_at)
+         VALUES ($1, $2, 'company', NULL, $3, '{}', $4, $4)
+         ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(company_id)
+    .bind("Default")
+    .bind(company_id)
+    .bind(now_epoch)
+    .execute(&mut *tx)
+    .await
+    .context("upsert organizational_units company")?;
+
+    let company_slug = "default";
+    sqlx::query(
+        "INSERT INTO companies (slug, name, settings, created_at, updated_at)
+         VALUES ($1, $2, '{}', NOW(), NOW())
+         ON CONFLICT (slug) DO NOTHING",
+    )
+    .bind(company_slug)
+    .bind("Default")
+    .execute(&mut *tx)
+    .await
+    .context("upsert companies row")?;
+
+    let company_uuid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM companies WHERE slug = $1")
+        .bind(company_slug)
+        .fetch_one(&mut *tx)
+        .await
+        .context("fetch company uuid")?;
+
+    sqlx::query(
+        "INSERT INTO organizations (company_id, slug, name, created_at, updated_at)
+         VALUES ($1, 'platform', 'Platform', NOW(), NOW())
+         ON CONFLICT (company_id, slug) DO NOTHING",
+    )
+    .bind(company_uuid)
+    .execute(&mut *tx)
+    .await
+    .context("upsert bootstrap organization")?;
+
+    let org_uuid: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM organizations WHERE company_id = $1 AND slug = 'platform'",
+    )
+    .bind(company_uuid)
+    .fetch_one(&mut *tx)
+    .await
+    .context("fetch org uuid")?;
+
+    sqlx::query(
+        "INSERT INTO teams (org_id, slug, name, created_at, updated_at)
+         VALUES ($1, 'admins', 'Admins', NOW(), NOW())
+         ON CONFLICT (org_id, slug) DO NOTHING",
+    )
+    .bind(org_uuid)
+    .execute(&mut *tx)
+    .await
+    .context("upsert bootstrap team")?;
+
+    let team_uuid: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM teams WHERE org_id = $1 AND slug = 'admins'")
+            .bind(org_uuid)
+            .fetch_one(&mut *tx)
+            .await
+            .context("fetch team uuid")?;
+
+    let user_uuid: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO users (email, name, idp_provider, idp_subject, status, created_at, updated_at)
+         VALUES ($1, $1, $2, $3, 'active', NOW(), NOW())
+         ON CONFLICT (email) DO UPDATE SET idp_provider = EXCLUDED.idp_provider, idp_subject = EXCLUDED.idp_subject, updated_at = NOW()
+         RETURNING id",
+    )
+    .bind(email)
+    .bind(provider)
+    .bind(subject)
+    .fetch_one(&mut *tx)
+    .await
+    .context("upsert admin user")?;
+
+    sqlx::query(
+        "INSERT INTO memberships (user_id, team_id, role, status, created_at, updated_at)
+         VALUES ($1, $2, 'admin', 'active', NOW(), NOW())
+         ON CONFLICT (user_id, team_id) DO NOTHING",
+    )
+    .bind(user_uuid)
+    .bind(team_uuid)
+    .execute(&mut *tx)
+    .await
+    .context("upsert membership")?;
+
+    let user_id_str = user_uuid.to_string();
+    sqlx::query(
+        "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at)
+         VALUES ($1, $2, $3, 'PlatformAdmin', $4)
+         ON CONFLICT (user_id, tenant_id, unit_id, role) DO NOTHING",
+    )
+    .bind(&user_id_str)
+    .bind("default")
+    .bind(company_id)
+    .bind(now_epoch)
+    .execute(&mut *tx)
+    .await
+    .context("upsert PlatformAdmin role")?;
+
+    tx.commit().await.context("commit seed transaction")?;
+
+    tracing::info!(
+        email = %email,
+        provider = %provider,
+        subject = %subject,
+        "platform admin seeded successfully"
+    );
+
+    Ok(())
 }
 
 #[cfg(test)]
