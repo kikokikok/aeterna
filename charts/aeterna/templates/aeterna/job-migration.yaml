@@ -45,19 +45,19 @@ spec:
             - migrate
             - up
           env:
-            - name: AETERNA_POSTGRESQL_HOST
+            - name: PG_HOST
               value: {{ include "aeterna.postgresql.host" . | quote }}
-            - name: AETERNA_POSTGRESQL_PORT
+            - name: PG_PORT
               value: {{ include "aeterna.postgresql.port" . | quote }}
-            - name: AETERNA_POSTGRESQL_DATABASE
+            - name: PG_DATABASE
               value: {{ include "aeterna.postgresql.database" . | quote }}
-            - name: AETERNA_POSTGRESQL_USERNAME
+            - name: PG_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: {{ include "aeterna.postgresql.secretName" . }}
                   key: username
                   optional: true
-            - name: AETERNA_POSTGRESQL_PASSWORD
+            - name: PG_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "aeterna.postgresql.secretName" . }}
