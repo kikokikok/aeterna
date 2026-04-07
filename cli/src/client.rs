@@ -7,8 +7,10 @@
 //! 4. Provide a consistent error surface when auth is missing.
 
 use anyhow::{Context, Result, bail};
-use reqwest::{Client, Response};
+use reqwest::{Client, Response, header::ACCEPT};
 use serde::{Deserialize, Serialize};
+use std::future::Future;
+use tokio::time::{Duration, Instant, sleep};
 
 use crate::credentials::{self, StoredCredential};
 use crate::profile::ResolvedConfig;
@@ -32,6 +34,22 @@ pub struct TokenResponse {
     pub token_type: String,
     pub github_login: Option<String>,
     pub email: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct DeviceCodeResponse {
+    pub device_code: String,
+    pub user_code: String,
+    pub verification_uri: String,
+    pub expires_in: u64,
+    pub interval: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct DeviceAccessTokenResponse {
+    pub access_token: Option<String>,
+    pub token_type: Option<String>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -138,21 +156,15 @@ impl AeternaClient {
             .with_context(|| not_logged_in_message(profile_name))?;
 
         // Refresh if expired
-        let access_token = if cred.is_expired() {
-            let refreshed = refresh_token(&server_url, &cred.refresh_token).await?;
-            let new_cred = StoredCredential {
-                profile_name: profile_name.clone(),
-                access_token: refreshed.access_token.clone(),
-                refresh_token: refreshed.refresh_token.clone(),
-                expires_at: chrono::Utc::now().timestamp() + refreshed.expires_in as i64,
-                github_login: refreshed.github_login,
-                email: refreshed.email,
-            };
+        let (access_token, refreshed_cred) =
+            ensure_valid_token(&server_url, profile_name, cred, |url, refresh| async move {
+                refresh_token(&url, &refresh).await
+            })
+            .await?;
+
+        if let Some(new_cred) = refreshed_cred {
             credentials::save(&new_cred).context("Failed to persist refreshed credentials")?;
-            refreshed.access_token
-        } else {
-            cred.access_token
-        };
+        }
 
         Ok(Self {
             inner: Client::new(),
@@ -1058,6 +1070,40 @@ impl AeternaClient {
     }
 }
 
+async fn ensure_valid_token<F, Fut>(
+    server_url: &str,
+    profile_name: &str,
+    cred: StoredCredential,
+    refresh_fn: F,
+) -> Result<(String, Option<StoredCredential>)>
+where
+    F: Fn(String, String) -> Fut,
+    Fut: Future<Output = Result<TokenResponse>>,
+{
+    if !cred.is_expired() {
+        return Ok((cred.access_token, None));
+    }
+
+    let refreshed = refresh_fn(server_url.to_string(), cred.refresh_token.clone())
+        .await
+        .with_context(|| {
+            format!(
+                "Session refresh failed for profile '{profile_name}'. Run: aeterna auth login --profile {profile_name}"
+            )
+        })?;
+
+    let new_cred = StoredCredential {
+        profile_name: profile_name.to_string(),
+        access_token: refreshed.access_token.clone(),
+        refresh_token: refreshed.refresh_token,
+        expires_at: chrono::Utc::now().timestamp() + refreshed.expires_in as i64,
+        github_login: refreshed.github_login,
+        email: refreshed.email,
+    };
+
+    Ok((refreshed.access_token, Some(new_cred)))
+}
+
 // ---------------------------------------------------------------------------
 // Bootstrap (login)
 // ---------------------------------------------------------------------------
@@ -1093,6 +1139,111 @@ pub async fn bootstrap_github(
     resp.json::<TokenResponse>()
         .await
         .context("Invalid response from auth bootstrap endpoint")
+}
+
+fn github_device_code_url() -> &'static str {
+    "https://github.com/login/device/code"
+}
+
+fn github_device_access_token_url() -> &'static str {
+    "https://github.com/login/oauth/access_token"
+}
+
+pub async fn request_device_code(client_id: &str, scope: &str) -> Result<DeviceCodeResponse> {
+    let client = Client::new();
+    let resp = client
+        .post(github_device_code_url())
+        .header(ACCEPT, "application/json")
+        .form(&[("client_id", client_id), ("scope", scope)])
+        .send()
+        .await
+        .context("Cannot reach GitHub device authorization endpoint")?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        bail!("Device code request failed (HTTP {}): {}", status, text);
+    }
+
+    resp.json::<DeviceCodeResponse>()
+        .await
+        .context("Invalid response from GitHub device code endpoint")
+}
+
+pub async fn poll_device_authorization(
+    client_id: &str,
+    device_code: &str,
+    interval: u64,
+    expires_in: u64,
+) -> Result<String> {
+    let client = Client::new();
+    let started = Instant::now();
+    let mut poll_interval_secs = interval.max(1);
+
+    loop {
+        if started.elapsed() >= Duration::from_secs(expires_in) {
+            bail!("Device authorization timed out. Please run `aeterna auth login` again.");
+        }
+
+        sleep(Duration::from_secs(poll_interval_secs)).await;
+
+        let resp = client
+            .post(github_device_access_token_url())
+            .header(ACCEPT, "application/json")
+            .form(&[
+                ("client_id", client_id),
+                ("device_code", device_code),
+                ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
+            ])
+            .send()
+            .await
+            .context("Cannot reach GitHub device token endpoint")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            bail!(
+                "Device authorization polling failed (HTTP {}): {}",
+                status,
+                text
+            );
+        }
+
+        let body = resp
+            .json::<DeviceAccessTokenResponse>()
+            .await
+            .context("Invalid response from GitHub device token endpoint")?;
+
+        match handle_device_poll_response(body, &mut poll_interval_secs)? {
+            Some(access_token) => return Ok(access_token),
+            None => continue,
+        }
+    }
+}
+
+fn handle_device_poll_response(
+    body: DeviceAccessTokenResponse,
+    poll_interval_secs: &mut u64,
+) -> Result<Option<String>> {
+    if let Some(access_token) = body.access_token {
+        return Ok(Some(access_token));
+    }
+
+    match body.error.as_deref() {
+        Some("authorization_pending") => Ok(None),
+        Some("slow_down") => {
+            *poll_interval_secs = poll_interval_secs.saturating_add(5);
+            Ok(None)
+        }
+        Some("expired_token") => {
+            bail!("Device authorization expired. Please run `aeterna auth login` again.")
+        }
+        Some("access_denied") => {
+            bail!("Device authorization denied. Please run `aeterna auth login` again.")
+        }
+        Some(other) => bail!("Device authorization failed: {other}"),
+        None => bail!("Device authorization failed: missing access_token and error fields"),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1306,5 +1457,258 @@ mod tests {
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("rt_abc"));
+    }
+
+    #[test]
+    fn test_device_code_response_deserialize() {
+        let json = r#"{
+            "device_code": "dev_123",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://github.com/login/device",
+            "expires_in": 900,
+            "interval": 5
+        }"#;
+        let resp: DeviceCodeResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.device_code, "dev_123");
+        assert_eq!(resp.user_code, "ABCD-EFGH");
+        assert_eq!(resp.verification_uri, "https://github.com/login/device");
+        assert_eq!(resp.expires_in, 900);
+        assert_eq!(resp.interval, 5);
+    }
+
+    #[test]
+    fn test_device_access_token_response_deserialize_success() {
+        let json = r#"{
+            "access_token": "gho_abc",
+            "token_type": "bearer"
+        }"#;
+        let resp: DeviceAccessTokenResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.access_token.as_deref(), Some("gho_abc"));
+        assert_eq!(resp.token_type.as_deref(), Some("bearer"));
+        assert!(resp.error.is_none());
+    }
+
+    #[test]
+    fn test_device_access_token_response_deserialize_authorization_pending() {
+        let json = r#"{"error":"authorization_pending"}"#;
+        let resp: DeviceAccessTokenResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.error.as_deref(), Some("authorization_pending"));
+        assert!(resp.access_token.is_none());
+    }
+
+    #[test]
+    fn test_device_access_token_response_deserialize_slow_down() {
+        let json = r#"{"error":"slow_down"}"#;
+        let resp: DeviceAccessTokenResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.error.as_deref(), Some("slow_down"));
+        assert!(resp.access_token.is_none());
+    }
+
+    #[test]
+    fn test_device_access_token_response_deserialize_expired_token() {
+        let json = r#"{"error":"expired_token"}"#;
+        let resp: DeviceAccessTokenResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.error.as_deref(), Some("expired_token"));
+        assert!(resp.access_token.is_none());
+    }
+
+    #[test]
+    fn test_device_access_token_response_deserialize_access_denied() {
+        let json = r#"{"error":"access_denied"}"#;
+        let resp: DeviceAccessTokenResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.error.as_deref(), Some("access_denied"));
+        assert!(resp.access_token.is_none());
+    }
+
+    #[test]
+    fn test_github_device_flow_endpoints() {
+        assert_eq!(
+            github_device_code_url(),
+            "https://github.com/login/device/code"
+        );
+        assert_eq!(
+            github_device_access_token_url(),
+            "https://github.com/login/oauth/access_token"
+        );
+    }
+
+    #[test]
+    fn test_handle_device_poll_response_success() {
+        let mut interval = 5;
+        let out = handle_device_poll_response(
+            DeviceAccessTokenResponse {
+                access_token: Some("gho_success".to_string()),
+                token_type: Some("bearer".to_string()),
+                error: None,
+            },
+            &mut interval,
+        )
+        .unwrap();
+        assert_eq!(out, Some("gho_success".to_string()));
+        assert_eq!(interval, 5);
+    }
+
+    #[test]
+    fn test_handle_device_poll_response_authorization_pending() {
+        let mut interval = 5;
+        let out = handle_device_poll_response(
+            DeviceAccessTokenResponse {
+                access_token: None,
+                token_type: None,
+                error: Some("authorization_pending".to_string()),
+            },
+            &mut interval,
+        )
+        .unwrap();
+        assert!(out.is_none());
+        assert_eq!(interval, 5);
+    }
+
+    #[test]
+    fn test_handle_device_poll_response_slow_down_increments_interval() {
+        let mut interval = 5;
+        let out = handle_device_poll_response(
+            DeviceAccessTokenResponse {
+                access_token: None,
+                token_type: None,
+                error: Some("slow_down".to_string()),
+            },
+            &mut interval,
+        )
+        .unwrap();
+        assert!(out.is_none());
+        assert_eq!(interval, 10);
+    }
+
+    #[test]
+    fn test_handle_device_poll_response_expired_token_errors() {
+        let mut interval = 5;
+        let err = handle_device_poll_response(
+            DeviceAccessTokenResponse {
+                access_token: None,
+                token_type: None,
+                error: Some("expired_token".to_string()),
+            },
+            &mut interval,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Device authorization expired"));
+    }
+
+    #[test]
+    fn test_handle_device_poll_response_access_denied_errors() {
+        let mut interval = 5;
+        let err = handle_device_poll_response(
+            DeviceAccessTokenResponse {
+                access_token: None,
+                token_type: None,
+                error: Some("access_denied".to_string()),
+            },
+            &mut interval,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Device authorization denied"));
+    }
+
+    #[test]
+    fn test_refresh_error_message_contains_relogin_hint() {
+        let profile_name = "prod";
+        let err = anyhow::Error::msg("refresh failed").context(format!(
+            "Session refresh failed for profile '{profile_name}'. Run: aeterna auth login --profile {profile_name}"
+        ));
+        let rendered = format!("{err:#}");
+        assert!(rendered.contains("aeterna auth login --profile prod"));
+    }
+
+    #[tokio::test]
+    async fn test_ensure_valid_token_not_expired_skips_refresh() {
+        let cred = StoredCredential {
+            profile_name: "default".to_string(),
+            access_token: "access_live".to_string(),
+            refresh_token: "refresh_live".to_string(),
+            expires_at: chrono::Utc::now().timestamp() + 3_600,
+            github_login: Some("alice".to_string()),
+            email: Some("alice@example.com".to_string()),
+        };
+
+        let result = ensure_valid_token(
+            "https://aeterna.example.com",
+            "default",
+            cred,
+            |_url, _refresh| async {
+                Ok(TokenResponse {
+                    access_token: "should_not_be_used".to_string(),
+                    refresh_token: "should_not_be_used".to_string(),
+                    expires_in: 60,
+                    token_type: "Bearer".to_string(),
+                    github_login: None,
+                    email: None,
+                })
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.0, "access_live");
+        assert!(result.1.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_ensure_valid_token_expired_refresh_success() {
+        let cred = StoredCredential {
+            profile_name: "default".to_string(),
+            access_token: "old_access".to_string(),
+            refresh_token: "refresh_old".to_string(),
+            expires_at: chrono::Utc::now().timestamp() - 3_600,
+            github_login: Some("alice".to_string()),
+            email: Some("alice@example.com".to_string()),
+        };
+
+        let (access, refreshed) = ensure_valid_token(
+            "https://aeterna.example.com",
+            "default",
+            cred,
+            |_url, _refresh| async {
+                Ok(TokenResponse {
+                    access_token: "new_access".to_string(),
+                    refresh_token: "new_refresh".to_string(),
+                    expires_in: 600,
+                    token_type: "Bearer".to_string(),
+                    github_login: Some("alice".to_string()),
+                    email: Some("alice@example.com".to_string()),
+                })
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(access, "new_access");
+        let refreshed = refreshed.unwrap();
+        assert_eq!(refreshed.access_token, "new_access");
+        assert_eq!(refreshed.refresh_token, "new_refresh");
+    }
+
+    #[tokio::test]
+    async fn test_ensure_valid_token_expired_refresh_failure_contains_hint() {
+        let cred = StoredCredential {
+            profile_name: "prod".to_string(),
+            access_token: "old_access".to_string(),
+            refresh_token: "refresh_old".to_string(),
+            expires_at: chrono::Utc::now().timestamp() - 3_600,
+            github_login: None,
+            email: None,
+        };
+
+        let err = ensure_valid_token(
+            "https://aeterna.example.com",
+            "prod",
+            cred,
+            |_url, _refresh| async { anyhow::bail!("upstream refresh failed") },
+        )
+        .await
+        .unwrap_err();
+
+        let rendered = format!("{err:#}");
+        assert!(rendered.contains("aeterna auth login --profile prod"));
     }
 }

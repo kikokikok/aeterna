@@ -52,7 +52,7 @@ The system SHALL expose health endpoints whose status matches the supported runt
 - **AND** readiness SHALL report whether required downstream dependencies and runtime components are available for the configured mode
 
 #### Scenario: Degraded runtime state
-- **WHEN** a required backend, auth provider, or persistence layer is unavailable
+- **WHEN** a required backend, auth provider, persistence layer, vector store, or session backing store is unavailable
 - **THEN** the runtime SHALL report degraded or unready status
 - **AND** operational output SHALL identify the failing component category
 

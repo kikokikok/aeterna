@@ -1,14 +1,24 @@
 ## 1. CLI auth and profile foundation
 
-- [ ] 1.1 Add CLI auth command surface (`login`, `logout`, `status`) under the `aeterna` binary.
-- [ ] 1.2 Implement a shared authenticated CLI client that resolves target profile, server URL, and credentials.
-- [ ] 1.3 Implement secure credential persistence and documented fallback storage behavior.
+- [x] 1.1 Add CLI auth command surface (`login`, `logout`, `status`) under the `aeterna` binary.
+- [x] 1.2 Implement a shared authenticated CLI client that resolves target profile, server URL, and credentials.
+- [x] 1.3 Implement secure credential persistence and documented fallback storage behavior.
 - [ ] 1.4 Add token refresh/session continuation support for CLI-authenticated usage.
 
 ## 2. Configuration and environment management
 
-- [ ] 2.1 Define canonical user-level and project-level CLI config file locations.
-- [ ] 2.2 Add CLI config/profile management commands for show, set/update, validate, and default-profile selection.
+- [x] 2.1 Define canonical user-level and project-level CLI config file locations.
+- [x] 2.2 Add CLI config/profile management commands for show, set/update, validate, and default-profile selection.
+  - [x] 2.2.1 `aeterna config show/set/validate/default-profile` commands (config.rs)
+  - [x] 2.2.2 `aeterna profile add` — interactive wizard, `--from-file` manifest (TOML), CLI flags
+  - [x] 2.2.3 `aeterna profile update` — merge flags/file into existing profile
+  - [x] 2.2.4 `aeterna profile remove` — with confirmation prompt and `--yes` flag
+  - [x] 2.2.5 `aeterna profile list` — tabular display with default marker
+  - [x] 2.2.6 `aeterna profile default` — set default profile
+  - [x] 2.2.7 Register Auth, Config, Profile commands in Commands enum and main.rs dispatch
+  - [x] 2.2.8 Add `github_client_id` field to Profile struct for device flow auth
+  - [x] 2.2.9 Add `delete_profile`, `list_profiles`, `default_profile_name` helpers to profile.rs
+  - [x] 2.2.10 Unit tests for profile commands (18 tests passing)
 - [ ] 2.3 Align configuration loading code and docs on the `AETERNA_*` namespace and canonical precedence rules.
 - [ ] 2.4 Update errors and status output to reference the canonical config/profile model.
 

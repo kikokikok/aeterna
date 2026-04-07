@@ -3,7 +3,10 @@
 //! Subcommands: login, logout, status
 
 use clap::{Args, Subcommand};
+use colored::Colorize;
+use indicatif::{ProgressBar, ProgressStyle};
 use serde_json::json;
+use std::process::Command;
 
 use crate::{client, credentials, output, profile, ux_error};
 
@@ -26,7 +29,7 @@ pub enum AuthCommand {
 #[derive(Args)]
 pub struct LoginArgs {
     /// GitHub personal access token (PAT) to exchange for Aeterna credentials.
-    /// If omitted, the CLI prompts interactively.
+    /// If omitted, the CLI starts GitHub device-flow login.
     #[arg(long, env = "GITHUB_TOKEN")]
     pub github_token: Option<String>,
 
@@ -99,14 +102,85 @@ async fn run_login(args: LoginArgs) -> anyhow::Result<()> {
         resolved.server_url.clone()
     };
 
-    // Obtain GitHub token
     let github_token = match args.github_token {
         Some(t) => t,
         None => {
-            // Read from stdin without echo
-            dialoguer::Password::new()
-                .with_prompt("GitHub personal access token (PAT)")
-                .interact()?
+            let github_client_id = std::env::var("AETERNA_GITHUB_CLIENT_ID")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .or_else(|| {
+                    resolved
+                        .profile
+                        .github_client_id
+                        .clone()
+                        .filter(|v| !v.trim().is_empty())
+                })
+                .ok_or_else(|| {
+                    let err = ux_error::UxError::new("Missing GitHub OAuth client ID")
+                        .why("Device-flow login requires a GitHub OAuth App client ID")
+                        .fix("Set AETERNA_GITHUB_CLIENT_ID in your environment")
+                        .fix("Or configure profile.github_client_id in your Aeterna profile")
+                        .suggest("aeterna auth login --github-token <PAT>");
+                    err.display();
+                    anyhow::anyhow!(
+                        "Missing GitHub OAuth client ID. Set AETERNA_GITHUB_CLIENT_ID or configure profile.github_client_id."
+                    )
+                })?;
+
+            let device = client::request_device_code(&github_client_id, "read:user,user:email")
+                .await
+                .map_err(|e| {
+                    let err = ux_error::UxError::new("GitHub device flow setup failed")
+                        .why(e.to_string())
+                        .fix("Verify the GitHub OAuth client ID is correct")
+                        .fix("Check network access to github.com")
+                        .suggest("aeterna auth login");
+                    err.display();
+                    anyhow::anyhow!("Device flow setup failed: {e}")
+                })?;
+
+            if !args.json {
+                output::info(&format!(
+                    "Open {} and enter code {}",
+                    device.verification_uri.bold().underline(),
+                    device.user_code.bold().yellow()
+                ));
+            }
+
+            let _ = try_open_browser(&device.verification_uri);
+
+            let spinner = ProgressBar::new_spinner();
+            spinner.set_style(
+                ProgressStyle::with_template("{spinner} {msg}")
+                    .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+            );
+            spinner.set_message("Waiting for authorization...");
+            spinner.enable_steady_tick(std::time::Duration::from_millis(120));
+
+            let token_result = client::poll_device_authorization(
+                &github_client_id,
+                &device.device_code,
+                device.interval,
+                device.expires_in,
+            )
+            .await;
+
+            match token_result {
+                Ok(token) => {
+                    spinner.finish_and_clear();
+                    token
+                }
+                Err(e) => {
+                    spinner.finish_and_clear();
+                    let err = ux_error::UxError::new("GitHub device authorization failed")
+                        .why(e.to_string())
+                        .fix("Complete the device authorization in your browser")
+                        .fix("Retry login if the code expired")
+                        .suggest("aeterna auth login");
+                    err.display();
+                    return Err(anyhow::anyhow!("Device authorization failed: {e}"));
+                }
+            }
         }
     };
 
@@ -150,6 +224,7 @@ async fn run_login(args: LoginArgs) -> anyhow::Result<()> {
             auth_method: profile::AuthMethod::GitHub,
             tenant_id: resolved.tenant_id.clone(),
             label: None,
+            github_client_id: resolved.profile.github_client_id.clone(),
         };
         profile::save_profile(&new_profile)?;
     }
@@ -184,6 +259,17 @@ async fn run_login(args: LoginArgs) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn try_open_browser(url: &str) -> bool {
+    let os = std::env::consts::OS;
+    let status = match os {
+        "macos" => Command::new("open").arg(url).status(),
+        "linux" => Command::new("xdg-open").arg(url).status(),
+        _ => return false,
+    };
+
+    status.map(|s| s.success()).unwrap_or(false)
 }
 
 // ---------------------------------------------------------------------------

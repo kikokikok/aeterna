@@ -463,14 +463,23 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
     migrations.sort_by_key(|m| m.version);
 
     match args.direction.as_str() {
-        "status" => {
-            let pool = connect_migration_pool().await?;
-            ensure_migration_table(&pool).await?;
-            let applied = get_applied_migrations(&pool).await?;
-            verify_applied_checksums(&migrations, &applied)?;
-            let report = build_migration_report(&migrations, &applied);
-            print_migration_report("status", args.dry_run, args.json, &report)?;
-        }
+        "status" => match connect_migration_pool().await {
+            Ok(pool) => {
+                ensure_migration_table(&pool).await?;
+                let applied = get_applied_migrations(&pool).await?;
+                verify_applied_checksums(&migrations, &applied)?;
+                let report = build_migration_report(&migrations, &applied);
+                print_migration_report("status", args.dry_run, args.json, &report)?;
+            }
+            Err(_) => {
+                let report = build_offline_status_report(&migrations);
+                print_migration_report("status", args.dry_run, args.json, &report)?;
+                output::warn(
+                    "Database not connected — showing embedded migrations only. \
+                         Set DATABASE_URL or PG_HOST to see applied status.",
+                );
+            }
+        },
         "up" => {
             let target_version = parse_target_version(args.target.as_deref())?;
 
@@ -484,7 +493,30 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
                 return Ok(());
             }
 
-            let pool = connect_migration_pool().await?;
+            let pool = match connect_migration_pool().await {
+                Ok(pool) => pool,
+                Err(e) => {
+                    if args.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "success": false,
+                                "direction": "up",
+                                "error": "database_not_connected",
+                                "message": format!("Database migration failed: database not connected — {e}"),
+                                "fix": "Set DATABASE_URL or configure PG_HOST/PG_PORT/PG_USER/PG_PASSWORD/PG_DATABASE, or use --dry-run to preview",
+                            }))?
+                        );
+                    } else {
+                        ux_error::UxError::new("Database migration failed: database not connected")
+                            .why(format!("{e}"))
+                            .fix("Set DATABASE_URL or configure PG_HOST/PG_PORT/PG_USER/PG_PASSWORD/PG_DATABASE")
+                            .suggest("aeterna admin migrate up --dry-run")
+                            .display();
+                    }
+                    std::process::exit(1);
+                }
+            };
             ensure_migration_table(&pool).await?;
             let applied = get_applied_migrations(&pool).await?;
             verify_applied_checksums(&migrations, &applied)?;
@@ -820,6 +852,25 @@ fn build_migration_report(
     MigrationReport {
         current_version,
         pending_count,
+        migrations: entries,
+    }
+}
+
+fn build_offline_status_report(embedded: &[EmbeddedMigration]) -> MigrationReport {
+    let entries = embedded
+        .iter()
+        .map(|migration| MigrationReportEntry {
+            version: migration.version,
+            name: migration.name.to_string(),
+            status: "unknown".to_string(),
+            checksum: migration_checksum(migration.sql),
+            applied_at: None,
+        })
+        .collect::<Vec<_>>();
+
+    MigrationReport {
+        current_version: None,
+        pending_count: entries.len(),
         migrations: entries,
     }
 }

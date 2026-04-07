@@ -41,6 +41,12 @@ The system SHALL support multiple deployment modes WITH high availability option
 - **THEN** ingress resources SHALL support controller-specific annotations and certificate issuer configuration through chart values
 - **AND** the documented example SHALL describe secret naming and certificate manager expectations
 
+#### Scenario: Tenant configuration is materialized through the provider contract
+- **WHEN** operators deploy tenant-aware Aeterna workloads into a supported Kubernetes environment
+- **THEN** the deployment assets SHALL support materializing the canonical tenant configuration provider contract for each provisioned tenant
+- **AND** tenant-specific non-secret configuration SHALL be rendered separately from tenant-specific secret values
+- **AND** the deployment path SHALL keep tenant runtime secret values out of versioned deployment files
+
 ### Requirement: OpenTofu Multi-Cloud Provisioning
 The platform SHALL provide OpenTofu Infrastructure-as-Code modules for automated, highly-available deployment across GCP, AWS, and Azure.
 
@@ -89,6 +95,51 @@ The deployment SHALL enforce that identity headers or equivalent trusted identit
 - **WHEN** a request attempts to supply trusted identity fields from outside the supported authentication boundary
 - **THEN** the deployment SHALL prevent those fields from being trusted
 - **AND** the request SHALL fail closed rather than inheriting forged identity
+
+### Requirement: Plugin Auth Helm Configuration
+The Helm chart SHALL expose a `pluginAuth` values block for configuring Aeterna's authentication system in Kubernetes deployments, including enable/disable toggle, JWT secret, and GitHub OAuth App credentials.
+
+#### Scenario: Auth disabled by default
+- **WHEN** the Helm chart is installed with default values
+- **THEN** `pluginAuth.enabled` SHALL default to `false`
+- **AND** the deployed server SHALL operate in backward-compatible no-auth mode
+
+#### Scenario: Auth enabled via values
+- **WHEN** the Helm chart is installed with `pluginAuth.enabled: true` and required credentials
+- **THEN** the configmap SHALL include `AETERNA_PLUGIN_AUTH_ENABLED=true`
+- **AND** the deployment SHALL inject all `AETERNA_PLUGIN_AUTH_*` environment variables into the Aeterna container
+- **AND** the server SHALL enforce authentication on protected routes
+
+#### Scenario: Missing auth credentials fail chart validation
+- **WHEN** the Helm chart is installed with `pluginAuth.enabled: true` but missing required fields (JWT secret, GitHub client ID)
+- **THEN** the chart SHALL fail during template rendering or values validation
+- **AND** the error message SHALL indicate which required auth fields are missing
+
+### Requirement: Helm Admin Bootstrap Values
+The Helm chart SHALL expose an `adminBootstrap` values section that configures the initial PlatformAdmin identity seeding, mapping to `AETERNA_ADMIN_BOOTSTRAP_*` environment variables in the deployment template.
+
+#### Scenario: Admin bootstrap values wired to deployment env vars
+- **WHEN** the operator sets `adminBootstrap.email`, `adminBootstrap.provider`, and `adminBootstrap.providerSubject` in Helm values
+- **THEN** the deployment template SHALL inject `AETERNA_ADMIN_BOOTSTRAP_EMAIL`, `AETERNA_ADMIN_BOOTSTRAP_PROVIDER`, and `AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT` as environment variables on the Aeterna container
+- **AND** the env vars SHALL only be rendered when `adminBootstrap.email` is non-empty
+
+#### Scenario: Default values do not seed an admin
+- **WHEN** the chart is installed with default values (no `adminBootstrap.email` set)
+- **THEN** the deployment template SHALL NOT inject admin bootstrap environment variables
+- **AND** the server SHALL start without attempting bootstrap seeding
+
+### Requirement: Helm Plugin Auth Tenant Value
+The Helm chart SHALL expose a `pluginAuth.defaultTenantId` value that maps to the `AETERNA_PLUGIN_AUTH_TENANT` environment variable in the deployment template, enabling the plugin auth bootstrap endpoint to resolve a tenant.
+
+#### Scenario: Plugin auth tenant wired to deployment env var
+- **WHEN** the operator sets `pluginAuth.defaultTenantId` in Helm values
+- **THEN** the deployment template SHALL inject `AETERNA_PLUGIN_AUTH_TENANT` as an environment variable on the Aeterna container
+- **AND** the plugin auth bootstrap endpoint SHALL use this value for tenant resolution
+
+#### Scenario: Plugin auth tenant not set
+- **WHEN** the chart is installed without `pluginAuth.defaultTenantId`
+- **THEN** the deployment template SHALL NOT inject `AETERNA_PLUGIN_AUTH_TENANT`
+- **AND** the plugin auth bootstrap endpoint SHALL fail closed with an error rather than defaulting to an arbitrary tenant
 
 ## Overview
 

@@ -43,5 +43,8 @@ async fn main() -> Result<()> {
         Commands::Completion(args) => commands::completion::run(args),
         Commands::Setup(args) => commands::setup::run(args).await,
         Commands::Serve(args) => commands::serve::run(args).await,
+        Commands::Auth(cmd) => commands::auth::run(cmd).await,
+        Commands::Config(cmd) => commands::config::run(cmd).await,
+        Commands::Profile(cmd) => commands::profile::run(cmd).await,
     }
 }

@@ -2,7 +2,7 @@ apiVersion: v2
 name: aeterna-opal
 description: OPAL Authorization Stack for Aeterna Memory-Knowledge System
 type: application
-version: 0.2.0
+version: 0.5.0
 appVersion: "0.7.5"
 keywords:
   - opal

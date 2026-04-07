@@ -1,7 +1,9 @@
 pub mod admin;
 pub mod agent;
+pub mod auth;
 pub mod check;
 pub mod completion;
+pub mod config;
 pub mod context;
 pub mod govern;
 pub mod hints;
@@ -10,6 +12,7 @@ pub mod knowledge;
 pub mod memory;
 pub mod org;
 pub mod policy;
+pub mod profile;
 pub mod search;
 pub mod serve;
 pub mod setup;
@@ -101,4 +104,13 @@ pub enum Commands {
 
     #[command(about = "Start the Aeterna HTTP API server")]
     Serve(serve::ServeArgs),
+
+    #[command(subcommand, about = "Authenticate with Aeterna servers")]
+    Auth(auth::AuthCommand),
+
+    #[command(subcommand, about = "Manage CLI configuration")]
+    Config(config::ConfigCommand),
+
+    #[command(subcommand, about = "Manage CLI connection profiles")]
+    Profile(profile::ProfileCommand),
 }

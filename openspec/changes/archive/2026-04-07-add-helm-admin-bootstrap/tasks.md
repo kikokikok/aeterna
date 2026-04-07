@@ -69,15 +69,26 @@
 - [x] 8.11 Run `cargo build` to verify compilation
 - [x] 8.12 Run `cargo test --all` to verify no regressions
 
-## 9. Build and Deploy (Round 2 — with migration runner)
+## 9. Build and Deploy (Round 2 — migration runner + fixes)
 
-- [ ] 9.1 Build and push new container image
-- [ ] 9.2 Bump chart version to `0.4.1-bootstrap.2`, package and publish
-- [ ] 9.3 `helm upgrade` on [REDACTED_ENV] with new chart
+- [x] 9.1 Build and push container image `sha-4a21982` (chart `0.4.1-bootstrap.3`)
+- [x] 9.2 Fix pgvector extension not installed on CNPG — ran `CREATE EXTENSION IF NOT EXISTS vector` manually as postgres superuser
+- [x] 9.3 Diagnose migration failures: 003-008 had wrong table names, premature FK constraints to tables created by later migrations
+- [x] 9.4 Baseline [REDACTED_ENV] `_aeterna_migrations` table with 14 rows for existing image checksums
+- [x] 9.5 Helm upgrade [REDACTED_ENV] to revision 56 — migration Job succeeds as no-op, all 12 pods running
+- [x] 9.6 Fix migration SQL files 003-008: remove premature FKs, fix table names, add idempotent guards
+- [x] 9.7 Update baseline checksums on [REDACTED_ENV] for fixed migrations 003-008
+- [x] 9.8 Commit and push fixed migrations (`4ef8573`)
+- [x] 9.9 Wait for Docker CI build (~36 min) for image `sha-4ef8573`
+- [x] 9.10 Update [REDACTED_TENANT] values with new image tag
+- [x] 9.11 Helm upgrade [REDACTED_ENV] with new image — revision 57
 
-## 10. Verification (Round 2 — migration runner)
+## 10. Verification (Round 2 — migration runner with fixed SQL)
 
-- [ ] 10.1 Verify migration Job completes successfully (not Failed)
-- [ ] 10.2 Verify `_aeterna_migrations` table exists with all 14 migrations tracked
-- [ ] 10.3 Verify pod starts cleanly after migration Job
-- [ ] 10.4 Verify bootstrap seeding still works (PlatformAdmin in DB)
+- [x] 10.1 Verify migration Job succeeds with baselined checksums (revision 56)
+- [x] 10.2 Verify `_aeterna_migrations` table has all 14 rows
+- [x] 10.3 Verify all 12 pods running 1/1
+- [x] 10.4 Verify PlatformAdmin `[REDACTED_EMAIL]` active in DB
+- [x] 10.5 Verify migration Job succeeds with new image (fixed SQL + matching checksums) — "Job completed" event confirmed
+- [x] 10.6 Verify pods restart cleanly after upgrade — 12/12 Running, aeterna pods on image `sha-4ef8573`
+- [x] 10.7 Verify bootstrap seeding still works — PlatformAdmin `[REDACTED_EMAIL]` status=active

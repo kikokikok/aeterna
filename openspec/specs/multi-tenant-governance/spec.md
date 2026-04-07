@@ -22,6 +22,17 @@ Each tenant MUST have:
 - **THEN** the system SHALL only return results from the user's tenant
 - **AND** embeddings from other tenants SHALL NOT influence the search results
 
+#### Scenario: Tenant configuration segregation
+- **WHEN** the system stores or mutates tenant-specific configuration and secret references
+- **THEN** each tenant SHALL have an independently addressable configuration surface bound to that tenant's unique identifier
+- **AND** GlobalAdmin and TenantAdmin mutations SHALL be restricted to the tenant and ownership scope authorized for the caller
+- **AND** the system SHALL reject tenant configuration references that cross tenant boundaries or expose raw secret values outside the tenant's approved secret container
+
+#### Scenario: Shared provider connections respect tenant visibility boundaries
+- **WHEN** the system exposes a platform-managed Git provider connection to one or more tenants
+- **THEN** only explicitly allowed tenants SHALL be able to reference that connection in tenant configuration
+- **AND** tenants that are not granted visibility SHALL receive an authorization or validation error without disclosure of hidden connection details
+
 ### Requirement: Hierarchical Organization Structure
 
 The system SHALL support a four-level organizational hierarchy within each tenant:
@@ -50,14 +61,17 @@ The hierarchy MUST be bootstrappable from an external identity provider (GitHub,
 
 ### Requirement: Relationship-Based Access Control
 
-The system SHALL implement ReBAC (Relationship-Based Access Control) using OpenFGA for fine-grained permissions within a tenant.
+The system SHALL implement Cedar-based Role-Based Access Control with 8 roles (Viewer, Agent, Developer, TechLead, Architect, Admin, TenantAdmin, PlatformAdmin) for fine-grained permissions within and across tenants.
 
 Supported roles:
-- **Developer**: Can add memories, propose knowledge, view resources
-- **Tech Lead**: Can approve promotions, manage team knowledge
-- **Architect**: Can reject proposals, force corrections, review drift
-- **Admin**: Full tenant management access
+- **Viewer**: Read-only access to memories, knowledge, policies, governance requests, and organization structure
 - **Agent**: Inherits permissions from the user it acts on behalf of
+- **Developer**: Can add memories, propose knowledge, view resources, register and delegate to agents
+- **Tech Lead**: Can approve promotions, manage team knowledge, manage members
+- **Architect**: Can reject proposals, force corrections, review drift, create policies
+- **Admin**: Full tenant management access (legacy alias for TenantAdmin)
+- **TenantAdmin**: Explicit full tenant-scoped administration, tenant config/secrets, role delegation within tenant
+- **PlatformAdmin**: Cross-tenant super admin, tenant lifecycle, shared Git provider connections
 
 #### Scenario: Role-based knowledge approval
 - **WHEN** a Developer proposes promoting a memory to team knowledge
@@ -74,6 +88,17 @@ Supported roles:
 - **WHEN** an LLM agent is configured with Architect role
 - **THEN** the agent SHALL be able to approve or reject proposals programmatically
 - **AND** all agent actions SHALL be audited with the agent's identity
+
+#### Scenario: Viewer role has read-only access
+- **WHEN** a user has the Viewer role
+- **THEN** the user SHALL be able to view memories, knowledge, policies, governance requests, and organization structure
+- **AND** the user SHALL NOT be able to create, modify, delete, or approve any resource
+
+#### Scenario: TenantAdmin manages tenant-scoped resources
+- **WHEN** a user has the TenantAdmin role on a specific tenant
+- **THEN** the user SHALL have full administrative access within that tenant
+- **AND** the user SHALL be able to manage tenant config, secrets, hierarchy, and role assignments within the tenant
+- **AND** the user SHALL NOT have access to other tenants or platform-wide operations
 
 ### Requirement: Governance Event Streaming
 
@@ -211,14 +236,19 @@ pub struct TenantContext {
 ```
 
 #### Scenario: Context injection
-- **WHEN** a request arrives at any API endpoint
-- **THEN** the system SHALL extract and validate TenantContext from the request
-- **AND** the context SHALL be available to all downstream operations
+- **WHEN** a request arrives at any tenant-scoped API or tool boundary
+- **THEN** the system SHALL extract and validate TenantContext from authenticated identity or trusted boundary data
+- **AND** the context SHALL include the caller's effective roles and hierarchy path for downstream authorization decisions
 
 #### Scenario: Context validation failure
 - **WHEN** a request lacks valid TenantContext
 - **THEN** the system SHALL reject the request with 401 Unauthorized
 - **AND** the system SHALL NOT process any data operations
+
+#### Scenario: MCP tool invocation validates tenant context
+- **WHEN** an MCP tool is invoked with tenant context in the JSON payload
+- **THEN** the runtime SHALL validate that the supplied tenant context matches the authenticated identity
+- **AND** the request SHALL be rejected if the supplied tenant context cannot be verified
 
 ### Requirement: Policy Inheritance
 
@@ -256,6 +286,7 @@ The system SHALL implement defense-in-depth for tenant data isolation.
 - **WHEN** PostgreSQL tables contain multi-tenant data
 - **THEN** row-level security (RLS) policies MUST be enabled
 - **AND** RLS MUST enforce tenant isolation at the database level
+- **AND** runtime hot paths MUST activate the database tenant context needed for those RLS policies
 
 #### Scenario: Penetration Testing
 - **WHEN** new tenant isolation features are deployed
@@ -346,6 +377,7 @@ The system SHALL enforce mandatory tenant context propagation.
 - **WHEN** TenantContext extraction fails
 - **THEN** system MUST fail closed (reject request)
 - **AND** MUST NOT fall back to default tenant
+- **AND** MUST NOT assign a synthetic system user as a replacement caller identity
 
 #### Scenario: Context Audit Trail
 - **WHEN** operations are performed
@@ -413,4 +445,43 @@ The system SHALL map trusted Okta group claims into Aeterna roles and policy inp
 - **WHEN** an operation requires a role or policy attribute that cannot be derived from the authenticated user's trusted group claims
 - **THEN** the system SHALL deny the operation
 - **AND** the system SHALL record the authorization failure for audit or troubleshooting
+
+### Requirement: Administrative Authority Boundaries
+The system SHALL distinguish cross-tenant platform administration from tenant-scoped administration without weakening tenant isolation.
+
+#### Scenario: Platform admin manages tenant lifecycle without implicit tenant content access
+- **WHEN** a platform administrator creates, updates, or deactivates a tenant
+- **THEN** the system SHALL allow the lifecycle mutation across tenants
+- **AND** the platform administrator SHALL NOT implicitly gain read or write access to that tenant's memory or knowledge content outside an explicit tenant-scoped request path
+
+#### Scenario: Tenant admin is limited to one tenant
+- **WHEN** a tenant administrator attempts a cross-tenant lifecycle or scoped-administration action
+- **THEN** the system SHALL reject the request with an authorization error
+- **AND** the audit trail SHALL record the denied cross-tenant attempt
+
+### Requirement: Verified Tenant Resolution for Administrative Onboarding
+The system SHALL resolve tenant association for onboarding and administrative bootstrap from explicit tenant selection, sync-derived mappings, or admin-approved verified mappings.
+
+#### Scenario: Verified domain mapping resolves a tenant
+- **WHEN** an onboarding or bootstrap flow matches exactly one admin-approved email-domain mapping for a tenant
+- **THEN** the system SHALL allow that mapping to select the tenant automatically
+- **AND** the audit trail SHALL record the mapping source used for the tenant resolution
+
+#### Scenario: Ambiguous or missing mapping fails closed
+- **WHEN** no verified tenant mapping exists or multiple mappings match the same onboarding request
+- **THEN** the system SHALL require explicit tenant selection or administrator intervention
+- **AND** the system SHALL NOT infer a tenant from an unverified email suffix alone
+
+### Requirement: Canonical Administrative Role Catalog
+The system SHALL maintain one canonical administrative role catalog across runtime types, CLI validation, API schemas, and authorization policy bundles.
+
+#### Scenario: Role catalog inspection is consistent
+- **WHEN** an operator inspects the supported role catalog through the API, CLI, or policy-inspection surface
+- **THEN** each surface SHALL report the same role identifiers and scope rules
+- **AND** the catalog SHALL include any special cross-tenant or read-only administrative roles supported by the deployment
+
+#### Scenario: Policy bundle with unknown role is rejected
+- **WHEN** the authorization policy bundle references a role that is not part of the canonical role catalog
+- **THEN** policy validation SHALL fail before the bundle becomes active
+- **AND** the validation error SHALL identify the unknown role reference
 

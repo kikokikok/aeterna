@@ -1,6 +1,6 @@
 [package]
 name = "context"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 description = "Context auto-resolution for Aeterna - git detection, env vars, context.toml"
 license = "Apache-2.0"

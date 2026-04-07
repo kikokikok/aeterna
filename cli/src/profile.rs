@@ -70,6 +70,10 @@ pub struct Profile {
     pub tenant_id: Option<String>,
     /// Optional free-form label (e.g. "prod", "dev").
     pub label: Option<String>,
+    /// GitHub App OAuth client_id for device-flow authentication.
+    /// Per-profile so different environments can use different GitHub Apps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub github_client_id: Option<String>,
 }
 
 impl Profile {
@@ -80,6 +84,7 @@ impl Profile {
             auth_method: AuthMethod::GitHub,
             tenant_id: None,
             label: None,
+            github_client_id: None,
         }
     }
 }
@@ -259,6 +264,7 @@ fn find_profile(
             auth_method: AuthMethod::GitHub,
             tenant_id: None,
             label: None,
+            github_client_id: None,
         },
         ConfigSource::Default,
     ))
@@ -316,6 +322,49 @@ pub fn set_default_profile(name: &str) -> Result<PathBuf> {
     config.default_profile = Some(name.to_string());
     save_config_file(&path, &config)?;
     Ok(path)
+}
+
+/// Remove a profile from the user-level config file.
+///
+/// Returns `Ok(true)` if the profile was found and removed, `Ok(false)` if it
+/// did not exist. Clears `default_profile` when it matches the removed name.
+pub fn delete_profile(name: &str) -> Result<(bool, PathBuf)> {
+    let path = user_config_path()
+        .context("Cannot determine user config directory. Set XDG_CONFIG_HOME or HOME.")?;
+    if !path.exists() {
+        return Ok((false, path));
+    }
+    let mut config = load_config_file(&path)?;
+    let removed = config.profiles.remove(name).is_some();
+    if removed {
+        if config.default_profile.as_deref() == Some(name) {
+            config.default_profile = None;
+        }
+        save_config_file(&path, &config)?;
+    }
+    Ok((removed, path))
+}
+
+/// List all profile names in the user-level config file.
+pub fn list_profiles() -> Result<Vec<(String, Profile)>> {
+    let path = match user_config_path() {
+        Some(p) if p.exists() => p,
+        _ => return Ok(Vec::new()),
+    };
+    let config = load_config_file(&path)?;
+    let mut profiles: Vec<(String, Profile)> = config.profiles.into_iter().collect();
+    profiles.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(profiles)
+}
+
+/// Return the default profile name from the user-level config, if set.
+pub fn default_profile_name() -> Result<Option<String>> {
+    let path = match user_config_path() {
+        Some(p) if p.exists() => p,
+        _ => return Ok(None),
+    };
+    let config = load_config_file(&path)?;
+    Ok(config.default_profile)
 }
 
 // ---------------------------------------------------------------------------
@@ -496,6 +545,7 @@ server_url = "https://aeterna.example.com"
             auth_method: AuthMethod::ApiKey,
             tenant_id: Some("tenant-123".to_string()),
             label: Some("production".to_string()),
+            github_client_id: None,
         };
         let s = toml::to_string_pretty(&p).unwrap();
         let p2: Profile = toml::from_str(&s).unwrap();

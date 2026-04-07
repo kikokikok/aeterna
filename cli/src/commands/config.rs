@@ -276,6 +276,7 @@ fn run_set(args: SetArgs) -> anyhow::Result<()> {
         auth_method,
         tenant_id,
         label,
+        github_client_id: existing.as_ref().and_then(|p| p.github_client_id.clone()),
     };
 
     // Validate
