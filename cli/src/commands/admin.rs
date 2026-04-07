@@ -734,7 +734,9 @@ async fn apply_migration(pool: &PgPool, migration: &EmbeddedMigration) -> anyhow
     let checksum = migration_checksum(migration.sql);
     let mut tx = pool.begin().await?;
 
-    sqlx::query(migration.sql).execute(&mut *tx).await?;
+    // Use raw_sql to support multiple statements in a single migration file.
+    // sqlx::query() sends a prepared statement which only allows one command.
+    sqlx::raw_sql(migration.sql).execute(&mut *tx).await?;
     sqlx::query(
         "INSERT INTO _aeterna_migrations (version, name, checksum) VALUES ($1, $2, $3) ON CONFLICT (version) DO NOTHING",
     )
