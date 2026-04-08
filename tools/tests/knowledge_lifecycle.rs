@@ -413,6 +413,10 @@ async fn test_knowledge_lifecycle_integration() -> anyhow::Result<()> {
     let server = McpServer::new(
         memory_manager,
         sync_manager,
+        Arc::new(knowledge::manager::KnowledgeManager::new(
+            repo.clone(),
+            governance_engine.clone(),
+        )),
         repo.clone(),
         Arc::new(
             storage::postgres::PostgresBackend::new(pg_fixture.url())

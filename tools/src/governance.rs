@@ -1,6 +1,8 @@
 use crate::tools::Tool;
 use async_trait::async_trait;
 use knowledge::governance::GovernanceEngine;
+use knowledge::manager::KnowledgeManager;
+use mk_core::types::PromotionRequestStatus;
 use mk_core::types::{GovernanceEvent, OrganizationalUnit, Role, TenantContext, UnitType};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -1110,11 +1112,20 @@ impl Tool for GovernanceRejectTool {
 /// Tool to list pending approval requests.
 pub struct GovernanceRequestListTool {
     storage: Arc<GovernanceStorage>,
+    knowledge_manager: Option<Arc<KnowledgeManager>>,
 }
 
 impl GovernanceRequestListTool {
     pub fn new(storage: Arc<GovernanceStorage>) -> Self {
-        Self { storage }
+        Self {
+            storage,
+            knowledge_manager: None,
+        }
+    }
+
+    pub fn with_knowledge_manager(mut self, knowledge_manager: Arc<KnowledgeManager>) -> Self {
+        self.knowledge_manager = Some(knowledge_manager);
+        self
     }
 }
 
@@ -1176,10 +1187,35 @@ impl Tool for GovernanceRequestListTool {
 
         let requests = self.storage.list_pending_requests(&filters).await?;
 
+        let promotion_summary = if let (Some(manager), Some(ctx)) =
+            (self.knowledge_manager.as_ref(), p.tenant_context)
+        {
+            let pending = manager
+                .list_promotion_requests(ctx.clone(), Some(PromotionRequestStatus::PendingReview))
+                .await?
+                .len();
+            let approved = manager
+                .list_promotion_requests(ctx.clone(), Some(PromotionRequestStatus::Approved))
+                .await?
+                .len();
+            let rejected = manager
+                .list_promotion_requests(ctx, Some(PromotionRequestStatus::Rejected))
+                .await?
+                .len();
+            Some(json!({
+                "pendingCount": pending,
+                "approvedCount": approved,
+                "rejectedCount": rejected,
+            }))
+        } else {
+            None
+        };
+
         Ok(json!({
             "success": true,
             "count": requests.len(),
-            "requests": requests
+            "requests": requests,
+            "promotionSummary": promotion_summary
         }))
     }
 }

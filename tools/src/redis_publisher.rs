@@ -135,6 +135,12 @@ impl RedisPublisher {
             GovernanceEvent::GitProviderConnectionUpdated { tenant_id, .. } => tenant_id,
             GovernanceEvent::GitProviderConnectionTenantGranted { tenant_id, .. } => tenant_id,
             GovernanceEvent::GitProviderConnectionTenantRevoked { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgePromotionRequested { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgePromotionApproved { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgePromotionRejected { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgePromotionRetargeted { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgePromotionApplied { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgeRelationCreated { tenant_id, .. } => tenant_id,
         };
 
         let stream_key = format!("{}:{}", base_stream_key, tenant_id.as_str());
@@ -467,6 +473,12 @@ mod tests {
                 GovernanceEvent::GitProviderConnectionUpdated { tenant_id, .. } => tenant_id,
                 GovernanceEvent::GitProviderConnectionTenantGranted { tenant_id, .. } => tenant_id,
                 GovernanceEvent::GitProviderConnectionTenantRevoked { tenant_id, .. } => tenant_id,
+                GovernanceEvent::KnowledgePromotionRequested { tenant_id, .. } => tenant_id,
+                GovernanceEvent::KnowledgePromotionApproved { tenant_id, .. } => tenant_id,
+                GovernanceEvent::KnowledgePromotionRejected { tenant_id, .. } => tenant_id,
+                GovernanceEvent::KnowledgePromotionRetargeted { tenant_id, .. } => tenant_id,
+                GovernanceEvent::KnowledgePromotionApplied { tenant_id, .. } => tenant_id,
+                GovernanceEvent::KnowledgeRelationCreated { tenant_id, .. } => tenant_id,
             };
             assert_eq!(extracted_tenant_id, &tenant_id);
         }
