@@ -16,11 +16,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-musl
+          - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             binary: aeterna
             archive: aeterna-x86_64-linux.tar.gz
-          - target: aarch64-unknown-linux-musl
+          - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             binary: aeterna
             archive: aeterna-aarch64-linux.tar.gz
@@ -42,24 +42,14 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install musl tools (Linux only)
-        if: contains(matrix.target, 'linux-musl')
+      - name: Install cross-compilation tools (Linux aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y musl-tools perl make
-          if [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
-            # musl-gcc exists from musl-tools; create musl-g++ wrapper for C++ crates (duckdb)
-            sudo ln -sf /usr/bin/g++ /usr/local/bin/musl-g++
-            echo "CC_x86_64_unknown_linux_musl=musl-gcc" >> "$GITHUB_ENV"
-            echo "CXX_x86_64_unknown_linux_musl=g++" >> "$GITHUB_ENV"
-            echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> "$GITHUB_ENV"
-          fi
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-musl" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu musl-dev
-            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
-            echo "CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
-            echo "CXX_aarch64_unknown_linux_musl=aarch64-linux-gnu-g++" >> "$GITHUB_ENV"
-          fi
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> "$GITHUB_ENV"
 
       - name: Cache cargo registry
         uses: actions/cache@v4
