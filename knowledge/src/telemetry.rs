@@ -70,6 +70,91 @@ impl KnowledgeTelemetry {
         histogram!("cca_context_assembly_tokens").record(tokens_used as f64);
         histogram!("cca_context_assembly_latency_ms").record(latency_ms);
     }
+    // ── Task 11.1 — Promotion lifecycle metrics ──────────────────────────────
+
+    /// Record a new promotion request being submitted.
+    /// Labels: source_layer, target_layer.
+    pub fn record_promotion_requested(&self, source_layer: &str, target_layer: &str) {
+        counter!(
+            "knowledge_promotion_requests_total",
+            "source_layer" => source_layer.to_string(),
+            "target_layer" => target_layer.to_string()
+        )
+        .increment(1);
+    }
+
+    /// Record a promotion request being approved.
+    /// Tracks both event count and end-to-end approval latency (ms from request
+    /// creation to approval).
+    pub fn record_promotion_approved(&self, target_layer: &str, latency_ms: f64) {
+        counter!(
+            "knowledge_promotion_approvals_total",
+            "target_layer" => target_layer.to_string()
+        )
+        .increment(1);
+        histogram!(
+            "knowledge_promotion_approval_latency_ms",
+            "target_layer" => target_layer.to_string()
+        )
+        .record(latency_ms);
+    }
+
+    /// Record a promotion request being rejected.
+    /// `reason_category` is a short coarse bucket (e.g. "policy", "stale", "manual").
+    pub fn record_promotion_rejected(&self, target_layer: &str, reason_category: &str) {
+        counter!(
+            "knowledge_promotion_rejections_total",
+            "target_layer" => target_layer.to_string(),
+            "reason_category" => reason_category.to_string()
+        )
+        .increment(1);
+    }
+
+    /// Record a promotion request being retargeted to a new layer.
+    pub fn record_promotion_retargeted(&self, old_layer: &str, new_layer: &str) {
+        counter!(
+            "knowledge_promotion_retargets_total",
+            "old_layer" => old_layer.to_string(),
+            "new_layer" => new_layer.to_string()
+        )
+        .increment(1);
+    }
+
+    /// Record a promotion conflict (another promotion for the same source is
+    /// already Approved or Applied).
+    /// `conflict_type` example values: "parallel_approved", "parallel_applied".
+    pub fn record_promotion_conflict(&self, conflict_type: &str) {
+        counter!(
+            "knowledge_promotion_conflicts_total",
+            "conflict_type" => conflict_type.to_string()
+        )
+        .increment(1);
+    }
+
+    // ── Task 11.3 — Alert-grade counters ─────────────────────────────────────
+    //
+    // These counters are intended to drive Prometheus/Alertmanager rules.
+    // Any increment above zero in a short window (e.g. 5 min) should trigger
+    // an alert.  See docs/guides/knowledge-promotion-alerting.md.
+
+    /// Increment when `apply_promotion` fails for any reason other than an
+    /// expected state-machine error (e.g. a storage write error).
+    pub fn record_promotion_apply_failed(&self, reason: &str) {
+        counter!(
+            "knowledge_promotion_apply_failed_total",
+            "reason" => reason.to_string()
+        )
+        .increment(1);
+    }
+
+    /// Increment when `NotificationService::notify_promotion` returns an error.
+    pub fn record_notification_delivery_failed(&self, event_type: &str) {
+        counter!(
+            "knowledge_notification_delivery_failed_total",
+            "event_type" => event_type.to_string()
+        )
+        .increment(1);
+    }
 }
 
 #[cfg(test)]
@@ -126,4 +211,51 @@ mod tests {
         telemetry.record_context_assembly("success", 3, 1200, 85.5);
         telemetry.record_context_assembly("failure", 0, 0, 10.0);
     }
+    #[test]
+    fn test_record_promotion_requested() {
+        let t = KnowledgeTelemetry;
+        t.record_promotion_requested("team", "org");
+        t.record_promotion_requested("project", "team");
+    }
+
+    #[test]
+    fn test_record_promotion_approved() {
+        let t = KnowledgeTelemetry;
+        t.record_promotion_approved("org", 1234.5);
+        t.record_promotion_approved("company", 5678.9);
+    }
+
+    #[test]
+    fn test_record_promotion_rejected() {
+        let t = KnowledgeTelemetry;
+        t.record_promotion_rejected("org", "policy");
+        t.record_promotion_rejected("team", "stale");
+        t.record_promotion_rejected("team", "manual");
+    }
+
+    #[test]
+    fn test_record_promotion_retargeted() {
+        let t = KnowledgeTelemetry;
+        t.record_promotion_retargeted("org", "team");
+    }
+
+    #[test]
+    fn test_record_promotion_conflict() {
+        let t = KnowledgeTelemetry;
+        t.record_promotion_conflict("parallel_approved");
+        t.record_promotion_conflict("parallel_applied");
+    }
+
+    #[test]
+    fn test_record_promotion_apply_failed() {
+        let t = KnowledgeTelemetry;
+        t.record_promotion_apply_failed("storage_error");
+    }
+
+    #[test]
+    fn test_record_notification_delivery_failed() {
+        let t = KnowledgeTelemetry;
+        t.record_notification_delivery_failed("KnowledgePromotionApproved");
+    }
+
 }

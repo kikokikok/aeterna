@@ -101,7 +101,9 @@ fn create_sample_sources() -> Vec<SummarySource> {
         context_vector: None,
         full_content: None,
         full_content_tokens: None,
-        current_source_content: None
+        current_source_content: None,
+        variant_role: None,
+        relations: vec![]
     }]
 }
 

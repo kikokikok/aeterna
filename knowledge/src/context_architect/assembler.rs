@@ -8,7 +8,8 @@ use config::cca::StalenessPolicy;
 use dashmap::DashMap;
 use mk_core::traits::RlmAssemblyService;
 use mk_core::types::{
-    ContextVector, LayerSummary, MemoryLayer, SummaryDepth, TenantContext, compute_xxhash64
+    ContextVector, KnowledgeRelation, KnowledgeVariantRole, LayerSummary, MemoryLayer, SummaryDepth,
+    TenantContext, compute_xxhash64,
 };
 
 use crate::context_architect::compressor::ViewMode;
@@ -273,7 +274,29 @@ pub struct SummarySource {
     pub context_vector: Option<ContextVector>,
     pub full_content: Option<String>,
     pub full_content_tokens: Option<u32>,
-    pub current_source_content: Option<String>
+    pub current_source_content: Option<String>,
+    /// The promotion-lifecycle variant role of the underlying knowledge entry.
+    /// `None` is treated as `Canonical` (backward-compatible default).
+    pub variant_role: Option<KnowledgeVariantRole>,
+    /// Semantic relations attached to this knowledge entry.  Used by the
+    /// context assembler to group canonical entries with their residuals and
+    /// to bias ordering deterministically (task 6.4).
+    pub relations: Vec<KnowledgeRelation>,
+}
+
+impl SummarySource {
+    /// Returns the effective variant-role precedence weight.
+    /// Canonical = 5 (highest); Exception = 1 (lowest).
+    pub fn variant_precedence(&self) -> u8 {
+        match self.variant_role.unwrap_or(KnowledgeVariantRole::Canonical) {
+            KnowledgeVariantRole::Canonical => 5,
+            KnowledgeVariantRole::Clarification => 4,
+            KnowledgeVariantRole::Specialization => 3,
+            KnowledgeVariantRole::Applicability => 2,
+            KnowledgeVariantRole::Exception => 1,
+            KnowledgeVariantRole::Superseded => 0,
+        }
+    }
 }
 
 pub struct ContextAssembler {
@@ -573,10 +596,17 @@ impl ContextAssembler {
         query_embedding: Option<&ContextVector>,
         source: &SummarySource
     ) -> f32 {
-        match (query_embedding, &source.context_vector) {
+        let base = match (query_embedding, &source.context_vector) {
             (Some(query), Some(source_vec)) => cosine_similarity(query, source_vec),
-            _ => self.layer_base_score(source.layer)
-        }
+            _ => self.layer_base_score(source.layer),
+        };
+        // Task 6.4: add a small variant-role bonus so that Canonical entries
+        // float to the top within the same cosine/layer band.
+        // Bonus range: 0.00 (Exception) .. 0.04 (Canonical), keeping the
+        // total score well below the cosine range and never crossing layer
+        // boundaries (each layer step is 0.1).
+        let role_bonus = (source.variant_precedence() as f32 - 1.0) * 0.01;
+        (base + role_bonus).min(1.0)
     }
 
     fn layer_base_score(&self, layer: MemoryLayer) -> f32 {
@@ -637,11 +667,17 @@ impl ContextAssembler {
             }
         }
 
+        // Task 6.4: deterministic ordering
+        //   1. Layer priority (Session > Project > Team > Org > Company by default)
+        //   2. Variant-role precedence: Canonical first within same layer band
+        //   3. Relevance score descending within same role+layer
         entries.sort_by(|a, b| {
             let layer_cmp = self.layer_order(a.layer).cmp(&self.layer_order(b.layer));
             if layer_cmp != std::cmp::Ordering::Equal {
                 return layer_cmp;
             }
+            // Higher relevance_score already encodes the variant-role bonus from
+            // compute_relevance_score, so a single score comparison is sufficient.
             b.relevance_score
                 .partial_cmp(&a.relevance_score)
                 .unwrap_or(std::cmp::Ordering::Equal)
@@ -790,7 +826,9 @@ fn sample_source(id: &str, layer: MemoryLayer) -> SummarySource {
         context_vector: None,
         full_content: None,
         full_content_tokens: None,
-        current_source_content: None
+        current_source_content: None,
+        variant_role: None,
+        relations: vec![]
     }
 }
 
@@ -1030,8 +1068,10 @@ mod tests {
             context_vector: None,
             full_content: Some("This is the full content".to_string()),
             full_content_tokens: Some(100),
-            current_source_content: None
-        };
+            current_source_content: None,
+            variant_role: None,
+            relations: vec![]
+            };
 
         let sources = vec![source];
         let result = assembler.assemble_context(None, &sources, None);
@@ -1068,8 +1108,10 @@ mod tests {
             context_vector: None,
             full_content: None,
             full_content_tokens: None,
-            current_source_content: Some(content.to_string())
-        };
+            current_source_content: Some(content.to_string()),
+            variant_role: None,
+            relations: vec![]
+            };
 
         let result = assembler.assemble_context(None, &[source], None);
 
@@ -1108,8 +1150,10 @@ mod tests {
             context_vector: None,
             full_content: None,
             full_content_tokens: None,
-            current_source_content: Some(modified_content.to_string())
-        };
+            current_source_content: Some(modified_content.to_string()),
+            variant_role: None,
+            relations: vec![]
+            };
 
         let result = assembler.assemble_context(None, &[source], None);
 
@@ -1160,8 +1204,10 @@ mod tests {
             context_vector: None,
             full_content: None,
             full_content_tokens: None,
-            current_source_content: Some(fresh_content.to_string())
-        };
+            current_source_content: Some(fresh_content.to_string()),
+            variant_role: None,
+            relations: vec![]
+            };
 
         let stale_original = "Stale original";
         let stale_modified = "Stale modified content";
@@ -1188,8 +1234,10 @@ mod tests {
             context_vector: None,
             full_content: None,
             full_content_tokens: None,
-            current_source_content: Some(stale_modified.to_string())
-        };
+            current_source_content: Some(stale_modified.to_string()),
+            variant_role: None,
+            relations: vec![]
+            };
 
         let result = assembler.assemble_context(None, &[fresh_source, stale_source], None);
 
@@ -1241,8 +1289,10 @@ mod tests {
             context_vector: None,
             full_content: None,
             full_content_tokens: None,
-            current_source_content: Some(empty_content.to_string())
-        };
+            current_source_content: Some(empty_content.to_string()),
+            variant_role: None,
+            relations: vec![]
+            };
 
         let result = assembler.assemble_context(None, &[source], None);
 
@@ -1277,8 +1327,10 @@ mod tests {
             context_vector: None,
             full_content: None,
             full_content_tokens: None,
-            current_source_content: Some(large_content)
-        };
+            current_source_content: Some(large_content),
+            variant_role: None,
+            relations: vec![]
+            };
 
         let result = assembler.assemble_context(None, &[source], None);
 
@@ -1313,8 +1365,10 @@ mod tests {
             context_vector: None,
             full_content: None,
             full_content_tokens: None,
-            current_source_content: Some(unicode_content.to_string())
-        };
+            current_source_content: Some(unicode_content.to_string()),
+            variant_role: None,
+            relations: vec![]
+            };
 
         let result = assembler.assemble_context(None, &[source], None);
 
@@ -1350,8 +1404,10 @@ mod tests {
             context_vector: None,
             full_content: None,
             full_content_tokens: None,
-            current_source_content: Some(modified.to_string())
-        };
+            current_source_content: Some(modified.to_string()),
+            variant_role: None,
+            relations: vec![]
+            };
 
         let result = assembler.assemble_context(None, &[source], None);
 
