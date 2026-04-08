@@ -716,8 +716,10 @@ mod tests {
         let postgres = Arc::new(storage::postgres::PostgresBackend::from_pool(lazy_pool));
         let governance_engine = Arc::new(GovernanceEngine::new());
         let git_repo = Arc::new(GitRepository::new(tempdir.path()).expect("git repo"));
-        let knowledge_manager =
-            Arc::new(KnowledgeManager::new(git_repo, governance_engine.clone()));
+        let knowledge_manager = Arc::new(KnowledgeManager::new(
+            git_repo.clone(),
+            governance_engine.clone(),
+        ));
         let memory_manager = Arc::new(MemoryManager::new());
         let sync_manager = Arc::new(
             sync::bridge::SyncManager::new(
@@ -741,7 +743,8 @@ mod tests {
         let mcp_server = Arc::new(tools::server::McpServer::new(
             memory_manager.clone(),
             sync_manager.clone(),
-            Arc::new(MockRepo),
+            knowledge_manager.clone(),
+            git_repo.clone(),
             postgres.clone(),
             governance_engine.clone(),
             Arc::new(TestNoopReasoner),

@@ -253,7 +253,10 @@ async fn test_app_state_with_plugin_auth(
     postgres.initialize_schema().await.ok()?;
     let governance_engine = Arc::new(GovernanceEngine::new());
     let git_repo = Arc::new(GitRepository::new(tempdir.path()).unwrap());
-    let knowledge_manager = Arc::new(KnowledgeManager::new(git_repo, governance_engine.clone()));
+    let knowledge_manager = Arc::new(KnowledgeManager::new(
+        git_repo.clone(),
+        governance_engine.clone(),
+    ));
     let memory_manager = Arc::new(MemoryManager::new());
     let sync_manager = Arc::new(
         SyncManager::new(
@@ -277,7 +280,8 @@ async fn test_app_state_with_plugin_auth(
     let mcp_server = Arc::new(McpServer::new(
         memory_manager.clone(),
         sync_manager.clone(),
-        repo.clone(),
+        knowledge_manager.clone(),
+        git_repo.clone(),
         postgres.clone(),
         governance_engine.clone(),
         Arc::new(TestNoopReasoner),
