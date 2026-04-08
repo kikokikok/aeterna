@@ -298,6 +298,7 @@ mod tests {
         let server = Arc::new(McpServer::new(
             memory_manager.clone(),
             sync_manager.clone(),
+            knowledge_manager.clone(),
             repo,
             postgres.clone(),
             governance_engine.clone(),

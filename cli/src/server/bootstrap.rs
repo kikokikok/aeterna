@@ -199,6 +199,7 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     let mcp_server = Arc::new(McpServer::new(
         memory_manager.clone(),
         sync_manager.clone(),
+        knowledge_manager.clone(),
         knowledge_repository.clone(),
         postgres.clone(),
         governance_engine.clone(),

@@ -3597,8 +3597,10 @@ mod tests {
             knowledge::repository::GitRepository::new(tempfile::tempdir().ok()?.path()).ok()?,
         );
         let governance_engine = Arc::new(GovernanceEngine::new());
-        let knowledge_manager =
-            Arc::new(KnowledgeManager::new(git_repo, governance_engine.clone()));
+        let knowledge_manager = Arc::new(KnowledgeManager::new(
+            git_repo.clone(),
+            governance_engine.clone(),
+        ));
         let memory_manager = Arc::new(MemoryManager::new());
         let sync_manager = Arc::new(
             SyncManager::new(
@@ -3620,7 +3622,8 @@ mod tests {
         let mcp_server = Arc::new(McpServer::new(
             memory_manager.clone(),
             sync_manager.clone(),
-            Arc::new(MockRepo),
+            knowledge_manager.clone(),
+            git_repo.clone(),
             postgres.clone(),
             governance_engine.clone(),
             Arc::new(TestNoopReasoner),
