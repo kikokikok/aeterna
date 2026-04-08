@@ -12,8 +12,10 @@ use crate::graph::{
     GraphTraverseTool, GraphUnlinkTool, GraphViolationsTool,
 };
 use crate::knowledge::{
-    InMemoryKnowledgeProposalStorage, KnowledgeGetTool, KnowledgeListTool, KnowledgeProposeTool,
-    KnowledgeQueryTool, SimpleKnowledgeInterpreter,
+    InMemoryKnowledgeProposalStorage, KnowledgeApproveTool, KnowledgeGetTool, KnowledgeLinkTool,
+    KnowledgeListTool, KnowledgePromoteTool, KnowledgePromotionPreviewTool, KnowledgeProposeTool,
+    KnowledgeQueryTool, KnowledgeRejectTool, KnowledgeReviewPendingTool,
+    SimpleKnowledgeInterpreter,
 };
 use crate::memory::{
     DefaultPromotionGovernance, GraphNeighborsTool, GraphPathTool, GraphQueryTool, MemoryAddTool,
@@ -65,6 +67,12 @@ pub fn tool_to_cedar_action(tool_name: &str) -> &'static str {
         "aeterna_knowledge_propose" => "BatchKnowledge",
         "aeterna_knowledge_submit" => "BatchKnowledge",
         "aeterna_knowledge_pending" => "ListKnowledge",
+        "aeterna_knowledge_promotion_preview" => "SearchKnowledge",
+        "aeterna_knowledge_promote" => "ProposeKnowledge",
+        "aeterna_knowledge_review_pending" => "ListKnowledge",
+        "aeterna_knowledge_approve" => "ApproveKnowledge",
+        "aeterna_knowledge_reject" => "ApproveKnowledge",
+        "aeterna_knowledge_link" => "ModifyGraph",
 
         "sync_now" => "TriggerSync",
         "sync_status" => "ViewSyncStatus",
@@ -123,6 +131,7 @@ impl McpServer {
     pub fn new(
         memory_manager: Arc<MemoryManager>,
         sync_manager: Arc<SyncManager>,
+        knowledge_manager: Arc<knowledge::manager::KnowledgeManager>,
         knowledge_repository: Arc<
             dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>,
         >,
@@ -176,6 +185,22 @@ impl McpServer {
             Arc::new(InMemoryKnowledgeProposalStorage::default()),
             Arc::new(SimpleKnowledgeInterpreter::default()),
         )));
+        registry.register(Box::new(KnowledgePromotionPreviewTool::new(
+            knowledge_manager.clone(),
+        )));
+        registry.register(Box::new(KnowledgePromoteTool::new(
+            knowledge_manager.clone(),
+        )));
+        registry.register(Box::new(KnowledgeReviewPendingTool::new(
+            knowledge_manager.clone(),
+        )));
+        registry.register(Box::new(KnowledgeApproveTool::new(
+            knowledge_manager.clone(),
+        )));
+        registry.register(Box::new(KnowledgeRejectTool::new(
+            knowledge_manager.clone(),
+        )));
+        registry.register(Box::new(KnowledgeLinkTool::new(knowledge_manager.clone())));
 
         registry.register(Box::new(MemoryPromoteTool::new(
             memory_manager.clone(),
@@ -224,9 +249,10 @@ impl McpServer {
                 gov_storage.clone(),
                 governance_engine.clone(),
             )));
-            registry.register(Box::new(GovernanceRequestListTool::new(
-                gov_storage.clone(),
-            )));
+            registry.register(Box::new(
+                GovernanceRequestListTool::new(gov_storage.clone())
+                    .with_knowledge_manager(knowledge_manager.clone()),
+            ));
             registry.register(Box::new(GovernanceRequestGetTool::new(gov_storage.clone())));
             registry.register(Box::new(GovernanceAuditListTool::new(gov_storage.clone())));
             registry.register(Box::new(GovernanceRoleAssignTool::new(
@@ -1101,6 +1127,10 @@ mod tests {
         McpServer::new(
             memory_manager,
             sync_manager,
+            Arc::new(knowledge::manager::KnowledgeManager::new(
+                repo.clone(),
+                governance.clone(),
+            )),
             repo,
             Arc::new(MockStorageBackend),
             governance,

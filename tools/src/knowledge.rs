@@ -1,13 +1,32 @@
 use crate::tools::Tool;
 use async_trait::async_trait;
+use knowledge::manager::KnowledgeManager;
 use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
-use mk_core::types::TenantContext;
+use mk_core::types::{
+    KnowledgeRelation, KnowledgeRelationType, KnowledgeVariantRole, PromotionDecision,
+    PromotionMode, PromotionRequest, PromotionRequestStatus, TenantContext,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use validator::Validate;
+
+// ── Precedence helpers ────────────────────────────────────────────────────────
+
+/// Maps a KnowledgeLayer to its canonical authority rank.
+/// Lower = more authoritative.  Company is most authoritative (rank 0).
+fn knowledge_layer_authority(layer: mk_core::types::KnowledgeLayer) -> u8 {
+    match layer {
+        mk_core::types::KnowledgeLayer::Company => 0,
+        mk_core::types::KnowledgeLayer::Org => 1,
+        mk_core::types::KnowledgeLayer::Team => 2,
+        mk_core::types::KnowledgeLayer::Project => 3,
+    }
+}
 
 pub struct KnowledgeGetTool {
     repo: Arc<dyn KnowledgeRepository<Error = knowledge::repository::RepositoryError>>,
@@ -222,16 +241,53 @@ impl Tool for KnowledgeQueryTool {
             .await
             .unwrap_or((Vec::new(), None));
 
-        let repo_results = self
+        // --- Task 6.1/6.3: apply canonical precedence and attach relation context ---
+
+        let mut repo_results = self
             .repo
-            .search(ctx, &p.query, layers, p.limit.unwrap_or(10))
+            .search(ctx.clone(), &p.query, layers, p.limit.unwrap_or(10))
             .await?;
+
+        // Sort by canonical-vs-residual precedence:
+        //   1. Layer authority: Company(0) > Org(1) > Team(2) > Project(3)
+        //   2. Variant-role precedence: Canonical(5) > Clarification(4) > Specialization(3) > Applicability(2) > Exception(1)
+        //   3. Most-recently-updated first within same role+layer
+        repo_results.sort_by(|a, b| {
+            let la = knowledge_layer_authority(a.layer);
+            let lb = knowledge_layer_authority(b.layer);
+            if la != lb { return la.cmp(&lb); }
+            let pa = a.variant_precedence();
+            let pb = b.variant_precedence();
+            if pa != pb { return pb.cmp(&pa); }
+            b.updated_at.cmp(&a.updated_at)
+        });
+
+        // Enrich each keyword result with its semantic relations (task 6.3)
+        let mut enriched_keyword: Vec<Value> = Vec::with_capacity(repo_results.len());
+        for entry in repo_results {
+            let relations = self
+                .repo
+                .get_relations_for_item(ctx.clone(), &entry.path)
+                .await
+                .unwrap_or_default();
+            enriched_keyword.push(json!({
+                "path": entry.path,
+                "layer": entry.layer,
+                "kind": entry.kind,
+                "status": entry.status,
+                "variantRole": entry.variant_role(),
+                "content": entry.content,
+                "metadata": entry.metadata,
+                "updatedAt": entry.updated_at,
+                "relations": relations,
+            }));
+        }
 
         Ok(json!({
             "success": true,
             "results": {
                 "semantic": vector_results,
-                "keyword": repo_results
+                "keyword": enriched_keyword
             }
         }))
     }
@@ -1226,6 +1282,412 @@ impl<S: KnowledgeProposalStorage + 'static> Tool for KnowledgePendingListTool<S>
     }
 }
 
+pub struct KnowledgePromotionPreviewTool {
+    manager: Arc<KnowledgeManager>,
+}
+
+impl KnowledgePromotionPreviewTool {
+    pub fn new(manager: Arc<KnowledgeManager>) -> Self {
+        Self { manager }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgePromotionPreviewParams {
+    pub source_item_id: String,
+    pub target_layer: String,
+    pub mode: Option<String>,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>,
+}
+
+#[async_trait]
+impl Tool for KnowledgePromotionPreviewTool {
+    fn name(&self) -> &str {
+        "aeterna_knowledge_promotion_preview"
+    }
+
+    fn description(&self) -> &str {
+        "Preview a knowledge promotion split before creating a promotion request."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "sourceItemId": { "type": "string" },
+                "targetLayer": { "type": "string", "enum": ["company", "org", "team", "project"] },
+                "mode": { "type": "string", "enum": ["full", "partial"] },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
+            },
+            "required": ["sourceItemId", "targetLayer"]
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: KnowledgePromotionPreviewParams = serde_json::from_value(params)?;
+        p.validate()?;
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let target_layer = parse_knowledge_layer(&p.target_layer)?;
+        let mode = parse_promotion_mode(p.mode.as_deref())?;
+        let preview = self
+            .manager
+            .preview_promotion(ctx, &p.source_item_id, target_layer, mode)
+            .await?;
+        Ok(json!({ "success": true, "preview": preview }))
+    }
+}
+
+pub struct KnowledgePromoteTool {
+    manager: Arc<KnowledgeManager>,
+}
+
+impl KnowledgePromoteTool {
+    pub fn new(manager: Arc<KnowledgeManager>) -> Self {
+        Self { manager }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgePromoteParams {
+    pub source_item_id: String,
+    pub target_layer: String,
+    pub mode: Option<String>,
+    pub shared_content: String,
+    pub residual_content: Option<String>,
+    pub residual_role: Option<String>,
+    pub justification: Option<String>,
+    pub source_version: Option<String>,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>,
+}
+
+#[async_trait]
+impl Tool for KnowledgePromoteTool {
+    fn name(&self) -> &str {
+        "aeterna_knowledge_promote"
+    }
+
+    fn description(&self) -> &str {
+        "Create a governed knowledge promotion request."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "sourceItemId": { "type": "string" },
+                "targetLayer": { "type": "string", "enum": ["company", "org", "team", "project"] },
+                "mode": { "type": "string", "enum": ["full", "partial"] },
+                "sharedContent": { "type": "string" },
+                "residualContent": { "type": "string" },
+                "residualRole": { "type": "string", "enum": ["canonical", "specialization", "applicability", "exception", "clarification"] },
+                "justification": { "type": "string" },
+                "sourceVersion": { "type": "string" },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
+            },
+            "required": ["sourceItemId", "targetLayer", "sharedContent"]
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: KnowledgePromoteParams = serde_json::from_value(params)?;
+        p.validate()?;
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+
+        let existing = self
+            .manager
+            .repository_get(ctx.clone(), &p.source_item_id)
+            .await?
+            .ok_or_else(|| format!("Knowledge item not found: {}", p.source_item_id))?;
+
+        let now = chrono::Utc::now().timestamp();
+        let request = PromotionRequest {
+            id: String::new(),
+            source_item_id: p.source_item_id,
+            source_layer: existing.layer,
+            source_status: existing.status,
+            target_layer: parse_knowledge_layer(&p.target_layer)?,
+            promotion_mode: parse_promotion_mode(p.mode.as_deref())?,
+            shared_content: p.shared_content,
+            residual_content: p.residual_content,
+            residual_role: parse_variant_role(p.residual_role.as_deref())?,
+            justification: p.justification,
+            status: PromotionRequestStatus::Draft,
+            requested_by: ctx.user_id.clone(),
+            tenant_id: ctx.tenant_id.clone(),
+            source_version: p
+                .source_version
+                .unwrap_or_else(|| existing.commit_hash.unwrap_or_default()),
+            latest_decision: None,
+            promoted_item_id: None,
+            residual_item_id: None,
+            created_at: now,
+            updated_at: now,
+        };
+
+        let request = self.manager.create_promotion_request(ctx, request).await?;
+        Ok(json!({ "success": true, "promotionRequest": request }))
+    }
+}
+
+pub struct KnowledgeReviewPendingTool {
+    manager: Arc<KnowledgeManager>,
+}
+
+impl KnowledgeReviewPendingTool {
+    pub fn new(manager: Arc<KnowledgeManager>) -> Self {
+        Self { manager }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeReviewPendingParams {
+    pub status: Option<String>,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>,
+}
+
+#[async_trait]
+impl Tool for KnowledgeReviewPendingTool {
+    fn name(&self) -> &str {
+        "aeterna_knowledge_review_pending"
+    }
+
+    fn description(&self) -> &str {
+        "List pending or filtered knowledge promotion requests for review."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "status": { "type": "string", "enum": ["draft", "pendingReview", "approved", "rejected", "applied", "cancelled"] },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
+            }
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: KnowledgeReviewPendingParams = serde_json::from_value(params)?;
+        p.validate()?;
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let status = parse_promotion_status(p.status.as_deref())?;
+        let requests = self.manager.list_promotion_requests(ctx, status).await?;
+        Ok(json!({ "success": true, "count": requests.len(), "requests": requests }))
+    }
+}
+
+pub struct KnowledgeApproveTool {
+    manager: Arc<KnowledgeManager>,
+}
+
+impl KnowledgeApproveTool {
+    pub fn new(manager: Arc<KnowledgeManager>) -> Self {
+        Self { manager }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeApproveParams {
+    pub promotion_id: String,
+    pub decision: String,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>,
+}
+
+#[async_trait]
+impl Tool for KnowledgeApproveTool {
+    fn name(&self) -> &str {
+        "aeterna_knowledge_approve"
+    }
+
+    fn description(&self) -> &str {
+        "Approve a knowledge promotion request with a structured decision."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "promotionId": { "type": "string" },
+                "decision": { "type": "string" },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
+            },
+            "required": ["promotionId", "decision"]
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: KnowledgeApproveParams = serde_json::from_value(params)?;
+        p.validate()?;
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let decision = PromotionDecision::from_str(&p.decision)?;
+        let request = self
+            .manager
+            .approve_promotion(ctx, &p.promotion_id, decision, None)
+            .await?;
+        Ok(json!({ "success": true, "promotionRequest": request }))
+    }
+}
+
+pub struct KnowledgeRejectTool {
+    manager: Arc<KnowledgeManager>,
+}
+
+impl KnowledgeRejectTool {
+    pub fn new(manager: Arc<KnowledgeManager>) -> Self {
+        Self { manager }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeRejectParams {
+    pub promotion_id: String,
+    pub reason: String,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>,
+}
+
+#[async_trait]
+impl Tool for KnowledgeRejectTool {
+    fn name(&self) -> &str {
+        "aeterna_knowledge_reject"
+    }
+
+    fn description(&self) -> &str {
+        "Reject a knowledge promotion request with a reason."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "promotionId": { "type": "string" },
+                "reason": { "type": "string" },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
+            },
+            "required": ["promotionId", "reason"]
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: KnowledgeRejectParams = serde_json::from_value(params)?;
+        p.validate()?;
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let request = self
+            .manager
+            .reject_promotion(ctx, &p.promotion_id, &p.reason, None)
+            .await?;
+        Ok(json!({ "success": true, "promotionRequest": request }))
+    }
+}
+
+pub struct KnowledgeLinkTool {
+    manager: Arc<KnowledgeManager>,
+}
+
+impl KnowledgeLinkTool {
+    pub fn new(manager: Arc<KnowledgeManager>) -> Self {
+        Self { manager }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeLinkParams {
+    pub source_id: String,
+    pub target_id: String,
+    pub relation_type: String,
+    #[serde(default)]
+    pub metadata: HashMap<String, Value>,
+    #[serde(rename = "tenantContext")]
+    pub tenant_context: Option<TenantContext>,
+}
+
+#[async_trait]
+impl Tool for KnowledgeLinkTool {
+    fn name(&self) -> &str {
+        "aeterna_knowledge_link"
+    }
+
+    fn description(&self) -> &str {
+        "Create an explicit semantic relation between two knowledge items."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "sourceId": { "type": "string" },
+                "targetId": { "type": "string" },
+                "relationType": { "type": "string" },
+                "metadata": { "type": "object" },
+                "tenantContext": { "$ref": "#/definitions/TenantContext" }
+            },
+            "required": ["sourceId", "targetId", "relationType"]
+        })
+    }
+
+    async fn call(&self, params: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let p: KnowledgeLinkParams = serde_json::from_value(params)?;
+        p.validate()?;
+        let ctx = p.tenant_context.ok_or("Missing tenant context")?;
+        let relation = KnowledgeRelation {
+            id: uuid::Uuid::new_v4().to_string(),
+            source_id: p.source_id,
+            target_id: p.target_id,
+            relation_type: KnowledgeRelationType::from_str(&p.relation_type)?,
+            tenant_id: ctx.tenant_id.clone(),
+            created_by: ctx.user_id.clone(),
+            created_at: chrono::Utc::now().timestamp(),
+            metadata: p.metadata,
+        };
+        let relation = self.manager.create_relation(ctx, relation).await?;
+        Ok(json!({ "success": true, "relation": relation }))
+    }
+}
+
+fn parse_promotion_mode(mode: Option<&str>) -> Result<PromotionMode, KnowledgeToolError> {
+    match mode {
+        None => Ok(PromotionMode::Partial),
+        Some(value) => PromotionMode::from_str(value).map_err(|_| {
+            KnowledgeToolError::StorageError(format!("Invalid promotion mode: {value}"))
+        }),
+    }
+}
+
+fn parse_variant_role(
+    role: Option<&str>,
+) -> Result<Option<KnowledgeVariantRole>, KnowledgeToolError> {
+    match role {
+        None => Ok(None),
+        Some(value) => KnowledgeVariantRole::from_str(value)
+            .map(Some)
+            .map_err(|_| {
+                KnowledgeToolError::StorageError(format!("Invalid residual role: {value}"))
+            }),
+    }
+}
+
+fn parse_promotion_status(
+    status: Option<&str>,
+) -> Result<Option<PromotionRequestStatus>, KnowledgeToolError> {
+    match status {
+        None => Ok(None),
+        Some(value) => PromotionRequestStatus::from_str(value)
+            .map(Some)
+            .map_err(|_| {
+                KnowledgeToolError::StorageError(format!("Invalid promotion status: {value}"))
+            }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1807,6 +2269,23 @@ mod tests {
 
         assert_eq!(result["count"], 1);
         assert_eq!(result["proposals"][0]["title"], "Team ADR");
+    }
+
+    #[tokio::test]
+    async fn test_parse_promotion_helpers() {
+        assert_eq!(parse_promotion_mode(None).unwrap(), PromotionMode::Partial);
+        assert_eq!(
+            parse_promotion_mode(Some("full")).unwrap(),
+            PromotionMode::Full
+        );
+        assert_eq!(
+            parse_variant_role(Some("specialization")).unwrap(),
+            Some(KnowledgeVariantRole::Specialization)
+        );
+        assert_eq!(
+            parse_promotion_status(Some("pendingReview")).unwrap(),
+            Some(PromotionRequestStatus::PendingReview)
+        );
     }
 
     #[tokio::test]
