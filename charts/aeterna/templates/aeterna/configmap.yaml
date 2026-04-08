@@ -49,6 +49,29 @@ data:
   AETERNA_CEDAR_AGENT_HOST: {{ printf "%s-cedar-agent" (include "aeterna.fullname" .) | quote }}
   AETERNA_CEDAR_AGENT_PORT: "8180"
   {{- end }}
+  {{- if .Values.pluginAuth.enabled }}
+  AETERNA_PLUGIN_AUTH_ENABLED: "true"
+  {{- if .Values.pluginAuth.github.clientId }}
+  AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID: {{ .Values.pluginAuth.github.clientId | quote }}
+  {{- end }}
+  {{- if .Values.pluginAuth.github.appId }}
+  AETERNA_PLUGIN_AUTH_GITHUB_APP_ID: {{ .Values.pluginAuth.github.appId | quote }}
+  {{- end }}
+  {{- if .Values.pluginAuth.github.appName }}
+  AETERNA_PLUGIN_AUTH_GITHUB_APP_NAME: {{ .Values.pluginAuth.github.appName | quote }}
+  {{- end }}
+  {{- if .Values.pluginAuth.redirectBaseUrl }}
+  AETERNA_PLUGIN_AUTH_REDIRECT_BASE_URL: {{ .Values.pluginAuth.redirectBaseUrl | quote }}
+  {{- end }}
+  {{- if .Values.pluginAuth.tokenIssuer }}
+  AETERNA_PLUGIN_AUTH_TOKEN_ISSUER: {{ .Values.pluginAuth.tokenIssuer | quote }}
+  {{- end }}
+  AETERNA_PLUGIN_AUTH_ACCESS_TOKEN_TTL_SECONDS: {{ .Values.pluginAuth.accessTokenTtlSeconds | quote }}
+  AETERNA_PLUGIN_AUTH_REFRESH_TOKEN_TTL_SECONDS: {{ .Values.pluginAuth.refreshTokenTtlSeconds | quote }}
+  {{- if .Values.pluginAuth.defaultTenantId }}
+  AETERNA_PLUGIN_AUTH_TENANT: {{ .Values.pluginAuth.defaultTenantId | quote }}
+  {{- end }}
+  {{- end }}
   {{- if and (ne .Values.deploymentMode "local") .Values.central.url }}
   AETERNA_CENTRAL_URL: {{ .Values.central.url | quote }}
   AETERNA_CENTRAL_AUTH: {{ .Values.central.auth | quote }}

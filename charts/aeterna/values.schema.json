@@ -603,6 +603,30 @@
         }
       }
     },
+    "pluginAuth": {
+      "type": "object",
+      "description": "Plugin authentication configuration (GitHub device-code flow)",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false, "description": "Enable plugin authentication" },
+        "jwtSecret": { "type": "string", "default": "", "description": "Secret key for signing JWT tokens" },
+        "github": {
+          "type": "object",
+          "properties": {
+            "clientId": { "type": "string", "default": "", "description": "GitHub OAuth App client ID" },
+            "clientSecret": { "type": "string", "default": "", "description": "GitHub OAuth App client secret" },
+            "appId": { "type": "string", "default": "", "description": "GitHub App ID (numeric)" },
+            "appName": { "type": "string", "default": "", "description": "GitHub App slug name" },
+            "appPem": { "type": "string", "default": "", "description": "GitHub App private key (PEM)" }
+          }
+        },
+        "redirectBaseUrl": { "type": "string", "default": "", "description": "Base URL for OAuth redirects" },
+        "tokenIssuer": { "type": "string", "default": "", "description": "JWT token issuer claim" },
+        "accessTokenTtlSeconds": { "type": "integer", "default": 3600, "minimum": 60, "description": "Access token TTL in seconds" },
+        "refreshTokenTtlSeconds": { "type": "integer", "default": 604800, "minimum": 60, "description": "Refresh token TTL in seconds" },
+        "defaultTenantId": { "type": "string", "default": "", "description": "Default tenant ID for authenticated users" },
+        "existingSecret": { "type": "string", "default": "", "description": "Existing K8s secret with auth credentials" }
+      }
+    },
     "cnpg": {
       "type": "object"
     },
@@ -629,5 +653,44 @@
         "storageClass": { "type": "string" }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "pluginAuth": {
+            "properties": { "enabled": { "const": true } },
+            "required": ["enabled"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "pluginAuth": {
+            "anyOf": [
+              {
+                "properties": {
+                  "existingSecret": { "minLength": 1 }
+                },
+                "required": ["existingSecret"]
+              },
+              {
+                "required": ["jwtSecret"],
+                "properties": {
+                  "jwtSecret": { "minLength": 1 },
+                  "github": {
+                    "required": ["clientId", "clientSecret"],
+                    "properties": {
+                      "clientId": { "minLength": 1 },
+                      "clientSecret": { "minLength": 1 }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

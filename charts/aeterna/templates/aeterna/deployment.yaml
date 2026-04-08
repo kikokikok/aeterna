@@ -184,17 +184,23 @@ spec:
             - name: OTEL_TRACES_SAMPLER_ARG
               value: {{ .Values.observability.tracing.samplingRatio | default "1.0" | quote }}
             {{- end }}
-            {{- if .Values.opal.enabled }}
-            - name: AETERNA_CEDAR_POLICY_TEXT
+            {{- if .Values.pluginAuth.enabled }}
+            - name: AETERNA_PLUGIN_AUTH_JWT_SECRET
               valueFrom:
-                configMapKeyRef:
-                  name: {{ include "aeterna.fullname" . }}-cedar-policies
-                  key: policy-text
-            - name: AETERNA_CEDAR_SCHEMA_TEXT
+                secretKeyRef:
+                  name: {{ .Values.pluginAuth.existingSecret | default (printf "%s-plugin-auth" (include "aeterna.fullname" .)) }}
+                  key: jwt-secret
+            - name: AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_SECRET
               valueFrom:
-                configMapKeyRef:
-                  name: {{ include "aeterna.fullname" . }}-cedar-policies
-                  key: schema-text
+                secretKeyRef:
+                  name: {{ .Values.pluginAuth.existingSecret | default (printf "%s-plugin-auth" (include "aeterna.fullname" .)) }}
+                  key: github-client-secret
+            - name: AETERNA_PLUGIN_AUTH_GITHUB_APP_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.pluginAuth.existingSecret | default (printf "%s-plugin-auth" (include "aeterna.fullname" .)) }}
+                  key: github-app-pem
+                  optional: true
             {{- end }}
             - name: RUST_LOG
               value: {{ .Values.observability.logging.level | default "info" | quote }}
@@ -278,20 +284,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.knowledgeRepo.webhook.secretName }}
                   key: webhook-secret
-            {{- end }}
-            {{- end }}
-            {{- if .Values.pluginAuth.defaultTenantId }}
-            - name: AETERNA_PLUGIN_AUTH_TENANT
-              value: {{ .Values.pluginAuth.defaultTenantId | quote }}
-            {{- end }}
-            {{- if .Values.adminBootstrap.email }}
-            - name: AETERNA_ADMIN_BOOTSTRAP_EMAIL
-              value: {{ .Values.adminBootstrap.email | quote }}
-            - name: AETERNA_ADMIN_BOOTSTRAP_PROVIDER
-              value: {{ .Values.adminBootstrap.provider | default "github" | quote }}
-            {{- if .Values.adminBootstrap.providerSubject }}
-            - name: AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT
-              value: {{ .Values.adminBootstrap.providerSubject | quote }}
             {{- end }}
             {{- end }}
           livenessProbe:
