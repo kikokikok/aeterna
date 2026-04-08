@@ -17,4 +17,5 @@ pub mod pr_proposal_storage;
 pub mod repository;
 pub mod scheduler;
 pub mod telemetry;
+pub mod resolver;
 pub mod tenant_repo_resolver;

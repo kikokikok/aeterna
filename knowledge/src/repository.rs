@@ -396,10 +396,55 @@ impl GitRepository {
         let content = tokio::fs::read_to_string(&full_path).await?;
 
         let commit_hash = {
+            // Use per-file commit history so the version is the commit that last
+            // touched *this file*, not the repo HEAD (which advances with every
+            // promotion-request or relation write).
             let repo = Repository::open(&self.root_path)?;
+            let relative = full_path.strip_prefix(&self.root_path)
+                .unwrap_or(&full_path);
+            let relative_str = relative.to_string_lossy();
             let mut revwalk = repo.revwalk()?;
+            revwalk.set_sorting(git2::Sort::TIME)?;
             revwalk.push_head().ok();
-            revwalk.next().transpose()?.map(|id| id.to_string())
+            // Walk commits and find the most recent one touching this file.
+            let mut file_commit: Option<String> = None;
+            'walk: for oid in revwalk.flatten() {
+                if let Ok(commit) = repo.find_commit(oid) {
+                    if let Ok(tree) = commit.tree() {
+                        if tree.get_path(std::path::Path::new(relative_str.as_ref())).is_ok() {
+                            // Check parent to see if this commit modified the file
+                            let parent_has_file = commit.parent(0).ok()
+                                .and_then(|p| p.tree().ok())
+                                .map(|pt| pt.get_path(std::path::Path::new(relative_str.as_ref())).is_ok())
+                                .unwrap_or(false);
+                            // First commit (no parent) or file changed → this is the last touch
+                            if commit.parent_count() == 0 || !parent_has_file {
+                                file_commit = Some(oid.to_string());
+                                break 'walk;
+                            }
+                            // Compare blob OIDs between parent and this commit
+                            if let Some(parent) = commit.parent(0).ok() {
+                                let parent_tree = parent.tree().ok();
+                                let cur_entry = tree.get_path(std::path::Path::new(relative_str.as_ref())).ok();
+                                let par_entry = parent_tree.as_ref()
+                                    .and_then(|pt| pt.get_path(std::path::Path::new(relative_str.as_ref())).ok());
+                                match (cur_entry, par_entry) {
+                                    (Some(c), Some(p)) if c.id() != p.id() => {
+                                        file_commit = Some(oid.to_string());
+                                        break 'walk;
+                                    }
+                                    (Some(_), None) => {
+                                        file_commit = Some(oid.to_string());
+                                        break 'walk;
+                                    }
+                                    _ => continue,
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            file_commit
         };
 
         let (kind, status, summaries, metadata, author, updated_at) = if metadata_path.exists() {
@@ -756,6 +801,141 @@ impl GitRepository {
         }
         Ok(None)
     }
+
+    fn resolve_meta_path(
+        &self,
+        ctx: &mk_core::types::TenantContext,
+        kind: &str,
+        id: &str,
+    ) -> std::path::PathBuf {
+        self.root_path
+            .join(ctx.tenant_id.as_str())
+            .join("_meta")
+            .join(kind)
+            .join(format!("{id}.json"))
+    }
+
+    async fn store_promotion_request_inner(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        request: mk_core::types::PromotionRequest,
+    ) -> Result<mk_core::types::PromotionRequest, RepositoryError> {
+        let path = self.resolve_meta_path(&ctx, "promotions", &request.id);
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(&path, serde_json::to_string(&request)?).await?;
+        self.commit(&format!("[promotion] upsert {}", request.id))?;
+        Ok(request)
+    }
+
+    async fn get_promotion_request_inner(
+        &self,
+        ctx: &mk_core::types::TenantContext,
+        id: &str,
+    ) -> Result<Option<mk_core::types::PromotionRequest>, RepositoryError> {
+        let path = self.resolve_meta_path(ctx, "promotions", id);
+        if !path.exists() {
+            return Ok(None);
+        }
+        let content = tokio::fs::read_to_string(&path).await?;
+        Ok(Some(serde_json::from_str(&content)?))
+    }
+
+    async fn list_promotion_requests_inner(
+        &self,
+        ctx: &mk_core::types::TenantContext,
+        status: Option<mk_core::types::PromotionRequestStatus>,
+    ) -> Result<Vec<mk_core::types::PromotionRequest>, RepositoryError> {
+        let dir = self
+            .root_path
+            .join(ctx.tenant_id.as_str())
+            .join("_meta")
+            .join("promotions");
+        if !dir.exists() {
+            return Ok(vec![]);
+        }
+        let mut results = Vec::new();
+        for entry in WalkDir::new(&dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+        {
+            let content = tokio::fs::read_to_string(entry.path()).await?;
+            if let Ok(req) = serde_json::from_str::<mk_core::types::PromotionRequest>(&content) {
+                if status.as_ref().map_or(true, |s| &req.status == s) {
+                    results.push(req);
+                }
+            }
+        }
+        Ok(results)
+    }
+
+    async fn store_relation_inner(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        relation: mk_core::types::KnowledgeRelation,
+    ) -> Result<mk_core::types::KnowledgeRelation, RepositoryError> {
+        let path = self.resolve_meta_path(&ctx, "relations", &relation.id);
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(&path, serde_json::to_string(&relation)?).await?;
+        self.commit(&format!("[relation] upsert {}", relation.id))?;
+        Ok(relation)
+    }
+
+    async fn get_relations_for_item_inner(
+        &self,
+        ctx: &mk_core::types::TenantContext,
+        item_id: &str,
+    ) -> Result<Vec<mk_core::types::KnowledgeRelation>, RepositoryError> {
+        let dir = self
+            .root_path
+            .join(ctx.tenant_id.as_str())
+            .join("_meta")
+            .join("relations");
+        if !dir.exists() {
+            return Ok(vec![]);
+        }
+        let mut results = Vec::new();
+        for entry in WalkDir::new(&dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+        {
+            let content = tokio::fs::read_to_string(entry.path()).await?;
+            if let Ok(rel) = serde_json::from_str::<mk_core::types::KnowledgeRelation>(&content) {
+                if rel.source_id == item_id || rel.target_id == item_id {
+                    results.push(rel);
+                }
+            }
+        }
+        Ok(results)
+    }
+
+    /// Copies source entry to target layer WITHOUT modifying or deleting the source.
+    async fn promote_non_destructive(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        source_layer: KnowledgeLayer,
+        target_layer: KnowledgeLayer,
+        path: &str,
+        message: &str,
+    ) -> Result<String, RepositoryError> {
+        let mut entry = self
+            .get_inner(ctx.clone(), source_layer, path)
+            .await?
+            .ok_or_else(|| RepositoryError::InvalidPath(path.to_string()))?;
+        entry.layer = target_layer;
+        entry.updated_at = chrono::Utc::now().timestamp();
+        if self.remote_url.is_some() {
+            self.store_governance_track_with_verb(ctx, entry, message, "promote")
+                .await
+        } else {
+            self.store_inner(ctx, entry, message).await
+        }
+    }
 }
 
 #[async_trait]
@@ -949,6 +1129,94 @@ impl KnowledgeRepository for GitRepository {
 
     fn root_path(&self) -> Option<std::path::PathBuf> {
         Some(self.root_path.clone())
+    }
+
+    async fn store_promotion_request(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        request: mk_core::types::PromotionRequest,
+    ) -> Result<mk_core::types::PromotionRequest, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.write().await;
+            let r = self.store_promotion_request_inner(ctx, request).await?;
+            self.push_to_remote()?;
+            Ok(r)
+        } else {
+            self.store_promotion_request_inner(ctx, request).await
+        }
+    }
+
+    async fn get_promotion_request(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        id: &str,
+    ) -> Result<Option<mk_core::types::PromotionRequest>, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.read().await;
+            self.pull_from_remote()?;
+            self.get_promotion_request_inner(&ctx, id).await
+        } else {
+            self.get_promotion_request_inner(&ctx, id).await
+        }
+    }
+
+    async fn update_promotion_request(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        request: mk_core::types::PromotionRequest,
+    ) -> Result<mk_core::types::PromotionRequest, Self::Error> {
+        // Same as store — upsert by id
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.write().await;
+            let r = self.store_promotion_request_inner(ctx, request).await?;
+            self.push_to_remote()?;
+            Ok(r)
+        } else {
+            self.store_promotion_request_inner(ctx, request).await
+        }
+    }
+
+    async fn list_promotion_requests(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        status: Option<mk_core::types::PromotionRequestStatus>,
+    ) -> Result<Vec<mk_core::types::PromotionRequest>, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.read().await;
+            self.pull_from_remote()?;
+            self.list_promotion_requests_inner(&ctx, status).await
+        } else {
+            self.list_promotion_requests_inner(&ctx, status).await
+        }
+    }
+
+    async fn store_relation(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        relation: mk_core::types::KnowledgeRelation,
+    ) -> Result<mk_core::types::KnowledgeRelation, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.write().await;
+            let r = self.store_relation_inner(ctx, relation).await?;
+            self.push_to_remote()?;
+            Ok(r)
+        } else {
+            self.store_relation_inner(ctx, relation).await
+        }
+    }
+
+    async fn get_relations_for_item(
+        &self,
+        ctx: mk_core::types::TenantContext,
+        item_id: &str,
+    ) -> Result<Vec<mk_core::types::KnowledgeRelation>, Self::Error> {
+        if self.remote_url.is_some() {
+            let _lock = self.rw_lock.read().await;
+            self.pull_from_remote()?;
+            self.get_relations_for_item_inner(&ctx, item_id).await
+        } else {
+            self.get_relations_for_item_inner(&ctx, item_id).await
+        }
     }
 }
 

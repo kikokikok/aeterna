@@ -1,5 +1,8 @@
 use crate::telemetry::KnowledgeTelemetry;
-use mk_core::traits::{EmbeddingService, EventPublisher, LlmService};
+use mk_core::traits::{
+    EmbeddingService, EventPublisher, LlmService,
+    NotificationService, PromotionNotification, PromotionNotificationEventType,
+};
 use mk_core::types::{
     ConstraintSeverity, GovernanceEvent, KnowledgeLayer, Policy, PolicyViolation, TenantContext,
     ValidationResult
@@ -35,7 +38,9 @@ pub struct GovernanceEngine {
     llm_service: Option<Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>>>>,
     knowledge_repository: Option<
         Arc<dyn mk_core::traits::KnowledgeRepository<Error = crate::repository::RepositoryError>>
-    >
+    >,
+    /// Task 9.8: optional notification service for promotion lifecycle events
+    notification_service: Option<Arc<dyn NotificationService>>,
 }
 
 impl GovernanceEngine {
@@ -47,7 +52,8 @@ impl GovernanceEngine {
             event_publisher: None,
             embedding_service: None,
             llm_service: None,
-            knowledge_repository: None
+            knowledge_repository: None,
+            notification_service: None,
         }
     }
 
@@ -93,6 +99,15 @@ impl GovernanceEngine {
         self
     }
 
+    /// Task 9.8 — Attach a notification service for promotion lifecycle events.
+    pub fn with_notification_service(
+        mut self,
+        notification_service: Arc<dyn NotificationService>,
+    ) -> Self {
+        self.notification_service = Some(notification_service);
+        self
+    }
+
     pub fn storage(
         &self
     ) -> Option<Arc<dyn mk_core::traits::StorageBackend<Error = storage::postgres::PostgresError>>>
@@ -114,10 +129,97 @@ impl GovernanceEngine {
         self.knowledge_repository.clone()
     }
     pub async fn publish_event(&self, event: GovernanceEvent) -> Result<(), EventError> {
+        // Task 9.8 — deliver promotion lifecycle notifications BEFORE publishing
+        // (fire-and-forget; errors are logged but do not fail the request).
+        if let Some(ns) = &self.notification_service {
+            if let Some(notification) = Self::event_to_notification(&event) {
+                if let Err(e) = ns.notify_promotion(notification.clone()).await {
+                    tracing::warn!(error = %e, "Promotion notification delivery failed");
+                    // Task 11.3 — alert-grade counter for notification delivery failures
+                    self.telemetry.record_notification_delivery_failed(
+                        &format!("{:?}", notification.event_type),
+                    );
+                }
+            }
+        }
+
         if let Some(publisher) = &self.event_publisher {
             publisher.publish(event).await
         } else {
             Ok(())
+        }
+    }
+
+    /// Task 9.8 — Convert a `GovernanceEvent` to a `PromotionNotification` when applicable.
+    fn event_to_notification(event: &GovernanceEvent) -> Option<PromotionNotification> {
+        match event {
+            GovernanceEvent::KnowledgePromotionRequested {
+                promotion_id,
+                source_item_id,
+                requested_by,
+                tenant_id,
+                ..
+            } => Some(PromotionNotification {
+                event_type: PromotionNotificationEventType::Requested,
+                promotion_id: promotion_id.clone(),
+                source_item_id: source_item_id.clone(),
+                proposer_id: requested_by.clone(),
+                reason: None,
+                tenant_id: tenant_id.clone(),
+            }),
+            GovernanceEvent::KnowledgePromotionApproved {
+                promotion_id,
+                approved_by,
+                tenant_id,
+                ..
+            } => Some(PromotionNotification {
+                event_type: PromotionNotificationEventType::Approved,
+                promotion_id: promotion_id.clone(),
+                source_item_id: String::new(),
+                proposer_id: approved_by.clone(),
+                reason: None,
+                tenant_id: tenant_id.clone(),
+            }),
+            GovernanceEvent::KnowledgePromotionRejected {
+                promotion_id,
+                reason,
+                rejected_by,
+                tenant_id,
+                ..
+            } => Some(PromotionNotification {
+                event_type: PromotionNotificationEventType::Rejected,
+                promotion_id: promotion_id.clone(),
+                source_item_id: String::new(),
+                proposer_id: rejected_by.clone(),
+                reason: Some(reason.clone()),
+                tenant_id: tenant_id.clone(),
+            }),
+            GovernanceEvent::KnowledgePromotionRetargeted {
+                promotion_id,
+                retargeted_by,
+                tenant_id,
+                ..
+            } => Some(PromotionNotification {
+                event_type: PromotionNotificationEventType::Retargeted,
+                promotion_id: promotion_id.clone(),
+                source_item_id: String::new(),
+                proposer_id: retargeted_by.clone(),
+                reason: None,
+                tenant_id: tenant_id.clone(),
+            }),
+            GovernanceEvent::KnowledgePromotionApplied {
+                promotion_id,
+                tenant_id,
+                ..
+            } => Some(PromotionNotification {
+                event_type: PromotionNotificationEventType::Applied,
+                promotion_id: promotion_id.clone(),
+                source_item_id: String::new(),
+                proposer_id: mk_core::types::UserId::default(),
+                reason: None,
+                tenant_id: tenant_id.clone(),
+            }),
+            _ => None,
         }
     }
 }
