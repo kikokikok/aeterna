@@ -1298,6 +1298,36 @@ impl PostgresBackend {
                 tenant_id,
                 *timestamp,
             ),
+            mk_core::types::GovernanceEvent::KnowledgePromotionRequested {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("knowledge_promotion_requested", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::KnowledgePromotionApproved {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("knowledge_promotion_approved", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::KnowledgePromotionRejected {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("knowledge_promotion_rejected", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::KnowledgePromotionRetargeted {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("knowledge_promotion_retargeted", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::KnowledgePromotionApplied {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("knowledge_promotion_applied", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::KnowledgeRelationCreated {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("knowledge_relation_created", tenant_id, *timestamp),
         };
 
         sqlx::query(

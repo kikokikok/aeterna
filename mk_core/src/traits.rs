@@ -347,6 +347,54 @@ pub trait KnowledgeRepository: Send + Sync {
     }
 
     fn root_path(&self) -> Option<std::path::PathBuf>;
+
+    async fn store_promotion_request(
+        &self,
+        _ctx: crate::types::TenantContext,
+        _request: crate::types::PromotionRequest,
+    ) -> Result<crate::types::PromotionRequest, Self::Error> {
+        panic!("KnowledgeRepository::store_promotion_request is not implemented")
+    }
+
+    async fn get_promotion_request(
+        &self,
+        _ctx: crate::types::TenantContext,
+        _id: &str,
+    ) -> Result<Option<crate::types::PromotionRequest>, Self::Error> {
+        panic!("KnowledgeRepository::get_promotion_request is not implemented")
+    }
+
+    async fn update_promotion_request(
+        &self,
+        _ctx: crate::types::TenantContext,
+        _request: crate::types::PromotionRequest,
+    ) -> Result<crate::types::PromotionRequest, Self::Error> {
+        panic!("KnowledgeRepository::update_promotion_request is not implemented")
+    }
+
+    async fn list_promotion_requests(
+        &self,
+        _ctx: crate::types::TenantContext,
+        _status: Option<crate::types::PromotionRequestStatus>,
+    ) -> Result<Vec<crate::types::PromotionRequest>, Self::Error> {
+        panic!("KnowledgeRepository::list_promotion_requests is not implemented")
+    }
+
+    async fn store_relation(
+        &self,
+        _ctx: crate::types::TenantContext,
+        _relation: crate::types::KnowledgeRelation,
+    ) -> Result<crate::types::KnowledgeRelation, Self::Error> {
+        panic!("KnowledgeRepository::store_relation is not implemented")
+    }
+
+    async fn get_relations_for_item(
+        &self,
+        _ctx: crate::types::TenantContext,
+        _item_id: &str,
+    ) -> Result<Vec<crate::types::KnowledgeRelation>, Self::Error> {
+        panic!("KnowledgeRepository::get_relations_for_item is not implemented")
+    }
 }
 
 #[async_trait]
@@ -652,4 +700,62 @@ pub trait GitProviderConnectionRegistry: Send + Sync {
         connection_id: &str,
         tenant_id: &crate::types::TenantId,
     ) -> Result<bool, Self::Error>;
+}
+
+// ── Task 9.8: Promotion Notification Service ─────────────────────────────────
+
+/// A promotion lifecycle notification event sent to interested parties.
+#[derive(Debug, Clone)]
+pub struct PromotionNotification {
+    /// The kind of lifecycle event that triggered this notification.
+    pub event_type: PromotionNotificationEventType,
+    /// The promotion request identifier.
+    pub promotion_id: String,
+    /// The source item that was nominated for promotion.
+    pub source_item_id: String,
+    /// The user who originated the promotion request (the proposer).
+    pub proposer_id: crate::types::UserId,
+    /// Optional human-readable reason / decision comment.
+    pub reason: Option<String>,
+    /// Tenant this notification belongs to.
+    pub tenant_id: crate::types::TenantId,
+}
+
+/// Discriminant for a `PromotionNotification`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PromotionNotificationEventType {
+    /// The promotion request was submitted and is awaiting review.
+    Requested,
+    /// The promotion request was approved by a reviewer.
+    Approved,
+    /// The promotion request was rejected by a reviewer.
+    Rejected,
+    /// The promotion was retargeted to a different layer.
+    Retargeted,
+    /// The promotion was applied and the promoted item was stored.
+    Applied,
+}
+
+/// Delivers promotion lifecycle notifications to interested parties.
+///
+/// Implementations are responsible for routing the notification to proposers,
+/// reviewers, and any impacted dependents (task 9.8).  The default no-op
+/// implementation is used when no notification service is wired in.
+#[async_trait]
+pub trait NotificationService: Send + Sync {
+    /// Called after a promotion lifecycle event occurs.
+    ///
+    /// Implementations SHOULD NOT block — fire-and-forget delivery is preferred.
+    /// Returning an error is logged but does not fail the originating request.
+    async fn notify_promotion(&self, notification: PromotionNotification) -> anyhow::Result<()>;
+}
+
+/// No-op implementation used when no `NotificationService` is configured.
+pub struct NoOpNotificationService;
+
+#[async_trait]
+impl NotificationService for NoOpNotificationService {
+    async fn notify_promotion(&self, _notification: PromotionNotification) -> anyhow::Result<()> {
+        Ok(())
+    }
 }

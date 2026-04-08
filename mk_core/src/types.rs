@@ -692,6 +692,196 @@ pub enum KnowledgeStatus {
     Accepted,
     Deprecated,
     Superseded,
+    Rejected,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    ToSchema,
+    Display,
+    EnumString,
+    Default,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum KnowledgeVariantRole {
+    #[default]
+    Canonical,
+    Specialization,
+    Applicability,
+    Exception,
+    Clarification,
+    /// Task 10.4: marker for historically superseded or deprecated items during migration
+    Superseded,
+}
+
+impl KnowledgeVariantRole {
+    /// Lower rank value = higher retrieval priority.
+    /// Used by the resolver to sort search results so Canonical surfaces first.
+    #[must_use]
+    pub fn rank(&self) -> u8 {
+        match self {
+            KnowledgeVariantRole::Canonical => 0,
+            KnowledgeVariantRole::Specialization => 1,
+            KnowledgeVariantRole::Applicability => 2,
+            KnowledgeVariantRole::Clarification => 3,
+            KnowledgeVariantRole::Exception => 4,
+            KnowledgeVariantRole::Superseded => 5,
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    ToSchema,
+    Display,
+    EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum KnowledgeRelationType {
+    PromotedFrom,
+    PromotedTo,
+    Specializes,
+    ApplicableFrom,
+    ExceptionTo,
+    Clarifies,
+    Supersedes,
+    SupersededBy,
+    DerivedFrom,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeRelation {
+    pub id: String,
+    pub source_id: String,
+    pub target_id: String,
+    pub relation_type: KnowledgeRelationType,
+    pub tenant_id: TenantId,
+    pub created_by: UserId,
+    pub created_at: i64,
+    #[serde(default)]
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    ToSchema,
+    Display,
+    EnumString,
+    Default,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum PromotionMode {
+    Full,
+    #[default]
+    Partial,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    ToSchema,
+    Display,
+    EnumString,
+    Default,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum PromotionRequestStatus {
+    Draft,
+    #[default]
+    PendingReview,
+    Approved,
+    Rejected,
+    Applied,
+    Cancelled,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    ToSchema,
+    Display,
+    EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(ascii_case_insensitive)]
+pub enum PromotionDecision {
+    ApproveAsReplacement,
+    ApproveAsSpecialization,
+    ApproveAsApplicability,
+    ApproveAsException,
+    ApproveAsClarification,
+    Reject,
+    NeedsRefinement,
+    RetargetLayer,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PromotionRequest {
+    pub id: String,
+    pub source_item_id: String,
+    pub source_layer: KnowledgeLayer,
+    pub source_status: KnowledgeStatus,
+    pub target_layer: KnowledgeLayer,
+    #[serde(default)]
+    pub promotion_mode: PromotionMode,
+    pub shared_content: String,
+    pub residual_content: Option<String>,
+    pub residual_role: Option<KnowledgeVariantRole>,
+    pub justification: Option<String>,
+    #[serde(default)]
+    pub status: PromotionRequestStatus,
+    pub requested_by: UserId,
+    pub tenant_id: TenantId,
+    pub source_version: String,
+    pub latest_decision: Option<PromotionDecision>,
+    pub promoted_item_id: Option<String>,
+    pub residual_item_id: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 #[derive(
@@ -714,6 +904,36 @@ pub enum KnowledgeLayer {
     Org,
     Team,
     Project,
+}
+
+impl KnowledgeLayer {
+    #[must_use]
+    pub fn precedence(&self) -> u8 {
+        match self {
+            KnowledgeLayer::Project => 1,
+            KnowledgeLayer::Team => 2,
+            KnowledgeLayer::Org => 3,
+            KnowledgeLayer::Company => 4,
+        }
+    }
+}
+
+impl PromotionRequest {
+    pub fn validate_layer_direction(&self) -> Result<(), String> {
+        if self.source_layer == KnowledgeLayer::Company {
+            return Err("company-layer knowledge cannot be promoted higher".to_string());
+        }
+
+        if self.target_layer.precedence() <= self.source_layer.precedence() {
+            return Err("target_layer must be strictly higher than source_layer".to_string());
+        }
+
+        if self.source_status != KnowledgeStatus::Accepted {
+            return Err("only accepted knowledge can be promoted".to_string());
+        }
+
+        Ok(())
+    }
 }
 
 impl From<MemoryLayer> for Option<KnowledgeLayer> {
@@ -1178,6 +1398,81 @@ pub struct KnowledgeEntry {
     pub updated_at: i64,
 }
 
+impl KnowledgeEntry {
+    /// Extract the `variant_role` stored in `metadata["variant_role"]`.
+    /// Falls back to `Canonical` when the field is absent or unparseable,
+    /// matching the migration decision that all existing accepted items are
+    /// treated as canonical.
+    pub fn variant_role(&self) -> KnowledgeVariantRole {
+        self.metadata
+            .get("variant_role")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(KnowledgeVariantRole::Canonical)
+    }
+
+    /// Returns the numeric precedence weight for this entry's variant role.
+    /// Higher is more authoritative and should appear earlier in search results.
+    ///
+    /// Order (descending priority):
+    ///   Canonical (5) > Clarification (4) > Specialization (3)
+    ///               > Applicability (2)  > Exception (1)
+    pub fn variant_precedence(&self) -> u8 {
+        match self.variant_role() {
+            KnowledgeVariantRole::Canonical => 5,
+            KnowledgeVariantRole::Clarification => 4,
+            KnowledgeVariantRole::Specialization => 3,
+            KnowledgeVariantRole::Applicability => 2,
+            KnowledgeVariantRole::Exception => 1,
+            // Superseded items are lowest priority in precedence — shown last
+            KnowledgeVariantRole::Superseded => 0,
+        }
+    }
+}
+
+/// A knowledge entry together with its stored semantic relations.
+///
+/// Used as the enriched unit returned by relation-aware search / query paths
+/// (task 6.3).  The `relations` vec is populated on a best-effort basis;
+/// callers should treat an empty vec as "no relations loaded" rather than
+/// "no relations exist".
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeEntryWithRelations {
+    #[serde(flatten)]
+    pub entry: KnowledgeEntry,
+    /// Semantic relations where this entry is either source or target.
+    pub relations: Vec<KnowledgeRelation>,
+}
+
+impl KnowledgeEntryWithRelations {
+    pub fn new(entry: KnowledgeEntry, relations: Vec<KnowledgeRelation>) -> Self {
+        Self { entry, relations }
+    }
+
+    pub fn without_relations(entry: KnowledgeEntry) -> Self {
+        Self { entry, relations: vec![] }
+    }
+}
+
+/// The enriched result returned by `KnowledgeManager::query_enriched`.
+///
+/// Each item in the result set is grouped as a canonical entry (or a
+/// standalone residual with no canonical parent) plus the local residual
+/// items that are semantically related to it (task 6.2).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeQueryResult {
+    /// The primary entry for this group.  For canonical entries this is the
+    /// promoted item at the highest applicable layer.  For unrelated entries
+    /// it is the entry itself.
+    pub primary: KnowledgeEntryWithRelations,
+    /// Local residual items related to `primary` via Specializes,
+    /// ApplicableFrom, ExceptionTo, or Clarifies relations.
+    pub local_residuals: Vec<(KnowledgeRelationType, KnowledgeEntryWithRelations)>,
+}
+
+
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Default, ToSchema,
 )]
@@ -1421,6 +1716,69 @@ pub enum GovernanceEvent {
         tenant_id: TenantId,
         timestamp: i64,
     },
+
+    /// Knowledge promotion request submitted
+    KnowledgePromotionRequested {
+        promotion_id: String,
+        source_item_id: String,
+        source_layer: KnowledgeLayer,
+        target_layer: KnowledgeLayer,
+        /// Task 9.7: audit metadata — promotion split mode
+        promotion_mode: PromotionMode,
+        /// Task 9.7: audit metadata — proposer's justification text
+        justification: Option<String>,
+        requested_by: UserId,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Knowledge promotion approved
+    KnowledgePromotionApproved {
+        promotion_id: String,
+        decision: PromotionDecision,
+        approved_by: UserId,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Knowledge promotion rejected
+    KnowledgePromotionRejected {
+        promotion_id: String,
+        reason: String,
+        rejected_by: UserId,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Knowledge promotion retargeted to a new layer
+    KnowledgePromotionRetargeted {
+        promotion_id: String,
+        new_target_layer: KnowledgeLayer,
+        retargeted_by: UserId,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Knowledge promotion applied (promoted item stored at target layer)
+    KnowledgePromotionApplied {
+        promotion_id: String,
+        promoted_item_id: String,
+        residual_item_id: Option<String>,
+        /// Task 9.7: audit metadata — split mode used (Full vs Partial)
+        promotion_mode: PromotionMode,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
+
+    /// Semantic relation created between knowledge items
+    KnowledgeRelationCreated {
+        relation_id: String,
+        source_id: String,
+        target_id: String,
+        relation_type: KnowledgeRelationType,
+        tenant_id: TenantId,
+        timestamp: i64,
+    },
 }
 
 impl GovernanceEvent {
@@ -1448,6 +1806,12 @@ impl GovernanceEvent {
             GovernanceEvent::GitProviderConnectionUpdated { tenant_id, .. } => tenant_id,
             GovernanceEvent::GitProviderConnectionTenantGranted { tenant_id, .. } => tenant_id,
             GovernanceEvent::GitProviderConnectionTenantRevoked { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgePromotionRequested { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgePromotionApproved { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgePromotionRejected { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgePromotionRetargeted { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgePromotionApplied { tenant_id, .. } => tenant_id,
+            GovernanceEvent::KnowledgeRelationCreated { tenant_id, .. } => tenant_id,
         }
     }
 }
@@ -1795,6 +2159,24 @@ impl PersistentEvent {
             GovernanceEvent::GitProviderConnectionTenantRevoked { .. } => {
                 "git_provider_connection_tenant_revoked".to_string()
             }
+            GovernanceEvent::KnowledgePromotionRequested { .. } => {
+                "knowledge_promotion_requested".to_string()
+            }
+            GovernanceEvent::KnowledgePromotionApproved { .. } => {
+                "knowledge_promotion_approved".to_string()
+            }
+            GovernanceEvent::KnowledgePromotionRejected { .. } => {
+                "knowledge_promotion_rejected".to_string()
+            }
+            GovernanceEvent::KnowledgePromotionRetargeted { .. } => {
+                "knowledge_promotion_retargeted".to_string()
+            }
+            GovernanceEvent::KnowledgePromotionApplied { .. } => {
+                "knowledge_promotion_applied".to_string()
+            }
+            GovernanceEvent::KnowledgeRelationCreated { .. } => {
+                "knowledge_relation_created".to_string()
+            }
         }
     }
 
@@ -2029,6 +2411,141 @@ mod tests {
 
         let deserialized: KnowledgeLayer = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, KnowledgeLayer::Company);
+    }
+
+    #[test]
+    fn test_knowledge_layer_precedence() {
+        assert_eq!(KnowledgeLayer::Project.precedence(), 1);
+        assert_eq!(KnowledgeLayer::Team.precedence(), 2);
+        assert_eq!(KnowledgeLayer::Org.precedence(), 3);
+        assert_eq!(KnowledgeLayer::Company.precedence(), 4);
+    }
+
+    #[test]
+    fn test_knowledge_status_serialization_includes_rejected() {
+        let rejected = KnowledgeStatus::Rejected;
+        let json = serde_json::to_string(&rejected).unwrap();
+        assert_eq!(json, "\"rejected\"");
+
+        let deserialized: KnowledgeStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, KnowledgeStatus::Rejected);
+    }
+
+    #[test]
+    fn test_promotion_request_validate_layer_direction_accepts_upward_promotion() {
+        let request = PromotionRequest {
+            id: "prom-1".to_string(),
+            source_item_id: "item-1".to_string(),
+            source_layer: KnowledgeLayer::Project,
+            source_status: KnowledgeStatus::Accepted,
+            target_layer: KnowledgeLayer::Team,
+            promotion_mode: PromotionMode::Partial,
+            shared_content: "shared".to_string(),
+            residual_content: Some("local".to_string()),
+            residual_role: Some(KnowledgeVariantRole::Specialization),
+            justification: Some("reuse".to_string()),
+            status: PromotionRequestStatus::PendingReview,
+            requested_by: UserId::new("user-1".to_string()).unwrap(),
+            tenant_id: TenantId::new("tenant-1".to_string()).unwrap(),
+            source_version: "sha-1".to_string(),
+            latest_decision: None,
+            promoted_item_id: None,
+            residual_item_id: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+
+        assert!(request.validate_layer_direction().is_ok());
+    }
+
+    #[test]
+    fn test_promotion_request_validate_layer_direction_rejects_non_upward_target() {
+        let request = PromotionRequest {
+            id: "prom-1".to_string(),
+            source_item_id: "item-1".to_string(),
+            source_layer: KnowledgeLayer::Team,
+            source_status: KnowledgeStatus::Accepted,
+            target_layer: KnowledgeLayer::Project,
+            promotion_mode: PromotionMode::Partial,
+            shared_content: "shared".to_string(),
+            residual_content: None,
+            residual_role: None,
+            justification: None,
+            status: PromotionRequestStatus::PendingReview,
+            requested_by: UserId::new("user-1".to_string()).unwrap(),
+            tenant_id: TenantId::new("tenant-1".to_string()).unwrap(),
+            source_version: "sha-1".to_string(),
+            latest_decision: None,
+            promoted_item_id: None,
+            residual_item_id: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+
+        assert_eq!(
+            request.validate_layer_direction().unwrap_err(),
+            "target_layer must be strictly higher than source_layer"
+        );
+    }
+
+    #[test]
+    fn test_promotion_request_validate_layer_direction_rejects_company_source() {
+        let request = PromotionRequest {
+            id: "prom-1".to_string(),
+            source_item_id: "item-1".to_string(),
+            source_layer: KnowledgeLayer::Company,
+            source_status: KnowledgeStatus::Accepted,
+            target_layer: KnowledgeLayer::Company,
+            promotion_mode: PromotionMode::Full,
+            shared_content: "shared".to_string(),
+            residual_content: None,
+            residual_role: None,
+            justification: None,
+            status: PromotionRequestStatus::PendingReview,
+            requested_by: UserId::new("user-1".to_string()).unwrap(),
+            tenant_id: TenantId::new("tenant-1".to_string()).unwrap(),
+            source_version: "sha-1".to_string(),
+            latest_decision: None,
+            promoted_item_id: None,
+            residual_item_id: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+
+        assert_eq!(
+            request.validate_layer_direction().unwrap_err(),
+            "company-layer knowledge cannot be promoted higher"
+        );
+    }
+
+    #[test]
+    fn test_promotion_request_validate_layer_direction_rejects_non_accepted_source() {
+        let request = PromotionRequest {
+            id: "prom-1".to_string(),
+            source_item_id: "item-1".to_string(),
+            source_layer: KnowledgeLayer::Project,
+            source_status: KnowledgeStatus::Draft,
+            target_layer: KnowledgeLayer::Team,
+            promotion_mode: PromotionMode::Partial,
+            shared_content: "shared".to_string(),
+            residual_content: None,
+            residual_role: None,
+            justification: None,
+            status: PromotionRequestStatus::PendingReview,
+            requested_by: UserId::new("user-1".to_string()).unwrap(),
+            tenant_id: TenantId::new("tenant-1".to_string()).unwrap(),
+            source_version: "sha-1".to_string(),
+            latest_decision: None,
+            promoted_item_id: None,
+            residual_item_id: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+
+        assert_eq!(
+            request.validate_layer_direction().unwrap_err(),
+            "only accepted knowledge can be promoted"
+        );
     }
 
     #[test]
