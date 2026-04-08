@@ -589,6 +589,124 @@ impl AeternaClient {
     }
 
     // -----------------------------------------------------------------------
+    // Knowledge promotion lifecycle endpoints
+    // -----------------------------------------------------------------------
+
+    /// POST /api/v1/knowledge/{id}/promotions/preview
+    pub async fn knowledge_promotion_preview(
+        &self,
+        id: &str,
+        target_layer: &str,
+        mode: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let mut body = serde_json::json!({ "target_layer": target_layer });
+        if let Some(m) = mode {
+            body["mode"] = serde_json::json!(m);
+        }
+        parse_json_response(
+            self.post(&format!("/api/v1/knowledge/{id}/promotions/preview"), &body)
+                .await?,
+        )
+        .await
+    }
+
+    /// POST /api/v1/knowledge/{id}/promotions — create a promotion request.
+    pub async fn knowledge_promote(
+        &self,
+        id: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        parse_json_response(
+            self.post(&format!("/api/v1/knowledge/{id}/promotions"), body)
+                .await?,
+        )
+        .await
+    }
+
+    /// GET /api/v1/knowledge/promotions — list promotion requests (optionally filtered by status).
+    pub async fn knowledge_promotions_list(
+        &self,
+        status: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let path = if let Some(s) = status {
+            format!("/api/v1/knowledge/promotions?status={s}")
+        } else {
+            "/api/v1/knowledge/promotions".to_string()
+        };
+        parse_json_response(self.get(&path).await?).await
+    }
+
+    /// POST /api/v1/knowledge/promotions/{id}/approve
+    pub async fn knowledge_promotion_approve(
+        &self,
+        promotion_id: &str,
+        decision: &str,
+    ) -> Result<serde_json::Value> {
+        let body = serde_json::json!({ "decision": decision });
+        parse_json_response(
+            self.post(
+                &format!("/api/v1/knowledge/promotions/{promotion_id}/approve"),
+                &body,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    /// POST /api/v1/knowledge/promotions/{id}/reject
+    pub async fn knowledge_promotion_reject(
+        &self,
+        promotion_id: &str,
+        reason: &str,
+    ) -> Result<serde_json::Value> {
+        let body = serde_json::json!({ "reason": reason });
+        parse_json_response(
+            self.post(
+                &format!("/api/v1/knowledge/promotions/{promotion_id}/reject"),
+                &body,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    /// POST /api/v1/knowledge/promotions/{id}/retarget
+    pub async fn knowledge_promotion_retarget(
+        &self,
+        promotion_id: &str,
+        target_layer: &str,
+    ) -> Result<serde_json::Value> {
+        let body = serde_json::json!({ "target_layer": target_layer });
+        parse_json_response(
+            self.post(
+                &format!("/api/v1/knowledge/promotions/{promotion_id}/retarget"),
+                &body,
+            )
+            .await?,
+        )
+        .await
+    }
+
+    /// POST /api/v1/knowledge/{id}/relations — create a semantic relation.
+    pub async fn knowledge_relate(
+        &self,
+        id: &str,
+        target_id: &str,
+        relation_type: &str,
+    ) -> Result<serde_json::Value> {
+        let body = serde_json::json!({
+            "target_id": target_id,
+            "relation_type": relation_type,
+        });
+        parse_json_response(
+            self.post(&format!("/api/v1/knowledge/{id}/relations"), &body)
+                .await?,
+        )
+        .await
+    }
+
+
+    // -----------------------------------------------------------------------
     // Agent endpoints
     // -----------------------------------------------------------------------
 
