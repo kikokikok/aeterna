@@ -178,6 +178,10 @@ async fn test_full_integration_mcp_to_adapters() -> anyhow::Result<()> {
     let server = Arc::new(McpServer::new(
         memory_manager,
         sync_manager,
+        Arc::new(knowledge::manager::KnowledgeManager::new(
+            knowledge_repo.clone(),
+            governance_engine.clone(),
+        )),
         knowledge_repo.clone(),
         Arc::new(
             storage::postgres::PostgresBackend::new(pg_fixture.url())
@@ -258,6 +262,10 @@ async fn test_server_timeout() -> anyhow::Result<()> {
     let _server = McpServer::new(
         memory_manager.clone(),
         sync_manager.clone(),
+        Arc::new(knowledge::manager::KnowledgeManager::new(
+            knowledge_repo.clone(),
+            governance_engine.clone(),
+        )),
         knowledge_repo.clone(),
         Arc::new(
             storage::postgres::PostgresBackend::new(pg_fixture.url())
@@ -310,16 +318,21 @@ async fn test_server_timeout() -> anyhow::Result<()> {
         }
     }
 
+    let deny_governance_engine = Arc::new(knowledge::governance::GovernanceEngine::new());
     let server = McpServer::new(
         memory_manager.clone(),
         sync_manager.clone(),
+        Arc::new(knowledge::manager::KnowledgeManager::new(
+            knowledge_repo.clone(),
+            deny_governance_engine.clone(),
+        )),
         knowledge_repo.clone(),
         Arc::new(
             storage::postgres::PostgresBackend::new(pg_fixture.url())
                 .await
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?,
         ),
-        Arc::new(knowledge::governance::GovernanceEngine::new()),
+        deny_governance_engine,
         Arc::new(memory::reasoning::DefaultReflectiveReasoner::new(Arc::new(
             memory::llm::mock::MockLlmService::new(),
         ))),

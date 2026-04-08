@@ -387,6 +387,10 @@ async fn test_tenant_isolation_e2e() -> anyhow::Result<()> {
     let server = McpServer::new(
         memory_manager,
         sync_manager,
+        Arc::new(knowledge::manager::KnowledgeManager::new(
+            repo.clone(),
+            governance_engine.clone(),
+        )),
         repo,
         storage_backend,
         governance_engine,

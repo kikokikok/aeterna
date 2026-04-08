@@ -135,6 +135,7 @@ async fn setup_cca_test_server_with_real_deps() -> anyhow::Result<Arc<McpServer>
     let server = Arc::new(McpServer::new(
         memory_manager,
         sync_manager,
+        knowledge_manager,
         knowledge_repo.clone(),
         storage_backend,
         governance_engine,
