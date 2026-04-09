@@ -400,7 +400,8 @@ impl GitRepository {
             // touched *this file*, not the repo HEAD (which advances with every
             // promotion-request or relation write).
             let repo = Repository::open(&self.root_path)?;
-            let relative = full_path.strip_prefix(&self.root_path)
+            let relative = full_path
+                .strip_prefix(&self.root_path)
                 .unwrap_or(&full_path);
             let relative_str = relative.to_string_lossy();
             let mut revwalk = repo.revwalk()?;
@@ -411,11 +412,19 @@ impl GitRepository {
             'walk: for oid in revwalk.flatten() {
                 if let Ok(commit) = repo.find_commit(oid) {
                     if let Ok(tree) = commit.tree() {
-                        if tree.get_path(std::path::Path::new(relative_str.as_ref())).is_ok() {
+                        if tree
+                            .get_path(std::path::Path::new(relative_str.as_ref()))
+                            .is_ok()
+                        {
                             // Check parent to see if this commit modified the file
-                            let parent_has_file = commit.parent(0).ok()
+                            let parent_has_file = commit
+                                .parent(0)
+                                .ok()
                                 .and_then(|p| p.tree().ok())
-                                .map(|pt| pt.get_path(std::path::Path::new(relative_str.as_ref())).is_ok())
+                                .map(|pt| {
+                                    pt.get_path(std::path::Path::new(relative_str.as_ref()))
+                                        .is_ok()
+                                })
                                 .unwrap_or(false);
                             // First commit (no parent) or file changed → this is the last touch
                             if commit.parent_count() == 0 || !parent_has_file {
@@ -425,9 +434,13 @@ impl GitRepository {
                             // Compare blob OIDs between parent and this commit
                             if let Some(parent) = commit.parent(0).ok() {
                                 let parent_tree = parent.tree().ok();
-                                let cur_entry = tree.get_path(std::path::Path::new(relative_str.as_ref())).ok();
-                                let par_entry = parent_tree.as_ref()
-                                    .and_then(|pt| pt.get_path(std::path::Path::new(relative_str.as_ref())).ok());
+                                let cur_entry = tree
+                                    .get_path(std::path::Path::new(relative_str.as_ref()))
+                                    .ok();
+                                let par_entry = parent_tree.as_ref().and_then(|pt| {
+                                    pt.get_path(std::path::Path::new(relative_str.as_ref()))
+                                        .ok()
+                                });
                                 match (cur_entry, par_entry) {
                                     (Some(c), Some(p)) if c.id() != p.id() => {
                                         file_commit = Some(oid.to_string());
@@ -915,6 +928,7 @@ impl GitRepository {
     }
 
     /// Copies source entry to target layer WITHOUT modifying or deleting the source.
+    #[allow(dead_code)]
     async fn promote_non_destructive(
         &self,
         ctx: mk_core::types::TenantContext,

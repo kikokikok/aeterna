@@ -23,7 +23,8 @@ use memory::manager::MemoryManager;
 use memory::reasoning::{DefaultReflectiveReasoner, ReflectiveReasoner};
 use mk_core::traits::AuthorizationService;
 use mk_core::types::{
-    ReasoningStrategy, ReasoningTrace, Role, RoleIdentifier, TenantContext, UserId,
+    INSTANCE_SCOPE_TENANT_ID, ReasoningStrategy, ReasoningTrace, Role, RoleIdentifier,
+    TenantContext, UserId,
 };
 use storage::git_provider_connection_store::InMemoryGitProviderConnectionStore;
 use storage::governance::GovernanceStorage;
@@ -224,6 +225,7 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     a2a_auth_state.validate()?;
     let plugin_auth_state = Arc::new(PluginAuthState {
         config: config.plugin_auth.clone(),
+        postgres: Some(postgres.clone()),
         refresh_store: RefreshTokenStore::new(),
     });
 
@@ -724,6 +726,28 @@ async fn seed_platform_admin(
 
     let mut tx = pool.begin().await.context("begin seed transaction")?;
 
+    sqlx::query(
+        "INSERT INTO organizational_units (id, name, type, parent_id, tenant_id, metadata, created_at, updated_at)
+         VALUES ($1, $2, 'company', NULL, $1, '{}', $3, $3)
+         ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(INSTANCE_SCOPE_TENANT_ID)
+    .bind("Instance")
+    .bind(now_epoch)
+    .execute(&mut *tx)
+    .await
+    .context("upsert instance-scope organizational unit")?;
+
+    sqlx::query(
+        "UPDATE user_roles
+         SET tenant_id = $1, unit_id = $1
+         WHERE role = 'PlatformAdmin' AND tenant_id = 'default'",
+    )
+    .bind(INSTANCE_SCOPE_TENANT_ID)
+    .execute(&mut *tx)
+    .await
+    .context("migrate legacy PlatformAdmin rows to instance scope")?;
+
     let company_id = "default";
     sqlx::query(
         "INSERT INTO organizational_units (id, name, type, parent_id, tenant_id, metadata, created_at, updated_at)
@@ -822,8 +846,8 @@ async fn seed_platform_admin(
          ON CONFLICT (user_id, tenant_id, unit_id, role) DO NOTHING",
     )
     .bind(&user_id_str)
-    .bind("default")
-    .bind(company_id)
+    .bind(INSTANCE_SCOPE_TENANT_ID)
+    .bind(INSTANCE_SCOPE_TENANT_ID)
     .bind(now_epoch)
     .execute(&mut *tx)
     .await

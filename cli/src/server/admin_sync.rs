@@ -27,7 +27,7 @@ async fn handle_github_sync(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     // --- Authorization: PlatformAdmin only -----------------------------------
-    let ctx = match authenticated_tenant_context(&state, &headers) {
+    let ctx = match authenticated_tenant_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(resp) => return resp,
     };

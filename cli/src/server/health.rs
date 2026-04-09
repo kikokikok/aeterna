@@ -356,7 +356,7 @@ mod tests {
 
         Arc::new(AppState {
             config: Arc::new(config::Config::default()),
-            postgres,
+            postgres: postgres.clone(),
             memory_manager,
             knowledge_manager,
             knowledge_repository: Arc::new(MockRepo),
@@ -381,6 +381,7 @@ mod tests {
             }),
             plugin_auth_state: Arc::new(PluginAuthState {
                 config: config::PluginAuthConfig::default(),
+                postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStore::new(),
             }),
             idp_config: None,

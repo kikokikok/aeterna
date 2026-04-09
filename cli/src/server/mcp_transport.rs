@@ -357,6 +357,7 @@ mod tests {
             }),
             plugin_auth_state: Arc::new(PluginAuthState {
                 config: config::PluginAuthConfig::default(),
+                postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStore::new(),
             }),
             idp_config: None,

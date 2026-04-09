@@ -11,11 +11,8 @@ use std::convert::Infallible;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use super::AppState;
-use super::plugin_auth::{
-    tenant_context_from_plugin_bearer, tenant_context_from_plugin_bearer_or_default,
-    validate_plugin_bearer,
-};
+use super::plugin_auth::validate_plugin_bearer;
+use super::{AppState, authenticated_tenant_context};
 
 #[derive(Debug, Deserialize)]
 pub struct KnowledgeQueryRequest {
@@ -347,7 +344,7 @@ async fn query_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -441,7 +438,7 @@ async fn create_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -508,7 +505,7 @@ async fn update_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -578,7 +575,7 @@ async fn delete_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -617,7 +614,7 @@ async fn batch_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -726,7 +723,7 @@ async fn metadata_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -775,7 +772,7 @@ async fn promotion_preview_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -831,7 +828,7 @@ async fn create_promotion_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -939,7 +936,7 @@ async fn list_promotions_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -979,7 +976,7 @@ async fn get_promotion_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -1014,7 +1011,7 @@ async fn approve_promotion_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -1111,7 +1108,7 @@ async fn reject_promotion_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -1173,7 +1170,7 @@ async fn retarget_promotion_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -1249,7 +1246,7 @@ async fn create_relation_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -1337,41 +1334,11 @@ async fn check_reviewer_permission(
 /// When plugin auth is **disabled** (development / service-to-service mode):
 /// falls back to the synthetic `default/system` context with an explicit debug
 /// log.  This fallback is intentional and must NOT be used in production.
-fn tenant_context_from_request(
+async fn tenant_context_from_request(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<mk_core::types::TenantContext, axum::response::Response> {
-    if state.plugin_auth_state.config.enabled {
-        let secret = state
-            .plugin_auth_state
-            .config
-            .jwt_secret
-            .as_deref()
-            .ok_or_else(|| {
-                error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "configuration_error",
-                    "Plugin auth JWT secret is not configured",
-                )
-            })?;
-        return tenant_context_from_plugin_bearer(headers, secret).ok_or_else(|| {
-            error_response(
-                StatusCode::UNAUTHORIZED,
-                "invalid_plugin_token",
-                "Valid plugin bearer token required",
-            )
-        });
-    }
-    // Development / service-to-service fallback (plugin auth disabled).
-    Ok(tenant_context_from_plugin_bearer_or_default(
-        headers,
-        state
-            .plugin_auth_state
-            .config
-            .jwt_secret
-            .as_deref()
-            .unwrap_or(""),
-    ))
+    authenticated_tenant_context(state, headers).await
 }
 
 fn reject_invalid_plugin_bearer(
@@ -1954,7 +1921,7 @@ mod tests {
 
         Some(router(Arc::new(AppState {
             config: Arc::new(config::Config::default()),
-            postgres,
+            postgres: postgres.clone(),
             memory_manager,
             knowledge_manager,
             knowledge_repository: repo,
@@ -1979,6 +1946,7 @@ mod tests {
             }),
             plugin_auth_state: Arc::new(PluginAuthState {
                 config: config::PluginAuthConfig::default(),
+                postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStore::new(),
             }),
             idp_config: None,
@@ -2529,7 +2497,7 @@ mod tests {
 
         Some(router(Arc::new(AppState {
             config: Arc::new(config::Config::default()),
-            postgres,
+            postgres: postgres.clone(),
             memory_manager,
             knowledge_manager,
             knowledge_repository: repo,
@@ -2558,6 +2526,7 @@ mod tests {
                     jwt_secret: Some("test-jwt-secret-at-least-32-chars-long!!".to_string()),
                     ..Default::default()
                 },
+                postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStore::new(),
             }),
             idp_config: None,

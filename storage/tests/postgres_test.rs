@@ -1,5 +1,8 @@
 use mk_core::traits::StorageBackend;
-use mk_core::types::{RecordSource, TenantContext, TenantId, UserId};
+use mk_core::types::{
+    INSTANCE_SCOPE_TENANT_ID, OrganizationalUnit, RecordSource, Role, RoleIdentifier,
+    TenantContext, TenantId, UnitType, UserId,
+};
 use storage::postgres::{PostgresBackend, PostgresError};
 use testing::{postgres, unique_id};
 
@@ -311,6 +314,138 @@ async fn test_postgres_backend_role_management() {
 
     let roles_after = backend.get_user_roles(&user_id, &tenant_id).await.unwrap();
     assert_eq!(roles_after.len(), 0);
+}
+
+#[tokio::test]
+async fn test_resolve_user_id_by_idp_subject_returns_matching_user() {
+    let Some(backend) = create_test_backend().await else {
+        eprintln!("Skipping PostgreSQL test: Docker not available");
+        return;
+    };
+
+    let email = format!("{}@example.com", unique_id("user"));
+    let idp_subject = unique_id("github-login");
+
+    let user_id: String = sqlx::query_scalar(
+        "INSERT INTO users (email, name, idp_provider, idp_subject, status, created_at, updated_at)
+         VALUES ($1, $1, 'github', $2, 'active', NOW(), NOW())
+         RETURNING id::text",
+    )
+    .bind(&email)
+    .bind(&idp_subject)
+    .fetch_one(backend.pool())
+    .await
+    .unwrap();
+
+    let resolved = backend
+        .resolve_user_id_by_idp_subject(&idp_subject)
+        .await
+        .unwrap();
+
+    assert_eq!(resolved.as_deref(), Some(user_id.as_str()));
+    assert_eq!(
+        backend
+            .resolve_user_id_by_idp_subject("missing-subject")
+            .await
+            .unwrap(),
+        None
+    );
+}
+
+#[tokio::test]
+async fn test_get_user_roles_for_auth_includes_instance_scope_and_deduplicates() {
+    let Some(backend) = create_test_backend().await else {
+        eprintln!("Skipping PostgreSQL test: Docker not available");
+        return;
+    };
+
+    let tenant_id = TenantId::new(unique_tenant_id()).unwrap();
+    let tenant_unit_id = unique_id("company");
+    let root_unit_id = unique_id("instance");
+    let user_id = unique_id("user");
+    let now = chrono::Utc::now().timestamp();
+
+    backend
+        .create_unit(&OrganizationalUnit {
+            id: tenant_unit_id.clone(),
+            name: "Tenant Company".to_string(),
+            unit_type: UnitType::Company,
+            parent_id: None,
+            tenant_id: tenant_id.clone(),
+            metadata: std::collections::HashMap::new(),
+            created_at: now,
+            updated_at: now,
+            source_owner: RecordSource::Admin,
+        })
+        .await
+        .unwrap();
+
+    backend
+        .create_unit(&OrganizationalUnit {
+            id: root_unit_id.clone(),
+            name: "Instance Scope".to_string(),
+            unit_type: UnitType::Company,
+            parent_id: None,
+            tenant_id: INSTANCE_SCOPE_TENANT_ID.parse().unwrap(),
+            metadata: std::collections::HashMap::new(),
+            created_at: now,
+            updated_at: now,
+            source_owner: RecordSource::Admin,
+        })
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at)
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(&user_id)
+    .bind(tenant_id.as_str())
+    .bind(&tenant_unit_id)
+    .bind("admin")
+    .bind(now)
+    .execute(backend.pool())
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at)
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(&user_id)
+    .bind(INSTANCE_SCOPE_TENANT_ID)
+    .bind(&root_unit_id)
+    .bind("platformadmin")
+    .bind(now)
+    .execute(backend.pool())
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at)
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(&user_id)
+    .bind(INSTANCE_SCOPE_TENANT_ID)
+    .bind(&root_unit_id)
+    .bind("admin")
+    .bind(now)
+    .execute(backend.pool())
+    .await
+    .unwrap();
+
+    let roles = backend
+        .get_user_roles_for_auth(&user_id, tenant_id.as_str())
+        .await
+        .unwrap();
+
+    let actual: std::collections::HashSet<RoleIdentifier> = roles.into_iter().collect();
+    let expected: std::collections::HashSet<RoleIdentifier> =
+        [Role::Admin.into(), Role::PlatformAdmin.into()]
+            .into_iter()
+            .collect();
+
+    assert_eq!(actual, expected);
 }
 
 #[tokio::test]

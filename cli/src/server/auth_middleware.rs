@@ -39,6 +39,7 @@ use mk_core::types::{RoleIdentifier, TenantContext, TenantId, UserId};
 use tower::{Layer, Service};
 
 use super::PluginAuthState;
+use super::lookup_roles_for_idp_subject;
 use super::plugin_auth::{PluginIdentity, validate_plugin_bearer};
 
 // ---------------------------------------------------------------------------
@@ -145,7 +146,7 @@ where
             };
 
             // Build TenantContext from validated identity.
-            match tenant_context_from_identity(&identity, req.headers()) {
+            match tenant_context_from_identity(&auth_state, &identity, req.headers()).await {
                 Some(ctx) => {
                     req.extensions_mut().insert(ctx);
                     inner.call(req).await
@@ -167,19 +168,24 @@ where
 /// Build a `TenantContext` from a validated plugin identity and optional
 /// header overrides (e.g. `X-Target-Tenant-ID` for PlatformAdmin cross-tenant
 /// operations, `X-User-Role` for explicit role assertion).
-fn tenant_context_from_identity(
+async fn tenant_context_from_identity(
+    auth_state: &PluginAuthState,
     identity: &PluginIdentity,
     headers: &axum::http::HeaderMap,
 ) -> Option<TenantContext> {
     let tenant_id = TenantId::new(sanitize(&identity.tenant_id, 100))?;
     let user_id = UserId::new(sanitize(&identity.github_login, 100))?;
 
-    let roles = headers
-        .get("x-user-role")
-        .and_then(|v| v.to_str().ok())
-        .filter(|s| !s.is_empty())
-        .map(|s| vec![RoleIdentifier::from_str_flexible(s)])
-        .unwrap_or_default();
+    let roles = match &auth_state.postgres {
+        Some(postgres) => lookup_roles_for_idp_subject(
+            postgres.as_ref(),
+            &identity.github_login,
+            tenant_id.as_str(),
+        )
+        .await
+        .ok()?,
+        None => Vec::new(),
+    };
 
     let target_tenant_id = headers
         .get("x-target-tenant-id")
@@ -268,19 +274,36 @@ mod tests {
     use axum::body::Body;
     use axum::http::{Request, header::AUTHORIZATION};
     use axum::routing::get;
+    use mk_core::types::{
+        INSTANCE_SCOPE_TENANT_ID, OrganizationalUnit, RecordSource, TenantId, UnitType,
+    };
+    use storage::postgres::PostgresBackend;
+    use testing::{postgres, unique_id};
     use tower::ServiceExt;
 
     use crate::server::plugin_auth::RefreshTokenStore;
 
-    fn test_auth_state(enabled: bool, jwt_secret: Option<String>) -> Arc<PluginAuthState> {
+    fn test_auth_state(
+        enabled: bool,
+        jwt_secret: Option<String>,
+        postgres: Option<Arc<PostgresBackend>>,
+    ) -> Arc<PluginAuthState> {
         Arc::new(PluginAuthState {
             config: config::PluginAuthConfig {
                 enabled,
                 jwt_secret,
                 ..Default::default()
             },
+            postgres,
             refresh_store: RefreshTokenStore::new(),
         })
+    }
+
+    async fn create_test_backend() -> Option<Arc<PostgresBackend>> {
+        let fixture = postgres().await?;
+        let backend = Arc::new(PostgresBackend::new(fixture.url()).await.ok()?);
+        backend.initialize_schema().await.ok()?;
+        Some(backend)
     }
 
     /// Handler that reads the TenantContext from extensions.
@@ -290,6 +313,11 @@ mod tests {
                 let body = serde_json::json!({
                     "tenant_id": ctx.tenant_id.as_str(),
                     "user_id": ctx.user_id.as_str(),
+                    "roles": ctx
+                        .roles
+                        .iter()
+                        .map(std::string::ToString::to_string)
+                        .collect::<Vec<_>>(),
                 });
                 (StatusCode::OK, axum::Json(body)).into_response()
             }
@@ -311,7 +339,7 @@ mod tests {
 
     #[tokio::test]
     async fn auth_disabled_passes_through_with_default_context() {
-        let app = app_with_auth(test_auth_state(false, None));
+        let app = app_with_auth(test_auth_state(false, None, None));
         let resp = app
             .oneshot(
                 Request::builder()
@@ -333,7 +361,7 @@ mod tests {
 
     #[tokio::test]
     async fn auth_disabled_uses_legacy_headers() {
-        let app = app_with_auth(test_auth_state(false, None));
+        let app = app_with_auth(test_auth_state(false, None, None));
         let resp = app
             .oneshot(
                 Request::builder()
@@ -362,6 +390,7 @@ mod tests {
         let app = app_with_auth(test_auth_state(
             true,
             Some("test-secret-at-least-32-characters-long".to_string()),
+            None,
         ));
         let resp = app
             .oneshot(
@@ -383,6 +412,7 @@ mod tests {
         let app = app_with_auth(test_auth_state(
             true,
             Some("test-secret-at-least-32-characters-long".to_string()),
+            None,
         ));
         let resp = app
             .oneshot(
@@ -405,11 +435,74 @@ mod tests {
         use crate::server::plugin_auth::PluginTokenClaims;
         use jsonwebtoken::{EncodingKey, Header};
 
+        let Some(backend) = create_test_backend().await else {
+            eprintln!("Skipping PostgreSQL test: Docker not available");
+            return;
+        };
+
         let secret = "test-secret-at-least-32-characters-long";
         let now = chrono::Utc::now().timestamp();
+        let tenant = TenantId::new("tenant-1".to_string()).unwrap();
+        let tenant_unit_id = unique_id("company");
+        let root_unit_id = unique_id("instance");
+
+        backend
+            .create_unit(&OrganizationalUnit {
+                id: tenant_unit_id.clone(),
+                name: "Tenant Company".to_string(),
+                unit_type: UnitType::Company,
+                parent_id: None,
+                tenant_id: tenant.clone(),
+                metadata: std::collections::HashMap::new(),
+                created_at: now,
+                updated_at: now,
+                source_owner: RecordSource::Admin,
+            })
+            .await
+            .unwrap();
+
+        backend
+            .create_unit(&OrganizationalUnit {
+                id: root_unit_id.clone(),
+                name: "Instance Scope".to_string(),
+                unit_type: UnitType::Company,
+                parent_id: None,
+                tenant_id: INSTANCE_SCOPE_TENANT_ID.parse().unwrap(),
+                metadata: std::collections::HashMap::new(),
+                created_at: now,
+                updated_at: now,
+                source_owner: RecordSource::Admin,
+            })
+            .await
+            .unwrap();
+
+        let user_id: String = sqlx::query_scalar(
+            "INSERT INTO users (email, name, idp_provider, idp_subject, status, created_at, updated_at)
+             VALUES ($1, $1, 'github', $2, 'active', NOW(), NOW())
+             RETURNING id::text",
+        )
+        .bind(format!("{}@example.com", unique_id("auth-user")))
+        .bind("testuser")
+        .fetch_one(backend.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at)
+             VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(&user_id)
+        .bind(INSTANCE_SCOPE_TENANT_ID)
+        .bind(&root_unit_id)
+        .bind("platformadmin")
+        .bind(now)
+        .execute(backend.pool())
+        .await
+        .unwrap();
+
         let claims = PluginTokenClaims {
             sub: "testuser".to_string(),
-            tenant_id: "tenant-1".to_string(),
+            tenant_id: tenant.as_str().to_string(),
             iss: "aeterna".to_string(),
             aud: vec![PluginTokenClaims::AUDIENCE.to_string()],
             iat: now,
@@ -426,12 +519,17 @@ mod tests {
         )
         .unwrap();
 
-        let app = app_with_auth(test_auth_state(true, Some(secret.to_string())));
+        let app = app_with_auth(test_auth_state(
+            true,
+            Some(secret.to_string()),
+            Some(backend),
+        ));
         let resp = app
             .oneshot(
                 Request::builder()
                     .uri("/protected")
                     .header(AUTHORIZATION, format!("Bearer {token}"))
+                    .header("x-user-role", "viewer")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -445,13 +543,14 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["tenant_id"], "tenant-1");
         assert_eq!(json["user_id"], "testuser");
+        assert_eq!(json["roles"], serde_json::json!(["PlatformAdmin"]));
     }
 
     // ── Auth enabled: missing JWT secret config ───────────────────────
 
     #[tokio::test]
     async fn auth_enabled_returns_500_without_jwt_secret() {
-        let app = app_with_auth(test_auth_state(true, None));
+        let app = app_with_auth(test_auth_state(true, None, None));
         let resp = app
             .oneshot(
                 Request::builder()

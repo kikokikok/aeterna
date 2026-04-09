@@ -7,11 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use super::AppState;
-use super::plugin_auth::{
-    tenant_context_from_plugin_bearer, tenant_context_from_plugin_bearer_or_default,
-    validate_plugin_bearer,
-};
+use super::plugin_auth::validate_plugin_bearer;
+use super::{AppState, authenticated_tenant_context};
 use storage::postgres::PostgresBackend;
 
 #[derive(Debug, Deserialize)]
@@ -113,7 +110,7 @@ async fn push_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -238,7 +235,7 @@ async fn pull_handler(
         return response;
     }
 
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -368,41 +365,11 @@ fn extract_auth_token(headers: &HeaderMap) -> Option<String> {
 /// When plugin auth is **disabled** (development / service-to-service mode):
 /// falls back to the synthetic `default/system` context with an explicit debug
 /// log.  This fallback is intentional and MUST NOT be used in production.
-fn tenant_context_from_request(
+async fn tenant_context_from_request(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<mk_core::types::TenantContext, axum::response::Response> {
-    if state.plugin_auth_state.config.enabled {
-        let secret = state
-            .plugin_auth_state
-            .config
-            .jwt_secret
-            .as_deref()
-            .ok_or_else(|| {
-                error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "configuration_error",
-                    "Plugin auth JWT secret is not configured",
-                )
-            })?;
-        return tenant_context_from_plugin_bearer(headers, secret).ok_or_else(|| {
-            error_response(
-                StatusCode::UNAUTHORIZED,
-                "invalid_plugin_token",
-                "Valid plugin bearer token required",
-            )
-        });
-    }
-    // Development / service-to-service fallback (plugin auth disabled).
-    Ok(tenant_context_from_plugin_bearer_or_default(
-        headers,
-        state
-            .plugin_auth_state
-            .config
-            .jwt_secret
-            .as_deref()
-            .unwrap_or(""),
-    ))
+    authenticated_tenant_context(state, headers).await
 }
 
 fn reject_invalid_plugin_bearer(

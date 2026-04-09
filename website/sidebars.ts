@@ -12,6 +12,8 @@ const sidebars: SidebarsConfig = {
         'helm/quickstart-hybrid',
         'helm/quickstart-remote',
         'guides/cli-quick-reference',
+        'guides/admin-provisioning-guide',
+        'guides/tenant-admin-control-plane',
       ],
     },
     {

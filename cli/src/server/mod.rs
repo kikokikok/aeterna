@@ -57,6 +57,7 @@ use plugin_auth::RefreshTokenStore;
 /// via `State<Arc<AppState>>` without an extra extraction layer.
 pub struct PluginAuthState {
     pub config: config::PluginAuthConfig,
+    pub postgres: Option<Arc<PostgresBackend>>,
     /// Single-use refresh-token store (rotated on every refresh).
     pub refresh_store: RefreshTokenStore,
 }
@@ -112,6 +113,18 @@ fn error_json(status: StatusCode, code: &str, message: &str) -> axum::response::
     (status, Json(json!({ "error": code, "message": message }))).into_response()
 }
 
+pub(crate) async fn lookup_roles_for_idp_subject(
+    postgres: &PostgresBackend,
+    idp_subject: &str,
+    tenant_id: &str,
+) -> Result<Vec<RoleIdentifier>, storage::postgres::PostgresError> {
+    let Some(user_id) = postgres.resolve_user_id_by_idp_subject(idp_subject).await? else {
+        return Ok(Vec::new());
+    };
+
+    postgres.get_user_roles_for_auth(&user_id, tenant_id).await
+}
+
 /// Extracts an authenticated `TenantContext` from request headers.
 ///
 /// - `X-Tenant-ID` header → `TenantContext::tenant_id`
@@ -121,42 +134,67 @@ fn error_json(status: StatusCode, code: &str, message: &str) -> axum::response::
 ///
 /// When plugin-auth is enabled the bearer token is validated; otherwise the
 /// raw header values are trusted (development / service-to-service mode).
-pub fn authenticated_tenant_context(
+pub async fn authenticated_tenant_context(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<TenantContext, axum::response::Response> {
     // --- Resolve user identity ---------------------------------------------------
-    let user_id_str: String = if state.plugin_auth_state.config.enabled {
-        let secret = state
-            .plugin_auth_state
-            .config
-            .jwt_secret
-            .as_deref()
-            .ok_or_else(|| {
+    let (user_id_str, roles): (String, Vec<RoleIdentifier>) =
+        if state.plugin_auth_state.config.enabled {
+            let secret = state
+                .plugin_auth_state
+                .config
+                .jwt_secret
+                .as_deref()
+                .ok_or_else(|| {
+                    error_json(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "configuration_error",
+                        "Plugin auth JWT secret is not configured",
+                    )
+                })?;
+            let identity =
+                plugin_auth::validate_plugin_bearer(headers, secret).ok_or_else(|| {
+                    error_json(
+                        StatusCode::UNAUTHORIZED,
+                        "invalid_plugin_token",
+                        "Valid plugin bearer token required",
+                    )
+                })?;
+
+            let roles = lookup_roles_for_idp_subject(
+                state.postgres.as_ref(),
+                &identity.github_login,
+                &identity.tenant_id,
+            )
+            .await
+            .map_err(|err| {
                 error_json(
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "configuration_error",
-                    "Plugin auth JWT secret is not configured",
+                    "role_lookup_failed",
+                    &err.to_string(),
                 )
             })?;
-        let identity = plugin_auth::validate_plugin_bearer(headers, secret).ok_or_else(|| {
-            error_json(
-                StatusCode::UNAUTHORIZED,
-                "invalid_plugin_token",
-                "Valid plugin bearer token required",
+
+            (identity.github_login, roles)
+        } else {
+            (
+                headers
+                    .get("x-user-id")
+                    .and_then(|v| v.to_str().ok())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("system")
+                    .chars()
+                    .take(100)
+                    .collect(),
+                headers
+                    .get("x-user-role")
+                    .and_then(|v| v.to_str().ok())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| vec![RoleIdentifier::from_str_flexible(s)])
+                    .unwrap_or_default(),
             )
-        })?;
-        identity.github_login
-    } else {
-        headers
-            .get("x-user-id")
-            .and_then(|v| v.to_str().ok())
-            .filter(|s| !s.is_empty())
-            .unwrap_or("system")
-            .chars()
-            .take(100)
-            .collect()
-    };
+        };
 
     let user_id = UserId::new(user_id_str).ok_or_else(|| {
         error_json(
@@ -181,13 +219,6 @@ pub fn authenticated_tenant_context(
     })?;
 
     // --- Optional roles ----------------------------------------------------------
-    let roles = headers
-        .get("x-user-role")
-        .and_then(|v| v.to_str().ok())
-        .filter(|s| !s.is_empty())
-        .map(|s| vec![RoleIdentifier::from_str_flexible(s)])
-        .unwrap_or_default();
-
     // --- Optional PlatformAdmin target tenant ------------------------------------
     let target_tenant_id: Option<TenantId> = headers
         .get("x-target-tenant-id")
@@ -213,5 +244,5 @@ pub async fn tenant_scoped_context(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<TenantContext, axum::response::Response> {
-    authenticated_tenant_context(state, headers)
+    authenticated_tenant_context(state, headers).await
 }

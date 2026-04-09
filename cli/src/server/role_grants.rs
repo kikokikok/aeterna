@@ -100,7 +100,7 @@ async fn handle_grant_role(
     headers: HeaderMap,
     Json(req): Json<ScopedRoleGrantRequest>,
 ) -> impl IntoResponse {
-    let ctx = match authenticated_tenant_context(&state, &headers) {
+    let ctx = match authenticated_tenant_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(resp) => return resp,
     };
@@ -194,7 +194,7 @@ async fn handle_revoke_role(
     headers: HeaderMap,
     Json(req): Json<ScopedRoleGrantRequest>,
 ) -> impl IntoResponse {
-    let ctx = match authenticated_tenant_context(&state, &headers) {
+    let ctx = match authenticated_tenant_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(resp) => return resp,
     };
@@ -292,7 +292,7 @@ async fn handle_list_grants(
     headers: HeaderMap,
     Query(query): Query<ListGrantsQuery>,
 ) -> impl IntoResponse {
-    let ctx = match authenticated_tenant_context(&state, &headers) {
+    let ctx = match authenticated_tenant_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(resp) => return resp,
     };

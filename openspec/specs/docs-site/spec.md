@@ -37,3 +37,18 @@ The system SHALL automatically build and deploy the documentation website to Git
 - **WHEN** the Docusaurus build step exits with a non-zero code
 - **THEN** the deployment step does not run and the workflow is marked failed
 
+### Requirement: Admin Provisioning Guide
+The documentation site SHALL include a comprehensive Admin Provisioning Guide in the Getting Started section that covers the full end-to-end workflow from PlatformAdmin bootstrap through tenant creation, user management, role assignment, organizational hierarchy, and configuration.
+
+#### Scenario: Guide is accessible from navigation
+- **WHEN** a user opens the documentation site and navigates to Getting Started
+- **THEN** the Admin Provisioning Guide SHALL appear in the sidebar navigation alongside the CLI Quick Reference and Tenant Admin Control Plane guides
+
+#### Scenario: Guide covers full provisioning workflow
+- **WHEN** a user reads the Admin Provisioning Guide
+- **THEN** the guide SHALL document PlatformAdmin bootstrap (env vars, startup behavior), CLI profile setup, GitHub device-code authentication, tenant creation, user registration and invitation, role assignment and hierarchy, tenant configuration and secrets, repository binding, shared Git provider connections, manifest-based provisioning, permission inspection, and REST API equivalents for all CLI operations
+
+#### Scenario: Guide uses only generic examples
+- **WHEN** example values appear in the Admin Provisioning Guide
+- **THEN** all examples SHALL use generic placeholder values (e.g. `acme-corp`, `alice@acme-corp.com`, `aeterna.example.com`) and SHALL NOT contain environment-specific hostnames, internal user identifiers, or real credentials
+

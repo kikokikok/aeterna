@@ -4,6 +4,12 @@ use strum::{Display, EnumString};
 use utoipa::ToSchema;
 use validator::Validate;
 
+/// Sentinel `tenant_id` used to store instance-scoped roles (e.g. `PlatformAdmin`)
+/// in the `user_roles` table. Using a reserved value instead of a real tenant slug
+/// prevents ambiguity and ensures platform-level grants are never confused with
+/// tenant-scoped grants.
+pub const INSTANCE_SCOPE_TENANT_ID: &str = "__root__";
+
 #[derive(
     Debug,
     Clone,
@@ -1451,7 +1457,10 @@ impl KnowledgeEntryWithRelations {
     }
 
     pub fn without_relations(entry: KnowledgeEntry) -> Self {
-        Self { entry, relations: vec![] }
+        Self {
+            entry,
+            relations: vec![],
+        }
     }
 }
 
@@ -1471,7 +1480,6 @@ pub struct KnowledgeQueryResult {
     /// ApplicableFrom, ExceptionTo, or Clarifies relations.
     pub local_residuals: Vec<(KnowledgeRelationType, KnowledgeEntryWithRelations)>,
 }
-
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Default, ToSchema,

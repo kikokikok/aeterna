@@ -152,7 +152,7 @@ async fn search_handler(
     headers: HeaderMap,
     Json(req): Json<MemorySearchRequest>,
 ) -> impl IntoResponse {
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -203,7 +203,7 @@ async fn add_handler(
     headers: HeaderMap,
     Json(req): Json<MemoryAddRequest>,
 ) -> impl IntoResponse {
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -235,7 +235,7 @@ async fn list_handler(
     headers: HeaderMap,
     Json(req): Json<MemoryListRequest>,
 ) -> impl IntoResponse {
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -271,7 +271,7 @@ async fn feedback_handler(
     headers: HeaderMap,
     Json(req): Json<MemoryFeedbackRequest>,
 ) -> impl IntoResponse {
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -323,7 +323,7 @@ async fn delete_handler(
     Path(memory_id): Path<String>,
     Json(req): Json<MemoryDeleteRequest>,
 ) -> impl IntoResponse {
-    let ctx = match tenant_context_from_request(&state, &headers) {
+    let ctx = match tenant_context_from_request(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -378,11 +378,11 @@ fn parse_reward_type(reward_type: &str) -> Result<mk_core::types::RewardType, &'
     }
 }
 
-pub(crate) fn tenant_context_from_request(
+pub(crate) async fn tenant_context_from_request(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<mk_core::types::TenantContext, axum::response::Response> {
-    authenticated_tenant_context(state, headers)
+    authenticated_tenant_context(state, headers).await
 }
 
 fn error_response(status: StatusCode, error: &str, message: &str) -> axum::response::Response {

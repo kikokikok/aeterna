@@ -53,6 +53,7 @@ pub struct CedarPolicyEvaluator {
     policies: PolicySet,
 }
 
+#[allow(deprecated)]
 impl CedarPolicyEvaluator {
     pub fn new(policy_text: &str) -> Result<Self, CodeSearchError> {
         let policies =
@@ -106,6 +107,7 @@ impl CedarPolicyEvaluator {
 }
 
 #[async_trait]
+#[allow(deprecated)]
 impl PolicyEvaluator for CedarPolicyEvaluator {
     async fn evaluate_request(
         &self,

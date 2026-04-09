@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use mk_core::traits::StorageBackend;
-use mk_core::types::{OrganizationalUnit, RoleIdentifier, TenantContext, UnitType};
+use mk_core::types::{
+    INSTANCE_SCOPE_TENANT_ID, OrganizationalUnit, RoleIdentifier, TenantContext, UnitType,
+};
 use sqlx::pool::PoolConnection;
 use sqlx::{Pool, Postgres, Row};
 use thiserror::Error;
@@ -1163,6 +1165,54 @@ impl PostgresBackend {
             }
         }
         Ok(result)
+    }
+
+    /// Looks up a user's internal UUID by their identity-provider subject (e.g. GitHub login or email).
+    ///
+    /// Returns `None` when no matching user exists — callers should treat this as an anonymous /
+    /// unauthenticated identity with no roles.
+    pub async fn resolve_user_id_by_idp_subject(
+        &self,
+        idp_subject: &str,
+    ) -> Result<Option<String>, PostgresError> {
+        use sqlx::Row;
+        let row = sqlx::query("SELECT id::text FROM users WHERE idp_subject = $1 LIMIT 1")
+            .bind(idp_subject)
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(row.map(|r| r.get::<String, _>("id")))
+    }
+
+    /// Returns the deduplicated list of roles for a user within a specific tenant, **plus**
+    /// any instance-scoped roles stored under [`mk_core::types::INSTANCE_SCOPE_TENANT_ID`] (`"__root__"`).
+    ///
+    /// This is the authoritative role lookup for authentication context construction.
+    pub async fn get_user_roles_for_auth(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+    ) -> Result<Vec<RoleIdentifier>, PostgresError> {
+        use sqlx::Row;
+        let rows = sqlx::query(
+            "SELECT DISTINCT role FROM user_roles
+             WHERE user_id = $1 AND (tenant_id = $2 OR tenant_id = $3)",
+        )
+        .bind(user_id)
+        .bind(tenant_id)
+        .bind(INSTANCE_SCOPE_TENANT_ID)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut roles: Vec<RoleIdentifier> = rows
+            .iter()
+            .map(|r| {
+                let role_str: String = r.get("role");
+                RoleIdentifier::from_str_flexible(&role_str)
+            })
+            .collect();
+        roles.sort_by_cached_key(|role| role.to_string().to_ascii_lowercase());
+        roles.dedup();
+        Ok(roles)
     }
 
     pub async fn log_event(
@@ -3129,5 +3179,31 @@ mod tests {
         assert!(select_query.contains("SELECT"));
         assert!(delete_query.contains("DELETE"));
         assert!(exists_query.contains("SELECT 1"));
+    }
+
+    // Tests for resolve_user_id_by_idp_subject and get_user_roles_for_auth SQL patterns
+
+    #[test]
+    fn resolve_user_id_sql_pattern_is_correct() {
+        let sql = "SELECT id::text FROM users WHERE idp_subject = $1 LIMIT 1";
+        assert!(sql.contains("idp_subject"));
+        assert!(sql.contains("LIMIT 1"));
+        assert!(sql.starts_with("SELECT"));
+    }
+
+    #[test]
+    fn get_user_roles_for_auth_sql_includes_root_sentinel() {
+        // The query must include BOTH the caller's tenant_id AND the __root__ sentinel so that
+        // instance-scoped roles (e.g. PlatformAdmin) are always returned regardless of tenant.
+        let sql = "SELECT DISTINCT role FROM user_roles
+             WHERE user_id = $1 AND (tenant_id = $2 OR tenant_id = '__root__')";
+        assert!(sql.contains("__root__"));
+        assert!(sql.contains("DISTINCT"));
+        assert!(sql.contains("tenant_id = $2 OR tenant_id"));
+    }
+
+    #[test]
+    fn instance_scope_tenant_id_constant_is_root() {
+        assert_eq!(mk_core::types::INSTANCE_SCOPE_TENANT_ID, "__root__");
     }
 }

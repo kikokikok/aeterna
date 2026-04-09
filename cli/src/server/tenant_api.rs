@@ -345,7 +345,7 @@ async fn inspect_tenant_config(
     headers: HeaderMap,
     Path(tenant): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(response) = require_platform_admin(&state, &headers) {
+    if let Err(response) = require_platform_admin(&state, &headers).await {
         return response;
     }
 
@@ -375,7 +375,7 @@ async fn upsert_tenant_config(
     Path(tenant): Path<String>,
     Json(req): Json<UpsertTenantConfigRequest>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -417,7 +417,7 @@ async fn validate_tenant_config(
     Path(tenant): Path<String>,
     Json(req): Json<UpsertTenantConfigRequest>,
 ) -> impl IntoResponse {
-    if let Err(response) = require_platform_admin(&state, &headers) {
+    if let Err(response) = require_platform_admin(&state, &headers).await {
         return response;
     }
 
@@ -459,7 +459,7 @@ async fn set_tenant_secret(
     Path((tenant, logical_name)): Path<(String, String)>,
     Json(req): Json<SetTenantSecretRequest>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -508,7 +508,7 @@ async fn delete_tenant_secret(
     headers: HeaderMap,
     Path((tenant, logical_name)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -847,7 +847,7 @@ async fn create_tenant(
     headers: HeaderMap,
     Json(req): Json<CreateTenantRequest>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -896,7 +896,7 @@ async fn list_tenants(
     headers: HeaderMap,
     Query(query): Query<TenantListQuery>,
 ) -> impl IntoResponse {
-    if let Err(response) = require_platform_admin(&state, &headers) {
+    if let Err(response) = require_platform_admin(&state, &headers).await {
         return response;
     }
 
@@ -923,7 +923,7 @@ async fn show_tenant(
     headers: HeaderMap,
     Path(tenant): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(response) = require_platform_admin(&state, &headers) {
+    if let Err(response) = require_platform_admin(&state, &headers).await {
         return response;
     }
 
@@ -955,7 +955,7 @@ async fn update_tenant(
     Path(tenant): Path<String>,
     Json(req): Json<UpdateTenantRequest>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -1012,7 +1012,7 @@ async fn deactivate_tenant(
     headers: HeaderMap,
     Path(tenant): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -1066,7 +1066,7 @@ async fn add_domain_mapping(
     Path(tenant): Path<String>,
     Json(req): Json<CreateTenantDomainMappingRequest>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -1113,7 +1113,7 @@ async fn show_tenant_repository_binding(
     headers: HeaderMap,
     Path(tenant): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(response) = require_platform_admin(&state, &headers) {
+    if let Err(response) = require_platform_admin(&state, &headers).await {
         return response;
     }
 
@@ -1164,7 +1164,7 @@ async fn set_tenant_repository_binding(
     Path(tenant): Path<String>,
     Json(req): Json<SetTenantRepositoryBindingRequest>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -1334,7 +1334,7 @@ async fn validate_tenant_repository_binding(
     Path(tenant): Path<String>,
     Json(req): Json<SetTenantRepositoryBindingRequest>,
 ) -> impl IntoResponse {
-    if let Err(response) = require_platform_admin(&state, &headers) {
+    if let Err(response) = require_platform_admin(&state, &headers).await {
         return response;
     }
 
@@ -1990,11 +1990,11 @@ async fn list_user_memberships(
     }
 }
 
-fn require_platform_admin(
+async fn require_platform_admin(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<TenantContext, axum::response::Response> {
-    let ctx = authenticated_tenant_context(state, headers)?;
+    let ctx = authenticated_tenant_context(state, headers).await?;
     if !ctx.has_known_role(&Role::PlatformAdmin) {
         return Err(error_response(
             StatusCode::FORBIDDEN,
@@ -2358,7 +2358,7 @@ async fn create_git_provider_connection(
     headers: HeaderMap,
     Json(req): Json<CreateGitProviderConnectionRequest>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -2411,7 +2411,7 @@ async fn list_git_provider_connections(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if let Err(response) = require_platform_admin(&state, &headers) {
+    if let Err(response) = require_platform_admin(&state, &headers).await {
         return response;
     }
 
@@ -2437,7 +2437,7 @@ async fn show_git_provider_connection(
     headers: HeaderMap,
     Path(connection_id): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(response) = require_platform_admin(&state, &headers) {
+    if let Err(response) = require_platform_admin(&state, &headers).await {
         return response;
     }
 
@@ -2465,7 +2465,7 @@ async fn grant_git_provider_connection_to_tenant(
     headers: HeaderMap,
     Path((connection_id, tenant)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -2519,7 +2519,7 @@ async fn revoke_git_provider_connection_from_tenant(
     headers: HeaderMap,
     Path((connection_id, tenant)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -2820,7 +2820,7 @@ async fn provision_tenant(
     headers: HeaderMap,
     Json(manifest): Json<TenantManifest>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers) {
+    let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -3653,7 +3653,7 @@ mod tests {
 
         let state = Arc::new(AppState {
             config: Arc::new(config::Config::default()),
-            postgres,
+            postgres: postgres.clone(),
             memory_manager,
             knowledge_manager,
             knowledge_repository: Arc::new(MockRepo),
@@ -3678,6 +3678,7 @@ mod tests {
             }),
             plugin_auth_state: Arc::new(PluginAuthState {
                 config: config::PluginAuthConfig::default(),
+                postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStore::new(),
             }),
             idp_config: None,
