@@ -15,7 +15,7 @@ pub mod meta_agent;
 pub mod note_taking;
 pub mod pr_proposal_storage;
 pub mod repository;
+pub mod resolver;
 pub mod scheduler;
 pub mod telemetry;
-pub mod resolver;
 pub mod tenant_repo_resolver;

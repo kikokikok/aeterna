@@ -6,7 +6,7 @@ fn make_router() -> ComplexityRouter {
     ComplexityRouter::new(config::RlmConfig {
         enabled: true,
         max_steps: 5,
-        complexity_threshold: 0.3
+        complexity_threshold: 0.3,
     })
 }
 

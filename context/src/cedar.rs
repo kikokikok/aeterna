@@ -88,7 +88,7 @@ pub enum CedarError {
 
     /// Configuration error.
     #[error("Configuration error: {0}")]
-    ConfigError(String)
+    ConfigError(String),
 }
 
 pub type Result<T> = std::result::Result<T, CedarError>;
@@ -119,7 +119,7 @@ pub struct CedarConfig {
     pub circuit_breaker_threshold: u32,
 
     /// Circuit breaker reset timeout in seconds.
-    pub circuit_breaker_reset_secs: u64
+    pub circuit_breaker_reset_secs: u64,
 }
 
 impl Default for CedarConfig {
@@ -131,7 +131,7 @@ impl Default for CedarConfig {
             cache_enabled: true,
             cache_ttl_secs: 300, // 5 minutes
             circuit_breaker_threshold: 5,
-            circuit_breaker_reset_secs: 30
+            circuit_breaker_reset_secs: 30,
         }
     }
 }
@@ -187,7 +187,7 @@ impl CedarConfig {
 pub struct EntityUid {
     #[serde(rename = "type")]
     pub entity_type: String,
-    pub id: String
+    pub id: String,
 }
 
 impl EntityUid {
@@ -196,7 +196,7 @@ impl EntityUid {
     pub fn new(entity_type: impl Into<String>, id: impl Into<String>) -> Self {
         Self {
             entity_type: entity_type.into(),
-            id: id.into()
+            id: id.into(),
         }
     }
 
@@ -266,7 +266,7 @@ pub struct Entity {
 
     /// Parent entity UIDs (for hierarchy).
     #[serde(default)]
-    pub parents: Vec<EntityUid>
+    pub parents: Vec<EntityUid>,
 }
 
 impl Entity {
@@ -311,7 +311,7 @@ pub struct AuthorizationRequest {
 
     /// Additional entities to merge with stored data.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub additional_entities: Option<Vec<Entity>>
+    pub additional_entities: Option<Vec<Entity>>,
 }
 
 impl AuthorizationRequest {
@@ -324,7 +324,7 @@ impl AuthorizationRequest {
             resource: None,
             context: None,
             entities: None,
-            additional_entities: None
+            additional_entities: None,
         }
     }
 
@@ -371,7 +371,7 @@ pub struct AuthorizationResponse {
 
     /// Diagnostic information.
     #[serde(default)]
-    pub diagnostics: AuthorizationDiagnostics
+    pub diagnostics: AuthorizationDiagnostics,
 }
 
 /// Authorization decision.
@@ -380,7 +380,7 @@ pub enum AuthorizationDecision {
     /// Request is allowed.
     Allow,
     /// Request is denied.
-    Deny
+    Deny,
 }
 
 /// Diagnostic information from authorization.
@@ -392,7 +392,7 @@ pub struct AuthorizationDiagnostics {
 
     /// Error messages (if any).
     #[serde(default)]
-    pub errors: Vec<String>
+    pub errors: Vec<String>,
 }
 
 // ============================================================================
@@ -404,7 +404,7 @@ pub struct AuthorizationDiagnostics {
 enum CircuitState {
     Closed,
     Open,
-    HalfOpen
+    HalfOpen,
 }
 
 struct CircuitBreaker {
@@ -412,7 +412,7 @@ struct CircuitBreaker {
     failure_count: u32,
     last_failure: Option<std::time::Instant>,
     threshold: u32,
-    reset_timeout: Duration
+    reset_timeout: Duration,
 }
 
 impl CircuitBreaker {
@@ -422,7 +422,7 @@ impl CircuitBreaker {
             failure_count: 0,
             last_failure: None,
             threshold,
-            reset_timeout
+            reset_timeout,
         }
     }
 
@@ -440,7 +440,7 @@ impl CircuitBreaker {
                     true
                 }
             }
-            CircuitState::Closed | CircuitState::HalfOpen => true
+            CircuitState::Closed | CircuitState::HalfOpen => true,
         }
     }
 
@@ -469,14 +469,14 @@ impl CircuitBreaker {
 
 struct EntityCache {
     entities: HashMap<EntityUid, (Entity, std::time::Instant)>,
-    ttl: Duration
+    ttl: Duration,
 }
 
 impl EntityCache {
     fn new(ttl: Duration) -> Self {
         Self {
             entities: HashMap::new(),
-            ttl
+            ttl,
         }
     }
 
@@ -522,7 +522,7 @@ pub struct CedarClient {
     config: CedarConfig,
     http: Client,
     circuit_breaker: Arc<RwLock<CircuitBreaker>>,
-    cache: Arc<RwLock<EntityCache>>
+    cache: Arc<RwLock<EntityCache>>,
 }
 
 impl CedarClient {
@@ -539,7 +539,7 @@ impl CedarClient {
 
         let circuit_breaker = CircuitBreaker::new(
             config.circuit_breaker_threshold,
-            Duration::from_secs(config.circuit_breaker_reset_secs)
+            Duration::from_secs(config.circuit_breaker_reset_secs),
         );
 
         let cache = EntityCache::new(Duration::from_secs(config.cache_ttl_secs));
@@ -548,7 +548,7 @@ impl CedarClient {
             config,
             http,
             circuit_breaker: Arc::new(RwLock::new(circuit_breaker)),
-            cache: Arc::new(RwLock::new(cache))
+            cache: Arc::new(RwLock::new(cache)),
         }
     }
 
@@ -651,7 +651,7 @@ impl CedarClient {
             })
             .ok_or_else(|| CedarError::EntityNotFound {
                 entity_type: "Aeterna::User".to_string(),
-                id: format!("email={email}")
+                id: format!("email={email}"),
             })
     }
 
@@ -687,7 +687,7 @@ impl CedarClient {
             })
             .ok_or_else(|| CedarError::EntityNotFound {
                 entity_type: "Aeterna::Project".to_string(),
-                id: format!("git_remote={git_remote}")
+                id: format!("git_remote={git_remote}"),
             })
     }
 
@@ -712,7 +712,7 @@ impl CedarClient {
             .find(|e| e.uid == *uid)
             .ok_or_else(|| CedarError::EntityNotFound {
                 entity_type: uid.entity_type.clone(),
-                id: uid.id.clone()
+                id: uid.id.clone(),
             })
     }
 
@@ -742,7 +742,7 @@ impl CedarClient {
         principal: &EntityUid,
         action: &str,
         resource: &EntityUid,
-        context: Option<serde_json::Value>
+        context: Option<serde_json::Value>,
     ) -> Result<bool> {
         let request = AuthorizationRequest::new()
             .with_principal(principal)
@@ -804,7 +804,7 @@ impl CedarClient {
             resource: None,
             context: None,
             entities: None,
-            additional_entities: None
+            additional_entities: None,
         };
 
         let response = self.authorize(request).await?;
@@ -894,13 +894,13 @@ impl CedarClient {
     async fn execute_with_circuit_breaker<F, Fut, T>(&self, f: F) -> Result<T>
     where
         F: Fn() -> Fut,
-        Fut: std::future::Future<Output = Result<T>>
+        Fut: std::future::Future<Output = Result<T>>,
     {
         {
             let mut cb = self.circuit_breaker.write().await;
             if !cb.can_execute() {
                 return Err(CedarError::Unavailable(
-                    "Circuit breaker is open".to_string()
+                    "Circuit breaker is open".to_string(),
                 ));
             }
         }
@@ -969,7 +969,7 @@ pub struct AccessibleLayers {
     pub team_ids: Vec<String>,
 
     /// Accessible project IDs.
-    pub project_ids: Vec<String>
+    pub project_ids: Vec<String>,
 }
 
 impl AccessibleLayers {
@@ -1080,7 +1080,7 @@ mod tests {
                 "name": "Test User",
                 "count": 42
             }),
-            parents: vec![]
+            parents: vec![],
         };
 
         assert_eq!(entity.get_attr_str("email"), Some("test@example.com"));
@@ -1097,7 +1097,7 @@ mod tests {
                 "roles": ["admin", "developer"],
                 "single": "value"
             }),
-            parents: vec![]
+            parents: vec![],
         };
 
         let roles = entity.get_attr_str_array("roles");
@@ -1159,7 +1159,7 @@ mod tests {
             company_ids: vec!["c1".to_string()],
             org_ids: vec!["o1".to_string(), "o2".to_string()],
             team_ids: vec!["t1".to_string()],
-            project_ids: vec!["p1".to_string(), "p2".to_string(), "p3".to_string()]
+            project_ids: vec!["p1".to_string(), "p2".to_string(), "p3".to_string()],
         };
         assert_eq!(layers.total_count(), 7);
     }
@@ -1247,7 +1247,7 @@ mod integration_tests {
             cache_ttl_secs: 60,
             max_retries: 1,
             circuit_breaker_threshold: 5,
-            circuit_breaker_reset_secs: 30
+            circuit_breaker_reset_secs: 30,
         };
         CedarClient::new(config)
     }
@@ -1359,7 +1359,7 @@ mod integration_tests {
                 assert_eq!(entity_type, "Aeterna::User");
                 assert_eq!(id, "email=unknown@example.com");
             }
-            other => panic!("Expected EntityNotFound, got: {:?}", other)
+            other => panic!("Expected EntityNotFound, got: {:?}", other),
         }
     }
 
@@ -1564,7 +1564,7 @@ mod integration_tests {
             cache_ttl_secs: 60,
             max_retries: 1,
             circuit_breaker_threshold: 2, // Open after 2 failures
-            circuit_breaker_reset_secs: 30
+            circuit_breaker_reset_secs: 30,
         };
         let client = CedarClient::new(config);
 
@@ -1580,7 +1580,7 @@ mod integration_tests {
             Err(CedarError::Unavailable(msg)) => {
                 assert!(msg.contains("Circuit breaker is open"));
             }
-            other => panic!("Expected Unavailable error, got: {:?}", other)
+            other => panic!("Expected Unavailable error, got: {:?}", other),
         }
     }
 
@@ -1603,7 +1603,7 @@ mod integration_tests {
                 assert_eq!(status, 400);
                 assert_eq!(message, "Bad Request");
             }
-            other => panic!("Expected AgentError, got: {:?}", other)
+            other => panic!("Expected AgentError, got: {:?}", other),
         }
     }
 
@@ -1626,7 +1626,7 @@ mod integration_tests {
             cache_ttl_secs: 300,
             max_retries: 1,
             circuit_breaker_threshold: 5,
-            circuit_breaker_reset_secs: 30
+            circuit_breaker_reset_secs: 30,
         };
         let client = CedarClient::new(config);
 
@@ -1660,7 +1660,7 @@ mod integration_tests {
             cache_ttl_secs: 300,
             max_retries: 1,
             circuit_breaker_threshold: 5,
-            circuit_breaker_reset_secs: 30
+            circuit_breaker_reset_secs: 30,
         };
         let client = CedarClient::new(config);
 

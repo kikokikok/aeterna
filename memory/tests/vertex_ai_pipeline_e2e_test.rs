@@ -50,8 +50,10 @@
 
 #[cfg(all(feature = "google-provider", feature = "vertex-ai"))]
 mod vertex_ai_pipeline_e2e {
-    use memory::backends::{BackendConfig, SearchQuery, VectorBackend, VectorBackendType, VectorRecord, create_backend};
     use memory::backends::factory::VertexAiConfig;
+    use memory::backends::{
+        BackendConfig, SearchQuery, VectorBackend, VectorBackendType, VectorRecord, create_backend,
+    };
     use memory::embedding::google::GoogleEmbeddingService;
     use mk_core::traits::EmbeddingService;
     use std::collections::HashMap;
@@ -59,10 +61,10 @@ mod vertex_ai_pipeline_e2e {
     const EMBEDDING_DIM: usize = 768;
 
     fn embedding_service() -> GoogleEmbeddingService {
-        let project_id = std::env::var("AETERNA_GOOGLE_PROJECT_ID")
-            .expect("AETERNA_GOOGLE_PROJECT_ID not set");
-        let location = std::env::var("AETERNA_GOOGLE_LOCATION")
-            .unwrap_or_else(|_| "us-central1".to_string());
+        let project_id =
+            std::env::var("AETERNA_GOOGLE_PROJECT_ID").expect("AETERNA_GOOGLE_PROJECT_ID not set");
+        let location =
+            std::env::var("AETERNA_GOOGLE_LOCATION").unwrap_or_else(|_| "us-central1".to_string());
         let model = std::env::var("AETERNA_GOOGLE_EMBEDDING_MODEL")
             .unwrap_or_else(|_| "text-embedding-005".to_string());
         GoogleEmbeddingService::new(project_id, location, model)
@@ -73,8 +75,7 @@ mod vertex_ai_pipeline_e2e {
             backend_type: VectorBackendType::VertexAi,
             embedding_dimension: EMBEDDING_DIM,
             vertex_ai: Some(VertexAiConfig {
-                project_id: std::env::var("GCP_PROJECT_ID")
-                    .expect("GCP_PROJECT_ID not set"),
+                project_id: std::env::var("GCP_PROJECT_ID").expect("GCP_PROJECT_ID not set"),
                 location: std::env::var("VERTEX_AI_LOCATION")
                     .unwrap_or_else(|_| "us-central1".to_string()),
                 index_endpoint: std::env::var("VERTEX_AI_INDEX_ENDPOINT")
@@ -89,7 +90,9 @@ mod vertex_ai_pipeline_e2e {
             weaviate: None,
             mongodb: None,
         };
-        create_backend(config).await.expect("VertexAiBackend must initialize")
+        create_backend(config)
+            .await
+            .expect("VertexAiBackend must initialize")
     }
 
     // -------------------------------------------------------------------------
@@ -105,17 +108,32 @@ mod vertex_ai_pipeline_e2e {
 
         // Three documents: two related to memory/AI, one unrelated
         let texts = [
-            ("pipeline-doc-memory", "Aeterna provides hierarchical vector memory storage for AI agents"),
-            ("pipeline-doc-agents", "Autonomous agents use semantic retrieval to access past context"),
-            ("pipeline-doc-finance", "The Federal Reserve sets interest rates to control monetary policy"),
+            (
+                "pipeline-doc-memory",
+                "Aeterna provides hierarchical vector memory storage for AI agents",
+            ),
+            (
+                "pipeline-doc-agents",
+                "Autonomous agents use semantic retrieval to access past context",
+            ),
+            (
+                "pipeline-doc-finance",
+                "The Federal Reserve sets interest rates to control monetary policy",
+            ),
         ];
 
         // Embed and upsert all documents
         let mut records = Vec::new();
         for (id, text) in &texts {
-            let vector = embedder.embed(text).await
+            let vector = embedder
+                .embed(text)
+                .await
                 .unwrap_or_else(|e| panic!("embed failed for {id}: {e}"));
-            assert_eq!(vector.len(), EMBEDDING_DIM, "embedding must be {EMBEDDING_DIM}-dim for {id}");
+            assert_eq!(
+                vector.len(),
+                EMBEDDING_DIM,
+                "embedding must be {EMBEDDING_DIM}-dim for {id}"
+            );
             records.push(VectorRecord::new(
                 *id,
                 vector,
@@ -123,7 +141,9 @@ mod vertex_ai_pipeline_e2e {
             ));
         }
 
-        let upsert_result = backend.upsert(tenant, records).await
+        let upsert_result = backend
+            .upsert(tenant, records)
+            .await
             .expect("upsert of embedded documents must succeed");
         assert_eq!(upsert_result.upserted_count, 3);
         assert!(upsert_result.failed_ids.is_empty());
@@ -133,11 +153,15 @@ mod vertex_ai_pipeline_e2e {
 
         // Query: close to the "memory" domain
         let query_text = "vector memory retrieval for AI agent context";
-        let query_vector = embedder.embed(query_text).await
+        let query_vector = embedder
+            .embed(query_text)
+            .await
             .expect("embed query must succeed");
 
         let query = SearchQuery::new(query_vector).with_limit(3);
-        let results = backend.search(tenant, query).await
+        let results = backend
+            .search(tenant, query)
+            .await
             .expect("search must succeed");
 
         assert!(!results.is_empty(), "search must return results");
@@ -152,7 +176,10 @@ mod vertex_ai_pipeline_e2e {
 
         // Cleanup
         let ids = texts.iter().map(|(id, _)| id.to_string()).collect();
-        backend.delete(tenant, ids).await.expect("cleanup delete must succeed");
+        backend
+            .delete(tenant, ids)
+            .await
+            .expect("cleanup delete must succeed");
     }
 
     // -------------------------------------------------------------------------
@@ -172,27 +199,35 @@ mod vertex_ai_pipeline_e2e {
         let vec_b = embedder.embed(text_b).await.expect("embed tenant-b doc");
 
         backend
-            .upsert("pipeline-tenant-a", vec![VectorRecord::new(
-                "pipe-iso-1",
-                vec_a,
-                HashMap::from([("lang".to_string(), serde_json::json!("rust"))]),
-            )])
+            .upsert(
+                "pipeline-tenant-a",
+                vec![VectorRecord::new(
+                    "pipe-iso-1",
+                    vec_a,
+                    HashMap::from([("lang".to_string(), serde_json::json!("rust"))]),
+                )],
+            )
             .await
             .expect("upsert for tenant-a must succeed");
 
         backend
-            .upsert("pipeline-tenant-b", vec![VectorRecord::new(
-                "pipe-iso-1",  // Same ID, different tenant
-                vec_b,
-                HashMap::from([("lang".to_string(), serde_json::json!("python"))]),
-            )])
+            .upsert(
+                "pipeline-tenant-b",
+                vec![VectorRecord::new(
+                    "pipe-iso-1", // Same ID, different tenant
+                    vec_b,
+                    HashMap::from([("lang".to_string(), serde_json::json!("python"))]),
+                )],
+            )
             .await
             .expect("upsert for tenant-b must succeed");
 
         tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
         // A third tenant must not see records from either tenant
-        let result_c = backend.get("pipeline-tenant-c", "pipe-iso-1").await
+        let result_c = backend
+            .get("pipeline-tenant-c", "pipe-iso-1")
+            .await
             .expect("get from tenant-c must not error");
         assert!(
             result_c.is_none(),
@@ -217,8 +252,14 @@ mod vertex_ai_pipeline_e2e {
         }
 
         // Cleanup
-        backend.delete("pipeline-tenant-a", vec!["pipe-iso-1".to_string()]).await.ok();
-        backend.delete("pipeline-tenant-b", vec!["pipe-iso-1".to_string()]).await.ok();
+        backend
+            .delete("pipeline-tenant-a", vec!["pipe-iso-1".to_string()])
+            .await
+            .ok();
+        backend
+            .delete("pipeline-tenant-b", vec!["pipe-iso-1".to_string()])
+            .await
+            .ok();
     }
 
     // -------------------------------------------------------------------------
@@ -232,7 +273,7 @@ mod vertex_ai_pipeline_e2e {
         // Use the real backend but submit a 3-dim vector when the index expects 768
         let wrong_dim_config = BackendConfig {
             backend_type: VectorBackendType::VertexAi,
-            embedding_dimension: 3,  // Deliberately wrong
+            embedding_dimension: 3, // Deliberately wrong
             vertex_ai: Some(VertexAiConfig {
                 project_id: std::env::var("GCP_PROJECT_ID").expect("GCP_PROJECT_ID not set"),
                 location: std::env::var("VERTEX_AI_LOCATION")
@@ -250,12 +291,13 @@ mod vertex_ai_pipeline_e2e {
             mongodb: None,
         };
 
-        let backend = create_backend(wrong_dim_config).await
+        let backend = create_backend(wrong_dim_config)
+            .await
             .expect("backend init always succeeds; dimension mismatch only surfaces on search");
 
         let record = VectorRecord::new(
             "dim-mismatch-1",
-            vec![1.0_f32, 0.0, 0.0],  // 3-dim, not 768
+            vec![1.0_f32, 0.0, 0.0], // 3-dim, not 768
             HashMap::new(),
         );
 
@@ -275,10 +317,16 @@ mod vertex_ai_pipeline_e2e {
             // upsert already rejected — that's the correct early-fail behaviour
             let err = upsert_result.unwrap_err();
             let msg = err.to_string();
-            assert!(!msg.is_empty(), "dimension-mismatch error must carry a message");
+            assert!(
+                !msg.is_empty(),
+                "dimension-mismatch error must carry a message"
+            );
         }
 
         // Best-effort cleanup
-        backend.delete("dim-mismatch-tenant", vec!["dim-mismatch-1".to_string()]).await.ok();
+        backend
+            .delete("dim-mismatch-tenant", vec!["dim-mismatch-1".to_string()])
+            .await
+            .ok();
     }
 }

@@ -8,21 +8,21 @@ use std::str::FromStr;
 
 struct MockRlmHandler {
     complexity_threshold: f32,
-    should_fail: bool
+    should_fail: bool,
 }
 
 impl MockRlmHandler {
     fn new(complexity_threshold: f32) -> Self {
         Self {
             complexity_threshold,
-            should_fail: false
+            should_fail: false,
         }
     }
 
     fn failing() -> Self {
         Self {
             complexity_threshold: 0.0,
-            should_fail: true
+            should_fail: true,
         }
     }
 }
@@ -52,7 +52,7 @@ impl RlmAssemblyService for MockRlmHandler {
     async fn execute_assembly(
         &self,
         query_text: &str,
-        _tenant: &TenantContext
+        _tenant: &TenantContext,
     ) -> Result<RlmAssemblyResult, anyhow::Error> {
         if self.should_fail {
             return Err(anyhow::anyhow!("Mock RLM failure"));
@@ -63,7 +63,7 @@ impl RlmAssemblyService for MockRlmHandler {
             involved_memory_ids: vec!["mem-1".to_string(), "mem-2".to_string()],
             rlm_synthesized: true,
             steps: 3,
-            total_reward: 0.8
+            total_reward: 0.8,
         })
     }
 }
@@ -71,7 +71,7 @@ impl RlmAssemblyService for MockRlmHandler {
 fn create_tenant() -> TenantContext {
     TenantContext::new(
         TenantId::from_str("test-tenant").unwrap(),
-        UserId::from_str("test-user").unwrap()
+        UserId::from_str("test-user").unwrap(),
     )
 }
 
@@ -90,8 +90,8 @@ fn create_sample_sources() -> Vec<SummarySource> {
             source_hash: "hash".to_string(),
             content_hash: None,
             personalized: false,
-            personalization_context: None
-        }
+            personalization_context: None,
+        },
     );
 
     vec![SummarySource {
@@ -103,7 +103,7 @@ fn create_sample_sources() -> Vec<SummarySource> {
         full_content_tokens: None,
         current_source_content: None,
         variant_role: None,
-        relations: vec![]
+        relations: vec![],
     }]
 }
 

@@ -34,9 +34,9 @@ mod types;
 
 pub use cedar::{
     AccessibleLayers, AuthorizationDecision, AuthorizationDiagnostics, AuthorizationRequest,
-    AuthorizationResponse, CedarClient, CedarConfig, CedarError, Entity, EntityUid
+    AuthorizationResponse, CedarClient, CedarConfig, CedarError, Entity, EntityUid,
 };
 pub use resolver::{CedarContextResolver, ContextError, ContextResolver};
 pub use types::{
-    ContextConfig, ContextSource, ResolvedContext, ResolvedValue, ServerConfig, StorageConfig
+    ContextConfig, ContextSource, ResolvedContext, ResolvedValue, ServerConfig, StorageConfig,
 };

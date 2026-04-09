@@ -19,7 +19,7 @@ use uuid::Uuid;
 use storage::governance::{
     ApprovalDecision, ApprovalRequest, CreateApprovalRequest, CreateDecision, CreateGovernanceRole,
     Decision, GovernanceAuditEntry, GovernanceConfig, GovernanceRole, PrincipalType, RequestStatus,
-    RequestType, RiskLevel
+    RequestType, RiskLevel,
 };
 
 // ============================================================================
@@ -32,14 +32,14 @@ pub enum PolicyLayer {
     Company,
     Org,
     Team,
-    Project
+    Project,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PolicyMode {
     Mandatory,
-    Optional
+    Optional,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,7 +48,7 @@ pub enum Severity {
     Info,
     Warn,
     Error,
-    Block
+    Block,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,7 +57,7 @@ pub enum RuleTarget {
     Dependency,
     File,
     Code,
-    Config
+    Config,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,7 +67,7 @@ pub struct PolicyRule {
     pub target: RuleTarget,
     pub pattern: String,
     pub severity: Severity,
-    pub message: String
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,14 +82,14 @@ pub struct Policy {
     pub tenant_id: String,
     pub created_at: i64,
     pub updated_at: i64,
-    pub created_by: String
+    pub created_by: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct SimulationScenario {
     pub scenario_type: String,
     pub input: String,
-    pub context: HashMap<String, String>
+    pub context: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,24 +99,24 @@ pub struct SimulationResult {
     pub input: String,
     pub decision: String,
     pub matched_rules: Vec<String>,
-    pub violations: Vec<SimulationViolation>
+    pub violations: Vec<SimulationViolation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimulationViolation {
     pub rule_id: String,
     pub severity: Severity,
-    pub message: String
+    pub message: String,
 }
 
 pub struct MockPolicyStorage {
-    pub policies: Arc<RwLock<HashMap<String, Policy>>>
+    pub policies: Arc<RwLock<HashMap<String, Policy>>>,
 }
 
 impl MockPolicyStorage {
     pub fn new() -> Self {
         Self {
-            policies: Arc::new(RwLock::new(HashMap::new()))
+            policies: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -129,7 +129,7 @@ impl MockPolicyStorage {
         &self,
         tenant_id: &str,
         _layer: Option<PolicyLayer>,
-        _mode: Option<PolicyMode>
+        _mode: Option<PolicyMode>,
     ) -> Result<Vec<Policy>, String> {
         let policies = self.policies.read().await;
         Ok(policies
@@ -142,7 +142,7 @@ impl MockPolicyStorage {
     pub async fn simulate_policy(
         &self,
         policy_id: &str,
-        scenario: &SimulationScenario
+        scenario: &SimulationScenario,
     ) -> Result<SimulationResult, String> {
         let policies = self.policies.read().await;
         let policy = policies
@@ -163,7 +163,7 @@ impl MockPolicyStorage {
                 "code-change" => {
                     rule.target == RuleTarget::Code && scenario.input.contains(&rule.pattern)
                 }
-                _ => false
+                _ => false,
             };
 
             if matches {
@@ -172,7 +172,7 @@ impl MockPolicyStorage {
                     violations.push(SimulationViolation {
                         rule_id: rule.id.clone(),
                         severity: rule.severity,
-                        message: rule.message.clone()
+                        message: rule.message.clone(),
                     });
                 }
             }
@@ -194,7 +194,7 @@ impl MockPolicyStorage {
             input: scenario.input.clone(),
             decision: decision.to_string(),
             matched_rules,
-            violations
+            violations,
         })
     }
 }
@@ -209,7 +209,7 @@ pub struct MockGovernanceStorage {
     decisions: Arc<RwLock<HashMap<Uuid, Vec<ApprovalDecision>>>>,
     roles: Arc<RwLock<Vec<GovernanceRole>>>,
     audit_logs: Arc<RwLock<Vec<GovernanceAuditEntry>>>,
-    request_counter: Arc<RwLock<u64>>
+    request_counter: Arc<RwLock<u64>>,
 }
 
 impl MockGovernanceStorage {
@@ -220,7 +220,7 @@ impl MockGovernanceStorage {
             decisions: Arc::new(RwLock::new(HashMap::new())),
             roles: Arc::new(RwLock::new(Vec::new())),
             audit_logs: Arc::new(RwLock::new(Vec::new())),
-            request_counter: Arc::new(RwLock::new(0))
+            request_counter: Arc::new(RwLock::new(0)),
         }
     }
 
@@ -229,7 +229,7 @@ impl MockGovernanceStorage {
         company_id: Option<Uuid>,
         org_id: Option<Uuid>,
         team_id: Option<Uuid>,
-        project_id: Option<Uuid>
+        project_id: Option<Uuid>,
     ) -> Result<GovernanceConfig, String> {
         let configs = self.configs.read().await;
         let key = format!(
@@ -259,7 +259,7 @@ impl MockGovernanceStorage {
 
     pub async fn create_request(
         &self,
-        request: &CreateApprovalRequest
+        request: &CreateApprovalRequest,
     ) -> Result<ApprovalRequest, String> {
         let mut counter = self.request_counter.write().await;
         *counter += 1;
@@ -297,7 +297,7 @@ impl MockGovernanceStorage {
             resolved_at: None,
             resolution_reason: None,
             applied_at: None,
-            applied_by: None
+            applied_by: None,
         };
 
         let mut requests = self.requests.write().await;
@@ -312,7 +312,7 @@ impl MockGovernanceStorage {
 
     pub async fn add_decision(
         &self,
-        decision: &CreateDecision
+        decision: &CreateDecision,
     ) -> Result<ApprovalDecision, String> {
         let id = Uuid::new_v4();
         let approval_decision = ApprovalDecision {
@@ -323,7 +323,7 @@ impl MockGovernanceStorage {
             approver_email: decision.approver_email.clone(),
             decision: decision.decision,
             comment: decision.comment.clone(),
-            created_at: Utc::now()
+            created_at: Utc::now(),
         };
 
         let mut decisions = self.decisions.write().await;
@@ -368,7 +368,7 @@ impl MockGovernanceStorage {
             granted_at: Utc::now(),
             expires_at: role.expires_at,
             revoked_at: None,
-            revoked_by: None
+            revoked_by: None,
         };
 
         let mut roles = self.roles.write().await;
@@ -380,7 +380,7 @@ impl MockGovernanceStorage {
         &self,
         principal_id: Uuid,
         role: &str,
-        revoked_by: Uuid
+        revoked_by: Uuid,
     ) -> Result<(), String> {
         let mut roles = self.roles.write().await;
         for r in roles.iter_mut() {
@@ -399,7 +399,7 @@ impl MockGovernanceStorage {
         role: &str,
         company_id: Option<Uuid>,
         org_id: Option<Uuid>,
-        team_id: Option<Uuid>
+        team_id: Option<Uuid>,
     ) -> Result<bool, String> {
         let roles = self.roles.read().await;
         let now = Utc::now();
@@ -424,7 +424,7 @@ impl MockGovernanceStorage {
         actor_type: PrincipalType,
         actor_id: Option<Uuid>,
         actor_email: Option<&str>,
-        details: serde_json::Value
+        details: serde_json::Value,
     ) -> Result<Uuid, String> {
         let id = Uuid::new_v4();
         let entry = GovernanceAuditEntry {
@@ -439,7 +439,7 @@ impl MockGovernanceStorage {
             details,
             old_values: None,
             new_values: None,
-            created_at: Utc::now()
+            created_at: Utc::now(),
         };
 
         let mut logs = self.audit_logs.write().await;
@@ -474,7 +474,7 @@ async fn test_performance_100_concurrent_policy_simulations() {
                 target: RuleTarget::Dependency,
                 pattern: "vulnerable-lib".to_string(),
                 severity: Severity::Block,
-                message: "Blocked dependency".to_string()
+                message: "Blocked dependency".to_string(),
             },
             PolicyRule {
                 id: "rule-2".to_string(),
@@ -482,7 +482,7 @@ async fn test_performance_100_concurrent_policy_simulations() {
                 target: RuleTarget::File,
                 pattern: "README.md".to_string(),
                 severity: Severity::Warn,
-                message: "README required".to_string()
+                message: "README required".to_string(),
             },
             PolicyRule {
                 id: "rule-3".to_string(),
@@ -490,14 +490,14 @@ async fn test_performance_100_concurrent_policy_simulations() {
                 target: RuleTarget::Code,
                 pattern: r"eval\s*\(".to_string(),
                 severity: Severity::Block,
-                message: "No eval".to_string()
+                message: "No eval".to_string(),
             },
         ],
         cedar_policy: Some("permit (principal, action, resource);".to_string()),
         tenant_id: "perf-tenant".to_string(),
         created_at: Utc::now().timestamp(),
         updated_at: Utc::now().timestamp(),
-        created_by: "perf-test".to_string()
+        created_by: "perf-test".to_string(),
     };
 
     // Store policy directly (simulating approved policy)
@@ -530,7 +530,7 @@ async fn test_performance_100_concurrent_policy_simulations() {
                 "safe-package@2.0.0"
             }
             .to_string(),
-            context: HashMap::new()
+            context: HashMap::new(),
         };
 
         join_set.spawn(async move {
@@ -600,7 +600,7 @@ async fn test_performance_context_resolution_under_load() {
         #[allow(dead_code)]
         company: Option<String>,
         #[allow(dead_code)]
-        user: Option<String>
+        user: Option<String>,
     }
 
     let num_requests = 50;
@@ -617,7 +617,7 @@ async fn test_performance_context_resolution_under_load() {
                 org: Some(format!("org-{}", i % 3)),
                 company: Some("test-company".to_string()),
                 user: Some(format!("user{}@example.com", i)),
-                tenant_id: format!("tenant-{}", i % 10)
+                tenant_id: format!("tenant-{}", i % 10),
             };
 
             // Simulate resolution time
@@ -672,7 +672,7 @@ async fn test_performance_memory_search_large_corpus() {
         #[allow(dead_code)]
         id: String,
         content: String,
-        tags: Vec<String>
+        tags: Vec<String>,
     }
 
     let memories: Arc<RwLock<Vec<Memory>>> = Arc::new(RwLock::new(Vec::new()));
@@ -682,7 +682,7 @@ async fn test_performance_memory_search_large_corpus() {
         let memory = Memory {
             id: format!("mem-{}", i),
             content: format!("Memory content {} with keywords", i),
-            tags: vec![format!("tag-{}", i % 10), "test".to_string()]
+            tags: vec![format!("tag-{}", i % 10), "test".to_string()],
         };
         memories.write().await.push(memory);
     }
@@ -753,7 +753,7 @@ async fn test_security_agent_cannot_bypass_delegation() {
         team_id: None,
         project_id: None,
         granted_by: granter_id,
-        expires_at: Some(Utc::now() + Duration::hours(1))
+        expires_at: Some(Utc::now() + Duration::hours(1)),
     };
 
     governance_storage.assign_role(&agent_role).await.unwrap();
@@ -789,7 +789,7 @@ async fn test_security_agent_cannot_bypass_delegation() {
         requestor_id: Uuid::new_v4(),
         requestor_email: None,
         required_approvals: 1,
-        timeout_hours: None
+        timeout_hours: None,
     };
 
     let request = governance_storage
@@ -804,7 +804,7 @@ async fn test_security_agent_cannot_bypass_delegation() {
         approver_id: agent_id,
         approver_email: Some(format!("agent-{}@system", agent_id)),
         decision: Decision::Approve,
-        comment: Some("Attempting unauthorized approval".to_string())
+        comment: Some("Attempting unauthorized approval".to_string()),
     };
 
     // The decision might be recorded but should not count toward approval
@@ -851,7 +851,7 @@ async fn test_security_role_escalation_prevention() {
         team_id: None,
         project_id: None,
         granted_by: admin_user,
-        expires_at: None
+        expires_at: None,
     };
 
     governance_storage.assign_role(&user_role).await.unwrap();
@@ -882,7 +882,7 @@ async fn test_security_role_escalation_prevention() {
         team_id: None,
         project_id: None,
         granted_by: regular_user, // Self-granting
-        expires_at: None
+        expires_at: None,
     };
 
     // This should either fail or be logged as suspicious
@@ -901,7 +901,7 @@ async fn test_security_role_escalation_prevention() {
                 "granted_by": regular_user.to_string(),
                 "existing_role": "viewer",
                 "result": "blocked"
-            })
+            }),
         )
         .await
         .unwrap();
@@ -937,13 +937,13 @@ async fn test_security_cross_tenant_isolation() {
             target: RuleTarget::Dependency,
             pattern: "secret-lib".to_string(),
             severity: Severity::Block,
-            message: "Secret".to_string()
+            message: "Secret".to_string(),
         }],
         cedar_policy: Some("permit (principal, action, resource);".to_string()),
         tenant_id: "tenant-a".to_string(),
         created_at: Utc::now().timestamp(),
         updated_at: Utc::now().timestamp(),
-        created_by: "admin@tenant-a.com".to_string()
+        created_by: "admin@tenant-a.com".to_string(),
     };
 
     // Step 2: Create policies for tenant B
@@ -959,13 +959,13 @@ async fn test_security_cross_tenant_isolation() {
             target: RuleTarget::Dependency,
             pattern: "private-lib".to_string(),
             severity: Severity::Block,
-            message: "Private".to_string()
+            message: "Private".to_string(),
         }],
         cedar_policy: Some("permit (principal, action, resource);".to_string()),
         tenant_id: "tenant-b".to_string(),
         created_at: Utc::now().timestamp(),
         updated_at: Utc::now().timestamp(),
-        created_by: "admin@tenant-b.com".to_string()
+        created_by: "admin@tenant-b.com".to_string(),
     };
 
     storage
@@ -1010,7 +1010,7 @@ async fn test_security_cross_tenant_isolation() {
     let _scenario = SimulationScenario {
         scenario_type: "dependency-add".to_string(),
         input: "secret-lib".to_string(),
-        context: HashMap::new()
+        context: HashMap::new(),
     };
 
     // Tenant A simulating against tenant B's policy should fail or be blocked
@@ -1042,7 +1042,7 @@ async fn test_security_token_expiration_and_revocation() {
         team_id: None,
         project_id: None,
         granted_by: Uuid::new_v4(),
-        expires_at: Some(expires_at)
+        expires_at: Some(expires_at),
     };
 
     let role_id = governance_storage
@@ -1086,7 +1086,7 @@ async fn test_security_token_expiration_and_revocation() {
                 "role": "temporary-approver",
                 "was_expired": false,
                 "original_expiry": expires_at.to_rfc3339()
-            })
+            }),
         )
         .await
         .unwrap();
@@ -1103,7 +1103,7 @@ async fn test_security_token_expiration_and_revocation() {
         team_id: None,
         project_id: None,
         granted_by: Uuid::new_v4(),
-        expires_at: Some(now - Duration::minutes(1)) // Already expired
+        expires_at: Some(now - Duration::minutes(1)), // Already expired
     };
 
     governance_storage.assign_role(&short_role).await.unwrap();

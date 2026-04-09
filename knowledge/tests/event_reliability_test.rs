@@ -1,9 +1,9 @@
 use knowledge::durable_events::{
-    DlqResult, DurablePublishError, IdempotentConsumerError, RetryResult
+    DlqResult, DurablePublishError, IdempotentConsumerError, RetryResult,
 };
 use mk_core::types::{
     ConsumerState, EventDeliveryMetrics, EventStatus, GovernanceEvent, PersistentEvent, TenantId,
-    UnitType
+    UnitType,
 };
 
 fn create_test_tenant() -> TenantId {
@@ -16,7 +16,7 @@ fn create_test_event(tenant_id: TenantId) -> GovernanceEvent {
         unit_type: UnitType::Project,
         tenant_id,
         parent_id: None,
-        timestamp: chrono::Utc::now().timestamp()
+        timestamp: chrono::Utc::now().timestamp(),
     }
 }
 
@@ -146,7 +146,7 @@ fn test_event_delivery_metrics_creation() {
         tenant_id.clone(),
         "unit_created".to_string(),
         one_hour_ago,
-        now
+        now,
     );
 
     assert_eq!(metrics.tenant_id, tenant_id);
@@ -182,7 +182,7 @@ fn test_consumer_state_creation() {
     let state = ConsumerState::new(
         "drift-processor".to_string(),
         "abc123def456".to_string(),
-        tenant_id.clone()
+        tenant_id.clone(),
     );
 
     assert_eq!(state.consumer_group, "drift-processor");
@@ -245,34 +245,34 @@ fn test_event_type_extraction() {
                 unit_type: UnitType::Project,
                 tenant_id: tenant_id.clone(),
                 parent_id: None,
-                timestamp: 0
+                timestamp: 0,
             },
-            "unit_created"
+            "unit_created",
         ),
         (
             GovernanceEvent::UnitUpdated {
                 unit_id: "u1".to_string(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
-            "unit_updated"
+            "unit_updated",
         ),
         (
             GovernanceEvent::UnitDeleted {
                 unit_id: "u1".to_string(),
                 tenant_id: tenant_id.clone(),
-                timestamp: 0
+                timestamp: 0,
             },
-            "unit_deleted"
+            "unit_deleted",
         ),
         (
             GovernanceEvent::DriftDetected {
                 project_id: "p1".to_string(),
                 tenant_id: tenant_id.clone(),
                 drift_score: 0.5,
-                timestamp: 0
+                timestamp: 0,
             },
-            "drift_detected"
+            "drift_detected",
         ),
     ];
 

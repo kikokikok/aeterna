@@ -1,5 +1,5 @@
 use memory::rlm::bootstrap::{
-    BootstrapTaskTemplate, BootstrapTrainer, ComplexityLevel, generate_bootstrap_tasks
+    BootstrapTaskTemplate, BootstrapTrainer, ComplexityLevel, generate_bootstrap_tasks,
 };
 use memory::rlm::trainer::RewardConfig;
 use mk_core::types::{MemoryLayer, TenantContext, TenantId, UserId};
@@ -8,7 +8,7 @@ use std::str::FromStr;
 fn test_tenant() -> TenantContext {
     TenantContext::new(
         TenantId::from_str("bootstrap-test-tenant").unwrap(),
-        UserId::from_str("bootstrap-test-user").unwrap()
+        UserId::from_str("bootstrap-test-user").unwrap(),
     )
 }
 
@@ -26,7 +26,7 @@ fn test_bootstrap_template_moderate_includes_multiple_layers() {
     let template = BootstrapTaskTemplate::moderate(
         "test_moderate",
         "find patterns",
-        vec![MemoryLayer::Project, MemoryLayer::Team, MemoryLayer::Org]
+        vec![MemoryLayer::Project, MemoryLayer::Team, MemoryLayer::Org],
     );
 
     assert_eq!(template.complexity_level, ComplexityLevel::Moderate);
@@ -60,7 +60,7 @@ fn test_generate_bootstrap_tasks_with_mixed_complexity() {
         BootstrapTaskTemplate::moderate(
             "moderate",
             "mod query",
-            vec![MemoryLayer::Project, MemoryLayer::Team]
+            vec![MemoryLayer::Project, MemoryLayer::Team],
         ),
         BootstrapTaskTemplate::complex("complex", "complex query"),
     ];
@@ -210,12 +210,12 @@ async fn test_bootstrap_single_iteration() {
 fn test_reward_config_affects_trajectory_reward() {
     let high_success = RewardConfig {
         success_weight: 2.0,
-        efficiency_weight: 0.1
+        efficiency_weight: 0.1,
     };
 
     let high_efficiency = RewardConfig {
         success_weight: 0.5,
-        efficiency_weight: 1.0
+        efficiency_weight: 1.0,
     };
 
     let template = BootstrapTaskTemplate::simple("test", "query");
@@ -246,7 +246,7 @@ fn test_template_serialization_roundtrip() {
     let template = BootstrapTaskTemplate::moderate(
         "serialization_test",
         "test query",
-        vec![MemoryLayer::Project, MemoryLayer::Team]
+        vec![MemoryLayer::Project, MemoryLayer::Team],
     );
 
     let json = serde_json::to_string(&template).unwrap();

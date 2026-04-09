@@ -24,10 +24,10 @@ pub mod types;
 pub use hints::{HintPreset, HintsConfig, OperationHints};
 pub use types::{
     BranchPolicy, ConstraintOperator, ConstraintSeverity, ConstraintTarget, CredentialKind,
-    HierarchyPath, KnowledgeEntry, KnowledgeEntryWithRelations, KnowledgeLayer, KnowledgeQueryResult,
-    KnowledgeRelation, KnowledgeRelationType, KnowledgeStatus, KnowledgeType, KnowledgeVariantRole,
-    MemoryLayer, PromotionDecision, PromotionMode, PromotionRequest, PromotionRequestStatus,
-    RecordSource, RepositoryKind, TenantConfigDocument, TenantConfigField, TenantConfigOwnership,
-    TenantContext, TenantId, TenantRecord, TenantRepositoryBinding, TenantSecretEntry,
-    TenantSecretReference, TenantStatus, UserId,
+    HierarchyPath, KnowledgeEntry, KnowledgeEntryWithRelations, KnowledgeLayer,
+    KnowledgeQueryResult, KnowledgeRelation, KnowledgeRelationType, KnowledgeStatus, KnowledgeType,
+    KnowledgeVariantRole, MemoryLayer, PromotionDecision, PromotionMode, PromotionRequest,
+    PromotionRequestStatus, RecordSource, RepositoryKind, TenantConfigDocument, TenantConfigField,
+    TenantConfigOwnership, TenantContext, TenantId, TenantRecord, TenantRepositoryBinding,
+    TenantSecretEntry, TenantSecretReference, TenantStatus, UserId,
 };

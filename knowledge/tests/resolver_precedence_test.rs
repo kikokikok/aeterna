@@ -222,12 +222,7 @@ async fn test_variant_role_canonical_before_specialization_same_layer() {
     seed(&manager, ctx.clone(), canonical).await;
 
     let results = manager
-        .query_with_precedence(
-            ctx,
-            "role ordering",
-            vec![KnowledgeLayer::Team],
-            10,
-        )
+        .query_with_precedence(ctx, "role ordering", vec![KnowledgeLayer::Team], 10)
         .await
         .unwrap();
 
@@ -259,24 +254,34 @@ async fn test_variant_role_full_ordering_same_layer() {
     // Seed in reverse expected order
     let roles = [
         ("resolver/exception", KnowledgeVariantRole::Exception),
-        ("resolver/applicability", KnowledgeVariantRole::Applicability),
-        ("resolver/specialization", KnowledgeVariantRole::Specialization),
-        ("resolver/clarification", KnowledgeVariantRole::Clarification),
+        (
+            "resolver/applicability",
+            KnowledgeVariantRole::Applicability,
+        ),
+        (
+            "resolver/specialization",
+            KnowledgeVariantRole::Specialization,
+        ),
+        (
+            "resolver/clarification",
+            KnowledgeVariantRole::Clarification,
+        ),
         ("resolver/canonical", KnowledgeVariantRole::Canonical),
     ];
 
     for (path, role) in &roles {
-        let e = make_entry(path, "role full ordering", KnowledgeLayer::Org, Some(*role), 1000);
+        let e = make_entry(
+            path,
+            "role full ordering",
+            KnowledgeLayer::Org,
+            Some(*role),
+            1000,
+        );
         seed(&manager, ctx.clone(), e).await;
     }
 
     let results = manager
-        .query_with_precedence(
-            ctx,
-            "role full ordering",
-            vec![KnowledgeLayer::Org],
-            10,
-        )
+        .query_with_precedence(ctx, "role full ordering", vec![KnowledgeLayer::Org], 10)
         .await
         .unwrap();
 
@@ -286,10 +291,22 @@ async fn test_variant_role_full_ordering_same_layer() {
 
     let pos = |p: &str| path_order.iter().position(|&x| x == p).unwrap();
 
-    assert!(pos("resolver/canonical") < pos("resolver/clarification"), "Canonical before Clarification");
-    assert!(pos("resolver/clarification") < pos("resolver/specialization"), "Clarification before Specialization");
-    assert!(pos("resolver/specialization") < pos("resolver/applicability"), "Specialization before Applicability");
-    assert!(pos("resolver/applicability") < pos("resolver/exception"), "Applicability before Exception");
+    assert!(
+        pos("resolver/canonical") < pos("resolver/clarification"),
+        "Canonical before Clarification"
+    );
+    assert!(
+        pos("resolver/clarification") < pos("resolver/specialization"),
+        "Clarification before Specialization"
+    );
+    assert!(
+        pos("resolver/specialization") < pos("resolver/applicability"),
+        "Specialization before Applicability"
+    );
+    assert!(
+        pos("resolver/applicability") < pos("resolver/exception"),
+        "Applicability before Exception"
+    );
 }
 
 /// Within the same layer AND same variant role, the most recently updated entry
@@ -319,12 +336,7 @@ async fn test_updated_at_tiebreak_within_same_role_and_layer() {
     seed(&manager, ctx.clone(), newer).await;
 
     let results = manager
-        .query_with_precedence(
-            ctx,
-            "tiebreak content",
-            vec![KnowledgeLayer::Team],
-            10,
-        )
+        .query_with_precedence(ctx, "tiebreak content", vec![KnowledgeLayer::Team], 10)
         .await
         .unwrap();
 
@@ -382,12 +394,7 @@ async fn test_enriched_groups_canonical_with_specialization() {
     manager.create_relation(ctx.clone(), rel).await.unwrap();
 
     let results = manager
-        .query_enriched(
-            ctx,
-            "grouping test",
-            vec![KnowledgeLayer::Team],
-            10,
-        )
+        .query_enriched(ctx, "grouping test", vec![KnowledgeLayer::Team], 10)
         .await
         .unwrap();
 
@@ -404,11 +411,7 @@ async fn test_enriched_groups_canonical_with_specialization() {
         group.primary.entry.path, "resolver/enriched-canon",
         "primary must be the canonical entry"
     );
-    assert_eq!(
-        group.local_residuals.len(),
-        1,
-        "expected 1 local residual"
-    );
+    assert_eq!(group.local_residuals.len(), 1, "expected 1 local residual");
     assert_eq!(
         group.local_residuals[0].0,
         KnowledgeRelationType::Specializes,
@@ -437,14 +440,36 @@ async fn test_enriched_groups_all_residual_relation_types() {
     seed(&manager, ctx.clone(), canonical).await;
 
     let residuals: &[(&str, KnowledgeVariantRole, KnowledgeRelationType)] = &[
-        ("resolver/multi-spec", KnowledgeVariantRole::Specialization, KnowledgeRelationType::Specializes),
-        ("resolver/multi-applicable", KnowledgeVariantRole::Applicability, KnowledgeRelationType::ApplicableFrom),
-        ("resolver/multi-exception", KnowledgeVariantRole::Exception, KnowledgeRelationType::ExceptionTo),
-        ("resolver/multi-clarification", KnowledgeVariantRole::Clarification, KnowledgeRelationType::Clarifies),
+        (
+            "resolver/multi-spec",
+            KnowledgeVariantRole::Specialization,
+            KnowledgeRelationType::Specializes,
+        ),
+        (
+            "resolver/multi-applicable",
+            KnowledgeVariantRole::Applicability,
+            KnowledgeRelationType::ApplicableFrom,
+        ),
+        (
+            "resolver/multi-exception",
+            KnowledgeVariantRole::Exception,
+            KnowledgeRelationType::ExceptionTo,
+        ),
+        (
+            "resolver/multi-clarification",
+            KnowledgeVariantRole::Clarification,
+            KnowledgeRelationType::Clarifies,
+        ),
     ];
 
     for (path, role, rel_type) in residuals {
-        let e = make_entry(path, "multi residual", KnowledgeLayer::Org, Some(*role), 1000);
+        let e = make_entry(
+            path,
+            "multi residual",
+            KnowledgeLayer::Org,
+            Some(*role),
+            1000,
+        );
         seed(&manager, ctx.clone(), e).await;
 
         let rel = make_relation(path, "resolver/multi-canon", *rel_type, &ctx);
@@ -452,16 +477,15 @@ async fn test_enriched_groups_all_residual_relation_types() {
     }
 
     let results = manager
-        .query_enriched(
-            ctx,
-            "multi residual",
-            vec![KnowledgeLayer::Org],
-            10,
-        )
+        .query_enriched(ctx, "multi residual", vec![KnowledgeLayer::Org], 10)
         .await
         .unwrap();
 
-    assert_eq!(results.len(), 1, "all residuals should collapse into one group");
+    assert_eq!(
+        results.len(),
+        1,
+        "all residuals should collapse into one group"
+    );
 
     let group = &results[0];
     assert_eq!(
@@ -503,12 +527,7 @@ async fn test_enriched_standalone_entry_has_empty_local_residuals() {
     seed(&manager, ctx.clone(), entry).await;
 
     let results = manager
-        .query_enriched(
-            ctx,
-            "standalone content",
-            vec![KnowledgeLayer::Project],
-            10,
-        )
+        .query_enriched(ctx, "standalone content", vec![KnowledgeLayer::Project], 10)
         .await
         .unwrap();
 
@@ -557,12 +576,7 @@ async fn test_enriched_residual_not_duplicated_as_standalone() {
     manager.create_relation(ctx.clone(), rel).await.unwrap();
 
     let results = manager
-        .query_enriched(
-            ctx,
-            "dedup content",
-            vec![KnowledgeLayer::Team],
-            10,
-        )
+        .query_enriched(ctx, "dedup content", vec![KnowledgeLayer::Team], 10)
         .await
         .unwrap();
 
@@ -573,7 +587,10 @@ async fn test_enriched_residual_not_duplicated_as_standalone() {
         "residual must not appear as a second standalone result"
     );
     assert!(
-        results[0].local_residuals.iter().any(|(_, e)| e.entry.path == "resolver/dedup-spec"),
+        results[0]
+            .local_residuals
+            .iter()
+            .any(|(_, e)| e.entry.path == "resolver/dedup-spec"),
         "residual must be inside local_residuals of the canonical group"
     );
 }
@@ -613,12 +630,7 @@ async fn test_enriched_non_qualifying_relations_do_not_group() {
     manager.create_relation(ctx.clone(), rel).await.unwrap();
 
     let results = manager
-        .query_enriched(
-            ctx,
-            "non qualifying",
-            vec![KnowledgeLayer::Team],
-            10,
-        )
+        .query_enriched(ctx, "non qualifying", vec![KnowledgeLayer::Team], 10)
         .await
         .unwrap();
 
@@ -671,12 +683,7 @@ async fn test_enriched_primary_relations_field_is_populated() {
     manager.create_relation(ctx.clone(), rel).await.unwrap();
 
     let results = manager
-        .query_enriched(
-            ctx,
-            "relations field",
-            vec![KnowledgeLayer::Org],
-            10,
-        )
+        .query_enriched(ctx, "relations field", vec![KnowledgeLayer::Org], 10)
         .await
         .unwrap();
 

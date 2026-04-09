@@ -14,7 +14,7 @@ use uuid::Uuid;
 use storage::governance::{
     ApprovalDecision, ApprovalMode, ApprovalRequest, AuditFilters, CreateApprovalRequest,
     CreateDecision, CreateGovernanceRole, Decision, GovernanceAuditEntry, GovernanceConfig,
-    GovernanceRole, PrincipalType, RequestStatus, RequestType, RiskLevel
+    GovernanceRole, PrincipalType, RequestStatus, RequestType, RiskLevel,
 };
 
 // ============================================================================
@@ -27,7 +27,7 @@ pub enum PolicyLayer {
     Company,
     Org,
     Team,
-    Project
+    Project,
 }
 
 impl std::fmt::Display for PolicyLayer {
@@ -36,7 +36,7 @@ impl std::fmt::Display for PolicyLayer {
             PolicyLayer::Company => write!(f, "company"),
             PolicyLayer::Org => write!(f, "org"),
             PolicyLayer::Team => write!(f, "team"),
-            PolicyLayer::Project => write!(f, "project")
+            PolicyLayer::Project => write!(f, "project"),
         }
     }
 }
@@ -45,7 +45,7 @@ impl std::fmt::Display for PolicyLayer {
 #[serde(rename_all = "lowercase")]
 pub enum PolicyMode {
     Mandatory,
-    Optional
+    Optional,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,7 +54,7 @@ pub enum Severity {
     Info,
     Warn,
     Error,
-    Block
+    Block,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,7 +63,7 @@ pub enum RuleTarget {
     Dependency,
     File,
     Code,
-    Config
+    Config,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,7 +73,7 @@ pub enum DraftStatus {
     Submitted,
     Approved,
     Rejected,
-    Expired
+    Expired,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,7 +83,7 @@ pub struct PolicyRule {
     pub target: RuleTarget,
     pub pattern: String,
     pub severity: Severity,
-    pub message: String
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,7 +98,7 @@ pub struct Policy {
     pub tenant_id: String,
     pub created_at: i64,
     pub updated_at: i64,
-    pub created_by: String
+    pub created_by: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,14 +120,14 @@ pub struct PolicyDraft {
     pub submitted_at: Option<i64>,
     pub reviewed_at: Option<i64>,
     pub reviewed_by: Option<String>,
-    pub rejection_reason: Option<String>
+    pub rejection_reason: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct SimulationScenario {
     pub scenario_type: String,
     pub input: String,
-    pub context: HashMap<String, String>
+    pub context: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,46 +137,46 @@ pub struct SimulationResult {
     pub input: String,
     pub decision: String,
     pub matched_rules: Vec<String>,
-    pub violations: Vec<SimulationViolation>
+    pub violations: Vec<SimulationViolation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimulationViolation {
     pub rule_id: String,
     pub severity: Severity,
-    pub message: String
+    pub message: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
     pub valid: bool,
     pub errors: Vec<ValidationError>,
-    pub warnings: Vec<ValidationWarning>
+    pub warnings: Vec<ValidationWarning>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ValidationError {
     pub code: String,
     pub message: String,
-    pub location: Option<String>
+    pub location: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ValidationWarning {
     pub code: String,
-    pub message: String
+    pub message: String,
 }
 
 pub struct MockPolicyStorage {
     pub policies: Arc<RwLock<HashMap<String, Policy>>>,
-    drafts: Arc<RwLock<HashMap<String, PolicyDraft>>>
+    drafts: Arc<RwLock<HashMap<String, PolicyDraft>>>,
 }
 
 impl MockPolicyStorage {
     pub fn new() -> Self {
         Self {
             policies: Arc::new(RwLock::new(HashMap::new())),
-            drafts: Arc::new(RwLock::new(HashMap::new()))
+            drafts: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -238,7 +238,7 @@ impl MockPolicyStorage {
             tenant_id: draft.tenant_id.clone(),
             created_at: Utc::now().timestamp(),
             updated_at: Utc::now().timestamp(),
-            created_by: draft.created_by.clone()
+            created_by: draft.created_by.clone(),
         };
 
         drop(drafts);
@@ -257,7 +257,7 @@ impl MockPolicyStorage {
             errors.push(ValidationError {
                 code: "E001".to_string(),
                 message: "Draft name cannot be empty".to_string(),
-                location: Some("name".to_string())
+                location: Some("name".to_string()),
             });
         }
 
@@ -265,21 +265,21 @@ impl MockPolicyStorage {
             errors.push(ValidationError {
                 code: "E004".to_string(),
                 message: "Draft must have description or template".to_string(),
-                location: None
+                location: None,
             });
         }
 
         ValidationResult {
             valid: errors.is_empty(),
             errors,
-            warnings
+            warnings,
         }
     }
 
     pub async fn simulate_policy(
         &self,
         policy_id: &str,
-        scenario: &SimulationScenario
+        scenario: &SimulationScenario,
     ) -> Result<SimulationResult, String> {
         let policies = self.policies.read().await;
         let policy = policies
@@ -300,7 +300,7 @@ impl MockPolicyStorage {
                 "code-change" => {
                     rule.target == RuleTarget::Code && scenario.input.contains(&rule.pattern)
                 }
-                _ => false
+                _ => false,
             };
 
             if matches {
@@ -309,7 +309,7 @@ impl MockPolicyStorage {
                     violations.push(SimulationViolation {
                         rule_id: rule.id.clone(),
                         severity: rule.severity,
-                        message: rule.message.clone()
+                        message: rule.message.clone(),
                     });
                 }
             }
@@ -331,7 +331,7 @@ impl MockPolicyStorage {
             input: scenario.input.clone(),
             decision: decision.to_string(),
             matched_rules,
-            violations
+            violations,
         })
     }
 }
@@ -346,7 +346,7 @@ pub struct MockGovernanceStorage {
     decisions: Arc<RwLock<HashMap<Uuid, Vec<ApprovalDecision>>>>,
     roles: Arc<RwLock<Vec<GovernanceRole>>>,
     audit_logs: Arc<RwLock<Vec<GovernanceAuditEntry>>>,
-    request_counter: Arc<RwLock<u64>>
+    request_counter: Arc<RwLock<u64>>,
 }
 
 impl MockGovernanceStorage {
@@ -357,7 +357,7 @@ impl MockGovernanceStorage {
             decisions: Arc::new(RwLock::new(HashMap::new())),
             roles: Arc::new(RwLock::new(Vec::new())),
             audit_logs: Arc::new(RwLock::new(Vec::new())),
-            request_counter: Arc::new(RwLock::new(0))
+            request_counter: Arc::new(RwLock::new(0)),
         }
     }
 
@@ -365,7 +365,7 @@ impl MockGovernanceStorage {
         company_id: Option<Uuid>,
         org_id: Option<Uuid>,
         team_id: Option<Uuid>,
-        project_id: Option<Uuid>
+        project_id: Option<Uuid>,
     ) -> String {
         format!(
             "{:?}:{:?}:{:?}:{:?}",
@@ -378,7 +378,7 @@ impl MockGovernanceStorage {
         company_id: Option<Uuid>,
         org_id: Option<Uuid>,
         team_id: Option<Uuid>,
-        project_id: Option<Uuid>
+        project_id: Option<Uuid>,
     ) -> Result<GovernanceConfig, String> {
         let configs = self.configs.read().await;
         let key = Self::scope_key(company_id, org_id, team_id, project_id);
@@ -396,7 +396,7 @@ impl MockGovernanceStorage {
             config.company_id,
             config.org_id,
             config.team_id,
-            config.project_id
+            config.project_id,
         );
         let id = config.id.unwrap_or_else(Uuid::new_v4);
         let mut stored = config.clone();
@@ -407,7 +407,7 @@ impl MockGovernanceStorage {
 
     pub async fn create_request(
         &self,
-        request: &CreateApprovalRequest
+        request: &CreateApprovalRequest,
     ) -> Result<ApprovalRequest, String> {
         let mut counter = self.request_counter.write().await;
         *counter += 1;
@@ -445,7 +445,7 @@ impl MockGovernanceStorage {
             resolved_at: None,
             resolution_reason: None,
             applied_at: None,
-            applied_by: None
+            applied_by: None,
         };
 
         let mut requests = self.requests.write().await;
@@ -460,7 +460,7 @@ impl MockGovernanceStorage {
 
     pub async fn add_decision(
         &self,
-        decision: &CreateDecision
+        decision: &CreateDecision,
     ) -> Result<ApprovalDecision, String> {
         let id = Uuid::new_v4();
         let approval_decision = ApprovalDecision {
@@ -471,7 +471,7 @@ impl MockGovernanceStorage {
             approver_email: decision.approver_email.clone(),
             decision: decision.decision,
             comment: decision.comment.clone(),
-            created_at: Utc::now()
+            created_at: Utc::now(),
         };
 
         let mut decisions = self.decisions.write().await;
@@ -499,7 +499,7 @@ impl MockGovernanceStorage {
     pub async fn mark_applied(
         &self,
         request_id: Uuid,
-        applied_by: Uuid
+        applied_by: Uuid,
     ) -> Result<ApprovalRequest, String> {
         let mut requests = self.requests.write().await;
         let request = requests.get_mut(&request_id).ok_or("Request not found")?;
@@ -531,7 +531,7 @@ impl MockGovernanceStorage {
             granted_at: Utc::now(),
             expires_at: role.expires_at,
             revoked_at: None,
-            revoked_by: None
+            revoked_by: None,
         };
 
         let mut roles = self.roles.write().await;
@@ -545,7 +545,7 @@ impl MockGovernanceStorage {
         role: &str,
         company_id: Option<Uuid>,
         org_id: Option<Uuid>,
-        team_id: Option<Uuid>
+        team_id: Option<Uuid>,
     ) -> Result<bool, String> {
         let roles = self.roles.read().await;
         let has_role = roles.iter().any(|r| {
@@ -568,7 +568,7 @@ impl MockGovernanceStorage {
         actor_type: PrincipalType,
         actor_id: Option<Uuid>,
         actor_email: Option<&str>,
-        details: serde_json::Value
+        details: serde_json::Value,
     ) -> Result<Uuid, String> {
         let id = Uuid::new_v4();
         let entry = GovernanceAuditEntry {
@@ -583,7 +583,7 @@ impl MockGovernanceStorage {
             details,
             old_values: None,
             new_values: None,
-            created_at: Utc::now()
+            created_at: Utc::now(),
         };
 
         let mut logs = self.audit_logs.write().await;
@@ -593,7 +593,7 @@ impl MockGovernanceStorage {
 
     pub async fn list_audit_logs(
         &self,
-        filters: &AuditFilters
+        filters: &AuditFilters,
     ) -> Result<Vec<GovernanceAuditEntry>, String> {
         let logs = self.audit_logs.read().await;
         let limit = filters.limit.unwrap_or(50);
@@ -643,7 +643,7 @@ async fn test_e2e_human_creates_policy_via_ai() {
                 target: RuleTarget::Dependency,
                 pattern: "cve:critical".to_string(),
                 severity: Severity::Block,
-                message: "Critical CVE found in dependency".to_string()
+                message: "Critical CVE found in dependency".to_string(),
             },
             PolicyRule {
                 id: "require-readme".to_string(),
@@ -651,7 +651,7 @@ async fn test_e2e_human_creates_policy_via_ai() {
                 target: RuleTarget::File,
                 pattern: "README.md".to_string(),
                 severity: Severity::Warn,
-                message: "README.md file is required".to_string()
+                message: "README.md file is required".to_string(),
             },
         ],
         cedar_policy: Some(
@@ -662,7 +662,7 @@ async fn test_e2e_human_creates_policy_via_ai() {
                 resource.cve_severity != "critical"
             };
         "#
-            .to_string()
+            .to_string(),
         ),
         status: DraftStatus::Pending,
         tenant_id: "test-tenant".to_string(),
@@ -672,7 +672,7 @@ async fn test_e2e_human_creates_policy_via_ai() {
         submitted_at: None,
         reviewed_at: None,
         reviewed_by: None,
-        rejection_reason: None
+        rejection_reason: None,
     };
 
     let draft_id = policy_storage.create_draft(draft.clone()).await.unwrap();
@@ -694,7 +694,7 @@ async fn test_e2e_human_creates_policy_via_ai() {
     let scenario = SimulationScenario {
         scenario_type: "dependency-add".to_string(),
         input: "cve:critical-2024-1234".to_string(),
-        context: HashMap::new()
+        context: HashMap::new(),
     };
 
     policy_storage.submit_draft(&draft_id).await.unwrap();
@@ -745,7 +745,7 @@ async fn test_e2e_admin_configures_meta_governance() {
         memory_settings: json!({
             "require_approval": false,
             "auto_approve_threshold": 0.8
-        })
+        }),
     };
 
     let config_id = governance_storage.upsert_config(&config).await.unwrap();
@@ -770,7 +770,7 @@ async fn test_e2e_admin_configures_meta_governance() {
         team_id: None,
         project_id: None,
         granted_by: admin_id,
-        expires_at: None
+        expires_at: None,
     };
 
     let role_id = governance_storage
@@ -785,7 +785,7 @@ async fn test_e2e_admin_configures_meta_governance() {
             "policy-approver",
             Some(company_id),
             None,
-            None
+            None,
         )
         .await
         .unwrap();
@@ -807,7 +807,7 @@ async fn test_e2e_admin_configures_meta_governance() {
         requestor_id: Uuid::new_v4(),
         requestor_email: Some("developer@example.com".to_string()),
         required_approvals: 3,
-        timeout_hours: Some(72)
+        timeout_hours: Some(72),
     };
 
     let created_request = governance_storage.create_request(&request).await.unwrap();
@@ -827,7 +827,7 @@ async fn test_e2e_admin_configures_meta_governance() {
                 "min_approvers": 3,
                 "approval_mode": "quorum",
                 "escalation_enabled": true
-            })
+            }),
         )
         .await
         .unwrap();
@@ -852,7 +852,7 @@ async fn test_e2e_agent_proposes_policy_autonomously() {
         team_id: None,
         project_id: None,
         granted_by: Uuid::new_v4(),
-        expires_at: Some(Utc::now() + Duration::hours(24))
+        expires_at: Some(Utc::now() + Duration::hours(24)),
     };
 
     governance_storage.assign_role(&agent_role).await.unwrap();
@@ -873,7 +873,7 @@ async fn test_e2e_agent_proposes_policy_autonomously() {
             target: RuleTarget::Code,
             pattern: r"console\.log".to_string(),
             severity: Severity::Warn,
-            message: "Avoid console.log in production code".to_string()
+            message: "Avoid console.log in production code".to_string(),
         }],
         cedar_policy: Some(
             r#"
@@ -883,7 +883,7 @@ async fn test_e2e_agent_proposes_policy_autonomously() {
                 resource.code_content.contains("console.log")
             };
         "#
-            .to_string()
+            .to_string(),
         ),
         status: DraftStatus::Pending,
         tenant_id: "test-tenant".to_string(),
@@ -893,7 +893,7 @@ async fn test_e2e_agent_proposes_policy_autonomously() {
         submitted_at: None,
         reviewed_at: None,
         reviewed_by: None,
-        rejection_reason: None
+        rejection_reason: None,
     };
 
     let draft_id = policy_storage.create_draft(draft.clone()).await.unwrap();
@@ -921,7 +921,7 @@ async fn test_e2e_agent_proposes_policy_autonomously() {
         requestor_id: agent_id,
         requestor_email: Some(format!("agent-{}@system", agent_id)),
         required_approvals: 1,
-        timeout_hours: Some(48)
+        timeout_hours: Some(48),
     };
 
     let request = governance_storage
@@ -944,7 +944,7 @@ async fn test_e2e_agent_proposes_policy_autonomously() {
                 "detection_pattern": detected_pattern,
                 "confidence": 0.95,
                 "delegation_role": "policy-proposer"
-            })
+            }),
         )
         .await
         .unwrap();
@@ -957,7 +957,7 @@ async fn test_e2e_agent_proposes_policy_autonomously() {
         approver_id: Uuid::new_v4(),
         approver_email: Some("techlead@example.com".to_string()),
         decision: Decision::Approve,
-        comment: Some("Good catch by the agent, approving".to_string())
+        comment: Some("Good catch by the agent, approving".to_string()),
     };
 
     governance_storage.add_decision(&decision).await.unwrap();
@@ -1000,7 +1000,7 @@ async fn test_e2e_multi_approver_workflow() {
         escalation_contact: Some("escalation@example.com".to_string()),
         policy_settings: json!({}),
         knowledge_settings: json!({}),
-        memory_settings: json!({})
+        memory_settings: json!({}),
     };
 
     governance_storage.upsert_config(&config).await.unwrap();
@@ -1019,7 +1019,7 @@ async fn test_e2e_multi_approver_workflow() {
             target: RuleTarget::Code,
             pattern: r"(http|https)://".to_string(),
             severity: Severity::Block,
-            message: "External network calls are blocked".to_string()
+            message: "External network calls are blocked".to_string(),
         }],
         cedar_policy: Some("forbid (principal, action, resource);".to_string()),
         status: DraftStatus::Pending,
@@ -1030,7 +1030,7 @@ async fn test_e2e_multi_approver_workflow() {
         submitted_at: None,
         reviewed_at: None,
         reviewed_by: None,
-        rejection_reason: None
+        rejection_reason: None,
     };
 
     let draft_id = policy_storage.create_draft(draft.clone()).await.unwrap();
@@ -1052,7 +1052,7 @@ async fn test_e2e_multi_approver_workflow() {
         requestor_id,
         requestor_email: Some("security@example.com".to_string()),
         required_approvals: 3,
-        timeout_hours: Some(48)
+        timeout_hours: Some(48),
     };
 
     let approval_request = governance_storage.create_request(&request).await.unwrap();
@@ -1067,7 +1067,7 @@ async fn test_e2e_multi_approver_workflow() {
         approver_id: approver1,
         approver_email: Some("security-lead@example.com".to_string()),
         decision: Decision::Approve,
-        comment: Some("Security review passed".to_string())
+        comment: Some("Security review passed".to_string()),
     };
 
     governance_storage.add_decision(&decision1).await.unwrap();
@@ -1087,7 +1087,7 @@ async fn test_e2e_multi_approver_workflow() {
         approver_id: approver2,
         approver_email: Some("tech-lead@example.com".to_string()),
         decision: Decision::Approve,
-        comment: Some("Technical impact assessed and accepted".to_string())
+        comment: Some("Technical impact assessed and accepted".to_string()),
     };
 
     governance_storage.add_decision(&decision2).await.unwrap();
@@ -1107,7 +1107,7 @@ async fn test_e2e_multi_approver_workflow() {
         approver_id: approver3,
         approver_email: Some("architect@example.com".to_string()),
         decision: Decision::Approve,
-        comment: Some("Architecture alignment confirmed".to_string())
+        comment: Some("Architecture alignment confirmed".to_string()),
     };
 
     governance_storage.add_decision(&decision3).await.unwrap();
@@ -1157,7 +1157,7 @@ async fn test_e2e_audit_export_for_compliance() {
                 "field": "min_approvers",
                 "old_value": 2,
                 "new_value": 3
-            })
+            }),
         )
         .await
         .unwrap();
@@ -1174,7 +1174,7 @@ async fn test_e2e_audit_export_for_compliance() {
             json!({
                 "principal_id": user_id.to_string(),
                 "role": "policy-approver"
-            })
+            }),
         )
         .await
         .unwrap();
@@ -1192,7 +1192,7 @@ async fn test_e2e_audit_export_for_compliance() {
             json!({
                 "policy_name": "Security Baseline",
                 "layer": "Company"
-            })
+            }),
         )
         .await
         .unwrap();
@@ -1209,7 +1209,7 @@ async fn test_e2e_audit_export_for_compliance() {
             json!({
                 "decision": "approve",
                 "comment": "LGTM"
-            })
+            }),
         )
         .await
         .unwrap();
@@ -1219,7 +1219,7 @@ async fn test_e2e_audit_export_for_compliance() {
         actor_id: None,
         target_type: None,
         since: Utc::now() - Duration::days(30),
-        limit: Some(100)
+        limit: Some(100),
     };
 
     let audit_logs = governance_storage.list_audit_logs(&filters).await.unwrap();
@@ -1230,7 +1230,7 @@ async fn test_e2e_audit_export_for_compliance() {
         actor_id: None,
         target_type: None,
         since: Utc::now() - Duration::days(30),
-        limit: Some(50)
+        limit: Some(50),
     };
 
     let config_logs = governance_storage
@@ -1245,7 +1245,7 @@ async fn test_e2e_audit_export_for_compliance() {
         actor_id: Some(admin_id),
         target_type: None,
         since: Utc::now() - Duration::days(30),
-        limit: Some(50)
+        limit: Some(50),
     };
 
     let admin_logs = governance_storage
@@ -1292,7 +1292,7 @@ async fn test_e2e_project_init_with_auto_detection() {
         org: Option<String>,
         company: Option<String>,
         #[allow(dead_code)]
-        user: Option<String>
+        user: Option<String>,
     }
 
     let _git_remote = "git@github.com:acme-corp/api-gateway.git";
@@ -1304,7 +1304,7 @@ async fn test_e2e_project_init_with_auto_detection() {
         org: Some("engineering".to_string()),
         company: Some("acme-corp".to_string()),
         user: Some("developer@acme-corp.com".to_string()),
-        tenant_id: "tenant-acme-corp".to_string()
+        tenant_id: "tenant-acme-corp".to_string(),
     };
 
     assert!(detected_context.project.is_some());
@@ -1335,7 +1335,7 @@ async fn test_e2e_project_init_with_auto_detection() {
         escalation_contact: Some("admin@acme-corp.com".to_string()),
         policy_settings: json!({}),
         knowledge_settings: json!({}),
-        memory_settings: json!({})
+        memory_settings: json!({}),
     };
 
     governance_storage.upsert_config(&config).await.unwrap();
@@ -1368,7 +1368,7 @@ async fn test_e2e_project_init_with_auto_detection() {
         submitted_at: None,
         reviewed_at: None,
         reviewed_by: None,
-        rejection_reason: None
+        rejection_reason: None,
     };
 
     let draft_id = policy_storage.create_draft(default_policy).await.unwrap();
@@ -1386,7 +1386,7 @@ async fn test_e2e_memory_promotion_with_governance() {
         content: String,
         reward_score: f64,
         access_count: u32,
-        tags: Vec<String>
+        tags: Vec<String>,
     }
 
     let governance_storage = Arc::new(MockGovernanceStorage::new());
@@ -1413,7 +1413,7 @@ async fn test_e2e_memory_promotion_with_governance() {
         memory_settings: json!({
             "auto_approve_threshold": 0.8,
             "require_approval": true
-        })
+        }),
     };
 
     governance_storage.upsert_config(&config).await.unwrap();
@@ -1423,7 +1423,7 @@ async fn test_e2e_memory_promotion_with_governance() {
         content: "User prefers dark mode interface for all tools".to_string(),
         reward_score: 0.95,
         access_count: 15,
-        tags: vec!["preference".to_string(), "ui".to_string()]
+        tags: vec!["preference".to_string(), "ui".to_string()],
     };
 
     assert!(
@@ -1457,7 +1457,7 @@ async fn test_e2e_memory_promotion_with_governance() {
         requestor_id: Uuid::new_v4(),
         requestor_email: Some("system@aeterna.local".to_string()),
         required_approvals: 1,
-        timeout_hours: Some(24)
+        timeout_hours: Some(24),
     };
 
     let request = governance_storage
@@ -1479,7 +1479,7 @@ async fn test_e2e_memory_promotion_with_governance() {
                 "reward_score": memory.reward_score,
                 "threshold": 0.8,
                 "access_count": memory.access_count
-            })
+            }),
         )
         .await
         .unwrap();
@@ -1493,7 +1493,7 @@ async fn test_e2e_memory_promotion_with_governance() {
         approver_id,
         approver_email: Some("user@example.com".to_string()),
         decision: Decision::Approve,
-        comment: Some("This is valuable context, approve promotion".to_string())
+        comment: Some("This is valuable context, approve promotion".to_string()),
     };
 
     governance_storage.add_decision(&decision).await.unwrap();
@@ -1549,7 +1549,7 @@ async fn test_e2e_knowledge_proposal_workflow() {
             "min_approvers": 2,
             "auto_approve_threshold": "low"
         }),
-        memory_settings: json!({})
+        memory_settings: json!({}),
     };
 
     governance_storage.upsert_config(&config).await.unwrap();
@@ -1586,7 +1586,7 @@ async fn test_e2e_knowledge_proposal_workflow() {
         requestor_id: proposer_id,
         requestor_email: Some("developer@example.com".to_string()),
         required_approvals: 2,
-        timeout_hours: Some(72)
+        timeout_hours: Some(72),
     };
 
     let request = governance_storage
@@ -1609,7 +1609,7 @@ async fn test_e2e_knowledge_proposal_workflow() {
                 "title": knowledge_draft.get("title").unwrap(),
                 "type": knowledge_draft.get("type").unwrap(),
                 "confidence": knowledge_draft.get("confidence").unwrap()
-            })
+            }),
         )
         .await
         .unwrap();
@@ -1623,7 +1623,7 @@ async fn test_e2e_knowledge_proposal_workflow() {
         approver_id: reviewer1_id,
         approver_email: Some("techlead@example.com".to_string()),
         decision: Decision::Approve,
-        comment: Some("Accurate technical information, approve".to_string())
+        comment: Some("Accurate technical information, approve".to_string()),
     };
 
     governance_storage.add_decision(&decision1).await.unwrap();
@@ -1643,7 +1643,7 @@ async fn test_e2e_knowledge_proposal_workflow() {
         approver_id: reviewer2_id,
         approver_email: Some("architect@example.com".to_string()),
         decision: Decision::Approve,
-        comment: Some("Aligns with our architecture standards".to_string())
+        comment: Some("Aligns with our architecture standards".to_string()),
     };
 
     governance_storage.add_decision(&decision2).await.unwrap();

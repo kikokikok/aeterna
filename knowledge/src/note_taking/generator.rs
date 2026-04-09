@@ -9,7 +9,7 @@ use crate::context_architect::ViewMode;
 pub struct NoteGeneratorConfig {
     pub include_code_snippets: bool,
     pub include_metadata: bool,
-    pub max_pattern_length: usize
+    pub max_pattern_length: usize,
 }
 
 impl Default for NoteGeneratorConfig {
@@ -17,7 +17,7 @@ impl Default for NoteGeneratorConfig {
         Self {
             include_code_snippets: true,
             include_metadata: true,
-            max_pattern_length: 500
+            max_pattern_length: 500,
         }
     }
 }
@@ -30,7 +30,7 @@ pub struct GeneratedNote {
     pub tags: Vec<String>,
     pub source_distillation_id: String,
     pub created_at: u64,
-    pub quality_score: f32
+    pub quality_score: f32,
 }
 
 impl GeneratedNote {
@@ -54,7 +54,7 @@ impl GeneratedNote {
 }
 
 pub struct NoteTemplate {
-    pub sections: Vec<NoteSection>
+    pub sections: Vec<NoteSection>,
 }
 
 impl Default for NoteTemplate {
@@ -67,7 +67,7 @@ impl Default for NoteTemplate {
                 NoteSection::Patterns,
                 NoteSection::CodeSnippets,
                 NoteSection::Metadata,
-            ]
+            ],
         }
     }
 }
@@ -79,12 +79,12 @@ pub enum NoteSection {
     Solution,
     Patterns,
     CodeSnippets,
-    Metadata
+    Metadata,
 }
 
 pub struct NoteGenerator {
     config: NoteGeneratorConfig,
-    template: NoteTemplate
+    template: NoteTemplate,
 }
 
 impl NoteGeneratorConfig {
@@ -93,14 +93,14 @@ impl NoteGeneratorConfig {
             ViewMode::Ax => Self {
                 include_code_snippets: false,
                 include_metadata: false,
-                max_pattern_length: 200
+                max_pattern_length: 200,
             },
             ViewMode::Ux => Self {
                 include_code_snippets: false,
                 include_metadata: true,
-                max_pattern_length: 300
+                max_pattern_length: 300,
             },
-            ViewMode::Dx => Self::default()
+            ViewMode::Dx => Self::default(),
         }
     }
 }
@@ -123,7 +123,7 @@ impl NoteTemplate {
                 NoteSection::Patterns,
                 NoteSection::CodeSnippets,
                 NoteSection::Metadata,
-            ]
+            ],
         };
         Self { sections }
     }
@@ -133,7 +133,7 @@ impl NoteGenerator {
     pub fn new(config: NoteGeneratorConfig) -> Self {
         Self {
             config,
-            template: NoteTemplate::default()
+            template: NoteTemplate::default(),
         }
     }
 
@@ -157,14 +157,14 @@ impl NoteGenerator {
             tags: distillation.tags.clone(),
             source_distillation_id: distillation.id.clone(),
             created_at: timestamp,
-            quality_score: distillation.quality_score
+            quality_score: distillation.quality_score,
         }
     }
 
     pub fn generate_for_view(
         &self,
         distillation: &DistillationResult,
-        view_mode: ViewMode
+        view_mode: ViewMode,
     ) -> GeneratedNote {
         let template = NoteTemplate::for_view_mode(view_mode);
         let config = NoteGeneratorConfig::for_view_mode(view_mode);
@@ -208,7 +208,7 @@ impl NoteGenerator {
     fn render_section(
         &self,
         section: NoteSection,
-        distillation: &DistillationResult
+        distillation: &DistillationResult,
     ) -> Option<String> {
         match section {
             NoteSection::Context => {
@@ -298,7 +298,7 @@ mod tests {
             code_snippets: vec!["fn main() -> Result<()> {}".to_string()],
             quality_score: 0.85,
             distilled_at: 1234567890,
-            source_event_count: 5
+            source_event_count: 5,
         }
     }
 
@@ -441,7 +441,7 @@ mod tests {
     #[test]
     fn test_custom_template() {
         let template = NoteTemplate {
-            sections: vec![NoteSection::Problem, NoteSection::Solution]
+            sections: vec![NoteSection::Problem, NoteSection::Solution],
         };
         let generator = NoteGenerator::new(NoteGeneratorConfig::default()).with_template(template);
         let distillation = sample_distillation();

@@ -82,19 +82,13 @@ impl GitProviderConnectionRegistry for InMemoryGitProviderConnectionStore {
         Ok(connection)
     }
 
-    async fn get_connection(
-        &self,
-        id: &str,
-    ) -> Result<Option<GitProviderConnection>, Self::Error> {
+    async fn get_connection(&self, id: &str) -> Result<Option<GitProviderConnection>, Self::Error> {
         Ok(self.connections.get(id).map(|r| r.value().clone()))
     }
 
     async fn list_connections(&self) -> Result<Vec<GitProviderConnection>, Self::Error> {
-        let mut connections: Vec<GitProviderConnection> = self
-            .connections
-            .iter()
-            .map(|r| r.value().clone())
-            .collect();
+        let mut connections: Vec<GitProviderConnection> =
+            self.connections.iter().map(|r| r.value().clone()).collect();
         connections.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(connections)
     }
@@ -137,9 +131,7 @@ impl GitProviderConnectionRegistry for InMemoryGitProviderConnectionStore {
             .connections
             .get_mut(connection_id)
             .ok_or_else(|| GitProviderConnectionError::NotFound(connection_id.to_string()))?;
-        entry
-            .allowed_tenant_ids
-            .retain(|t| t != tenant_id);
+        entry.allowed_tenant_ids.retain(|t| t != tenant_id);
         Ok(())
     }
 
@@ -151,7 +143,11 @@ impl GitProviderConnectionRegistry for InMemoryGitProviderConnectionStore {
         Ok(self
             .connections
             .get(connection_id)
-            .map(|r: dashmap::mapref::one::Ref<'_, String, GitProviderConnection>| r.is_visible_to(tenant_id))
+            .map(
+                |r: dashmap::mapref::one::Ref<'_, String, GitProviderConnection>| {
+                    r.is_visible_to(tenant_id)
+                },
+            )
             .unwrap_or(false))
     }
 }
@@ -206,8 +202,14 @@ mod tests {
     #[tokio::test]
     async fn list_connections_sorted_by_id() {
         let store = store();
-        store.create_connection(make_connection("b-conn", vec![])).await.unwrap();
-        store.create_connection(make_connection("a-conn", vec![])).await.unwrap();
+        store
+            .create_connection(make_connection("b-conn", vec![]))
+            .await
+            .unwrap();
+        store
+            .create_connection(make_connection("a-conn", vec![]))
+            .await
+            .unwrap();
         let list = store.list_connections().await.unwrap();
         assert_eq!(list[0].id, "a-conn");
         assert_eq!(list[1].id, "b-conn");
@@ -218,9 +220,18 @@ mod tests {
         let store = store();
         let t1 = tenant("tenant-1");
         let t2 = tenant("tenant-2");
-        store.create_connection(make_connection("shared", vec![t1.clone(), t2.clone()])).await.unwrap();
-        store.create_connection(make_connection("only-t1", vec![t1.clone()])).await.unwrap();
-        store.create_connection(make_connection("none", vec![])).await.unwrap();
+        store
+            .create_connection(make_connection("shared", vec![t1.clone(), t2.clone()]))
+            .await
+            .unwrap();
+        store
+            .create_connection(make_connection("only-t1", vec![t1.clone()]))
+            .await
+            .unwrap();
+        store
+            .create_connection(make_connection("none", vec![]))
+            .await
+            .unwrap();
 
         let for_t2 = store.list_connections_for_tenant(&t2).await.unwrap();
         assert_eq!(for_t2.len(), 1);
@@ -231,7 +242,10 @@ mod tests {
     async fn grant_and_revoke_tenant_visibility() {
         let store = store();
         let t = tenant("acme");
-        store.create_connection(make_connection("conn-x", vec![])).await.unwrap();
+        store
+            .create_connection(make_connection("conn-x", vec![]))
+            .await
+            .unwrap();
 
         assert!(!store.tenant_can_use("conn-x", &t).await.unwrap());
 
@@ -251,7 +265,10 @@ mod tests {
     async fn grant_on_missing_connection_returns_error() {
         let store = store();
         let t = tenant("acme");
-        let err = store.grant_tenant_visibility("ghost", &t).await.unwrap_err();
+        let err = store
+            .grant_tenant_visibility("ghost", &t)
+            .await
+            .unwrap_err();
         assert!(matches!(err, GitProviderConnectionError::NotFound(_)));
     }
 
@@ -259,7 +276,10 @@ mod tests {
     async fn revoke_on_missing_connection_returns_error() {
         let store = store();
         let t = tenant("acme");
-        let err = store.revoke_tenant_visibility("ghost", &t).await.unwrap_err();
+        let err = store
+            .revoke_tenant_visibility("ghost", &t)
+            .await
+            .unwrap_err();
         assert!(matches!(err, GitProviderConnectionError::NotFound(_)));
     }
 

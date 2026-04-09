@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use mk_core::types::{
-    DriftResult, GovernanceEvent, KnowledgeEntry, KnowledgeLayer, TenantContext, ValidationResult
+    DriftResult, GovernanceEvent, KnowledgeEntry, KnowledgeLayer, TenantContext, ValidationResult,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -23,7 +23,7 @@ pub enum GovernanceClientError {
     #[error("Sync conflict: {0}")]
     SyncConflict(String),
     #[error("Governance error: {0}")]
-    Governance(#[from] crate::governance::GovernanceError)
+    Governance(#[from] crate::governance::GovernanceError),
 }
 
 pub type Result<T> = std::result::Result<T, GovernanceClientError>;
@@ -33,7 +33,7 @@ pub struct SyncState {
     pub last_sync_timestamp: i64,
     pub local_version: u64,
     pub remote_version: u64,
-    pub pending_changes: Vec<PendingChange>
+    pub pending_changes: Vec<PendingChange>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,21 +41,21 @@ pub struct PendingChange {
     pub id: String,
     pub change_type: ChangeType,
     pub data: serde_json::Value,
-    pub created_at: i64
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ChangeType {
     PolicyUpdate,
     DriftResult,
-    ProposalAction
+    ProposalAction,
 }
 
 #[derive(Debug, Clone)]
 struct CacheEntry<T> {
     data: T,
     inserted_at: Instant,
-    ttl: Duration
+    ttl: Duration,
 }
 
 impl<T: Clone> CacheEntry<T> {
@@ -63,7 +63,7 @@ impl<T: Clone> CacheEntry<T> {
         Self {
             data,
             inserted_at: Instant::now(),
-            ttl
+            ttl,
         }
     }
 
@@ -78,39 +78,39 @@ pub trait GovernanceClient: Send + Sync {
         &self,
         ctx: &TenantContext,
         layer: KnowledgeLayer,
-        context: &std::collections::HashMap<String, serde_json::Value>
+        context: &std::collections::HashMap<String, serde_json::Value>,
     ) -> Result<ValidationResult>;
 
     async fn get_drift_status(
         &self,
         ctx: &TenantContext,
-        project_id: &str
+        project_id: &str,
     ) -> Result<Option<DriftResult>>;
 
     async fn list_proposals(
         &self,
         ctx: &TenantContext,
-        layer: Option<KnowledgeLayer>
+        layer: Option<KnowledgeLayer>,
     ) -> Result<Vec<KnowledgeEntry>>;
 
     async fn replay_events(
         &self,
         ctx: &TenantContext,
         since_timestamp: i64,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<GovernanceEvent>>;
 }
 
 pub struct RemoteGovernanceClient {
     client: reqwest::Client,
-    base_url: String
+    base_url: String,
 }
 
 impl RemoteGovernanceClient {
     pub fn new(base_url: String) -> Self {
         Self {
             client: reqwest::Client::new(),
-            base_url
+            base_url,
         }
     }
 }
@@ -121,13 +121,13 @@ pub struct HybridGovernanceClient {
     cache: Arc<RwLock<HybridCache>>,
     sync_state: Arc<RwLock<SyncState>>,
     cache_ttl: Duration,
-    sync_interval: Duration
+    sync_interval: Duration,
 }
 
 #[derive(Default)]
 struct HybridCache {
     drift_results: HashMap<String, CacheEntry<DriftResult>>,
-    proposals: Option<CacheEntry<Vec<KnowledgeEntry>>>
+    proposals: Option<CacheEntry<Vec<KnowledgeEntry>>>,
 }
 
 impl HybridGovernanceClient {
@@ -138,7 +138,7 @@ impl HybridGovernanceClient {
             cache: Arc::new(RwLock::new(HybridCache::default())),
             sync_state: Arc::new(RwLock::new(SyncState::default())),
             cache_ttl: Duration::from_secs(300),
-            sync_interval: Duration::from_secs(60)
+            sync_interval: Duration::from_secs(60),
         }
     }
 
@@ -189,7 +189,7 @@ impl HybridGovernanceClient {
     async fn push_change_to_remote(
         &self,
         ctx: &TenantContext,
-        change: &PendingChange
+        change: &PendingChange,
     ) -> Result<()> {
         let url = match change.change_type {
             ChangeType::PolicyUpdate => {
@@ -245,7 +245,7 @@ impl GovernanceClient for HybridGovernanceClient {
         &self,
         ctx: &TenantContext,
         layer: KnowledgeLayer,
-        context: &std::collections::HashMap<String, serde_json::Value>
+        context: &std::collections::HashMap<String, serde_json::Value>,
     ) -> Result<ValidationResult> {
         let local_result = self
             .local_engine
@@ -260,7 +260,7 @@ impl GovernanceClient for HybridGovernanceClient {
                 "context": context,
                 "result": local_result
             }),
-            created_at: chrono::Utc::now().timestamp()
+            created_at: chrono::Utc::now().timestamp(),
         })
         .await;
 
@@ -270,7 +270,7 @@ impl GovernanceClient for HybridGovernanceClient {
     async fn get_drift_status(
         &self,
         ctx: &TenantContext,
-        project_id: &str
+        project_id: &str,
     ) -> Result<Option<DriftResult>> {
         let cache_key = Self::cache_key(ctx, &format!("drift:{}", project_id));
 
@@ -300,7 +300,7 @@ impl GovernanceClient for HybridGovernanceClient {
                         .await
                     {
                         Ok(result) => Ok(result),
-                        Err(e) => Err(GovernanceClientError::Internal(format!("{:?}", e)))
+                        Err(e) => Err(GovernanceClientError::Internal(format!("{:?}", e))),
                     }
                 } else {
                     Ok(None)
@@ -312,7 +312,7 @@ impl GovernanceClient for HybridGovernanceClient {
     async fn list_proposals(
         &self,
         ctx: &TenantContext,
-        layer: Option<KnowledgeLayer>
+        layer: Option<KnowledgeLayer>,
     ) -> Result<Vec<KnowledgeEntry>> {
         {
             let cache = self.cache.read().await;
@@ -340,7 +340,7 @@ impl GovernanceClient for HybridGovernanceClient {
                     let target_layer = layer.unwrap_or(KnowledgeLayer::Project);
                     match repo.list(ctx.clone(), target_layer, "proposals/").await {
                         Ok(entries) => Ok(entries),
-                        Err(e) => Err(GovernanceClientError::Internal(format!("{:?}", e)))
+                        Err(e) => Err(GovernanceClientError::Internal(format!("{:?}", e))),
                     }
                 } else {
                     Ok(vec![])
@@ -353,7 +353,7 @@ impl GovernanceClient for HybridGovernanceClient {
         &self,
         ctx: &TenantContext,
         since_timestamp: i64,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<GovernanceEvent>> {
         self.remote_client
             .replay_events(ctx, since_timestamp, limit)
@@ -364,7 +364,7 @@ impl GovernanceClient for HybridGovernanceClient {
 pub enum GovernanceClientKind {
     Local(LocalGovernanceClient),
     Hybrid(HybridGovernanceClient),
-    Remote(RemoteGovernanceClient)
+    Remote(RemoteGovernanceClient),
 }
 
 impl std::fmt::Debug for GovernanceClientKind {
@@ -372,7 +372,7 @@ impl std::fmt::Debug for GovernanceClientKind {
         match self {
             GovernanceClientKind::Local(_) => f.debug_tuple("Local").finish(),
             GovernanceClientKind::Hybrid(_) => f.debug_tuple("Hybrid").finish(),
-            GovernanceClientKind::Remote(_) => f.debug_tuple("Remote").finish()
+            GovernanceClientKind::Remote(_) => f.debug_tuple("Remote").finish(),
         }
     }
 }
@@ -382,55 +382,55 @@ impl GovernanceClientKind {
         match self {
             GovernanceClientKind::Local(c) => c,
             GovernanceClientKind::Hybrid(c) => c,
-            GovernanceClientKind::Remote(c) => c
+            GovernanceClientKind::Remote(c) => c,
         }
     }
 }
 
 pub fn create_governance_client(
     config: &config::DeploymentConfig,
-    engine: Option<Arc<crate::governance::GovernanceEngine>>
+    engine: Option<Arc<crate::governance::GovernanceEngine>>,
 ) -> Result<GovernanceClientKind> {
     match config.mode.as_str() {
         "local" => {
             let engine = engine.ok_or_else(|| {
                 GovernanceClientError::Internal(
-                    "Local mode requires a GovernanceEngine instance".to_string()
+                    "Local mode requires a GovernanceEngine instance".to_string(),
                 )
             })?;
             Ok(GovernanceClientKind::Local(LocalGovernanceClient::new(
-                engine
+                engine,
             )))
         }
         "hybrid" => {
             let engine = engine.ok_or_else(|| {
                 GovernanceClientError::Internal(
-                    "Hybrid mode requires a GovernanceEngine instance".to_string()
+                    "Hybrid mode requires a GovernanceEngine instance".to_string(),
                 )
             })?;
             let remote_url = config.remote_url.clone().ok_or_else(|| {
                 GovernanceClientError::Internal(
-                    "Hybrid mode requires a remote_url configuration".to_string()
+                    "Hybrid mode requires a remote_url configuration".to_string(),
                 )
             })?;
             Ok(GovernanceClientKind::Hybrid(HybridGovernanceClient::new(
-                remote_url, engine
+                remote_url, engine,
             )))
         }
         "remote" => {
             let remote_url = config.remote_url.clone().ok_or_else(|| {
                 GovernanceClientError::Internal(
-                    "Remote mode requires a remote_url configuration".to_string()
+                    "Remote mode requires a remote_url configuration".to_string(),
                 )
             })?;
             Ok(GovernanceClientKind::Remote(RemoteGovernanceClient::new(
-                remote_url
+                remote_url,
             )))
         }
         other => Err(GovernanceClientError::Internal(format!(
             "Invalid deployment mode: {}",
             other
-        )))
+        ))),
     }
 }
 
@@ -439,7 +439,7 @@ pub fn create_governance_client(
 /// Used in "local" deployment mode where all governance operations are
 /// performed locally without any remote communication.
 pub struct LocalGovernanceClient {
-    engine: Arc<crate::governance::GovernanceEngine>
+    engine: Arc<crate::governance::GovernanceEngine>,
 }
 
 impl LocalGovernanceClient {
@@ -454,7 +454,7 @@ impl GovernanceClient for LocalGovernanceClient {
         &self,
         _ctx: &TenantContext,
         layer: KnowledgeLayer,
-        context: &std::collections::HashMap<String, serde_json::Value>
+        context: &std::collections::HashMap<String, serde_json::Value>,
     ) -> Result<ValidationResult> {
         Ok(self
             .engine
@@ -465,7 +465,7 @@ impl GovernanceClient for LocalGovernanceClient {
     async fn get_drift_status(
         &self,
         ctx: &TenantContext,
-        project_id: &str
+        project_id: &str,
     ) -> Result<Option<DriftResult>> {
         if let Some(storage) = self.engine.storage() {
             match storage
@@ -473,7 +473,7 @@ impl GovernanceClient for LocalGovernanceClient {
                 .await
             {
                 Ok(result) => Ok(result),
-                Err(e) => Err(GovernanceClientError::Internal(format!("{:?}", e)))
+                Err(e) => Err(GovernanceClientError::Internal(format!("{:?}", e))),
             }
         } else {
             Ok(None)
@@ -483,13 +483,13 @@ impl GovernanceClient for LocalGovernanceClient {
     async fn list_proposals(
         &self,
         ctx: &TenantContext,
-        layer: Option<KnowledgeLayer>
+        layer: Option<KnowledgeLayer>,
     ) -> Result<Vec<KnowledgeEntry>> {
         if let Some(repo) = self.engine.repository() {
             let target_layer = layer.unwrap_or(KnowledgeLayer::Project);
             match repo.list(ctx.clone(), target_layer, "proposals/").await {
                 Ok(entries) => Ok(entries),
-                Err(e) => Err(GovernanceClientError::Internal(format!("{:?}", e)))
+                Err(e) => Err(GovernanceClientError::Internal(format!("{:?}", e))),
             }
         } else {
             Ok(vec![])
@@ -500,7 +500,7 @@ impl GovernanceClient for LocalGovernanceClient {
         &self,
         ctx: &TenantContext,
         since_timestamp: i64,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<GovernanceEvent>> {
         if let Some(storage) = self.engine.storage() {
             match storage
@@ -508,7 +508,7 @@ impl GovernanceClient for LocalGovernanceClient {
                 .await
             {
                 Ok(events) => Ok(events),
-                Err(e) => Err(GovernanceClientError::Internal(format!("{:?}", e)))
+                Err(e) => Err(GovernanceClientError::Internal(format!("{:?}", e))),
             }
         } else {
             Ok(vec![])
@@ -522,7 +522,7 @@ impl GovernanceClient for RemoteGovernanceClient {
         &self,
         ctx: &TenantContext,
         layer: KnowledgeLayer,
-        context: &std::collections::HashMap<String, serde_json::Value>
+        context: &std::collections::HashMap<String, serde_json::Value>,
     ) -> Result<ValidationResult> {
         let url = format!("{}/api/v1/governance/validate", self.base_url);
         let response = self
@@ -547,7 +547,7 @@ impl GovernanceClient for RemoteGovernanceClient {
     async fn get_drift_status(
         &self,
         ctx: &TenantContext,
-        project_id: &str
+        project_id: &str,
     ) -> Result<Option<DriftResult>> {
         let url = format!("{}/api/v1/governance/drift/{}", self.base_url, project_id);
         let response = self
@@ -568,7 +568,7 @@ impl GovernanceClient for RemoteGovernanceClient {
     async fn list_proposals(
         &self,
         ctx: &TenantContext,
-        layer: Option<KnowledgeLayer>
+        layer: Option<KnowledgeLayer>,
     ) -> Result<Vec<KnowledgeEntry>> {
         let mut url = format!("{}/api/v1/governance/proposals", self.base_url);
         if let Some(l) = layer {
@@ -594,7 +594,7 @@ impl GovernanceClient for RemoteGovernanceClient {
         &self,
         ctx: &TenantContext,
         since_timestamp: i64,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<GovernanceEvent>> {
         let url = format!(
             "{}/api/v1/governance/events/replay?since_timestamp={}&limit={}",
@@ -641,7 +641,7 @@ mod tests {
             id: "change-1".to_string(),
             change_type: ChangeType::PolicyUpdate,
             data: serde_json::json!({"key": "value"}),
-            created_at: 1234567890
+            created_at: 1234567890,
         };
 
         let json = serde_json::to_string(&change).unwrap();
@@ -732,7 +732,7 @@ mod tests {
             id: "test-change".to_string(),
             change_type: ChangeType::PolicyUpdate,
             data: serde_json::json!({"test": true}),
-            created_at: chrono::Utc::now().timestamp()
+            created_at: chrono::Utc::now().timestamp(),
         };
 
         client.queue_local_change(change).await;
@@ -824,8 +824,8 @@ mod tests {
                 id: "change-1".to_string(),
                 change_type: ChangeType::DriftResult,
                 data: serde_json::json!({}),
-                created_at: 1234567890
-            }]
+                created_at: 1234567890,
+            }],
         };
 
         let json = serde_json::to_string(&state).unwrap();
@@ -848,7 +848,7 @@ mod tests {
                     id: format!("change-{}", i),
                     change_type: ChangeType::PolicyUpdate,
                     data: serde_json::json!({"index": i}),
-                    created_at: chrono::Utc::now().timestamp()
+                    created_at: chrono::Utc::now().timestamp(),
                 })
                 .await;
         }
@@ -999,7 +999,7 @@ mod tests {
         let config = config::DeploymentConfig {
             mode: "local".to_string(),
             remote_url: None,
-            sync_enabled: true
+            sync_enabled: true,
         };
         let engine = Arc::new(crate::governance::GovernanceEngine::new());
 
@@ -1013,7 +1013,7 @@ mod tests {
         let config = config::DeploymentConfig {
             mode: "local".to_string(),
             remote_url: None,
-            sync_enabled: true
+            sync_enabled: true,
         };
 
         let result = create_governance_client(&config, None);
@@ -1031,7 +1031,7 @@ mod tests {
         let config = config::DeploymentConfig {
             mode: "hybrid".to_string(),
             remote_url: Some("http://localhost:8080".to_string()),
-            sync_enabled: true
+            sync_enabled: true,
         };
         let engine = Arc::new(crate::governance::GovernanceEngine::new());
 
@@ -1045,7 +1045,7 @@ mod tests {
         let config = config::DeploymentConfig {
             mode: "hybrid".to_string(),
             remote_url: Some("http://localhost:8080".to_string()),
-            sync_enabled: true
+            sync_enabled: true,
         };
 
         let result = create_governance_client(&config, None);
@@ -1063,7 +1063,7 @@ mod tests {
         let config = config::DeploymentConfig {
             mode: "hybrid".to_string(),
             remote_url: None,
-            sync_enabled: true
+            sync_enabled: true,
         };
         let engine = Arc::new(crate::governance::GovernanceEngine::new());
 
@@ -1082,7 +1082,7 @@ mod tests {
         let config = config::DeploymentConfig {
             mode: "remote".to_string(),
             remote_url: Some("http://localhost:8080".to_string()),
-            sync_enabled: false
+            sync_enabled: false,
         };
 
         let result = create_governance_client(&config, None);
@@ -1095,7 +1095,7 @@ mod tests {
         let config = config::DeploymentConfig {
             mode: "remote".to_string(),
             remote_url: None,
-            sync_enabled: false
+            sync_enabled: false,
         };
 
         let result = create_governance_client(&config, None);
@@ -1113,7 +1113,7 @@ mod tests {
         let config = config::DeploymentConfig {
             mode: "invalid".to_string(),
             remote_url: None,
-            sync_enabled: true
+            sync_enabled: true,
         };
 
         let result = create_governance_client(&config, None);
@@ -1138,7 +1138,7 @@ mod tests {
         let engine = Arc::new(crate::governance::GovernanceEngine::new());
         let client_kind = GovernanceClientKind::Hybrid(HybridGovernanceClient::new(
             "http://localhost:8080".to_string(),
-            engine
+            engine,
         ));
         let _client: &dyn GovernanceClient = client_kind.as_client();
     }
@@ -1146,7 +1146,7 @@ mod tests {
     #[test]
     fn test_governance_client_kind_as_client_remote() {
         let client_kind = GovernanceClientKind::Remote(RemoteGovernanceClient::new(
-            "http://localhost:8080".to_string()
+            "http://localhost:8080".to_string(),
         ));
         let _client: &dyn GovernanceClient = client_kind.as_client();
     }

@@ -1,6 +1,6 @@
 use memory::backends::{
     BackendConfig, BackendError, SearchQuery, VectorBackend, VectorBackendType, VectorRecord,
-    create_backend
+    create_backend,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -66,7 +66,7 @@ async fn run_backend_test_suite(backend: Arc<dyn VectorBackend>, tenant_id: &str
                 "e2e-2".to_string(),
                 "e2e-3".to_string(),
                 "e2e-4".to_string(),
-            ]
+            ],
         )
         .await
         .unwrap();
@@ -90,12 +90,12 @@ async fn run_tenant_isolation_test(backend: Arc<dyn VectorBackend>, dim: usize) 
     let record_a = VectorRecord::new(
         "shared-id",
         (0..dim).map(|i| i as f32 * 0.1).collect(),
-        HashMap::from([("tenant".to_string(), serde_json::json!("a"))])
+        HashMap::from([("tenant".to_string(), serde_json::json!("a"))]),
     );
     let record_b = VectorRecord::new(
         "shared-id",
         (0..dim).map(|i| i as f32 * 0.2).collect(),
-        HashMap::from([("tenant".to_string(), serde_json::json!("b"))])
+        HashMap::from([("tenant".to_string(), serde_json::json!("b"))]),
     );
 
     backend.upsert("tenant-a", vec![record_a]).await.unwrap();
@@ -149,7 +149,7 @@ async fn test_qdrant_e2e() {
         qdrant: Some(memory::backends::factory::QdrantConfig {
             url: std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6334".into()),
             api_key: std::env::var("QDRANT_API_KEY").ok(),
-            collection_prefix: "e2e_test".into()
+            collection_prefix: "e2e_test".into(),
         }),
         ..Default::default()
     };
@@ -169,7 +169,7 @@ async fn test_pgvector_e2e() {
             connection_string: std::env::var("PGVECTOR_URL")
                 .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/aeterna_test".into()),
             schema: "public".into(),
-            table_name: "e2e_vectors".into()
+            table_name: "e2e_vectors".into(),
         }),
         ..Default::default()
     };
@@ -191,7 +191,7 @@ async fn test_pinecone_e2e() {
         pinecone: Some(memory::backends::factory::PineconeConfig {
             api_key,
             environment,
-            index_name: "e2e-test".into()
+            index_name: "e2e-test".into(),
         }),
         ..Default::default()
     };
@@ -210,7 +210,7 @@ async fn test_weaviate_e2e() {
         weaviate: Some(memory::backends::factory::WeaviateConfig {
             url: std::env::var("WEAVIATE_URL").unwrap_or_else(|_| "http://localhost:8080".into()),
             api_key: std::env::var("WEAVIATE_API_KEY").ok(),
-            class_name: "E2ETest".into()
+            class_name: "E2ETest".into(),
         }),
         ..Default::default()
     };
@@ -230,7 +230,7 @@ async fn test_mongodb_e2e() {
             connection_string: std::env::var("MONGODB_URI").expect("MONGODB_URI required"),
             database: "e2e_test".into(),
             collection: "vectors".into(),
-            index_name: "vector_index".into()
+            index_name: "vector_index".into(),
         }),
         ..Default::default()
     };
@@ -252,7 +252,7 @@ async fn test_vertex_ai_e2e() {
             index_endpoint: std::env::var("VERTEX_AI_INDEX_ENDPOINT")
                 .expect("VERTEX_AI_INDEX_ENDPOINT required"),
             deployed_index_id: std::env::var("VERTEX_AI_DEPLOYED_INDEX_ID")
-                .expect("VERTEX_AI_DEPLOYED_INDEX_ID required")
+                .expect("VERTEX_AI_DEPLOYED_INDEX_ID required"),
         }),
         ..Default::default()
     };
@@ -272,7 +272,7 @@ async fn test_databricks_e2e() {
             workspace_url: std::env::var("DATABRICKS_HOST").expect("DATABRICKS_HOST required"),
             token: std::env::var("DATABRICKS_TOKEN").expect("DATABRICKS_TOKEN required"),
             catalog: std::env::var("DATABRICKS_CATALOG").unwrap_or_else(|_| "main".into()),
-            schema: std::env::var("DATABRICKS_SCHEMA").unwrap_or_else(|_| "e2e_test".into())
+            schema: std::env::var("DATABRICKS_SCHEMA").unwrap_or_else(|_| "e2e_test".into()),
         }),
         ..Default::default()
     };
@@ -291,7 +291,7 @@ async fn test_backend_switching_config() {
         VectorBackendType::Weaviate,
         VectorBackendType::Mongodb,
         VectorBackendType::VertexAi,
-        VectorBackendType::Databricks
+        VectorBackendType::Databricks,
     ] {
         let type_str = backend_type.to_string();
         let parsed: VectorBackendType = type_str.parse().unwrap();

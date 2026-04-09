@@ -1,7 +1,7 @@
 use super::{
     BuildPhase, BuildResult, ImproveAction, ImprovePhase, ImproveResult, MetaAgentConfig,
     QualityGateConfig, QualityGateEvaluator, QualityGateSummary, TestCommand, TestPhase,
-    TestResult, TestStatus, TimeBudget, TimeBudgetConfig, TimeBudgetExhaustedResult
+    TestResult, TestStatus, TimeBudget, TimeBudgetConfig, TimeBudgetExhaustedResult,
 };
 use tracing::{Instrument, info_span, warn};
 
@@ -10,7 +10,7 @@ pub struct MetaAgentLoopState {
     pub iterations: u32,
     pub last_build: Option<BuildResult>,
     pub last_test: Option<TestResult>,
-    pub last_improve: Option<ImproveResult>
+    pub last_improve: Option<ImproveResult>,
 }
 
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub struct MetaAgentLoopStateExtended {
     pub last_build: Option<BuildResult>,
     pub last_test: Option<TestResult>,
     pub last_improve: Option<ImproveResult>,
-    pub quality_gates: Option<QualityGateSummary>
+    pub quality_gates: Option<QualityGateSummary>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,11 +27,11 @@ pub enum MetaAgentLoopResult {
     Success {
         build: BuildResult,
         test: TestResult,
-        iterations: u32
+        iterations: u32,
     },
     Failure {
-        state: MetaAgentLoopState
-    }
+        state: MetaAgentLoopState,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -40,21 +40,21 @@ pub enum MetaAgentLoopResultExtended {
         build: BuildResult,
         test: TestResult,
         quality_gates: QualityGateSummary,
-        iterations: u32
+        iterations: u32,
     },
     QualityGateFailure {
         build: BuildResult,
         test: TestResult,
         quality_gates: QualityGateSummary,
-        iterations: u32
+        iterations: u32,
     },
     Failure {
-        state: MetaAgentLoopStateExtended
+        state: MetaAgentLoopStateExtended,
     },
     TimeBudgetExhausted {
         exhausted: TimeBudgetExhaustedResult,
-        state: MetaAgentLoopStateExtended
-    }
+        state: MetaAgentLoopStateExtended,
+    },
 }
 
 impl MetaAgentLoopResultExtended {
@@ -87,7 +87,7 @@ impl MetaAgentLoopResult {
                 .last_improve
                 .as_ref()
                 .and_then(|improve| improve.escalation_message.clone()),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -96,7 +96,7 @@ pub struct MetaAgentLoop<C: crate::context_architect::LlmClient> {
     build_phase: BuildPhase<C>,
     test_phase: TestPhase,
     improve_phase: ImprovePhase<C>,
-    config: MetaAgentConfig
+    config: MetaAgentConfig,
 }
 
 impl<C: crate::context_architect::LlmClient> MetaAgentLoop<C> {
@@ -104,13 +104,13 @@ impl<C: crate::context_architect::LlmClient> MetaAgentLoop<C> {
         build_phase: BuildPhase<C>,
         test_phase: TestPhase,
         improve_phase: ImprovePhase<C>,
-        config: MetaAgentConfig
+        config: MetaAgentConfig,
     ) -> Self {
         Self {
             build_phase,
             test_phase,
             improve_phase,
-            config
+            config,
         }
     }
 
@@ -118,7 +118,7 @@ impl<C: crate::context_architect::LlmClient> MetaAgentLoop<C> {
         &self,
         requirements: &str,
         test_command: &TestCommand,
-        context: Option<&str>
+        context: Option<&str>,
     ) -> Result<MetaAgentLoopResult, crate::context_architect::LlmError> {
         let span = info_span!(
             "meta_agent_loop",
@@ -150,7 +150,7 @@ impl<C: crate::context_architect::LlmClient> MetaAgentLoop<C> {
                     return Ok(MetaAgentLoopResult::Success {
                         build,
                         test,
-                        iterations: state.iterations
+                        iterations: state.iterations,
                     });
                 }
 
@@ -175,7 +175,7 @@ pub struct MetaAgentLoopWithBudget<C: crate::context_architect::LlmClient> {
     improve_phase: ImprovePhase<C>,
     config: MetaAgentConfig,
     time_budget_config: TimeBudgetConfig,
-    quality_gate_config: QualityGateConfig
+    quality_gate_config: QualityGateConfig,
 }
 
 impl<C: crate::context_architect::LlmClient> MetaAgentLoopWithBudget<C> {
@@ -185,7 +185,7 @@ impl<C: crate::context_architect::LlmClient> MetaAgentLoopWithBudget<C> {
         improve_phase: ImprovePhase<C>,
         config: MetaAgentConfig,
         time_budget_config: TimeBudgetConfig,
-        quality_gate_config: QualityGateConfig
+        quality_gate_config: QualityGateConfig,
     ) -> Self {
         Self {
             build_phase,
@@ -193,7 +193,7 @@ impl<C: crate::context_architect::LlmClient> MetaAgentLoopWithBudget<C> {
             improve_phase,
             config,
             time_budget_config,
-            quality_gate_config
+            quality_gate_config,
         }
     }
 
@@ -201,7 +201,7 @@ impl<C: crate::context_architect::LlmClient> MetaAgentLoopWithBudget<C> {
         &self,
         requirements: &str,
         test_command: &TestCommand,
-        context: Option<&str>
+        context: Option<&str>,
     ) -> Result<MetaAgentLoopResultExtended, crate::context_architect::LlmError> {
         let span = info_span!(
             "meta_agent_loop_with_budget",
@@ -220,7 +220,7 @@ impl<C: crate::context_architect::LlmClient> MetaAgentLoopWithBudget<C> {
                 last_build: None,
                 last_test: None,
                 last_improve: None,
-                quality_gates: None
+                quality_gates: None,
             };
 
             while state.iterations < self.config.max_iterations {
@@ -230,7 +230,7 @@ impl<C: crate::context_architect::LlmClient> MetaAgentLoopWithBudget<C> {
                         TimeBudgetExhaustedResult::new(budget_check.elapsed, state.iterations);
                     return Ok(MetaAgentLoopResultExtended::TimeBudgetExhausted {
                         exhausted,
-                        state
+                        state,
                     });
                 }
 
@@ -261,7 +261,7 @@ impl<C: crate::context_architect::LlmClient> MetaAgentLoopWithBudget<C> {
                             .with_partial_results("Build completed, test not started");
                     return Ok(MetaAgentLoopResultExtended::TimeBudgetExhausted {
                         exhausted,
-                        state
+                        state,
                     });
                 }
 
@@ -280,14 +280,14 @@ impl<C: crate::context_architect::LlmClient> MetaAgentLoopWithBudget<C> {
                             build,
                             test,
                             quality_gates,
-                            iterations: state.iterations
+                            iterations: state.iterations,
                         });
                     } else {
                         return Ok(MetaAgentLoopResultExtended::QualityGateFailure {
                             build,
                             test,
                             quality_gates,
-                            iterations: state.iterations
+                            iterations: state.iterations,
                         });
                     }
                 }
@@ -299,7 +299,7 @@ impl<C: crate::context_architect::LlmClient> MetaAgentLoopWithBudget<C> {
                             .with_partial_results("Tests failed, improve phase not started");
                     return Ok(MetaAgentLoopResultExtended::TimeBudgetExhausted {
                         exhausted,
-                        state
+                        state,
                     });
                 }
 
@@ -327,13 +327,13 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     struct MockLlmClient {
-        responses: Mutex<Vec<String>>
+        responses: Mutex<Vec<String>>,
     }
 
     impl MockLlmClient {
         fn new(responses: Vec<String>) -> Self {
             Self {
-                responses: Mutex::new(responses)
+                responses: Mutex::new(responses),
             }
         }
     }
@@ -350,7 +350,7 @@ mod tests {
         async fn complete_with_system(
             &self,
             _system: &str,
-            _user: &str
+            _user: &str,
         ) -> Result<String, LlmError> {
             let mut responses = self.responses.lock().unwrap();
             responses
@@ -376,7 +376,7 @@ mod tests {
             MetaAgentConfig {
                 max_iterations: 1,
                 ..Default::default()
-            }
+            },
         );
 
         let command = TestCommand::new("sh", vec!["-c".to_string(), "exit 0".to_string()]);
@@ -386,7 +386,7 @@ mod tests {
             MetaAgentLoopResult::Success { iterations, .. } => {
                 assert_eq!(iterations, 1);
             }
-            _ => panic!("Expected success")
+            _ => panic!("Expected success"),
         }
     }
 
@@ -406,7 +406,7 @@ mod tests {
                 ..Default::default()
             },
             TimeBudgetConfig::default().with_duration_secs(60),
-            QualityGateConfig::default()
+            QualityGateConfig::default(),
         );
 
         let command = TestCommand::new("sh", vec!["-c".to_string(), "exit 0".to_string()]);
@@ -437,9 +437,9 @@ mod tests {
                 .with_linter(super::super::LinterConfig {
                     program: "sh".to_string(),
                     args: vec!["-c".to_string(), "exit 1".to_string()],
-                    timeout_secs: 2
+                    timeout_secs: 2,
                 })
-                .require_all()
+                .require_all(),
         );
 
         let command = TestCommand::new("sh", vec!["-c".to_string(), "exit 0".to_string()]);
@@ -452,7 +452,7 @@ mod tests {
                 assert!(quality_gates.tests_passed());
                 assert_eq!(quality_gates.linter_passed(), Some(false));
             }
-            _ => panic!("Expected QualityGateFailure")
+            _ => panic!("Expected QualityGateFailure"),
         }
     }
 
@@ -472,7 +472,7 @@ mod tests {
                 ..Default::default()
             },
             TimeBudgetConfig::default().with_duration_secs(0),
-            QualityGateConfig::default()
+            QualityGateConfig::default(),
         );
 
         let command = TestCommand::new("sh", vec!["-c".to_string(), "exit 0".to_string()]);
@@ -482,7 +482,7 @@ mod tests {
             MetaAgentLoopResultExtended::TimeBudgetExhausted { exhausted, .. } => {
                 assert_eq!(exhausted.iterations_completed, 0);
             }
-            _ => panic!("Expected TimeBudgetExhausted")
+            _ => panic!("Expected TimeBudgetExhausted"),
         }
     }
 
@@ -492,7 +492,7 @@ mod tests {
             QualityGateSummary::from_results(vec![super::super::QualityGateResult::pass(
                 super::super::QualityGateType::Tests,
                 "pass",
-                0
+                0,
             )]);
 
         let success = MetaAgentLoopResultExtended::Success {
@@ -500,15 +500,15 @@ mod tests {
                 output: "out".to_string(),
                 notes: vec![],
                 hindsight: vec![],
-                tokens_used: 0
+                tokens_used: 0,
             },
             test: TestResult {
                 status: TestStatus::Pass,
                 output: "pass".to_string(),
-                duration_ms: 100
+                duration_ms: 100,
             },
             quality_gates: quality_gates.clone(),
-            iterations: 1
+            iterations: 1,
         };
 
         assert!(success.is_success());

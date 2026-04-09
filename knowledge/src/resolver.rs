@@ -154,11 +154,12 @@ pub fn resolve(
         let enriched_primary = enrich(primary);
 
         // Collect residuals that point to this primary.
-        let mut local_residuals: Vec<(KnowledgeRelationType, KnowledgeEntryWithRelations)> =
-            active
-                .iter()
-                .filter_map(|e| {
-                    residual_paths.get(&e.path).and_then(|(parent_id, rel_type)| {
+        let mut local_residuals: Vec<(KnowledgeRelationType, KnowledgeEntryWithRelations)> = active
+            .iter()
+            .filter_map(|e| {
+                residual_paths
+                    .get(&e.path)
+                    .and_then(|(parent_id, rel_type)| {
                         if parent_id == &primary.path {
                             seen.insert(e.path.clone());
                             Some((*rel_type, enrich(e)))
@@ -166,8 +167,8 @@ pub fn resolve(
                             None
                         }
                     })
-                })
-                .collect();
+            })
+            .collect();
 
         // Sort residuals by role rank so Specialization comes before Exception.
         local_residuals.sort_by_key(|(_, e)| e.entry.variant_role().rank());
@@ -201,8 +202,7 @@ pub fn resolve(
 mod tests {
     use super::*;
     use mk_core::types::{
-        KnowledgeLayer, KnowledgeStatus, KnowledgeType, KnowledgeVariantRole,
-        TenantId, UserId,
+        KnowledgeLayer, KnowledgeStatus, KnowledgeType, KnowledgeVariantRole, TenantId, UserId,
     };
     use std::collections::HashMap as HM;
 
@@ -214,10 +214,7 @@ mod tests {
     ) -> KnowledgeEntry {
         let mut metadata = HM::new();
         if let Some(r) = role {
-            metadata.insert(
-                "variant_role".to_string(),
-                serde_json::json!(r.to_string()),
-            );
+            metadata.insert("variant_role".to_string(), serde_json::json!(r.to_string()));
         }
         KnowledgeEntry {
             path: path.to_string(),
@@ -256,8 +253,18 @@ mod tests {
     #[test]
     fn test_superseded_items_excluded_by_default() {
         let entries = vec![
-            entry("a/active", KnowledgeLayer::Team, KnowledgeStatus::Accepted, None),
-            entry("a/superseded", KnowledgeLayer::Team, KnowledgeStatus::Superseded, None),
+            entry(
+                "a/active",
+                KnowledgeLayer::Team,
+                KnowledgeStatus::Accepted,
+                None,
+            ),
+            entry(
+                "a/superseded",
+                KnowledgeLayer::Team,
+                KnowledgeStatus::Superseded,
+                None,
+            ),
         ];
         let results = resolve(entries, HM::new(), false);
         assert_eq!(results.len(), 1, "superseded item should be filtered");
@@ -267,8 +274,18 @@ mod tests {
     #[test]
     fn test_superseded_items_included_when_requested() {
         let entries = vec![
-            entry("a/active", KnowledgeLayer::Team, KnowledgeStatus::Accepted, None),
-            entry("a/superseded", KnowledgeLayer::Team, KnowledgeStatus::Superseded, None),
+            entry(
+                "a/active",
+                KnowledgeLayer::Team,
+                KnowledgeStatus::Accepted,
+                None,
+            ),
+            entry(
+                "a/superseded",
+                KnowledgeLayer::Team,
+                KnowledgeStatus::Superseded,
+                None,
+            ),
         ];
         let results = resolve(entries, HM::new(), true);
         assert_eq!(results.len(), 2);
@@ -279,9 +296,24 @@ mod tests {
     #[test]
     fn test_higher_layer_ranks_first() {
         let entries = vec![
-            entry("p/proj", KnowledgeLayer::Project, KnowledgeStatus::Accepted, None),
-            entry("c/company", KnowledgeLayer::Company, KnowledgeStatus::Accepted, None),
-            entry("t/team", KnowledgeLayer::Team, KnowledgeStatus::Accepted, None),
+            entry(
+                "p/proj",
+                KnowledgeLayer::Project,
+                KnowledgeStatus::Accepted,
+                None,
+            ),
+            entry(
+                "c/company",
+                KnowledgeLayer::Company,
+                KnowledgeStatus::Accepted,
+                None,
+            ),
+            entry(
+                "t/team",
+                KnowledgeLayer::Team,
+                KnowledgeStatus::Accepted,
+                None,
+            ),
         ];
         let results = resolve(entries, HM::new(), false);
         assert_eq!(results[0].primary.entry.layer, KnowledgeLayer::Company);
@@ -342,13 +374,14 @@ mod tests {
 
         let results = resolve(vec![canon, residual], all_rels, false);
 
-        assert_eq!(results.len(), 1, "residual should be grouped under canonical");
+        assert_eq!(
+            results.len(),
+            1,
+            "residual should be grouped under canonical"
+        );
         assert_eq!(results[0].primary.entry.path, "org/canon");
         assert_eq!(results[0].local_residuals.len(), 1);
-        assert_eq!(
-            results[0].local_residuals[0].1.entry.path,
-            "proj/residual"
-        );
+        assert_eq!(results[0].local_residuals[0].1.entry.path, "proj/residual");
         assert_eq!(
             results[0].local_residuals[0].0,
             KnowledgeRelationType::Specializes
@@ -359,8 +392,18 @@ mod tests {
 
     #[test]
     fn test_relations_attached_to_returned_entries() {
-        let e = entry("p/item", KnowledgeLayer::Project, KnowledgeStatus::Accepted, None);
-        let r = rel("r1", "p/item", "o/other", KnowledgeRelationType::DerivedFrom);
+        let e = entry(
+            "p/item",
+            KnowledgeLayer::Project,
+            KnowledgeStatus::Accepted,
+            None,
+        );
+        let r = rel(
+            "r1",
+            "p/item",
+            "o/other",
+            KnowledgeRelationType::DerivedFrom,
+        );
         let mut all_rels: HM<String, Vec<KnowledgeRelation>> = HM::new();
         all_rels.insert("p/item".to_string(), vec![r.clone()]);
 
@@ -380,7 +423,12 @@ mod tests {
             Some(KnowledgeVariantRole::Specialization),
         );
         // Points to a canonical that is NOT in the result set
-        let r = rel("r1", "proj/orphan", "org/missing", KnowledgeRelationType::Specializes);
+        let r = rel(
+            "r1",
+            "proj/orphan",
+            "org/missing",
+            KnowledgeRelationType::Specializes,
+        );
         let mut all_rels: HM<String, Vec<KnowledgeRelation>> = HM::new();
         all_rels.insert("proj/orphan".to_string(), vec![r]);
 

@@ -9,7 +9,7 @@ pub struct TriggerMonitorConfig {
     pub default_check_interval_secs: u64,
     pub enable_time_based_triggers: bool,
     pub enable_change_count_triggers: bool,
-    pub enable_hash_based_triggers: bool
+    pub enable_hash_based_triggers: bool,
 }
 
 impl Default for TriggerMonitorConfig {
@@ -18,7 +18,7 @@ impl Default for TriggerMonitorConfig {
             default_check_interval_secs: 300,
             enable_time_based_triggers: true,
             enable_change_count_triggers: true,
-            enable_hash_based_triggers: true
+            enable_hash_based_triggers: true,
         }
     }
 }
@@ -27,21 +27,21 @@ impl Default for TriggerMonitorConfig {
 pub enum TriggerReason {
     TimeThresholdExceeded {
         age_seconds: u64,
-        threshold_seconds: u64
+        threshold_seconds: u64,
     },
     ChangeCountExceeded {
         change_count: u32,
-        threshold: u32
+        threshold: u32,
     },
     SourceHashChanged {
         previous_hash: String,
-        new_hash: String
+        new_hash: String,
     },
     NoExistingSummary,
     ManualRefresh,
     ParentSummaryInvalidated {
-        parent_layer: MemoryLayer
-    }
+        parent_layer: MemoryLayer,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +50,7 @@ pub struct TriggerResult {
     pub layer: MemoryLayer,
     pub depth: SummaryDepth,
     pub reason: TriggerReason,
-    pub triggered_at: i64
+    pub triggered_at: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -60,20 +60,20 @@ pub struct EntryState {
     pub source_hash: String,
     pub change_count: u32,
     pub summaries: HashMap<SummaryDepth, SummaryState>,
-    pub last_modified_at: i64
+    pub last_modified_at: i64,
 }
 
 #[derive(Debug, Clone)]
 pub struct SummaryState {
     pub content_hash: String,
     pub generated_at: i64,
-    pub is_stale: bool
+    pub is_stale: bool,
 }
 
 pub struct SummaryTriggerMonitor {
     config: TriggerMonitorConfig,
     layer_configs: RwLock<HashMap<MemoryLayer, SummaryConfig>>,
-    entry_states: RwLock<HashMap<String, EntryState>>
+    entry_states: RwLock<HashMap<String, EntryState>>,
 }
 
 impl SummaryTriggerMonitor {
@@ -81,7 +81,7 @@ impl SummaryTriggerMonitor {
         Self {
             config,
             layer_configs: RwLock::new(HashMap::new()),
-            entry_states: RwLock::new(HashMap::new())
+            entry_states: RwLock::new(HashMap::new()),
         }
     }
 
@@ -107,7 +107,7 @@ impl SummaryTriggerMonitor {
                 source_hash: new_source_hash.to_string(),
                 change_count: 0,
                 summaries: HashMap::new(),
-                last_modified_at: now
+                last_modified_at: now,
             });
 
         entry.change_count += 1;
@@ -121,7 +121,7 @@ impl SummaryTriggerMonitor {
         layer: MemoryLayer,
         depth: SummaryDepth,
         content_hash: &str,
-        source_hash: &str
+        source_hash: &str,
     ) {
         let mut states = self.entry_states.write().await;
         let now = current_timestamp();
@@ -134,7 +134,7 @@ impl SummaryTriggerMonitor {
                 source_hash: source_hash.to_string(),
                 change_count: 0,
                 summaries: HashMap::new(),
-                last_modified_at: now
+                last_modified_at: now,
             });
 
         entry.summaries.insert(
@@ -142,8 +142,8 @@ impl SummaryTriggerMonitor {
             SummaryState {
                 content_hash: content_hash.to_string(),
                 generated_at: now,
-                is_stale: false
-            }
+                is_stale: false,
+            },
         );
 
         entry.change_count = 0;
@@ -164,7 +164,7 @@ impl SummaryTriggerMonitor {
         entry_id: &str,
         layer: MemoryLayer,
         depth: SummaryDepth,
-        current_source_hash: &str
+        current_source_hash: &str,
     ) -> Option<TriggerResult> {
         let configs = self.layer_configs.read().await;
         let config = configs.get(&layer)?;
@@ -182,9 +182,11 @@ impl SummaryTriggerMonitor {
                 layer,
                 depth,
                 reason: TriggerReason::NoExistingSummary,
-                triggered_at: now
+                triggered_at: now,
             }),
-            Some(entry) => self.check_entry_triggers(entry, depth, current_source_hash, config, now)
+            Some(entry) => {
+                self.check_entry_triggers(entry, depth, current_source_hash, config, now)
+            }
         }
     }
 
@@ -213,7 +215,7 @@ impl SummaryTriggerMonitor {
         let configs = self.layer_configs.read().await;
         let config = match configs.get(&layer) {
             Some(c) => c,
-            None => return Vec::new()
+            None => return Vec::new(),
         };
 
         let states = self.entry_states.read().await;
@@ -243,7 +245,7 @@ impl SummaryTriggerMonitor {
         depth: SummaryDepth,
         current_source_hash: &str,
         config: &SummaryConfig,
-        now: i64
+        now: i64,
     ) -> Option<TriggerResult> {
         match entry.summaries.get(&depth) {
             None => Some(TriggerResult {
@@ -251,7 +253,7 @@ impl SummaryTriggerMonitor {
                 layer: entry.layer,
                 depth,
                 reason: TriggerReason::NoExistingSummary,
-                triggered_at: now
+                triggered_at: now,
             }),
             Some(summary) => {
                 if summary.is_stale {
@@ -260,7 +262,7 @@ impl SummaryTriggerMonitor {
                         layer: entry.layer,
                         depth,
                         reason: TriggerReason::ManualRefresh,
-                        triggered_at: now
+                        triggered_at: now,
                     });
                 }
 
@@ -273,9 +275,9 @@ impl SummaryTriggerMonitor {
                         depth,
                         reason: TriggerReason::SourceHashChanged {
                             previous_hash: entry.source_hash.clone(),
-                            new_hash: current_source_hash.to_string()
+                            new_hash: current_source_hash.to_string(),
                         },
-                        triggered_at: now
+                        triggered_at: now,
                     });
                 }
 
@@ -290,9 +292,9 @@ impl SummaryTriggerMonitor {
                             depth,
                             reason: TriggerReason::TimeThresholdExceeded {
                                 age_seconds: age,
-                                threshold_seconds: interval
+                                threshold_seconds: interval,
                             },
-                            triggered_at: now
+                            triggered_at: now,
                         });
                     }
                 }
@@ -307,9 +309,9 @@ impl SummaryTriggerMonitor {
                         depth,
                         reason: TriggerReason::ChangeCountExceeded {
                             change_count: entry.change_count,
-                            threshold
+                            threshold,
                         },
-                        triggered_at: now
+                        triggered_at: now,
                     });
                 }
 
@@ -347,7 +349,7 @@ mod tests {
             update_on_changes: Some(5),
             skip_if_unchanged: true,
             personalized: false,
-            depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph]
+            depths: vec![SummaryDepth::Sentence, SummaryDepth::Paragraph],
         }
     }
 
@@ -361,7 +363,7 @@ mod tests {
                 "entry1",
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
-                "hash1"
+                "hash1",
             )
             .await;
 
@@ -380,7 +382,7 @@ mod tests {
                 "entry1",
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
-                "hash1"
+                "hash1",
             )
             .await;
 
@@ -400,7 +402,7 @@ mod tests {
                 "entry1",
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
-                "hash1"
+                "hash1",
             )
             .await;
 
@@ -418,7 +420,7 @@ mod tests {
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
                 "summary_hash",
-                "old_source_hash"
+                "old_source_hash",
             )
             .await;
 
@@ -427,7 +429,7 @@ mod tests {
                 "entry1",
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
-                "new_source_hash"
+                "new_source_hash",
             )
             .await;
 
@@ -450,7 +452,7 @@ mod tests {
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
                 "summary_hash",
-                "source_hash"
+                "source_hash",
             )
             .await;
 
@@ -465,7 +467,7 @@ mod tests {
                 "entry1",
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
-                "source_hash"
+                "source_hash",
             )
             .await;
 
@@ -491,7 +493,7 @@ mod tests {
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
                 "summary_hash",
-                "source_hash"
+                "source_hash",
             )
             .await;
 
@@ -502,7 +504,7 @@ mod tests {
                 "entry1",
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
-                "source_hash"
+                "source_hash",
             )
             .await;
 
@@ -526,7 +528,7 @@ mod tests {
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
                 "summary_hash",
-                "source_hash"
+                "source_hash",
             )
             .await;
 
@@ -535,7 +537,7 @@ mod tests {
                 "entry1",
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
-                "source_hash"
+                "source_hash",
             )
             .await;
 
@@ -553,7 +555,7 @@ mod tests {
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
                 "hash1",
-                "src1"
+                "src1",
             )
             .await;
         monitor
@@ -562,7 +564,7 @@ mod tests {
                 MemoryLayer::Session,
                 SummaryDepth::Paragraph,
                 "hash2",
-                "src2"
+                "src2",
             )
             .await;
 
@@ -593,7 +595,7 @@ mod tests {
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
                 "hash1",
-                "src1"
+                "src1",
             )
             .await;
         monitor
@@ -602,7 +604,7 @@ mod tests {
                 MemoryLayer::Project,
                 SummaryDepth::Sentence,
                 "hash2",
-                "src2"
+                "src2",
             )
             .await;
 
@@ -634,7 +636,7 @@ mod tests {
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
                 "hash",
-                "src"
+                "src",
             )
             .await;
 
@@ -663,7 +665,7 @@ mod tests {
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
                 "summary_hash",
-                "old_hash"
+                "old_hash",
             )
             .await;
 
@@ -678,7 +680,7 @@ mod tests {
                 "entry1",
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
-                "new_hash"
+                "new_hash",
             )
             .await;
 
@@ -727,7 +729,7 @@ mod tests {
                 MemoryLayer::Session,
                 SummaryDepth::Sentence,
                 "summary_hash",
-                "hash1"
+                "hash1",
             )
             .await;
 

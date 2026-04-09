@@ -13,7 +13,7 @@ use crate::state::{AppState, FetcherConfig};
 /// The OPAL Data Fetcher server.
 pub struct OpalFetcherServer {
     state: Arc<AppState>,
-    listener_handle: Option<tokio::task::JoinHandle<()>>
+    listener_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl OpalFetcherServer {
@@ -22,7 +22,7 @@ impl OpalFetcherServer {
         let state = Arc::new(AppState::new(config).await?);
         Ok(Self {
             state,
-            listener_handle: None
+            listener_handle: None,
         })
     }
 
@@ -31,7 +31,7 @@ impl OpalFetcherServer {
     pub fn with_state(state: Arc<AppState>) -> Self {
         Self {
             state,
-            listener_handle: None
+            listener_handle: None,
         }
     }
 
@@ -143,7 +143,7 @@ pub async fn run_from_env() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into())
+                .add_directive(tracing::Level::INFO.into()),
         )
         .init();
 

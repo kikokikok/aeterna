@@ -5,7 +5,7 @@ use std::str::FromStr;
 fn test_tenant() -> TenantContext {
     TenantContext::new(
         TenantId::from_str("test-tenant").unwrap(),
-        UserId::from_str("test-user").unwrap()
+        UserId::from_str("test-user").unwrap(),
     )
 }
 
@@ -15,7 +15,7 @@ fn create_trajectory(tokens_used: usize) -> DecompositionTrajectory {
             text: "test".to_string(),
             ..Default::default()
         },
-        test_tenant()
+        test_tenant(),
     );
     traj.tokens_used = tokens_used;
     traj
@@ -60,9 +60,9 @@ fn reward_query_refined_is_positive_but_lower_than_used() {
     let mut refined = create_trajectory(10_000);
     refined.record_outcome(
         TrainingOutcome::QueryRefined {
-            new_query: "new query".to_string()
+            new_query: "new query".to_string(),
         },
-        &config
+        &config,
     );
 
     let mut used = create_trajectory(10_000);
@@ -132,24 +132,24 @@ fn reward_efficiency_caps_at_100k_tokens() {
 fn reward_weights_affect_computation() {
     let success_heavy = RewardConfig {
         success_weight: 2.0,
-        efficiency_weight: 0.1
+        efficiency_weight: 0.1,
     };
 
     let efficiency_heavy = RewardConfig {
         success_weight: 0.5,
-        efficiency_weight: 1.0
+        efficiency_weight: 1.0,
     };
 
     let mut traj1 = create_trajectory(50_000);
     traj1.record_outcome(
         TrainingOutcome::ResultUsed { quality_score: 0.8 },
-        &success_heavy
+        &success_heavy,
     );
 
     let mut traj2 = create_trajectory(50_000);
     traj2.record_outcome(
         TrainingOutcome::ResultUsed { quality_score: 0.8 },
-        &efficiency_heavy
+        &efficiency_heavy,
     );
 
     assert_ne!(
@@ -163,13 +163,13 @@ fn reward_weights_affect_computation() {
 fn reward_clamped_to_minus_one_to_one() {
     let extreme_config = RewardConfig {
         success_weight: 10.0,
-        efficiency_weight: 10.0
+        efficiency_weight: 10.0,
     };
 
     let mut high_reward = create_trajectory(0);
     high_reward.record_outcome(
         TrainingOutcome::ResultUsed { quality_score: 1.0 },
-        &extreme_config
+        &extreme_config,
     );
 
     let mut low_reward = create_trajectory(100_000);
@@ -191,7 +191,7 @@ fn reward_clamped_to_minus_one_to_one() {
 fn reward_zero_tokens_gives_full_efficiency_bonus() {
     let config = RewardConfig {
         success_weight: 0.0,
-        efficiency_weight: 1.0
+        efficiency_weight: 1.0,
     };
 
     let mut traj = create_trajectory(0);
@@ -243,9 +243,9 @@ fn reward_different_outcomes_ordering() {
     let mut refined = create_trajectory(tokens);
     refined.record_outcome(
         TrainingOutcome::QueryRefined {
-            new_query: "q".to_string()
+            new_query: "q".to_string(),
         },
-        &config
+        &config,
     );
 
     let mut no_signal = create_trajectory(tokens);
@@ -264,7 +264,7 @@ fn reward_different_outcomes_ordering() {
 fn reward_with_zero_weights_is_zero() {
     let config = RewardConfig {
         success_weight: 0.0,
-        efficiency_weight: 0.0
+        efficiency_weight: 0.0,
     };
 
     let mut traj = create_trajectory(50_000);
@@ -281,7 +281,7 @@ fn reward_with_zero_weights_is_zero() {
 fn reward_exact_threshold_token_count() {
     let config = RewardConfig {
         success_weight: 0.0,
-        efficiency_weight: 1.0
+        efficiency_weight: 1.0,
     };
 
     let mut at_threshold = create_trajectory(50_000);

@@ -34,8 +34,8 @@ mod google_embedding_e2e {
     fn service_from_env() -> GoogleEmbeddingService {
         let project_id =
             std::env::var("AETERNA_GOOGLE_PROJECT_ID").expect("AETERNA_GOOGLE_PROJECT_ID not set");
-        let location = std::env::var("AETERNA_GOOGLE_LOCATION")
-            .unwrap_or_else(|_| "us-central1".to_string());
+        let location =
+            std::env::var("AETERNA_GOOGLE_LOCATION").unwrap_or_else(|_| "us-central1".to_string());
         let model = std::env::var("AETERNA_GOOGLE_EMBEDDING_MODEL")
             .unwrap_or_else(|_| "text-embedding-005".to_string());
 

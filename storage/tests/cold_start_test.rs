@@ -1,6 +1,6 @@
 use storage::graph_duckdb::{
     ColdStartConfig, DuckDbGraphConfig, DuckDbGraphStore, LazyLoadResult, PartitionAccessRecord,
-    WarmPoolRecommendation
+    WarmPoolRecommendation,
 };
 
 fn create_store_with_cold_start(config: ColdStartConfig) -> DuckDbGraphStore {
@@ -144,7 +144,7 @@ async fn test_lazy_load_no_s3() {
     let result = store
         .lazy_load_partitions(
             "tenant-1",
-            &["partition-a".to_string(), "partition-b".to_string()]
+            &["partition-a".to_string(), "partition-b".to_string()],
         )
         .await
         .unwrap();
@@ -215,7 +215,7 @@ fn test_lazy_load_result_struct() {
         partitions_loaded: 5,
         total_load_time_ms: 1500,
         budget_remaining_ms: 1500,
-        deferred_partitions: vec!["p1".to_string(), "p2".to_string()]
+        deferred_partitions: vec!["p1".to_string(), "p2".to_string()],
     };
 
     assert_eq!(result.partitions_loaded, 5);
@@ -231,7 +231,7 @@ fn test_partition_access_record_struct() {
         tenant_id: "tenant-1".to_string(),
         access_count: 10,
         last_access: chrono::Utc::now(),
-        avg_load_time_ms: 45.5
+        avg_load_time_ms: 45.5,
     };
 
     assert_eq!(record.partition_key, "test-partition");
@@ -245,7 +245,7 @@ fn test_warm_pool_recommendation_struct() {
     let rec = WarmPoolRecommendation {
         recommended: true,
         min_instances: 5,
-        reason: "High traffic".to_string()
+        reason: "High traffic".to_string(),
     };
 
     assert!(rec.recommended);

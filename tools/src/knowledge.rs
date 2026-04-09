@@ -255,10 +255,14 @@ impl Tool for KnowledgeQueryTool {
         repo_results.sort_by(|a, b| {
             let la = knowledge_layer_authority(a.layer);
             let lb = knowledge_layer_authority(b.layer);
-            if la != lb { return la.cmp(&lb); }
+            if la != lb {
+                return la.cmp(&lb);
+            }
             let pa = a.variant_precedence();
             let pb = b.variant_precedence();
-            if pa != pb { return pb.cmp(&pa); }
+            if pa != pb {
+                return pb.cmp(&pa);
+            }
             b.updated_at.cmp(&a.updated_at)
         });
 

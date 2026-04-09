@@ -879,7 +879,9 @@ async fn run_promotion_preview(args: KnowledgePromotionPreviewArgs) -> anyhow::R
                     println!();
                 }
             }
-            output::hint("Run 'aeterna knowledge promote' with --yes to submit the promotion request");
+            output::hint(
+                "Run 'aeterna knowledge promote' with --yes to submit the promotion request",
+            );
         }
         return Ok(());
     }
@@ -938,9 +940,15 @@ async fn run_promote(args: KnowledgePromoteArgs) -> anyhow::Result<()> {
         ));
         println!();
 
-        let shared = prompt_required("Enter the content to promote to the target layer (shared canonical):\n> ")?;
-        let residual = prompt_optional("Enter the content to keep at the source layer (residual; press Enter to skip):\n> ")?;
-        let role = prompt_optional("Role for the residual item (specialization / applicability / exception; press Enter to skip):\n> ")?;
+        let shared = prompt_required(
+            "Enter the content to promote to the target layer (shared canonical):\n> ",
+        )?;
+        let residual = prompt_optional(
+            "Enter the content to keep at the source layer (residual; press Enter to skip):\n> ",
+        )?;
+        let role = prompt_optional(
+            "Role for the residual item (specialization / applicability / exception; press Enter to skip):\n> ",
+        )?;
 
         println!();
         output::warn("Review your split before submitting:");
@@ -1101,7 +1109,10 @@ async fn run_pending(args: KnowledgePendingArgs) -> anyhow::Result<()> {
             println!();
 
             if count == 0 {
-                println!("  ✓ No promotion requests matching filter '{}'", args.status);
+                println!(
+                    "  ✓ No promotion requests matching filter '{}'",
+                    args.status
+                );
                 println!();
             } else {
                 for item in &items {
@@ -1116,7 +1127,9 @@ async fn run_pending(args: KnowledgePendingArgs) -> anyhow::Result<()> {
                     println!("        Status: {}  |  Created: {}", status, created);
                     println!();
                 }
-                output::hint("Use 'aeterna knowledge approve <id>' or 'aeterna knowledge reject <id> --reason <reason>' to act");
+                output::hint(
+                    "Use 'aeterna knowledge approve <id>' or 'aeterna knowledge reject <id> --reason <reason>' to act",
+                );
             }
         }
         return Ok(());
@@ -1475,12 +1488,7 @@ fn prompt_required(prompt: &str) -> anyhow::Result<String> {
     write!(out, "{prompt}")?;
     out.flush()?;
     let stdin = std::io::stdin();
-    let line = stdin
-        .lock()
-        .lines()
-        .next()
-        .transpose()?
-        .unwrap_or_default();
+    let line = stdin.lock().lines().next().transpose()?.unwrap_or_default();
     let trimmed = line.trim().to_string();
     if trimmed.is_empty() {
         anyhow::bail!("Input is required for promotion content");
@@ -1495,12 +1503,7 @@ fn prompt_optional(prompt: &str) -> anyhow::Result<Option<String>> {
     write!(out, "{prompt}")?;
     out.flush()?;
     let stdin = std::io::stdin();
-    let line = stdin
-        .lock()
-        .lines()
-        .next()
-        .transpose()?
-        .unwrap_or_default();
+    let line = stdin.lock().lines().next().transpose()?.unwrap_or_default();
     let trimmed = line.trim().to_string();
     if trimmed.is_empty() {
         Ok(None)
@@ -1516,12 +1519,7 @@ fn prompt_confirm(prompt: &str) -> anyhow::Result<bool> {
     write!(out, "{prompt}")?;
     out.flush()?;
     let stdin = std::io::stdin();
-    let line = stdin
-        .lock()
-        .lines()
-        .next()
-        .transpose()?
-        .unwrap_or_default();
+    let line = stdin.lock().lines().next().transpose()?.unwrap_or_default();
     let answer = line.trim().to_lowercase();
     Ok(answer == "y" || answer == "yes")
 }

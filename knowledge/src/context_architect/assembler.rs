@@ -8,8 +8,8 @@ use config::cca::StalenessPolicy;
 use dashmap::DashMap;
 use mk_core::traits::RlmAssemblyService;
 use mk_core::types::{
-    ContextVector, KnowledgeRelation, KnowledgeVariantRole, LayerSummary, MemoryLayer, SummaryDepth,
-    TenantContext, compute_xxhash64,
+    ContextVector, KnowledgeRelation, KnowledgeVariantRole, LayerSummary, MemoryLayer,
+    SummaryDepth, TenantContext, compute_xxhash64,
 };
 
 use crate::context_architect::compressor::ViewMode;
@@ -18,14 +18,14 @@ use crate::context_architect::compressor::ViewMode;
 pub struct CacheKey {
     pub query_hash: u64,
     pub token_budget: u32,
-    pub view_mode: ViewMode
+    pub view_mode: ViewMode,
 }
 
 impl CacheKey {
     pub fn new(
         query_embedding: Option<&ContextVector>,
         token_budget: u32,
-        view_mode: ViewMode
+        view_mode: ViewMode,
     ) -> Self {
         let query_hash = match query_embedding {
             Some(vec) => {
@@ -38,13 +38,13 @@ impl CacheKey {
                 }
                 hasher.finish()
             }
-            None => 0
+            None => 0,
         };
 
         Self {
             query_hash,
             token_budget,
-            view_mode
+            view_mode,
         }
     }
 }
@@ -52,7 +52,7 @@ impl CacheKey {
 #[derive(Debug, Clone)]
 pub struct CacheEntry {
     pub context: AssembledContext,
-    pub created_at: Instant
+    pub created_at: Instant,
 }
 
 #[derive(Debug, Clone)]
@@ -62,7 +62,7 @@ pub struct AssemblyMetrics {
     cache_misses: Arc<AtomicU64>,
     timeouts: Arc<AtomicU64>,
     latency_sum_ms: Arc<AtomicU64>,
-    partial_returns: Arc<AtomicU64>
+    partial_returns: Arc<AtomicU64>,
 }
 
 impl AssemblyMetrics {
@@ -73,7 +73,7 @@ impl AssemblyMetrics {
             cache_misses: Arc::new(AtomicU64::new(0)),
             timeouts: Arc::new(AtomicU64::new(0)),
             latency_sum_ms: Arc::new(AtomicU64::new(0)),
-            partial_returns: Arc::new(AtomicU64::new(0))
+            partial_returns: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -82,7 +82,7 @@ impl AssemblyMetrics {
         latency_ms: u64,
         hit_cache: bool,
         timed_out: bool,
-        partial: bool
+        partial: bool,
     ) {
         self.total_assemblies.fetch_add(1, Ordering::Relaxed);
         self.latency_sum_ms.fetch_add(latency_ms, Ordering::Relaxed);
@@ -141,7 +141,7 @@ impl AssemblyMetrics {
 pub enum StalenessStatus {
     Fresh,
     Stale,
-    Unknown
+    Unknown,
 }
 
 #[derive(Debug, Clone)]
@@ -155,7 +155,7 @@ pub struct AssemblerConfig {
     pub staleness_policy: StalenessPolicy,
     pub assembly_timeout_ms: u64,
     pub enable_parallel_queries: bool,
-    pub enable_early_termination: bool
+    pub enable_early_termination: bool,
 }
 
 impl Default for AssemblerConfig {
@@ -176,7 +176,7 @@ impl Default for AssemblerConfig {
             staleness_policy: StalenessPolicy::default(),
             assembly_timeout_ms: 100,
             enable_parallel_queries: true,
-            enable_early_termination: true
+            enable_early_termination: true,
         }
     }
 }
@@ -190,7 +190,7 @@ pub struct ContextEntry {
     pub depth: SummaryDepth,
     pub relevance_score: f32,
     pub context_vector: Option<ContextVector>,
-    pub staleness_status: StalenessStatus
+    pub staleness_status: StalenessStatus,
 }
 
 #[derive(Debug, Clone)]
@@ -198,7 +198,7 @@ pub struct ContextMetadata {
     pub view_type: String,
     pub includes_trajectory_logs: bool,
     pub includes_metrics: bool,
-    pub includes_traces: bool
+    pub includes_traces: bool,
 }
 
 impl ContextMetadata {
@@ -207,7 +207,7 @@ impl ContextMetadata {
             view_type: "agent_experience".to_string(),
             includes_trajectory_logs: false,
             includes_metrics: false,
-            includes_traces: false
+            includes_traces: false,
         }
     }
 
@@ -231,7 +231,7 @@ impl ContextMetadata {
             view_type: "developer_experience".to_string(),
             includes_trajectory_logs: true,
             includes_metrics: true,
-            includes_traces: true
+            includes_traces: true,
         }
     }
 }
@@ -239,7 +239,7 @@ impl ContextMetadata {
 #[derive(Debug, Clone)]
 pub struct ContextView {
     pub content: String,
-    pub metadata: ContextMetadata
+    pub metadata: ContextMetadata,
 }
 
 #[derive(Debug, Clone)]
@@ -253,7 +253,7 @@ pub struct AssembledContext {
     pub stale_entries: Vec<String>,
     pub has_stale_content: bool,
     pub timed_out: bool,
-    pub partial: bool
+    pub partial: bool,
 }
 
 impl AssembledContext {
@@ -303,7 +303,7 @@ pub struct ContextAssembler {
     config: AssemblerConfig,
     cache: Arc<DashMap<CacheKey, CacheEntry>>,
     metrics: Arc<AssemblyMetrics>,
-    rlm_handler: Option<Arc<dyn RlmAssemblyService>>
+    rlm_handler: Option<Arc<dyn RlmAssemblyService>>,
 }
 
 impl ContextAssembler {
@@ -312,7 +312,7 @@ impl ContextAssembler {
             config,
             cache: Arc::new(DashMap::new()),
             metrics: Arc::new(AssemblyMetrics::new()),
-            rlm_handler: None
+            rlm_handler: None,
         }
     }
 
@@ -360,7 +360,7 @@ impl ContextAssembler {
         &self,
         query_embedding: Option<&ContextVector>,
         sources: &[SummarySource],
-        token_budget: Option<u32>
+        token_budget: Option<u32>,
     ) -> AssembledContext {
         let start = Instant::now();
         let budget = token_budget.unwrap_or(self.config.default_token_budget);
@@ -378,7 +378,7 @@ impl ContextAssembler {
                     start.elapsed().as_millis() as u64,
                     true,
                     false,
-                    false
+                    false,
                 );
                 return cached;
             }
@@ -400,8 +400,8 @@ impl ContextAssembler {
                 cache_key,
                 CacheEntry {
                     context: result.clone(),
-                    created_at: Instant::now()
-                }
+                    created_at: Instant::now(),
+                },
             );
         }
 
@@ -417,7 +417,7 @@ impl ContextAssembler {
         query_embedding: Option<&ContextVector>,
         sources: &[SummarySource],
         token_budget: Option<u32>,
-        tenant: &TenantContext
+        tenant: &TenantContext,
     ) -> AssembledContext {
         let start = Instant::now();
 
@@ -438,7 +438,7 @@ impl ContextAssembler {
                             depth: SummaryDepth::Detailed,
                             relevance_score: 0.95,
                             context_vector: query_embedding.cloned(),
-                            staleness_status: StalenessStatus::Fresh
+                            staleness_status: StalenessStatus::Fresh,
                         };
 
                         let view = ContextView {
@@ -447,8 +447,8 @@ impl ContextAssembler {
                                 view_type: "rlm_synthesized".to_string(),
                                 includes_trajectory_logs: false,
                                 includes_metrics: false,
-                                includes_traces: false
-                            }
+                                includes_traces: false,
+                            },
                         };
 
                         self.metrics
@@ -464,7 +464,7 @@ impl ContextAssembler {
                             stale_entries: vec![],
                             has_stale_content: false,
                             timed_out: false,
-                            partial: false
+                            partial: false,
                         };
                     }
                     Err(e) => {
@@ -481,7 +481,7 @@ impl ContextAssembler {
         &self,
         query_embedding: Option<&ContextVector>,
         sources: &[SummarySource],
-        token_budget: Option<u32>
+        token_budget: Option<u32>,
     ) -> AssembledContext {
         let budget = token_budget.unwrap_or(self.config.default_token_budget);
 
@@ -532,7 +532,7 @@ impl ContextAssembler {
             stale_entries,
             has_stale_content,
             timed_out: false,
-            partial: false
+            partial: false,
         }
     }
 
@@ -544,7 +544,7 @@ impl ContextAssembler {
                 SummaryDepth::Detailed,
                 SummaryDepth::Paragraph,
                 SummaryDepth::Sentence,
-            ]
+            ],
         };
 
         let metadata = match self.config.view_mode {
@@ -553,14 +553,14 @@ impl ContextAssembler {
                 view_type: "user_experience".to_string(),
                 includes_trajectory_logs: false,
                 includes_metrics: false,
-                includes_traces: false
+                includes_traces: false,
             },
             ViewMode::Dx => ContextMetadata {
                 view_type: "developer_experience".to_string(),
                 includes_trajectory_logs: true,
                 includes_metrics: true,
-                includes_traces: true
-            }
+                includes_traces: true,
+            },
         };
 
         let (content, _total_tokens) = self.build_view_content(entries, &preferred_depths, budget);
@@ -572,7 +572,7 @@ impl ContextAssembler {
         &self,
         entries: &[ContextEntry],
         _preferred_depths: &[SummaryDepth],
-        budget: u32
+        budget: u32,
     ) -> (String, u32) {
         let mut output = Vec::new();
         let mut used_tokens = 0;
@@ -594,7 +594,7 @@ impl ContextAssembler {
     fn compute_relevance_score(
         &self,
         query_embedding: Option<&ContextVector>,
-        source: &SummarySource
+        source: &SummarySource,
     ) -> f32 {
         let base = match (query_embedding, &source.context_vector) {
             (Some(query), Some(source_vec)) => cosine_similarity(query, source_vec),
@@ -618,14 +618,14 @@ impl ContextAssembler {
 
         match position {
             Some(idx) => 1.0 - (idx as f32 * 0.1),
-            None => 0.5
+            None => 0.5,
         }
     }
 
     fn distribute_token_budget(
         &self,
         scored_sources: &[(&SummarySource, f32)],
-        budget: u32
+        budget: u32,
     ) -> HashMap<String, u32> {
         let mut allocations = HashMap::new();
 
@@ -655,7 +655,7 @@ impl ContextAssembler {
     fn select_entries(
         &self,
         scored_sources: &[(&SummarySource, f32)],
-        allocations: &HashMap<String, u32>
+        allocations: &HashMap<String, u32>,
     ) -> Vec<ContextEntry> {
         let mut entries = Vec::new();
 
@@ -698,12 +698,12 @@ impl ContextAssembler {
         &self,
         source: &SummarySource,
         allocation: u32,
-        relevance: f32
+        relevance: f32,
     ) -> Option<ContextEntry> {
         let depth_order = [
             SummaryDepth::Detailed,
             SummaryDepth::Paragraph,
-            SummaryDepth::Sentence
+            SummaryDepth::Sentence,
         ];
 
         for depth in depth_order {
@@ -719,7 +719,7 @@ impl ContextAssembler {
                     depth,
                     relevance_score: relevance,
                     context_vector: source.context_vector.clone(),
-                    staleness_status: staleness
+                    staleness_status: staleness,
                 });
             }
         }
@@ -735,7 +735,7 @@ impl ContextAssembler {
                     depth,
                     relevance_score: relevance,
                     context_vector: source.context_vector.clone(),
-                    staleness_status: staleness
+                    staleness_status: staleness,
                 });
             }
         }
@@ -748,7 +748,7 @@ impl ContextAssembler {
             depth: SummaryDepth::Detailed,
             relevance_score: relevance,
             context_vector: source.context_vector.clone(),
-            staleness_status: StalenessStatus::Fresh
+            staleness_status: StalenessStatus::Fresh,
         })
     }
 
@@ -802,8 +802,8 @@ fn sample_source(id: &str, layer: MemoryLayer) -> SummarySource {
             source_hash: "hash".to_string(),
             content_hash: None,
             personalized: false,
-            personalization_context: None
-        }
+            personalization_context: None,
+        },
     );
     summaries.insert(
         SummaryDepth::Paragraph,
@@ -815,8 +815,8 @@ fn sample_source(id: &str, layer: MemoryLayer) -> SummarySource {
             source_hash: "hash".to_string(),
             content_hash: None,
             personalized: false,
-            personalization_context: None
-        }
+            personalization_context: None,
+        },
     );
 
     SummarySource {
@@ -828,7 +828,7 @@ fn sample_source(id: &str, layer: MemoryLayer) -> SummarySource {
         full_content_tokens: None,
         current_source_content: None,
         variant_role: None,
-        relations: vec![]
+        relations: vec![],
     }
 }
 
@@ -997,8 +997,8 @@ mod tests {
                 source_hash: "hash".to_string(),
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let sources = vec![source];
@@ -1022,8 +1022,8 @@ mod tests {
                 source_hash: "hash".to_string(),
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let sources = vec![source];
@@ -1070,8 +1070,8 @@ mod tests {
             full_content_tokens: Some(100),
             current_source_content: None,
             variant_role: None,
-            relations: vec![]
-            };
+            relations: vec![],
+        };
 
         let sources = vec![source];
         let result = assembler.assemble_context(None, &sources, None);
@@ -1097,8 +1097,8 @@ mod tests {
                 source_hash: source_hash.clone(),
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let source = SummarySource {
@@ -1110,8 +1110,8 @@ mod tests {
             full_content_tokens: None,
             current_source_content: Some(content.to_string()),
             variant_role: None,
-            relations: vec![]
-            };
+            relations: vec![],
+        };
 
         let result = assembler.assemble_context(None, &[source], None);
 
@@ -1139,8 +1139,8 @@ mod tests {
                 source_hash: original_hash,
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let source = SummarySource {
@@ -1152,8 +1152,8 @@ mod tests {
             full_content_tokens: None,
             current_source_content: Some(modified_content.to_string()),
             variant_role: None,
-            relations: vec![]
-            };
+            relations: vec![],
+        };
 
         let result = assembler.assemble_context(None, &[source], None);
 
@@ -1193,8 +1193,8 @@ mod tests {
                 source_hash: fresh_hash,
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let fresh_source = SummarySource {
@@ -1206,8 +1206,8 @@ mod tests {
             full_content_tokens: None,
             current_source_content: Some(fresh_content.to_string()),
             variant_role: None,
-            relations: vec![]
-            };
+            relations: vec![],
+        };
 
         let stale_original = "Stale original";
         let stale_modified = "Stale modified content";
@@ -1223,8 +1223,8 @@ mod tests {
                 source_hash: stale_hash,
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let stale_source = SummarySource {
@@ -1236,8 +1236,8 @@ mod tests {
             full_content_tokens: None,
             current_source_content: Some(stale_modified.to_string()),
             variant_role: None,
-            relations: vec![]
-            };
+            relations: vec![],
+        };
 
         let result = assembler.assemble_context(None, &[fresh_source, stale_source], None);
 
@@ -1278,8 +1278,8 @@ mod tests {
                 source_hash: empty_hash,
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let source = SummarySource {
@@ -1291,8 +1291,8 @@ mod tests {
             full_content_tokens: None,
             current_source_content: Some(empty_content.to_string()),
             variant_role: None,
-            relations: vec![]
-            };
+            relations: vec![],
+        };
 
         let result = assembler.assemble_context(None, &[source], None);
 
@@ -1316,8 +1316,8 @@ mod tests {
                 source_hash: large_hash,
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let source = SummarySource {
@@ -1329,8 +1329,8 @@ mod tests {
             full_content_tokens: None,
             current_source_content: Some(large_content),
             variant_role: None,
-            relations: vec![]
-            };
+            relations: vec![],
+        };
 
         let result = assembler.assemble_context(None, &[source], None);
 
@@ -1354,8 +1354,8 @@ mod tests {
                 source_hash: unicode_hash,
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let source = SummarySource {
@@ -1367,8 +1367,8 @@ mod tests {
             full_content_tokens: None,
             current_source_content: Some(unicode_content.to_string()),
             variant_role: None,
-            relations: vec![]
-            };
+            relations: vec![],
+        };
 
         let result = assembler.assemble_context(None, &[source], None);
 
@@ -1393,8 +1393,8 @@ mod tests {
                 source_hash: original_hash,
                 content_hash: None,
                 personalized: false,
-                personalization_context: None
-            }
+                personalization_context: None,
+            },
         );
 
         let source = SummarySource {
@@ -1406,8 +1406,8 @@ mod tests {
             full_content_tokens: None,
             current_source_content: Some(modified.to_string()),
             variant_role: None,
-            relations: vec![]
-            };
+            relations: vec![],
+        };
 
         let result = assembler.assemble_context(None, &[source], None);
 

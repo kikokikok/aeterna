@@ -13,7 +13,7 @@ pub struct HindsightRetrievalConfig {
     pub semantic_threshold: f32,
     pub recency_weight: f32,
     pub success_weight: f32,
-    pub enable_tag_filtering: bool
+    pub enable_tag_filtering: bool,
 }
 
 impl Default for HindsightRetrievalConfig {
@@ -25,7 +25,7 @@ impl Default for HindsightRetrievalConfig {
             semantic_threshold: 0.8,
             recency_weight: 0.2,
             success_weight: 0.2,
-            enable_tag_filtering: true
+            enable_tag_filtering: true,
         }
     }
 }
@@ -35,7 +35,7 @@ pub struct HindsightRetrievalFilter {
     pub tags: Option<Vec<String>>,
     pub min_success_rate: Option<f32>,
     pub created_after: Option<i64>,
-    pub created_before: Option<i64>
+    pub created_before: Option<i64>,
 }
 
 impl HindsightRetrievalFilter {
@@ -66,7 +66,7 @@ pub struct ScoredHindsightNote {
     pub relevance_score: f32,
     pub recency_score: f32,
     pub success_score: f32,
-    pub combined_score: f32
+    pub combined_score: f32,
 }
 
 impl ScoredHindsightNote {
@@ -75,7 +75,7 @@ impl ScoredHindsightNote {
         relevance_score: f32,
         recency_score: f32,
         success_score: f32,
-        config: &HindsightRetrievalConfig
+        config: &HindsightRetrievalConfig,
     ) -> Self {
         let relevance_weight = 1.0 - config.recency_weight - config.success_weight;
         let combined_score = relevance_score * relevance_weight
@@ -87,14 +87,14 @@ impl ScoredHindsightNote {
             relevance_score,
             recency_score,
             success_score,
-            combined_score
+            combined_score,
         }
     }
 }
 
 pub struct HindsightRetriever {
     storage: Arc<PostgresBackend>,
-    config: HindsightRetrievalConfig
+    config: HindsightRetrievalConfig,
 }
 
 impl HindsightRetriever {
@@ -106,7 +106,7 @@ impl HindsightRetriever {
         &self,
         tenant_id: &str,
         error: &ErrorSignature,
-        filter: Option<&HindsightRetrievalFilter>
+        filter: Option<&HindsightRetrievalFilter>,
     ) -> Result<Vec<ScoredHindsightNote>, PostgresError> {
         let span = info_span!(
             "retrieve_hindsight_notes",
@@ -133,7 +133,7 @@ fn rank_notes(
     error: &ErrorSignature,
     notes: &[HindsightNote],
     config: &HindsightRetrievalConfig,
-    filter: Option<&HindsightRetrievalFilter>
+    filter: Option<&HindsightRetrievalFilter>,
 ) -> Vec<ScoredHindsightNote> {
     let now = chrono::Utc::now().timestamp();
 
@@ -152,7 +152,7 @@ fn rank_notes(
                 relevance,
                 recency,
                 success,
-                config
+                config,
             ))
         })
         .collect();
@@ -170,7 +170,7 @@ fn rank_notes(
 fn matches_filter(
     note: &HindsightNote,
     config: &HindsightRetrievalConfig,
-    filter: Option<&HindsightRetrievalFilter>
+    filter: Option<&HindsightRetrievalFilter>,
 ) -> bool {
     let Some(filter) = filter else {
         return true;
@@ -210,11 +210,11 @@ fn matches_filter(
 fn relevance_score(
     error: &ErrorSignature,
     note: &HindsightNote,
-    config: &HindsightRetrievalConfig
+    config: &HindsightRetrievalConfig,
 ) -> f32 {
     if let (Some(query_vec), Some(note_vec)) = (
         error.embedding.as_ref(),
-        note.error_signature.embedding.as_ref()
+        note.error_signature.embedding.as_ref(),
     ) {
         let sim = cosine_similarity(query_vec, note_vec);
         if sim >= config.semantic_threshold {
@@ -230,13 +230,13 @@ fn relevance_score(
 
     let msg_sim = jaccard_similarity(
         &tokenize(&error.message_pattern),
-        &tokenize(&note.error_signature.message_pattern)
+        &tokenize(&note.error_signature.message_pattern),
     );
     score += msg_sim * 0.3;
 
     let ctx_sim = jaccard_similarity(
         &error.context_patterns,
-        &note.error_signature.context_patterns
+        &note.error_signature.context_patterns,
     );
     score += ctx_sim * 0.1;
 
@@ -315,7 +315,7 @@ mod tests {
             message_pattern: message.to_string(),
             stack_patterns: vec![],
             context_patterns: vec!["tool:cargo_test".to_string()],
-            embedding: None
+            embedding: None,
         }
     }
 
@@ -330,12 +330,12 @@ mod tests {
                 changes: vec![],
                 success_rate: success,
                 application_count: 1,
-                last_success_at: 0
+                last_success_at: 0,
             }],
             content: "content".to_string(),
             tags: vec!["rust".to_string()],
             created_at,
-            updated_at: created_at
+            updated_at: created_at,
         }
     }
 
@@ -415,13 +415,13 @@ mod tests {
                 "1",
                 signature("TypeError", "cannot read property"),
                 now - 604800,
-                0.5
+                0.5,
             ),
             note(
                 "2",
                 signature("TypeError", "cannot read property"),
                 now,
-                0.5
+                0.5,
             ),
         ];
 

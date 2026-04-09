@@ -17,7 +17,7 @@ fn test_init_command_help() {
         .stdout(predicate::str::contains("Directory to initialize"))
         .stdout(predicate::str::contains("Tenant ID to use"))
         .stdout(predicate::str::contains(
-            "Force overwrite existing context.toml"
+            "Force overwrite existing context.toml",
         ));
 }
 

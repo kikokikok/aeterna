@@ -16,7 +16,7 @@ use tokio::sync::RwLock;
 fn test_tenant_context() -> TenantContext {
     TenantContext::new(
         TenantId::from_str("test-tenant").unwrap(),
-        UserId::from_str("test-user").unwrap()
+        UserId::from_str("test-user").unwrap(),
     )
 }
 
@@ -29,7 +29,7 @@ fn create_test_combined_trainer() -> CombinedMemoryTrainer {
         max_trajectory_length: 100,
         baseline_decay: 0.9,
         min_weight: 0.1,
-        max_weight: 10.0
+        max_weight: 10.0,
     };
 
     let r1_trajectories: Arc<RwLock<HashMap<String, Vec<mk_core::types::MemoryTrajectoryEvent>>>> =
@@ -62,9 +62,9 @@ async fn test_decomposition_training_flow() -> Result<(), Box<dyn std::error::Er
             target_layers: Vec::new(),
             filters: std::collections::HashMap::new(),
             limit: 10,
-            threshold: 0.7
+            threshold: 0.7,
         },
-        tenant_ctx.clone()
+        tenant_ctx.clone(),
     );
 
     trainer
@@ -75,7 +75,7 @@ async fn test_decomposition_training_flow() -> Result<(), Box<dyn std::error::Er
     trainer
         .record_decomposition_outcome(
             &trajectory.id,
-            TrainingOutcome::ResultUsed { quality_score: 0.8 }
+            TrainingOutcome::ResultUsed { quality_score: 0.8 },
         )
         .await?;
 
@@ -123,9 +123,9 @@ async fn test_clear_decomposition_trajectories()
                 target_layers: Vec::new(),
                 filters: std::collections::HashMap::new(),
                 limit: 10,
-                threshold: 0.7
+                threshold: 0.7,
             },
-            tenant_ctx.clone()
+            tenant_ctx.clone(),
         );
 
         trainer.add_decomposition_trajectory(trajectory).await;
@@ -153,21 +153,21 @@ async fn test_multiple_trajectories_training()
     let trajectories = vec![
         (
             "How do we handle authentication?".to_string(),
-            TrainingOutcome::ResultUsed { quality_score: 0.9 }
+            TrainingOutcome::ResultUsed { quality_score: 0.9 },
         ),
         (
             "What's our deployment strategy?".to_string(),
-            TrainingOutcome::ResultUsed { quality_score: 0.7 }
+            TrainingOutcome::ResultUsed { quality_score: 0.7 },
         ),
         (
             "How to implement caching?".to_string(),
             TrainingOutcome::QueryRefined {
-                new_query: "How to implement Redis caching?".to_string()
-            }
+                new_query: "How to implement Redis caching?".to_string(),
+            },
         ),
         (
             "Database schema design".to_string(),
-            TrainingOutcome::ResultIgnored
+            TrainingOutcome::ResultIgnored,
         ),
     ];
 
@@ -178,9 +178,9 @@ async fn test_multiple_trajectories_training()
                 target_layers: Vec::new(),
                 filters: std::collections::HashMap::new(),
                 limit: 10,
-                threshold: 0.7
+                threshold: 0.7,
             },
-            tenant_ctx.clone()
+            tenant_ctx.clone(),
         );
 
         trainer
@@ -219,9 +219,9 @@ async fn test_train_step_with_decomposition_only()
             target_layers: Vec::new(),
             filters: std::collections::HashMap::new(),
             limit: 10,
-            threshold: 0.7
+            threshold: 0.7,
         },
-        tenant_ctx.clone()
+        tenant_ctx.clone(),
     );
 
     trainer
@@ -232,7 +232,7 @@ async fn test_train_step_with_decomposition_only()
     trainer
         .record_decomposition_outcome(
             &trajectory.id,
-            TrainingOutcome::ResultUsed { quality_score: 0.8 }
+            TrainingOutcome::ResultUsed { quality_score: 0.8 },
         )
         .await?;
 
@@ -270,9 +270,9 @@ async fn test_policy_state_persistence_cycle()
                 target_layers: Vec::new(),
                 filters: std::collections::HashMap::new(),
                 limit: 10,
-                threshold: 0.7
+                threshold: 0.7,
             },
-            tenant_ctx.clone()
+            tenant_ctx.clone(),
         );
 
         trainer
@@ -282,7 +282,7 @@ async fn test_policy_state_persistence_cycle()
         trainer
             .record_decomposition_outcome(
                 &trajectory.id,
-                TrainingOutcome::ResultUsed { quality_score: 0.8 }
+                TrainingOutcome::ResultUsed { quality_score: 0.8 },
             )
             .await?;
     }
@@ -340,9 +340,9 @@ async fn test_incomplete_trajectory_handling()
             target_layers: Vec::new(),
             filters: std::collections::HashMap::new(),
             limit: 10,
-            threshold: 0.7
+            threshold: 0.7,
         },
-        tenant_ctx.clone()
+        tenant_ctx.clone(),
     );
 
     trainer.add_decomposition_trajectory(trajectory).await;
