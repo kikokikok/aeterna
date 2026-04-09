@@ -34,6 +34,6 @@
 - [x] 5.1 Thread the `PgPool` or `PostgresBackend` into `PluginAuthState` during server construction
 
 ## 6. Verification
-- [ ] 6.1 `cargo build` passes
-- [ ] 6.2 `cargo test --all` passes (or pre-existing failures only)
-- [ ] 6.3 Deploy and verify `aeterna tenant create` works for bootstrapped PlatformAdmin
+- [x] 6.1 `cargo build` passes
+- [x] 6.2 `cargo test --all` passes (or pre-existing failures only)
+- [x] 6.3 Deploy and verify `aeterna tenant create` works for bootstrapped PlatformAdmin

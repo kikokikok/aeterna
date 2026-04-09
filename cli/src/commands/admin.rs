@@ -683,6 +683,11 @@ fn embedded_migrations() -> Vec<EmbeddedMigration> {
             name: "016_governance_rls",
             sql: include_str!("../../../storage/migrations/016_governance_rls.sql"),
         },
+        EmbeddedMigration {
+            version: 17,
+            name: "017_tenants_tables",
+            sql: include_str!("../../../storage/migrations/017_tenants_tables.sql"),
+        },
     ]
 }
 

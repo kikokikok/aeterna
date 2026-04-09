@@ -643,6 +643,58 @@ impl PostgresBackend {
 
         rls_migration::run_rls_migration(&self.pool).await?;
 
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS tenants (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                slug TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                source_owner TEXT NOT NULL DEFAULT 'admin',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                deactivated_at TIMESTAMPTZ
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS tenant_domain_mappings (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                domain TEXT NOT NULL,
+                verified BOOLEAN NOT NULL DEFAULT false,
+                source TEXT NOT NULL DEFAULT 'admin',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (tenant_id, domain)
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS tenant_repository_bindings (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID UNIQUE NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                local_path TEXT,
+                remote_url TEXT,
+                branch TEXT NOT NULL DEFAULT 'main',
+                branch_policy TEXT NOT NULL DEFAULT 'direct_commit',
+                credential_kind TEXT NOT NULL DEFAULT 'none',
+                credential_ref TEXT,
+                github_owner TEXT,
+                github_repo TEXT,
+                source_owner TEXT NOT NULL DEFAULT 'admin',
+                git_provider_connection_id TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )",
+        )
+        .execute(&self.pool)
+        .await?;
+
         Ok(())
     }
 
