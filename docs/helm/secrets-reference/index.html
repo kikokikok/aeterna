@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="generator" content="Docusaurus v3.9.2">
 <title data-rh="true">Secrets &amp; Environment Variables Reference | Aeterna</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://kikokikok.github.io/aeterna/docs/helm/secrets-reference"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Secrets &amp; Environment Variables Reference | Aeterna"><meta data-rh="true" name="description" content="Complete inventory of all secrets, credentials, and environment variables required to deploy and operate Aeterna."><meta data-rh="true" property="og:description" content="Complete inventory of all secrets, credentials, and environment variables required to deploy and operate Aeterna."><link data-rh="true" rel="icon" href="/aeterna/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://kikokikok.github.io/aeterna/docs/helm/secrets-reference"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/helm/secrets-reference" hreflang="en"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/helm/secrets-reference" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Secrets & Environment Variables Reference","item":"https://kikokikok.github.io/aeterna/docs/helm/secrets-reference"}]}</script><link rel="stylesheet" href="/aeterna/assets/css/styles.a5946a0e.css">
-<script src="/aeterna/assets/js/runtime~main.ee493b36.js" defer="defer"></script>
+<script src="/aeterna/assets/js/runtime~main.a2a1eb67.js" defer="defer"></script>
 <script src="/aeterna/assets/js/main.776e8dd9.js" defer="defer"></script>
 </head>
 <body class="navigation-with-keyboard">
@@ -524,7 +524,79 @@
 
 
 
-<table><thead><tr><th>Variable</th><th>Values Key</th><th>Default</th><th>Purpose</th></tr></thead><tbody><tr><td><code>AETERNA_DEPLOYMENT_MODE</code></td><td><code>deploymentMode</code></td><td><code>local</code></td><td>Deployment mode (local/hybrid/remote)</td></tr><tr><td><code>AETERNA_LOG_LEVEL</code></td><td><code>observability.logging.level</code></td><td><code>info</code></td><td>Log verbosity</td></tr><tr><td><code>AETERNA_LOG_FORMAT</code></td><td><code>observability.logging.format</code></td><td><code>json</code></td><td>Log format (json/text)</td></tr><tr><td><code>AETERNA_LLM_PROVIDER</code></td><td><code>llm.provider</code></td><td><code>openai</code></td><td>LLM backend</td></tr><tr><td><code>AETERNA_VECTOR_BACKEND</code></td><td><code>vectorBackend.type</code></td><td><code>qdrant</code></td><td>Vector storage backend</td></tr><tr><td><code>AETERNA_POSTGRESQL_HOST</code></td><td>Auto-resolved</td><td>—</td><td>PostgreSQL host</td></tr><tr><td><code>AETERNA_POSTGRESQL_PORT</code></td><td>Auto-resolved</td><td><code>5432</code></td><td>PostgreSQL port</td></tr><tr><td><code>AETERNA_POSTGRESQL_DATABASE</code></td><td>Auto-resolved</td><td><code>aeterna</code></td><td>PostgreSQL database</td></tr><tr><td><code>AETERNA_REDIS_HOST</code></td><td>Auto-resolved</td><td>—</td><td>Redis/Dragonfly host</td></tr><tr><td><code>AETERNA_REDIS_PORT</code></td><td>Auto-resolved</td><td><code>6379</code></td><td>Redis/Dragonfly port</td></tr><tr><td><code>AETERNA_QDRANT_HOST</code></td><td>Auto-resolved</td><td>—</td><td>Qdrant host</td></tr><tr><td><code>AETERNA_QDRANT_PORT</code></td><td>Auto-resolved</td><td><code>6334</code></td><td>Qdrant gRPC port</td></tr><tr><td><code>AETERNA_OPAL_ENABLED</code></td><td><code>opal.enabled</code></td><td><code>true</code></td><td>Enable OPAL authorization</td></tr><tr><td><code>AETERNA_CEDAR_AGENT_HOST</code></td><td>Auto-resolved</td><td>—</td><td>Cedar Agent service host</td></tr><tr><td><code>AETERNA_CEDAR_AGENT_PORT</code></td><td>—</td><td><code>8180</code></td><td>Cedar Agent service port</td></tr><tr><td><code>AETERNA_FEATURE_CCA</code></td><td><code>aeterna.features.cca</code></td><td><code>true</code></td><td>Enable CCA capabilities</td></tr><tr><td><code>AETERNA_FEATURE_RADKIT</code></td><td><code>aeterna.features.radkit</code></td><td><code>false</code></td><td>Enable Radkit A2A</td></tr><tr><td><code>AETERNA_FEATURE_RLM</code></td><td><code>aeterna.features.rlm</code></td><td><code>true</code></td><td>Enable RLM navigation</td></tr><tr><td><code>AETERNA_FEATURE_REFLECTIVE</code></td><td><code>aeterna.features.reflective</code></td><td><code>true</code></td><td>Enable reflective reasoning</td></tr><tr><td><code>AETERNA_KNOWLEDGE_REPO_PATH</code></td><td>—</td><td><code>/tmp/knowledge-repo</code></td><td>Local git clone path</td></tr><tr><td><code>AETERNA_K8S_NAMESPACE</code></td><td>Auto-resolved</td><td>Pod namespace</td><td>Namespace used by the tenant config provider</td></tr><tr><td><code>AETERNA_KNOWLEDGE_REPO_URL</code></td><td><code>knowledgeRepo.remoteUrl</code></td><td>—</td><td>Remote knowledge repo SSH URL</td></tr><tr><td><code>AETERNA_KNOWLEDGE_REPO_BRANCH</code></td><td><code>knowledgeRepo.branch</code></td><td><code>main</code></td><td>Knowledge repo branch</td></tr><tr><td><code>AETERNA_GITHUB_OWNER</code></td><td><code>knowledgeRepo.github.owner</code></td><td>—</td><td>GitHub org/user for knowledge repo</td></tr><tr><td><code>AETERNA_GITHUB_REPO</code></td><td><code>knowledgeRepo.github.repo</code></td><td>—</td><td>GitHub repo name for knowledge</td></tr><tr><td><code>AETERNA_GITHUB_APP_ID</code></td><td><code>knowledgeRepo.github.appId</code></td><td>—</td><td>GitHub App ID</td></tr><tr><td><code>AETERNA_GITHUB_INSTALLATION_ID</code></td><td><code>knowledgeRepo.github.installationId</code></td><td>—</td><td>GitHub App installation ID</td></tr><tr><td><code>AETERNA_GITHUB_ORG_NAME</code></td><td><code>githubOrgSync.orgName</code></td><td>—</td><td>GitHub org to sync</td></tr><tr><td><code>AETERNA_GITHUB_TEAM_FILTER</code></td><td><code>githubOrgSync.teamFilter</code></td><td>—</td><td>Regex to filter synced teams</td></tr><tr><td><code>AETERNA_GITHUB_SYNC_REPOS_AS_PROJECTS</code></td><td><code>githubOrgSync.syncReposAsProjects</code></td><td><code>false</code></td><td>Map repos to projects</td></tr><tr><td><code>AETERNA_TENANT_ID</code></td><td><code>githubOrgSync.tenantId</code></td><td><code>default</code></td><td>Tenant ID for synced entities</td></tr><tr><td><code>AETERNA_CENTRAL_URL</code></td><td><code>central.url</code></td><td>—</td><td>Central server URL (hybrid/remote)</td></tr><tr><td><code>AETERNA_CENTRAL_AUTH</code></td><td><code>central.auth</code></td><td>—</td><td>Central auth method</td></tr></tbody></table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Variable</th><th>Values Key</th><th>Default</th><th>Purpose</th></tr></thead><tbody><tr><td><code>AETERNA_DEPLOYMENT_MODE</code></td><td><code>deploymentMode</code></td><td><code>local</code></td><td>Deployment mode (local/hybrid/remote)</td></tr><tr><td><code>AETERNA_LOG_LEVEL</code></td><td><code>observability.logging.level</code></td><td><code>info</code></td><td>Log verbosity</td></tr><tr><td><code>AETERNA_LOG_FORMAT</code></td><td><code>observability.logging.format</code></td><td><code>json</code></td><td>Log format (json/text)</td></tr><tr><td><code>AETERNA_LLM_PROVIDER</code></td><td><code>llm.provider</code></td><td><code>openai</code></td><td>LLM backend</td></tr><tr><td><code>AETERNA_VECTOR_BACKEND</code></td><td><code>vectorBackend.type</code></td><td><code>qdrant</code></td><td>Vector storage backend</td></tr><tr><td><code>AETERNA_POSTGRESQL_HOST</code></td><td>Auto-resolved</td><td>—</td><td>PostgreSQL host</td></tr><tr><td><code>AETERNA_POSTGRESQL_PORT</code></td><td>Auto-resolved</td><td><code>5432</code></td><td>PostgreSQL port</td></tr><tr><td><code>AETERNA_POSTGRESQL_DATABASE</code></td><td>Auto-resolved</td><td><code>aeterna</code></td><td>PostgreSQL database</td></tr><tr><td><code>AETERNA_REDIS_HOST</code></td><td>Auto-resolved</td><td>—</td><td>Redis/Dragonfly host</td></tr><tr><td><code>AETERNA_REDIS_PORT</code></td><td>Auto-resolved</td><td><code>6379</code></td><td>Redis/Dragonfly port</td></tr><tr><td><code>AETERNA_QDRANT_HOST</code></td><td>Auto-resolved</td><td>—</td><td>Qdrant host</td></tr><tr><td><code>AETERNA_QDRANT_PORT</code></td><td>Auto-resolved</td><td><code>6334</code></td><td>Qdrant gRPC port</td></tr><tr><td><code>AETERNA_OPAL_ENABLED</code></td><td><code>opal.enabled</code></td><td><code>true</code></td><td>Enable OPAL authorization</td></tr><tr><td><code>AETERNA_CEDAR_AGENT_HOST</code></td><td>Auto-resolved</td><td>—</td><td>Cedar Agent service host</td></tr><tr><td><code>AETERNA_CEDAR_AGENT_PORT</code></td><td>—</td><td><code>8180</code></td><td>Cedar Agent service port</td></tr><tr><td><code>AETERNA_FEATURE_CCA</code></td><td><code>aeterna.features.cca</code></td><td><code>true</code></td><td>Enable CCA capabilities</td></tr><tr><td><code>AETERNA_FEATURE_RADKIT</code></td><td><code>aeterna.features.radkit</code></td><td><code>false</code></td><td>Enable Radkit A2A</td></tr><tr><td><code>AETERNA_FEATURE_RLM</code></td><td><code>aeterna.features.rlm</code></td><td><code>true</code></td><td>Enable RLM navigation</td></tr><tr><td><code>AETERNA_FEATURE_REFLECTIVE</code></td><td><code>aeterna.features.reflective</code></td><td><code>true</code></td><td>Enable reflective reasoning</td></tr><tr><td><code>AETERNA_KNOWLEDGE_REPO_PATH</code></td><td>—</td><td><code>/tmp/knowledge-repo</code></td><td>Local git clone path</td></tr><tr><td><code>AETERNA_K8S_NAMESPACE</code></td><td>Auto-resolved</td><td>Pod namespace</td><td>Namespace used by the tenant config provider</td></tr><tr><td><code>AETERNA_KNOWLEDGE_REPO_URL</code></td><td><code>knowledgeRepo.remoteUrl</code></td><td>—</td><td>Remote knowledge repo SSH URL</td></tr><tr><td><code>AETERNA_KNOWLEDGE_REPO_BRANCH</code></td><td><code>knowledgeRepo.branch</code></td><td><code>main</code></td><td>Knowledge repo branch</td></tr><tr><td><code>AETERNA_GITHUB_OWNER</code></td><td><code>knowledgeRepo.github.owner</code></td><td>—</td><td>GitHub org/user for knowledge repo</td></tr><tr><td><code>AETERNA_GITHUB_REPO</code></td><td><code>knowledgeRepo.github.repo</code></td><td>—</td><td>GitHub repo name for knowledge</td></tr><tr><td><code>AETERNA_GITHUB_APP_ID</code></td><td><code>knowledgeRepo.github.appId</code></td><td>—</td><td>GitHub App ID</td></tr><tr><td><code>AETERNA_GITHUB_INSTALLATION_ID</code></td><td><code>knowledgeRepo.github.installationId</code></td><td>—</td><td>GitHub App installation ID</td></tr><tr><td><code>AETERNA_GITHUB_ORG_NAME</code></td><td><code>githubOrgSync.orgName</code></td><td>—</td><td>GitHub org to sync</td></tr><tr><td><code>AETERNA_GITHUB_TEAM_FILTER</code></td><td><code>githubOrgSync.teamFilter</code></td><td>—</td><td>Regex to filter synced teams</td></tr><tr><td><code>AETERNA_GITHUB_SYNC_REPOS_AS_PROJECTS</code></td><td><code>githubOrgSync.syncReposAsProjects</code></td><td><code>false</code></td><td>Map repos to projects</td></tr><tr><td><code>AETERNA_TENANT_ID</code></td><td><code>githubOrgSync.tenantId</code></td><td><code>default</code></td><td>Tenant ID for synced entities</td></tr><tr><td><code>AETERNA_CENTRAL_URL</code></td><td><code>central.url</code></td><td>—</td><td>Central server URL (hybrid/remote)</td></tr><tr><td><code>AETERNA_CENTRAL_AUTH</code></td><td><code>central.auth</code></td><td>—</td><td>Central auth method</td></tr><tr><td><code>AETERNA_DEFAULT_TENANT_ID</code></td><td><code>defaultTenantId</code></td><td>—</td><td>Default tenant for plugin auth and webhook resolution. Leave unset to require explicit per-user mapping (fail-closed).</td></tr><tr><td><code>AETERNA_PLUGIN_AUTH_ENABLED</code></td><td><code>pluginAuth.enabled</code></td><td><code>false</code></td><td>Enable GitHub plugin auth boundary</td></tr><tr><td><code>AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID</code></td><td><code>pluginAuth.github.clientId</code></td><td>—</td><td>GitHub OAuth App client ID</td></tr><tr><td><code>AETERNA_PLUGIN_AUTH_GITHUB_APP_ID</code></td><td><code>pluginAuth.github.appId</code></td><td>—</td><td>GitHub App ID</td></tr><tr><td><code>AETERNA_PLUGIN_AUTH_GITHUB_APP_NAME</code></td><td><code>pluginAuth.github.appName</code></td><td>—</td><td>GitHub App slug name</td></tr><tr><td><code>AETERNA_PLUGIN_AUTH_REDIRECT_BASE_URL</code></td><td><code>pluginAuth.redirectBaseUrl</code></td><td>—</td><td>Base URL for OAuth redirects</td></tr><tr><td><code>AETERNA_PLUGIN_AUTH_TOKEN_ISSUER</code></td><td><code>pluginAuth.tokenIssuer</code></td><td>—</td><td>JWT token issuer claim</td></tr><tr><td><code>AETERNA_PLUGIN_AUTH_ACCESS_TOKEN_TTL_SECONDS</code></td><td><code>pluginAuth.accessTokenTtlSeconds</code></td><td><code>3600</code></td><td>Access token TTL</td></tr><tr><td><code>AETERNA_PLUGIN_AUTH_REFRESH_TOKEN_TTL_SECONDS</code></td><td><code>pluginAuth.refreshTokenTtlSeconds</code></td><td><code>604800</code></td><td>Refresh token TTL</td></tr><tr><td><code>AETERNA_ADMIN_BOOTSTRAP_EMAIL</code></td><td><code>adminBootstrap.email</code></td><td>—</td><td>Initial PlatformAdmin email. Empty = skip bootstrap.</td></tr><tr><td><code>AETERNA_ADMIN_BOOTSTRAP_PROVIDER</code></td><td><code>adminBootstrap.provider</code></td><td><code>github</code></td><td>Identity provider for the bootstrap admin</td></tr><tr><td><code>AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT</code></td><td><code>adminBootstrap.providerSubject</code></td><td>—</td><td>Provider-specific subject (e.g. GitHub login)</td></tr></tbody></table>
 <h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="llm-provider-specific-variables">LLM Provider-Specific Variables<a href="#llm-provider-specific-variables" class="hash-link" aria-label="Direct link to LLM Provider-Specific Variables" title="Direct link to LLM Provider-Specific Variables" translate="no">​</a></h3>
 
 
