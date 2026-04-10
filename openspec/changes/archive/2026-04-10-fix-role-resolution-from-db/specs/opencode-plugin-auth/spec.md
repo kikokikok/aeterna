@@ -3,7 +3,7 @@
 ### Requirement: Authenticated Plugin Request Identity
 The system SHALL ensure that plugin-originated authenticated requests carry validated user identity into Aeterna server request handling.
 
-The plugin auth bootstrap endpoint SHALL require a configured default tenant ID (`AETERNA_PLUGIN_AUTH_TENANT` or `pluginAuth.defaultTenantId` in Helm values) to resolve the tenant for GitHub-authenticated users. When this value is absent, the endpoint SHALL fail closed rather than falling back to a default tenant.
+The plugin auth bootstrap endpoint SHALL require a configured default tenant ID (`AETERNA_DEFAULT_TENANT_ID` or top-level `defaultTenantId` in Helm values) to resolve the tenant for GitHub-authenticated users. When this value is absent, the endpoint SHALL fail closed rather than falling back to a default tenant.
 
 When authentication is enabled, the server SHALL resolve user roles from the `user_roles` database table after JWT validation, rather than trusting client-asserted `X-User-Role` headers. The server SHALL map the JWT subject (GitHub login) to the internal user identity via `users.idp_subject`, then query the `user_roles` table to populate the request context with database-backed roles.
 

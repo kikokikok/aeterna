@@ -321,7 +321,7 @@ async fn trigger_incremental_sync(state: &Arc<AppState>, org_name: &str) {
 /// (`parse_webhook` enforces signature validity), not via per-user bearer tokens.
 /// The tenant for webhook events is resolved from the server's plugin auth
 /// configuration in the same order as bootstrap: explicit `default_tenant_id`,
-/// then the `AETERNA_PLUGIN_AUTH_TENANT` environment variable.
+/// then the `AETERNA_DEFAULT_TENANT_ID` environment variable.
 ///
 /// If no tenant is configured, the webhook event is published under the
 /// hardcoded `"default"` tenant only as a last-resort operational fallback,
@@ -337,7 +337,7 @@ fn webhook_tenant_context(state: &Arc<AppState>) -> TenantContext {
         }
     }
     tracing::warn!(
-        "No tenant configured for webhook events; using default tenant.          Set AETERNA_PLUGIN_AUTH_TENANT or configure plugin_auth.default_tenant_id."
+        "No tenant configured for webhook events; using default tenant.          Set AETERNA_DEFAULT_TENANT_ID or configure plugin_auth.default_tenant_id."
     );
     TenantContext::default()
 }

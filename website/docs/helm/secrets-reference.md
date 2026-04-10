@@ -180,6 +180,18 @@ These are set via the ConfigMap and Helm values — no secrets involved:
 | `AETERNA_TENANT_ID` | `githubOrgSync.tenantId` | `default` | Tenant ID for synced entities |
 | `AETERNA_CENTRAL_URL` | `central.url` | — | Central server URL (hybrid/remote) |
 | `AETERNA_CENTRAL_AUTH` | `central.auth` | — | Central auth method |
+| `AETERNA_DEFAULT_TENANT_ID` | `defaultTenantId` | — | Default tenant for plugin auth and webhook resolution. Leave unset to require explicit per-user mapping (fail-closed). |
+| `AETERNA_PLUGIN_AUTH_ENABLED` | `pluginAuth.enabled` | `false` | Enable GitHub plugin auth boundary |
+| `AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID` | `pluginAuth.github.clientId` | — | GitHub OAuth App client ID |
+| `AETERNA_PLUGIN_AUTH_GITHUB_APP_ID` | `pluginAuth.github.appId` | — | GitHub App ID |
+| `AETERNA_PLUGIN_AUTH_GITHUB_APP_NAME` | `pluginAuth.github.appName` | — | GitHub App slug name |
+| `AETERNA_PLUGIN_AUTH_REDIRECT_BASE_URL` | `pluginAuth.redirectBaseUrl` | — | Base URL for OAuth redirects |
+| `AETERNA_PLUGIN_AUTH_TOKEN_ISSUER` | `pluginAuth.tokenIssuer` | — | JWT token issuer claim |
+| `AETERNA_PLUGIN_AUTH_ACCESS_TOKEN_TTL_SECONDS` | `pluginAuth.accessTokenTtlSeconds` | `3600` | Access token TTL |
+| `AETERNA_PLUGIN_AUTH_REFRESH_TOKEN_TTL_SECONDS` | `pluginAuth.refreshTokenTtlSeconds` | `604800` | Refresh token TTL |
+| `AETERNA_ADMIN_BOOTSTRAP_EMAIL` | `adminBootstrap.email` | — | Initial PlatformAdmin email. Empty = skip bootstrap. |
+| `AETERNA_ADMIN_BOOTSTRAP_PROVIDER` | `adminBootstrap.provider` | `github` | Identity provider for the bootstrap admin |
+| `AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT` | `adminBootstrap.providerSubject` | — | Provider-specific subject (e.g. GitHub login) |
 
 ### LLM Provider-Specific Variables
 

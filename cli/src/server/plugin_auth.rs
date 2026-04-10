@@ -228,7 +228,7 @@ async fn bootstrap_handler(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                     "error": "tenant_not_configured",
-                    "message": "No tenant configured for plugin authentication. Set AETERNA_PLUGIN_AUTH_TENANT or configure default_tenant_id."
+                    "message": "No tenant configured for plugin authentication. Set AETERNA_DEFAULT_TENANT_ID or configure default_tenant_id."
                 })),
             );
         }
@@ -624,7 +624,7 @@ pub(crate) fn resolve_tenant_for_github_user(
     }
 
     // Priority 3: env override for operator convenience.
-    if let Ok(env_tenant) = std::env::var("AETERNA_PLUGIN_AUTH_TENANT") {
+    if let Ok(env_tenant) = std::env::var("AETERNA_DEFAULT_TENANT_ID") {
         let trimmed = env_tenant.trim().to_string();
         if !trimmed.is_empty() {
             return Some(trimmed);
@@ -796,7 +796,7 @@ mod tests {
     #[test]
     fn resolve_tenant_returns_none_when_no_config_and_no_env() {
         // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
-        unsafe { std::env::remove_var("AETERNA_PLUGIN_AUTH_TENANT") };
+        unsafe { std::env::remove_var("AETERNA_DEFAULT_TENANT_ID") };
         let cfg = config::PluginAuthConfig {
             enabled: true,
             jwt_secret: Some("s".to_string()),
@@ -812,7 +812,7 @@ mod tests {
     #[test]
     fn resolve_tenant_prefers_config_field_over_env() {
         // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
-        unsafe { std::env::set_var("AETERNA_PLUGIN_AUTH_TENANT", "env-tenant") };
+        unsafe { std::env::set_var("AETERNA_DEFAULT_TENANT_ID", "env-tenant") };
         let cfg = config::PluginAuthConfig {
             enabled: true,
             jwt_secret: Some("s".to_string()),
@@ -820,14 +820,14 @@ mod tests {
             ..Default::default()
         };
         let result = resolve_tenant_for_github_user("alice", &cfg);
-        unsafe { std::env::remove_var("AETERNA_PLUGIN_AUTH_TENANT") };
+        unsafe { std::env::remove_var("AETERNA_DEFAULT_TENANT_ID") };
         assert_eq!(result.as_deref(), Some("config-tenant"));
     }
 
     #[test]
     fn resolve_tenant_falls_back_to_env_when_config_absent() {
         // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
-        unsafe { std::env::set_var("AETERNA_PLUGIN_AUTH_TENANT", "env-tenant") };
+        unsafe { std::env::set_var("AETERNA_DEFAULT_TENANT_ID", "env-tenant") };
         let cfg = config::PluginAuthConfig {
             enabled: true,
             jwt_secret: Some("s".to_string()),
@@ -835,14 +835,14 @@ mod tests {
             ..Default::default()
         };
         let result = resolve_tenant_for_github_user("alice", &cfg);
-        unsafe { std::env::remove_var("AETERNA_PLUGIN_AUTH_TENANT") };
+        unsafe { std::env::remove_var("AETERNA_DEFAULT_TENANT_ID") };
         assert_eq!(result.as_deref(), Some("env-tenant"));
     }
 
     #[test]
     fn resolve_tenant_ignores_blank_config_field() {
         // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
-        unsafe { std::env::remove_var("AETERNA_PLUGIN_AUTH_TENANT") };
+        unsafe { std::env::remove_var("AETERNA_DEFAULT_TENANT_ID") };
         let cfg = config::PluginAuthConfig {
             enabled: true,
             jwt_secret: Some("s".to_string()),

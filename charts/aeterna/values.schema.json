@@ -623,10 +623,10 @@
         "tokenIssuer": { "type": "string", "default": "", "description": "JWT token issuer claim" },
         "accessTokenTtlSeconds": { "type": "integer", "default": 3600, "minimum": 60, "description": "Access token TTL in seconds" },
         "refreshTokenTtlSeconds": { "type": "integer", "default": 604800, "minimum": 60, "description": "Refresh token TTL in seconds" },
-        "defaultTenantId": { "type": "string", "default": "", "description": "Default tenant ID for authenticated users" },
         "existingSecret": { "type": "string", "default": "", "description": "Existing K8s secret with auth credentials" }
       }
     },
+    "defaultTenantId": { "type": "string", "default": "", "description": "Default tenant ID for tenant resolution (plugin auth, webhooks). Maps to AETERNA_DEFAULT_TENANT_ID." },
     "cnpg": {
       "type": "object"
     },

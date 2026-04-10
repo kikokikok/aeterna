@@ -270,8 +270,11 @@ tenantConfigProvider:
 ## Plugin auth configuration
 ## Configures the OpenCode plugin authentication boundary (GitHub OAuth)
 pluginAuth:
-  ## @param pluginAuth.defaultTenantId Default tenant ID for plugin auth user resolution (maps to AETERNA_PLUGIN_AUTH_TENANT)
-  defaultTenantId: ""
+
+## @param defaultTenantId Default tenant ID for tenant resolution (maps to AETERNA_DEFAULT_TENANT_ID).
+## Used by plugin auth, webhooks, and any other flow that requires a fallback tenant.
+## Leave empty to require explicit per-user tenant mapping (fail-closed).
+defaultTenantId: ""
 
 ## Admin bootstrap configuration
 ## Seeds an initial PlatformAdmin user on first startup so the system is operational without manual DB intervention

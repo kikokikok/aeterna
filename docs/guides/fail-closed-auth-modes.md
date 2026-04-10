@@ -38,13 +38,13 @@ Or via environment:
 ```bash
 AETERNA_PLUGIN_AUTH_ENABLED=true
 AETERNA_PLUGIN_AUTH_JWT_SECRET=<secret>
-AETERNA_PLUGIN_AUTH_TENANT=<tenant-id>
+AETERNA_DEFAULT_TENANT_ID=<tenant-id>
 ```
 
 ### Tenant resolution priority (bootstrap / webhooks)
 
 1. `plugin_auth.default_tenant_id` config field
-2. `AETERNA_PLUGIN_AUTH_TENANT` environment variable
+2. `AETERNA_DEFAULT_TENANT_ID` environment variable
 3. → If neither is set: bootstrap returns **500**, webhook logs a warning
 
 ---

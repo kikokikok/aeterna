@@ -68,9 +68,9 @@ data:
   {{- end }}
   AETERNA_PLUGIN_AUTH_ACCESS_TOKEN_TTL_SECONDS: {{ .Values.pluginAuth.accessTokenTtlSeconds | quote }}
   AETERNA_PLUGIN_AUTH_REFRESH_TOKEN_TTL_SECONDS: {{ .Values.pluginAuth.refreshTokenTtlSeconds | quote }}
-  {{- if .Values.pluginAuth.defaultTenantId }}
-  AETERNA_PLUGIN_AUTH_TENANT: {{ .Values.pluginAuth.defaultTenantId | quote }}
   {{- end }}
+  {{- if .Values.defaultTenantId }}
+  AETERNA_DEFAULT_TENANT_ID: {{ .Values.defaultTenantId | quote }}
   {{- end }}
   {{- if and (ne .Values.deploymentMode "local") .Values.central.url }}
   AETERNA_CENTRAL_URL: {{ .Values.central.url | quote }}

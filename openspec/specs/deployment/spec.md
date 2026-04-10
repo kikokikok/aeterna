@@ -128,17 +128,17 @@ The Helm chart SHALL expose an `adminBootstrap` values section that configures t
 - **THEN** the deployment template SHALL NOT inject admin bootstrap environment variables
 - **AND** the server SHALL start without attempting bootstrap seeding
 
-### Requirement: Helm Plugin Auth Tenant Value
-The Helm chart SHALL expose a `pluginAuth.defaultTenantId` value that maps to the `AETERNA_PLUGIN_AUTH_TENANT` environment variable in the deployment template, enabling the plugin auth bootstrap endpoint to resolve a tenant.
+### Requirement: Helm Default Tenant Value
+The Helm chart SHALL expose a top-level `defaultTenantId` value that maps to the `AETERNA_DEFAULT_TENANT_ID` environment variable in the deployment template, enabling tenant resolution for plugin auth bootstrap and webhook processing.
 
-#### Scenario: Plugin auth tenant wired to deployment env var
-- **WHEN** the operator sets `pluginAuth.defaultTenantId` in Helm values
-- **THEN** the deployment template SHALL inject `AETERNA_PLUGIN_AUTH_TENANT` as an environment variable on the Aeterna container
-- **AND** the plugin auth bootstrap endpoint SHALL use this value for tenant resolution
+#### Scenario: Default tenant wired to deployment env var
+- **WHEN** the operator sets `defaultTenantId` in Helm values
+- **THEN** the deployment template SHALL inject `AETERNA_DEFAULT_TENANT_ID` as an environment variable on the Aeterna container
+- **AND** the plugin auth bootstrap endpoint and webhook handler SHALL use this value for tenant resolution
 
-#### Scenario: Plugin auth tenant not set
-- **WHEN** the chart is installed without `pluginAuth.defaultTenantId`
-- **THEN** the deployment template SHALL NOT inject `AETERNA_PLUGIN_AUTH_TENANT`
+#### Scenario: Default tenant not set
+- **WHEN** the chart is installed without `defaultTenantId`
+- **THEN** the deployment template SHALL NOT inject `AETERNA_DEFAULT_TENANT_ID`
 - **AND** the plugin auth bootstrap endpoint SHALL fail closed with an error rather than defaulting to an arbitrary tenant
 
 ## Overview

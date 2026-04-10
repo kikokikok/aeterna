@@ -17,8 +17,9 @@ pluginAuth:
   tokenIssuer: "aeterna-ci"
   accessTokenTtlSeconds: 1800
   refreshTokenTtlSeconds: 86400
-  defaultTenantId: "ci-tenant-001"
   existingSecret: "aeterna-plugin-auth-secret"
+
+defaultTenantId: "ci-tenant-001"
 
 opal:
   enabled: true

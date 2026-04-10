@@ -259,12 +259,13 @@ pub struct PluginAuthConfig {
     pub access_token_ttl_seconds: Option<u64>,
     #[serde(default)]
     pub refresh_token_ttl_seconds: Option<u64>,
-    /// The tenant ID to embed in plugin-issued tokens.
-    ///
-    /// Required for the plugin auth bootstrap to succeed.  When absent the
-    /// server fails closed rather than defaulting to the synthetic "default"
-    /// tenant.  Operators may also set `AETERNA_PLUGIN_AUTH_TENANT` as an
-    /// environment override.
+    /// The default tenant ID for user resolution across all flows: plugin auth
+    /// token issuance, webhook event routing, and any other surface that needs
+    /// to place an authenticated user into a tenant when one is not explicitly
+    /// provided.  Required for the plugin auth bootstrap to succeed.  When
+    /// absent the server fails closed rather than defaulting to the synthetic
+    /// "default" tenant.  Set via `AETERNA_DEFAULT_TENANT_ID` or via
+    /// `defaultTenantId` in Helm values.
     #[serde(default)]
     pub default_tenant_id: Option<String>,
 }
