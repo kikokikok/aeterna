@@ -81,8 +81,8 @@ pub fn server_not_connected() -> UxError {
         .why("The memory/knowledge backend is not running or unreachable")
         .fix("Start the Aeterna server")
         .fix("Check your network connection")
-        .fix("Verify server URL in .aeterna/context.toml")
-        .suggest("aeterna status")
+        .fix("Verify the active profile, AETERNA_SERVER_URL, or profile config files")
+        .suggest("aeterna auth status")
 }
 
 #[must_use]
@@ -160,10 +160,10 @@ pub fn policy_violation(policy_id: &str, details: &str) -> UxError {
 #[must_use]
 pub fn config_error(message: &str) -> UxError {
     UxError::new(format!("Configuration error: {message}"))
-        .why("The configuration file may be invalid or missing required fields")
-        .fix("Check your .aeterna/context.toml file")
-        .fix("Re-initialize with defaults")
-        .suggest("aeterna init --force")
+        .why("The active profile or config file may be invalid or missing required fields")
+        .fix("Check .aeterna/config.toml and ~/.config/aeterna/config.toml")
+        .fix("Run 'aeterna config show' to inspect effective settings")
+        .suggest("aeterna config validate")
 }
 
 #[must_use]

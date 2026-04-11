@@ -11,9 +11,19 @@ pub mod trace;
 
 use clap::Subcommand;
 
+use crate::ux_error;
+
 pub(crate) fn legacy_codesearch_binary_removed(command: &str) -> anyhow::Error {
+    ux_error::UxError::new(format!(
+        "`aeterna code-search {command}` is not supported in the current CLI control-plane flow"
+    ))
+    .why("The legacy codesearch binary integration was removed, and no supported control-plane backend contract exists for this command group yet")
+    .fix("Use built-in code navigation tools (grep/LSP/MCP) instead of `aeterna code-search`")
+    .fix("Use the Aeterna MCP tooling path for code intelligence workflows")
+    .suggest("aeterna auth status")
+    .display();
     anyhow::anyhow!(
-        "`aeterna code-search {command}` no longer shells out to the legacy `codesearch` binary. Configure an MCP-compatible code intelligence backend instead (for example JetBrains Code Intelligence MCP) and access code intelligence through Aeterna's MCP tooling."
+        "`aeterna code-search {command}` is unsupported in the current CLI control-plane flow"
     )
 }
 

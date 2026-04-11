@@ -36,6 +36,22 @@
 #   ./run-e2e.sh --folder "13. Plugin Auth Bootstrap Flow" \
 #     --env-var "githubAccessToken=ghu_..."
 #
+# Suggested end-to-end scenarios:
+#
+#   First-time onboarding (unauthenticated baseline):
+#     ./run-e2e.sh --folder "1. Deployment" \
+#       --env-var "baseUrl=https://aeterna.example.com"
+#
+#   Daily authenticated usage (plugin auth folders):
+#     ./run-e2e.sh --folder "13. Plugin Auth Bootstrap Flow" \
+#       --env-var "baseUrl=https://aeterna.example.com" \
+#       --env-var "githubAccessToken=ghu_..."
+#
+#   Operator/admin flow:
+#     ./run-e2e.sh --folder "29. Governance Status" \
+#       --env-var "baseUrl=https://aeterna.example.com" \
+#       --env-var "githubAccessToken=ghu_..."
+#
 
 set -euo pipefail
 

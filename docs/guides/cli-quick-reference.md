@@ -9,13 +9,21 @@ This is a concise cheat sheet. For detailed tenancy-management workflows, also s
 ## Installation
 
 ```bash
-# From source
+# Install latest supported release for your platform
+curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/main/install.sh | sh
+
+# Or build from source
 git clone https://github.com/kikokikok/aeterna.git
 cd aeterna
-cargo build --release
+cargo build --release -p aeterna
+install -m 0755 target/release/aeterna "$HOME/.local/bin/aeterna"
+```
 
-# Add to PATH
-export PATH="$PATH:$(pwd)/target/release"
+Verify:
+
+```bash
+aeterna --version
+aeterna auth status --json
 ```
 
 ---
@@ -24,10 +32,34 @@ export PATH="$PATH:$(pwd)/target/release"
 
 | Command | Description |
 |---------|-------------|
-| `aeterna profile login` | Authenticate to a live Aeterna control plane |
+| `aeterna auth login` | Authenticate to a live Aeterna control plane |
+| `aeterna auth login --profile dev --server-url URL` | First-time onboarding for a named environment |
 | `aeterna status` | Show current context and status |
-| `aeterna whoami` | Show current user identity |
+| `aeterna user whoami` | Show current user identity |
+| `aeterna config show --profile dev` | Show effective config + precedence sources |
+| `aeterna config validate --profile dev` | Validate profile/config before use |
 | `aeterna admin health` | Quick health check for the control plane |
+
+### First-Time Onboarding
+
+| Step | Command |
+|------|---------|
+| Install CLI | `curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/main/install.sh | sh` |
+| Log in | `aeterna auth login --profile dev --server-url https://aeterna.example.com` |
+| Verify auth | `aeterna auth status --profile dev` |
+| Inspect config | `aeterna config show --profile dev` |
+| Validate config | `aeterna config validate --profile dev` |
+| Inspect runtime context | `aeterna status --verbose` |
+
+### Daily Authenticated Workflow
+
+| Goal | Command |
+|------|---------|
+| Check current auth | `aeterna auth status --profile dev` |
+| Search memory | `aeterna memory search "QUERY"` |
+| Search knowledge | `aeterna knowledge search "QUERY"` |
+| Check governance | `aeterna govern status` |
+| Check runtime health | `aeterna admin health --verbose` |
 
 ---
 

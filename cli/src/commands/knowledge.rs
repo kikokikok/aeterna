@@ -486,16 +486,40 @@ async fn run_search(args: KnowledgeSearchArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let err = ux_error::server_not_connected();
-    err.display();
-    output::info("Run with --dry-run to see what would happen.");
+    if let Some(client) = get_live_client().await {
+        let first_layer = layers.first().map(String::as_str);
+        let result = client
+            .knowledge_query(&args.query, first_layer, args.limit)
+            .await?;
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Knowledge Search Results");
+            println!();
+            if let Some(primary) = result.get("primary") {
+                println!("Primary:");
+                println!("{}", serde_json::to_string_pretty(primary)?);
+                println!();
+            }
+            if let Some(related) = result.get("related") {
+                println!("Related:");
+                println!("{}", serde_json::to_string_pretty(related)?);
+            } else {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
+        }
+        return Ok(());
+    }
 
-    Ok(())
+    knowledge_server_required(
+        "knowledge_search",
+        "Knowledge search requires a live Aeterna server connection",
+    )
 }
 
 async fn run_get(args: KnowledgeGetArgs) -> anyhow::Result<()> {
     let resolver = ContextResolver::new();
-    let resolved = resolver.resolve()?;
+    let _resolved = resolver.resolve()?;
 
     let layer = args.layer.to_lowercase();
     let valid_layers = ["company", "org", "team", "project"];
@@ -505,33 +529,27 @@ async fn run_get(args: KnowledgeGetArgs) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Invalid layer"));
     }
 
-    if args.json {
-        let output = json!({
-            "operation": "knowledge_get",
-            "path": args.path,
-            "layer": layer,
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-                "userId": resolved.user_id.value,
-                "projectId": resolved.project_id.as_ref().map(|v| &v.value),
-            },
-            "status": "not_connected",
-            "message": "Knowledge repository not connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header(&format!("Knowledge: {} ({})", args.path, layer));
-        println!();
-        let err = ux_error::server_not_connected();
-        err.display();
+    if let Some(client) = get_live_client().await {
+        let result = client.knowledge_metadata(&args.path).await?;
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header(&format!("Knowledge: {} ({})", args.path, layer));
+            println!();
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        return Ok(());
     }
 
-    Ok(())
+    knowledge_server_required(
+        "knowledge_get",
+        "Knowledge get requires a live Aeterna server connection",
+    )
 }
 
 async fn run_list(args: KnowledgeListArgs) -> anyhow::Result<()> {
     let resolver = ContextResolver::new();
-    let resolved = resolver.resolve()?;
+    let _resolved = resolver.resolve()?;
 
     let layer = args.layer.to_lowercase();
     let valid_layers = ["company", "org", "team", "project"];
@@ -541,32 +559,10 @@ async fn run_list(args: KnowledgeListArgs) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Invalid layer"));
     }
 
-    if args.json {
-        let output = json!({
-            "operation": "knowledge_list",
-            "layer": layer,
-            "prefix": args.prefix,
-            "limit": args.limit,
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-                "userId": resolved.user_id.value,
-                "projectId": resolved.project_id.as_ref().map(|v| &v.value),
-            },
-            "status": "not_connected",
-            "message": "Knowledge repository not connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header(&format!("Knowledge in '{layer}' layer"));
-        if let Some(prefix) = &args.prefix {
-            println!("  Prefix: {prefix}");
-        }
-        println!();
-        let err = ux_error::server_not_connected();
-        err.display();
-    }
-
-    Ok(())
+    let profile_name = crate::profile::load_resolved(None, None)
+        .map(|r| r.profile_name)
+        .unwrap_or_else(|_| "default".to_string());
+    Err(crate::backend::unsupported("knowledge list", &profile_name))
 }
 
 async fn run_check(args: KnowledgeCheckArgs) -> anyhow::Result<()> {
@@ -633,24 +629,13 @@ async fn run_check(args: KnowledgeCheckArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if args.json {
-        let output = json!({
-            "operation": "knowledge_check",
-            "context": args.context,
-            "policy": args.policy,
-            "dependency": args.dependency,
-            "status": "not_connected",
-            "message": "Knowledge repository not connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Knowledge Check");
-        println!();
-        let err = ux_error::server_not_connected();
-        err.display();
-    }
-
-    Ok(())
+    let profile_name = crate::profile::load_resolved(None, None)
+        .map(|r| r.profile_name)
+        .unwrap_or_else(|_| "default".to_string());
+    Err(crate::backend::unsupported(
+        "knowledge check",
+        &profile_name,
+    ))
 }
 
 fn hint_effect(enabled: bool, effect: &str) -> String {
@@ -785,30 +770,33 @@ async fn run_propose(args: KnowledgeProposeArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if args.json {
-        let output = json!({
-            "operation": "knowledge_propose",
-            "description": args.description,
+    if let Some(client) = get_live_client().await {
+        let body = json!({
+            "title": title,
+            "content": args.description,
             "type": knowledge_type,
             "layer": layer,
-            "title": title,
             "submit": args.submit,
-            "status": "not_connected",
-            "message": "Knowledge repository not connected"
         });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Knowledge Propose");
-        println!();
-        println!("  Title: {title}");
-        println!("  Type:  {knowledge_type}");
-        println!("  Layer: {layer}");
-        println!();
-        let err = ux_error::server_not_connected();
-        err.display();
+        let result = client.knowledge_create(&body).await?;
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Knowledge Propose");
+            println!();
+            println!("  Title: {title}");
+            println!("  Type:  {knowledge_type}");
+            println!("  Layer: {layer}");
+            println!();
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        return Ok(());
     }
 
-    Ok(())
+    knowledge_server_required(
+        "knowledge_propose",
+        "Knowledge propose requires a live Aeterna server connection",
+    )
 }
 
 // ---------------------------------------------------------------------------

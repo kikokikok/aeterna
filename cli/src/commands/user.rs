@@ -683,7 +683,9 @@ async fn run_whoami(args: UserWhoamiArgs) -> anyhow::Result<()> {
         output::header("Context Sources");
         println!("  git     - Detected from git remote/user.email");
         println!("  env     - Environment variables (AETERNA_*)");
-        println!("  config  - .aeterna/context.toml file");
+        println!(
+            "  config  - profile config files (.aeterna/config.toml, ~/.config/aeterna/config.toml)"
+        );
         println!("  default - Built-in defaults");
         println!();
 

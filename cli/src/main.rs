@@ -6,6 +6,7 @@ mod backend;
 mod client;
 mod commands;
 mod credentials;
+mod offline;
 mod output;
 mod profile;
 mod server;

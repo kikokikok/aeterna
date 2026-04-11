@@ -6,6 +6,23 @@ use serde_json::json;
 use crate::output;
 use crate::ux_error;
 
+async fn get_live_client() -> Option<crate::client::AeternaClient> {
+    crate::backend::connect()
+        .await
+        .ok()
+        .map(|(client, _)| client)
+}
+
+fn memory_server_required(operation: &str, message: &str) -> anyhow::Result<()> {
+    ux_error::UxError::new(message)
+        .why("This memory command requires a live control-plane backend")
+        .fix("Start the Aeterna server: aeterna serve")
+        .fix("Ensure AETERNA_SERVER_URL is set or a profile is configured and reachable")
+        .suggest("aeterna auth login")
+        .display();
+    anyhow::bail!("Aeterna server not connected for operation: {operation}")
+}
+
 #[derive(Subcommand)]
 pub enum MemoryCommand {
     #[command(about = "Search memories across layers")]
@@ -320,10 +337,41 @@ async fn run_search(args: MemorySearchArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Server not yet connected: display error and exit non-zero
-    ux_error::server_not_connected().display();
-    anyhow::bail!(
-        "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running.\n         Use --dry-run to preview this operation without a server connection."
+    if let Some(client) = get_live_client().await {
+        let filters = match args.layer.as_ref() {
+            Some(layer) => {
+                let mut m = serde_json::Map::new();
+                m.insert("layer".to_string(), json!(layer));
+                m
+            }
+            None => serde_json::Map::new(),
+        };
+        let req = crate::client::MemorySearchRequest {
+            query: args.query.clone(),
+            limit: args.limit,
+            threshold: args.threshold,
+            filters,
+            context_summary: None,
+        };
+        let result = client.memory_search(&req).await?;
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Memory Search Results");
+            println!();
+            println!("  Total: {}", result.total);
+            println!();
+            for item in result.items {
+                println!("- [{}] {}", item.id, item.content);
+            }
+        }
+        return Ok(());
+    }
+
+    memory_server_required(
+        "memory search",
+        "Memory search requires a live Aeterna server connection",
     )
 }
 
@@ -435,10 +483,36 @@ async fn run_add(args: MemoryAddArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Server not yet connected: display error and exit non-zero
-    ux_error::server_not_connected().display();
-    anyhow::bail!(
-        "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running.\n         Use --dry-run to preview this operation without a server connection."
+    if let Some(client) = get_live_client().await {
+        let mut metadata_map = serde_json::Map::new();
+        if let Some(obj) = metadata.as_object() {
+            metadata_map = obj.clone();
+        }
+        if !tags.is_empty() {
+            metadata_map.insert("tags".to_string(), json!(tags));
+        }
+
+        let req = crate::client::MemoryAddRequest {
+            content: args.content.clone(),
+            layer: layer.clone(),
+            metadata: metadata_map,
+        };
+        let result = client.memory_add(&req).await?;
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::success(&format!(
+                "Stored memory {} in {} layer",
+                result.memory_id, result.layer
+            ));
+        }
+        return Ok(());
+    }
+
+    memory_server_required(
+        "memory add",
+        "Memory add requires a live Aeterna server connection",
     )
 }
 
@@ -463,10 +537,23 @@ async fn run_delete(args: MemoryDeleteArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Server not yet connected: display error and exit non-zero
-    ux_error::server_not_connected().display();
-    anyhow::bail!(
-        "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running.\n         Use --dry-run flag is not supported for delete; connect a server to proceed."
+    if let Some(client) = get_live_client().await {
+        let req = crate::client::MemoryDeleteRequest {
+            layer: layer.clone(),
+        };
+        let result = client.memory_delete(&args.memory_id, &req).await?;
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::success(&result.message);
+        }
+        return Ok(());
+    }
+
+    memory_server_required(
+        "memory delete",
+        "Memory delete requires a live Aeterna server connection",
     )
 }
 
@@ -485,19 +572,38 @@ async fn run_list(args: MemoryListArgs) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Invalid layer"));
     }
 
-    // Server not yet connected: display error and exit non-zero
-    ux_error::server_not_connected().display();
-    anyhow::bail!(
-        "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running.\n         Use --dry-run is not supported for list; connect a server to proceed."
+    if let Some(client) = get_live_client().await {
+        let req = crate::client::MemoryListRequest {
+            layer: layer.clone(),
+            limit: args.limit,
+        };
+        let result = client.memory_list(&req).await?;
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header(&format!("Memories in {layer} layer"));
+            println!();
+            println!("  Total: {}", result.total);
+            println!();
+            for item in result.items {
+                println!("- [{}] {}", item.id, item.content);
+            }
+        }
+        return Ok(());
+    }
+
+    memory_server_required(
+        "memory list",
+        "Memory list requires a live Aeterna server connection",
     )
 }
 
 async fn run_show(_args: MemoryShowArgs) -> anyhow::Result<()> {
-    // Server not yet connected: display error and exit non-zero
-    ux_error::server_not_connected().display();
-    anyhow::bail!(
-        "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running."
-    )
+    let profile_name = crate::profile::load_resolved(None, None)
+        .map(|r| r.profile_name)
+        .unwrap_or_else(|_| "default".to_string());
+    Err(crate::backend::unsupported("memory show", &profile_name))
 }
 
 async fn run_feedback(args: MemoryFeedbackArgs) -> anyhow::Result<()> {
@@ -534,10 +640,27 @@ async fn run_feedback(args: MemoryFeedbackArgs) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Invalid score"));
     }
 
-    // Server not yet connected: display error and exit non-zero
-    ux_error::server_not_connected().display();
-    anyhow::bail!(
-        "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running."
+    if let Some(client) = get_live_client().await {
+        let req = crate::client::MemoryFeedbackRequest {
+            memory_id: args.memory_id.clone(),
+            layer: layer.clone(),
+            reward_type: feedback_type.clone(),
+            score: args.score,
+            reasoning: args.reasoning.clone(),
+        };
+        let result = client.memory_feedback(&req).await?;
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::success(&result.message);
+        }
+        return Ok(());
+    }
+
+    memory_server_required(
+        "memory feedback",
+        "Memory feedback requires a live Aeterna server connection",
     )
 }
 
@@ -659,11 +782,10 @@ async fn run_promote(args: MemoryPromoteArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Server not yet connected: display error and exit non-zero
-    ux_error::server_not_connected().display();
-    anyhow::bail!(
-        "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running.\n         Use --dry-run to preview this promotion without a server connection."
-    )
+    let profile_name = crate::profile::load_resolved(None, None)
+        .map(|r| r.profile_name)
+        .unwrap_or_else(|_| "default".to_string());
+    Err(crate::backend::unsupported("memory promote", &profile_name))
 }
 
 #[cfg(test)]

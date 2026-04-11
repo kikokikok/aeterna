@@ -114,6 +114,119 @@ Use the chart examples for cloud deployments:
 
 ---
 
+## Native CLI Installation (macOS and Linux)
+
+The supported `aeterna` CLI distribution is published through GitHub Releases and the repository installer script.
+
+### Supported release assets
+
+The CLI release workflow publishes these archives for every tagged release:
+
+- `aeterna-x86_64-linux.tar.gz`
+- `aeterna-aarch64-linux.tar.gz`
+- `aeterna-x86_64-macos.tar.gz`
+- `aeterna-aarch64-macos.tar.gz`
+- matching `*.sha256` checksum files
+- combined `checksums.sha256`
+
+These assets are produced by `.github/workflows/cli-release.yml`.
+
+### Quick install via installer script
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/main/install.sh | sh
+```
+
+The installer:
+- detects your OS/architecture
+- downloads the matching GitHub Release archive
+- installs `aeterna` into `/usr/local/bin` when writable, otherwise `~/.local/bin`
+
+Install a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/main/install.sh | sh -s -- --version v0.6.0
+```
+
+Install to a custom directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/main/install.sh | sh -s -- --install-dir "$HOME/bin"
+```
+
+### Manual install from release asset
+
+```bash
+# Example: macOS Apple Silicon
+VERSION=v0.6.0
+ARCHIVE=aeterna-aarch64-macos.tar.gz
+
+curl -fsSLO "https://github.com/kikokikok/aeterna/releases/download/${VERSION}/${ARCHIVE}"
+curl -fsSLO "https://github.com/kikokikok/aeterna/releases/download/${VERSION}/${ARCHIVE}.sha256"
+shasum -a 256 -c "${ARCHIVE}.sha256"
+tar -xzf "${ARCHIVE}"
+install -m 0755 aeterna "$HOME/.local/bin/aeterna"
+```
+
+### Verify installation
+
+```bash
+aeterna --version
+aeterna auth status --json
+```
+
+### First-time onboarding
+
+```bash
+# 1. log in to a target
+aeterna auth login --profile dev --server-url https://aeterna.example.com
+
+# 2. inspect effective config and precedence
+aeterna config show --profile dev
+
+# 3. validate configuration
+aeterna config validate --profile dev
+
+# 4. inspect resolved runtime context
+aeterna status --verbose
+
+# 5. verify authentication
+aeterna auth status --profile dev
+```
+
+### Daily authenticated usage
+
+```bash
+# switch target/profile
+aeterna auth status --profile dev
+aeterna config show --profile prod
+
+# memory / knowledge / governance
+aeterna memory search "database preferences"
+aeterna knowledge search "oauth callback"
+aeterna govern status
+
+# operator runtime check
+aeterna admin health --verbose
+```
+
+### Operator/admin flow
+
+```bash
+# install
+curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/main/install.sh | sh
+
+# log in against the operator target
+aeterna auth login --profile ops --server-url https://aeterna.example.com
+
+# validate config and runtime
+aeterna config validate --profile ops
+aeterna admin health --verbose
+aeterna admin validate --target all
+```
+
+---
+
 ## Helm Chart Deployment
 
 ### Public Artifacts
@@ -220,7 +333,7 @@ Use the control plane to bootstrap tenants, then keep environment-specific overl
 
 ```bash
 # authenticate as PlatformAdmin
-aeterna profile login
+aeterna auth login
 
 # create tenant record
 aeterna tenant create --slug acme --name "Acme Corp"

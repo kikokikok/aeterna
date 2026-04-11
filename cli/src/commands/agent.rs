@@ -5,6 +5,23 @@ use serde_json::json;
 use crate::output;
 use crate::ux_error;
 
+async fn get_live_client() -> Option<crate::client::AeternaClient> {
+    crate::backend::connect()
+        .await
+        .ok()
+        .map(|(client, _)| client)
+}
+
+fn agent_server_required(operation: &str, message: &str) -> anyhow::Result<()> {
+    ux_error::UxError::new(message)
+        .why("This command requires a live control-plane backend")
+        .fix("Start the Aeterna server: aeterna serve")
+        .fix("Ensure AETERNA_SERVER_URL is set or a profile is configured and reachable")
+        .suggest("aeterna auth login")
+        .display();
+    anyhow::bail!("Aeterna server not connected for operation: {operation}")
+}
+
 #[derive(Subcommand)]
 pub enum AgentCommand {
     #[command(about = "Register an AI agent")]
@@ -223,112 +240,111 @@ async fn run_register(args: AgentRegisterArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let err = ux_error::server_not_connected();
-    err.display();
-    output::info("Run with --dry-run to see what would be created.");
+    if let Some(client) = get_live_client().await {
+        let body = json!({
+            "id": agent_id,
+            "name": args.name,
+            "description": args.description,
+            "type": args.agent_type,
+            "delegatedBy": delegated_by,
+        });
+        let result = client.agent_register(&body).await?;
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Agent Registered");
+            println!();
+            println!("  ID:   {}", result["id"].as_str().unwrap_or("?"));
+            println!("  Name: {}", result["name"].as_str().unwrap_or("?"));
+            println!("  Type: {}", result["type"].as_str().unwrap_or("?"));
+            println!();
+        }
+        return Ok(());
+    }
 
-    Ok(())
+    agent_server_required(
+        "agent_register",
+        "Cannot register agent: server not connected",
+    )
 }
 
 async fn run_list(args: AgentListArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let resolved = resolver.resolve()?;
-
-    if args.json {
-        let output = json!({
-            "operation": "agent_list",
-            "filters": {
-                "delegatedBy": args.delegated_by,
-                "agentType": args.agent_type,
-                "all": args.all,
-            },
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-                "userId": resolved.user_id.value,
-            },
-            "status": "not_connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header("Agents");
-        println!();
-
-        if args.all {
-            output::info("Showing all agents you have access to.");
+    if let Some(client) = get_live_client().await {
+        let result = client
+            .agent_list(
+                args.delegated_by.as_deref(),
+                args.agent_type.as_deref(),
+                args.all,
+            )
+            .await?;
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Agents");
+            println!();
+            if let Some(items) = result.as_array() {
+                if items.is_empty() {
+                    println!("  (no agents found)");
+                } else {
+                    for item in items {
+                        println!(
+                            "  {:<28} {:<12} {:<22} {}",
+                            item["id"].as_str().unwrap_or("?"),
+                            item["type"].as_str().unwrap_or("?"),
+                            item["delegatedBy"]
+                                .as_str()
+                                .or_else(|| item["delegated_by"].as_str())
+                                .unwrap_or("?"),
+                            item["status"].as_str().unwrap_or("?")
+                        );
+                    }
+                }
+            } else {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
+            println!();
         }
-
-        if let Some(ref user) = args.delegated_by {
-            println!("  Filter: delegated_by = {user}");
-        }
-        if let Some(ref t) = args.agent_type {
-            println!("  Filter: type = {t}");
-        }
-        println!();
-
-        output::header("Example Output (would show)");
-        println!("  AGENT ID            TYPE       DELEGATED BY         STATUS    LAST ACTIVE");
-        println!("  agent-opencode-1234 opencode   alice@acme.com       active    2 min ago");
-        println!("  agent-bot-5678      langchain  bob@acme.com         active    1 hour ago");
-        println!("  agent-test-9012     custom     carol@acme.com       inactive  3 days ago");
-        println!();
-
-        let err = ux_error::server_not_connected();
-        err.display();
+        return Ok(());
     }
 
-    Ok(())
+    agent_server_required("agent_list", "Cannot list agents: server not connected")
 }
 
 async fn run_show(args: AgentShowArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let resolved = resolver.resolve()?;
-
-    if args.json {
-        let output = json!({
-            "operation": "agent_show",
-            "agentId": args.agent_id,
-            "verbose": args.verbose,
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-                "userId": resolved.user_id.value,
-            },
-            "status": "not_connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header(&format!("Agent: {}", args.agent_id));
-        println!();
-
-        output::header("Would Show");
-        println!("  - Agent name and description");
-        println!("  - Agent type (opencode, langchain, etc.)");
-        println!("  - Delegating user");
-        println!("  - Current permissions");
-        println!("  - Status (active/inactive)");
-        println!("  - Last activity");
-
-        if args.verbose {
+    if let Some(client) = get_live_client().await {
+        let result = client.agent_show(&args.agent_id).await?;
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header(&format!("Agent: {}", args.agent_id));
             println!();
-            output::header("Verbose Details");
-            println!("  - Full permission matrix");
-            println!("  - Recent operations");
-            println!("  - Memory access history");
-            println!("  - Policy violations (if any)");
-            println!("  - Audit trail");
+            println!("  ID:          {}", result["id"].as_str().unwrap_or("?"));
+            println!("  Name:        {}", result["name"].as_str().unwrap_or("?"));
+            println!("  Type:        {}", result["type"].as_str().unwrap_or("?"));
+            println!(
+                "  DelegatedBy: {}",
+                result["delegatedBy"]
+                    .as_str()
+                    .or_else(|| result["delegated_by"].as_str())
+                    .unwrap_or("?")
+            );
+            println!(
+                "  Status:      {}",
+                result["status"].as_str().unwrap_or("?")
+            );
+            if args.verbose {
+                println!();
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
+            println!();
         }
-        println!();
-
-        let err = ux_error::server_not_connected();
-        err.display();
+        return Ok(());
     }
 
-    Ok(())
+    agent_server_required("agent_show", "Cannot show agent: server not connected")
 }
 
 async fn run_permissions(args: AgentPermissionsArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let resolved = resolver.resolve()?;
-
     let valid_permissions = [
         "memory:read",
         "memory:write",
@@ -354,163 +370,110 @@ async fn run_permissions(args: AgentPermissionsArgs) -> anyhow::Result<()> {
             return Err(anyhow::anyhow!("Invalid permission"));
         }
 
-        if args.json {
-            let output = json!({
-                "operation": "agent_permission_grant",
-                "agentId": args.agent_id,
-                "permission": perm_to_grant,
-                "scope": args.scope,
-                "status": "not_connected"
-            });
-            println!("{}", serde_json::to_string_pretty(&output)?);
-        } else {
-            output::header("Grant Agent Permission");
-            println!();
-            println!("  Agent:      {}", args.agent_id);
-            println!("  Permission: {perm_to_grant}");
-            if let Some(ref scope) = args.scope {
-                println!("  Scope:      {scope}");
+        if let Some(client) = get_live_client().await {
+            let result = client
+                .agent_permission_grant(
+                    &args.agent_id,
+                    &json!({"permission": perm_to_grant, "scope": args.scope}),
+                )
+                .await?;
+            if args.json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                output::header("Grant Agent Permission");
+                println!();
+                println!("  Agent:      {}", args.agent_id);
+                println!("  Permission: {perm_to_grant}");
+                if let Some(ref scope) = args.scope {
+                    println!("  Scope:      {scope}");
+                }
+                println!();
             }
-            println!();
-
-            output::header("Would Do");
-            println!("  1. Verify you can delegate this permission");
-            println!("  2. Update agent's Cedar policies");
-            println!("  3. Log audit event");
-            println!();
-
-            let err = ux_error::server_not_connected();
-            err.display();
+            return Ok(());
         }
-        return Ok(());
+        return agent_server_required(
+            "agent_permission_grant",
+            "Cannot grant agent permission: server not connected",
+        );
     }
 
     if let Some(ref perm_to_revoke) = args.revoke {
+        if let Some(client) = get_live_client().await {
+            let result = client
+                .agent_permission_revoke(&args.agent_id, perm_to_revoke)
+                .await?;
+            if args.json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                output::header("Revoke Agent Permission");
+                println!();
+                println!("  Agent:      {}", args.agent_id);
+                println!("  Permission: {perm_to_revoke}");
+                println!();
+            }
+            return Ok(());
+        }
+        return agent_server_required(
+            "agent_permission_revoke",
+            "Cannot revoke agent permission: server not connected",
+        );
+    }
+
+    if let Some(client) = get_live_client().await {
+        let result = client.agent_permissions_list(&args.agent_id).await?;
         if args.json {
-            let output = json!({
-                "operation": "agent_permission_revoke",
-                "agentId": args.agent_id,
-                "permission": perm_to_revoke,
-                "status": "not_connected"
-            });
-            println!("{}", serde_json::to_string_pretty(&output)?);
+            println!("{}", serde_json::to_string_pretty(&result)?);
         } else {
-            output::header("Revoke Agent Permission");
+            output::header(&format!("Permissions for: {}", args.agent_id));
             println!();
-            println!("  Agent:      {}", args.agent_id);
-            println!("  Permission: {perm_to_revoke}");
+            if let Some(items) = result.as_array() {
+                for item in items {
+                    println!(
+                        "  {:<20} {:<15} {}",
+                        item["permission"].as_str().unwrap_or("?"),
+                        item["scope"].as_str().unwrap_or("?"),
+                        item["grantedBy"]
+                            .as_str()
+                            .or_else(|| item["granted_by"].as_str())
+                            .unwrap_or("?")
+                    );
+                }
+            } else {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
             println!();
-
-            output::header("Would Do");
-            println!("  1. Remove permission from agent");
-            println!("  2. Update Cedar policies");
-            println!("  3. Log audit event");
-            println!();
-
-            let err = ux_error::server_not_connected();
-            err.display();
         }
         return Ok(());
     }
 
-    if args.json {
-        let output = json!({
-            "operation": "agent_permissions_list",
-            "agentId": args.agent_id,
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-            },
-            "status": "not_connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header(&format!("Permissions for: {}", args.agent_id));
-        println!();
-
-        output::header("Example Output (would show)");
-        println!("  PERMISSION       SCOPE           GRANTED BY          DATE");
-        println!("  memory:read      project         alice@acme.com      2024-06-01");
-        println!("  memory:write     project         alice@acme.com      2024-06-01");
-        println!("  knowledge:read   org             alice@acme.com      2024-06-01");
-        println!("  policy:read      company         system              2024-06-01");
-        println!();
-
-        output::header("Available Permissions");
-        println!("  memory:read     - Search and retrieve memories");
-        println!("  memory:write    - Add new memories");
-        println!("  memory:delete   - Delete memories (restricted)");
-        println!("  knowledge:read  - Query knowledge repository");
-        println!("  knowledge:write - Modify knowledge (restricted)");
-        println!("  policy:read     - Check constraints");
-        println!("  policy:propose  - Propose new policies");
-        println!("  graph:read      - Query memory graph");
-        println!("  graph:write     - Modify graph relationships");
-        println!();
-
-        output::header("Actions");
-        println!(
-            "  Grant:  aeterna agent permissions {} --grant <permission>",
-            args.agent_id
-        );
-        println!(
-            "  Revoke: aeterna agent permissions {} --revoke <permission>",
-            args.agent_id
-        );
-        println!();
-
-        let err = ux_error::server_not_connected();
-        err.display();
-    }
-
-    Ok(())
+    agent_server_required(
+        "agent_permissions_list",
+        "Cannot list agent permissions: server not connected",
+    )
 }
 
 async fn run_revoke(args: AgentRevokeArgs) -> anyhow::Result<()> {
-    let resolver = ContextResolver::new();
-    let resolved = resolver.resolve()?;
-
-    if args.json {
-        let output = json!({
-            "operation": "agent_revoke",
-            "agentId": args.agent_id,
-            "force": args.force,
-            "context": {
-                "tenantId": resolved.tenant_id.value,
-                "userId": resolved.user_id.value,
-            },
-            "status": "not_connected"
-        });
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        output::header(&format!("Revoke Agent: {}", args.agent_id));
-        println!();
-
-        if !args.force {
-            output::warn("This will permanently revoke the agent's access.");
-            println!();
-        }
-
-        output::header("Would Do");
-        println!("  1. Verify your permission to revoke this agent");
-        println!("  2. Invalidate all agent tokens");
-        println!("  3. Remove all Cedar policies for this agent");
-        println!("  4. Log audit event");
-        println!("  5. Agent status set to 'revoked'");
-        println!();
-
-        output::header("Effect");
-        println!("  - Agent can no longer access any Aeterna resources");
-        println!("  - All active sessions will be terminated");
-        println!("  - Historical data and audit trail preserved");
-        println!();
-
-        if !args.force {
-            output::info("Add --force to proceed without confirmation.");
-        }
-
-        let err = ux_error::server_not_connected();
-        err.display();
+    if !args.force {
+        output::warn("This will permanently revoke the agent's access.");
+        output::info("Add --force to proceed without confirmation.");
+        return Ok(());
     }
 
-    Ok(())
+    if let Some(client) = get_live_client().await {
+        let result = client.agent_revoke(&args.agent_id).await?;
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header(&format!("Revoked Agent: {}", args.agent_id));
+            println!();
+            println!(
+                "  Status: {}",
+                result["status"].as_str().unwrap_or("revoked")
+            );
+            println!();
+        }
+        return Ok(());
+    }
+
+    agent_server_required("agent_revoke", "Cannot revoke agent: server not connected")
 }

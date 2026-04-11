@@ -10,7 +10,22 @@ use clap::Args;
 use colored::Colorize;
 use context::ContextResolver;
 
+use crate::offline::{OfflineCliClient, OfflineConfig};
 use crate::output;
+
+async fn get_live_client() -> Option<crate::client::AeternaClient> {
+    crate::backend::connect()
+        .await
+        .ok()
+        .map(|(client, _)| client)
+}
+
+async fn get_offline_client() -> Result<OfflineCliClient> {
+    let resolved = crate::profile::load_resolved(None, None)?;
+    OfflineCliClient::new(resolved.server_url, OfflineConfig::default())
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))
+}
 
 #[derive(Args)]
 pub struct SyncArgs {
@@ -65,44 +80,103 @@ pub async fn run(args: SyncArgs) -> Result<()> {
     );
     println!();
 
-    // Sync requires a live backend connection for state analysis and execution.
-    // We cannot accurately report "Already in sync" or "no planned changes"
-    // without querying the real backend — always surface the not-connected state.
-    eprintln!();
-    eprintln!(
-        "{} {}",
-        "error:".red().bold(),
-        "Cannot connect to Aeterna server".white().bold()
-    );
-    eprintln!(
-        "       {}",
-        "The memory/knowledge backend is not running or unreachable".dimmed()
-    );
-    eprintln!();
-    eprintln!("{}", "How to fix:".yellow().bold());
-    eprintln!("  1. Start the Aeterna server");
-    eprintln!("  2. Check your network connection");
-    eprintln!("  3. Verify server URL in .aeterna/context.toml");
-    eprintln!();
-    Err(server_not_connected_error())
+    let Some(_client) = get_live_client().await else {
+        let offline = get_offline_client().await?;
+        offline.display_cache_age_warning().await;
+        let stats = offline.queue_stats().await;
+
+        if !args.dry_run {
+            let payload = serde_json::json!({
+                "direction": args.direction,
+                "force": args.force,
+                "verbose": args.verbose,
+            });
+            let op_id = offline
+                .queue_operation("sync", "control-plane", "memory-knowledge", payload)
+                .await?;
+            output::warn("Server not reachable - queued sync request for later processing");
+            println!("  Queue operation: {op_id}");
+        } else {
+            output::warn("Server not reachable - showing offline sync status only");
+        }
+
+        println!(
+            "  Offline queue: {}/{} pending",
+            stats.pending, stats.max_size
+        );
+        println!();
+        output::hint(
+            "Reconnect later and run 'aeterna sync' again to use the live backend when available",
+        );
+        return Ok(());
+    };
+
+    let profile_name = crate::profile::load_resolved(None, None)
+        .map(|r| r.profile_name)
+        .unwrap_or_else(|_| "default".to_string());
+    Err(crate::backend::unsupported("sync", &profile_name))
 }
 
 async fn run_json(args: SyncArgs, ctx: &context::ResolvedContext) -> Result<()> {
-    // All sync operations (including dry-run) require a live backend connection.
-    // Without a real connection we cannot report accurate planned changes or sync state.
-    let err_output = serde_json::json!({
-        "success": false,
-        "error": "server_not_connected",
-        "context": {
-            "tenant_id": ctx.tenant_id.value,
-            "project_id": ctx.project_id.as_ref().map(|p| &p.value),
-        },
-        "direction": args.direction,
-        "dry_run": args.dry_run,
-        "message": "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running."
-    });
-    println!("{}", serde_json::to_string_pretty(&err_output)?);
-    Err(server_not_connected_error())
+    if get_live_client().await.is_none() {
+        let offline = get_offline_client().await?;
+        let stats = offline.queue_stats().await;
+        let queued_op = if args.dry_run {
+            None
+        } else {
+            Some(
+                offline
+                    .queue_operation(
+                        "sync",
+                        "control-plane",
+                        "memory-knowledge",
+                        serde_json::json!({
+                            "direction": args.direction,
+                            "force": args.force,
+                            "verbose": args.verbose,
+                        }),
+                    )
+                    .await?,
+            )
+        };
+        let err_output = serde_json::json!({
+            "success": true,
+            "mode": "offline",
+            "context": {
+                "tenant_id": ctx.tenant_id.value,
+                "project_id": ctx.project_id.as_ref().map(|p| &p.value),
+            },
+            "direction": args.direction,
+            "dry_run": args.dry_run,
+            "queued_operation_id": queued_op,
+            "queue": {
+                "pending": stats.pending,
+                "max_size": stats.max_size,
+            },
+            "message": if args.dry_run {
+                "Server not connected; offline sync dry-run completed without queueing changes"
+            } else {
+                "Server not connected; sync request queued for later processing"
+            }
+        });
+        println!("{}", serde_json::to_string_pretty(&err_output)?);
+        return Ok(());
+    }
+
+    let profile_name = crate::profile::load_resolved(None, None)
+        .map(|r| r.profile_name)
+        .unwrap_or_else(|_| "default".to_string());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "success": false,
+            "error": "unsupported",
+            "operation": "sync",
+            "profile": profile_name,
+            "message": "Backend API for 'sync' is not yet available"
+        }))?
+    );
+    Err(anyhow::anyhow!("Backend API for 'sync' not yet available"))
 }
 
 struct SyncState {
@@ -137,7 +211,7 @@ fn analyze_sync_state(_args: &SyncArgs) -> SyncState {
 
 fn server_not_connected_error() -> anyhow::Error {
     anyhow::anyhow!(
-        "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running.\n         Use --dry-run to preview sync changes without a server connection."
+        "Aeterna server not connected. Set AETERNA_SERVER_URL or configure an active profile, then ensure the server is running.\n         Use --dry-run to preview sync changes without a server connection."
     )
 }
 

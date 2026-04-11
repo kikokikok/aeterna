@@ -6,7 +6,7 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,7 @@ pub struct OfflineCliClient {
     server_url: String,
     config: OfflineConfig,
     queue: Arc<RwLock<VecDeque<QueuedOperation>>>,
-    last_sync: Arc<RwLock<Option<DateTime<Utc>>>>
+    last_sync: Arc<RwLock<Option<DateTime<Utc>>>>,
 }
 
 /// Offline mode configuration.
@@ -33,7 +33,7 @@ pub struct OfflineConfig {
     /// Max queue size.
     pub max_queue_size: usize,
     /// Retry interval for sync (seconds).
-    pub sync_retry_interval_secs: u64
+    pub sync_retry_interval_secs: u64,
 }
 
 impl Default for OfflineConfig {
@@ -42,7 +42,7 @@ impl Default for OfflineConfig {
             cache_dir: PathBuf::from(".aeterna/cache"),
             cache_warning_age_hours: 24,
             max_queue_size: 1000,
-            sync_retry_interval_secs: 300
+            sync_retry_interval_secs: 300,
         }
     }
 }
@@ -57,7 +57,7 @@ pub struct QueuedOperation {
     pub payload: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub retry_count: u32,
-    pub status: QueueStatus
+    pub status: QueueStatus,
 }
 
 /// Queue status.
@@ -66,7 +66,7 @@ pub enum QueueStatus {
     Pending,
     Processing,
     Failed,
-    Resolved
+    Resolved,
 }
 
 /// Conflict resolution strategy.
@@ -79,7 +79,7 @@ pub enum ConflictStrategy {
     /// Manual resolution required.
     Manual,
     /// Merge changes if possible.
-    Merge
+    Merge,
 }
 
 impl OfflineCliClient {
@@ -108,7 +108,7 @@ impl OfflineCliClient {
             server_url,
             config,
             queue: Arc::new(RwLock::new(VecDeque::new())),
-            last_sync: Arc::new(RwLock::new(None))
+            last_sync: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -141,7 +141,7 @@ impl OfflineCliClient {
             
             CREATE INDEX IF NOT EXISTS idx_queue_status ON operation_queue(status);
             CREATE INDEX IF NOT EXISTS idx_cache_cached_at ON policy_cache(cached_at);
-            "#
+            "#,
         )
         .execute(pool)
         .await
@@ -207,7 +207,7 @@ impl OfflineCliClient {
         operation_type: &str,
         entity_type: &str,
         entity_id: &str,
-        payload: serde_json::Value
+        payload: serde_json::Value,
     ) -> Result<String, OfflineError> {
         let operation = QueuedOperation {
             id: uuid::Uuid::new_v4().to_string(),
@@ -217,7 +217,7 @@ impl OfflineCliClient {
             payload,
             created_at: Utc::now(),
             retry_count: 0,
-            status: QueueStatus::Pending
+            status: QueueStatus::Pending,
         };
 
         // Store in SQLite
@@ -255,7 +255,7 @@ impl OfflineCliClient {
         &self,
         local: &QueuedOperation,
         server_state: Option<serde_json::Value>,
-        strategy: ConflictStrategy
+        strategy: ConflictStrategy,
     ) -> Result<ConflictResolution, OfflineError> {
         let resolution = match strategy {
             ConflictStrategy::PreferLocal => {
@@ -306,7 +306,7 @@ impl OfflineCliClient {
         let mut result = SyncResult {
             synced: 0,
             failed: 0,
-            conflicts: 0
+            conflicts: 0,
         };
 
         // Get pending operations from SQLite
@@ -314,7 +314,7 @@ impl OfflineCliClient {
             "SELECT id, operation_type, entity_type, entity_id, payload, retry_count 
              FROM operation_queue 
              WHERE status = 'Pending' 
-             ORDER BY created_at"
+             ORDER BY created_at",
         )
         .fetch_all(&self.db_pool)
         .await
@@ -367,7 +367,7 @@ impl OfflineCliClient {
         _op_type: &str,
         _entity_type: &str,
         _entity_id: &str,
-        _payload: &serde_json::Value
+        _payload: &serde_json::Value,
     ) -> Result<(), OfflineError> {
         // In real implementation: send to server via API
         // For now, simulate success
@@ -384,7 +384,7 @@ impl OfflineCliClient {
 
         QueueStats {
             pending: pending_count as usize,
-            max_size: self.config.max_queue_size
+            max_size: self.config.max_queue_size,
         }
     }
 }
@@ -395,7 +395,7 @@ pub enum ConflictResolution {
     UseLocal(QueuedOperation),
     UseServer,
     Merged(serde_json::Value),
-    RequiresManual(String)
+    RequiresManual(String),
 }
 
 /// Sync result.
@@ -403,14 +403,14 @@ pub enum ConflictResolution {
 pub struct SyncResult {
     pub synced: u64,
     pub failed: u64,
-    pub conflicts: u64
+    pub conflicts: u64,
 }
 
 /// Queue statistics.
 #[derive(Debug, Clone)]
 pub struct QueueStats {
     pub pending: usize,
-    pub max_size: usize
+    pub max_size: usize,
 }
 
 /// Offline errors.
@@ -426,10 +426,8 @@ pub enum OfflineError {
     SerializationError(String),
 
     #[error("Sync error: {0}")]
-    SyncError(String)
+    SyncError(String),
 }
-
-use sqlx::Row;
 
 #[cfg(test)]
 mod tests {

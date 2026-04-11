@@ -31,8 +31,9 @@ use clap::{Parser, Subcommand};
     version,
     about = "Aeterna - Universal Memory & Knowledge Framework",
     long_about = "A breeze to setup. Sensible defaults for everything.\n\nCommands work without \
-                  configuration - just run them.\nContext is auto-detected from git, env vars, or \
-                  .aeterna/context.toml"
+                  heavy setup - just run them.\nControl-plane commands resolve settings from CLI flags, \
+                  AETERNA_* environment variables, or profile config files \
+                  (.aeterna/config.toml and ~/.config/aeterna/config.toml)."
 )]
 pub struct Cli {
     #[command(subcommand)]

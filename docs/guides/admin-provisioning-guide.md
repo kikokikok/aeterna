@@ -168,7 +168,7 @@ The environment variable takes precedence over the profile configuration.
 The recommended method for interactive users:
 
 ```bash
-aeterna profile login
+aeterna auth login
 ```
 
 This will:

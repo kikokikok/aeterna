@@ -128,7 +128,7 @@ begin returning `tenant_deactivated` errors. The record is retained for audit.
 
 ```bash
 # Authenticate as platform-admin
-aeterna profile login
+aeterna auth login
 
 # Create the tenant record
 aeterna tenant create --slug acme --name "Acme Corp"

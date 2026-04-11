@@ -254,38 +254,52 @@ async fn run_health(args: AdminHealthArgs) -> anyhow::Result<()> {
     let resolver = ContextResolver::new();
     let ctx = resolver.resolve()?;
 
-    // Health check results
-    let mut checks: Vec<HealthCheck> = Vec::new();
-
-    let components = if args.component == "all" {
-        vec!["memory", "knowledge", "policy", "context"]
-    } else {
-        vec![args.component.as_str()]
+    let Some(client) = get_live_client().await else {
+        crate::ux_error::server_not_connected().display();
+        anyhow::bail!("Aeterna server not connected for operation: admin_health");
     };
 
-    for component in &components {
-        let check = check_component_health(component, args.timeout).await;
-        checks.push(check);
-    }
-
-    let all_healthy = checks.iter().all(|c| c.status == "healthy");
-    let overall_status = if all_healthy { "healthy" } else { "degraded" };
+    let health = client.admin_health().await?;
+    let raw_status = health["status"].as_str().unwrap_or("unknown");
+    let version = health["version"].as_str().unwrap_or("unknown");
+    let overall_status = if raw_status == "ok" {
+        "healthy"
+    } else {
+        raw_status
+    };
 
     if args.json {
         let output = json!({
             "status": overall_status,
+            "server": health,
             "context": {
                 "tenant_id": ctx.tenant_id.value,
                 "user_id": ctx.user_id.value,
                 "project_id": ctx.project_id.as_ref().map(|v| &v.value),
             },
-            "checks": checks.iter().map(|c| json!({
-                "component": c.component,
-                "status": c.status,
-                "latency_ms": c.latency_ms,
-                "message": c.message,
-                "details": c.details,
-            })).collect::<Vec<_>>(),
+            "checks": if args.component == "all" {
+                vec![json!({
+                    "component": "server",
+                    "status": overall_status,
+                    "latency_ms": serde_json::Value::Null,
+                    "message": format!("Server /health returned status='{raw_status}' version='{version}'"),
+                    "details": {
+                        "version": version,
+                        "component_detail": "Per-component health endpoints are not exposed by the current server API"
+                    },
+                })]
+            } else {
+                vec![json!({
+                    "component": args.component,
+                    "status": "unsupported",
+                    "latency_ms": serde_json::Value::Null,
+                    "message": format!("Per-component health for '{}' is not exposed by the current server API; only /health is available", args.component),
+                    "details": {
+                        "server_status": raw_status,
+                        "version": version,
+                    },
+                })]
+            },
             "timestamp": chrono::Utc::now().to_rfc3339(),
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
@@ -293,17 +307,17 @@ async fn run_health(args: AdminHealthArgs) -> anyhow::Result<()> {
         output::header("System Health Check");
         println!();
 
-        // Overall status
-        let status_icon = if all_healthy { "✓" } else { "!" };
-        let status_color = if all_healthy { "green" } else { "yellow" };
+        let healthy = overall_status == "healthy";
+        let status_icon = if healthy { "✓" } else { "!" };
+        let status_color = if healthy { "green" } else { "yellow" };
         println!(
             "  Overall Status: {} {}",
             colored_status(status_icon, status_color),
             overall_status.to_uppercase()
         );
+        println!("  Server Version:  {version}");
         println!();
 
-        // Context info
         output::subheader("Context");
         println!("  Tenant:  {}", ctx.tenant_id.value);
         println!("  User:    {}", ctx.user_id.value);
@@ -315,64 +329,22 @@ async fn run_health(args: AdminHealthArgs) -> anyhow::Result<()> {
         );
         println!();
 
-        // Overall status
-        let status_icon = if all_healthy { "✓" } else { "!" };
-        let status_color = if all_healthy { "green" } else { "yellow" };
-        println!(
-            "  Overall Status: {} {}",
-            colored_status(status_icon, status_color),
-            overall_status.to_uppercase()
-        );
-        println!();
-
-        // Context info
-        output::subheader("Context");
-        println!("  Tenant:  {}", ctx.tenant_id.value);
-        println!("  User:    {}", ctx.user_id.value);
-        println!(
-            "  Project: {}",
-            ctx.project_id
-                .as_ref()
-                .map_or("(auto-detect)", |v| v.value.as_str())
-        );
-        println!();
-
-        // Component checks
-        output::subheader("Components");
-        for check in &checks {
-            let icon = match check.status.as_str() {
-                "healthy" => "✓",
-                "degraded" => "!",
-                "unhealthy" => "✗",
-                _ => "?",
-            };
-            let color = match check.status.as_str() {
-                "healthy" => "green",
-                "degraded" => "yellow",
-                "unhealthy" => "red",
-                _ => "white",
-            };
-
-            println!(
-                "  {} {:<12} {:>6}ms  {}",
-                colored_status(icon, color),
-                check.component,
-                check.latency_ms,
-                check.message
-            );
-
-            if args.verbose {
-                for (key, value) in &check.details {
-                    println!("      {key}: {value}");
-                }
-            }
+        output::subheader("Health Source");
+        println!("  Endpoint: /health");
+        println!("  Raw status: {raw_status}");
+        if args.component == "all" {
+            println!("  Detail: per-component health is not exposed by the current server API");
+        } else {
+            println!("  Requested component: {}", args.component);
+            println!("  Detail: per-component health is not exposed by the current server API");
+        }
+        if args.verbose {
+            println!();
+            println!("{}", serde_json::to_string_pretty(&health)?);
         }
         println!();
 
-        if !all_healthy {
-            output::hint("Run with --verbose for detailed diagnostics");
-            output::hint("Check server logs for more information");
-        }
+        output::hint("Run with --verbose to inspect the raw /health response");
     }
 
     Ok(())
