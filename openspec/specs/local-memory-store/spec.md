@@ -2,10 +2,9 @@
 
 ## Purpose
 The Local Memory Store provides an embedded SQLite-based storage layer for personal-layer memories (agent, user, session) with offline resilience, sub-millisecond reads, and bidirectional sync to the remote Aeterna server.
-
 ## Requirements
 ### Requirement: Local Memory Store Initialization
-The system SHALL initialize an embedded SQLite database (via `better-sqlite3`) on plugin startup at the configured path (default `~/.aeterna/local.db`).
+The system SHALL initialize an embedded SQLite database compatible with the OpenCode runtime on plugin startup at the configured path (default `~/.aeterna/local.db`).
 
 #### Scenario: First-time initialization
 - **WHEN** the plugin starts and no local database file exists
@@ -70,8 +69,8 @@ The system SHALL cache remote shared-layer memories (project, team, org, company
 #### Scenario: Read cached shared memory
 - **WHEN** a memory search targets layer `project`, `team`, `org`, or `company`
 - **AND** cached entries exist in the local store with `ownership = 'cached'`
-- **THEN** the system SHALL return cached results immediately
-- **AND** the system SHALL attempt a background refresh from the remote server if online
+- **THEN** the system SHALL return cached results immediately when the cache is still fresh
+- **AND** the returned results SHALL indicate that they came from cache
 
 #### Scenario: Cache miss with server available
 - **WHEN** a shared-layer search has no cached results
@@ -84,6 +83,12 @@ The system SHALL cache remote shared-layer memories (project, team, org, company
 - **AND** the remote server is unreachable
 - **THEN** the system SHALL return an empty result set (not an error)
 - **AND** the system SHALL log a warning about offline state
+
+#### Scenario: Stale cache fallback
+- **WHEN** a shared-layer search has cached results that are older than the fresh-cache threshold
+- **AND** the remote server request fails
+- **THEN** the system SHALL return the stale cached results rather than failing the search
+- **AND** the returned results SHALL indicate that they may be stale
 
 #### Scenario: Cache eviction
 - **WHEN** the number of cached shared-layer entries exceeds `local.max_cached_entries` (default 50,000)
@@ -101,6 +106,11 @@ The system SHALL function for personal layers without any network connectivity.
 - **WHEN** the remote server becomes reachable after an offline period
 - **THEN** the `SyncEngine` SHALL push all queued changes on the next sync cycle
 - **AND** the system SHALL pull any shared layer updates missed during the offline period
+
+#### Scenario: Offline search provenance is visible
+- **WHEN** the plugin returns local, cached, or remote memory results
+- **THEN** the returned results SHALL include source metadata identifying whether the result came from local storage, cache, or remote retrieval
+- **AND** stale cached results SHALL be identifiable to the user-facing tool output
 
 ### Requirement: Session Memory Expiration
 The system SHALL automatically expire session-layer memories from the local store after a configurable TTL.
@@ -122,3 +132,4 @@ The system SHALL support configuration via environment variables and `.aeterna/c
 - **WHEN** `AETERNA_LOCAL_DB_PATH` is set
 - **THEN** the system SHALL use that path for the local database file
 - **AND** the system SHALL create parent directories if they do not exist
+

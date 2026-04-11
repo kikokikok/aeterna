@@ -2,6 +2,8 @@
 
 Comprehensive guide for integrating Aeterna with [OpenCode](https://opencode.ai), the AI-powered coding assistant.
 
+For a practical operator workflow, see the [OpenCode Daily Usage Playbook](../guides/opencode-daily-usage-playbook).
+
 ---
 
 ## Table of Contents
@@ -10,7 +12,7 @@ Comprehensive guide for integrating Aeterna with [OpenCode](https://opencode.ai)
 2. [Quick Start](#quick-start)
 3. [Integration Methods](#integration-methods)
 4. [NPM Plugin (Recommended)](#npm-plugin-recommended)
-5. [All 8 Aeterna Tools](#all-8-aeterna-tools)
+5. [All 14 Aeterna Tools](#all-14-aeterna-tools)
 6. [Hook System](#hook-system)
 7. [Automatic Session Capture](#automatic-session-capture)
 8. [Knowledge Context Injection](#knowledge-context-injection)
@@ -70,24 +72,7 @@ Aeterna integrates with OpenCode to provide:
 
 ## Quick Start
 
-### 1. Install the Plugin
-
-```bash
-npm install -D @aeterna-org/opencode-plugin
-```
-
-### 2. Initialize Configuration
-
-```bash
-npx aeterna init --opencode
-```
-
-This creates:
-- `opencode.jsonc` with plugin configuration
-- `.aeterna/config.toml` with project settings
-- Updates `.gitignore` to exclude local files
-
-### 3. Configure OpenCode
+### 1. Configure OpenCode
 
 Add to your `opencode.jsonc`:
 
@@ -98,7 +83,34 @@ Add to your `opencode.jsonc`:
 }
 ```
 
-### 4. Start Using
+OpenCode installs configured npm plugins automatically at startup. No separate `npm install -D` step is required for normal use.
+
+### 2. Configure Aeterna auth and target
+
+Static-token path:
+
+```bash
+export AETERNA_SERVER_URL=http://localhost:8080
+export AETERNA_TOKEN=<your-token>
+```
+
+Interactive device-flow path:
+
+```bash
+export AETERNA_SERVER_URL=http://localhost:8080
+export AETERNA_PLUGIN_AUTH_ENABLED=true
+export AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID=<your-oauth-app-client-id>
+```
+
+Optional target context:
+
+```bash
+export AETERNA_TEAM=platform
+export AETERNA_ORG=engineering
+export AETERNA_USER_ID=you@example.com
+```
+
+### 3. Start Using
 
 Launch OpenCode and all Aeterna tools are now available:
 
@@ -110,6 +122,8 @@ Found 2 relevant memories:
 - "User prefers PostgreSQL for relational data" (user layer, 0.92 score)
 - "Project uses TimescaleDB for time-series" (project layer, 0.85 score)
 ```
+
+When interactive auth is enabled, the plugin presents a GitHub device-flow verification URL and user code through the normal OpenCode-visible startup path. Complete that one-time sign-in in your browser, then continue once the plugin reports success.
 
 ---
 
@@ -126,7 +140,7 @@ Aeterna provides **two integration methods**:
 
 | Feature | NPM Plugin | MCP Server |
 |---------|------------|------------|
-| All 8 tools | Yes | Yes |
+| All 14 tools | Yes | Yes |
 | Chat message hook | Yes | No |
 | System prompt injection | Yes | No |
 | Tool execution capture | Yes | Limited |
@@ -143,37 +157,13 @@ Aeterna provides **two integration methods**:
 
 ### Architecture
 
-```typescript
-// @aeterna-org/opencode-plugin/src/index.ts
-import type { Plugin, Hooks, PluginInput } from "@opencode-ai/plugin"
-import { tool } from "@opencode-ai/plugin/tool"
-import { AeternaClient } from "@aeterna/client"
+The current plugin implementation provides:
 
-const aeterna: Plugin = async (input: PluginInput): Promise<Hooks> => {
-  const client = new AeternaClient({
-    project: input.project.name,
-    directory: input.directory,
-    serverUrl: process.env.AETERNA_SERVER_URL,
-  })
-
-  await client.sessionStart()
-
-  return {
-    // Tools
-    tool: { /* 8 Aeterna tools */ },
-    
-    // Hooks
-    "chat.message": async (input, output) => { /* Inject knowledge */ },
-    "experimental.chat.system.transform": async (input, output) => { /* Add context */ },
-    "tool.execute.before": async (input, output) => { /* Validate args */ },
-    "tool.execute.after": async (input, output) => { /* Capture memory */ },
-    "permission.ask": async (input, output) => { /* Check governance */ },
-    "event": async ({ event }) => { /* Handle lifecycle */ },
-  }
-}
-
-export default aeterna
-```
+- a default OpenCode plugin entrypoint
+- a local-first memory router for personal layers
+- a background sync engine when `AETERNA_SERVER_URL` is configured
+- tool registration for the supported Aeterna tool surface
+- hook-based context injection, capture, governance, and session lifecycle handling
 
 ### Package Structure
 
@@ -199,7 +189,7 @@ export default aeterna
 
 ---
 
-## All 8 Aeterna Tools
+## All 14 Aeterna Tools
 
 ### Memory Tools
 
@@ -884,12 +874,6 @@ threshold = 0.75
 notifications = true
 # Alert on semantic drift detection
 drift_alerts = true
-
-[server]
-# Aeterna server URL (for remote deployments)
-url = "http://localhost:8080"
-# API key (if using remote server)
-# api_key = "your-api-key"
 ```
 
 ### Environment Variables
@@ -897,34 +881,28 @@ url = "http://localhost:8080"
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `AETERNA_SERVER_URL` | Aeterna server URL | `http://localhost:8080` |
-| `AETERNA_API_KEY` | API key for authentication | - |
-| `AETERNA_PROJECT` | Project name override | From config |
-| `AETERNA_DEBUG` | Enable debug logging | `false` |
+| `AETERNA_TOKEN` | Static bearer token for API authentication | - |
+| `AETERNA_PLUGIN_AUTH_ENABLED` | Enable GitHub OAuth device-flow login | `false` |
+| `AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID` | GitHub OAuth App client ID for device flow | - |
+| `AETERNA_TEAM` | Team context override | - |
+| `AETERNA_ORG` | Organization context override | - |
+| `AETERNA_USER_ID` | User identity override | - |
+| `AETERNA_LOCAL_DB_PATH` | Local SQLite path for personal layers | `~/.aeterna/local.db` |
 
 ### `opencode.jsonc`
 
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  
-  // NPM Plugin configuration
-  "plugin": ["@aeterna-org/opencode-plugin"],
-  
-  // Plugin-specific options
-  "pluginConfig": {
-    "@aeterna-org/opencode-plugin": {
-      "capture": {
-        "enabled": true,
-        "sensitivity": "medium"
-      },
-      "knowledge": {
-        "injectionEnabled": true,
-        "maxItems": 3
-      }
-    }
-  }
+
+  "plugin": ["@aeterna-org/opencode-plugin"]
 }
 ```
+
+The supported plugin configuration model is:
+- OpenCode plugin registration in `opencode.jsonc`
+- Aeterna runtime/auth settings via environment variables
+- optional `.aeterna/config.toml` for project-specific plugin behavior
 
 ---
 
@@ -940,8 +918,8 @@ Error: Cannot find module '@aeterna-org/opencode-plugin'
 
 **Solution:**
 ```bash
-npm install -D @aeterna-org/opencode-plugin
-# Verify in package.json
+# Verify the plugin entry exists in opencode.jsonc
+# OpenCode installs configured plugins automatically at startup
 ```
 
 #### Connection Refused

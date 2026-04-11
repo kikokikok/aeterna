@@ -1,7 +1,7 @@
 # opencode-integration Specification
 
 ## Purpose
-TBD - created by archiving change add-opencode-plugin. Update Purpose after archive.
+Define the supported Aeterna integration contract for OpenCode, including the plugin package, tool surface, hook behavior, session lifecycle, and user-visible integration model.
 ## Requirements
 ### Requirement: NPM Plugin Package
 
@@ -9,30 +9,31 @@ The system SHALL provide an NPM package `@aeterna-org/opencode-plugin` that inte
 
 The plugin MUST:
 - Export a default Plugin function conforming to OpenCode's Plugin type
-- Register all Aeterna tools as OpenCode tools
+- Register all supported Aeterna tools as OpenCode tools
 - Implement lifecycle hooks for deep integration
-- Support configuration via `.aeterna/config.toml`
+- Support configuration via `opencode.jsonc`, environment variables, and `.aeterna/config.toml`
 - Initialize a `LocalMemoryManager` on startup for local-first personal layer access
-- Run a background `SyncEngine` for bidirectional memory synchronization
+- Run a background `SyncEngine` for bidirectional memory synchronization when a server URL is configured
 
 #### Scenario: Plugin installation
-- **WHEN** a user runs `npm install -D @aeterna-org/opencode-plugin`
-- **THEN** the plugin SHALL be available for OpenCode configuration
-- **AND** the plugin SHALL include `better-sqlite3` as a dependency
+- **WHEN** a user adds `"plugin": ["@aeterna-org/opencode-plugin"]` to `opencode.jsonc`
+- **THEN** OpenCode SHALL install and load the plugin automatically at startup
+- **AND** the supported installation flow SHALL NOT require a separate manual `npm install -D` step for normal usage
+- **AND** the plugin SHALL use the Bun-compatible SQLite runtime supported by OpenCode
 
 #### Scenario: Plugin initialization with local store
 - **WHEN** OpenCode starts with the Aeterna plugin configured
 - **THEN** the plugin SHALL initialize the `LocalMemoryManager` with the configured database path
 - **AND** the plugin SHALL start the `SyncEngine` background loop if a server URL is configured
 - **AND** the plugin SHALL register all tools and hooks
-- **AND** the plugin SHALL start a session context
+- **AND** the plugin SHALL establish exactly one active session context for the OpenCode session
 
 #### Scenario: Plugin initialization without server
 - **WHEN** OpenCode starts with the Aeterna plugin configured
 - **AND** no `AETERNA_SERVER_URL` is set
 - **THEN** the plugin SHALL initialize the `LocalMemoryManager` for offline-only operation
 - **AND** personal layer tools SHALL function normally
-- **AND** shared layer tools SHALL return empty results with an informative message
+- **AND** shared layer tools SHALL return empty or cached results with an informative message rather than failing the session
 
 #### Scenario: Plugin shutdown with pending sync
 - **WHEN** OpenCode shuts down
@@ -41,13 +42,13 @@ The plugin MUST:
 - **AND** the plugin SHALL close the SQLite database cleanly
 
 #### Scenario: Plugin configuration via opencode.jsonc
-- **WHEN** the user adds `"plugin": ["@aeterna-org/opencode-plugin"]` to opencode.jsonc
+- **WHEN** the user adds `"plugin": ["@aeterna-org/opencode-plugin"]` to `opencode.jsonc`
 - **THEN** OpenCode SHALL load and initialize the Aeterna plugin
-- **AND** all Aeterna tools SHALL be available to the AI
+- **AND** all supported Aeterna tools SHALL be available to the AI
 
 ### Requirement: Tool Registration
 
-The system SHALL register all 8 Aeterna tools as OpenCode tools using the `tool()` helper from `@opencode-ai/plugin/tool`.
+The system SHALL register the supported Aeterna tools as OpenCode tools using the `tool()` helper from `@opencode-ai/plugin/tool`.
 
 | Tool Name | Description |
 |-----------|-------------|
@@ -57,6 +58,13 @@ The system SHALL register all 8 Aeterna tools as OpenCode tools using the `tool(
 | `aeterna_memory_promote` | Promote memory to higher layer |
 | `aeterna_knowledge_query` | Query knowledge repository |
 | `aeterna_knowledge_propose` | Propose new knowledge item |
+| `aeterna_graph_query` | Query graph relationships and traversals |
+| `aeterna_graph_neighbors` | Find directly related memories |
+| `aeterna_graph_path` | Find shortest path between memories |
+| `aeterna_context_assemble` | Assemble hierarchical context |
+| `aeterna_note_capture` | Capture trajectory events for distillation |
+| `aeterna_hindsight_query` | Query learned error patterns |
+| `aeterna_meta_loop_status` | Inspect meta-loop state |
 | `aeterna_sync_status` | Check sync status |
 | `aeterna_governance_status` | Check governance state |
 
@@ -142,6 +150,11 @@ The system SHALL implement the `tool.execute.after` hook to capture tool executi
 - **THEN** the plugin SHALL detect the error-resolution pattern
 - **AND** the plugin SHALL flag the pattern as significant
 
+#### Scenario: Captured arguments reflect executed tool call
+- **WHEN** the plugin captures a completed tool execution
+- **THEN** the stored execution record SHALL preserve the executed arguments for that tool call
+- **AND** the plugin SHALL NOT replace captured arguments with an empty placeholder object
+
 ### Requirement: Permission Hook
 
 The system SHALL implement the `permission.ask` hook to integrate with Aeterna's governance system.
@@ -171,6 +184,11 @@ The system SHALL implement the `event` hook to handle session lifecycle events.
 - **THEN** the plugin SHALL initialize session context
 - **AND** the plugin SHALL subscribe to governance notifications
 
+#### Scenario: Session startup does not create duplicate backend sessions
+- **WHEN** the plugin starts and later receives the `session.start` event for the same OpenCode session
+- **THEN** the plugin SHALL maintain a single active Aeterna session context for that OpenCode session
+- **AND** the plugin SHALL NOT create duplicate backend sessions for the same logical start
+
 ### Requirement: MCP Server Alternative
 
 The system SHALL provide an MCP server as an alternative integration method for remote or hybrid deployments.
@@ -178,7 +196,7 @@ The system SHALL provide an MCP server as an alternative integration method for 
 The MCP server MUST:
 - Support stdio transport for local use
 - Support HTTP transport for remote use
-- Expose all 8 Aeterna tools via MCP protocol
+- Expose the supported Aeterna tools via MCP protocol
 - Expose knowledge and memory resources
 
 #### Scenario: MCP stdio transport
@@ -241,6 +259,11 @@ Significance criteria:
 - **WHEN** similar queries are detected 3+ times
 - **THEN** the plugin SHALL consolidate into a single memory
 - **AND** flag for promotion
+
+#### Scenario: Repeated pattern history is recorded
+- **WHEN** the plugin analyzes tool executions for repeated significant patterns
+- **THEN** the execution history used for repeated-pattern detection SHALL be updated for each completed execution
+- **AND** repeated-pattern significance SHALL be based on actual recorded session history rather than an empty in-memory baseline
 
 ### Requirement: Knowledge Context Injection
 
@@ -510,3 +533,4 @@ The OpenCode integration SHALL preserve existing proposal tools while adding pro
 - **WHEN** a client invokes `aeterna_knowledge_propose`
 - **THEN** the tool SHALL continue to behave as before
 - **AND** promotion lifecycle tools SHALL be additive
+

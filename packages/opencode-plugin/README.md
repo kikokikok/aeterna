@@ -69,6 +69,7 @@ By default the plugin authenticates with a static bearer token set via `AETERNA_
 
 1. **Static token** (`AETERNA_TOKEN`) — set this for service-to-service or CI use. The plugin uses it as-is; no interactive auth is performed.
 2. **Dynamic auth** (`AETERNA_PLUGIN_AUTH_ENABLED=true`) — the plugin performs the GitHub OAuth device flow sign-in and stores a rotating refresh token. The access token is renewed automatically on each session start.
+2. **Dynamic auth** (`AETERNA_PLUGIN_AUTH_ENABLED=true`) — the plugin performs the GitHub OAuth device flow sign-in and stores a rotating refresh token. The access token is refreshed automatically and reused across later starts until re-auth is required.
 3. **Unauthenticated** — if neither is configured the plugin runs in local-only mode; personal memory layers work offline, shared layers return empty results.
 
 #### Interactive Sign-in (Device Flow)
@@ -231,9 +232,9 @@ Memory search results include `source` metadata (`local`, `cache`, or `remote`) 
      - Injects the combined context into the chat
 
 3. **Tool Execution Capture**:
-   - Every tool execution is automatically captured
-   - Significant patterns (error resolution, repeated usage) are flagged
-   - Captured memories are available for future sessions
+    - Every tool execution is automatically captured with its executed arguments and outcome
+    - Significant patterns (error resolution, repeated usage) are flagged
+    - Captured memories are available for future sessions
 
 4. **Session End**: When session ends, the plugin:
    - Flushes pending sync queue (final push with 5s timeout)

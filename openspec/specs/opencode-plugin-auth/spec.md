@@ -1,7 +1,7 @@
 # opencode-plugin-auth Specification
 
 ## Purpose
-TBD - created by archiving change add-opencode-github-app-auth. Update Purpose after archive.
+Define the supported interactive authentication contract for the OpenCode plugin and CLI, including device-flow sign-in, token refresh, and authenticated request identity.
 ## Requirements
 ### Requirement: GitHub-OAuth-App Device-Code Plugin Authentication
 The system SHALL provide an interactive authentication flow for the OpenCode plugin and CLI clients that uses a GitHub OAuth App device-code sign-in to obtain Aeterna-issued credentials for API access.
@@ -12,6 +12,7 @@ The plugin and CLI SHALL use the authenticated flow for interactive user access 
 - **WHEN** the OpenCode plugin starts without a valid Aeterna plugin session
 - **THEN** the plugin SHALL initiate the supported GitHub OAuth App device-code authentication flow
 - **AND** the flow SHALL complete with Aeterna-issued credentials bound to the authenticated user identity
+- **AND** the plugin SHALL present the verification URL and user code through the supported OpenCode user-visible interaction path for plugin sign-in
 
 #### Scenario: User signs in from CLI
 - **WHEN** a user runs `aeterna auth login` without providing a `--github-token` flag
@@ -35,6 +36,11 @@ The system SHALL support refresh of Aeterna-issued plugin credentials without re
 - **WHEN** token refresh fails because the session is revoked, invalid, or otherwise not refreshable
 - **THEN** the plugin SHALL fail the authenticated request explicitly
 - **AND** the plugin SHALL require the user to sign in again before continuing authenticated operations
+
+#### Scenario: Session reuse and refresh do not require duplicate startup state
+- **WHEN** the plugin refreshes or reuses an existing authenticated session during startup
+- **THEN** the plugin SHALL preserve a single coherent authenticated session context
+- **AND** refresh/session reuse SHALL NOT require the user to restart OpenCode to recover normal authenticated tool usage
 
 ### Requirement: Authenticated Plugin Request Identity
 The system SHALL ensure that plugin-originated authenticated requests carry validated user identity into Aeterna server request handling.
