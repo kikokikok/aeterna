@@ -11,6 +11,7 @@ type ToolExecuteAfterInput = {
     tool: string;
     sessionID: string;
     callID: string;
+    args?: Record<string, unknown>;
 };
 type ToolExecuteAfterOutput = {
     title: string;

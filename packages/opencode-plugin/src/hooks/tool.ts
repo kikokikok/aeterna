@@ -1,5 +1,5 @@
 import type { AeternaClient } from "../client.js";
-import { detectSignificance } from "../utils/detect.js";
+import { detectSignificance, recordExecution } from "../utils/detect.js";
 
 type ToolExecuteBeforeInput = {
   tool: string;
@@ -15,6 +15,7 @@ type ToolExecuteAfterInput = {
   tool: string;
   sessionID: string;
   callID: string;
+  args?: Record<string, unknown>;
 };
 
 type ToolExecuteAfterOutput = {
@@ -43,13 +44,15 @@ export const createToolHooks = (client: AeternaClient) => ({
       sessionId: sessionContext.sessionId,
       callId: input.callID,
       title: output.title,
-      args: {} as Record<string, unknown>,
+      args: input.args ?? {},
       output: String(output.output),
       metadata: {},
       timestamp: Date.now(),
       duration: undefined,
       success: true,
     });
+
+    recordExecution(sessionContext.sessionId, input.tool, "success");
 
     const isSignificant = detectSignificance(input, output);
 

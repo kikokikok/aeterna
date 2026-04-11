@@ -38,6 +38,7 @@ export interface MemorySearchParams {
     layers?: MemoryLayer[];
     limit?: number;
     threshold?: number;
+    queryEmbedding?: number[];
     sessionId?: string;
     tags?: string[];
 }
@@ -46,6 +47,52 @@ export interface MemoryPromoteParams {
     memoryId: string;
     targetLayer: MemoryLayer;
     reason?: string;
+}
+export interface SyncPushEntry {
+    id: string;
+    content: string;
+    layer: MemoryLayer;
+    tags: string[];
+    metadata?: Record<string, unknown>;
+    importance: number;
+    created_at: string;
+    updated_at: string;
+    deleted_at?: string;
+}
+export interface SyncPushPayload {
+    entries: SyncPushEntry[];
+    device_id: string;
+}
+export interface SyncConflictEntry {
+    id: string;
+    remote_content: string;
+    remote_updated_at: string;
+}
+export interface SyncPushResponse {
+    cursor: string;
+    conflicts: SyncConflictEntry[];
+    embeddings: Record<string, number[]>;
+}
+export interface SyncPullParams {
+    sinceCursor?: string;
+    layers?: MemoryLayer[];
+    limit?: number;
+}
+export interface SyncPullEntry {
+    id: string;
+    content: string;
+    layer: MemoryLayer;
+    embedding?: number[];
+    tags: string[];
+    metadata?: Record<string, unknown>;
+    importance: number;
+    created_at: string;
+    updated_at: string;
+}
+export interface SyncPullResponse {
+    entries: SyncPullEntry[];
+    cursor: string;
+    has_more: boolean;
 }
 /** Knowledge scope levels */
 export type KnowledgeScope = "project" | "team" | "org" | "company";
@@ -159,6 +206,55 @@ export interface ProjectContext {
         summary: string;
     }>;
 }
+/**
+ * Configuration for interactive GitHub-backed plugin authentication.
+ *
+ * When `enabled` is true the plugin will use the Aeterna server's
+ * `/api/v1/auth/plugin/*` endpoints to exchange a GitHub OAuth code for
+ * Aeterna-issued plugin session credentials rather than relying on a static
+ * `AETERNA_TOKEN`.
+ *
+ * If `enabled` is false (or absent) the plugin falls back to the static
+ * `AETERNA_TOKEN` environment variable / constructor argument.
+ */
+export interface PluginAuthConfig {
+    /** Enable interactive GitHub OAuth plugin authentication. Default: false */
+    enabled: boolean;
+    /**
+     * GitHub OAuth App client ID.  Typically read from
+     * `AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID`.
+     */
+    githubClientId?: string;
+    /** OAuth scope requested from GitHub during device-flow authorisation. Default: `"read:user user:email"` */
+    scope?: string;
+    /** Aeterna server base URL used for token exchange.  Mirrors `serverUrl`. */
+    serverUrl: string;
+}
+/**
+ * Response from GitHub's `POST https://github.com/login/device/code`
+ * endpoint when initiating the OAuth device flow.
+ */
+export interface DeviceCodeResponse {
+    /** The code the plugin polls with. */
+    device_code: string;
+    /** Short code the user must enter at `verification_uri`. */
+    user_code: string;
+    /** URL the user opens in their browser. */
+    verification_uri: string;
+    /** Seconds before the device code expires. */
+    expires_in: number;
+    /** Minimum polling interval in seconds. */
+    interval: number;
+}
+/** Token pair returned by the plugin auth endpoints. */
+export interface PluginAuthTokens {
+    accessToken: string;
+    refreshToken: string;
+    /** Seconds until the access token expires. */
+    expiresIn: number;
+    githubLogin: string;
+    githubEmail?: string;
+}
 /** Configuration for the Aeterna client */
 export interface AeternaClientConfig {
     /** Project name for context */
@@ -204,6 +300,8 @@ export interface PluginConfig {
         systemPromptHook: boolean;
         permissionHook: boolean;
     };
+    /** Interactive GitHub-backed plugin auth.  Undefined means disabled. */
+    auth?: PluginAuthConfig;
 }
 /** Default plugin configuration */
 export declare const DEFAULT_CONFIG: PluginConfig;

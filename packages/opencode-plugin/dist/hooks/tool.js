@@ -1,4 +1,4 @@
-import { detectSignificance } from "../utils/detect.js";
+import { detectSignificance, recordExecution } from "../utils/detect.js";
 export const createToolHooks = (client) => ({
     before: async (input, output) => {
         if (!input.tool.startsWith("aeterna_"))
@@ -17,13 +17,14 @@ export const createToolHooks = (client) => ({
             sessionId: sessionContext.sessionId,
             callId: input.callID,
             title: output.title,
-            args: {},
+            args: input.args ?? {},
             output: String(output.output),
             metadata: {},
             timestamp: Date.now(),
             duration: undefined,
             success: true,
         });
+        recordExecution(sessionContext.sessionId, input.tool, "success");
         const isSignificant = detectSignificance(input, output);
         if (isSignificant) {
             await client.flagForPromotion(sessionContext.sessionId, input.callID);

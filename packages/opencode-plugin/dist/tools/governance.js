@@ -5,6 +5,7 @@ export const createGovernanceTools = (client) => ({
         args: {},
         async execute(_args, _context) {
             const status = await client.getSyncStatus();
+            const localStatus = client.getLocalSyncStatus();
             const statusEmoji = {
                 healthy: "✅",
                 degraded: "⚠️",
@@ -13,7 +14,13 @@ export const createGovernanceTools = (client) => ({
             const errorsSection = status.errors && status.errors.length > 0
                 ? `\n\nErrors:\n${status.errors.map((e) => `  - ${e}`).join("\n")}`
                 : "";
-            return `Sync status: ${statusEmoji[status.syncHealth]} ${status.syncHealth}\n\nLast sync: ${new Date(status.lastSync).toLocaleString()}\nPending promotions: ${status.pendingPromotions}\nPending proposals: ${status.pendingProposals}${errorsSection}`;
+            const localSection = localStatus
+                ? `\n\nLocal store:\nPending push: ${localStatus.pendingPushCount}\nLast push: ${localStatus.lastPush ? new Date(localStatus.lastPush).toLocaleString() : "never"}\nLast pull: ${localStatus.lastPull ? new Date(localStatus.lastPull).toLocaleString() : "never"}\nServer connectivity: ${localStatus.serverConnectivity ? "✅ connected" : "❌ offline"}\nEntry counts:\n${Object.entries(localStatus.entryCounts)
+                    .sort(([left], [right]) => left.localeCompare(right))
+                    .map(([key, value]) => `  - ${key}: ${value}`)
+                    .join("\n")}`
+                : "\n\nLocal store: not enabled";
+            return `Sync status: ${statusEmoji[status.syncHealth]} ${status.syncHealth}\n\nLast sync: ${new Date(status.lastSync).toLocaleString()}\nPending promotions: ${status.pendingPromotions}\nPending proposals: ${status.pendingProposals}${errorsSection}${localSection}`;
         },
     }),
     aeterna_governance_status: tool({

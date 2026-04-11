@@ -56,8 +56,15 @@ export const createMemoryTools = (client) => ({
             if (results.length === 0) {
                 return `No memories found for query: "${args.query}"`;
             }
-            return results
-                .map((r) => `- [${r.memory.id}] ${r.score.toFixed(2)}: ${r.memory.content.slice(0, 100)}...`)
+            const hasStaleResults = results.some((r) => r.memory.metadata?.stale === true);
+            const warning = hasStaleResults
+                ? "⚠️ Some results from local cache may be stale (last synced >10 min ago)\n\n"
+                : "";
+            return warning + results
+                .map((r) => {
+                const source = typeof r.memory.metadata?.source === "string" ? r.memory.metadata.source : "unknown";
+                return `- [${r.memory.id}] (${source}) ${r.score.toFixed(2)}: ${r.memory.content.slice(0, 100)}...`;
+            })
                 .join("\n");
         },
     }),

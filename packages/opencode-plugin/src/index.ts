@@ -134,10 +134,10 @@ export const aeterna: Plugin = async (input: PluginInput): Promise<Hooks> => {
     }
   }
 
-  // Authenticate before starting the session (task 3.3 / 4.1)
+  // Authenticate before OpenCode session lifecycle begins.
+  // Session creation itself is owned by the session hook so we do not create
+  // duplicate backend sessions during plugin startup and `session.start`.
   await attemptPluginAuth(client);
-
-  await client.sessionStart();
 
   return {
     tool: {

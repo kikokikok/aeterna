@@ -1,0 +1,7 @@
+export declare const SCHEMA_VERSION = 1;
+export declare const CREATE_MEMORIES_TABLE_SQL = "\nCREATE TABLE IF NOT EXISTS memories (\n  id TEXT PRIMARY KEY,\n  content TEXT NOT NULL,\n  layer TEXT NOT NULL,\n  ownership TEXT NOT NULL,\n  embedding BLOB,\n  tags TEXT,\n  metadata TEXT,\n  importance_score REAL NOT NULL DEFAULT 0.0,\n  tenant_context TEXT,\n  device_id TEXT,\n  created_at INTEGER NOT NULL,\n  updated_at INTEGER NOT NULL,\n  synced_at INTEGER,\n  deleted_at INTEGER\n);\n";
+export declare const CREATE_SYNC_QUEUE_TABLE_SQL = "\nCREATE TABLE IF NOT EXISTS sync_queue (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  memory_id TEXT NOT NULL,\n  operation TEXT NOT NULL,\n  queued_at INTEGER NOT NULL,\n  FOREIGN KEY (memory_id) REFERENCES memories(id)\n);\n";
+export declare const CREATE_SYNC_CURSORS_TABLE_SQL = "\nCREATE TABLE IF NOT EXISTS sync_cursors (\n  server_url TEXT NOT NULL,\n  direction TEXT NOT NULL,\n  cursor TEXT NOT NULL,\n  updated_at INTEGER NOT NULL,\n  PRIMARY KEY (server_url, direction)\n);\n";
+export declare const CREATE_INDEXES_SQL = "\nCREATE INDEX IF NOT EXISTS idx_memories_layer ON memories(layer);\nCREATE INDEX IF NOT EXISTS idx_memories_ownership ON memories(ownership);\nCREATE INDEX IF NOT EXISTS idx_memories_updated ON memories(updated_at);\nCREATE INDEX IF NOT EXISTS idx_sync_queue_memory_id ON sync_queue(memory_id);\nCREATE INDEX IF NOT EXISTS idx_sync_queue_queued_at ON sync_queue(queued_at);\n";
+export declare const SCHEMA_STATEMENTS: readonly string[];
+//# sourceMappingURL=schema.d.ts.map

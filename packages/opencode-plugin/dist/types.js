@@ -31,5 +31,7 @@ export const DEFAULT_CONFIG = {
         systemPromptHook: true,
         permissionHook: true,
     },
+    // auth is intentionally omitted from the default — disabled unless explicitly
+    // configured via env vars or .aeterna/config.toml [auth] section.
 };
 //# sourceMappingURL=types.js.map
