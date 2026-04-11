@@ -26,10 +26,8 @@ The system SHALL define and implement one canonical configuration precedence mod
 - **THEN** it SHALL use the documented canonical file locations for user-level and project-level config
 - **AND** documentation and error messages SHALL reference those same canonical paths consistently
 
-## MODIFIED Requirements
-
-### Requirement: Configuration Loading
-Configuration loading for the current Aeterna runtime SHALL use the supported Aeterna configuration sources and precedence.
+### Requirement: CLI Canonical Configuration Loading
+Configuration loading for the current Aeterna CLI runtime SHALL use the supported Aeterna configuration sources and precedence.
 
 #### Scenario: Aeterna CLI/server configuration precedence
 - **WHEN** the CLI or server resolves configuration for control-plane or runtime usage

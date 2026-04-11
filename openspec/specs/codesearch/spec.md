@@ -4,14 +4,17 @@
 TBD - created by archiving change add-codesearch-repo-management. Update Purpose after archive.
 ## Requirements
 ### Requirement: Request Repository via CLI
-The system MUST allow users to request repository indexing via a CLI command.
+The system MUST allow users to request repository indexing via a supported CLI command surface.
 
-#### Scenario: Requesting a remote repository
-- **WHEN** user executes `aeterna codesearch repo request --url <url> --type remote`
-- **THEN** a new request is created in `codesearch_requests` table
-- **AND** the state is set to `PENDING` (or `APPROVED` if auto-approval applies)
+#### Scenario: Requesting a remote repository through the supported CLI path
+- **WHEN** a user executes the supported `aeterna code-search` repository request command
+- **THEN** the command SHALL route through a supported backend path for repository request handling
+- **AND** the command SHALL create or request the repository indexing operation rather than failing with a reference to a removed legacy binary
 
----
+#### Scenario: Unsupported code-search mode is explicit
+- **WHEN** the configured deployment or build does not support the requested code-search operation
+- **THEN** the CLI SHALL return an explicit unsupported error describing the supported migration path
+- **AND** it SHALL NOT present a dead command shell that only references removed legacy components
 
 ### Requirement: Request Repository via MCP
 The system MUST provide an MCP tool named `codesearch_repo_request` for agents to request repository access.

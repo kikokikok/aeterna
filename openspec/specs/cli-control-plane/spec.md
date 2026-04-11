@@ -1,5 +1,8 @@
-## ADDED Requirements
+# cli-control-plane Specification
 
+## Purpose
+TBD - created by archiving change add-cli-control-plane. Update Purpose after archive.
+## Requirements
 ### Requirement: Authenticated CLI Control Plane
 The system SHALL provide the `aeterna` binary as the supported authenticated control plane for Aeterna users and operators.
 
@@ -103,3 +106,4 @@ The system SHALL publish supported native installation paths for macOS and Linux
 - **WHEN** a Linux user follows the documented install path
 - **THEN** the user SHALL be able to install a supported `aeterna` binary from release artifacts or package-manager integration
 - **AND** the documented installation path SHALL match the published release assets
+
