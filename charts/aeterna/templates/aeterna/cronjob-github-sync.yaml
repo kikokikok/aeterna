@@ -33,9 +33,22 @@ spec:
                 {{- toYaml .Values.aeterna.securityContext | nindent 16 }}
               image: {{ include "aeterna.image" . | quote }}
               imagePullPolicy: {{ .Values.aeterna.image.pullPolicy }}
+              {{- if .Values.githubOrgSync.perTenantMode }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  wget -qO- \
+                    --method=POST \
+                    --header="X-User-Role: PlatformAdmin" \
+                    --header="X-User-ID: cronjob-github-sync" \
+                    --header="X-Tenant-ID: {{ .Values.githubOrgSync.tenantId }}" \
+                    http://{{ include "aeterna.fullname" . }}.{{ .Release.Namespace }}.svc/api/v1/admin/sync/github >/dev/null
+              {{- else }}
               command: ["aeterna"]
               args: ["admin", "sync", "github"]
+              {{- end }}
               env:
+                {{- if not .Values.githubOrgSync.perTenantMode }}
                 - name: AETERNA_GITHUB_ORG_NAME
                   value: {{ .Values.githubOrgSync.orgName | quote }}
                 {{- if .Values.githubOrgSync.teamFilter }}
@@ -60,6 +73,7 @@ spec:
                     secretKeyRef:
                       name: {{ .Values.knowledgeRepo.github.pemSecret }}
                       key: pem-key
+                {{- end }}
                 {{- end }}
                 - name: PG_HOST
                   value: {{ include "aeterna.postgresql.host" . | quote }}

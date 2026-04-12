@@ -15,8 +15,8 @@ use mk_core::traits::{EmbeddingService, LlmService};
 use mk_core::types::{TenantConfigDocument, TenantId};
 
 use crate::embedding::factory::{
-    BedrockEmbeddingConfig, EmbeddingProviderConfig, EmbeddingProviderType,
-    GoogleEmbeddingConfig, OpenAiEmbeddingConfig, create_embedding_service,
+    BedrockEmbeddingConfig, EmbeddingProviderConfig, EmbeddingProviderType, GoogleEmbeddingConfig,
+    OpenAiEmbeddingConfig, create_embedding_service,
 };
 use crate::llm::factory::{
     BedrockLlmConfig, GoogleLlmConfig, LlmProviderConfig, LlmProviderType, OpenAiLlmConfig,
@@ -52,25 +52,36 @@ pub mod config_keys {
     pub const EMBEDDING_BEDROCK_REGION: &str = "embedding_bedrock_region";
 }
 
+/// Well-known tenant config field names for GitHub org sync.
+pub mod github_config_keys {
+    /// GitHub organization name.
+    pub const ORG_NAME: &str = "github.org_name";
+    /// GitHub App ID (numeric string).
+    pub const APP_ID: &str = "github.app_id";
+    /// GitHub App installation ID (numeric string).
+    pub const INSTALLATION_ID: &str = "github.installation_id";
+    /// Optional regex to filter synced teams.
+    pub const TEAM_FILTER: &str = "github.team_filter";
+    /// Whether to map GitHub repos as Aeterna projects.
+    pub const SYNC_REPOS_AS_PROJECTS: &str = "github.sync_repos_as_projects";
+    /// Secret logical name for the GitHub App PEM private key.
+    pub const APP_PEM: &str = "github.app_pem";
+}
+
 /// Type alias for a boxed, thread-safe LLM service.
-pub type BoxedLlmService = Arc<
-    dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
->;
+pub type BoxedLlmService =
+    Arc<dyn LlmService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>;
 
 /// Type alias for a boxed, thread-safe embedding service.
-pub type BoxedEmbeddingService = Arc<
-    dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
->;
+pub type BoxedEmbeddingService =
+    Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>;
 
 /// Async closure that resolves a tenant's config document.
 ///
 /// Returns `None` when the tenant has no custom configuration, letting the
 /// registry fall back to platform defaults.
 pub type ConfigResolver = Arc<
-    dyn Fn(
-            TenantId,
-        )
-            -> Pin<Box<dyn Future<Output = Option<TenantConfigDocument>> + Send + 'static>>
+    dyn Fn(TenantId) -> Pin<Box<dyn Future<Output = Option<TenantConfigDocument>> + Send + 'static>>
         + Send
         + Sync,
 >;
@@ -79,10 +90,7 @@ pub type ConfigResolver = Arc<
 ///
 /// Returns `None` when the secret is not set for the given tenant.
 pub type SecretResolver = Arc<
-    dyn Fn(
-            TenantId,
-            String,
-        ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'static>>
+    dyn Fn(TenantId, String) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'static>>
         + Send
         + Sync,
 >;
@@ -354,10 +362,7 @@ impl TenantProviderRegistry {
     /// Uses config and secret resolvers set via [`set_resolvers`]. Falls back
     /// to the platform default when resolvers are not set or when the tenant
     /// has no custom provider configured.
-    pub async fn resolve_embedding(
-        &self,
-        tenant_id: &TenantId,
-    ) -> Option<BoxedEmbeddingService> {
+    pub async fn resolve_embedding(&self, tenant_id: &TenantId) -> Option<BoxedEmbeddingService> {
         let (config_resolver, secret_resolver) =
             match (&self.config_resolver, &self.secret_resolver) {
                 (Some(cr), Some(sr)) => (cr.clone(), sr.clone()),
@@ -490,12 +495,9 @@ impl TenantProviderRegistry {
                 }
             }
             "google" | "vertex" | "vertex_ai" | "vertexai" | "gemini" => {
-                let project_id =
-                    get_field_str(config, config_keys::EMBEDDING_GOOGLE_PROJECT_ID)
-                        .ok_or_else(|| {
-                            anyhow::anyhow!("Google embedding project_id not configured")
-                        })?
-                        .to_string();
+                let project_id = get_field_str(config, config_keys::EMBEDDING_GOOGLE_PROJECT_ID)
+                    .ok_or_else(|| anyhow::anyhow!("Google embedding project_id not configured"))?
+                    .to_string();
                 let location = get_field_str(config, config_keys::EMBEDDING_GOOGLE_LOCATION)
                     .ok_or_else(|| anyhow::anyhow!("Google embedding location not configured"))?
                     .to_string();
@@ -709,10 +711,7 @@ mod tests {
         TenantId::new("11111111-1111-1111-1111-111111111111".to_string()).unwrap()
     }
 
-    fn make_config_doc(
-        tenant_id: &TenantId,
-        fields: Vec<(&str, &str)>,
-    ) -> TenantConfigDocument {
+    fn make_config_doc(tenant_id: &TenantId, fields: Vec<(&str, &str)>) -> TenantConfigDocument {
         let mut field_map = BTreeMap::new();
         for (key, value) in fields {
             field_map.insert(
@@ -739,9 +738,7 @@ mod tests {
         let llm = registry.get_llm_service(&tenant_id, &provider).await;
         assert!(llm.is_none(), "No platform default and no tenant config");
 
-        let embedding = registry
-            .get_embedding_service(&tenant_id, &provider)
-            .await;
+        let embedding = registry.get_embedding_service(&tenant_id, &provider).await;
         assert!(
             embedding.is_none(),
             "No platform default and no tenant config"
@@ -784,8 +781,7 @@ mod tests {
     async fn rejects_unknown_provider_type_gracefully() {
         let registry = TenantProviderRegistry::new(None, None);
         let tenant_id = test_tenant_id();
-        let config =
-            make_config_doc(&tenant_id, vec![(config_keys::LLM_PROVIDER, "unknown_ai")]);
+        let config = make_config_doc(&tenant_id, vec![(config_keys::LLM_PROVIDER, "unknown_ai")]);
         let provider = MockConfigProvider::new().with_config(config);
 
         let llm = registry.get_llm_service(&tenant_id, &provider).await;
@@ -862,9 +858,7 @@ mod tests {
         );
         let provider = MockConfigProvider::new().with_config(config);
 
-        let embedding = registry
-            .get_embedding_service(&tenant_id, &provider)
-            .await;
+        let embedding = registry.get_embedding_service(&tenant_id, &provider).await;
         assert!(
             embedding.is_none(),
             "Should fall back when embedding API key is missing"
@@ -940,10 +934,7 @@ mod tests {
         let registry = TenantProviderRegistry::new(None, None);
         let tenant_id = test_tenant_id();
         let result = registry.resolve_embedding(&tenant_id).await;
-        assert!(
-            result.is_none(),
-            "No platform default set, should be None"
-        );
+        assert!(result.is_none(), "No platform default set, should be None");
     }
 
     #[tokio::test]
@@ -952,8 +943,7 @@ mod tests {
         let tenant_id = test_tenant_id();
 
         // Resolvers that return None (no tenant config)
-        let config_resolver: super::ConfigResolver =
-            Arc::new(|_tid| Box::pin(async { None }));
+        let config_resolver: super::ConfigResolver = Arc::new(|_tid| Box::pin(async { None }));
         let secret_resolver: super::SecretResolver =
             Arc::new(|_tid, _name| Box::pin(async { None }));
         registry.set_resolvers(config_resolver, secret_resolver);
@@ -970,8 +960,7 @@ mod tests {
         let mut registry = TenantProviderRegistry::new(None, None);
         let tenant_id = test_tenant_id();
 
-        let config_resolver: super::ConfigResolver =
-            Arc::new(|_tid| Box::pin(async { None }));
+        let config_resolver: super::ConfigResolver = Arc::new(|_tid| Box::pin(async { None }));
         let secret_resolver: super::SecretResolver =
             Arc::new(|_tid, _name| Box::pin(async { None }));
         registry.set_resolvers(config_resolver, secret_resolver);
@@ -1020,8 +1009,7 @@ mod tests {
         assert!(registry.config_resolver.is_none());
         assert!(registry.secret_resolver.is_none());
 
-        let config_resolver: super::ConfigResolver =
-            Arc::new(|_tid| Box::pin(async { None }));
+        let config_resolver: super::ConfigResolver = Arc::new(|_tid| Box::pin(async { None }));
         let secret_resolver: super::SecretResolver =
             Arc::new(|_tid, _name| Box::pin(async { None }));
         registry.set_resolvers(config_resolver, secret_resolver);

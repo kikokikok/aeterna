@@ -289,7 +289,10 @@ mod tests {
         assert!(err.what.contains("Cannot connect"));
         assert!(err.why.is_some());
         assert_eq!(err.how_to_fix.len(), 3);
-        assert_eq!(err.suggested_command, Some("aeterna status".to_string()));
+        assert_eq!(
+            err.suggested_command,
+            Some("aeterna auth status".to_string())
+        );
     }
 
     #[test]
@@ -360,7 +363,7 @@ mod tests {
         assert!(err.what.contains("invalid toml syntax"));
         assert_eq!(
             err.suggested_command,
-            Some("aeterna init --force".to_string())
+            Some("aeterna config validate".to_string())
         );
     }
 

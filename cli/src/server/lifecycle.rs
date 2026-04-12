@@ -13,8 +13,8 @@ use storage::dead_letter::DeadLetterQueue;
 use storage::remediation_store::RemediationStore;
 use tokio::sync::watch;
 
-use super::backup_api;
 use super::AppState;
+use super::backup_api;
 
 /// Coordinates all periodic background lifecycle tasks.
 pub struct LifecycleManager {
@@ -40,22 +40,34 @@ impl LifecycleManager {
         let rc = state.redis_conn.clone();
 
         // Retention purge — daily
-        Self::spawn_task_with_lock("retention_purge", Duration::from_secs(86400), self.shutdown_rx.clone(), rc.clone(), {
-            let state = state.clone();
-            move || {
+        Self::spawn_task_with_lock(
+            "retention_purge",
+            Duration::from_secs(86400),
+            self.shutdown_rx.clone(),
+            rc.clone(),
+            {
                 let state = state.clone();
-                async move { run_retention_purge(&state).await }
-            }
-        });
+                move || {
+                    let state = state.clone();
+                    async move { run_retention_purge(&state).await }
+                }
+            },
+        );
 
         // Job cleanup — hourly (consolidates the task previously in serve.rs)
-        Self::spawn_task_with_lock("job_cleanup", Duration::from_secs(3600), self.shutdown_rx.clone(), rc.clone(), {
-            move || async move {
-                backup_api::cleanup_expired_export_jobs().await;
-                backup_api::cleanup_expired_import_jobs().await;
-                backup_api::cleanup_temp_files().await;
-            }
-        });
+        Self::spawn_task_with_lock(
+            "job_cleanup",
+            Duration::from_secs(3600),
+            self.shutdown_rx.clone(),
+            rc.clone(),
+            {
+                move || async move {
+                    backup_api::cleanup_expired_export_jobs().await;
+                    backup_api::cleanup_expired_import_jobs().await;
+                    backup_api::cleanup_temp_files().await;
+                }
+            },
+        );
 
         // Remediation auto-expiry — daily
         Self::spawn_task_with_lock(
@@ -218,18 +230,26 @@ async fn run_retention_purge(state: &AppState) {
     let store = RemediationStore::global();
     let cleaned = store.cleanup_old(30 * 86400).await;
     if cleaned > 0 {
-        tracing::info!(count = cleaned, "Retention purge: removed old remediation records");
+        tracing::info!(
+            count = cleaned,
+            "Retention purge: removed old remediation records"
+        );
     }
 
     // 2. Export/import job cleanup is handled by the separate job_cleanup task.
 
     // 3. Hard-delete soft-deleted graph nodes past retention (default 7 days)
     if let Some(ref graph) = state.graph_store {
-        let cutoff = chrono::Utc::now() - chrono::Duration::days(i64::from(config.soft_delete_days));
+        let cutoff =
+            chrono::Utc::now() - chrono::Duration::days(i64::from(config.soft_delete_days));
         match graph.cleanup_deleted(cutoff) {
             Ok(count) => {
                 if count > 0 {
-                    tracing::info!(count, days = config.soft_delete_days, "Retention purge: hard-deleted expired graph nodes");
+                    tracing::info!(
+                        count,
+                        days = config.soft_delete_days,
+                        "Retention purge: hard-deleted expired graph nodes"
+                    );
                 }
             }
             Err(e) => tracing::warn!(error = %e, "Retention purge: graph hard-delete failed"),
@@ -247,7 +267,11 @@ async fn run_retention_purge(state: &AppState) {
         Ok(result) => {
             let count = result.rows_affected();
             if count > 0 {
-                tracing::info!(count, days = config.governance_event_days, "Retention purge: removed old governance events");
+                tracing::info!(
+                    count,
+                    days = config.governance_event_days,
+                    "Retention purge: removed old governance events"
+                );
             }
         }
         Err(e) => tracing::warn!(error = %e, "Retention purge: governance events cleanup failed"),
@@ -264,7 +288,11 @@ async fn run_retention_purge(state: &AppState) {
         Ok(result) => {
             let count = result.rows_affected();
             if count > 0 {
-                tracing::info!(count, days = config.drift_result_days, "Retention purge: removed old drift results");
+                tracing::info!(
+                    count,
+                    days = config.drift_result_days,
+                    "Retention purge: removed old drift results"
+                );
             }
         }
         Err(e) => tracing::warn!(error = %e, "Retention purge: drift results cleanup failed"),
@@ -338,6 +366,290 @@ async fn run_importance_decay(state: &AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::server::PluginAuthState;
+    use crate::server::plugin_auth::{RefreshTokenStore, RefreshTokenStoreBackend};
+    use agent_a2a::config::TrustedIdentityConfig;
+    use async_trait::async_trait;
+    use knowledge::api::GovernanceDashboardApi;
+    use knowledge::governance::GovernanceEngine;
+    use knowledge::manager::KnowledgeManager;
+    use knowledge::repository::{GitRepository, RepositoryError};
+    use knowledge::tenant_repo_resolver::TenantRepositoryResolver;
+    use memory::manager::MemoryManager;
+    use mk_core::traits::{AuthorizationService, KnowledgeRepository};
+    use mk_core::types::{
+        KnowledgeEntry, KnowledgeLayer, ReasoningStrategy, ReasoningTrace, Role, RoleIdentifier,
+        TenantContext, UserId,
+    };
+    use std::collections::HashMap;
+    use storage::postgres::PostgresBackend;
+    use storage::secret_provider::LocalSecretProvider;
+    use storage::tenant_config_provider::KubernetesTenantConfigProvider;
+    use storage::tenant_store::{TenantRepositoryBindingStore, TenantStore};
+    use sync::bridge::SyncManager;
+    use sync::state_persister::FilePersister;
+    use sync::websocket::{AuthToken, TokenValidator, WsResult, WsServer};
+
+    struct MockAuth;
+
+    #[async_trait]
+    impl AuthorizationService for MockAuth {
+        type Error = anyhow::Error;
+
+        async fn check_permission(
+            &self,
+            _ctx: &TenantContext,
+            _action: &str,
+            _resource: &str,
+        ) -> Result<bool, Self::Error> {
+            Ok(true)
+        }
+
+        async fn get_user_roles(
+            &self,
+            _ctx: &TenantContext,
+        ) -> Result<Vec<RoleIdentifier>, Self::Error> {
+            Ok(vec![Role::Developer.into()])
+        }
+
+        async fn assign_role(
+            &self,
+            _ctx: &TenantContext,
+            _user_id: &UserId,
+            _role: RoleIdentifier,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn remove_role(
+            &self,
+            _ctx: &TenantContext,
+            _user_id: &UserId,
+            _role: RoleIdentifier,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    struct MockRepo;
+
+    #[async_trait]
+    impl KnowledgeRepository for MockRepo {
+        type Error = RepositoryError;
+
+        async fn get(
+            &self,
+            _ctx: TenantContext,
+            _layer: KnowledgeLayer,
+            _path: &str,
+        ) -> Result<Option<KnowledgeEntry>, Self::Error> {
+            Ok(None)
+        }
+
+        async fn store(
+            &self,
+            _ctx: TenantContext,
+            _entry: KnowledgeEntry,
+            _message: &str,
+        ) -> Result<String, Self::Error> {
+            Ok("mock-commit".to_string())
+        }
+
+        async fn list(
+            &self,
+            _ctx: TenantContext,
+            _layer: KnowledgeLayer,
+            _prefix: &str,
+        ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+            Ok(vec![])
+        }
+
+        async fn delete(
+            &self,
+            _ctx: TenantContext,
+            _layer: KnowledgeLayer,
+            _path: &str,
+            _message: &str,
+        ) -> Result<String, Self::Error> {
+            Ok("mock-delete".to_string())
+        }
+
+        async fn get_head_commit(
+            &self,
+            _ctx: TenantContext,
+        ) -> Result<Option<String>, Self::Error> {
+            Ok(Some("mock-commit".to_string()))
+        }
+
+        async fn get_affected_items(
+            &self,
+            _ctx: TenantContext,
+            _since_commit: &str,
+        ) -> Result<Vec<(KnowledgeLayer, String)>, Self::Error> {
+            Ok(vec![])
+        }
+
+        async fn search(
+            &self,
+            _ctx: TenantContext,
+            _query: &str,
+            _layers: Vec<KnowledgeLayer>,
+            _limit: usize,
+        ) -> Result<Vec<KnowledgeEntry>, Self::Error> {
+            Ok(vec![])
+        }
+
+        fn root_path(&self) -> Option<std::path::PathBuf> {
+            None
+        }
+    }
+
+    struct TestNoopReasoner;
+
+    #[async_trait]
+    impl memory::reasoning::ReflectiveReasoner for TestNoopReasoner {
+        async fn reason(
+            &self,
+            query: &str,
+            _context_summary: Option<&str>,
+        ) -> anyhow::Result<ReasoningTrace> {
+            let now = chrono::Utc::now();
+            Ok(ReasoningTrace {
+                strategy: ReasoningStrategy::SemanticOnly,
+                thought_process: "test noop".to_string(),
+                refined_query: Some(query.to_string()),
+                start_time: now,
+                end_time: now,
+                timed_out: false,
+                duration_ms: 0,
+                metadata: HashMap::new(),
+            })
+        }
+    }
+
+    struct MockTokenValidator;
+
+    #[async_trait]
+    impl TokenValidator for MockTokenValidator {
+        async fn validate(&self, token: &str) -> WsResult<AuthToken> {
+            Ok(AuthToken {
+                user_id: token.to_string(),
+                tenant_id: "default".to_string(),
+                permissions: vec![],
+                expires_at: 0,
+            })
+        }
+    }
+
+    async fn app_state() -> Arc<AppState> {
+        let tempdir = tempfile::tempdir().unwrap();
+        let lazy_pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect_lazy("postgres://postgres:postgres@localhost:5432/aeterna")
+            .unwrap();
+        let postgres = Arc::new(PostgresBackend::from_pool(lazy_pool));
+        let governance_engine = Arc::new(GovernanceEngine::new());
+        let git_repo = Arc::new(GitRepository::new(tempdir.path()).unwrap());
+        let knowledge_manager = Arc::new(KnowledgeManager::new(
+            git_repo.clone(),
+            governance_engine.clone(),
+        ));
+        let memory_manager = Arc::new(MemoryManager::new());
+        let sync_manager = Arc::new(
+            SyncManager::new(
+                memory_manager.clone(),
+                knowledge_manager.clone(),
+                config::config::DeploymentConfig::default(),
+                None,
+                Arc::new(FilePersister::new(std::env::temp_dir())),
+                None,
+            )
+            .await
+            .unwrap(),
+        );
+        let auth_service: Arc<dyn AuthorizationService<Error = anyhow::Error> + Send + Sync> =
+            Arc::new(MockAuth);
+        let governance_dashboard = Arc::new(GovernanceDashboardApi::new(
+            governance_engine.clone(),
+            postgres.clone(),
+            config::config::DeploymentConfig::default(),
+        ));
+        let mcp_server = Arc::new(tools::server::McpServer::new(
+            memory_manager.clone(),
+            sync_manager.clone(),
+            knowledge_manager.clone(),
+            git_repo.clone(),
+            postgres.clone(),
+            governance_engine.clone(),
+            Arc::new(TestNoopReasoner),
+            auth_service.clone(),
+            None,
+            None,
+            None,
+        ));
+        let (shutdown_tx, _) = tokio::sync::watch::channel(false);
+        let tenant_store = Arc::new(TenantStore::new(postgres.pool().clone()));
+        let tenant_repository_binding_store =
+            Arc::new(TenantRepositoryBindingStore::new(postgres.pool().clone()));
+        let git_provider_connection_registry = Arc::new(
+            storage::git_provider_connection_store::InMemoryGitProviderConnectionStore::new(),
+        );
+        let tenant_repo_resolver = Arc::new(
+            TenantRepositoryResolver::new(
+                tenant_repository_binding_store.clone(),
+                std::env::temp_dir(),
+                Arc::new(LocalSecretProvider::new(HashMap::new())),
+            )
+            .with_connection_registry(git_provider_connection_registry.clone()),
+        );
+
+        Arc::new(AppState {
+            config: Arc::new(config::Config::default()),
+            postgres: postgres.clone(),
+            memory_manager,
+            knowledge_manager,
+            knowledge_repository: Arc::new(MockRepo),
+            governance_engine,
+            governance_dashboard,
+            auth_service,
+            mcp_server,
+            sync_manager,
+            git_provider: None,
+            webhook_secret: None,
+            event_publisher: None,
+            graph_store: None,
+            governance_storage: None,
+            reasoner: None,
+            ws_server: Arc::new(WsServer::new(Arc::new(MockTokenValidator))),
+            a2a_config: Arc::new(agent_a2a::Config::default()),
+            a2a_auth_state: Arc::new(agent_a2a::AuthState {
+                api_key: None,
+                jwt_secret: None,
+                enabled: false,
+                trusted_identity: TrustedIdentityConfig::default(),
+            }),
+            plugin_auth_state: Arc::new(PluginAuthState {
+                config: config::PluginAuthConfig::default(),
+                postgres: Some(postgres.clone()),
+                refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
+            }),
+            idp_config: None,
+            idp_sync_service: None,
+            idp_client: None,
+            shutdown_tx: Arc::new(shutdown_tx),
+            tenant_store,
+            tenant_repository_binding_store,
+            tenant_repo_resolver,
+            tenant_config_provider: Arc::new(KubernetesTenantConfigProvider::new(
+                "default".to_string(),
+            )),
+            provider_registry: Arc::new(memory::provider_registry::TenantProviderRegistry::new(
+                None, None,
+            )),
+            git_provider_connection_registry,
+            redis_conn: None,
+        })
+    }
 
     #[test]
     fn lifecycle_manager_creates_without_panic() {
@@ -367,17 +679,12 @@ mod tests {
         let counter = Arc::new(std::sync::atomic::AtomicU32::new(0));
         let counter_clone = counter.clone();
 
-        LifecycleManager::spawn_task(
-            "test_task",
-            Duration::from_millis(50),
-            rx,
-            move || {
-                let c = counter_clone.clone();
-                async move {
-                    c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                }
-            },
-        );
+        LifecycleManager::spawn_task("test_task", Duration::from_millis(50), rx, move || {
+            let c = counter_clone.clone();
+            async move {
+                c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
+        });
 
         // Let at least one tick happen
         tokio::time::sleep(Duration::from_millis(120)).await;
@@ -388,12 +695,16 @@ mod tests {
 
         let count = counter.load(std::sync::atomic::Ordering::SeqCst);
         // Should have run at least once but stopped after shutdown
-        assert!(count >= 1, "Task should have run at least once, ran {count} times");
+        assert!(
+            count >= 1,
+            "Task should have run at least once, ran {count} times"
+        );
     }
 
     #[tokio::test]
     async fn run_retention_purge_completes() {
         // Smoke test — just ensure it doesn't panic with an empty store.
-        run_retention_purge().await;
+        let state = app_state().await;
+        run_retention_purge(&state).await;
     }
 }

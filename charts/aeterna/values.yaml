@@ -311,6 +311,8 @@ aeterna:
 githubOrgSync:
   ## @param githubOrgSync.enabled Enable GitHub Organization sync
   enabled: false
+  ## @param githubOrgSync.perTenantMode When true, credentials are read from per-tenant config. When false (default), reads from env vars.
+  perTenantMode: false
   ## @param githubOrgSync.orgName GitHub Organization name to sync (e.g. "acme-corp")
   orgName: ""
   ## @param githubOrgSync.teamFilter Optional regex to filter teams (e.g. "^platform-")
