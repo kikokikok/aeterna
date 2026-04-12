@@ -8,12 +8,21 @@ to ensure validation runs during `helm template` and `helm install`.
 */}}
 
 {{/*
-Validate cache mutual exclusivity.
-Only one of dragonfly and valkey may be enabled at the same time.
+Validate required connection strings.
+PostgreSQL and Redis hosts must be provided when aeterna is enabled.
+Vector store host is required unless type is pgvector (uses PostgreSQL).
 */}}
-{{- define "aeterna.validate.cache" -}}
-{{- if and .Values.cache.dragonfly.enabled .Values.cache.valkey.enabled -}}
-{{- fail "Invalid configuration: cache.dragonfly.enabled and cache.valkey.enabled cannot both be true. Choose one cache backend." -}}
+{{- define "aeterna.validate.connections" -}}
+{{- if .Values.aeterna.enabled -}}
+  {{- if not .Values.postgresql.host -}}
+    {{- fail "postgresql.host is required. Provide a PostgreSQL connection or use the aeterna-prereqs chart." -}}
+  {{- end -}}
+  {{- if not .Values.redis.host -}}
+    {{- fail "redis.host is required. Provide a Redis-compatible cache connection or use the aeterna-prereqs chart." -}}
+  {{- end -}}
+  {{- if and (not .Values.vectorStore.host) (ne .Values.vectorStore.type "pgvector") (ne .Values.vectorStore.type "pinecone") (ne .Values.vectorStore.type "vertexai") (ne .Values.vectorStore.type "databricks") -}}
+    {{- fail "vectorStore.host is required when vectorStore.type is not pgvector, pinecone, vertexai, or databricks." -}}
+  {{- end -}}
 {{- end -}}
 {{- end -}}
 
@@ -27,24 +36,12 @@ Validate deployment mode requires central URL for hybrid/remote.
 {{- end -}}
 
 {{/*
-Validate vector backend type matches an enabled backend.
+Validate vector store type configuration.
 */}}
-{{- define "aeterna.validate.vectorBackend" -}}
-{{- $type := .Values.vectorBackend.type -}}
-{{- if and (eq $type "qdrant") (not .Values.vectorBackend.qdrant.bundled) (not .Values.vectorBackend.qdrant.external.host) -}}
-{{- fail "Invalid configuration: vectorBackend.type=qdrant with bundled=false requires vectorBackend.qdrant.external.host to be set." -}}
-{{- end -}}
-{{- if and (eq $type "pinecone") (not .Values.vectorBackend.pinecone.existingSecret) (not .Values.vectorBackend.pinecone.apiKey) -}}
-{{- fail "Invalid configuration: vectorBackend.type=pinecone requires pinecone.apiKey or pinecone.existingSecret." -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
-Validate PostgreSQL configuration.
-*/}}
-{{- define "aeterna.validate.postgresql" -}}
-{{- if and (not .Values.postgresql.bundled) (ne .Values.deploymentMode "hybrid") (not .Values.postgresql.external.host) -}}
-{{- fail "Invalid configuration: postgresql.bundled=false requires postgresql.external.host to be set." -}}
+{{- define "aeterna.validate.vectorStore" -}}
+{{- $type := .Values.vectorStore.type -}}
+{{- if and (eq $type "pinecone") (not .Values.vectorStore.existingSecret) -}}
+{{- fail "Invalid configuration: vectorStore.type=pinecone requires vectorStore.existingSecret for API key." -}}
 {{- end -}}
 {{- end -}}
 
@@ -129,10 +126,9 @@ Validate Okta-backed auth boundary configuration.
 Run all validations. Include this once in a rendered resource.
 */}}
 {{- define "aeterna.validate.all" -}}
-{{- include "aeterna.validate.cache" . -}}
+{{- include "aeterna.validate.connections" . -}}
 {{- include "aeterna.validate.deploymentMode" . -}}
-{{- include "aeterna.validate.vectorBackend" . -}}
-{{- include "aeterna.validate.postgresql" . -}}
+{{- include "aeterna.validate.vectorStore" . -}}
 {{- include "aeterna.validate.llm" . -}}
 {{- include "aeterna.validate.codesearch" . -}}
 {{- include "aeterna.validate.secrets" . -}}

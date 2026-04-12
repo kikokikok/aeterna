@@ -1,4 +1,4 @@
-{{- if or .Values.cache.dragonfly.enabled .Values.cache.valkey.enabled .Values.cache.external.enabled }}
+{{- if .Values.redis.host }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -30,25 +30,17 @@ spec:
         - -c
         - |
           set -e
-          echo "Testing Redis/Dragonfly connection..."
-          {{- if .Values.cache.external.enabled }}
-          HOST="{{ .Values.cache.external.host }}"
-          PORT="{{ .Values.cache.external.port | default 6379 }}"
-          {{- else if .Values.cache.dragonfly.enabled }}
-          HOST="{{ include "aeterna.fullname" . }}-dragonfly"
-          PORT="6379"
-          {{- else if .Values.cache.valkey.enabled }}
-          HOST="{{ include "aeterna.fullname" . }}-valkey"
-          PORT="6379"
-          {{- end }}
+          echo "Testing Redis connection..."
+          HOST="{{ .Values.redis.host }}"
+          PORT="{{ .Values.redis.port | default 6379 }}"
           redis-cli -h "$HOST" -p "$PORT" ping | grep -q PONG
-          echo "Redis/Dragonfly connection successful!"
-      {{- if and .Values.cache.external.enabled .Values.cache.external.existingSecret }}
+          echo "Redis connection successful!"
+      {{- if .Values.redis.existingSecret }}
       env:
         - name: REDISCLI_AUTH
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.cache.external.existingSecret }}
-              key: {{ .Values.cache.external.secretKey | default "redis-password" }}
+              name: {{ .Values.redis.existingSecret }}
+              key: {{ .Values.redis.passwordKey | default "password" }}
       {{- end }}
 {{- end }}

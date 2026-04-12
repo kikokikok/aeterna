@@ -2396,6 +2396,55 @@ impl PartialJobResult {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Remediation request system (human-in-the-loop approval for day-2 ops)
+// ---------------------------------------------------------------------------
+
+/// Risk tier for automated remediation actions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemediationRiskTier {
+    /// Execute immediately without approval (TTL cleanup, job cleanup).
+    AutoExecute,
+    /// Execute and notify operator (quota enforcement, importance decay).
+    NotifyAndExecute,
+    /// Wait for operator approval before executing (reconciliation deletes, tenant purge).
+    RequireApproval,
+}
+
+/// Current status of a remediation request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemediationStatus {
+    Pending,
+    Approved,
+    Rejected,
+    Executed,
+    Expired,
+    Failed,
+}
+
+/// A remediation request created by lifecycle tasks for operator review.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemediationRequest {
+    pub id: String,
+    pub request_type: String,
+    pub risk_tier: RemediationRiskTier,
+    pub entity_type: String,
+    pub entity_ids: Vec<String>,
+    pub tenant_id: Option<String>,
+    pub description: String,
+    pub proposed_action: String,
+    pub detected_by: String,
+    pub status: RemediationStatus,
+    pub created_at: i64,
+    pub reviewed_by: Option<String>,
+    pub reviewed_at: Option<i64>,
+    pub resolution_notes: Option<String>,
+    pub executed_at: Option<i64>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

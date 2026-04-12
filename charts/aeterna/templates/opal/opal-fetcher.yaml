@@ -66,16 +66,14 @@ spec:
             - name: POSTGRES_DB
               value: {{ include "aeterna.postgresql.database" . | quote }}
             - name: POSTGRES_USER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "aeterna.postgresql.secretName" . }}
-                  key: username
-                  optional: true
+              value: {{ .Values.postgresql.username | default "aeterna" | quote }}
+            {{- if .Values.postgresql.existingSecret }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "aeterna.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+                  key: {{ include "aeterna.postgresql.passwordKey" . }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthcheck

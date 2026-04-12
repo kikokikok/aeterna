@@ -27,7 +27,7 @@ use super::AppState;
 // Refresh token store
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct RefreshEntry {
     tenant_id: String,
     github_login: String,
@@ -84,6 +84,134 @@ impl RefreshTokenStore {
 
     pub async fn revoke(&self, token: &str) {
         self.tokens.write().await.remove(token);
+    }
+}
+
+/// Redis-backed refresh-token store for HA / multi-instance deployments.
+///
+/// Uses [`storage::RedisStore`] with prefix `aeterna:refresh_tokens`.
+/// Tokens are stored with a TTL and consumed atomically via `GETDEL`.
+pub struct RedisRefreshTokenStore {
+    store: storage::RedisStore,
+}
+
+impl RedisRefreshTokenStore {
+    /// Create a new Redis-backed refresh token store.
+    pub fn new(store: storage::RedisStore) -> Self {
+        Self { store }
+    }
+
+    /// Store a refresh token with the given TTL.
+    pub async fn insert(
+        &self,
+        token: String,
+        tenant_id: String,
+        github_login: String,
+        github_id: u64,
+        email: Option<String>,
+        ttl_seconds: u64,
+    ) {
+        let expires_at = Utc::now().timestamp() + ttl_seconds as i64;
+        let entry = RefreshEntry {
+            tenant_id,
+            github_login,
+            github_id,
+            email,
+            expires_at,
+        };
+        if let Err(e) = self.store.set(&token, &entry, Some(ttl_seconds)).await {
+            tracing::error!("Failed to store refresh token in Redis: {e}");
+        }
+    }
+
+    /// Consume a refresh token (single-use). Returns `None` if missing or
+    /// expired.
+    pub(super) async fn take(&self, token: &str) -> Option<RefreshEntry> {
+        match self.store.take::<RefreshEntry>(token).await {
+            Ok(Some(entry)) => {
+                if entry.expires_at <= Utc::now().timestamp() {
+                    return None;
+                }
+                Some(entry)
+            }
+            Ok(None) => None,
+            Err(e) => {
+                tracing::error!("Failed to take refresh token from Redis: {e}");
+                None
+            }
+        }
+    }
+
+    /// Revoke (delete) a refresh token.
+    pub async fn revoke(&self, token: &str) {
+        if let Err(e) = self.store.delete(token).await {
+            tracing::error!("Failed to revoke refresh token in Redis: {e}");
+        }
+    }
+}
+
+impl std::fmt::Debug for RedisRefreshTokenStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RedisRefreshTokenStore").finish()
+    }
+}
+
+/// Refresh token store that can be either in-memory or Redis-backed.
+///
+/// In unit tests and single-instance deployments the in-memory variant is used.
+/// For HA deployments (Kubernetes ReplicaSet), the Redis variant ensures all
+/// replicas share the same token state.
+#[derive(Debug)]
+pub enum RefreshTokenStoreBackend {
+    /// In-memory store (single-instance only).
+    InMemory(RefreshTokenStore),
+    /// Redis-backed store (multi-instance safe).
+    Redis(RedisRefreshTokenStore),
+}
+
+impl RefreshTokenStoreBackend {
+    /// Store a refresh token.
+    pub async fn insert(
+        &self,
+        token: String,
+        tenant_id: String,
+        github_login: String,
+        github_id: u64,
+        email: Option<String>,
+        ttl_seconds: u64,
+    ) {
+        match self {
+            Self::InMemory(s) => {
+                s.insert(token, tenant_id, github_login, github_id, email, ttl_seconds)
+                    .await;
+            }
+            Self::Redis(s) => {
+                s.insert(token, tenant_id, github_login, github_id, email, ttl_seconds)
+                    .await;
+            }
+        }
+    }
+
+    /// Consume a refresh token (single-use).
+    pub(super) async fn take(&self, token: &str) -> Option<RefreshEntry> {
+        match self {
+            Self::InMemory(s) => s.take(token).await,
+            Self::Redis(s) => s.take(token).await,
+        }
+    }
+
+    /// Revoke a refresh token.
+    pub async fn revoke(&self, token: &str) {
+        match self {
+            Self::InMemory(s) => s.revoke(token).await,
+            Self::Redis(s) => s.revoke(token).await,
+        }
+    }
+}
+
+impl Default for RefreshTokenStoreBackend {
+    fn default() -> Self {
+        Self::InMemory(RefreshTokenStore::new())
     }
 }
 
@@ -397,6 +525,125 @@ async fn logout_handler(
     (
         StatusCode::OK,
         Json(serde_json::json!({ "message": "Logged out successfully" })),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Admin session endpoint (returns user profile + roles + tenant memberships)
+// ---------------------------------------------------------------------------
+
+/// Router for the admin session convenience endpoint.
+///
+/// This is registered inside the protected API route group (requires bearer
+/// token). It returns the authenticated user's profile, roles across all
+/// tenants (including `__root__` PlatformAdmin grants), and tenant memberships
+/// in a single response for efficient admin UI bootstrap.
+pub fn admin_session_router(state: Arc<AppState>) -> Router {
+    Router::new()
+        .route("/auth/admin/session", post(admin_session_handler))
+        .with_state(state)
+}
+
+#[tracing::instrument(skip_all)]
+async fn admin_session_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let cfg = &state.plugin_auth_state.config;
+
+    let jwt_secret = match &cfg.jwt_secret {
+        Some(s) => s.clone(),
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "configuration_error",
+                    "message": "JWT secret is not configured"
+                })),
+            );
+        }
+    };
+
+    let identity = match validate_plugin_bearer(&headers, &jwt_secret) {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "unauthorized",
+                    "message": "Valid bearer token required"
+                })),
+            );
+        }
+    };
+
+    // Fetch user roles from the database (includes __root__ PlatformAdmin grants).
+    let roles = match state
+        .postgres
+        .get_user_roles_for_auth(&identity.github_login, &identity.tenant_id)
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!("Failed to fetch user roles: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "internal_error",
+                    "message": "Failed to fetch user roles"
+                })),
+            );
+        }
+    };
+
+    let is_platform_admin = roles
+        .iter()
+        .any(|r| r.to_string().eq_ignore_ascii_case("PlatformAdmin"));
+    let is_tenant_admin = roles
+        .iter()
+        .any(|r| r.to_string().eq_ignore_ascii_case("TenantAdmin"));
+
+    // Fetch tenant list: PlatformAdmin sees all tenants, others see only their own.
+    let tenants = if is_platform_admin {
+        match state.tenant_store.list_tenants(false).await {
+            Ok(t) => t
+                .into_iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "id": t.id.as_str(),
+                        "slug": t.slug,
+                        "name": t.name,
+                        "status": format!("{:?}", t.status),
+                    })
+                })
+                .collect::<Vec<_>>(),
+            Err(_) => vec![],
+        }
+    } else {
+        // Non-PlatformAdmin: return only the tenant from their JWT.
+        vec![serde_json::json!({
+            "id": identity.tenant_id,
+            "slug": identity.tenant_id,
+            "name": identity.tenant_id,
+            "status": "Active",
+        })]
+    };
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "user": {
+                "user_id": identity.github_login,
+                "github_login": identity.github_login,
+                "github_id": identity.github_id,
+                "email": identity.email,
+            },
+            "roles": roles,
+            "tenants": tenants,
+            "is_platform_admin": is_platform_admin,
+            "is_tenant_admin": is_tenant_admin,
+            "active_tenant_id": identity.tenant_id,
+        })),
     )
 }
 

@@ -20,6 +20,7 @@ use knowledge::tenant_repo_resolver::TenantRepositoryResolver;
 use memory::embedding::create_embedding_service_from_env;
 use memory::llm::create_llm_service_from_env;
 use memory::manager::MemoryManager;
+use memory::provider_registry::TenantProviderRegistry;
 use memory::reasoning::{DefaultReflectiveReasoner, ReflectiveReasoner};
 use mk_core::traits::AuthorizationService;
 use mk_core::types::{
@@ -38,7 +39,7 @@ use sync::state_persister::DatabasePersister;
 use sync::websocket::{AuthToken, TokenValidator, WsResult, WsServer};
 use tools::server::McpServer;
 
-use super::plugin_auth::RefreshTokenStore;
+use super::plugin_auth::{RefreshTokenStore, RefreshTokenStoreBackend};
 use super::{AppState, PluginAuthState};
 
 pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
@@ -144,11 +145,53 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         tracing::info!("Radkit/A2A feature disabled via AETERNA_FEATURE_RADKIT");
     }
 
+    let platform_embedding = create_embedding_service_from_env()?;
+    let platform_llm = llm_service.clone();
+
+    let tenant_config_provider = Arc::new(KubernetesTenantConfigProvider::new(
+        tenant_config_provider_namespace(),
+    ));
+
+    let mut registry = TenantProviderRegistry::new(
+        platform_llm.clone(),
+        platform_embedding.clone(),
+    );
+
+    // Wire type-erased config/secret resolvers so the registry can resolve
+    // tenant-specific providers without a generic TenantConfigProvider param.
+    {
+        use memory::provider_registry::{ConfigResolver, SecretResolver};
+        use mk_core::traits::TenantConfigProvider;
+
+        let cp_for_config: Arc<KubernetesTenantConfigProvider> = tenant_config_provider.clone();
+        let config_resolver: ConfigResolver = Arc::new(move |tenant_id| {
+            let provider = cp_for_config.clone();
+            Box::pin(async move { provider.get_config(&tenant_id).await.ok().flatten() })
+        });
+
+        let cp_for_secret: Arc<KubernetesTenantConfigProvider> = tenant_config_provider.clone();
+        let secret_resolver: SecretResolver = Arc::new(move |tenant_id, logical_name| {
+            let provider = cp_for_secret.clone();
+            Box::pin(async move {
+                provider
+                    .get_secret_value(&tenant_id, &logical_name)
+                    .await
+                    .ok()
+                    .flatten()
+            })
+        });
+
+        registry.set_resolvers(config_resolver, secret_resolver);
+    }
+
+    let provider_registry = Arc::new(registry);
+
     let mut memory_manager = MemoryManager::new()
         .with_config(memory_config)
-        .with_auth_service(auth_for_memory);
+        .with_auth_service(auth_for_memory)
+        .with_provider_registry(provider_registry.clone());
 
-    if let Some(embedding_service) = create_embedding_service_from_env()? {
+    if let Some(embedding_service) = platform_embedding {
         memory_manager = memory_manager.with_embedding_service(embedding_service.clone());
     }
 
@@ -223,11 +266,52 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         trusted_identity: a2a_config.auth.trusted_identity.clone(),
     });
     a2a_auth_state.validate()?;
+    // Build a Redis connection manager for shared state stores.
+    // If Redis is available, use Redis-backed stores for HA; otherwise fall back to in-memory.
+    let redis_conn: Option<Arc<redis::aio::ConnectionManager>> = {
+        let rc = &config.providers.redis;
+        let url = format!("redis://{}:{}/{}", rc.host, rc.port, rc.db);
+        match redis::Client::open(url.as_str()) {
+            Ok(client) => match client.get_connection_manager().await {
+                Ok(cm) => {
+                    tracing::info!("Redis connection manager established for shared state stores");
+                    Some(Arc::new(cm))
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to connect to Redis ({url}): {e}. Falling back to in-memory stores."
+                    );
+                    None
+                }
+            },
+            Err(e) => {
+                tracing::warn!(
+                    "Invalid Redis URL ({url}): {e}. Falling back to in-memory stores."
+                );
+                None
+            }
+        }
+    };
+
+    let refresh_store = match &redis_conn {
+        Some(conn) => {
+            let store =
+                storage::RedisStore::new(conn.clone(), "aeterna:refresh_tokens");
+            RefreshTokenStoreBackend::Redis(
+                super::plugin_auth::RedisRefreshTokenStore::new(store),
+            )
+        }
+        None => RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
+    };
+
     let plugin_auth_state = Arc::new(PluginAuthState {
         config: config.plugin_auth.clone(),
         postgres: Some(postgres.clone()),
-        refresh_store: RefreshTokenStore::new(),
+        refresh_store,
     });
+
+    // Initialize backup job stores (export/import) with Redis when available.
+    super::backup_api::init_job_stores(redis_conn.as_ref());
 
     let (idp_config, idp_client, idp_sync_service) = build_optional_idp_services(postgres.clone())?;
     let ws_server = Arc::new(WsServer::new(Arc::new(AllowAllTokenValidator)));
@@ -249,10 +333,6 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         )
         .with_connection_registry(git_provider_connection_registry.clone()),
     );
-    let tenant_config_provider = Arc::new(KubernetesTenantConfigProvider::new(
-        tenant_config_provider_namespace(),
-    ));
-
     Ok(Arc::new(AppState {
         config,
         postgres,
@@ -282,7 +362,9 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         tenant_repository_binding_store,
         tenant_repo_resolver,
         tenant_config_provider,
+        provider_registry,
         git_provider_connection_registry,
+        redis_conn,
     }))
 }
 

@@ -1,0 +1,32 @@
+{{- if .Values.cache.dragonfly.enabled }}
+apiVersion: dragonflydb.io/v1alpha1
+kind: Dragonfly
+metadata:
+  name: {{ include "prereqs.fullname" . }}-dragonfly
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "prereqs.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.cache.dragonfly.replicas | default 1 }}
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+
+  {{- if gt (int (.Values.cache.dragonfly.replicas | default 1)) 1 }}
+  replication:
+    enabled: true
+  {{- end }}
+{{- end }}

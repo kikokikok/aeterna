@@ -571,6 +571,16 @@ pub trait TenantConfigProvider: Send + Sync {
         logical_name: &str,
     ) -> Result<bool, Self::Error>;
 
+    /// Retrieve the plaintext value of a tenant secret by its logical name.
+    ///
+    /// Returns `None` if no secret with the given logical name exists for this
+    /// tenant.  Implementations MUST NOT log or trace the returned value.
+    async fn get_secret_value(
+        &self,
+        tenant_id: &crate::types::TenantId,
+        logical_name: &str,
+    ) -> Result<Option<String>, Self::Error>;
+
     async fn validate(
         &self,
         config: &crate::types::TenantConfigDocument,

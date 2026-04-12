@@ -75,7 +75,7 @@ async fn handle_message(
 mod tests {
     use super::*;
     use crate::server::PluginAuthState;
-    use crate::server::plugin_auth::RefreshTokenStore;
+    use crate::server::plugin_auth::{RefreshTokenStore, RefreshTokenStoreBackend};
     use agent_a2a::config::TrustedIdentityConfig;
     use async_trait::async_trait;
     use axum::body::Body;
@@ -358,7 +358,7 @@ mod tests {
             plugin_auth_state: Arc::new(PluginAuthState {
                 config: config::PluginAuthConfig::default(),
                 postgres: Some(postgres.clone()),
-                refresh_store: RefreshTokenStore::new(),
+                refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
             }),
             idp_config: None,
             idp_sync_service: None,
@@ -370,7 +370,11 @@ mod tests {
             tenant_config_provider: Arc::new(KubernetesTenantConfigProvider::new(
                 "default".to_string(),
             )),
+            provider_registry: Arc::new(memory::provider_registry::TenantProviderRegistry::new(
+                None, None,
+            )),
             git_provider_connection_registry,
+            redis_conn: None,
         });
 
         (server, app_state, tempdir)

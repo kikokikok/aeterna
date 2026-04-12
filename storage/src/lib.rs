@@ -1,6 +1,8 @@
 pub mod approval_workflow;
 pub mod budget_storage;
+pub mod cascade;
 pub mod code_graph;
+pub mod dead_letter;
 pub mod encryption;
 pub mod events;
 pub mod gdpr;
@@ -15,8 +17,13 @@ pub mod policy_evaluator;
 pub mod positional_index;
 pub mod postgres;
 pub mod query_builder;
+pub mod quota;
+pub mod reconciliation;
 pub mod redis;
+pub mod redis_store;
+pub mod remediation_store;
 pub mod repo_manager;
+pub mod retention;
 pub mod rlm_weights;
 pub mod rls_migration;
 pub mod secret_provider;
@@ -28,6 +35,9 @@ pub mod tenant_store;
 
 // Re-export Redis lock types for job coordination
 pub use redis::{JobSkipReason, LockResult};
+
+// Re-export generic Redis-backed store
+pub use redis_store::RedisStore;
 
 // Re-export budget storage types
 pub use budget_storage::{BudgetStorage, BudgetStorageError, StoredBudget, StoredUsage};
@@ -72,6 +82,9 @@ pub use encryption::{EncryptedData, EncryptionConfig, EncryptionError, Encryptio
 pub use kms_integration::{
     AwsKmsProvider, KmsClient, KmsConfig, KmsError, KmsKeyMetadata, KmsProvider, LocalKmsProvider,
 };
+
+// Re-export cascade delete types
+pub use cascade::{CascadeDeleter, CascadeError, CascadeReport, TenantPurgeReport};
 
 // Re-export GDPR types
 pub use gdpr::{

@@ -1,0 +1,242 @@
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { Building2, Plus, Search, Loader2, X } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { apiClient } from "@/api/client"
+import type { TenantRecord } from "@/api/types"
+
+function CreateTenantDialog({
+  open,
+  onClose,
+}: {
+  open: boolean
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [slug, setSlug] = useState("")
+  const [name, setName] = useState("")
+
+  const createTenant = useMutation({
+    mutationFn: (data: { slug: string; name: string }) =>
+      apiClient.post("/api/v1/admin/tenants", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenants"] })
+      setSlug("")
+      setName("")
+      onClose()
+    },
+  })
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Create Tenant</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            createTenant.mutate({ slug, name })
+          }}
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Slug
+              </label>
+              <input
+                type="text"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                required
+                pattern="[a-z0-9-]+"
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                placeholder="my-tenant"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                placeholder="My Tenant"
+              />
+            </div>
+          </div>
+          {createTenant.isError && (
+            <p className="mt-2 text-sm text-red-600">
+              Failed to create tenant. Please try again.
+            </p>
+          )}
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createTenant.isPending}
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {createTenant.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Create
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function TenantListPageContent() {
+  const navigate = useNavigate()
+  const [search, setSearch] = useState("")
+  const [dialogOpen, setDialogOpen] = useState(false)
+
+  const { data, isLoading, error, refetch } = useQuery<{ items: TenantRecord[] }>({
+    queryKey: ["tenants"],
+    queryFn: () => apiClient.get("/api/v1/admin/tenants"),
+  })
+
+  const tenants = (data?.items ?? (Array.isArray(data) ? data : [])) as TenantRecord[]
+  const filtered = tenants.filter(
+    (t) =>
+      t.name.toLowerCase().includes(search.toLowerCase()) ||
+      t.slug.toLowerCase().includes(search.toLowerCase()),
+  )
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center p-8">
+        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 text-center text-red-600">
+        Failed to load tenants.{" "}
+        <button onClick={() => refetch()} className="underline hover:no-underline">
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1 sm:max-w-xs">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search tenants..."
+            className="w-full rounded-md border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+          />
+        </div>
+        <button
+          onClick={() => setDialogOpen(true)}
+          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          <Plus className="h-4 w-4" />
+          Create Tenant
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead className="bg-gray-50 dark:bg-gray-800">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Name
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Slug
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Status
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Created
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-500">
+                  No tenants found.
+                </td>
+              </tr>
+            ) : (
+              filtered.map((tenant) => (
+                <tr
+                  key={tenant.id}
+                  onClick={() => navigate(`/admin/tenants/${tenant.slug}`)}
+                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {tenant.name}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                    {tenant.slug}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm">
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                        tenant.status === "active"
+                          ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
+                      )}
+                    >
+                      {tenant.status}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                    {new Date(tenant.created_at).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <CreateTenantDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+    </>
+  )
+}
+
+export function Component() {
+  return <TenantListPage />
+}
+
+export default function TenantListPage() {
+  return (
+    <div>
+      <div className="mb-6 flex items-center gap-3">
+        <Building2 className="h-6 w-6 text-gray-400" />
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Tenants</h1>
+      </div>
+      <TenantListPageContent />
+    </div>
+  )
+}

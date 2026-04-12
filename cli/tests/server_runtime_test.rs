@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aeterna::server::plugin_auth::{PluginTokenClaims, RefreshTokenStore};
+use aeterna::server::plugin_auth::{PluginTokenClaims, RefreshTokenStore, RefreshTokenStoreBackend};
 use aeterna::server::{AppState, PluginAuthState, health, metrics, router};
 use agent_a2a::config::TrustedIdentityConfig;
 use async_trait::async_trait;
@@ -334,7 +334,7 @@ async fn test_app_state_with_plugin_auth(
             plugin_auth_state: Arc::new(PluginAuthState {
                 config: plugin_auth_config,
                 postgres: Some(postgres.clone()),
-                refresh_store: RefreshTokenStore::new(),
+                refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
             }),
             idp_config: None,
             idp_sync_service: None,
@@ -346,7 +346,11 @@ async fn test_app_state_with_plugin_auth(
             tenant_config_provider: Arc::new(KubernetesTenantConfigProvider::new(
                 "default".to_string(),
             )),
+            provider_registry: Arc::new(memory::provider_registry::TenantProviderRegistry::new(
+                None, None,
+            )),
             git_provider_connection_registry,
+            redis_conn: None,
         }),
         tempdir,
     ))
@@ -1149,7 +1153,7 @@ async fn user_role_revoke_fails_closed_when_assignment_scope_is_ambiguous() {
             ..Default::default()
         },
         postgres: Some(state.postgres.clone()),
-        refresh_store: RefreshTokenStore::new(),
+        refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
     });
     let app = router::build_router(Arc::new(state));
 

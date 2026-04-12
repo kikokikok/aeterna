@@ -1,0 +1,109 @@
+{{- if .Values.postgresql.enabled }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "prereqs.fullname" . }}-cnpg
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "prereqs.labels" . | nindent 4 }}
+spec:
+  instances: {{ .Values.postgresql.instances }}
+
+  {{- if .Values.postgresql.imageName }}
+  imageName: {{ .Values.postgresql.imageName | quote }}
+  {{- end }}
+
+  bootstrap:
+    initdb:
+      database: {{ .Values.postgresql.database | quote }}
+      owner: {{ .Values.postgresql.owner | quote }}
+      {{- if .Values.postgresql.pgvector.enabled }}
+      postInitSQL:
+        - "CREATE EXTENSION IF NOT EXISTS vector;"
+      {{- end }}
+
+  postgresql:
+    {{- with .Values.postgresql.parameters }}
+    parameters:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.postgresql.pg_hba }}
+    pg_hba:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+
+  storage:
+    size: {{ .Values.postgresql.storage.size }}
+    {{- if .Values.postgresql.storage.storageClass }}
+    storageClassName: {{ .Values.postgresql.storage.storageClass | quote }}
+    {{- end }}
+
+  resources:
+    {{- include "prereqs.resources.calculate" (dict "resources" .Values.postgresql.resources) | nindent 4 }}
+
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+
+  {{- if .Values.postgresql.backup.enabled }}
+  backup:
+    barmanObjectStore:
+      destinationPath: {{ .Values.postgresql.backup.destinationPath | quote }}
+      {{- if eq .Values.postgresql.backup.provider "s3" }}
+      s3Credentials:
+        accessKeyId:
+          {{- with .Values.postgresql.backup.s3Credentials.accessKeyId }}
+          name: {{ .name | quote }}
+          key: {{ .key | quote }}
+          {{- end }}
+        secretAccessKey:
+          {{- with .Values.postgresql.backup.s3Credentials.secretAccessKey }}
+          name: {{ .name | quote }}
+          key: {{ .key | quote }}
+          {{- end }}
+      s3:
+        bucket: {{ index (.Values.postgresql.backup.destinationPath | splitList "/") 2 | quote }}
+        {{- if .Values.postgresql.backup.endpointURL }}
+        endpoint: {{ .Values.postgresql.backup.endpointURL | quote }}
+        {{- end }}
+      {{- else if eq .Values.postgresql.backup.provider "gcs" }}
+      googleCredentials:
+        {{- with .Values.postgresql.backup.googleCredentials.applicationCredentials }}
+        applicationCredentials:
+          name: {{ .name | quote }}
+          key: {{ .key | quote }}
+        {{- end }}
+      {{- else if eq .Values.postgresql.backup.provider "azure" }}
+      azureCredentials:
+        {{- with .Values.postgresql.backup.azureCredentials.storageAccount }}
+        storageAccount:
+          name: {{ .name | quote }}
+          key: {{ .key | quote }}
+        {{- end }}
+        {{- with .Values.postgresql.backup.azureCredentials.storageKey }}
+        storageKey:
+          name: {{ .name | quote }}
+          key: {{ .key | quote }}
+        {{- end }}
+      {{- end }}
+    retentionPolicy: {{ .Values.postgresql.backup.retentionPolicy | quote }}
+  {{- end }}
+
+{{- if .Values.postgresql.backup.enabled }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ include "prereqs.fullname" . }}-cnpg-backup
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "prereqs.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.postgresql.backup.schedule | quote }}
+  backupOwnerReference: cluster
+  cluster:
+    name: {{ include "prereqs.fullname" . }}-cnpg
+{{- end }}
+
+{{- end }}

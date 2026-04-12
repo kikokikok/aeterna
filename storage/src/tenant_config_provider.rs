@@ -167,6 +167,20 @@ impl TenantConfigProvider for KubernetesTenantConfigProvider {
         Ok(removed_from_secret || removed_from_config)
     }
 
+    async fn get_secret_value(
+        &self,
+        tenant_id: &TenantId,
+        logical_name: &str,
+    ) -> Result<Option<String>, Self::Error> {
+        Self::validate_tenant_id(tenant_id)?;
+        let secret_name = Self::secret_name_for_tenant(tenant_id);
+        let state = self.state.read().await;
+        Ok(state
+            .secrets
+            .get(&secret_name)
+            .and_then(|secret_data| secret_data.get(logical_name).cloned()))
+    }
+
     async fn validate(&self, config: &TenantConfigDocument) -> Result<(), Self::Error> {
         Self::validate_tenant_id(&config.tenant_id)?;
 

@@ -74,97 +74,88 @@ Return the image reference
 {{- end }}
 
 {{/*
-Return PostgreSQL host
+Return PostgreSQL host (direct connection string)
 */}}
 {{- define "aeterna.postgresql.host" -}}
-{{- if .Values.postgresql.bundled }}
-{{- printf "%s-cnpg-rw" (include "aeterna.fullname" .) }}
-{{- else }}
-{{- .Values.postgresql.external.host }}
-{{- end }}
+{{- .Values.postgresql.host }}
 {{- end }}
 
 {{/*
 Return PostgreSQL port
 */}}
 {{- define "aeterna.postgresql.port" -}}
-{{- if .Values.postgresql.bundled }}
-{{- 5432 }}
-{{- else }}
-{{- .Values.postgresql.external.port }}
-{{- end }}
+{{- .Values.postgresql.port | default 5432 }}
 {{- end }}
 
 {{/*
 Return PostgreSQL database
 */}}
 {{- define "aeterna.postgresql.database" -}}
-{{- if .Values.postgresql.bundled }}
-{{- "aeterna" }}
-{{- else }}
-{{- .Values.postgresql.external.database }}
-{{- end }}
+{{- .Values.postgresql.database | default "aeterna" }}
 {{- end }}
 
 {{/*
 Return PostgreSQL secret name
 */}}
 {{- define "aeterna.postgresql.secretName" -}}
-{{- if .Values.postgresql.bundled }}
-{{- printf "%s-cnpg-app" (include "aeterna.fullname" .) }}
-{{- else if .Values.postgresql.external.existingSecret }}
-{{- .Values.postgresql.external.existingSecret }}
+{{- if .Values.postgresql.existingSecret }}
+{{- .Values.postgresql.existingSecret }}
 {{- else }}
 {{- printf "%s-postgresql" (include "aeterna.fullname" .) }}
 {{- end }}
 {{- end }}
 
 {{/*
-Return Redis host
+Return PostgreSQL password key in the secret
+*/}}
+{{- define "aeterna.postgresql.passwordKey" -}}
+{{- .Values.postgresql.passwordKey | default "password" }}
+{{- end }}
+
+{{/*
+Return Redis host (direct connection string)
 */}}
 {{- define "aeterna.redis.host" -}}
-{{- if .Values.cache.external.enabled }}
-{{- .Values.cache.external.host }}
-{{- else if .Values.cache.dragonfly.enabled }}
-{{- printf "%s-dragonfly" (include "aeterna.fullname" .) }}
-{{- else if .Values.cache.valkey.enabled }}
-{{- printf "%s-valkey" (include "aeterna.fullname" .) }}
-{{- else }}
-{{- "localhost" }}
-{{- end }}
+{{- .Values.redis.host }}
 {{- end }}
 
 {{/*
 Return Redis port
 */}}
 {{- define "aeterna.redis.port" -}}
-{{- if .Values.cache.external.enabled }}
-{{- .Values.cache.external.port }}
+{{- .Values.redis.port | default 6379 }}
+{{- end }}
+
+{{/*
+Return Redis secret name
+*/}}
+{{- define "aeterna.redis.secretName" -}}
+{{- if .Values.redis.existingSecret }}
+{{- .Values.redis.existingSecret }}
 {{- else }}
-{{- 6379 }}
+{{- printf "%s-redis" (include "aeterna.fullname" .) }}
 {{- end }}
 {{- end }}
 
 {{/*
-Return Qdrant host
+Return Redis password key in the secret
 */}}
-{{- define "aeterna.qdrant.host" -}}
-{{- if .Values.vectorBackend.qdrant.bundled }}
-{{- printf "%s-qdrant" (include "aeterna.fullname" .) }}
-{{- else }}
-{{- .Values.vectorBackend.qdrant.external.host }}
-{{- end }}
+{{- define "aeterna.redis.passwordKey" -}}
+{{- .Values.redis.passwordKey | default "password" }}
 {{- end }}
 
 {{/*
-Return Qdrant port
+Return vector store host (direct connection string)
 */}}
-{{- define "aeterna.qdrant.port" -}}
-{{- if .Values.vectorBackend.qdrant.bundled }}
-{{- 6333 }}
-{{- else }}
-{{- .Values.vectorBackend.qdrant.external.port }}
+{{- define "aeterna.vectorStore.host" -}}
+{{- .Values.vectorStore.host }}
 {{- end }}
+
+{{/*
+Return vector store port
+*/}}
+{{- define "aeterna.vectorStore.port" -}}
+{{- .Values.vectorStore.port | default 6333 }}
 {{- end }}
 
 {{/*
@@ -262,16 +253,11 @@ resources:
 
 {{/*
 Configuration validation helper.
-Validates mutual exclusivity and required field combinations.
+Validates required connection info and deployment mode constraints.
 Call from deployment or configmap to enforce constraints at render time.
 Usage: {{ include "aeterna.validateConfig" . }}
 */}}
 {{- define "aeterna.validateConfig" -}}
-{{- if and .Values.postgresql.bundled (and (hasKey .Values.postgresql "external") .Values.postgresql.external.host) -}}
-  {{- if ne .Values.postgresql.external.host "" -}}
-    {{- fail "Cannot enable both bundled CloudNativePG (postgresql.bundled=true) and external PostgreSQL (postgresql.external.host set). Disable one." -}}
-  {{- end -}}
-{{- end -}}
 {{- if and (eq .Values.deploymentMode "remote") .Values.aeterna.enabled -}}
   {{/* In remote mode aeterna acts as thin client — warn but allow */}}
 {{- end -}}
@@ -281,19 +267,10 @@ Usage: {{ include "aeterna.validateConfig" . }}
 {{- end -}}
 
 {{/*
-PostgreSQL selector labels (used by network policies)
+Return vector store type
 */}}
-{{- define "aeterna.postgresql.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "aeterna.fullname" . }}-cnpg
-app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
-
-{{/*
-Qdrant selector labels (used by network policies)
-*/}}
-{{- define "aeterna.qdrant.selectorLabels" -}}
-app.kubernetes.io/name: qdrant
-app.kubernetes.io/instance: {{ .Release.Name }}
+{{- define "aeterna.vectorStore.type" -}}
+{{- .Values.vectorStore.type | default "qdrant" }}
 {{- end }}
 
 {{/*

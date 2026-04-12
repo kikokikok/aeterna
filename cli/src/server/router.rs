@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -9,12 +10,14 @@ use metrics::{counter, histogram};
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 use super::auth_middleware::AuthenticationLayer;
 use super::{
-    AppState, admin_sync, govern_api, health, knowledge_api, mcp_transport, org_api, plugin_auth,
-    project_api, role_grants, sessions, sync, team_api, tenant_api, user_api, webhooks,
+    AppState, admin_sync, backup_api, govern_api, health, knowledge_api, lifecycle_api,
+    mcp_transport, org_api, plugin_auth, project_api, role_grants, sessions, sync, team_api,
+    tenant_api, user_api, webhooks,
 };
 
 pub fn build_router(state: Arc<AppState>) -> Router {
@@ -42,6 +45,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .nest("/admin", role_grants::router(state.clone()))
         .merge(govern_api::router(state.clone()))
         .merge(sync::router(state.clone()))
+        .merge(backup_api::router(state.clone()))
+        .merge(lifecycle_api::router(state.clone()))
+        .merge(plugin_auth::admin_session_router(state.clone()))
         .layer(auth_layer.clone());
 
     let protected_mcp =
@@ -68,6 +74,20 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/webhooks",
             idp_sync::webhook_router(&idp_config, idp_sync_service, idp_client),
         );
+    }
+
+    // Admin UI static asset serving (optional — skipped if dist directory does not exist).
+    let admin_ui_path = std::env::var("AETERNA_ADMIN_UI_PATH")
+        .unwrap_or_else(|_| "./admin-ui/dist".to_string());
+    let admin_ui_dir = PathBuf::from(&admin_ui_path);
+    if admin_ui_dir.is_dir() {
+        let index_html = admin_ui_dir.join("index.html");
+        let serve_dir = ServeDir::new(&admin_ui_dir)
+            .not_found_service(ServeFile::new(&index_html));
+        app = app.nest_service("/admin", serve_dir);
+        tracing::info!(path = %admin_ui_path, "Admin UI serving enabled at /admin");
+    } else {
+        tracing::info!(path = %admin_ui_path, "Admin UI dist directory not found — /admin route not registered");
     }
 
     app.layer(PropagateRequestIdLayer::x_request_id())

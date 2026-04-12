@@ -41,13 +41,15 @@ aeterna/
 ├── errors/         # Error handling framework
 ├── utils/          # Common utilities
 ├── context/        # Context compression (CCA)
-├── cli/            # CLI (aeterna setup wizard)
+├── cli/            # CLI binary + Axum HTTP server
 ├── agent-a2a/      # Agent-to-Agent protocol (Radkit)
 ├── opal-fetcher/   # OPAL policy sync
 ├── observability/  # OpenTelemetry + Prometheus metrics
 ├── testing/        # Shared test fixtures and helpers
 ├── idp-sync/       # Identity provider sync (Okta)
 ├── cross-tests/    # Integration tests (require Docker)
+├── backup/         # Backup/restore system (archive, NDJSON, S3)
+├── admin-ui/       # Admin web UI (React 19, Vite, TypeScript, Tailwind)
 ├── openspec/       # Change proposals and versioned specs
 └── specs/          # Legacy spec documents
 ```
@@ -184,13 +186,18 @@ openspec archive <change-id> --yes    # Archive after deployment
 
 > Skip proposal only for: bug fixes, typos, formatting, comment-only changes, non-breaking dep bumps.
 
-### Active Changes (as of 2026-03)
+### Active Changes (as of 2026-04)
 
 | Change | Status | Remaining |
 |---|---|---|
 | `add-cloud-llm-providers` | in-progress | 1 task |
 | `fix-production-readiness-gaps` | in-progress | 4 tasks |
-| `add-okta-federated-auth` | complete (needs archive) | — |
+| `add-okta-federated-auth` | complete (needs archive) | -- |
+| `add-admin-web-ui` | in-progress | see tasks.md |
+| `add-backup-restore` | in-progress | see tasks.md |
+| `add-day2-operations` | in-progress | see tasks.md |
+| `add-tenant-provider-config` | in-progress | see tasks.md |
+| `refactor-binary-split` | in-progress | see tasks.md |
 
 ---
 
@@ -245,13 +252,96 @@ Published as `@aeterna-org/opencode-plugin` — MCP tools + hooks + automatic co
 
 ---
 
+## Server Modules (`cli/src/server/`)
+
+The CLI crate hosts an Axum HTTP server with these key modules:
+
+| Module | Purpose |
+|---|---|
+| `router.rs` | Route tree assembly, middleware stack |
+| `bootstrap.rs` | Server initialization, service wiring |
+| `plugin_auth.rs` | GitHub OAuth + JWT issuance/refresh |
+| `auth_middleware.rs` | JWT validation middleware layer |
+| `backup_api.rs` | Export/import job management |
+| `memory_api.rs` | Memory CRUD and search endpoints |
+| `knowledge_api.rs` | Knowledge operations |
+| `govern_api.rs` | Governance dashboard API |
+| `tenant_api.rs` | Tenant CRUD |
+| `org_api.rs` / `team_api.rs` / `project_api.rs` / `user_api.rs` | Entity management |
+| `role_grants.rs` | Role administration (nested under `/admin`) |
+| `mcp_transport.rs` | MCP protocol transport |
+| `health.rs` | Health, liveness, readiness probes |
+
+---
+
+## Backup/Restore (`backup/` crate)
+
+Core archive format for tenant data export/import:
+
+- **Archive format**: tar.gz with `manifest.json` + NDJSON data files + `checksums.sha256`
+- **API endpoints**: `cli/src/server/backup_api.rs` -- async export jobs, import with merge/replace/skip modes
+- **S3 support**: Platform default or per-tenant S3 destination
+- **Modules**: `archive.rs`, `manifest.rs`, `ndjson.rs`, `checksum.rs`, `s3.rs`, `validate.rs`, `destination.rs`
+
+---
+
+## Admin UI (`admin-ui/`)
+
+React 19 SPA served at `/admin/*` when built. Tech stack: Vite, TypeScript, Tailwind CSS 4, TanStack Query, React Router 7.
+
+- **Build**: `cd admin-ui && npm install && npm run build`
+- **Dev**: `cd admin-ui && npm run dev` (proxies `/api` to localhost:8080)
+- **Auth**: GitHub OAuth via `AuthContext`, JWT token management
+- **Served by**: `cli/src/server/router.rs` using `tower_http::services::ServeDir`
+- **Override path**: `AETERNA_ADMIN_UI_PATH` env var (default: `./admin-ui/dist`)
+
+---
+
+## ReplicaSet Deployment (NON-NEGOTIABLE)
+
+Aeterna runs as a Kubernetes ReplicaSet with N replicas. Every feature MUST work correctly with multiple instances:
+
+- **Shared state** -> Redis or PostgreSQL (never in-process HashMap/RwLock)
+- **Singleton tasks** -> Redis distributed lock before execution
+- **Caches** -> DashMap with TTL only (read-through, tolerate staleness)
+- **File output** -> S3/object storage (never local filesystem as final destination)
+- **Tokens** -> Redis with TTL (never in-process store)
+
+Before implementing any new feature, ask: "Does this work with 3 replicas behind a load balancer?"
+
+---
+
+## Per-Tenant Provider Configuration
+
+Managed by `TenantProviderRegistry` in `memory/src/provider_registry.rs`:
+
+| Config Key | Purpose |
+|---|---|
+| `llm_provider` | Provider type: `openai`, `google`, `bedrock` |
+| `llm_model` | Model identifier |
+| `llm_api_key` | Secret logical name for API key |
+| `embedding_provider` | Embedding provider type |
+| `embedding_model` | Embedding model identifier |
+| `embedding_api_key` | Secret logical name |
+
+Cloud-specific keys: `llm_google_project_id`, `llm_google_location`, `llm_bedrock_region` (and `embedding_*` equivalents).
+
+Platform defaults from env vars; tenant overrides from `TenantConfigDocument`; `DashMap` cache with TTL.
+
+---
+
 ## Do NOT
 
-- Use `edition = "2021"` — always `2024`
+- Use `edition = "2021"` -- always `2024`
 - Write code without a failing test first
 - Suppress clippy warnings without justification in `Cargo.toml`
-- Use `unwrap()` in library code — use `?` or explicit error handling
+- Use `unwrap()` in library code -- use `?` or explicit error handling
 - Skip `cargo fmt` before committing
 - Create new Cargo crates without adding them to the workspace `members` list
 - Commit without running `cargo test --all` locally
 - Start implementing a feature change without a validated OpenSpec proposal
+- Store mutable shared state in process memory (use Redis or PostgreSQL -- Aeterna runs as a ReplicaSet)
+- Use `LazyLock<RwLock<HashMap>>` for any state that must be visible across replicas
+- Assume a background task runs on only one instance without a distributed lock
+- Write export/import archives to local filesystem as the final destination (use S3)
+- Store authentication tokens in process memory (use Redis)

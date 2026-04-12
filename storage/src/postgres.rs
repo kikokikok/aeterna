@@ -278,6 +278,20 @@ impl PostgresBackend {
         .execute(&self.pool)
         .await
         .ok();
+        sqlx::query(
+            "ALTER TABLE memory_entries ADD COLUMN IF NOT EXISTS last_accessed_at BIGINT",
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_memory_entries_last_accessed ON \
+             memory_entries(last_accessed_at, memory_layer) \
+             WHERE last_accessed_at IS NOT NULL AND deleted_at IS NULL",
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS knowledge_items ( id TEXT PRIMARY KEY, tenant_id TEXT NOT \
@@ -694,6 +708,63 @@ impl PostgresBackend {
         )
         .execute(&self.pool)
         .await?;
+
+        // Day-2 operations tables (migration 019)
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS remediation_requests (
+                id TEXT PRIMARY KEY,
+                request_type TEXT NOT NULL,
+                risk_tier TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_ids JSONB NOT NULL DEFAULT '[]',
+                tenant_id TEXT,
+                description TEXT NOT NULL,
+                proposed_action TEXT NOT NULL,
+                detected_by TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at BIGINT NOT NULL,
+                reviewed_by TEXT,
+                reviewed_at BIGINT,
+                resolution_notes TEXT,
+                executed_at BIGINT
+            )",
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS dead_letter_items (
+                id TEXT PRIMARY KEY,
+                item_type TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                error TEXT NOT NULL,
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                max_retries INTEGER NOT NULL DEFAULT 5,
+                first_failed_at BIGINT NOT NULL,
+                last_failed_at BIGINT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                metadata JSONB NOT NULL DEFAULT '{}'
+            )",
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS tenant_storage_quotas (
+                tenant_id TEXT PRIMARY KEY,
+                memory_max BIGINT,
+                knowledge_max BIGINT,
+                vector_max BIGINT,
+                total_max BIGINT,
+                updated_at BIGINT NOT NULL
+            )",
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
 
         Ok(())
     }

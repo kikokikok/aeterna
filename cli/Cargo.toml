@@ -23,6 +23,7 @@ mk_core.workspace = true
 context.workspace = true
 config.workspace = true
 errors.workspace = true
+utils.workspace = true
 storage.workspace = true
 memory = { workspace = true, features = ["llm-integration", "embedding-integration", "google-provider", "bedrock-provider"] }
 knowledge.workspace = true
@@ -32,6 +33,7 @@ observability.workspace = true
 agent-a2a.workspace = true
 idp-sync.workspace = true
 adapters.workspace = true
+aeterna-backup.workspace = true
 
 axum = { workspace = true }
 tower = { workspace = true }
@@ -59,6 +61,7 @@ futures-util.workspace = true
 octocrab.workspace = true
 jsonwebtoken.workspace = true
 reqwest.workspace = true
+redis.workspace = true
 sha2.workspace = true
 
 colored = "3.0"

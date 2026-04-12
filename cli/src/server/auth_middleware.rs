@@ -281,7 +281,7 @@ mod tests {
     use testing::{postgres, unique_id};
     use tower::ServiceExt;
 
-    use crate::server::plugin_auth::RefreshTokenStore;
+    use crate::server::plugin_auth::{RefreshTokenStore, RefreshTokenStoreBackend};
 
     fn test_auth_state(
         enabled: bool,
@@ -295,7 +295,7 @@ mod tests {
                 ..Default::default()
             },
             postgres,
-            refresh_store: RefreshTokenStore::new(),
+            refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
         })
     }
 

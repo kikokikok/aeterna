@@ -7,6 +7,18 @@ use crate::state::SummarySyncTrigger;
 use mk_core::types::{LayerSummary, MemoryLayer, SummaryConfig, SummaryDepth};
 use std::collections::HashMap;
 
+/// Return the child layers below `layer` in the knowledge hierarchy
+/// (Company > Org > Team > Project).  For memory-only layers (Session,
+/// User, Agent) there are no children.
+fn child_layers(layer: MemoryLayer) -> Vec<MemoryLayer> {
+    match layer {
+        MemoryLayer::Company => vec![MemoryLayer::Org, MemoryLayer::Team, MemoryLayer::Project],
+        MemoryLayer::Org => vec![MemoryLayer::Team, MemoryLayer::Project],
+        MemoryLayer::Team => vec![MemoryLayer::Project],
+        _ => vec![],
+    }
+}
+
 pub struct SummarySyncResult {
     pub created: Vec<SummarySyncEvent>,
     pub updated: Vec<SummarySyncEvent>,
@@ -260,6 +272,90 @@ impl IncrementalSummarySync {
             invalidated_at: chrono::Utc::now().timestamp(),
             source_content_hash: source_hash,
         }))
+    }
+
+    /// Invalidate summaries for a specific layer only (layer-aware).
+    ///
+    /// Unlike [`invalidate_summaries`] which marks **all** depths as stale,
+    /// this only marks pointers whose `layer` field matches the given layer.
+    pub fn invalidate_summaries_for_layer(
+        &self,
+        entry_id: &str,
+        layer: MemoryLayer,
+        reason: InvalidationReason,
+        state: &mut SummaryPointerState,
+    ) -> Option<SummarySyncEvent> {
+        let count = state.mark_stale_for_entry_and_layer(entry_id, layer);
+        if count == 0 {
+            return None;
+        }
+
+        let depths: Vec<SummaryDepth> = state
+            .pointers
+            .get(entry_id)
+            .map(|m| {
+                m.iter()
+                    .filter(|(_, ptr)| ptr.layer == layer && ptr.is_stale)
+                    .map(|(d, _)| *d)
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let source_hash = state
+            .get_pointer(
+                entry_id,
+                depths.first().copied().unwrap_or(SummaryDepth::Sentence),
+            )
+            .map(|p| p.source_content_hash.clone());
+
+        Some(SummarySyncEvent::Invalidated(SummaryInvalidated {
+            entry_id: entry_id.to_string(),
+            layer,
+            depths,
+            reason,
+            invalidated_at: chrono::Utc::now().timestamp(),
+            source_content_hash: source_hash,
+        }))
+    }
+
+    /// Invalidate summaries and cascade to child layers in the knowledge
+    /// hierarchy.  When a parent layer's summary is invalidated, all
+    /// configured child layers for the same entry are also marked stale.
+    ///
+    /// Returns the events produced (one per invalidated layer).
+    pub fn invalidate_summaries_cascade(
+        &self,
+        entry_id: &str,
+        layer: MemoryLayer,
+        reason: InvalidationReason,
+        state: &mut SummaryPointerState,
+    ) -> Vec<SummarySyncEvent> {
+        let mut events = Vec::new();
+
+        // Invalidate the requested layer itself.
+        if let Some(event) =
+            self.invalidate_summaries_for_layer(entry_id, layer, reason, state)
+        {
+            events.push(event);
+        }
+
+        // Cascade to child layers below the current one.
+        for child_layer in child_layers(layer) {
+            if self.config_by_layer.contains_key(&child_layer) {
+                if let Some(event) = self.invalidate_summaries_for_layer(
+                    entry_id,
+                    child_layer,
+                    InvalidationReason::ParentLayerChanged {
+                        parent_layer: layer,
+                    },
+                    state,
+                ) {
+                    events.push(event);
+                }
+            }
+        }
+
+        events
     }
 
     pub fn invalidate_on_source_change(
@@ -697,5 +793,126 @@ mod tests {
         });
 
         assert!(result.has_errors());
+    }
+
+    #[test]
+    fn test_child_layers_company() {
+        let children = child_layers(MemoryLayer::Company);
+        assert_eq!(
+            children,
+            vec![MemoryLayer::Org, MemoryLayer::Team, MemoryLayer::Project]
+        );
+    }
+
+    #[test]
+    fn test_child_layers_org() {
+        let children = child_layers(MemoryLayer::Org);
+        assert_eq!(children, vec![MemoryLayer::Team, MemoryLayer::Project]);
+    }
+
+    #[test]
+    fn test_child_layers_team() {
+        let children = child_layers(MemoryLayer::Team);
+        assert_eq!(children, vec![MemoryLayer::Project]);
+    }
+
+    #[test]
+    fn test_child_layers_project_has_none() {
+        let children = child_layers(MemoryLayer::Project);
+        assert!(children.is_empty());
+    }
+
+    #[test]
+    fn test_child_layers_session_has_none() {
+        let children = child_layers(MemoryLayer::Session);
+        assert!(children.is_empty());
+    }
+
+    #[test]
+    fn test_invalidate_summaries_cascade_propagates_to_children() {
+        let sync = IncrementalSummarySync::new()
+            .with_config(create_test_config(MemoryLayer::Org))
+            .with_config(create_test_config(MemoryLayer::Team))
+            .with_config(create_test_config(MemoryLayer::Project));
+
+        let mut state = SummaryPointerState::default();
+
+        // Set pointers at Org and Project layers (use different depths
+        // because the state is keyed by (entry_id, depth)).
+        state.set_pointer(SummaryPointer::new(
+            "entry-1".to_string(),
+            MemoryLayer::Org,
+            SummaryDepth::Sentence,
+            "hash-org".to_string(),
+            "source".to_string(),
+            50,
+        ));
+        state.set_pointer(SummaryPointer::new(
+            "entry-1".to_string(),
+            MemoryLayer::Project,
+            SummaryDepth::Paragraph,
+            "hash-proj".to_string(),
+            "source".to_string(),
+            200,
+        ));
+
+        let events = sync.invalidate_summaries_cascade(
+            "entry-1",
+            MemoryLayer::Org,
+            InvalidationReason::ManualInvalidation,
+            &mut state,
+        );
+
+        // Should produce at least the Org event plus cascaded child events.
+        assert!(
+            events.len() >= 2,
+            "Expected cascade to produce >=2 events, got {}",
+            events.len()
+        );
+
+        // The first event should be the Org layer invalidation.
+        if let SummarySyncEvent::Invalidated(ref inv) = events[0] {
+            assert_eq!(inv.layer, MemoryLayer::Org);
+        } else {
+            panic!("Expected Invalidated event for Org layer");
+        }
+
+        // One of the events should target the Project layer via cascade.
+        let has_project = events.iter().any(|e| {
+            matches!(
+                e,
+                SummarySyncEvent::Invalidated(inv) if inv.layer == MemoryLayer::Project
+            )
+        });
+        assert!(has_project, "Cascade should have invalidated Project layer");
+    }
+
+    #[test]
+    fn test_invalidate_summaries_cascade_no_children_when_leaf() {
+        let sync = IncrementalSummarySync::new()
+            .with_config(create_test_config(MemoryLayer::Project));
+
+        let mut state = SummaryPointerState::default();
+        state.set_pointer(SummaryPointer::new(
+            "entry-1".to_string(),
+            MemoryLayer::Project,
+            SummaryDepth::Sentence,
+            "hash".to_string(),
+            "source".to_string(),
+            50,
+        ));
+
+        let events = sync.invalidate_summaries_cascade(
+            "entry-1",
+            MemoryLayer::Project,
+            InvalidationReason::ManualInvalidation,
+            &mut state,
+        );
+
+        // Only the Project layer itself should be invalidated.
+        assert_eq!(events.len(), 1);
+        if let SummarySyncEvent::Invalidated(ref inv) = events[0] {
+            assert_eq!(inv.layer, MemoryLayer::Project);
+        }
     }
 }

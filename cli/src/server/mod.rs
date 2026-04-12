@@ -1,9 +1,12 @@
 pub mod admin_sync;
 pub mod auth_middleware;
+pub mod backup_api;
 pub mod bootstrap;
 pub mod govern_api;
 pub mod health;
 pub mod knowledge_api;
+pub mod lifecycle;
+pub mod lifecycle_api;
 pub mod mcp_transport;
 pub mod metrics;
 pub mod org_api;
@@ -35,6 +38,7 @@ use knowledge::manager::KnowledgeManager;
 use knowledge::repository::RepositoryError;
 use knowledge::tenant_repo_resolver::TenantRepositoryResolver;
 use memory::manager::MemoryManager;
+use memory::provider_registry::TenantProviderRegistry;
 use memory::reasoning::ReflectiveReasoner;
 use mk_core::traits::GitProviderConnectionRegistry;
 use mk_core::traits::{AuthorizationService, EventPublisher, KnowledgeRepository};
@@ -49,7 +53,7 @@ use storage::tenant_config_provider::KubernetesTenantConfigProvider;
 use storage::tenant_store::{TenantRepositoryBindingStore, TenantStore};
 use tools::server::McpServer;
 
-use plugin_auth::RefreshTokenStore;
+use plugin_auth::RefreshTokenStoreBackend;
 
 /// Plugin-auth runtime state: configuration + in-process token store.
 ///
@@ -59,7 +63,11 @@ pub struct PluginAuthState {
     pub config: config::PluginAuthConfig,
     pub postgres: Option<Arc<PostgresBackend>>,
     /// Single-use refresh-token store (rotated on every refresh).
-    pub refresh_store: RefreshTokenStore,
+    ///
+    /// For multi-instance (Kubernetes) deployments, use
+    /// `RefreshTokenStoreBackend::Redis`. The in-memory variant is for
+    /// single-instance or test deployments.
+    pub refresh_store: RefreshTokenStoreBackend,
 }
 
 impl std::fmt::Debug for PluginAuthState {
@@ -100,9 +108,16 @@ pub struct AppState {
     pub tenant_repository_binding_store: Arc<TenantRepositoryBindingStore>,
     pub tenant_repo_resolver: Arc<TenantRepositoryResolver>,
     pub tenant_config_provider: Arc<KubernetesTenantConfigProvider>,
+    /// Per-tenant LLM/embedding provider registry with caching.
+    pub provider_registry: Arc<TenantProviderRegistry>,
     /// Registry of platform-owned Git provider connections (task 3.4).
     pub git_provider_connection_registry:
         Arc<dyn GitProviderConnectionRegistry<Error = GitProviderConnectionError> + Send + Sync>,
+    /// Optional Redis connection manager for shared state stores (HA mode).
+    ///
+    /// When present, backup job stores, dead-letter queue, remediation store,
+    /// and lifecycle distributed locks use Redis instead of in-memory state.
+    pub redis_conn: Option<Arc<redis::aio::ConnectionManager>>,
 }
 
 // ---------------------------------------------------------------------------

@@ -317,9 +317,12 @@ async fn pull_handler(
                 .and_then(|t| serde_json::from_value::<Vec<String>>(t.clone()).ok())
                 .unwrap_or_default();
 
+            // Redact PII before returning content to devices
+            let redacted_content = utils::redact_pii(&row.1);
+
             SyncPullEntry {
                 id: row.0.clone(),
-                content: row.1.clone(),
+                content: redacted_content,
                 layer: row.2.clone(),
                 embedding: None,
                 tags,

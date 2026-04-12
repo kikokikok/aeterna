@@ -1,0 +1,29 @@
+[package]
+name = "aeterna-backup"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mk_core = { path = "../mk_core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tokio = { workspace = true }
+flate2 = "1.1"
+tar = "0.4"
+tracing = { workspace = true }
+tempfile = { workspace = true }
+
+# S3 object storage
+aws-sdk-s3 = "1.82"
+aws-config = "1.6"
+
+[dev-dependencies]
+tokio = { workspace = true }
+
+[lints]
+workspace = true

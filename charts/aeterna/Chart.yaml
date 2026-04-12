@@ -1,6 +1,9 @@
 apiVersion: v2
 name: aeterna
-description: Universal Memory & Knowledge Framework for Enterprise AI Agent Systems
+description: >-
+  Aeterna application chart — deploys the Aeterna server, OPAL authorization
+  stack, and supporting jobs. Requires external PostgreSQL, Redis-compatible
+  cache, and vector store. Use the aeterna-prereqs chart for dev/test backends.
 type: application
 version: 0.6.0
 appVersion: "0.6.0"
@@ -27,33 +30,6 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/category: ai-machine-learning
 
-dependencies:
-  - name: dragonfly
-    version: "v1.37.0"
-    repository: oci://ghcr.io/dragonflydb/dragonfly/helm
-    condition: dragonfly.enabled
-    alias: dragonfly
-
-  - name: qdrant
-    version: "0.10.*"
-    repository: https://qdrant.github.io/qdrant-helm
-    condition: qdrant.enabled
-    alias: qdrant
-
-  - name: weaviate
-    version: "17.*"
-    repository: https://weaviate.github.io/weaviate-helm
-    condition: weaviate.enabled
-    alias: weaviate
-
-  - name: psmdb-operator
-    version: "1.21.*"
-    repository: https://percona.github.io/percona-helm-charts
-    condition: mongodb.enabled
-    alias: mongodb
-
-  - name: valkey
-    version: "0.9.*"
-    repository: https://valkey.io/valkey-helm/
-    condition: valkey.enabled
-    alias: valkey
+## No dependencies — this chart deploys only the Aeterna application.
+## Stateful services (PostgreSQL, Redis, Qdrant) are provided externally.
+## For dev/test, deploy them with: helm install prereqs charts/aeterna-prereqs

@@ -46,6 +46,7 @@ aws-sdk-kms = "1.57"
 # Metrics and observability (Task 8)
 metrics.workspace = true
 statig.workspace = true
+anyhow.workspace = true
 
 [dev-dependencies]
 testing.workspace = true
