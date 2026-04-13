@@ -131,7 +131,9 @@ jobs:
 
       - name: Push to OCI registry
         run: |
-          helm push .cr-release-packages/*.tgz oci://${{ env.REGISTRY_PATH }}
+          for chart in .cr-release-packages/*.tgz; do
+            helm push "$chart" oci://${{ env.REGISTRY_PATH }}
+          done
 
       - name: Checkout gh-pages
         uses: actions/checkout@v4
