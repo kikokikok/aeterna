@@ -26,6 +26,7 @@ use crate::tools::{ToolDefinition, ToolRegistry};
 use knowledge::governance::GovernanceEngine;
 use memory::manager::MemoryManager;
 use mk_core::traits::{AuthorizationService, EventPublisher, KnowledgeRepository};
+use mk_core::types::SYSTEM_USER_ID;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -686,7 +687,7 @@ impl McpServer {
                         let params_mut = request.params.get_or_insert(serde_json::json!({}));
                         if let Some(obj) = params_mut.as_object_mut() {
                             obj.entry("tenantContext").or_insert_with(
-                                || serde_json::json!({"tenant_id": caller, "user_id": "system"}),
+                                || serde_json::json!({"tenant_id": caller, "user_id": SYSTEM_USER_ID}),
                             );
                         }
                     }

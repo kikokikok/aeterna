@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
+const DEFAULT_QDRANT_SHARED_ENDPOINT: &str = "qdrant-shared-1:6333";
+const DEFAULT_QDRANT_SHARD_DNS_SUFFIX: &str = ".svc.cluster.local";
+const DEFAULT_QDRANT_PORT: u16 = 6333;
+
 #[derive(Error, Debug)]
 pub enum ShardError {
     #[error("Shard not found: {0}")]
@@ -68,7 +72,7 @@ impl ShardManager {
                 shard_id: "shared-shard-1".to_string(),
                 max_capacity: 100,
                 current_tenants: 0,
-                endpoint: "qdrant-shared-1:6333".to_string(),
+                endpoint: DEFAULT_QDRANT_SHARED_ENDPOINT.to_string(),
                 created_at: chrono::Utc::now(),
                 status: ShardStatus::Active,
             },
@@ -135,7 +139,11 @@ impl ShardManager {
             shard_id: shard_id.clone(),
             max_capacity: 1,
             current_tenants: 1,
-            endpoint: format!("qdrant-{}.svc.cluster.local:6333", shard_id),
+            endpoint: format!(
+                "qdrant-{shard_id}{suffix}:{port}",
+                suffix = DEFAULT_QDRANT_SHARD_DNS_SUFFIX,
+                port = DEFAULT_QDRANT_PORT
+            ),
             created_at: chrono::Utc::now(),
             status: ShardStatus::Provisioning,
         };

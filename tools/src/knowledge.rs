@@ -4,8 +4,8 @@ use knowledge::manager::KnowledgeManager;
 use memory::manager::MemoryManager;
 use mk_core::traits::KnowledgeRepository;
 use mk_core::types::{
-    KnowledgeRelation, KnowledgeRelationType, KnowledgeVariantRole, PromotionDecision,
-    PromotionMode, PromotionRequest, PromotionRequestStatus, TenantContext,
+    KnowledgeRelation, KnowledgeRelationType, KnowledgeVariantRole, PROVIDER_GITHUB,
+    PromotionDecision, PromotionMode, PromotionRequest, PromotionRequestStatus, TenantContext,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -801,7 +801,10 @@ pub struct InMemoryKnowledgeProposalStorage {
     drafts: tokio::sync::RwLock<std::collections::HashMap<String, KnowledgeDraft>>,
     proposals: tokio::sync::RwLock<std::collections::HashMap<String, KnowledgeProposal>>,
     pr_storage: Option<Arc<knowledge::pr_proposal_storage::PrProposalStorage>>,
+    proposal_provider: String,
 }
+
+const DEFAULT_PROPOSAL_PROVIDER: &str = PROVIDER_GITHUB;
 
 impl InMemoryKnowledgeProposalStorage {
     pub fn new() -> Self {
@@ -809,6 +812,7 @@ impl InMemoryKnowledgeProposalStorage {
             drafts: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             proposals: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             pr_storage: None,
+            proposal_provider: DEFAULT_PROPOSAL_PROVIDER.to_string(),
         }
     }
 
@@ -825,6 +829,7 @@ impl InMemoryKnowledgeProposalStorage {
                     default_branch.into(),
                 ),
             )),
+            proposal_provider: DEFAULT_PROPOSAL_PROVIDER.to_string(),
         }
     }
 
@@ -948,7 +953,7 @@ impl KnowledgeProposalStorage for InMemoryKnowledgeProposalStorage {
                         content: pr.body.unwrap_or_default(),
                         kind: mk_core::types::KnowledgeType::Adr,
                         layer: fallback_layer,
-                        proposed_by: "github".to_string(),
+                        proposed_by: self.proposal_provider.clone(),
                         proposed_at: chrono::Utc::now(),
                         status: KnowledgeProposalStatus::Pending,
                         approvers: Vec::new(),

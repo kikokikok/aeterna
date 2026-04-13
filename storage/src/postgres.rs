@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use mk_core::traits::StorageBackend;
 use mk_core::types::{
-    INSTANCE_SCOPE_TENANT_ID, OrganizationalUnit, RoleIdentifier, TenantContext, UnitType,
+    INSTANCE_SCOPE_TENANT_ID, OrganizationalUnit, RoleIdentifier, SYSTEM_USER_ID, TenantContext,
+    UnitType,
 };
 use sqlx::pool::PoolConnection;
 use sqlx::{Pool, Postgres, Row};
@@ -278,12 +279,10 @@ impl PostgresBackend {
         .execute(&self.pool)
         .await
         .ok();
-        sqlx::query(
-            "ALTER TABLE memory_entries ADD COLUMN IF NOT EXISTS last_accessed_at BIGINT",
-        )
-        .execute(&self.pool)
-        .await
-        .ok();
+        sqlx::query("ALTER TABLE memory_entries ADD COLUMN IF NOT EXISTS last_accessed_at BIGINT")
+            .execute(&self.pool)
+            .await
+            .ok();
         sqlx::query(
             "CREATE INDEX IF NOT EXISTS idx_memory_entries_last_accessed ON \
              memory_entries(last_accessed_at, memory_layer) \
@@ -1306,6 +1305,26 @@ impl PostgresBackend {
         Ok(row.map(|r| r.get::<String, _>("id")))
     }
 
+    /// Looks up a user's internal UUID by their identity-provider name and subject.
+    ///
+    /// Both `idp_provider` and `idp_subject` must match.  Returns `None` when no
+    /// matching user exists.
+    pub async fn resolve_user_id_by_idp(
+        &self,
+        idp_provider: &str,
+        idp_subject: &str,
+    ) -> Result<Option<String>, PostgresError> {
+        use sqlx::Row;
+        let row = sqlx::query(
+            "SELECT id::text FROM users WHERE idp_provider = $1 AND idp_subject = $2 LIMIT 1",
+        )
+        .bind(idp_provider)
+        .bind(idp_subject)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| r.get::<String, _>("id")))
+    }
+
     /// Returns the deduplicated list of roles for a user within a specific tenant, **plus**
     /// any instance-scoped roles stored under [`mk_core::types::INSTANCE_SCOPE_TENANT_ID`] (`"__root__"`).
     ///
@@ -1336,6 +1355,29 @@ impl PostgresBackend {
         roles.sort_by_cached_key(|role| role.to_string().to_ascii_lowercase());
         roles.dedup();
         Ok(roles)
+    }
+
+    /// Returns the distinct non-root tenant IDs that a user has any role in.
+    ///
+    /// Used for implicit tenant resolution: when a request carries no `X-Tenant-ID`
+    /// header, the server can auto-select the tenant when the result is exactly one.
+    /// When the result is empty or more than one, the caller must require an explicit
+    /// `X-Tenant-ID`.
+    pub async fn get_user_tenant_ids(&self, user_id: &str) -> Result<Vec<String>, PostgresError> {
+        use sqlx::Row;
+        let rows = sqlx::query(
+            "SELECT DISTINCT tenant_id FROM user_roles
+             WHERE user_id = $1 AND tenant_id != $2
+             ORDER BY tenant_id",
+        )
+        .bind(user_id)
+        .bind(INSTANCE_SCOPE_TENANT_ID)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| r.get::<String, _>("tenant_id"))
+            .collect())
     }
 
     pub async fn log_event(
@@ -1865,7 +1907,7 @@ impl StorageBackend for PostgresBackend {
     }
 
     async fn update_unit(&self, unit: &OrganizationalUnit) -> Result<(), Self::Error> {
-        let user_id = mk_core::types::UserId::new("system".to_string()).ok_or_else(|| {
+        let user_id = mk_core::types::UserId::new(SYSTEM_USER_ID.to_string()).ok_or_else(|| {
             PostgresError::Database(sqlx::Error::Decode("Invalid system user_id".into()))
         })?;
 
@@ -1887,7 +1929,7 @@ impl StorageBackend for PostgresBackend {
             ))
         })?;
 
-        let user_id = mk_core::types::UserId::new("system".to_string()).ok_or_else(|| {
+        let user_id = mk_core::types::UserId::new(SYSTEM_USER_ID.to_string()).ok_or_else(|| {
             PostgresError::Database(sqlx::Error::Decode("Invalid system user_id".into()))
         })?;
 

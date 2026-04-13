@@ -2,6 +2,7 @@ use crate::config::{IdpProvider, IdpSyncConfig};
 use crate::error::IdpSyncResult;
 use crate::okta::{IdpClient, IdpGroup, IdpUser, UserStatus};
 use chrono::{DateTime, Utc};
+use mk_core::types::PROVIDER_GITHUB;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
@@ -252,7 +253,7 @@ impl IdpSyncService {
         match &self.config.provider {
             IdpProvider::Okta(_) => "okta".to_string(),
             IdpProvider::AzureAd(_) => "azure_ad".to_string(),
-            IdpProvider::GitHub(_) => "github".to_string(),
+            IdpProvider::GitHub(_) => PROVIDER_GITHUB.to_string(),
         }
     }
 

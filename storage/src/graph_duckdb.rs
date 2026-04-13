@@ -17,6 +17,11 @@ const SCHEMA_VERSION: i32 = 1;
 const MAX_PATH_DEPTH: usize = 5;
 
 const DEFAULT_QUERY_TIMEOUT_SECS: i32 = 30;
+const DEFAULT_COLD_START_BUDGET_MS: u64 = 3000;
+const DEFAULT_CONTENTION_WAIT_CRITICAL_MS: u64 = 3000;
+const DEFAULT_SNAPSHOT_INTERVAL_SECS: u64 = 3600;
+const DEFAULT_GRAPH_RETENTION_MAX_AGE_SECS: u64 = 86400 * 7;
+const DEFAULT_ICEBERG_CATALOG_NAME: &str = "aeterna_iceberg";
 
 #[derive(Error, Debug)]
 pub enum GraphError {
@@ -88,7 +93,7 @@ impl Default for ColdStartConfig {
     fn default() -> Self {
         Self {
             lazy_loading_enabled: true,
-            budget_ms: 3000,
+            budget_ms: DEFAULT_COLD_START_BUDGET_MS,
             access_tracking_enabled: true,
             prewarm_partition_count: 5,
             warm_pool_enabled: false,
@@ -116,7 +121,7 @@ impl Default for IcebergConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            catalog_name: "aeterna_iceberg".to_string(),
+            catalog_name: DEFAULT_ICEBERG_CATALOG_NAME.to_string(),
             catalog_type: "rest".to_string(),
             s3_endpoint: None,
             s3_access_key_id: None,
@@ -279,7 +284,7 @@ impl Default for ContentionAlertConfig {
             queue_depth_warn: 5,
             queue_depth_critical: 10,
             wait_time_warn_ms: 1000,
-            wait_time_critical_ms: 3000,
+            wait_time_critical_ms: DEFAULT_CONTENTION_WAIT_CRITICAL_MS,
             timeout_rate_warn_percent: 5.0,
             timeout_rate_critical_percent: 15.0,
         }
@@ -323,9 +328,9 @@ pub struct BackupConfig {
 impl Default for BackupConfig {
     fn default() -> Self {
         Self {
-            snapshot_interval_secs: 3600,
+            snapshot_interval_secs: DEFAULT_SNAPSHOT_INTERVAL_SECS,
             retention_count: 24,
-            retention_max_age_secs: 86400 * 7,
+            retention_max_age_secs: DEFAULT_GRAPH_RETENTION_MAX_AGE_SECS,
             auto_backup_enabled: false,
             backup_prefix: "backups".to_string(),
         }

@@ -86,6 +86,7 @@ pub enum QuotaCheckResult {
 
 /// Soft-limit threshold expressed as a fraction of the hard limit (80%).
 const SOFT_LIMIT_THRESHOLD: f64 = 0.8;
+const DEFAULT_QUOTA_CACHE_TTL_SECS: u64 = 300;
 
 /// Enforces per-tenant storage quotas with a time-based cache.
 pub struct QuotaEnforcer {
@@ -104,7 +105,7 @@ impl QuotaEnforcer {
     pub fn new() -> Self {
         Self {
             cache: DashMap::new(),
-            cache_ttl: Duration::from_secs(300),
+            cache_ttl: Duration::from_secs(DEFAULT_QUOTA_CACHE_TTL_SECS),
         }
     }
 
@@ -222,12 +223,11 @@ impl QuotaEnforcer {
         pool: &PgPool,
         tenant_id: &str,
     ) -> Result<TenantStorageUsage, QuotaError> {
-        let memory_count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM memory_entries WHERE tenant_id = $1",
-        )
-        .bind(tenant_id)
-        .fetch_one(pool)
-        .await?;
+        let memory_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM memory_entries WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .fetch_one(pool)
+                .await?;
 
         // Knowledge entries may not exist yet; default to 0 on table-missing errors.
         let knowledge_count: i64 = match sqlx::query_as::<_, (i64,)>(

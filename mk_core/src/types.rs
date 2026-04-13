@@ -9,6 +9,10 @@ use validator::Validate;
 /// prevents ambiguity and ensures platform-level grants are never confused with
 /// tenant-scoped grants.
 pub const INSTANCE_SCOPE_TENANT_ID: &str = "__root__";
+pub const SYSTEM_USER_ID: &str = "system";
+pub const DEFAULT_TENANT_SLUG: &str = "default";
+pub const PROVIDER_GITHUB: &str = "github";
+pub const PROVIDER_KUBERNETES: &str = "kubernetes";
 
 #[derive(
     Debug,

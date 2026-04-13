@@ -19,7 +19,7 @@ use tracing::{error, info};
 
 use crate::graph_duckdb::DuckDbGraphStore;
 use crate::postgres::PostgresBackend;
-use mk_core::types::TenantContext;
+use mk_core::types::{SYSTEM_USER_ID, TenantContext};
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -259,10 +259,7 @@ impl CascadeDeleter {
         report.errors.extend(mem_report.errors);
 
         // 2. Delete knowledge items created by user -------------------------
-        match self
-            .pg_delete_user_knowledge(user_id, tenant_id)
-            .await
-        {
+        match self.pg_delete_user_knowledge(user_id, tenant_id).await {
             Ok(count) => report.postgres_deleted += count,
             Err(e) => report.record_error(format!("PG knowledge delete: {e}")),
         }
@@ -383,9 +380,7 @@ impl CascadeDeleter {
         let memory_ids = match self.pg_fetch_all_tenant_memory_ids(tenant_id).await {
             Ok(ids) => ids,
             Err(e) => {
-                report
-                    .errors
-                    .push(format!("Fetch tenant memory ids: {e}"));
+                report.errors.push(format!("Fetch tenant memory ids: {e}"));
                 Vec::new()
             }
         };
@@ -417,15 +412,10 @@ impl CascadeDeleter {
         }
 
         // 5. Unit policies --------------------------------------------------
-        match self
-            .pg_delete_all_tenant_unit_policies(tenant_id)
-            .await
-        {
+        match self.pg_delete_all_tenant_unit_policies(tenant_id).await {
             Ok(count) => report.unit_policies_deleted = count,
             Err(e) => {
-                report
-                    .errors
-                    .push(format!("PG tenant unit_policies: {e}"));
+                report.errors.push(format!("PG tenant unit_policies: {e}"));
             }
         }
 
@@ -453,13 +443,12 @@ impl CascadeDeleter {
         if ids.is_empty() {
             return Ok(0);
         }
-        let result = sqlx::query(
-            "DELETE FROM memory_entries WHERE id = ANY($1) AND tenant_id = $2",
-        )
-        .bind(ids)
-        .bind(tenant_id)
-        .execute(&self.pool)
-        .await?;
+        let result =
+            sqlx::query("DELETE FROM memory_entries WHERE id = ANY($1) AND tenant_id = $2")
+                .bind(ids)
+                .bind(tenant_id)
+                .execute(&self.pool)
+                .await?;
         Ok(result.rows_affected())
     }
 
@@ -495,13 +484,12 @@ impl CascadeDeleter {
         if ids.is_empty() {
             return Ok(0);
         }
-        let result = sqlx::query(
-            "DELETE FROM knowledge_items WHERE id = ANY($1) AND tenant_id = $2",
-        )
-        .bind(ids)
-        .bind(tenant_id)
-        .execute(&self.pool)
-        .await?;
+        let result =
+            sqlx::query("DELETE FROM knowledge_items WHERE id = ANY($1) AND tenant_id = $2")
+                .bind(ids)
+                .bind(tenant_id)
+                .execute(&self.pool)
+                .await?;
         Ok(result.rows_affected())
     }
 
@@ -510,20 +498,16 @@ impl CascadeDeleter {
         user_id: &str,
         tenant_id: &str,
     ) -> Result<u64, sqlx::Error> {
-        let result = sqlx::query(
-            "DELETE FROM knowledge_items WHERE tenant_id = $1 AND created_by = $2",
-        )
-        .bind(tenant_id)
-        .bind(user_id)
-        .execute(&self.pool)
-        .await?;
+        let result =
+            sqlx::query("DELETE FROM knowledge_items WHERE tenant_id = $1 AND created_by = $2")
+                .bind(tenant_id)
+                .bind(user_id)
+                .execute(&self.pool)
+                .await?;
         Ok(result.rows_affected())
     }
 
-    async fn pg_delete_all_tenant_knowledge(
-        &self,
-        tenant_id: &str,
-    ) -> Result<u64, sqlx::Error> {
+    async fn pg_delete_all_tenant_knowledge(&self, tenant_id: &str) -> Result<u64, sqlx::Error> {
         let result = sqlx::query("DELETE FROM knowledge_items WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&self.pool)
@@ -536,12 +520,11 @@ impl CascadeDeleter {
         user_id: &str,
         tenant_id: &str,
     ) -> Result<u64, sqlx::Error> {
-        let result =
-            sqlx::query("DELETE FROM user_roles WHERE user_id = $1 AND tenant_id = $2")
-                .bind(user_id)
-                .bind(tenant_id)
-                .execute(&self.pool)
-                .await?;
+        let result = sqlx::query("DELETE FROM user_roles WHERE user_id = $1 AND tenant_id = $2")
+            .bind(user_id)
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
         Ok(result.rows_affected())
     }
 
@@ -550,12 +533,11 @@ impl CascadeDeleter {
         unit_id: &str,
         tenant_id: &str,
     ) -> Result<u64, sqlx::Error> {
-        let result =
-            sqlx::query("DELETE FROM user_roles WHERE unit_id = $1 AND tenant_id = $2")
-                .bind(unit_id)
-                .bind(tenant_id)
-                .execute(&self.pool)
-                .await?;
+        let result = sqlx::query("DELETE FROM user_roles WHERE unit_id = $1 AND tenant_id = $2")
+            .bind(unit_id)
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
         Ok(result.rows_affected())
     }
 
@@ -567,42 +549,30 @@ impl CascadeDeleter {
         Ok(result.rows_affected())
     }
 
-    async fn pg_delete_org_unit(
-        &self,
-        unit_id: &str,
-        tenant_id: &str,
-    ) -> Result<u64, sqlx::Error> {
-        let result = sqlx::query(
-            "DELETE FROM organizational_units WHERE id = $1 AND tenant_id = $2",
-        )
-        .bind(unit_id)
-        .bind(tenant_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(result.rows_affected())
-    }
-
-    async fn pg_delete_all_tenant_org_units(
-        &self,
-        tenant_id: &str,
-    ) -> Result<u64, sqlx::Error> {
-        // Delete children first via a recursive approach: delete in order
-        // where no other unit references them as parent.
-        // Simpler: delete unit_policies first, then user_roles referencing
-        // units, then units.  Here we just delete the units; the caller
-        // (tenant_purge) handles roles + policies separately.
+    async fn pg_delete_org_unit(&self, unit_id: &str, tenant_id: &str) -> Result<u64, sqlx::Error> {
         let result =
-            sqlx::query("DELETE FROM organizational_units WHERE tenant_id = $1")
+            sqlx::query("DELETE FROM organizational_units WHERE id = $1 AND tenant_id = $2")
+                .bind(unit_id)
                 .bind(tenant_id)
                 .execute(&self.pool)
                 .await?;
         Ok(result.rows_affected())
     }
 
-    async fn pg_delete_all_tenant_user_roles(
-        &self,
-        tenant_id: &str,
-    ) -> Result<u64, sqlx::Error> {
+    async fn pg_delete_all_tenant_org_units(&self, tenant_id: &str) -> Result<u64, sqlx::Error> {
+        // Delete children first via a recursive approach: delete in order
+        // where no other unit references them as parent.
+        // Simpler: delete unit_policies first, then user_roles referencing
+        // units, then units.  Here we just delete the units; the caller
+        // (tenant_purge) handles roles + policies separately.
+        let result = sqlx::query("DELETE FROM organizational_units WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected())
+    }
+
+    async fn pg_delete_all_tenant_user_roles(&self, tenant_id: &str) -> Result<u64, sqlx::Error> {
         let result = sqlx::query("DELETE FROM user_roles WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&self.pool)
@@ -811,7 +781,7 @@ impl CascadeDeleter {
         use std::str::FromStr;
         let tid = mk_core::types::TenantId::from_str(tenant_id)
             .map_err(|e| format!("Invalid tenant_id: {e}"))?;
-        let uid = mk_core::types::UserId::from_str("system")
+        let uid = mk_core::types::UserId::from_str(SYSTEM_USER_ID)
             .map_err(|e| format!("Invalid system user_id: {e}"))?;
         Ok(TenantContext::new(tid, uid))
     }
@@ -874,8 +844,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&report).expect("serialize");
-        let deserialized: CascadeReport =
-            serde_json::from_str(&json).expect("deserialize");
+        let deserialized: CascadeReport = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(deserialized.postgres_deleted, 5);
         assert_eq!(deserialized.qdrant_deleted, 3);
         assert_eq!(deserialized.errors.len(), 1);
@@ -898,8 +867,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&report).expect("serialize");
-        let deserialized: TenantPurgeReport =
-            serde_json::from_str(&json).expect("deserialize");
+        let deserialized: TenantPurgeReport = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(deserialized.memories.postgres_deleted, 10);
         assert_eq!(deserialized.knowledge_items_deleted, 5);
     }
