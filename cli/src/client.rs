@@ -7,6 +7,7 @@
 //! 4. Provide a consistent error surface when auth is missing.
 
 use anyhow::{Context, Result, bail};
+use mk_core::types::PROVIDER_GITHUB;
 use reqwest::{Client, Response, header::ACCEPT};
 use serde::{Deserialize, Serialize};
 use std::future::Future;
@@ -14,6 +15,8 @@ use tokio::time::{Duration, Instant, sleep};
 
 use crate::credentials::{self, StoredCredential};
 use crate::profile::ResolvedConfig;
+
+const DEFAULT_GITHUB_OAUTH_BASE: &str = "https://github.com";
 
 // ---------------------------------------------------------------------------
 // Auth bootstrap/refresh request/response types
@@ -1236,7 +1239,7 @@ pub async fn bootstrap_github(
         server_url.trim_end_matches('/')
     );
     let body = BootstrapRequest {
-        provider: "github".to_string(),
+        provider: PROVIDER_GITHUB.to_string(),
         github_access_token: github_access_token.to_string(),
     };
     let client = Client::new();
@@ -1258,18 +1261,30 @@ pub async fn bootstrap_github(
         .context("Invalid response from auth bootstrap endpoint")
 }
 
-fn github_device_code_url() -> &'static str {
-    "https://github.com/login/device/code"
+fn github_device_code_url(github_oauth_base_url: Option<&str>) -> String {
+    let base = github_oauth_base_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_GITHUB_OAUTH_BASE);
+    format!("{base}/login/device/code")
 }
 
-fn github_device_access_token_url() -> &'static str {
-    "https://github.com/login/oauth/access_token"
+fn github_device_access_token_url(github_oauth_base_url: Option<&str>) -> String {
+    let base = github_oauth_base_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_GITHUB_OAUTH_BASE);
+    format!("{base}/login/oauth/access_token")
 }
 
-pub async fn request_device_code(client_id: &str, scope: &str) -> Result<DeviceCodeResponse> {
+pub async fn request_device_code(
+    client_id: &str,
+    scope: &str,
+    github_oauth_base_url: Option<&str>,
+) -> Result<DeviceCodeResponse> {
     let client = Client::new();
     let resp = client
-        .post(github_device_code_url())
+        .post(github_device_code_url(github_oauth_base_url))
         .header(ACCEPT, "application/json")
         .form(&[("client_id", client_id), ("scope", scope)])
         .send()
@@ -1292,6 +1307,7 @@ pub async fn poll_device_authorization(
     device_code: &str,
     interval: u64,
     expires_in: u64,
+    github_oauth_base_url: Option<&str>,
 ) -> Result<String> {
     let client = Client::new();
     let started = Instant::now();
@@ -1305,7 +1321,7 @@ pub async fn poll_device_authorization(
         sleep(Duration::from_secs(poll_interval_secs)).await;
 
         let resp = client
-            .post(github_device_access_token_url())
+            .post(github_device_access_token_url(github_oauth_base_url))
             .header(ACCEPT, "application/json")
             .form(&[
                 ("client_id", client_id),
@@ -1640,11 +1656,11 @@ mod tests {
     #[test]
     fn test_github_device_flow_endpoints() {
         assert_eq!(
-            github_device_code_url(),
+            github_device_code_url(None),
             "https://github.com/login/device/code"
         );
         assert_eq!(
-            github_device_access_token_url(),
+            github_device_access_token_url(None),
             "https://github.com/login/oauth/access_token"
         );
     }

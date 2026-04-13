@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aeterna::server::plugin_auth::{PluginTokenClaims, RefreshTokenStore, RefreshTokenStoreBackend};
+use aeterna::server::plugin_auth::{
+    PluginTokenClaims, RefreshTokenStore, RefreshTokenStoreBackend,
+};
 use aeterna::server::{AppState, PluginAuthState, health, metrics, router};
 use agent_a2a::config::TrustedIdentityConfig;
 use async_trait::async_trait;
@@ -336,6 +338,7 @@ async fn test_app_state_with_plugin_auth(
                 postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
             }),
+            k8s_auth_config: config::KubernetesAuthConfig::default(),
             idp_config: None,
             idp_sync_service: None,
             idp_client: None,
@@ -387,6 +390,7 @@ fn mint_test_plugin_bearer(secret: &str, tenant_id: &str, github_login: &str) ->
         &Header::new(jsonwebtoken::Algorithm::HS256),
         &PluginTokenClaims {
             sub: github_login.to_string(),
+            idp_provider: "github".to_string(),
             tenant_id: tenant_id.to_string(),
             iss: "aeterna-test".to_string(),
             aud: vec![PluginTokenClaims::AUDIENCE.to_string()],

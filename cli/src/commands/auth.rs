@@ -127,17 +127,23 @@ async fn run_login(args: LoginArgs) -> anyhow::Result<()> {
                     )
                 })?;
 
-            let device = client::request_device_code(&github_client_id, "read:user,user:email")
-                .await
-                .map_err(|e| {
-                    let err = ux_error::UxError::new("GitHub device flow setup failed")
-                        .why(e.to_string())
-                        .fix("Verify the GitHub OAuth client ID is correct")
-                        .fix("Check network access to github.com")
-                        .suggest("aeterna auth login");
-                    err.display();
-                    anyhow::anyhow!("Device flow setup failed: {e}")
-                })?;
+            let github_oauth_base_url = std::env::var("AETERNA_GITHUB_OAUTH_BASE_URL").ok();
+
+            let device = client::request_device_code(
+                &github_client_id,
+                "read:user,user:email",
+                github_oauth_base_url.as_deref(),
+            )
+            .await
+            .map_err(|e| {
+                let err = ux_error::UxError::new("GitHub device flow setup failed")
+                    .why(e.to_string())
+                    .fix("Verify the GitHub OAuth client ID is correct")
+                    .fix("Check network access to github.com")
+                    .suggest("aeterna auth login");
+                err.display();
+                anyhow::anyhow!("Device flow setup failed: {e}")
+            })?;
 
             if !args.json {
                 output::info(&format!(
@@ -162,6 +168,7 @@ async fn run_login(args: LoginArgs) -> anyhow::Result<()> {
                 &device.device_code,
                 device.interval,
                 device.expires_in,
+                github_oauth_base_url.as_deref(),
             )
             .await;
 

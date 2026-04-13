@@ -1,4 +1,5 @@
 use clap::{Args, Subcommand, ValueEnum};
+use mk_core::types::SYSTEM_USER_ID;
 use serde_json::json;
 
 use crate::output;
@@ -1180,7 +1181,7 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
                             let actor = entry["actor_email"]
                                 .as_str()
                                 .or_else(|| entry["actor"].as_str())
-                                .unwrap_or("system");
+                                .unwrap_or(SYSTEM_USER_ID);
                             let target_type = entry["target_type"].as_str().unwrap_or("?");
                             let target_id = entry["target_id"].as_str().unwrap_or("?");
                             let details = entry["details"].to_string();

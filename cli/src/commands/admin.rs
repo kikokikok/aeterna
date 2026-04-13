@@ -1,8 +1,9 @@
 use aeterna_backup::archive::{ArchiveReader, ArchiveWriter};
-use aeterna_backup::manifest::{BackupManifest, ExportScope, CURRENT_SCHEMA_VERSION};
+use aeterna_backup::manifest::{BackupManifest, CURRENT_SCHEMA_VERSION, ExportScope};
 use aeterna_backup::validate::validate_archive;
 use clap::{Args, Subcommand, ValueEnum};
 use context::ContextResolver;
+use mk_core::types::PROVIDER_GITHUB;
 use serde::Serialize;
 use serde_json::json;
 use std::path::PathBuf;
@@ -1168,9 +1169,7 @@ async fn run_export(args: AdminExportArgs) -> anyhow::Result<()> {
             println!();
             output::hint("No server connection (AETERNA_SERVER_URL not set).");
             output::hint("Created a valid archive with manifest only.");
-            output::hint(
-                "For a full data export, start the server and set AETERNA_SERVER_URL.",
-            );
+            output::hint("For a full data export, start the server and set AETERNA_SERVER_URL.");
         }
     }
 
@@ -1401,13 +1400,10 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
 
 async fn run_backup_validate(args: AdminBackupValidateArgs) -> anyhow::Result<()> {
     if !args.archive.exists() {
-        ux_error::UxError::new(format!(
-            "Archive not found: {}",
-            args.archive.display()
-        ))
-        .why("The specified archive file does not exist")
-        .fix("Check the file path is correct")
-        .display();
+        ux_error::UxError::new(format!("Archive not found: {}", args.archive.display()))
+            .why("The specified archive file does not exist")
+            .fix("Check the file path is correct")
+            .display();
         std::process::exit(1);
     }
 
@@ -1732,7 +1728,7 @@ fn colored_status(icon: &str, color: &str) -> String {
 
 async fn run_sync(args: AdminSyncArgs) -> anyhow::Result<()> {
     match args.provider.as_str() {
-        "github" => run_sync_github(args).await,
+        p if p == PROVIDER_GITHUB => run_sync_github(args).await,
         provider => {
             if args.json {
                 println!(
@@ -1792,7 +1788,7 @@ async fn run_sync_github(args: AdminSyncArgs) -> anyhow::Result<()> {
                 "{}",
                 serde_json::to_string_pretty(&json!({
                     "dry_run": true,
-                    "provider": "github",
+                    "provider": PROVIDER_GITHUB,
                     "org_name": org_name,
                     "app_id": app_id,
                     "installation_id": installation_id,
@@ -1825,7 +1821,8 @@ async fn run_sync_github(args: AdminSyncArgs) -> anyhow::Result<()> {
 
     let pool = sqlx::PgPool::connect(&database_url).await?;
 
-    let tenant_str = std::env::var("AETERNA_TENANT_ID").unwrap_or_else(|_| "default".to_string());
+    let tenant_str =
+        std::env::var(crate::env_vars::AETERNA_TENANT_ID).unwrap_or_else(|_| "default".to_string());
     let tenant_id: uuid::Uuid = {
         let row: Option<(uuid::Uuid,)> =
             sqlx::query_as("SELECT id FROM tenants WHERE name = $1 OR id::text = $1 LIMIT 1")
