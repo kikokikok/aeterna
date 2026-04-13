@@ -48,6 +48,12 @@ data:
   AETERNA_AUTH_BACKEND: "cedar"
   AETERNA_CEDAR_AGENT_HOST: {{ printf "%s-cedar-agent" (include "aeterna.fullname" .) | quote }}
   AETERNA_CEDAR_AGENT_PORT: "8180"
+  {{- if .Values.opal.cedar.policyText }}
+  AETERNA_CEDAR_POLICY_TEXT: {{ .Values.opal.cedar.policyText | quote }}
+  {{- end }}
+  {{- if .Values.opal.cedar.schemaText }}
+  AETERNA_CEDAR_SCHEMA_TEXT: {{ .Values.opal.cedar.schemaText | quote }}
+  {{- end }}
   {{- end }}
   {{- if .Values.pluginAuth.enabled }}
   AETERNA_PLUGIN_AUTH_ENABLED: "true"
