@@ -215,5 +215,8 @@ jobs:
 
       - name: Template verification
         run: |
-          helm template test-release oci://${{ env.REGISTRY_PATH }}/aeterna --version ${{ steps.version.outputs.version }} > /dev/null
+          helm template test-release oci://${{ env.REGISTRY_PATH }}/aeterna --version ${{ steps.version.outputs.version }} \
+            --set postgresql.host=postgres \
+            --set redis.host=redis \
+            --set vectorStore.host=qdrant > /dev/null
           echo "Template verification passed"
