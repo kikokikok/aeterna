@@ -39,14 +39,14 @@ spec:
                 - ALL
           ports:
             - name: opal-client
-              containerPort: 7000
+              containerPort: {{ .Values.opal.cedarAgent.httpPort }}
               protocol: TCP
             - name: cedar
-              containerPort: 8180
+              containerPort: {{ .Values.opal.cedarAgent.oidcPort }}
               protocol: TCP
           env:
             - name: OPAL_SERVER_URL
-              value: "http://{{ include "aeterna.fullname" . }}-opal-server:7002"
+              value: "http://{{ include "aeterna.fullname" . }}-opal-server:{{ .Values.opal.server.httpPort }}"
             - name: OPAL_CLIENT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -55,7 +55,7 @@ spec:
             - name: OPAL_INLINE_CEDAR_ENABLED
               value: "true"
             - name: OPAL_INLINE_CEDAR_CONFIG
-              value: '{"addr": "0.0.0.0", "port": 8180}'
+              value: '{"addr": "0.0.0.0", "port": {{ .Values.opal.cedarAgent.oidcPort }}}'
             - name: OPAL_LOG_LEVEL
               value: "INFO"
           livenessProbe:
@@ -97,11 +97,11 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 7000
+    - port: {{ .Values.opal.cedarAgent.httpPort }}
       targetPort: opal-client
       protocol: TCP
       name: opal-client
-    - port: 8180
+    - port: {{ .Values.opal.cedarAgent.oidcPort }}
       targetPort: cedar
       protocol: TCP
       name: cedar

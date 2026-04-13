@@ -39,11 +39,11 @@ spec:
                 - ALL
           ports:
             - name: http
-              containerPort: 7000
+              containerPort: {{ .Values.opal.fetcher.httpPort }}
               protocol: TCP
           env:
             - name: OPAL_SERVER_URL
-              value: "http://{{ include "aeterna.fullname" . }}-opal-server:7002"
+              value: "http://{{ include "aeterna.fullname" . }}-opal-server:{{ .Values.opal.server.httpPort }}"
             - name: OPAL_CLIENT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -54,7 +54,7 @@ spec:
             - name: OPAL_INLINE_CEDAR_ENABLED
               value: "false"
             - name: OPAL_POLICY_STORE_URL
-              value: "http://{{ include "aeterna.fullname" . }}-cedar-agent:8180"
+              value: "http://{{ include "aeterna.fullname" . }}-cedar-agent:{{ .Values.opal.cedarAgent.oidcPort }}"
             - name: OPAL_POLICY_STORE_TYPE
               value: "CEDAR"
             - name: OPAL_DATA_UPDATER_ENABLED
@@ -120,7 +120,7 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 7000
+    - port: {{ .Values.opal.fetcher.httpPort }}
       targetPort: http
       protocol: TCP
       name: http

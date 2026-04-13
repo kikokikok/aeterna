@@ -40,10 +40,10 @@ spec:
                 - ALL
           ports:
             - name: http
-              containerPort: 7002
+              containerPort: {{ .Values.opal.server.httpPort }}
               protocol: TCP
             - name: broadcast
-              containerPort: 7003
+              containerPort: {{ .Values.opal.server.broadcastPort }}
               protocol: TCP
           env:
             {{- if and (gt (int .Values.opal.server.replicaCount) 1) .Values.opal.server.redis.enabled }}
@@ -60,7 +60,7 @@ spec:
             {{- else }}
             ## Single-replica mode: broadcast via peer HTTP
             - name: OPAL_BROADCAST_URI
-              value: "http://{{ include "aeterna.fullname" . }}-opal-server:7003"
+              value: "http://{{ include "aeterna.fullname" . }}-opal-server:{{ .Values.opal.server.broadcastPort }}"
             {{- end }}
             - name: OPAL_BROADCAST_CONN_LOSS_BUGFIX_EXPERIMENT_ENABLED
               value: "false"
@@ -156,11 +156,11 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 7002
+    - port: {{ .Values.opal.server.httpPort }}
       targetPort: http
       protocol: TCP
       name: http
-    - port: 7003
+    - port: {{ .Values.opal.server.broadcastPort }}
       targetPort: broadcast
       protocol: TCP
       name: broadcast

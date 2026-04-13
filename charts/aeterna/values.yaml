@@ -120,6 +120,8 @@ aeterna:
   ## @param aeterna.fullnameOverride Override full name
   fullnameOverride: ""
 
+  name: ""
+
   ## Service account configuration
   serviceAccount:
     ## @param aeterna.serviceAccount.create Create service account
@@ -343,6 +345,18 @@ githubOrgSync:
         cpu: 100m
         memory: 128Mi
 
+# Kubernetes Service Account authentication for machine identities (e.g. CronJobs).
+# When enabled, the server validates K8s SA bearer tokens via the TokenReview API.
+k8sAuth:
+  enabled: false
+  # Audience used in projected token and TokenReview request.
+  tokenReviewAudience: "aeterna"
+  # Name of the dedicated ServiceAccount for the sync CronJob.
+  syncServiceAccountName: "aeterna-sync"
+  # Subject of the SA to bootstrap as PlatformAdmin (set via AETERNA_ADMIN_BOOTSTRAP_K8S_SA_SUBJECT env or here).
+  # Format: "system:serviceaccount:<namespace>:<name>"
+  syncSaSubject: ""
+
 tenantConfigProvider:
   enabled: true
   seedTenants: []
@@ -438,6 +452,8 @@ opal:
   server:
     ## @param opal.server.replicaCount Number of OPAL Server replicas (>=2 for HA)
     replicaCount: 3
+    httpPort: 7002
+    broadcastPort: 7003
     ## @param opal.server.logLevel Log level for OPAL Server: DEBUG, INFO, WARNING, ERROR
     logLevel: INFO
     image:
@@ -471,6 +487,8 @@ opal:
   cedarAgent:
     ## @param opal.cedarAgent.enabled Enable Cedar Agent
     enabled: true
+    httpPort: 7000
+    oidcPort: 8180
     ## @param opal.cedarAgent.replicaCount Number of Cedar Agent replicas (runs as Deployment, namespace-scoped)
     replicaCount: 1
     image:
@@ -489,6 +507,7 @@ opal:
   fetcher:
     ## @param opal.fetcher.enabled Enable OPAL Fetcher
     enabled: true
+    httpPort: 7000
     image:
       repository: permitio/opal-client
       tag: "0.8.0"

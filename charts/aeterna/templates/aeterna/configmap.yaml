@@ -72,6 +72,10 @@ data:
   {{- if .Values.defaultTenantId }}
   AETERNA_DEFAULT_TENANT_ID: {{ .Values.defaultTenantId | quote }}
   {{- end }}
+  {{- if .Values.k8sAuth.enabled }}
+  AETERNA_K8S_AUTH_ENABLED: "true"
+  AETERNA_K8S_AUTH_TOKEN_REVIEW_AUDIENCE: {{ .Values.k8sAuth.tokenReviewAudience | default "aeterna" | quote }}
+  {{- end }}
   {{- if and (ne .Values.deploymentMode "local") .Values.central.url }}
   AETERNA_CENTRAL_URL: {{ .Values.central.url | quote }}
   AETERNA_CENTRAL_AUTH: {{ .Values.central.auth | quote }}
