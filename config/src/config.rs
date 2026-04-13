@@ -10,8 +10,13 @@
 //! - Include comprehensive M-CANONICAL-DOCS
 
 use crate::cca::CcaConfig;
+use mk_core::types::PROVIDER_GITHUB;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+fn default_allowed_providers() -> Vec<String> {
+    vec![PROVIDER_GITHUB.to_string()]
+}
 
 /// Main configuration structure for the Memory-Knowledge system.
 ///
@@ -78,6 +83,9 @@ pub struct Config {
 
     #[serde(default)]
     pub plugin_auth: PluginAuthConfig,
+
+    #[serde(default)]
+    pub k8s_auth: KubernetesAuthConfig,
 
     #[serde(default)]
     pub admin_bootstrap: AdminBootstrapConfig,
@@ -235,14 +243,20 @@ pub struct KnowledgeRepoConfig {
     pub webhook_secret: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
 pub struct PluginAuthConfig {
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default = "default_allowed_providers")]
+    pub allowed_providers: Vec<String>,
     #[serde(default)]
     pub github_client_id: Option<String>,
     #[serde(default)]
     pub github_client_secret: Option<String>,
+    #[serde(default)]
+    pub github_api_base_url: Option<String>,
+    #[serde(default)]
+    pub github_oauth_base_url: Option<String>,
     #[serde(default)]
     pub github_app_id: Option<u64>,
     #[serde(default)]
@@ -270,6 +284,62 @@ pub struct PluginAuthConfig {
     pub default_tenant_id: Option<String>,
 }
 
+impl Default for PluginAuthConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            allowed_providers: default_allowed_providers(),
+            github_client_id: None,
+            github_client_secret: None,
+            github_api_base_url: None,
+            github_oauth_base_url: None,
+            github_app_id: None,
+            github_app_name: None,
+            github_app_pem: None,
+            redirect_base_url: None,
+            token_issuer: None,
+            jwt_secret: None,
+            access_token_ttl_seconds: None,
+            refresh_token_ttl_seconds: None,
+            default_tenant_id: None,
+        }
+    }
+}
+
+/// Configuration for Kubernetes Service Account token authentication.
+///
+/// When `enabled` is true the server validates `Authorization: Bearer <token>`
+/// requests via the Kubernetes TokenReview API before looking up the identity
+/// in the `users` table.
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default, PartialEq)]
+pub struct KubernetesAuthConfig {
+    /// Enable K8s SA token validation.
+    #[serde(default)]
+    pub enabled: bool,
+    /// URL of the Kubernetes API server (e.g. "https://kubernetes.default.svc").
+    /// Defaults to in-cluster API server when absent.
+    #[serde(default)]
+    pub api_server_url: Option<String>,
+    /// Audience expected in the projected token (e.g. "aeterna").
+    /// Passed to the TokenReview `spec.audiences` field.
+    #[serde(default)]
+    pub token_review_audience: Option<String>,
+    /// Path to the service account token file used to authenticate the
+    /// TokenReview request itself (in-cluster: `/var/run/secrets/kubernetes.io/serviceaccount/token`).
+    #[serde(default)]
+    pub sa_token_path: Option<String>,
+    /// Path to the CA bundle for TLS verification of the K8s API server.
+    /// Defaults to in-cluster CA bundle when absent.
+    #[serde(default)]
+    pub ca_bundle_path: Option<String>,
+    #[serde(default = "default_k8s_namespace")]
+    pub namespace: Option<String>,
+}
+
+fn default_k8s_namespace() -> Option<String> {
+    None
+}
+
 /// Configuration for the one-time PlatformAdmin bootstrap seeding.
 ///
 /// When `email` is set, the bootstrap routine creates (or updates) a
@@ -290,10 +360,37 @@ pub struct AdminBootstrapConfig {
     /// When `None` the email is used as subject.
     #[serde(default)]
     pub provider_subject: Option<String>,
+
+    #[serde(default = "default_bootstrap_company_slug")]
+    pub company_slug: String,
+
+    #[serde(default = "default_bootstrap_org_slug")]
+    pub org_slug: String,
+
+    #[serde(default = "default_bootstrap_team_slug")]
+    pub team_slug: String,
+
+    /// Kubernetes service account subject to bootstrap as PlatformAdmin.
+    /// Format: "system:serviceaccount:<namespace>:<name>"
+    /// When set, a user row with idp_provider="kubernetes" is seeded.
+    #[serde(default)]
+    pub k8s_sa_subject: Option<String>,
 }
 
 fn default_admin_bootstrap_provider() -> String {
-    "github".to_string()
+    PROVIDER_GITHUB.to_string()
+}
+
+fn default_bootstrap_company_slug() -> String {
+    "default".to_string()
+}
+
+fn default_bootstrap_org_slug() -> String {
+    "platform".to_string()
+}
+
+fn default_bootstrap_team_slug() -> String {
+    "admins".to_string()
 }
 
 fn default_branch() -> String {
@@ -399,19 +496,19 @@ pub struct PostgresConfig {
     pub timeout_seconds: u64,
 }
 
-fn default_postgres_host() -> String {
+pub(crate) fn default_postgres_host() -> String {
     "localhost".to_string()
 }
 
-fn default_postgres_port() -> u16 {
+pub(crate) fn default_postgres_port() -> u16 {
     5432
 }
 
-fn default_postgres_database() -> String {
+pub(crate) fn default_postgres_database() -> String {
     "memory_knowledge".to_string()
 }
 
-fn default_postgres_username() -> String {
+pub(crate) fn default_postgres_username() -> String {
     "postgres".to_string()
 }
 
@@ -419,11 +516,11 @@ fn default_postgres_password() -> String {
     "".to_string()
 }
 
-fn default_postgres_pool_size() -> u32 {
+pub(crate) fn default_postgres_pool_size() -> u32 {
     10
 }
 
-fn default_postgres_timeout() -> u64 {
+pub(crate) fn default_postgres_timeout() -> u64 {
     30
 }
 
@@ -476,19 +573,19 @@ pub struct QdrantConfig {
     pub timeout_seconds: u64,
 }
 
-fn default_qdrant_host() -> String {
+pub(crate) fn default_qdrant_host() -> String {
     "localhost".to_string()
 }
 
-fn default_qdrant_port() -> u16 {
+pub(crate) fn default_qdrant_port() -> u16 {
     6333
 }
 
-fn default_qdrant_collection() -> String {
+pub(crate) fn default_qdrant_collection() -> String {
     "memory_embeddings".to_string()
 }
 
-fn default_qdrant_timeout() -> u64 {
+pub(crate) fn default_qdrant_timeout() -> u64 {
     30
 }
 
@@ -544,23 +641,23 @@ pub struct RedisConfig {
     pub timeout_seconds: u64,
 }
 
-fn default_redis_host() -> String {
+pub(crate) fn default_redis_host() -> String {
     "localhost".to_string()
 }
 
-fn default_redis_port() -> u16 {
+pub(crate) fn default_redis_port() -> u16 {
     6379
 }
 
-fn default_redis_db() -> u8 {
+pub(crate) fn default_redis_db() -> u8 {
     0
 }
 
-fn default_redis_pool_size() -> u32 {
+pub(crate) fn default_redis_pool_size() -> u32 {
     10
 }
 
-fn default_redis_timeout() -> u64 {
+pub(crate) fn default_redis_timeout() -> u64 {
     30
 }
 
@@ -751,11 +848,11 @@ fn default_sync_enabled() -> bool {
     true
 }
 
-fn default_sync_interval() -> u64 {
+pub(crate) fn default_sync_interval() -> u64 {
     60
 }
 
-fn default_sync_batch_size() -> u32 {
+pub(crate) fn default_sync_batch_size() -> u32 {
     100
 }
 
@@ -763,7 +860,7 @@ fn default_sync_checkpoint() -> bool {
     true
 }
 
-fn default_sync_conflict_resolution() -> String {
+pub(crate) fn default_sync_conflict_resolution() -> String {
     "prefer_knowledge".to_string()
 }
 
@@ -831,15 +928,15 @@ fn default_tools_enabled() -> bool {
     true
 }
 
-fn default_tools_host() -> String {
+pub(crate) fn default_tools_host() -> String {
     "localhost".to_string()
 }
 
-fn default_tools_port() -> u16 {
+pub(crate) fn default_tools_port() -> u16 {
     8080
 }
 
-fn default_tools_rate_limit() -> u32 {
+pub(crate) fn default_tools_rate_limit() -> u32 {
     60
 }
 
@@ -896,11 +993,11 @@ fn default_observability_tracing_enabled() -> bool {
     true
 }
 
-fn default_observability_logging_level() -> String {
+pub(crate) fn default_observability_logging_level() -> String {
     "info".to_string()
 }
 
-fn default_observability_metrics_port() -> u16 {
+pub(crate) fn default_observability_metrics_port() -> u16 {
     9090
 }
 
