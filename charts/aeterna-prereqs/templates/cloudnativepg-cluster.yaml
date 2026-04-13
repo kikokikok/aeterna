@@ -42,10 +42,6 @@ spec:
   resources:
     {{- include "prereqs.resources.calculate" (dict "resources" .Values.postgresql.resources) | nindent 4 }}
 
-  securityContext:
-    seccompProfile:
-      type: RuntimeDefault
-
   {{- if .Values.postgresql.backup.enabled }}
   backup:
     barmanObjectStore:
