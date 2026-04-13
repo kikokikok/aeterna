@@ -5,8 +5,8 @@ description: >-
   stack, and supporting jobs. Requires external PostgreSQL, Redis-compatible
   cache, and vector store. Use the aeterna-prereqs chart for dev/test backends.
 type: application
-version: 0.6.0
-appVersion: "0.6.0"
+version: 0.7.0
+appVersion: "0.7.0"
 
 home: https://github.com/kikokikok/aeterna
 icon: https://raw.githubusercontent.com/kikokikok/aeterna/main/docs/logo.png
