@@ -587,69 +587,80 @@ impl PostgresBackend {
         .await?;
 
         sqlx::query(
-            "CREATE OR REPLACE FUNCTION get_effective_governance_config(
-                p_company_id UUID,
-                p_org_id UUID,
-                p_team_id UUID,
-                p_project_id UUID
-            ) RETURNS TABLE (
-                id UUID,
-                approval_mode TEXT,
-                min_approvers INTEGER,
-                timeout_hours INTEGER,
-                auto_approve_low_risk BOOLEAN,
-                escalation_enabled BOOLEAN,
-                escalation_timeout_hours INTEGER,
-                escalation_contact TEXT,
-                policy_settings JSONB,
-                knowledge_settings JSONB,
-                memory_settings JSONB
-            ) AS $$
+            "DO $$
             BEGIN
-                RETURN QUERY
-                SELECT 
-                    gc.id,
-                    gc.approval_mode,
-                    gc.min_approvers,
-                    gc.timeout_hours,
-                    gc.auto_approve_low_risk,
-                    gc.escalation_enabled,
-                    gc.escalation_timeout_hours,
-                    gc.escalation_contact,
-                    gc.policy_settings,
-                    gc.knowledge_settings,
-                    gc.memory_settings
-                FROM governance_configs gc
-                WHERE (gc.project_id = p_project_id AND p_project_id IS NOT NULL)
-                   OR (gc.team_id = p_team_id AND gc.project_id IS NULL AND p_team_id IS NOT NULL)
-                   OR (gc.org_id = p_org_id AND gc.team_id IS NULL AND gc.project_id IS NULL AND \
-             p_org_id IS NOT NULL)
-                   OR (gc.company_id = p_company_id AND gc.org_id IS NULL AND gc.team_id IS NULL \
-             AND gc.project_id IS NULL)
-                ORDER BY 
-                    CASE WHEN gc.project_id IS NOT NULL THEN 1
-                         WHEN gc.team_id IS NOT NULL THEN 2
-                         WHEN gc.org_id IS NOT NULL THEN 3
-                         ELSE 4 END
-                LIMIT 1;
-                
-                IF NOT FOUND THEN
-                    RETURN QUERY
-                    SELECT 
-                        gen_random_uuid(),
-                        'standard'::TEXT,
-                        1::INTEGER,
-                        72::INTEGER,
-                        false::BOOLEAN,
-                        false::BOOLEAN,
-                        NULL::INTEGER,
-                        NULL::TEXT,
-                        '{}'::JSONB,
-                        '{}'::JSONB,
-                        '{}'::JSONB;
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_proc p
+                    JOIN pg_namespace n ON n.oid = p.pronamespace
+                    WHERE n.nspname = 'public' AND p.proname = 'get_effective_governance_config'
+                ) THEN
+                    EXECUTE $func$
+                    CREATE OR REPLACE FUNCTION get_effective_governance_config(
+                        p_company_id UUID DEFAULT NULL,
+                        p_org_id UUID DEFAULT NULL,
+                        p_team_id UUID DEFAULT NULL,
+                        p_project_id UUID DEFAULT NULL
+                    ) RETURNS TABLE (
+                        config_id UUID,
+                        scope_level TEXT,
+                        approval_mode TEXT,
+                        min_approvers INT,
+                        timeout_hours INT,
+                        auto_approve_low_risk BOOLEAN,
+                        escalation_enabled BOOLEAN,
+                        escalation_timeout_hours INT,
+                        escalation_contact TEXT,
+                        policy_settings JSONB,
+                        knowledge_settings JSONB,
+                        memory_settings JSONB
+                    ) AS $inner$
+                    BEGIN
+                        IF p_project_id IS NOT NULL THEN
+                            RETURN QUERY
+                            SELECT gc.id, 'project'::TEXT, gc.approval_mode, gc.min_approvers, gc.timeout_hours,
+                                   gc.auto_approve_low_risk, gc.escalation_enabled, gc.escalation_timeout_hours,
+                                   gc.escalation_contact, gc.policy_settings, gc.knowledge_settings, gc.memory_settings
+                            FROM governance_configs gc
+                            WHERE gc.project_id = p_project_id LIMIT 1;
+                            IF FOUND THEN RETURN; END IF;
+                        END IF;
+                        IF p_team_id IS NOT NULL THEN
+                            RETURN QUERY
+                            SELECT gc.id, 'team'::TEXT, gc.approval_mode, gc.min_approvers, gc.timeout_hours,
+                                   gc.auto_approve_low_risk, gc.escalation_enabled, gc.escalation_timeout_hours,
+                                   gc.escalation_contact, gc.policy_settings, gc.knowledge_settings, gc.memory_settings
+                            FROM governance_configs gc
+                            WHERE gc.team_id = p_team_id AND gc.project_id IS NULL LIMIT 1;
+                            IF FOUND THEN RETURN; END IF;
+                        END IF;
+                        IF p_org_id IS NOT NULL THEN
+                            RETURN QUERY
+                            SELECT gc.id, 'org'::TEXT, gc.approval_mode, gc.min_approvers, gc.timeout_hours,
+                                   gc.auto_approve_low_risk, gc.escalation_enabled, gc.escalation_timeout_hours,
+                                   gc.escalation_contact, gc.policy_settings, gc.knowledge_settings, gc.memory_settings
+                            FROM governance_configs gc
+                            WHERE gc.org_id = p_org_id AND gc.team_id IS NULL AND gc.project_id IS NULL LIMIT 1;
+                            IF FOUND THEN RETURN; END IF;
+                        END IF;
+                        IF p_company_id IS NOT NULL THEN
+                            RETURN QUERY
+                            SELECT gc.id, 'company'::TEXT, gc.approval_mode, gc.min_approvers, gc.timeout_hours,
+                                   gc.auto_approve_low_risk, gc.escalation_enabled, gc.escalation_timeout_hours,
+                                   gc.escalation_contact, gc.policy_settings, gc.knowledge_settings, gc.memory_settings
+                            FROM governance_configs gc
+                            WHERE gc.company_id = p_company_id AND gc.org_id IS NULL AND gc.team_id IS NULL AND gc.project_id IS NULL LIMIT 1;
+                            IF FOUND THEN RETURN; END IF;
+                        END IF;
+                        RETURN QUERY SELECT
+                            gen_random_uuid(), 'default'::TEXT, 'standard'::TEXT, 1::INT, 72::INT,
+                            false::BOOLEAN, false::BOOLEAN, NULL::INT, NULL::TEXT,
+                            '{}'::JSONB, '{}'::JSONB, '{}'::JSONB;
+                    END;
+                    $inner$ LANGUAGE plpgsql
+                    $func$;
                 END IF;
             END;
-            $$ LANGUAGE plpgsql",
+            $$",
         )
         .execute(&self.pool)
         .await?;

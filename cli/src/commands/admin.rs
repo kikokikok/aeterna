@@ -696,6 +696,11 @@ fn embedded_migrations() -> Vec<EmbeddedMigration> {
             name: "019_day2_operations_tables",
             sql: include_str!("../../../storage/migrations/019_day2_operations_tables.sql"),
         },
+        EmbeddedMigration {
+            version: 20,
+            name: "020_fix_codesearch_views",
+            sql: include_str!("../../../storage/migrations/020_fix_codesearch_views.sql"),
+        },
     ]
 }
 
