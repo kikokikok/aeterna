@@ -16,12 +16,18 @@ use axum::routing::post;
 use axum::{Json, Router};
 use chrono::Utc;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use mk_core::types::{TenantContext, TenantId, UserId};
+use mk_core::types::{
+    DEFAULT_TENANT_SLUG, PROVIDER_GITHUB, RoleIdentifier, SYSTEM_USER_ID, TenantContext, TenantId,
+    UserId,
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use super::AppState;
+
+const DEFAULT_REFRESH_TOKEN_TTL_SECS: u64 = 30 * 24 * 3600;
+const DEFAULT_GITHUB_API_BASE: &str = "https://api.github.com";
 
 // ---------------------------------------------------------------------------
 // Refresh token store
@@ -182,12 +188,26 @@ impl RefreshTokenStoreBackend {
     ) {
         match self {
             Self::InMemory(s) => {
-                s.insert(token, tenant_id, github_login, github_id, email, ttl_seconds)
-                    .await;
+                s.insert(
+                    token,
+                    tenant_id,
+                    github_login,
+                    github_id,
+                    email,
+                    ttl_seconds,
+                )
+                .await;
             }
             Self::Redis(s) => {
-                s.insert(token, tenant_id, github_login, github_id, email, ttl_seconds)
-                    .await;
+                s.insert(
+                    token,
+                    tenant_id,
+                    github_login,
+                    github_id,
+                    email,
+                    ttl_seconds,
+                )
+                .await;
             }
         }
     }
@@ -242,6 +262,7 @@ pub struct PluginAuthLogoutRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PluginTokenClaims {
     pub sub: String,
+    pub idp_provider: String,
     pub tenant_id: String,
     pub iss: String,
     pub aud: Vec<String>,
@@ -265,6 +286,7 @@ impl PluginTokenClaims {
 /// Validated identity extracted from a plugin bearer token.
 #[derive(Debug, Clone)]
 pub struct PluginIdentity {
+    pub idp_provider: String,
     pub tenant_id: String,
     pub github_login: String,
     pub github_id: u64,
@@ -305,12 +327,12 @@ async fn bootstrap_handler(
         );
     }
 
-    if req.provider != "github" {
+    if !cfg.allowed_providers.contains(&req.provider) {
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({
                 "error": "unsupported_provider",
-                "message": "Only 'github' is supported as a plugin auth provider"
+                "message": "Provider not supported"
             })),
         );
     }
@@ -328,7 +350,7 @@ async fn bootstrap_handler(
         }
     };
 
-    let github_user = match fetch_github_user(&req.github_access_token).await {
+    let github_user = match fetch_github_user(&req.github_access_token, cfg).await {
         Ok(u) => u,
         Err(e) => {
             tracing::warn!("GitHub user fetch failed: {e}");
@@ -343,7 +365,9 @@ async fn bootstrap_handler(
     };
 
     let access_ttl = cfg.access_token_ttl_seconds.unwrap_or(3600);
-    let refresh_ttl = cfg.refresh_token_ttl_seconds.unwrap_or(30 * 24 * 3600);
+    let refresh_ttl = cfg
+        .refresh_token_ttl_seconds
+        .unwrap_or(DEFAULT_REFRESH_TOKEN_TTL_SECS);
     let issuer = cfg
         .token_issuer
         .clone()
@@ -453,7 +477,9 @@ async fn refresh_handler(
     };
 
     let access_ttl = cfg.access_token_ttl_seconds.unwrap_or(3600);
-    let refresh_ttl = cfg.refresh_token_ttl_seconds.unwrap_or(30 * 24 * 3600);
+    let refresh_ttl = cfg
+        .refresh_token_ttl_seconds
+        .unwrap_or(DEFAULT_REFRESH_TOKEN_TTL_SECS);
     let issuer = cfg
         .token_issuer
         .clone()
@@ -577,10 +603,36 @@ async fn admin_session_handler(
         }
     };
 
-    // Fetch user roles from the database (includes __root__ PlatformAdmin grants).
+    let user_id = match state
+        .postgres
+        .resolve_user_id_by_idp(&identity.idp_provider, &identity.github_login)
+        .await
+    {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "identity_not_provisioned",
+                    "message": "GitHub identity is not provisioned in this Aeterna instance"
+                })),
+            );
+        }
+        Err(e) => {
+            tracing::error!("Failed to resolve user identity: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "internal_error",
+                    "message": "Failed to resolve user identity"
+                })),
+            );
+        }
+    };
+
     let roles = match state
         .postgres
-        .get_user_roles_for_auth(&identity.github_login, &identity.tenant_id)
+        .get_user_roles_for_auth(&user_id, &identity.tenant_id)
         .await
     {
         Ok(r) => r,
@@ -598,12 +650,11 @@ async fn admin_session_handler(
 
     let is_platform_admin = roles
         .iter()
-        .any(|r| r.to_string().eq_ignore_ascii_case("PlatformAdmin"));
+        .any(|r| r == &RoleIdentifier::Known(mk_core::types::Role::PlatformAdmin));
     let is_tenant_admin = roles
         .iter()
-        .any(|r| r.to_string().eq_ignore_ascii_case("TenantAdmin"));
+        .any(|r| r == &RoleIdentifier::Known(mk_core::types::Role::TenantAdmin));
 
-    // Fetch tenant list: PlatformAdmin sees all tenants, others see only their own.
     let tenants = if is_platform_admin {
         match state.tenant_store.list_tenants(false).await {
             Ok(t) => t
@@ -620,20 +671,27 @@ async fn admin_session_handler(
             Err(_) => vec![],
         }
     } else {
-        // Non-PlatformAdmin: return only the tenant from their JWT.
-        vec![serde_json::json!({
-            "id": identity.tenant_id,
-            "slug": identity.tenant_id,
-            "name": identity.tenant_id,
-            "status": "Active",
-        })]
+        match state.postgres.get_user_tenant_ids(&user_id).await {
+            Ok(ids) => ids
+                .into_iter()
+                .map(|id| {
+                    serde_json::json!({
+                        "id": id,
+                        "slug": id,
+                        "name": id,
+                        "status": "Active",
+                    })
+                })
+                .collect::<Vec<_>>(),
+            Err(_) => vec![],
+        }
     };
 
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "user": {
-                "user_id": identity.github_login,
+                "user_id": user_id,
                 "github_login": identity.github_login,
                 "github_id": identity.github_id,
                 "email": identity.email,
@@ -668,6 +726,7 @@ pub fn validate_plugin_token(token: &str, jwt_secret: &str) -> Option<PluginIden
 
     match decode::<PluginTokenClaims>(token, &key, &validation) {
         Ok(data) if data.claims.kind == PluginTokenClaims::KIND => Some(PluginIdentity {
+            idp_provider: data.claims.idp_provider,
             tenant_id: data.claims.tenant_id,
             github_login: data.claims.sub,
             github_id: data.claims.github_id,
@@ -732,8 +791,8 @@ pub fn tenant_context_from_plugin_bearer_or_default(
         "No valid plugin bearer token found; using unauthenticated dev context (default/system).          This fallback must only occur in development or service-to-service mode."
     );
     TenantContext::new(
-        TenantId::new("default".to_string()).expect("static tenant id"),
-        UserId::new("system".to_string()).expect("static user id"),
+        TenantId::new(DEFAULT_TENANT_SLUG.to_string()).expect("static tenant id"),
+        UserId::new(SYSTEM_USER_ID.to_string()).expect("static user id"),
     )
 }
 
@@ -762,10 +821,17 @@ struct GitHubUserResponse {
     email: Option<String>,
 }
 
-async fn fetch_github_user(github_token: &str) -> anyhow::Result<GitHubUser> {
+async fn fetch_github_user(
+    github_token: &str,
+    cfg: &config::PluginAuthConfig,
+) -> anyhow::Result<GitHubUser> {
     let client = reqwest::Client::new();
+    let api_base = cfg
+        .github_api_base_url
+        .as_deref()
+        .unwrap_or(DEFAULT_GITHUB_API_BASE);
     let resp = client
-        .get("https://api.github.com/user")
+        .get(format!("{api_base}/user"))
         .header("Authorization", format!("Bearer {github_token}"))
         .header("User-Agent", "aeterna-plugin-auth/1.0")
         .header("Accept", "application/vnd.github+json")
@@ -776,7 +842,7 @@ async fn fetch_github_user(github_token: &str) -> anyhow::Result<GitHubUser> {
     let user: GitHubUserResponse = resp.json().await?;
     let email = match user.email {
         Some(email) => Some(email),
-        None => fetch_github_primary_email(&client, github_token).await?,
+        None => fetch_github_primary_email(&client, github_token, cfg).await?,
     };
 
     Ok(GitHubUser {
@@ -796,6 +862,7 @@ fn mint_access_token(
     let now = Utc::now().timestamp();
     let claims = PluginTokenClaims {
         sub: user.login.clone(),
+        idp_provider: PROVIDER_GITHUB.to_string(),
         tenant_id: tenant_id.to_string(),
         iss: issuer.to_string(),
         aud: vec![PluginTokenClaims::AUDIENCE.to_string()],
@@ -825,9 +892,14 @@ struct GitHubEmailResponse {
 async fn fetch_github_primary_email(
     client: &reqwest::Client,
     github_token: &str,
+    cfg: &config::PluginAuthConfig,
 ) -> anyhow::Result<Option<String>> {
+    let api_base = cfg
+        .github_api_base_url
+        .as_deref()
+        .unwrap_or(DEFAULT_GITHUB_API_BASE);
     let resp = client
-        .get("https://api.github.com/user/emails")
+        .get(format!("{api_base}/user/emails"))
         .header("Authorization", format!("Bearer {github_token}"))
         .header("User-Agent", "aeterna-plugin-auth/1.0")
         .header("Accept", "application/vnd.github+json")

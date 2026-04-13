@@ -26,6 +26,8 @@ use uuid::Uuid;
 
 use super::{AppState, authenticated_tenant_context, tenant_scoped_context};
 
+const OWNERSHIP_PLATFORM: &str = "platform";
+
 #[derive(Debug, Deserialize)]
 pub struct CreateTenantRequest {
     pub slug: String,
@@ -1127,7 +1129,11 @@ async fn purge_tenant(
     )
     .await;
 
-    (StatusCode::OK, Json(json!({ "success": true, "report": report }))).into_response()
+    (
+        StatusCode::OK,
+        Json(json!({ "success": true, "report": report })),
+    )
+        .into_response()
 }
 
 async fn add_domain_mapping(
@@ -2274,7 +2280,8 @@ fn extract_provider_info(
                 .get(model_key)
                 .and_then(|f| f.value.as_str().map(String::from));
             let has_secret = doc.secret_references.contains_key(api_key_name);
-            let configured = provider.is_some() && (has_secret || provider.as_deref() != Some("openai"));
+            let configured =
+                provider.is_some() && (has_secret || provider.as_deref() != Some("openai"));
             (provider, model, configured)
         }
         None => (None, None, false),
@@ -2313,12 +2320,10 @@ async fn get_tenant_providers(
         .ok()
         .flatten();
 
-    let has_tenant_config = config
-        .as_ref()
-        .is_some_and(|c| {
-            c.fields.contains_key(config_keys::LLM_PROVIDER)
-                || c.fields.contains_key(config_keys::EMBEDDING_PROVIDER)
-        });
+    let has_tenant_config = config.as_ref().is_some_and(|c| {
+        c.fields.contains_key(config_keys::LLM_PROVIDER)
+            || c.fields.contains_key(config_keys::EMBEDDING_PROVIDER)
+    });
 
     let llm = extract_provider_info(
         &config,
@@ -2336,7 +2341,7 @@ async fn get_tenant_providers(
     let source = if has_tenant_config {
         "tenant"
     } else {
-        "platform"
+        OWNERSHIP_PLATFORM
     };
 
     (
@@ -2483,12 +2488,16 @@ async fn set_tenant_embedding_provider(
         Err(response) => return response,
     };
 
-    let tenant_record =
-        match resolve_tenant_record_or_404(&state, &tenant, "provider_embedding_set_failed").await
-        {
-            Ok(record) => record,
-            Err(response) => return response,
-        };
+    let tenant_record = match resolve_tenant_record_or_404(
+        &state,
+        &tenant,
+        "provider_embedding_set_failed",
+    )
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
 
     // Check if changing embedding model when vectors already exist
     let existing_config = state
@@ -2497,16 +2506,12 @@ async fn set_tenant_embedding_provider(
         .await
         .ok()
         .flatten();
-    let existing_model = existing_config
-        .as_ref()
-        .and_then(|c| {
-            c.fields
-                .get(config_keys::EMBEDDING_MODEL)
-                .and_then(|f| f.value.as_str().map(String::from))
-        });
-    let model_changed = existing_model
-        .as_ref()
-        .is_some_and(|m| m != &req.model);
+    let existing_model = existing_config.as_ref().and_then(|c| {
+        c.fields
+            .get(config_keys::EMBEDDING_MODEL)
+            .and_then(|f| f.value.as_str().map(String::from))
+    });
+    let model_changed = existing_model.as_ref().is_some_and(|m| m != &req.model);
 
     // Build config fields
     let mut fields = BTreeMap::new();
@@ -2600,8 +2605,9 @@ async fn set_tenant_embedding_provider(
     });
 
     if model_changed {
-        response["warning"] =
-            serde_json::json!("Embedding model changed. Existing vectors may have different dimensions and should be re-indexed.");
+        response["warning"] = serde_json::json!(
+            "Embedding model changed. Existing vectors may have different dimensions and should be re-indexed."
+        );
     }
 
     (StatusCode::OK, Json(response)).into_response()
@@ -2781,22 +2787,20 @@ async fn test_tenant_provider_connectivity(
             .get_llm_service(&tenant_record.id, state.tenant_config_provider.as_ref())
             .await
         {
-            Some(llm) => {
-                match llm.generate("Say hello in one word.").await {
-                    Ok(_) => ProviderStatusInfo {
-                        status: "ok".to_string(),
-                        latency_ms: Some(start.elapsed().as_millis()),
-                        dimension: None,
-                        error: None,
-                    },
-                    Err(e) => ProviderStatusInfo {
-                        status: "error".to_string(),
-                        latency_ms: Some(start.elapsed().as_millis()),
-                        dimension: None,
-                        error: Some(format!("{e}")),
-                    },
-                }
-            }
+            Some(llm) => match llm.generate("Say hello in one word.").await {
+                Ok(_) => ProviderStatusInfo {
+                    status: "ok".to_string(),
+                    latency_ms: Some(start.elapsed().as_millis()),
+                    dimension: None,
+                    error: None,
+                },
+                Err(e) => ProviderStatusInfo {
+                    status: "error".to_string(),
+                    latency_ms: Some(start.elapsed().as_millis()),
+                    dimension: None,
+                    error: Some(format!("{e}")),
+                },
+            },
             None => ProviderStatusInfo {
                 status: "not_configured".to_string(),
                 latency_ms: None,
@@ -2814,22 +2818,20 @@ async fn test_tenant_provider_connectivity(
             .get_embedding_service(&tenant_record.id, state.tenant_config_provider.as_ref())
             .await
         {
-            Some(emb) => {
-                match emb.embed("test embedding connectivity").await {
-                    Ok(vector) => ProviderStatusInfo {
-                        status: "ok".to_string(),
-                        latency_ms: Some(start.elapsed().as_millis()),
-                        dimension: Some(vector.len()),
-                        error: None,
-                    },
-                    Err(e) => ProviderStatusInfo {
-                        status: "error".to_string(),
-                        latency_ms: Some(start.elapsed().as_millis()),
-                        dimension: None,
-                        error: Some(format!("{e}")),
-                    },
-                }
-            }
+            Some(emb) => match emb.embed("test embedding connectivity").await {
+                Ok(vector) => ProviderStatusInfo {
+                    status: "ok".to_string(),
+                    latency_ms: Some(start.elapsed().as_millis()),
+                    dimension: Some(vector.len()),
+                    error: None,
+                },
+                Err(e) => ProviderStatusInfo {
+                    status: "error".to_string(),
+                    latency_ms: Some(start.elapsed().as_millis()),
+                    dimension: None,
+                    error: Some(format!("{e}")),
+                },
+            },
             None => ProviderStatusInfo {
                 status: "not_configured".to_string(),
                 latency_ms: None,
@@ -4399,6 +4401,7 @@ mod tests {
                 postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
             }),
+            k8s_auth_config: config::KubernetesAuthConfig::default(),
             idp_config: None,
             idp_sync_service: None,
             idp_client: None,
@@ -4407,9 +4410,9 @@ mod tests {
             tenant_repository_binding_store,
             tenant_repo_resolver,
             tenant_config_provider,
-            provider_registry: Arc::new(
-                memory::provider_registry::TenantProviderRegistry::new(None, None),
-            ),
+            provider_registry: Arc::new(memory::provider_registry::TenantProviderRegistry::new(
+                None, None,
+            )),
             git_provider_connection_registry,
             redis_conn: None,
         });

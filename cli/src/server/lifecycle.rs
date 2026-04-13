@@ -16,6 +16,14 @@ use tokio::sync::watch;
 use super::AppState;
 use super::backup_api;
 
+const RETENTION_PURGE_INTERVAL_SECS: u64 = 86400;
+const JOB_CLEANUP_INTERVAL_SECS: u64 = 3600;
+const REMEDIATION_EXPIRY_INTERVAL_SECS: u64 = 86400;
+const DLQ_CLEANUP_INTERVAL_SECS: u64 = 86400;
+const IMPORTANCE_DECAY_INTERVAL_SECS: u64 = 3600;
+const RETENTION_AGE_7_DAYS_SECS: u64 = 7 * 86400;
+const RETENTION_AGE_30_DAYS_SECS: u64 = 30 * 86400;
+
 /// Coordinates all periodic background lifecycle tasks.
 pub struct LifecycleManager {
     shutdown_tx: watch::Sender<bool>,
@@ -42,7 +50,7 @@ impl LifecycleManager {
         // Retention purge — daily
         Self::spawn_task_with_lock(
             "retention_purge",
-            Duration::from_secs(86400),
+            Duration::from_secs(RETENTION_PURGE_INTERVAL_SECS),
             self.shutdown_rx.clone(),
             rc.clone(),
             {
@@ -57,7 +65,7 @@ impl LifecycleManager {
         // Job cleanup — hourly (consolidates the task previously in serve.rs)
         Self::spawn_task_with_lock(
             "job_cleanup",
-            Duration::from_secs(3600),
+            Duration::from_secs(JOB_CLEANUP_INTERVAL_SECS),
             self.shutdown_rx.clone(),
             rc.clone(),
             {
@@ -72,17 +80,17 @@ impl LifecycleManager {
         // Remediation auto-expiry — daily
         Self::spawn_task_with_lock(
             "remediation_expiry",
-            Duration::from_secs(86400),
+            Duration::from_secs(REMEDIATION_EXPIRY_INTERVAL_SECS),
             self.shutdown_rx.clone(),
             rc.clone(),
             {
                 move || async move {
                     let store = RemediationStore::global();
-                    let expired = store.expire_stale(7 * 86400).await; // 7 days
+                    let expired = store.expire_stale(RETENTION_AGE_7_DAYS_SECS as i64).await;
                     if expired > 0 {
                         tracing::info!(count = expired, "Expired stale remediation requests");
                     }
-                    let cleaned = store.cleanup_old(30 * 86400).await; // 30 days
+                    let cleaned = store.cleanup_old(RETENTION_AGE_30_DAYS_SECS as i64).await;
                     if cleaned > 0 {
                         tracing::info!(count = cleaned, "Cleaned old remediation records");
                     }
@@ -93,13 +101,15 @@ impl LifecycleManager {
         // Dead-letter cleanup — daily (remove discarded items older than 30 days)
         Self::spawn_task_with_lock(
             "dead_letter_cleanup",
-            Duration::from_secs(86400),
+            Duration::from_secs(DLQ_CLEANUP_INTERVAL_SECS),
             self.shutdown_rx.clone(),
             rc.clone(),
             {
                 move || async move {
                     let dlq = DeadLetterQueue::global();
-                    let cleaned = dlq.cleanup_discarded(30 * 86400).await;
+                    let cleaned = dlq
+                        .cleanup_discarded(RETENTION_AGE_30_DAYS_SECS as i64)
+                        .await;
                     if cleaned > 0 {
                         tracing::info!(count = cleaned, "Cleaned old dead-letter items");
                     }
@@ -114,7 +124,7 @@ impl LifecycleManager {
         // Importance decay — hourly
         Self::spawn_task_with_lock(
             "importance_decay",
-            Duration::from_secs(3600),
+            Duration::from_secs(IMPORTANCE_DECAY_INTERVAL_SECS),
             self.shutdown_rx.clone(),
             rc,
             {
@@ -228,7 +238,7 @@ async fn run_retention_purge(state: &AppState) {
 
     // 1. Remediation request cleanup (30 days for terminal records)
     let store = RemediationStore::global();
-    let cleaned = store.cleanup_old(30 * 86400).await;
+    let cleaned = store.cleanup_old(RETENTION_AGE_30_DAYS_SECS as i64).await;
     if cleaned > 0 {
         tracing::info!(
             count = cleaned,
@@ -633,6 +643,7 @@ mod tests {
                 postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
             }),
+            k8s_auth_config: config::KubernetesAuthConfig::default(),
             idp_config: None,
             idp_sync_service: None,
             idp_client: None,

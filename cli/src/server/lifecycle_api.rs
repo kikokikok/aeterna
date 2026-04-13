@@ -11,25 +11,23 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use mk_core::types::Role;
 use serde::Deserialize;
 use serde_json::json;
 use storage::dead_letter::DeadLetterQueue;
 use storage::remediation_store::{RemediationStore, RemediationStoreError};
 
-use super::{AppState, authenticated_tenant_context};
+use super::{AppState, authenticated_platform_context};
 
-/// Build the lifecycle admin router (nested under `/api/v1`).
+const RETENTION_PURGE_INTERVAL_SECS: u64 = 86400;
+const JOB_CLEANUP_INTERVAL_SECS: u64 = 3600;
+const REMEDIATION_EXPIRY_INTERVAL_SECS: u64 = 86400;
+const DLQ_CLEANUP_INTERVAL_SECS: u64 = 86400;
+const IMPORTANCE_DECAY_INTERVAL_SECS: u64 = 3600;
+
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
-        .route(
-            "/admin/lifecycle/remediations",
-            get(list_remediations),
-        )
-        .route(
-            "/admin/lifecycle/remediations/{id}",
-            get(get_remediation),
-        )
+        .route("/admin/lifecycle/remediations", get(list_remediations))
+        .route("/admin/lifecycle/remediations/{id}", get(get_remediation))
         .route(
             "/admin/lifecycle/remediations/{id}/approve",
             post(approve_remediation),
@@ -39,10 +37,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(reject_remediation),
         )
         .route("/admin/lifecycle/status", get(lifecycle_status))
-        .route(
-            "/admin/lifecycle/dead-letter",
-            get(list_dead_letter),
-        )
+        .route("/admin/lifecycle/dead-letter", get(list_dead_letter))
         .route(
             "/admin/lifecycle/dead-letter/{id}/retry",
             post(retry_dead_letter),
@@ -54,13 +49,15 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-/// Verify the caller is a PlatformAdmin. Returns the error response if not.
 async fn require_platform_admin(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<(), axum::response::Response> {
-    let ctx = authenticated_tenant_context(state, headers).await?;
-    if !ctx.has_known_role(&Role::PlatformAdmin) {
+    let (_user_id, roles) = authenticated_platform_context(state, headers).await?;
+    if !roles
+        .iter()
+        .any(|r| *r == mk_core::types::Role::PlatformAdmin.into())
+    {
         return Err(error_response(
             StatusCode::FORBIDDEN,
             "forbidden",
@@ -95,7 +92,11 @@ async fn list_remediations(
         store.list_pending().await
     };
 
-    (StatusCode::OK, Json(json!({ "items": items, "count": items.len() }))).into_response()
+    (
+        StatusCode::OK,
+        Json(json!({ "items": items, "count": items.len() })),
+    )
+        .into_response()
 }
 
 #[derive(Debug, Deserialize)]
@@ -117,7 +118,11 @@ async fn get_remediation(
     let store = RemediationStore::global();
     match store.get(&id).await {
         Some(req) => (StatusCode::OK, Json(json!(req))).into_response(),
-        None => error_response(StatusCode::NOT_FOUND, "not_found", "Remediation request not found"),
+        None => error_response(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "Remediation request not found",
+        ),
     }
 }
 
@@ -129,28 +134,33 @@ async fn approve_remediation(
     Path(id): Path<String>,
     body: Option<Json<ApproveBody>>,
 ) -> impl IntoResponse {
-    let ctx = match authenticated_tenant_context(&state, &headers).await {
+    let (user_id, roles) = match authenticated_platform_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(resp) => return resp,
     };
-    if !ctx.has_known_role(&Role::PlatformAdmin) {
-        return error_response(StatusCode::FORBIDDEN, "forbidden", "PlatformAdmin role required");
+    if !roles
+        .iter()
+        .any(|r| *r == mk_core::types::Role::PlatformAdmin.into())
+    {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "PlatformAdmin role required",
+        );
     }
 
-    let reviewer = ctx.user_id.as_str().to_string();
+    let reviewer = user_id.as_str().to_string();
     let notes = body.and_then(|b| b.notes.clone());
 
     let store = RemediationStore::global();
     match store.approve(&id, &reviewer, notes).await {
         Ok(req) => (StatusCode::OK, Json(json!(req))).into_response(),
-        Err(RemediationStoreError::NotFound(_)) => {
-            error_response(StatusCode::NOT_FOUND, "not_found", "Remediation request not found")
-        }
-        Err(e) => error_response(
-            StatusCode::CONFLICT,
-            "approve_failed",
-            &e.to_string(),
+        Err(RemediationStoreError::NotFound(_)) => error_response(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "Remediation request not found",
         ),
+        Err(e) => error_response(StatusCode::CONFLICT, "approve_failed", &e.to_string()),
     }
 }
 
@@ -167,27 +177,32 @@ async fn reject_remediation(
     Path(id): Path<String>,
     Json(body): Json<RejectBody>,
 ) -> impl IntoResponse {
-    let ctx = match authenticated_tenant_context(&state, &headers).await {
+    let (user_id, roles) = match authenticated_platform_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(resp) => return resp,
     };
-    if !ctx.has_known_role(&Role::PlatformAdmin) {
-        return error_response(StatusCode::FORBIDDEN, "forbidden", "PlatformAdmin role required");
+    if !roles
+        .iter()
+        .any(|r| *r == mk_core::types::Role::PlatformAdmin.into())
+    {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "PlatformAdmin role required",
+        );
     }
 
-    let reviewer = ctx.user_id.as_str().to_string();
+    let reviewer = user_id.as_str().to_string();
 
     let store = RemediationStore::global();
     match store.reject(&id, &reviewer, &body.reason).await {
         Ok(req) => (StatusCode::OK, Json(json!(req))).into_response(),
-        Err(RemediationStoreError::NotFound(_)) => {
-            error_response(StatusCode::NOT_FOUND, "not_found", "Remediation request not found")
-        }
-        Err(e) => error_response(
-            StatusCode::CONFLICT,
-            "reject_failed",
-            &e.to_string(),
+        Err(RemediationStoreError::NotFound(_)) => error_response(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "Remediation request not found",
         ),
+        Err(e) => error_response(StatusCode::CONFLICT, "reject_failed", &e.to_string()),
     }
 }
 
@@ -224,27 +239,27 @@ async fn lifecycle_status(
             "tasks": [
                 {
                     "name": "retention_purge",
-                    "interval_secs": 86400,
+                    "interval_secs": RETENTION_PURGE_INTERVAL_SECS,
                     "description": "Purge expired soft-deleted records and old remediation requests"
                 },
                 {
                     "name": "job_cleanup",
-                    "interval_secs": 3600,
+                    "interval_secs": JOB_CLEANUP_INTERVAL_SECS,
                     "description": "Clean up expired export/import jobs and temp files"
                 },
                 {
                     "name": "remediation_expiry",
-                    "interval_secs": 86400,
+                    "interval_secs": REMEDIATION_EXPIRY_INTERVAL_SECS,
                     "description": "Expire stale pending remediation requests and remove old records"
                 },
                 {
                     "name": "dead_letter_cleanup",
-                    "interval_secs": 86400,
+                    "interval_secs": DLQ_CLEANUP_INTERVAL_SECS,
                     "description": "Clean up discarded dead-letter items older than 30 days"
                 },
                 {
                     "name": "importance_decay",
-                    "interval_secs": 3600,
+                    "interval_secs": IMPORTANCE_DECAY_INTERVAL_SECS,
                     "description": "Apply exponential importance decay to memory entries"
                 }
             ],
@@ -286,7 +301,11 @@ async fn list_dead_letter(
         dlq.list_active(params.tenant_id.as_deref()).await
     };
 
-    (StatusCode::OK, Json(json!({ "items": items, "count": items.len() }))).into_response()
+    (
+        StatusCode::OK,
+        Json(json!({ "items": items, "count": items.len() })),
+    )
+        .into_response()
 }
 
 #[derive(Debug, Deserialize)]
@@ -312,7 +331,11 @@ async fn retry_dead_letter(
     match dlq.mark_retrying(&id).await {
         Ok(()) => {
             let item = dlq.get(&id).await;
-            (StatusCode::OK, Json(json!({ "status": "retrying", "item": item }))).into_response()
+            (
+                StatusCode::OK,
+                Json(json!({ "status": "retrying", "item": item })),
+            )
+                .into_response()
         }
         Err(_) => error_response(
             StatusCode::NOT_FOUND,
@@ -339,7 +362,11 @@ async fn discard_dead_letter(
     match dlq.discard(&id).await {
         Ok(()) => {
             let item = dlq.get(&id).await;
-            (StatusCode::OK, Json(json!({ "status": "discarded", "item": item }))).into_response()
+            (
+                StatusCode::OK,
+                Json(json!({ "status": "discarded", "item": item })),
+            )
+                .into_response()
         }
         Err(_) => error_response(
             StatusCode::NOT_FOUND,

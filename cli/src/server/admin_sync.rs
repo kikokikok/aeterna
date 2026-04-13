@@ -17,7 +17,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::{AppState, authenticated_tenant_context};
+use super::{AppState, authenticated_platform_context, authenticated_tenant_context};
 
 static SYNC_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static TENANT_SYNC_LOCKS: LazyLock<DashMap<String, ()>> = LazyLock::new(DashMap::new);
@@ -52,11 +52,14 @@ async fn handle_github_sync(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let ctx = match authenticated_tenant_context(&state, &headers).await {
+    let (_user_id, roles) = match authenticated_platform_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(resp) => return resp,
     };
-    if !ctx.has_known_role(&Role::PlatformAdmin) {
+    if !roles
+        .iter()
+        .any(|r| *r == mk_core::types::Role::PlatformAdmin.into())
+    {
         return error_response(
             StatusCode::FORBIDDEN,
             "forbidden",
@@ -487,7 +490,8 @@ async fn find_tenant_by_selector(
 }
 
 pub(crate) async fn resolve_tenant_id_from_pool(pool: &sqlx::PgPool) -> anyhow::Result<Uuid> {
-    let tenant_str = std::env::var("AETERNA_TENANT_ID").unwrap_or_else(|_| "default".to_string());
+    let tenant_str =
+        std::env::var(crate::env_vars::AETERNA_TENANT_ID).unwrap_or_else(|_| "default".to_string());
     let row: Option<(Uuid,)> =
         sqlx::query_as("SELECT id FROM tenants WHERE name = $1 OR id::text = $1 LIMIT 1")
             .bind(&tenant_str)
@@ -786,6 +790,7 @@ mod tests {
                 postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
             }),
+            k8s_auth_config: config::KubernetesAuthConfig::default(),
             idp_config: None,
             idp_sync_service: None,
             idp_client: None,

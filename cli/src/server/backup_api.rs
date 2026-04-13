@@ -28,6 +28,9 @@ use uuid::Uuid;
 
 use super::{AppState, authenticated_tenant_context};
 
+const JOB_STATE_TTL_SECS: u64 = 86400;
+const TEMP_FILE_MAX_AGE_SECS: u64 = 7200;
+
 // ---------------------------------------------------------------------------
 // Job model
 // ---------------------------------------------------------------------------
@@ -237,7 +240,11 @@ impl RedisExportJobStore {
     }
 
     async fn insert(&self, job: ExportJob) {
-        if let Err(e) = self.store.set(&job.job_id, &job, Some(86400)).await {
+        if let Err(e) = self
+            .store
+            .set(&job.job_id, &job, Some(JOB_STATE_TTL_SECS))
+            .await
+        {
             tracing::error!("Redis export job insert failed: {e}");
         }
     }
@@ -249,21 +256,25 @@ impl RedisExportJobStore {
     async fn update_status(&self, job_id: &str, status: JobStatus) {
         let _ = self
             .store
-            .update::<ExportJob>(job_id, |j| j.status = status, Some(86400))
+            .update::<ExportJob>(job_id, |j| j.status = status, Some(JOB_STATE_TTL_SECS))
             .await;
     }
 
     async fn update_progress(&self, job_id: &str, pct: u8) {
         let _ = self
             .store
-            .update::<ExportJob>(job_id, |j| j.progress_pct = pct, Some(86400))
+            .update::<ExportJob>(job_id, |j| j.progress_pct = pct, Some(JOB_STATE_TTL_SECS))
             .await;
     }
 
     async fn update_counts(&self, job_id: &str, counts: EntityCountsResponse) {
         let _ = self
             .store
-            .update::<ExportJob>(job_id, |j| j.entity_counts = counts, Some(86400))
+            .update::<ExportJob>(
+                job_id,
+                |j| j.entity_counts = counts,
+                Some(JOB_STATE_TTL_SECS),
+            )
             .await;
     }
 
@@ -278,7 +289,7 @@ impl RedisExportJobStore {
                     j.archive_path = Some(archive_path);
                     j.completed_at = Some(chrono::Utc::now().to_rfc3339());
                 },
-                Some(86400),
+                Some(JOB_STATE_TTL_SECS),
             )
             .await;
     }
@@ -293,7 +304,7 @@ impl RedisExportJobStore {
                     j.error = Some(error);
                     j.completed_at = Some(chrono::Utc::now().to_rfc3339());
                 },
-                Some(86400),
+                Some(JOB_STATE_TTL_SECS),
             )
             .await;
     }
@@ -379,7 +390,7 @@ impl RedisExportJobStore {
                         j.completed_at = Some(chrono::Utc::now().to_rfc3339());
                     }
                 },
-                Some(86400),
+                Some(JOB_STATE_TTL_SECS),
             )
             .await;
     }
@@ -621,7 +632,11 @@ impl RedisImportJobStore {
     }
 
     async fn insert(&self, job: ImportJob) {
-        if let Err(e) = self.store.set(&job.job_id, &job, Some(86400)).await {
+        if let Err(e) = self
+            .store
+            .set(&job.job_id, &job, Some(JOB_STATE_TTL_SECS))
+            .await
+        {
             tracing::error!("Redis import job insert failed: {e}");
         }
     }
@@ -633,28 +648,36 @@ impl RedisImportJobStore {
     async fn update_status(&self, job_id: &str, status: JobStatus) {
         let _ = self
             .store
-            .update::<ImportJob>(job_id, |j| j.status = status, Some(86400))
+            .update::<ImportJob>(job_id, |j| j.status = status, Some(JOB_STATE_TTL_SECS))
             .await;
     }
 
     async fn update_progress(&self, job_id: &str, pct: u8) {
         let _ = self
             .store
-            .update::<ImportJob>(job_id, |j| j.progress_pct = pct, Some(86400))
+            .update::<ImportJob>(job_id, |j| j.progress_pct = pct, Some(JOB_STATE_TTL_SECS))
             .await;
     }
 
     async fn update_counts(&self, job_id: &str, counts: EntityCountsResponse) {
         let _ = self
             .store
-            .update::<ImportJob>(job_id, |j| j.entity_counts = counts, Some(86400))
+            .update::<ImportJob>(
+                job_id,
+                |j| j.entity_counts = counts,
+                Some(JOB_STATE_TTL_SECS),
+            )
             .await;
     }
 
     async fn set_conflicts(&self, job_id: &str, conflicts: Vec<ImportConflict>) {
         let _ = self
             .store
-            .update::<ImportJob>(job_id, |j| j.conflicts = conflicts, Some(86400))
+            .update::<ImportJob>(
+                job_id,
+                |j| j.conflicts = conflicts,
+                Some(JOB_STATE_TTL_SECS),
+            )
             .await;
     }
 
@@ -668,7 +691,7 @@ impl RedisImportJobStore {
                     j.progress_pct = 100;
                     j.completed_at = Some(chrono::Utc::now().to_rfc3339());
                 },
-                Some(86400),
+                Some(JOB_STATE_TTL_SECS),
             )
             .await;
     }
@@ -683,7 +706,7 @@ impl RedisImportJobStore {
                     j.error = Some(error);
                     j.completed_at = Some(chrono::Utc::now().to_rfc3339());
                 },
-                Some(86400),
+                Some(JOB_STATE_TTL_SECS),
             )
             .await;
     }
@@ -805,10 +828,12 @@ fn import_store() -> &'static ImportJobStoreBackend {
 /// are invoked. Falls back to in-memory stores if `redis_conn` is `None`.
 pub fn init_job_stores(redis_conn: Option<&std::sync::Arc<redis::aio::ConnectionManager>>) {
     if let Some(conn) = redis_conn {
-        let _ = JOB_STORE
-            .set(ExportJobStoreBackend::Redis(RedisExportJobStore::new(conn.clone())));
-        let _ = IMPORT_JOBS
-            .set(ImportJobStoreBackend::Redis(RedisImportJobStore::new(conn.clone())));
+        let _ = JOB_STORE.set(ExportJobStoreBackend::Redis(RedisExportJobStore::new(
+            conn.clone(),
+        )));
+        let _ = IMPORT_JOBS.set(ImportJobStoreBackend::Redis(RedisImportJobStore::new(
+            conn.clone(),
+        )));
         tracing::info!("Backup job stores initialized with Redis backend");
     } else {
         let _ = JOB_STORE.set(ExportJobStoreBackend::InMemory(ExportJobStore::new()));
@@ -891,7 +916,7 @@ pub async fn cleanup_temp_files() {
                 let age = std::time::SystemTime::now()
                     .duration_since(modified)
                     .unwrap_or_default();
-                if age < std::time::Duration::from_secs(7200) {
+                if age < std::time::Duration::from_secs(TEMP_FILE_MAX_AGE_SECS) {
                     continue;
                 }
             }
@@ -1007,9 +1032,7 @@ async fn handle_create_export(
                 "PlatformAdmin role required for full-instance export",
             );
         }
-    } else if !ctx.has_known_role(&Role::TenantAdmin)
-        && !ctx.has_known_role(&Role::PlatformAdmin)
-    {
+    } else if !ctx.has_known_role(&Role::TenantAdmin) && !ctx.has_known_role(&Role::PlatformAdmin) {
         return error_response(
             StatusCode::FORBIDDEN,
             "forbidden",
@@ -1067,9 +1090,7 @@ async fn handle_create_export(
 
         if let Err(e) = result {
             tracing::error!(job_id = %bg_job_id, error = %e, "Export job failed");
-            export_store()
-                .fail(&bg_job_id, format!("{e:#}"))
-                .await;
+            export_store().fail(&bg_job_id, format!("{e:#}")).await;
         }
     });
 
@@ -1115,9 +1136,7 @@ async fn handle_download_export(
 
     let job = match export_store().get(&job_id).await {
         Some(job) => job,
-        None => {
-            return error_response(StatusCode::NOT_FOUND, "not_found", "Export job not found")
-        }
+        None => return error_response(StatusCode::NOT_FOUND, "not_found", "Export job not found"),
     };
 
     if job.status != JobStatus::Completed {
@@ -1135,7 +1154,7 @@ async fn handle_download_export(
                 StatusCode::GONE,
                 "no_archive",
                 "Archive path not available (uploaded to S3?)",
-            )
+            );
         }
     };
 
@@ -1154,7 +1173,7 @@ async fn handle_download_export(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "io_error",
                 &format!("Failed to read archive: {e}"),
-            )
+            );
         }
     };
 
@@ -1194,7 +1213,9 @@ async fn handle_cancel_export(
 
     match export_store().get(&job_id).await {
         Some(job) if job.status == JobStatus::Pending || job.status == JobStatus::Running => {
-            export_store().update_status(&job_id, JobStatus::Cancelled).await;
+            export_store()
+                .update_status(&job_id, JobStatus::Cancelled)
+                .await;
             (
                 StatusCode::OK,
                 Json(json!({"jobId": job_id, "status": "cancelled"})),
@@ -1416,10 +1437,7 @@ async fn handle_list_imports(
 
 /// Resolve the export destination from tenant config, falling back to env
 /// vars, then to local filesystem.
-async fn resolve_export_destination(
-    state: &AppState,
-    tenant_id: &str,
-) -> ExportDestination {
+async fn resolve_export_destination(state: &AppState, tenant_id: &str) -> ExportDestination {
     // 1. Try tenant config
     if let Ok(Some(config)) = state
         .tenant_config_provider
@@ -1489,7 +1507,9 @@ async fn run_export(
     include_audit: bool,
     since: Option<String>,
 ) -> anyhow::Result<()> {
-    export_store().update_status(job_id, JobStatus::Running).await;
+    export_store()
+        .update_status(job_id, JobStatus::Running)
+        .await;
     export_store().update_progress(job_id, 5).await;
 
     let destination = resolve_export_destination(state, tenant_id).await;
@@ -1542,10 +1562,9 @@ async fn run_export(
     }
 
     // Capture postgres txn start
-    let txn_start: Option<(String,)> =
-        sqlx::query_as("SELECT NOW()::text")
-            .fetch_optional(pool)
-            .await?;
+    let txn_start: Option<(String,)> = sqlx::query_as("SELECT NOW()::text")
+        .fetch_optional(pool)
+        .await?;
     manifest.backend_snapshots.postgres_txn_start = txn_start.map(|(t,)| t);
 
     // Create archive writer
@@ -1633,14 +1652,12 @@ async fn run_export(
             endpoint,
             force_path_style,
         } => {
-            let client = s3::create_s3_client(
-                region.as_deref(),
-                endpoint.as_deref(),
-                *force_path_style,
-            )
-            .await?;
+            let client =
+                s3::create_s3_client(region.as_deref(), endpoint.as_deref(), *force_path_style)
+                    .await?;
 
-            let s3_key = destination.archive_key(tenant_id, &timestamp, &format!("{scope_label}-{target}"));
+            let s3_key =
+                destination.archive_key(tenant_id, &timestamp, &format!("{scope_label}-{target}"));
             s3::upload_archive(&client, bucket, &s3_key, &final_path).await?;
 
             tracing::info!(bucket, key = %s3_key, "Export archive uploaded to S3");
@@ -1650,9 +1667,7 @@ async fn run_export(
 
             s3_key
         }
-        ExportDestination::Local { .. } => {
-            final_path.to_string_lossy().to_string()
-        }
+        ExportDestination::Local { .. } => final_path.to_string_lossy().to_string(),
     };
 
     export_store().complete(job_id, result_path).await;
@@ -1884,7 +1899,12 @@ async fn export_governance(
         ndjson.finish()?;
     }
 
-    tracing::info!(org_count, policy_count, role_count, "Exported governance data");
+    tracing::info!(
+        org_count,
+        policy_count,
+        role_count,
+        "Exported governance data"
+    );
     Ok((org_count, policy_count, role_count))
 }
 
@@ -1985,22 +2005,16 @@ async fn resolve_archive_path(
                 force_path_style,
                 ..
             } => {
-                let client = s3::create_s3_client(
-                    region.as_deref(),
-                    endpoint.as_deref(),
-                    *force_path_style,
-                )
-                .await?;
+                let client =
+                    s3::create_s3_client(region.as_deref(), endpoint.as_deref(), *force_path_style)
+                        .await?;
 
                 let local_dir = std::env::var("AETERNA_BACKUP_LOCAL_DIR")
                     .unwrap_or_else(|_| "/tmp/aeterna-imports".to_string());
                 let local_base = PathBuf::from(&local_dir);
                 tokio::fs::create_dir_all(&local_base).await?;
 
-                let filename = key
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or("import-archive.tar.gz");
+                let filename = key.rsplit('/').next().unwrap_or("import-archive.tar.gz");
                 let local_path = local_base.join(format!(
                     "import-{}-{filename}",
                     chrono::Utc::now().format("%Y%m%d%H%M%S")
@@ -2040,8 +2054,7 @@ async fn run_import(
     import_store().update_progress(job_id, 5).await;
 
     // Step 1: Resolve archive to local path (download from S3 if needed)
-    let (local_path, cleanup_after) =
-        resolve_archive_path(state, tenant_id, archive_path).await?;
+    let (local_path, cleanup_after) = resolve_archive_path(state, tenant_id, archive_path).await?;
 
     import_store().update_progress(job_id, 10).await;
 
@@ -2051,7 +2064,12 @@ async fn run_import(
     if !mismatches.is_empty() {
         let details: Vec<String> = mismatches
             .iter()
-            .map(|m| format!("{}: expected={} actual={}", m.filename, m.expected, m.actual))
+            .map(|m| {
+                format!(
+                    "{}: expected={} actual={}",
+                    m.filename, m.expected, m.actual
+                )
+            })
             .collect();
         anyhow::bail!(
             "Checksum validation failed for {} file(s): {}",
@@ -2099,7 +2117,10 @@ async fn run_import(
     }
 
     // Step 6: Import governance (org_units, policies, role_assignments)
-    if entity_counts.org_units > 0 || entity_counts.policies > 0 || entity_counts.role_assignments > 0 {
+    if entity_counts.org_units > 0
+        || entity_counts.policies > 0
+        || entity_counts.role_assignments > 0
+    {
         let (gov_counts, gov_conflicts) =
             import_governance(&reader, pool, tenant_id, mode, dry_run).await?;
         counts.org_units = gov_counts.0;
@@ -2163,9 +2184,7 @@ async fn import_memories(
         Err(_) => return Ok((0, Vec::new())),
     };
 
-    let records: Vec<serde_json::Value> = ndjson
-        .filter_map(|r| r.ok())
-        .collect();
+    let records: Vec<serde_json::Value> = ndjson.filter_map(|r| r.ok()).collect();
 
     if records.is_empty() {
         return Ok((0, Vec::new()));
@@ -2218,8 +2237,14 @@ async fn import_memories(
     } else {
         // Real import
         for record in &records {
-            let id = record.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-            let content = record.get("content").and_then(|v| v.as_str()).unwrap_or_default();
+            let id = record
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let content = record
+                .get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
             let memory_layer = record
                 .get("memory_layer")
                 .and_then(|v| v.as_str())
@@ -2228,14 +2253,22 @@ async fn import_memories(
                 .get("importance_score")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.5);
-            let properties = record.get("properties").cloned().unwrap_or(serde_json::Value::Null);
-            let created_at = record.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
-            let updated_at = record.get("updated_at").and_then(|v| v.as_str()).unwrap_or_default();
+            let properties = record
+                .get("properties")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            let created_at = record
+                .get("created_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let updated_at = record
+                .get("updated_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
 
             let query = match mode {
-                "merge" => {
-                    sqlx::query(
-                        "INSERT INTO memory_entries (id, tenant_id, content, memory_layer, importance_score, properties, created_at, updated_at) \
+                "merge" => sqlx::query(
+                    "INSERT INTO memory_entries (id, tenant_id, content, memory_layer, importance_score, properties, created_at, updated_at) \
                          VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8::timestamptz) \
                          ON CONFLICT (id) DO UPDATE SET \
                            content = EXCLUDED.content, \
@@ -2244,11 +2277,9 @@ async fn import_memories(
                            properties = EXCLUDED.properties, \
                            updated_at = EXCLUDED.updated_at \
                          WHERE EXCLUDED.updated_at > memory_entries.updated_at",
-                    )
-                }
-                "replace" => {
-                    sqlx::query(
-                        "INSERT INTO memory_entries (id, tenant_id, content, memory_layer, importance_score, properties, created_at, updated_at) \
+                ),
+                "replace" => sqlx::query(
+                    "INSERT INTO memory_entries (id, tenant_id, content, memory_layer, importance_score, properties, created_at, updated_at) \
                          VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8::timestamptz) \
                          ON CONFLICT (id) DO UPDATE SET \
                            content = EXCLUDED.content, \
@@ -2256,8 +2287,7 @@ async fn import_memories(
                            importance_score = EXCLUDED.importance_score, \
                            properties = EXCLUDED.properties, \
                            updated_at = EXCLUDED.updated_at",
-                    )
-                }
+                ),
                 _ => {
                     // skip_existing
                     sqlx::query(
@@ -2349,19 +2379,42 @@ async fn import_knowledge(
         }
     } else {
         for record in &records {
-            let id = record.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-            let r#type = record.get("type").and_then(|v| v.as_str()).unwrap_or_default();
-            let title = record.get("title").and_then(|v| v.as_str()).unwrap_or_default();
-            let content = record.get("content").and_then(|v| v.as_str()).unwrap_or_default();
-            let tags = record.get("tags").cloned().unwrap_or(serde_json::Value::Null);
-            let properties = record.get("properties").cloned().unwrap_or(serde_json::Value::Null);
-            let created_at = record.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
-            let updated_at = record.get("updated_at").and_then(|v| v.as_str()).unwrap_or_default();
+            let id = record
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let r#type = record
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let title = record
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let content = record
+                .get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let tags = record
+                .get("tags")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            let properties = record
+                .get("properties")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            let created_at = record
+                .get("created_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let updated_at = record
+                .get("updated_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
 
             let query = match mode {
-                "merge" => {
-                    sqlx::query(
-                        "INSERT INTO knowledge_items (id, tenant_id, type, title, content, tags, properties, created_at, updated_at) \
+                "merge" => sqlx::query(
+                    "INSERT INTO knowledge_items (id, tenant_id, type, title, content, tags, properties, created_at, updated_at) \
                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9::timestamptz) \
                          ON CONFLICT (id) DO UPDATE SET \
                            type = EXCLUDED.type, \
@@ -2371,11 +2424,9 @@ async fn import_knowledge(
                            properties = EXCLUDED.properties, \
                            updated_at = EXCLUDED.updated_at \
                          WHERE EXCLUDED.updated_at > knowledge_items.updated_at",
-                    )
-                }
-                "replace" => {
-                    sqlx::query(
-                        "INSERT INTO knowledge_items (id, tenant_id, type, title, content, tags, properties, created_at, updated_at) \
+                ),
+                "replace" => sqlx::query(
+                    "INSERT INTO knowledge_items (id, tenant_id, type, title, content, tags, properties, created_at, updated_at) \
                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9::timestamptz) \
                          ON CONFLICT (id) DO UPDATE SET \
                            type = EXCLUDED.type, \
@@ -2384,15 +2435,12 @@ async fn import_knowledge(
                            tags = EXCLUDED.tags, \
                            properties = EXCLUDED.properties, \
                            updated_at = EXCLUDED.updated_at",
-                    )
-                }
-                _ => {
-                    sqlx::query(
-                        "INSERT INTO knowledge_items (id, tenant_id, type, title, content, tags, properties, created_at, updated_at) \
+                ),
+                _ => sqlx::query(
+                    "INSERT INTO knowledge_items (id, tenant_id, type, title, content, tags, properties, created_at, updated_at) \
                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9::timestamptz) \
                          ON CONFLICT (id) DO NOTHING",
-                    )
-                }
+                ),
             };
 
             query
@@ -2435,21 +2483,34 @@ async fn import_governance(
 
         if !dry_run {
             for record in &records {
-                let id = record.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-                let name = record.get("name").and_then(|v| v.as_str()).unwrap_or_default();
-                let r#type = record.get("type").and_then(|v| v.as_str()).unwrap_or_default();
+                let id = record
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let name = record
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let r#type = record
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
                 let parent_id = record.get("parent_id").and_then(|v| v.as_str());
-                let metadata = record.get("metadata").cloned().unwrap_or(serde_json::Value::Null);
-                let created_at = record.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
+                let metadata = record
+                    .get("metadata")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+                let created_at = record
+                    .get("created_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
 
                 let query = match mode {
-                    "skip_existing" => {
-                        sqlx::query(
-                            "INSERT INTO organizational_units (id, name, type, parent_id, tenant_id, metadata, created_at) \
+                    "skip_existing" => sqlx::query(
+                        "INSERT INTO organizational_units (id, name, type, parent_id, tenant_id, metadata, created_at) \
                              VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz) \
                              ON CONFLICT (id) DO NOTHING",
-                        )
-                    }
+                    ),
                     _ => {
                         // merge and replace both overwrite for org units (no updated_at)
                         sqlx::query(
@@ -2490,7 +2551,11 @@ async fn import_governance(
             .unwrap_or_default();
 
             for (existing_id,) in &existing {
-                let resolution = if mode == "skip_existing" { "skipped" } else { "overwritten" };
+                let resolution = if mode == "skip_existing" {
+                    "skipped"
+                } else {
+                    "overwritten"
+                };
                 all_conflicts.push(ImportConflict {
                     entity_type: "org_unit".into(),
                     entity_id: existing_id.clone(),
@@ -2515,39 +2580,48 @@ async fn import_governance(
 
         if !dry_run {
             for record in &records {
-                let id = record.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-                let unit_id = record.get("unit_id").and_then(|v| v.as_str()).unwrap_or_default();
-                let policy = record.get("policy").cloned().unwrap_or(serde_json::Value::Null);
-                let created_at = record.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
-                let updated_at = record.get("updated_at").and_then(|v| v.as_str()).unwrap_or_default();
+                let id = record
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let unit_id = record
+                    .get("unit_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let policy = record
+                    .get("policy")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+                let created_at = record
+                    .get("created_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let updated_at = record
+                    .get("updated_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
 
                 let query = match mode {
-                    "merge" => {
-                        sqlx::query(
-                            "INSERT INTO unit_policies (id, unit_id, policy, created_at, updated_at) \
+                    "merge" => sqlx::query(
+                        "INSERT INTO unit_policies (id, unit_id, policy, created_at, updated_at) \
                              VALUES ($1, $2, $3, $4::timestamptz, $5::timestamptz) \
                              ON CONFLICT (id) DO UPDATE SET \
                                policy = EXCLUDED.policy, \
                                updated_at = EXCLUDED.updated_at \
                              WHERE EXCLUDED.updated_at > unit_policies.updated_at",
-                        )
-                    }
-                    "replace" => {
-                        sqlx::query(
-                            "INSERT INTO unit_policies (id, unit_id, policy, created_at, updated_at) \
+                    ),
+                    "replace" => sqlx::query(
+                        "INSERT INTO unit_policies (id, unit_id, policy, created_at, updated_at) \
                              VALUES ($1, $2, $3, $4::timestamptz, $5::timestamptz) \
                              ON CONFLICT (id) DO UPDATE SET \
                                policy = EXCLUDED.policy, \
                                updated_at = EXCLUDED.updated_at",
-                        )
-                    }
-                    _ => {
-                        sqlx::query(
-                            "INSERT INTO unit_policies (id, unit_id, policy, created_at, updated_at) \
+                    ),
+                    _ => sqlx::query(
+                        "INSERT INTO unit_policies (id, unit_id, policy, created_at, updated_at) \
                              VALUES ($1, $2, $3, $4::timestamptz, $5::timestamptz) \
                              ON CONFLICT (id) DO NOTHING",
-                        )
-                    }
+                    ),
                 };
 
                 query
@@ -2576,27 +2650,32 @@ async fn import_governance(
 
         if !dry_run {
             for record in &records {
-                let user_id = record.get("user_id").and_then(|v| v.as_str()).unwrap_or_default();
+                let user_id = record
+                    .get("user_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
                 let unit_id = record.get("unit_id").and_then(|v| v.as_str());
-                let role = record.get("role").and_then(|v| v.as_str()).unwrap_or_default();
-                let created_at = record.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
+                let role = record
+                    .get("role")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let created_at = record
+                    .get("created_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
 
                 // user_roles likely has a composite key (user_id, tenant_id, unit_id, role)
                 let query = match mode {
-                    "skip_existing" => {
-                        sqlx::query(
-                            "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at) \
+                    "skip_existing" => sqlx::query(
+                        "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at) \
                              VALUES ($1, $2, $3, $4, $5::timestamptz) \
                              ON CONFLICT DO NOTHING",
-                        )
-                    }
-                    _ => {
-                        sqlx::query(
-                            "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at) \
+                    ),
+                    _ => sqlx::query(
+                        "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at) \
                              VALUES ($1, $2, $3, $4, $5::timestamptz) \
                              ON CONFLICT DO NOTHING",
-                        )
-                    }
+                    ),
                 };
 
                 query
@@ -2645,29 +2724,37 @@ async fn import_governance_events(
 
     if !dry_run {
         for record in &records {
-            let id = record.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-            let event_type = record.get("event_type").and_then(|v| v.as_str()).unwrap_or_default();
-            let payload = record.get("payload").cloned().unwrap_or(serde_json::Value::Null);
-            let timestamp = record.get("timestamp").and_then(|v| v.as_str()).unwrap_or_default();
+            let id = record
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let event_type = record
+                .get("event_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let payload = record
+                .get("payload")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            let timestamp = record
+                .get("timestamp")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
 
             let query = match mode {
-                "skip_existing" => {
-                    sqlx::query(
-                        "INSERT INTO governance_events (id, event_type, tenant_id, payload, timestamp) \
+                "skip_existing" => sqlx::query(
+                    "INSERT INTO governance_events (id, event_type, tenant_id, payload, timestamp) \
                          VALUES ($1, $2, $3, $4, $5::timestamptz) \
                          ON CONFLICT (id) DO NOTHING",
-                    )
-                }
-                _ => {
-                    sqlx::query(
-                        "INSERT INTO governance_events (id, event_type, tenant_id, payload, timestamp) \
+                ),
+                _ => sqlx::query(
+                    "INSERT INTO governance_events (id, event_type, tenant_id, payload, timestamp) \
                          VALUES ($1, $2, $3, $4, $5::timestamptz) \
                          ON CONFLICT (id) DO UPDATE SET \
                            event_type = EXCLUDED.event_type, \
                            payload = EXCLUDED.payload, \
                            timestamp = EXCLUDED.timestamp",
-                    )
-                }
+                ),
             };
 
             query

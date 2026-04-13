@@ -799,6 +799,7 @@ mod tests {
                 postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
             }),
+            k8s_auth_config: config::KubernetesAuthConfig::default(),
             idp_config: None,
             idp_sync_service: None,
             idp_client: None,

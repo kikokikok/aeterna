@@ -77,13 +77,12 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     }
 
     // Admin UI static asset serving (optional — skipped if dist directory does not exist).
-    let admin_ui_path = std::env::var("AETERNA_ADMIN_UI_PATH")
-        .unwrap_or_else(|_| "./admin-ui/dist".to_string());
+    let admin_ui_path =
+        std::env::var("AETERNA_ADMIN_UI_PATH").unwrap_or_else(|_| "./admin-ui/dist".to_string());
     let admin_ui_dir = PathBuf::from(&admin_ui_path);
     if admin_ui_dir.is_dir() {
         let index_html = admin_ui_dir.join("index.html");
-        let serve_dir = ServeDir::new(&admin_ui_dir)
-            .not_found_service(ServeFile::new(&index_html));
+        let serve_dir = ServeDir::new(&admin_ui_dir).not_found_service(ServeFile::new(&index_html));
         app = app.nest_service("/admin", serve_dir);
         tracing::info!(path = %admin_ui_path, "Admin UI serving enabled at /admin");
     } else {

@@ -35,11 +35,13 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::response::{IntoResponse, Response};
 use futures_util::future::BoxFuture;
-use mk_core::types::{RoleIdentifier, TenantContext, TenantId, UserId};
+use mk_core::types::{
+    DEFAULT_TENANT_SLUG, RoleIdentifier, SYSTEM_USER_ID, TenantContext, TenantId, UserId,
+};
 use tower::{Layer, Service};
 
 use super::PluginAuthState;
-use super::lookup_roles_for_idp_subject;
+use super::lookup_roles_for_idp;
 use super::plugin_auth::{PluginIdentity, validate_plugin_bearer};
 
 // ---------------------------------------------------------------------------
@@ -174,18 +176,27 @@ async fn tenant_context_from_identity(
     headers: &axum::http::HeaderMap,
 ) -> Option<TenantContext> {
     let tenant_id = TenantId::new(sanitize(&identity.tenant_id, 100))?;
-    let user_id = UserId::new(sanitize(&identity.github_login, 100))?;
 
-    let roles = match &auth_state.postgres {
-        Some(postgres) => lookup_roles_for_idp_subject(
-            postgres.as_ref(),
-            &identity.github_login,
-            tenant_id.as_str(),
-        )
-        .await
-        .ok()?,
-        None => Vec::new(),
+    let (user_id_str, roles) = match &auth_state.postgres {
+        Some(postgres) => {
+            let resolved = postgres
+                .resolve_user_id_by_idp(&identity.idp_provider, &identity.github_login)
+                .await
+                .ok()??;
+            let roles = lookup_roles_for_idp(
+                postgres.as_ref(),
+                &identity.idp_provider,
+                &identity.github_login,
+                tenant_id.as_str(),
+            )
+            .await
+            .ok()?;
+            (resolved, roles)
+        }
+        None => (sanitize(&identity.github_login, 100), Vec::new()),
     };
+
+    let user_id = UserId::new(user_id_str)?;
 
     let target_tenant_id = headers
         .get("x-target-tenant-id")
@@ -212,12 +223,12 @@ fn dev_context_from_headers(headers: &axum::http::HeaderMap) -> TenantContext {
         .get("x-tenant-id")
         .and_then(|v| v.to_str().ok())
         .filter(|s| !s.is_empty())
-        .unwrap_or("default");
+        .unwrap_or(DEFAULT_TENANT_SLUG);
     let user_str = headers
         .get("x-user-id")
         .and_then(|v| v.to_str().ok())
         .filter(|s| !s.is_empty())
-        .unwrap_or("system");
+        .unwrap_or(SYSTEM_USER_ID);
 
     let roles = headers
         .get("x-user-role")
@@ -502,6 +513,7 @@ mod tests {
 
         let claims = PluginTokenClaims {
             sub: "testuser".to_string(),
+            idp_provider: "github".to_string(),
             tenant_id: tenant.as_str().to_string(),
             iss: "aeterna".to_string(),
             aud: vec![PluginTokenClaims::AUDIENCE.to_string()],
