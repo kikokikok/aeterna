@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Aeterna E2E Test Suite",
-    "description": "Exhaustive end-to-end tests for the Aeterna stack via HTTPS ingress.\n\n1. Deployment Validation \u2014 health, readiness, liveness, 404 fallback\n2. Admin Features & Configuration \u2014 OpenSpec discovery, governance, A2A, MCP\n3. Realistic Scenario \u2014 Full knowledge CRUD lifecycle\n4. MCP Protocol \u2014 JSON-RPC initialize, tools/list, tools/call, error handling\n5. A2A Protocol \u2014 Agent card, health, metrics, task submission\n6. Webhook Validation \u2014 GitHub webhook endpoint error paths\n7. Error Validation \u2014 Invalid inputs, missing fields, nonexistent resources\n8. Knowledge Layer Tests \u2014 Multi-layer creation, PR-track governance\n9. MCP Governance Tools \u2014 Configure, request lifecycle, audit, roles\n10. MCP Memory Tools \u2014 Add, delete, feedback, close\n11. MCP CCA & Sync Tools \u2014 Context assemble, note capture, meta-loop, sync\n12. MCP Knowledge & Policy Tools \u2014 knowledge_get, knowledge_query\n13. Plugin Auth \u2014 Bootstrap Flow\n14. Plugin Auth \u2014 Token Refresh & Logout\n15. Auth Guards \u2014 Sessions\n16. Auth Guards \u2014 Knowledge CRUD\n17. Auth Guards \u2014 Sync\n18. Auth Edge Cases \u2014 Security Boundaries\n19. Authenticated Memory Lifecycle\n20. Authenticated Knowledge \u2014 Multi-layer & Governance\n21. Authenticated Governance \u2014 Drift & Proposals\n22. Authenticated Sync Bridge\n23. Authenticated CCA Capabilities\n24. Full Authenticated Journey \u2014 End-to-End",
+    "description": "Exhaustive end-to-end tests for the Aeterna stack via HTTPS ingress.\n\n1. Deployment Validation — health, readiness, liveness, 404 fallback\n2. Admin Features & Configuration — OpenSpec discovery, governance, A2A, MCP\n3. Realistic Scenario — Full knowledge CRUD lifecycle\n4. MCP Protocol — JSON-RPC initialize, tools/list, tools/call, error handling\n5. A2A Protocol — Agent card, health, metrics, task submission\n6. Webhook Validation — GitHub webhook endpoint error paths\n7. Error Validation — Invalid inputs, missing fields, nonexistent resources\n8. Knowledge Layer Tests — Multi-layer creation, PR-track governance\n9. MCP Governance Tools — Configure, request lifecycle, audit, roles\n10. MCP Memory Tools — Add, delete, feedback, close\n11. MCP CCA & Sync Tools — Context assemble, note capture, meta-loop, sync\n12. MCP Knowledge & Policy Tools — knowledge_get, knowledge_query\n13. Plugin Auth — Bootstrap Flow\n14. Plugin Auth — Token Refresh & Logout\n15. Auth Guards — Sessions\n16. Auth Guards — Knowledge CRUD\n17. Auth Guards — Sync\n18. Auth Edge Cases — Security Boundaries\n19. Authenticated Memory Lifecycle\n20. Authenticated Knowledge — Multi-layer & Governance\n21. Authenticated Governance — Drift & Proposals\n22. Authenticated Sync Bridge\n23. Authenticated CCA Capabilities\n24. Full Authenticated Journey — End-to-End",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "version": "5.0.0"
   },
@@ -747,7 +747,7 @@
           }
         },
         {
-          "name": "2.12 Admin \u2014 GitHub Org Sync",
+          "name": "2.12 Admin — GitHub Org Sync",
           "event": [
             {
               "listen": "test",
@@ -770,13 +770,27 @@
                   "    });",
                   "",
                   "    if (status === 200) {",
-                  "        pm.test('Sync report fields', () => {",
+                  "        pm.test('Sync results envelope', () => {",
                   "            const json = pm.response.json();",
-                  "            pm.expect(json).to.have.property('users_created');",
-                  "            pm.expect(json).to.have.property('users_updated');",
-                  "            pm.expect(json).to.have.property('groups_synced');",
-                  "            pm.expect(json).to.have.property('memberships_added');",
+                  "            pm.expect(json).to.have.property('results');",
+                  "            pm.expect(json.results).to.be.an('array');",
                   "        });",
+                  "        if (pm.response.json().results.length > 0) {",
+                  "            pm.test('First result has tenant_id and status', () => {",
+                  "                const first = pm.response.json().results[0];",
+                  "                pm.expect(first).to.have.property('tenant_id');",
+                  "                pm.expect(first).to.have.property('status');",
+                  "            });",
+                  "            if (pm.response.json().results[0].status === 'ok') {",
+                  "                pm.test('Successful result has report with sync fields', () => {",
+                  "                    const report = pm.response.json().results[0].report;",
+                  "                    pm.expect(report).to.have.property('users_created');",
+                  "                    pm.expect(report).to.have.property('users_updated');",
+                  "                    pm.expect(report).to.have.property('groups_synced');",
+                  "                    pm.expect(report).to.have.property('memberships_added');",
+                  "                });",
+                  "            }",
+                  "        }",
                   "    } else if (status === 409) {",
                   "        pm.test('Concurrent sync guard active', () => {",
                   "            const json = pm.response.json();",
@@ -820,7 +834,7 @@
       ]
     },
     {
-      "name": "3. Realistic Scenario \u2014 Knowledge CRUD Lifecycle",
+      "name": "3. Realistic Scenario — Knowledge CRUD Lifecycle",
       "event": [
         {
           "listen": "prerequest",
@@ -1431,7 +1445,7 @@
       ]
     },
     {
-      "name": "4. MCP Protocol \u2014 JSON-RPC",
+      "name": "4. MCP Protocol — JSON-RPC",
       "item": [
         {
           "name": "4.1 MCP Initialize",
@@ -2840,7 +2854,7 @@
       ]
     },
     {
-      "name": "8. Knowledge Layer Tests \u2014 Multi-layer & Governance",
+      "name": "8. Knowledge Layer Tests — Multi-layer & Governance",
       "event": [
         {
           "listen": "prerequest",
@@ -3179,7 +3193,7 @@
       "name": "9. MCP Governance Tools",
       "item": [
         {
-          "name": "9.1 governance_configure \u2014 set governance config",
+          "name": "9.1 governance_configure — set governance config",
           "event": [
             {
               "listen": "test",
@@ -3244,7 +3258,7 @@
           }
         },
         {
-          "name": "9.2 governance_request_create \u2014 create approval request",
+          "name": "9.2 governance_request_create — create approval request",
           "event": [
             {
               "listen": "test",
@@ -3310,7 +3324,7 @@
           }
         },
         {
-          "name": "9.3 governance_request_list \u2014 list pending requests",
+          "name": "9.3 governance_request_list — list pending requests",
           "event": [
             {
               "listen": "test",
@@ -3365,7 +3379,7 @@
           }
         },
         {
-          "name": "9.4 governance_audit_list \u2014 list audit entries",
+          "name": "9.4 governance_audit_list — list audit entries",
           "event": [
             {
               "listen": "test",
@@ -3420,7 +3434,7 @@
           }
         },
         {
-          "name": "9.5 governance_role_list \u2014 list governance roles",
+          "name": "9.5 governance_role_list — list governance roles",
           "event": [
             {
               "listen": "test",
@@ -3475,7 +3489,7 @@
           }
         },
         {
-          "name": "9.6 governance_config_get \u2014 verify config set in 9.1",
+          "name": "9.6 governance_config_get — verify config set in 9.1",
           "event": [
             {
               "listen": "test",
@@ -3530,7 +3544,7 @@
           }
         },
         {
-          "name": "9.7 governance_unit_create \u2014 create org unit",
+          "name": "9.7 governance_unit_create — create org unit",
           "event": [
             {
               "listen": "test",
@@ -3585,7 +3599,7 @@
           }
         },
         {
-          "name": "9.8 governance_hierarchy_navigate \u2014 navigate org hierarchy",
+          "name": "9.8 governance_hierarchy_navigate — navigate org hierarchy",
           "event": [
             {
               "listen": "test",
@@ -3645,7 +3659,7 @@
       "name": "10. MCP Memory Tools",
       "item": [
         {
-          "name": "10.1 memory_add \u2014 store a memory",
+          "name": "10.1 memory_add — store a memory",
           "event": [
             {
               "listen": "test",
@@ -3710,7 +3724,7 @@
           }
         },
         {
-          "name": "10.2 memory_search \u2014 search memories (with tenant)",
+          "name": "10.2 memory_search — search memories (with tenant)",
           "event": [
             {
               "listen": "test",
@@ -3765,7 +3779,7 @@
           }
         },
         {
-          "name": "10.3 memory_feedback \u2014 submit reward signal",
+          "name": "10.3 memory_feedback — submit reward signal",
           "event": [
             {
               "listen": "test",
@@ -3820,7 +3834,7 @@
           }
         },
         {
-          "name": "10.4 memory_delete \u2014 delete a memory",
+          "name": "10.4 memory_delete — delete a memory",
           "event": [
             {
               "listen": "test",
@@ -3875,7 +3889,7 @@
           }
         },
         {
-          "name": "10.5 memory_close \u2014 close session context",
+          "name": "10.5 memory_close — close session context",
           "event": [
             {
               "listen": "test",
@@ -3930,7 +3944,7 @@
           }
         },
         {
-          "name": "10.6 memory_optimize \u2014 trigger optimization",
+          "name": "10.6 memory_optimize — trigger optimization",
           "event": [
             {
               "listen": "test",
@@ -3985,7 +3999,7 @@
           }
         },
         {
-          "name": "10.7 memory_reason \u2014 reflective reasoning",
+          "name": "10.7 memory_reason — reflective reasoning",
           "event": [
             {
               "listen": "test",
@@ -4045,7 +4059,7 @@
       "name": "11. MCP CCA & Sync Tools",
       "item": [
         {
-          "name": "11.1 context_assemble \u2014 hierarchical context",
+          "name": "11.1 context_assemble — hierarchical context",
           "event": [
             {
               "listen": "test",
@@ -4100,7 +4114,7 @@
           }
         },
         {
-          "name": "11.2 note_capture \u2014 capture trajectory event",
+          "name": "11.2 note_capture — capture trajectory event",
           "event": [
             {
               "listen": "test",
@@ -4155,7 +4169,7 @@
           }
         },
         {
-          "name": "11.3 meta_loop_status \u2014 get meta-agent status",
+          "name": "11.3 meta_loop_status — get meta-agent status",
           "event": [
             {
               "listen": "test",
@@ -4210,7 +4224,7 @@
           }
         },
         {
-          "name": "11.4 hindsight_query \u2014 query error patterns",
+          "name": "11.4 hindsight_query — query error patterns",
           "event": [
             {
               "listen": "test",
@@ -4265,7 +4279,7 @@
           }
         },
         {
-          "name": "11.5 sync_now \u2014 trigger sync",
+          "name": "11.5 sync_now — trigger sync",
           "event": [
             {
               "listen": "test",
@@ -4320,7 +4334,7 @@
           }
         },
         {
-          "name": "11.6 sync_status \u2014 check sync status",
+          "name": "11.6 sync_status — check sync status",
           "event": [
             {
               "listen": "test",
@@ -4380,7 +4394,7 @@
       "name": "12. MCP Knowledge & Policy Tools",
       "item": [
         {
-          "name": "12.1 knowledge_get \u2014 get by path",
+          "name": "12.1 knowledge_get — get by path",
           "event": [
             {
               "listen": "test",
@@ -4435,7 +4449,7 @@
           }
         },
         {
-          "name": "12.2 knowledge_query \u2014 semantic search",
+          "name": "12.2 knowledge_query — semantic search",
           "event": [
             {
               "listen": "test",
@@ -4490,7 +4504,7 @@
           }
         },
         {
-          "name": "12.3 knowledge_list \u2014 list by layer",
+          "name": "12.3 knowledge_list — list by layer",
           "event": [
             {
               "listen": "test",
@@ -4545,7 +4559,7 @@
           }
         },
         {
-          "name": "12.4 knowledge_resolve_conflict \u2014 conflict resolution",
+          "name": "12.4 knowledge_resolve_conflict — conflict resolution",
           "event": [
             {
               "listen": "test",
@@ -4602,10 +4616,10 @@
       ]
     },
     {
-      "name": "13. Plugin Auth \u2014 Bootstrap Flow",
+      "name": "13. Plugin Auth — Bootstrap Flow",
       "item": [
         {
-          "name": "13.1 Bootstrap \u2014 Happy Path",
+          "name": "13.1 Bootstrap — Happy Path",
           "event": [
             {
               "listen": "test",
@@ -4673,7 +4687,7 @@
           }
         },
         {
-          "name": "13.2 Bootstrap \u2014 Unsupported Provider",
+          "name": "13.2 Bootstrap — Unsupported Provider",
           "event": [
             {
               "listen": "test",
@@ -4722,7 +4736,7 @@
           }
         },
         {
-          "name": "13.3 Bootstrap \u2014 Missing Required Fields",
+          "name": "13.3 Bootstrap — Missing Required Fields",
           "event": [
             {
               "listen": "test",
@@ -4777,7 +4791,7 @@
           }
         },
         {
-          "name": "13.4 Bootstrap \u2014 Invalid GitHub Token",
+          "name": "13.4 Bootstrap — Invalid GitHub Token",
           "event": [
             {
               "listen": "test",
@@ -4826,7 +4840,7 @@
           }
         },
         {
-          "name": "13.5 Bootstrap \u2014 Empty Body",
+          "name": "13.5 Bootstrap — Empty Body",
           "event": [
             {
               "listen": "test",
@@ -4883,10 +4897,10 @@
       ]
     },
     {
-      "name": "14. Plugin Auth \u2014 Token Refresh & Logout",
+      "name": "14. Plugin Auth — Token Refresh & Logout",
       "item": [
         {
-          "name": "14.1 Refresh \u2014 Happy Path",
+          "name": "14.1 Refresh — Happy Path",
           "event": [
             {
               "listen": "test",
@@ -4961,7 +4975,7 @@
           }
         },
         {
-          "name": "14.2 Refresh \u2014 Old Token Rejected (single-use)",
+          "name": "14.2 Refresh — Old Token Rejected (single-use)",
           "event": [
             {
               "listen": "test",
@@ -5010,7 +5024,7 @@
           }
         },
         {
-          "name": "14.3 Refresh \u2014 Missing Token Field",
+          "name": "14.3 Refresh — Missing Token Field",
           "event": [
             {
               "listen": "test",
@@ -5065,7 +5079,7 @@
           }
         },
         {
-          "name": "14.4 Logout \u2014 Happy Path",
+          "name": "14.4 Logout — Happy Path",
           "event": [
             {
               "listen": "test",
@@ -5114,7 +5128,7 @@
           }
         },
         {
-          "name": "14.5 Logout \u2014 No Refresh Token",
+          "name": "14.5 Logout — No Refresh Token",
           "event": [
             {
               "listen": "test",
@@ -5215,10 +5229,10 @@
       ]
     },
     {
-      "name": "15. Auth Guards \u2014 Sessions",
+      "name": "15. Auth Guards — Sessions",
       "item": [
         {
-          "name": "15.1 Session Start \u2014 Valid Token",
+          "name": "15.1 Session Start — Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5273,7 +5287,7 @@
           }
         },
         {
-          "name": "15.2 Session Start \u2014 No Token (401)",
+          "name": "15.2 Session Start — No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5320,7 +5334,7 @@
           }
         },
         {
-          "name": "15.3 Session Start \u2014 Invalid Token (401)",
+          "name": "15.3 Session Start — Invalid Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5371,7 +5385,7 @@
           }
         },
         {
-          "name": "15.4 Session End \u2014 Valid Token",
+          "name": "15.4 Session End — Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5425,7 +5439,7 @@
           }
         },
         {
-          "name": "15.5 Session End \u2014 No Token (401)",
+          "name": "15.5 Session End — No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5476,10 +5490,10 @@
       ]
     },
     {
-      "name": "16. Auth Guards \u2014 Knowledge CRUD",
+      "name": "16. Auth Guards — Knowledge CRUD",
       "item": [
         {
-          "name": "16.1 Knowledge Create \u2014 Valid Token",
+          "name": "16.1 Knowledge Create — Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5537,7 +5551,7 @@
           }
         },
         {
-          "name": "16.2 Knowledge Create \u2014 No Token (401)",
+          "name": "16.2 Knowledge Create — No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5590,7 +5604,7 @@
           }
         },
         {
-          "name": "16.3 Knowledge Query \u2014 Valid Token",
+          "name": "16.3 Knowledge Query — Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5642,7 +5656,7 @@
           }
         },
         {
-          "name": "16.4 Knowledge Query \u2014 No Token (401)",
+          "name": "16.4 Knowledge Query — No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5690,7 +5704,7 @@
           }
         },
         {
-          "name": "16.5 Knowledge Delete \u2014 Valid Token (cleanup)",
+          "name": "16.5 Knowledge Delete — Valid Token (cleanup)",
           "event": [
             {
               "listen": "test",
@@ -5739,7 +5753,7 @@
           }
         },
         {
-          "name": "16.6 Knowledge Delete \u2014 No Token (401)",
+          "name": "16.6 Knowledge Delete — No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5774,10 +5788,10 @@
       ]
     },
     {
-      "name": "17. Auth Guards \u2014 Sync",
+      "name": "17. Auth Guards — Sync",
       "item": [
         {
-          "name": "17.1 Sync Push \u2014 Valid Token",
+          "name": "17.1 Sync Push — Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5829,7 +5843,7 @@
           }
         },
         {
-          "name": "17.2 Sync Push \u2014 No Token (401)",
+          "name": "17.2 Sync Push — No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5877,7 +5891,7 @@
           }
         },
         {
-          "name": "17.3 Sync Pull \u2014 Valid Token",
+          "name": "17.3 Sync Pull — Valid Token",
           "event": [
             {
               "listen": "test",
@@ -5926,7 +5940,7 @@
           }
         },
         {
-          "name": "17.4 Sync Pull \u2014 No Token (401)",
+          "name": "17.4 Sync Pull — No Token (401)",
           "event": [
             {
               "listen": "test",
@@ -5971,10 +5985,10 @@
       ]
     },
     {
-      "name": "18. Auth Edge Cases \u2014 Security Boundaries",
+      "name": "18. Auth Edge Cases — Security Boundaries",
       "item": [
         {
-          "name": "18.1 Admin Sync \u2014 No Auth Required (security gap documented)",
+          "name": "18.1 Admin Sync — No Auth Required (security gap documented)",
           "event": [
             {
               "listen": "test",
@@ -6017,7 +6031,7 @@
           }
         },
         {
-          "name": "18.2 Health Endpoints \u2014 No Auth Required",
+          "name": "18.2 Health Endpoints — No Auth Required",
           "event": [
             {
               "listen": "test",
@@ -6053,7 +6067,7 @@
           }
         },
         {
-          "name": "18.3 Knowledge Discovery \u2014 No Auth Required",
+          "name": "18.3 Knowledge Discovery — No Auth Required",
           "event": [
             {
               "listen": "test",
@@ -6086,7 +6100,7 @@
           }
         },
         {
-          "name": "18.4 Auth Bootstrap \u2014 Malformed JSON",
+          "name": "18.4 Auth Bootstrap — Malformed JSON",
           "event": [
             {
               "listen": "test",
@@ -6141,7 +6155,7 @@
           }
         },
         {
-          "name": "18.5 Protected Endpoint \u2014 Bearer Prefix Missing",
+          "name": "18.5 Protected Endpoint — Bearer Prefix Missing",
           "event": [
             {
               "listen": "test",
@@ -6192,7 +6206,7 @@
           }
         },
         {
-          "name": "18.6 Protected Endpoint \u2014 Empty Bearer",
+          "name": "18.6 Protected Endpoint — Empty Bearer",
           "event": [
             {
               "listen": "test",
@@ -6248,7 +6262,7 @@
       "name": "19. Authenticated Memory Lifecycle",
       "item": [
         {
-          "name": "19.1 memory_add \u2014 store project-layer memory (authenticated)",
+          "name": "19.1 memory_add — store project-layer memory (authenticated)",
           "event": [
             {
               "listen": "prerequest",
@@ -6317,7 +6331,7 @@
           }
         },
         {
-          "name": "19.2 memory_add \u2014 store team-layer memory",
+          "name": "19.2 memory_add — store team-layer memory",
           "event": [
             {
               "listen": "test",
@@ -6365,7 +6379,7 @@
           }
         },
         {
-          "name": "19.3 memory_search \u2014 find project memories",
+          "name": "19.3 memory_search — find project memories",
           "event": [
             {
               "listen": "test",
@@ -6417,7 +6431,7 @@
           }
         },
         {
-          "name": "19.4 memory_feedback \u2014 reward signal on stored memory",
+          "name": "19.4 memory_feedback — reward signal on stored memory",
           "event": [
             {
               "listen": "test",
@@ -6464,7 +6478,7 @@
           }
         },
         {
-          "name": "19.5 memory_reason \u2014 reflective reasoning query",
+          "name": "19.5 memory_reason — reflective reasoning query",
           "event": [
             {
               "listen": "test",
@@ -6511,7 +6525,7 @@
           }
         },
         {
-          "name": "19.6 memory_optimize \u2014 trigger Memory-R1 optimization",
+          "name": "19.6 memory_optimize — trigger Memory-R1 optimization",
           "event": [
             {
               "listen": "test",
@@ -6558,7 +6572,7 @@
           }
         },
         {
-          "name": "19.7 memory_close \u2014 close session context",
+          "name": "19.7 memory_close — close session context",
           "event": [
             {
               "listen": "test",
@@ -6605,7 +6619,7 @@
           }
         },
         {
-          "name": "19.8 memory_delete \u2014 cleanup test memory",
+          "name": "19.8 memory_delete — cleanup test memory",
           "event": [
             {
               "listen": "test",
@@ -6655,7 +6669,7 @@
       ]
     },
     {
-      "name": "20. Authenticated Knowledge \u2014 Multi-layer & Governance",
+      "name": "20. Authenticated Knowledge — Multi-layer & Governance",
       "item": [
         {
           "name": "20.1 Create Project-layer entry (fast-track, authenticated)",
@@ -7064,10 +7078,10 @@
       ]
     },
     {
-      "name": "21. Authenticated Governance \u2014 Drift & Proposals",
+      "name": "21. Authenticated Governance — Drift & Proposals",
       "item": [
         {
-          "name": "21.1 governance_configure \u2014 set drift config (MCP)",
+          "name": "21.1 governance_configure — set drift config (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7115,7 +7129,7 @@
           }
         },
         {
-          "name": "21.2 governance_config_get \u2014 verify config (MCP)",
+          "name": "21.2 governance_config_get — verify config (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7162,7 +7176,7 @@
           }
         },
         {
-          "name": "21.3 Drift Config \u2014 REST endpoint",
+          "name": "21.3 Drift Config — REST endpoint",
           "event": [
             {
               "listen": "test",
@@ -7196,7 +7210,7 @@
           }
         },
         {
-          "name": "21.4 Drift Detection \u2014 REST endpoint",
+          "name": "21.4 Drift Detection — REST endpoint",
           "event": [
             {
               "listen": "test",
@@ -7230,7 +7244,7 @@
           }
         },
         {
-          "name": "21.5 governance_request_create \u2014 create approval request (MCP)",
+          "name": "21.5 governance_request_create — create approval request (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7278,7 +7292,7 @@
           }
         },
         {
-          "name": "21.6 governance_request_list \u2014 list pending requests (MCP)",
+          "name": "21.6 governance_request_list — list pending requests (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7325,7 +7339,7 @@
           }
         },
         {
-          "name": "21.7 governance_audit_list \u2014 audit trail (MCP)",
+          "name": "21.7 governance_audit_list — audit trail (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7372,7 +7386,7 @@
           }
         },
         {
-          "name": "21.8 governance_role_list \u2014 list roles (MCP)",
+          "name": "21.8 governance_role_list — list roles (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7419,7 +7433,7 @@
           }
         },
         {
-          "name": "21.9 governance_unit_create \u2014 create org unit (MCP)",
+          "name": "21.9 governance_unit_create — create org unit (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7466,7 +7480,7 @@
           }
         },
         {
-          "name": "21.10 Governance Reports \u2014 REST endpoint",
+          "name": "21.10 Governance Reports — REST endpoint",
           "event": [
             {
               "listen": "test",
@@ -7500,7 +7514,7 @@
           }
         },
         {
-          "name": "21.11 List Proposals \u2014 REST endpoint",
+          "name": "21.11 List Proposals — REST endpoint",
           "event": [
             {
               "listen": "test",
@@ -7534,7 +7548,7 @@
           }
         },
         {
-          "name": "21.12 Event Replay \u2014 REST endpoint",
+          "name": "21.12 Event Replay — REST endpoint",
           "event": [
             {
               "listen": "test",
@@ -7583,7 +7597,7 @@
       "name": "22. Authenticated Sync Bridge",
       "item": [
         {
-          "name": "22.1 Sync Push \u2014 empty batch (authenticated)",
+          "name": "22.1 Sync Push — empty batch (authenticated)",
           "event": [
             {
               "listen": "test",
@@ -7637,7 +7651,7 @@
           }
         },
         {
-          "name": "22.2 Sync Pull \u2014 initial cursor (authenticated)",
+          "name": "22.2 Sync Pull — initial cursor (authenticated)",
           "event": [
             {
               "listen": "test",
@@ -7686,7 +7700,7 @@
           }
         },
         {
-          "name": "22.3 sync_now \u2014 trigger sync (MCP)",
+          "name": "22.3 sync_now — trigger sync (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7733,7 +7747,7 @@
           }
         },
         {
-          "name": "22.4 sync_status \u2014 check sync status (MCP)",
+          "name": "22.4 sync_status — check sync status (MCP)",
           "event": [
             {
               "listen": "test",
@@ -7780,7 +7794,7 @@
           }
         },
         {
-          "name": "22.5 Sync Push \u2014 with entry (authenticated)",
+          "name": "22.5 Sync Push — with entry (authenticated)",
           "event": [
             {
               "listen": "test",
@@ -7838,7 +7852,7 @@
       "name": "23. Authenticated CCA Capabilities",
       "item": [
         {
-          "name": "23.1 context_assemble \u2014 hierarchical context",
+          "name": "23.1 context_assemble — hierarchical context",
           "event": [
             {
               "listen": "test",
@@ -7886,7 +7900,7 @@
           }
         },
         {
-          "name": "23.2 note_capture \u2014 capture trajectory event",
+          "name": "23.2 note_capture — capture trajectory event",
           "event": [
             {
               "listen": "test",
@@ -7933,7 +7947,7 @@
           }
         },
         {
-          "name": "23.3 hindsight_query \u2014 query error patterns",
+          "name": "23.3 hindsight_query — query error patterns",
           "event": [
             {
               "listen": "test",
@@ -7980,7 +7994,7 @@
           }
         },
         {
-          "name": "23.4 meta_loop_status \u2014 check meta-agent status",
+          "name": "23.4 meta_loop_status — check meta-agent status",
           "event": [
             {
               "listen": "test",
@@ -8027,7 +8041,7 @@
           }
         },
         {
-          "name": "23.5 knowledge_query \u2014 semantic search via MCP",
+          "name": "23.5 knowledge_query — semantic search via MCP",
           "event": [
             {
               "listen": "test",
@@ -8074,7 +8088,7 @@
           }
         },
         {
-          "name": "23.6 knowledge_list \u2014 list by layer via MCP",
+          "name": "23.6 knowledge_list — list by layer via MCP",
           "event": [
             {
               "listen": "test",
@@ -8123,7 +8137,7 @@
       ]
     },
     {
-      "name": "24. Full Authenticated Journey \u2014 End-to-End",
+      "name": "24. Full Authenticated Journey — End-to-End",
       "item": [
         {
           "name": "24.1 Re-bootstrap (fresh tokens)",
@@ -8850,10 +8864,10 @@
       ]
     },
     {
-      "name": "25. Graph Tools \u2014 Link, Traverse, Query",
+      "name": "25. Graph Tools — Link, Traverse, Query",
       "item": [
         {
-          "name": "25.1 graph_link \u2014 create edge memory->knowledge",
+          "name": "25.1 graph_link — create edge memory->knowledge",
           "event": [
             {
               "listen": "test",
@@ -8921,7 +8935,7 @@
           }
         },
         {
-          "name": "25.2 graph_link \u2014 create second edge memory->memory",
+          "name": "25.2 graph_link — create second edge memory->memory",
           "event": [
             {
               "listen": "test",
@@ -8989,7 +9003,7 @@
           }
         },
         {
-          "name": "25.3 graph_traverse \u2014 BFS from e2e-memory-1",
+          "name": "25.3 graph_traverse — BFS from e2e-memory-1",
           "event": [
             {
               "listen": "test",
@@ -9051,7 +9065,7 @@
           }
         },
         {
-          "name": "25.4 graph_find_path \u2014 memory to knowledge",
+          "name": "25.4 graph_find_path — memory to knowledge",
           "event": [
             {
               "listen": "test",
@@ -9115,7 +9129,7 @@
           }
         },
         {
-          "name": "25.5 graph_related \u2014 find related",
+          "name": "25.5 graph_related — find related",
           "event": [
             {
               "listen": "test",
@@ -9176,7 +9190,7 @@
           }
         },
         {
-          "name": "25.6 graph_violations \u2014 check violations",
+          "name": "25.6 graph_violations — check violations",
           "event": [
             {
               "listen": "test",
@@ -9237,7 +9251,7 @@
           }
         },
         {
-          "name": "25.7 graph_implementations \u2014 by knowledge id",
+          "name": "25.7 graph_implementations — by knowledge id",
           "event": [
             {
               "listen": "test",
@@ -9298,7 +9312,7 @@
           }
         },
         {
-          "name": "25.8 graph_context \u2014 file context",
+          "name": "25.8 graph_context — file context",
           "event": [
             {
               "listen": "test",
@@ -9359,7 +9373,7 @@
           }
         },
         {
-          "name": "25.9 graph_query \u2014 search nodes",
+          "name": "25.9 graph_query — search nodes",
           "event": [
             {
               "listen": "test",
@@ -9421,7 +9435,7 @@
           }
         },
         {
-          "name": "25.10 graph_neighbors \u2014 find neighbors",
+          "name": "25.10 graph_neighbors — find neighbors",
           "event": [
             {
               "listen": "test",
@@ -9482,7 +9496,7 @@
           }
         },
         {
-          "name": "25.11 graph_unlink \u2014 cleanup by edge_id",
+          "name": "25.11 graph_unlink — cleanup by edge_id",
           "event": [
             {
               "listen": "test",
@@ -9542,7 +9556,7 @@
           }
         },
         {
-          "name": "25.12 graph_unlink \u2014 cleanup second edge",
+          "name": "25.12 graph_unlink — cleanup second edge",
           "event": [
             {
               "listen": "test",
@@ -9607,7 +9621,7 @@
       "name": "26. Memory Promote & Auto-Promote",
       "item": [
         {
-          "name": "26.1 memory_add \u2014 store promotable memory",
+          "name": "26.1 memory_add — store promotable memory",
           "event": [
             {
               "listen": "test",
@@ -9673,7 +9687,7 @@
           }
         },
         {
-          "name": "26.2 memory_feedback \u2014 boost reward",
+          "name": "26.2 memory_feedback — boost reward",
           "event": [
             {
               "listen": "test",
@@ -9733,7 +9747,7 @@
           }
         },
         {
-          "name": "26.3 aeterna_memory_promote \u2014 manual promote to team",
+          "name": "26.3 aeterna_memory_promote — manual promote to team",
           "event": [
             {
               "listen": "test",
@@ -9790,7 +9804,7 @@
           }
         },
         {
-          "name": "26.4 aeterna_memory_auto_promote \u2014 dry run",
+          "name": "26.4 aeterna_memory_auto_promote — dry run",
           "event": [
             {
               "listen": "test",
@@ -9852,7 +9866,7 @@
           }
         },
         {
-          "name": "26.5 aeterna_memory_auto_promote \u2014 actual run",
+          "name": "26.5 aeterna_memory_auto_promote — actual run",
           "event": [
             {
               "listen": "test",
@@ -9913,7 +9927,7 @@
           }
         },
         {
-          "name": "26.6 memory_delete \u2014 cleanup",
+          "name": "26.6 memory_delete — cleanup",
           "event": [
             {
               "listen": "test",
@@ -9978,7 +9992,7 @@
       "name": "27. Knowledge Propose & Governance Workflow",
       "item": [
         {
-          "name": "27.1 aeterna_knowledge_propose \u2014 propose ADR",
+          "name": "27.1 aeterna_knowledge_propose — propose ADR",
           "event": [
             {
               "listen": "test",
@@ -10047,7 +10061,7 @@
           }
         },
         {
-          "name": "27.2 aeterna_knowledge_pending \u2014 list pending",
+          "name": "27.2 aeterna_knowledge_pending — list pending",
           "event": [
             {
               "listen": "test",
@@ -10104,7 +10118,7 @@
           }
         },
         {
-          "name": "27.3 aeterna_knowledge_propose \u2014 propose pattern",
+          "name": "27.3 aeterna_knowledge_propose — propose pattern",
           "event": [
             {
               "listen": "test",
@@ -10165,7 +10179,7 @@
           }
         },
         {
-          "name": "27.4 aeterna_knowledge_propose \u2014 propose policy",
+          "name": "27.4 aeterna_knowledge_propose — propose policy",
           "event": [
             {
               "listen": "test",
@@ -10225,7 +10239,7 @@
           }
         },
         {
-          "name": "27.5 aeterna_knowledge_propose \u2014 propose hindsight",
+          "name": "27.5 aeterna_knowledge_propose — propose hindsight",
           "event": [
             {
               "listen": "test",
@@ -10285,7 +10299,7 @@
           }
         },
         {
-          "name": "27.6 knowledge_resolve_conflict \u2014 resolve federation conflict",
+          "name": "27.6 knowledge_resolve_conflict — resolve federation conflict",
           "event": [
             {
               "listen": "test",
@@ -10344,10 +10358,10 @@
       ]
     },
     {
-      "name": "28. Connected Integration Chain \u2014 Memory\u2192Graph\u2192Drift\u2192CCA\u2192Sync",
+      "name": "28. Connected Integration Chain — Memory→Graph→Drift→CCA→Sync",
       "item": [
         {
-          "name": "28.1 memory_add \u2014 chain seed memory",
+          "name": "28.1 memory_add — chain seed memory",
           "event": [
             {
               "listen": "test",
@@ -10408,7 +10422,7 @@
           }
         },
         {
-          "name": "28.2 memory_add \u2014 chain second memory",
+          "name": "28.2 memory_add — chain second memory",
           "event": [
             {
               "listen": "test",
@@ -10469,7 +10483,7 @@
           }
         },
         {
-          "name": "28.3 graph_link \u2014 memory1 related_to memory2",
+          "name": "28.3 graph_link — memory1 related_to memory2",
           "event": [
             {
               "listen": "test",
@@ -10530,7 +10544,7 @@
           }
         },
         {
-          "name": "28.4 graph_link \u2014 memory1 implements knowledge ref",
+          "name": "28.4 graph_link — memory1 implements knowledge ref",
           "event": [
             {
               "listen": "test",
@@ -10591,7 +10605,7 @@
           }
         },
         {
-          "name": "28.5 graph_traverse \u2014 verify both memories reachable",
+          "name": "28.5 graph_traverse — verify both memories reachable",
           "event": [
             {
               "listen": "test",
@@ -10654,7 +10668,7 @@
           }
         },
         {
-          "name": "28.6 graph_find_path \u2014 memory1 to memory2",
+          "name": "28.6 graph_find_path — memory1 to memory2",
           "event": [
             {
               "listen": "test",
@@ -10716,7 +10730,7 @@
           }
         },
         {
-          "name": "28.7 graph_related \u2014 verify memory2 appears",
+          "name": "28.7 graph_related — verify memory2 appears",
           "event": [
             {
               "listen": "test",
@@ -10778,7 +10792,7 @@
           }
         },
         {
-          "name": "28.8 memory_feedback \u2014 reward memory1",
+          "name": "28.8 memory_feedback — reward memory1",
           "event": [
             {
               "listen": "test",
@@ -10838,7 +10852,7 @@
           }
         },
         {
-          "name": "28.9 aeterna_memory_auto_promote \u2014 dry run",
+          "name": "28.9 aeterna_memory_auto_promote — dry run",
           "event": [
             {
               "listen": "test",
@@ -10900,7 +10914,7 @@
           }
         },
         {
-          "name": "28.10 aeterna_knowledge_propose \u2014 from chain memory",
+          "name": "28.10 aeterna_knowledge_propose — from chain memory",
           "event": [
             {
               "listen": "test",
@@ -11002,7 +11016,7 @@
           }
         },
         {
-          "name": "28.12 context_assemble \u2014 chain topic",
+          "name": "28.12 context_assemble — chain topic",
           "event": [
             {
               "listen": "test",
@@ -11059,7 +11073,7 @@
           }
         },
         {
-          "name": "28.13 hindsight_query \u2014 chain error patterns",
+          "name": "28.13 hindsight_query — chain error patterns",
           "event": [
             {
               "listen": "test",
@@ -11116,7 +11130,7 @@
           }
         },
         {
-          "name": "28.14 sync_status \u2014 bridge status",
+          "name": "28.14 sync_status — bridge status",
           "event": [
             {
               "listen": "test",
@@ -11173,7 +11187,7 @@
           }
         },
         {
-          "name": "28.15 Cleanup \u2014 delete chain memory 1",
+          "name": "28.15 Cleanup — delete chain memory 1",
           "request": {
             "method": "POST",
             "header": [
@@ -11224,7 +11238,7 @@
           ]
         },
         {
-          "name": "28.16 Cleanup \u2014 delete chain memory 2",
+          "name": "28.16 Cleanup — delete chain memory 2",
           "request": {
             "method": "POST",
             "header": [
@@ -11275,7 +11289,7 @@
           ]
         },
         {
-          "name": "28.17 Cleanup \u2014 unlink chain edge 1",
+          "name": "28.17 Cleanup — unlink chain edge 1",
           "request": {
             "method": "POST",
             "header": [
@@ -11326,7 +11340,7 @@
           ]
         },
         {
-          "name": "28.18 Cleanup \u2014 unlink chain edge 2",
+          "name": "28.18 Cleanup — unlink chain edge 2",
           "request": {
             "method": "POST",
             "header": [
@@ -12581,6 +12595,2760 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "34. Admin Session",
+      "item": [
+        {
+          "name": "34.1 Admin Session — Valid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 401', () => {",
+                  "    pm.expect([200, 401]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has user object', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('user');",
+                  "        pm.expect(json.user).to.have.property('user_id');",
+                  "        pm.expect(json.user).to.have.property('github_login');",
+                  "    });",
+                  "    pm.test('Response has roles array', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('roles');",
+                  "        pm.expect(json.roles).to.be.an('array');",
+                  "    });",
+                  "    pm.test('Response has tenants array', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('tenants');",
+                  "        pm.expect(json.tenants).to.be.an('array');",
+                  "    });",
+                  "    pm.test('Response has is_platform_admin flag', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('is_platform_admin');",
+                  "        pm.expect(json.is_platform_admin).to.be.a('boolean');",
+                  "    });",
+                  "    pm.test('Response has active_tenant_id', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('active_tenant_id');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/admin/session",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "admin",
+                "session"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "34.2 Admin Session — No Token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401 or 500', () => {",
+                  "    pm.expect([401, 500]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 401) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test('Error is unauthorized or configuration_error', () => {",
+                  "        pm.expect(['unauthorized', 'configuration_error']).to.include(json.error);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/admin/session",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "admin",
+                "session"
+              ]
+            },
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "35. Per-Tenant GitHub Sync",
+      "item": [
+        {
+          "name": "35.1 Sync Tenant — Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401, 403, 404, or 400', () => {",
+                  "    pm.expect([400, 401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 404) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test('Error is tenant_not_found', () => {",
+                  "        pm.expect(json.error).to.eql('tenant_not_found');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/nonexistent-tenant-xyz/sync/github",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "nonexistent-tenant-xyz",
+                "sync",
+                "github"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "35.2 Sync Tenant — Configured Tenant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Sync endpoint responds', () => {",
+                  "    pm.expect([200, 400, 401, 403, 404, 409, 500]).to.include(pm.response.code);",
+                  "});",
+                  "pm.test('Response is JSON', () => { pm.response.to.be.json; });",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Success has report with sync fields', () => {",
+                  "        const report = pm.response.json();",
+                  "        pm.expect(report).to.have.property('users_created');",
+                  "        pm.expect(report).to.have.property('users_updated');",
+                  "        pm.expect(report).to.have.property('groups_synced');",
+                  "        pm.expect(report).to.have.property('memberships_added');",
+                  "    });",
+                  "} else if (pm.response.code === 409) {",
+                  "    pm.test('Concurrent sync guard', () => {",
+                  "        pm.expect(pm.response.json().error).to.eql('sync_in_progress');",
+                  "    });",
+                  "} else if (pm.response.code === 400) {",
+                  "    pm.test('Bad request has error field', () => {",
+                  "        pm.expect(pm.response.json()).to.have.property('error');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/sync/github",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "sync",
+                "github"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "36. Tenant Provider Configuration",
+      "item": [
+        {
+          "name": "36.1 Get Tenant Providers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', () => {",
+                  "    pm.expect([200, 401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has success flag', () => {",
+                  "        pm.expect(pm.response.json().success).to.be.true;",
+                  "    });",
+                  "    pm.test('Response has llm, embedding, source fields', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('llm');",
+                  "        pm.expect(json).to.have.property('embedding');",
+                  "        pm.expect(json).to.have.property('source');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/providers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "providers"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "36.2 Set Tenant LLM Provider",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 4xx', () => {",
+                  "    pm.expect([200, 400, 401, 403, 404, 422]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has success and provider fields', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json).to.have.property('provider');",
+                  "        pm.expect(json).to.have.property('model');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/providers/llm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "providers",
+                "llm"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"provider\": \"openai\", \"model\": \"gpt-4o\"}"
+            }
+          }
+        },
+        {
+          "name": "36.3 Delete Tenant LLM Provider",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 4xx', () => {",
+                  "    pm.expect([200, 401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Delete response has success flag', () => {",
+                  "        pm.expect(pm.response.json().success).to.be.true;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/providers/llm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "providers",
+                "llm"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "36.4 Set Tenant Embedding Provider",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 4xx', () => {",
+                  "    pm.expect([200, 400, 401, 403, 404, 422]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has success and provider fields', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json).to.have.property('provider');",
+                  "        pm.expect(json).to.have.property('model');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/providers/embedding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "providers",
+                "embedding"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"provider\": \"openai\", \"model\": \"text-embedding-3-small\"}"
+            }
+          }
+        },
+        {
+          "name": "36.5 Delete Tenant Embedding Provider",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 4xx', () => {",
+                  "    pm.expect([200, 401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Delete response has success flag', () => {",
+                  "        pm.expect(pm.response.json().success).to.be.true;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/providers/embedding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "providers",
+                "embedding"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "36.6 Provider Connectivity Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 4xx', () => {",
+                  "    pm.expect([200, 401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response is JSON', () => { pm.response.to.be.json; });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantSlug}}/providers/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantSlug}}",
+                "providers",
+                "status"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "37. Tenant Purge",
+      "item": [
+        {
+          "name": "37.1 Purge Nonexistent Tenant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 401 or 403 (purge is idempotent)', () => {",
+                  "    pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has success and report', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json).to.have.property('report');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/nonexistent-purge-xyz/purge",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "nonexistent-purge-xyz",
+                "purge"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "38. Backup — Export and Import",
+      "item": [
+        {
+          "name": "38.1 Create Export Job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202 or 401 or 403', () => {",
+                  "    pm.expect([202, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 202) {",
+                  "    pm.test('Response has jobId and status=pending', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('jobId');",
+                  "        pm.expect(json.status).to.eql('pending');",
+                  "        pm.collectionVariables.set('exportJobId', json.jobId);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "export"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"target\": \"memories\", \"scope\": \"tenant\"}"
+            }
+          }
+        },
+        {
+          "name": "38.2 Poll Export Job Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', () => {",
+                  "    pm.expect([200, 401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Job has required fields', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('jobId');",
+                  "        pm.expect(json).to.have.property('status');",
+                  "        pm.expect(json).to.have.property('progressPct');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/export/{{exportJobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "export",
+                "{{exportJobId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "38.3 List Export Jobs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 401', () => {",
+                  "    pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has jobs array', () => {",
+                  "        pm.expect(pm.response.json()).to.have.property('jobs');",
+                  "        pm.expect(pm.response.json().jobs).to.be.an('array');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/exports",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "exports"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "38.4 Cancel Export Job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Cancel responds with valid status', () => {",
+                  "    pm.expect([200, 401, 403, 404, 409]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Cancelled job has status=cancelled', () => {",
+                  "        pm.expect(pm.response.json().status).to.eql('cancelled');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/export/{{exportJobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "export",
+                "{{exportJobId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "38.5 Export Invalid Target — 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400 or 401 or 403', () => {",
+                  "    pm.expect([400, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 400) {",
+                  "    pm.test('Error is invalid_target', () => {",
+                  "        pm.expect(pm.response.json().error).to.eql('invalid_target');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "export"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"target\": \"invalid_target\", \"scope\": \"tenant\"}"
+            }
+          }
+        },
+        {
+          "name": "38.6 Create Import Job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202 or 401 or 403', () => {",
+                  "    pm.expect([202, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 202) {",
+                  "    pm.test('Response has jobId and dryRun', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('jobId');",
+                  "        pm.expect(json).to.have.property('dryRun');",
+                  "        pm.expect(json.status).to.eql('pending');",
+                  "        pm.collectionVariables.set('importJobId', json.jobId);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "import"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"archivePath\": \"/tmp/test-archive.tar.gz\", \"mode\": \"merge\", \"dryRun\": true}"
+            }
+          }
+        },
+        {
+          "name": "38.7 Poll Import Job Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 4xx', () => {",
+                  "    pm.expect([200, 401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Job has jobId, status, mode, dryRun', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('jobId');",
+                  "        pm.expect(json).to.have.property('status');",
+                  "        pm.expect(json).to.have.property('mode');",
+                  "        pm.expect(json).to.have.property('dryRun');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/import/{{importJobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "import",
+                "{{importJobId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "38.8 List Import Jobs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 401', () => {",
+                  "    pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has jobs array', () => {",
+                  "        pm.expect(pm.response.json()).to.have.property('jobs');",
+                  "        pm.expect(pm.response.json().jobs).to.be.an('array');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/imports",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "imports"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "38.9 Import Invalid Mode — 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400 or 401 or 403', () => {",
+                  "    pm.expect([400, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 400) {",
+                  "    pm.test('Error is invalid_mode', () => {",
+                  "        pm.expect(pm.response.json().error).to.eql('invalid_mode');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "import"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"archivePath\": \"/tmp/test.tar.gz\", \"mode\": \"invalid_mode\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "39. Lifecycle — Remediations and Dead Letter",
+      "item": [
+        {
+          "name": "39.1 Lifecycle Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 401 or 403', () => {",
+                  "    pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has lifecycle_manager field', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('lifecycle_manager');",
+                  "        pm.expect(json.lifecycle_manager).to.eql('running');",
+                  "    });",
+                  "    pm.test('Response has tasks array', () => {",
+                  "        pm.expect(pm.response.json().tasks).to.be.an('array');",
+                  "        pm.expect(pm.response.json().tasks.length).to.be.greaterThan(0);",
+                  "    });",
+                  "    pm.test('Response has remediation_summary', () => {",
+                  "        const s = pm.response.json().remediation_summary;",
+                  "        pm.expect(s).to.have.property('pending');",
+                  "        pm.expect(s).to.have.property('total');",
+                  "    });",
+                  "    pm.test('Response has dead_letter_summary', () => {",
+                  "        const d = pm.response.json().dead_letter_summary;",
+                  "        pm.expect(d).to.have.property('active');",
+                  "        pm.expect(d).to.have.property('total');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/lifecycle/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "lifecycle",
+                "status"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "39.2 List Remediations (Pending)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 401 or 403', () => {",
+                  "    pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has items array and count', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('items');",
+                  "        pm.expect(json.items).to.be.an('array');",
+                  "        pm.expect(json).to.have.property('count');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/lifecycle/remediations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "lifecycle",
+                "remediations"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "39.3 List Remediations (All)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 401 or 403', () => {",
+                  "    pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has items array', () => {",
+                  "        pm.expect(pm.response.json().items).to.be.an('array');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/lifecycle/remediations?all=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "lifecycle",
+                "remediations"
+              ],
+              "query": [
+                {
+                  "key": "all",
+                  "value": "true"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "39.4 Get Remediation — Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404 or 401 or 403', () => {",
+                  "    pm.expect([401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 404) {",
+                  "    pm.test('Error is not_found', () => {",
+                  "        pm.expect(pm.response.json().error).to.eql('not_found');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/lifecycle/remediations/nonexistent-id-xyz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "lifecycle",
+                "remediations",
+                "nonexistent-id-xyz"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "39.5 Approve Remediation — Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404 or 401 or 403', () => {",
+                  "    pm.expect([401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 404) {",
+                  "    pm.test('Error is not_found', () => {",
+                  "        pm.expect(pm.response.json().error).to.eql('not_found');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/lifecycle/remediations/nonexistent-id-xyz/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "lifecycle",
+                "remediations",
+                "nonexistent-id-xyz",
+                "approve"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"notes\": \"test approval\"}"
+            }
+          }
+        },
+        {
+          "name": "39.6 Reject Remediation — Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404 or 401 or 403', () => {",
+                  "    pm.expect([401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 404) {",
+                  "    pm.test('Error is not_found', () => {",
+                  "        pm.expect(pm.response.json().error).to.eql('not_found');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/lifecycle/remediations/nonexistent-id-xyz/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "lifecycle",
+                "remediations",
+                "nonexistent-id-xyz",
+                "reject"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"reason\": \"test rejection\"}"
+            }
+          }
+        },
+        {
+          "name": "39.7 List Dead Letter Items",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 401 or 403', () => {",
+                  "    pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has items array and count', () => {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.have.property('items');",
+                  "        pm.expect(json.items).to.be.an('array');",
+                  "        pm.expect(json).to.have.property('count');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/lifecycle/dead-letter",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "lifecycle",
+                "dead-letter"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "39.8 Retry Dead Letter — Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404 or 401 or 403', () => {",
+                  "    pm.expect([401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 404) {",
+                  "    pm.test('Error is not_found', () => {",
+                  "        pm.expect(pm.response.json().error).to.eql('not_found');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/lifecycle/dead-letter/nonexistent-dlq-xyz/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "lifecycle",
+                "dead-letter",
+                "nonexistent-dlq-xyz",
+                "retry"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "39.9 Discard Dead Letter — Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404 or 401 or 403', () => {",
+                  "    pm.expect([401, 403, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 404) {",
+                  "    pm.test('Error is not_found', () => {",
+                  "        pm.expect(pm.response.json().error).to.eql('not_found');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/lifecycle/dead-letter/nonexistent-dlq-xyz/discard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "lifecycle",
+                "dead-letter",
+                "nonexistent-dlq-xyz",
+                "discard"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "40. Day-in-the-Life — Developer, Team Lead & Architect",
+      "item": [
+        {
+          "name": "40.1 [Developer] Bootstrap plugin session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"provider\": \"github\", \"github_access_token\": \"{{githubAccessToken}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/plugin/bootstrap",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "plugin",
+                "bootstrap"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Developer] Stores fresh plugin tokens for day session', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.access_token).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.refresh_token).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(json.github_login).to.be.a('string').and.not.be.empty;",
+                  "    pm.collectionVariables.set('pluginAccessToken', json.access_token);",
+                  "    pm.collectionVariables.set('pluginRefreshToken', json.refresh_token);",
+                  "    pm.collectionVariables.set('pluginGithubLogin', json.github_login);",
+                  "    pm.collectionVariables.set('dailyScenarioTs', String(Date.now()));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.2 [Developer] Open project coding session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"project\": \"payments-service\", \"directory\": \"/workspace/payments\", \"team\": \"backend-team\", \"org\": \"e2e-org\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Developer] Session created and ID stored', () => {",
+                  "    const json = pm.response.json();",
+                  "    const sid = json.sessionId || json.session_id || json.id;",
+                  "    pm.expect(sid).to.be.a('string').and.not.be.empty;",
+                  "    pm.collectionVariables.set('devSessionId', sid);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.3 [Developer] Search memory — what do I know about this service?",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 920, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_search\", \"arguments\": {\"query\": \"payments service PostgreSQL retry logic edge cases\", \"limit\": 10}, \"tenantContext\": {\"tenant_id\": \"e2e-daily\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-payments\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Developer] Memory search returns JSON-RPC response', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(920);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "40.4 [Developer] Capture discovery — retry idempotency edge case",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 921, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_add\", \"arguments\": {\"content\": \"Payments service: POST /charge is NOT idempotent by default — must pass X-Idempotency-Key header. Without it, duplicate charges occur on network retry. Discovered during load testing 2026-04-13.\", \"layer\": \"project\", \"importance\": 0.9, \"metadata\": {\"source\": \"alice-daily-e2e\", \"ts\": \"{{dailyScenarioTs}}\", \"tags\": [\"payments\", \"idempotency\", \"critical\"]}}, \"tenantContext\": {\"tenant_id\": \"e2e-daily\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-payments\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Developer] Discovery stored and memoryId captured', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(921);",
+                  "    if (json.result) {",
+                  "        const r = (typeof json.result === 'string') ? JSON.parse(json.result) : json.result;",
+                  "        if (r.content && Array.isArray(r.content)) {",
+                  "            const text = r.content.find(c => c.type === 'text');",
+                  "            if (text && text.text) {",
+                  "                try {",
+                  "                    const parsed = JSON.parse(text.text);",
+                  "                    if (parsed.memoryId) pm.collectionVariables.set('devDiscoveryMemoryId', parsed.memoryId);",
+                  "                } catch(e) {}",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "40.5 [Developer] Create knowledge entry — idempotency pattern ADR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"# Idempotency Pattern \\u2014 Payments Service\\n\\nAll mutating endpoints in the payments service MUST require an `X-Idempotency-Key` header. The key must be a UUID v4 generated by the caller. The server deduplicates requests with the same key within a 24h window.\\n\\n## Rationale\\nNetwork retries on POST /charge caused duplicate charges in production load tests.\\n\\n## Implementation\\nMiddleware: `payments_service::middleware::idempotency`\\nStorage: Redis with 24h TTL keyed by `idempotency:{key}`\", \"path\": \"patterns/idempotency-payments-{{dailyScenarioTs}}\", \"layer\": \"project\", \"tags\": [\"payments\", \"idempotency\", \"middleware\", \"pattern\"], \"metadata\": {\"author\": \"{{pluginGithubLogin}}\", \"source\": \"alice-daily-e2e\"}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('[Developer] Knowledge entry created and ID stored', () => {",
+                  "    const json = pm.response.json();",
+                  "    const kid = json.id || json.knowledgeId || json.knowledge_id;",
+                  "    pm.expect(kid).to.be.a('string').and.not.be.empty;",
+                  "    pm.collectionVariables.set('devKnowledgeId', kid);",
+                  "    const commit = json.commit || json.sha || json.version;",
+                  "    if (commit) pm.collectionVariables.set('devKnowledgeCommit', commit);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.6 [Developer] Link knowledge to discovery in graph",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 922, \"method\": \"tools/call\", \"params\": {\"name\": \"graph_link\", \"arguments\": {\"source_id\": \"{{devDiscoveryMemoryId}}\", \"target_id\": \"{{devKnowledgeId}}\", \"relation\": \"documents\", \"metadata\": {\"linked_by\": \"{{pluginGithubLogin}}\", \"source\": \"alice-daily-e2e\"}}, \"tenantContext\": {\"tenant_id\": \"e2e-daily\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-payments\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Developer] Graph link created or handled gracefully', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(922);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "40.7 [Developer] Query knowledge — confirm pattern is searchable",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"payments idempotency X-Idempotency-Key middleware\", \"limit\": 5, \"layers\": [\"project\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Developer] Knowledge query returns results array', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "    const results = json.results || json.entries || json.items || [];",
+                  "    pm.expect(Array.isArray(results)).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.8 [Team Lead] Review pending governance proposals",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/proposals?status=pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "proposals"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "pending"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Team Lead] Proposals list returned', () => {",
+                  "    const json = pm.response.json();",
+                  "    const proposals = json.proposals || json.items || json.results || [];",
+                  "    pm.expect(Array.isArray(proposals)).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.9 [Team Lead] Query team knowledge — idempotency standards",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"idempotency API standards retry handling\", \"limit\": 10, \"layers\": [\"project\", \"team\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Team Lead] Cross-layer knowledge query succeeded', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "    const results = json.results || json.entries || json.items || [];",
+                  "    pm.expect(Array.isArray(results)).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.10 [Team Lead] Promote discovery memory to team layer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 923, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_add\", \"arguments\": {\"content\": \"TEAM-PROMOTED: Payments service POST /charge requires X-Idempotency-Key header for safe retries. All backend services making payments calls must generate UUID v4 idempotency keys. Originally discovered by developer during load test 2026-04-13.\", \"layer\": \"team\", \"importance\": 0.95, \"metadata\": {\"source\": \"bob-teamlead-e2e\", \"promoted_from\": \"project\", \"ts\": \"{{dailyScenarioTs}}\", \"tags\": [\"payments\", \"idempotency\", \"team-standard\"]}}, \"tenantContext\": {\"tenant_id\": \"e2e-daily\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-payments\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Team Lead] Promoted memory stored at team layer', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(923);",
+                  "    if (json.result) {",
+                  "        const r = (typeof json.result === 'string') ? JSON.parse(json.result) : json.result;",
+                  "        if (r.content && Array.isArray(r.content)) {",
+                  "            const text = r.content.find(c => c.type === 'text');",
+                  "            if (text && text.text) {",
+                  "                try {",
+                  "                    const parsed = JSON.parse(text.text);",
+                  "                    if (parsed.memoryId) pm.collectionVariables.set('leadPromotedMemoryId', parsed.memoryId);",
+                  "                } catch(e) {}",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "40.11 [Team Lead] Create team-layer ADR — idempotency mandate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"# ADR-042: Mandatory Idempotency Keys for Mutating HTTP Endpoints\\n\\n**Status**: Accepted\\n**Date**: 2026-04-13\\n**Authors**: Backend Team\\n\\n## Decision\\nAll mutating HTTP endpoints (POST, PUT, PATCH) across backend services MUST support and validate `X-Idempotency-Key` headers. Services without this support are non-compliant.\\n\\n## Consequences\\n- Positive: eliminates duplicate side effects on client retries\\n- Negative: slight overhead for key storage in Redis\\n- Migration: existing services have 2 sprint remediation window\", \"path\": \"adr/042-idempotency-mandate-{{dailyScenarioTs}}\", \"layer\": \"team\", \"tags\": [\"adr\", \"idempotency\", \"api-standards\", \"team\"], \"metadata\": {\"author\": \"{{pluginGithubLogin}}\", \"adr_number\": \"042\", \"source\": \"bob-teamlead-e2e\"}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('[Team Lead] ADR knowledge entry created', () => {",
+                  "    const json = pm.response.json();",
+                  "    const kid = json.id || json.knowledgeId || json.knowledge_id;",
+                  "    pm.expect(kid).to.be.a('string').and.not.be.empty;",
+                  "    pm.collectionVariables.set('leadAdrKnowledgeId', kid);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.12 [Team Lead] Assemble CCA context for PR review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 924, \"method\": \"tools/call\", \"params\": {\"name\": \"context_assemble\", \"arguments\": {\"query\": \"idempotency payments service retry middleware team standards\", \"layers\": [\"project\", \"team\"], \"token_budget\": 4000, \"view_mode\": \"DX\"}, \"tenantContext\": {\"tenant_id\": \"e2e-daily\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-payments\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Team Lead] CCA context assembled for PR review', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(924);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "40.13 [Team Lead] Sync push — propagate team knowledge update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"project\": \"payments-service\", \"team\": \"backend-team\", \"org\": \"e2e-org\", \"message\": \"ADR-042 idempotency mandate propagation\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/push",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "push"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Team Lead] Sync push acknowledged', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.14 [Architect] Query org knowledge — API design standards",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"API design standards REST idempotency versioning org policy\", \"limit\": 10, \"layers\": [\"org\", \"company\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "query"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Architect] Org-level knowledge query returned', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "    const results = json.results || json.entries || json.items || [];",
+                  "    pm.expect(Array.isArray(results)).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.15 [Architect] Governance drift detection — payments project",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/governance/drift/e2e-payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "governance",
+                "drift",
+                "e2e-payments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Drift detection responds (200 or 404)', () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "pm.test('[Architect] Drift response is valid JSON', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.16 [Architect] Governance request — org-wide idempotency policy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 925, \"method\": \"tools/call\", \"params\": {\"name\": \"governance_request_create\", \"arguments\": {\"title\": \"Org-Wide Idempotency Key Policy\", \"description\": \"Mandate X-Idempotency-Key support on all mutating HTTP endpoints across all services in the organisation. Teams without compliance within 2 sprints should escalate to architecture review.\", \"scope\": \"org\", \"policy_path\": \"policies/api/idempotency-org\", \"requested_by\": \"{{pluginGithubLogin}}\", \"metadata\": {\"source\": \"carol-architect-e2e\", \"urgency\": \"medium\", \"ts\": \"{{dailyScenarioTs}}\"}}, \"tenantContext\": {\"tenant_id\": \"e2e-daily\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-payments\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Architect] Governance request created', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(925);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "    if (json.result) {",
+                  "        const r = (typeof json.result === 'string') ? JSON.parse(json.result) : json.result;",
+                  "        if (r.content && Array.isArray(r.content)) {",
+                  "            const text = r.content.find(c => c.type === 'text');",
+                  "            if (text && text.text) {",
+                  "                try {",
+                  "                    const parsed = JSON.parse(text.text);",
+                  "                    const rid = parsed.request_id || parsed.requestId || parsed.id;",
+                  "                    if (rid) pm.collectionVariables.set('archGovRequestId', rid);",
+                  "                    const rnum = parsed.request_number || parsed.number;",
+                  "                    if (rnum) pm.collectionVariables.set('archGovRequestNumber', rnum);",
+                  "                } catch(e) {}",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "40.17 [Architect] Review governance audit trail",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 926, \"method\": \"tools/call\", \"params\": {\"name\": \"governance_audit_list\", \"arguments\": {\"limit\": 20, \"scope\": \"org\"}, \"tenantContext\": {\"tenant_id\": \"e2e-daily\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-payments\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Architect] Audit trail returned', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(926);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "40.18 [Architect] Check lifecycle status — system health",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/lifecycle/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "lifecycle",
+                "status"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Architect] Lifecycle status valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.lifecycle_manager).to.eql('running');",
+                  "    pm.expect(json.tasks).to.be.an('array');",
+                  "    pm.expect(json.remediation_summary).to.be.an('object');",
+                  "    pm.expect(json.dead_letter_summary).to.be.an('object');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.19 [Architect] Assemble company-wide CCA context for design doc",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 927, \"method\": \"tools/call\", \"params\": {\"name\": \"context_assemble\", \"arguments\": {\"query\": \"API standards idempotency retry distributed systems company policy\", \"layers\": [\"org\", \"company\"], \"token_budget\": 8000, \"view_mode\": \"AX\"}, \"tenantContext\": {\"tenant_id\": \"e2e-daily\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-payments\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Architect] Company-wide CCA context assembled', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(927);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "40.20 [Architect] Memory optimize — consolidate day's learnings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 928, \"method\": \"tools/call\", \"params\": {\"name\": \"memory_optimize\", \"arguments\": {\"scope\": \"project\", \"dry_run\": false, \"deduplicate\": true}, \"tenantContext\": {\"tenant_id\": \"e2e-daily\", \"org_id\": \"e2e-org\", \"team_id\": \"e2e-team\", \"project_id\": \"e2e-payments\", \"user_id\": \"{{pluginGithubLogin}}\"}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('[Architect] Memory optimization triggered', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.jsonrpc).to.eql('2.0');",
+                  "    pm.expect(json.id).to.eql(928);",
+                  "    pm.expect(json.result || json.error).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "40.21 [Architect] Create org knowledge — idempotency policy rationale",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"# Org Policy: API Idempotency\\n\\n**Effective**: 2026-Q2\\n**Owner**: Architecture Guild\\n\\nAll REST services operating in production MUST implement idempotency for mutating operations. This policy was initiated following a payments service incident (load test 2026-04-13) where duplicate charges occurred due to missing idempotency controls.\\n\\n## Scope\\nAll teams, all services, all environments.\\n\\n## Enforcement\\nCompliance verified via governance drift detection. Non-compliant services flagged in architecture review queue.\", \"path\": \"policies/api/idempotency-org-{{dailyScenarioTs}}\", \"layer\": \"org\", \"tags\": [\"policy\", \"idempotency\", \"api\", \"org-wide\"], \"metadata\": {\"author\": \"{{pluginGithubLogin}}\", \"source\": \"carol-architect-e2e\", \"policy_version\": \"1.0\"}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "create"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('[Architect] Org-layer policy knowledge created', () => {",
+                  "    const json = pm.response.json();",
+                  "    const kid = json.id || json.knowledgeId || json.knowledge_id;",
+                  "    pm.expect(kid).to.be.a('string').and.not.be.empty;",
+                  "    pm.collectionVariables.set('archOrgKnowledgeId', kid);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.22 [Developer] Close coding session — end of day",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{devSessionId}}/end",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                "{{devSessionId}}",
+                "end"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Session close responds 200 or 404', () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "pm.test('[Developer] Session end response is JSON', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.23 [Cleanup] Delete developer knowledge entry",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{devKnowledgeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{devKnowledgeId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Delete responds 204 or 404', () => pm.expect([204, 404]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.24 [Cleanup] Delete team lead ADR knowledge entry",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{leadAdrKnowledgeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{leadAdrKnowledgeId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Delete responds 204 or 404', () => pm.expect([204, 404]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "40.25 [Cleanup] Delete architect org knowledge entry",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pluginAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/knowledge/{{archOrgKnowledgeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "knowledge",
+                "{{archOrgKnowledgeId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Delete responds 204 or 404', () => pm.expect([204, 404]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
         }
       ]
     }
