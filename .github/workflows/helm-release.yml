@@ -54,6 +54,7 @@ jobs:
       - name: Update Chart.yaml version
         run: |
           sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" ${{ env.CHART_PATH }}/Chart.yaml
+          sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" charts/aeterna-prereqs/Chart.yaml
 
       - name: Embed Cedar policies into chart values
         env:
@@ -111,12 +112,15 @@ jobs:
           helm repo update
 
       - name: Build dependencies
-        run: helm dependency build ${{ env.CHART_PATH }}
+        run: |
+          helm dependency build ${{ env.CHART_PATH }}
+          helm dependency build charts/aeterna-prereqs
 
       - name: Package chart
         run: |
           mkdir -p .cr-release-packages
           helm package ${{ env.CHART_PATH }} -d .cr-release-packages
+          helm package charts/aeterna-prereqs -d .cr-release-packages
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -211,6 +215,7 @@ jobs:
       - name: Verify OCI chart
         run: |
           helm pull oci://${{ env.REGISTRY_PATH }}/aeterna --version ${{ steps.version.outputs.version }}
+          helm pull oci://${{ env.REGISTRY_PATH }}/aeterna-prereqs --version ${{ steps.version.outputs.version }}
           ls -la aeterna-*.tgz
 
       - name: Template verification
