@@ -48,7 +48,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "aeterna.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+                  key: {{ include "aeterna.postgresql.passwordKey" . }}
           {{- end }}
           {{- if and (eq .Values.codesearch.embedder.type "openai") }}
             - name: OPENAI_API_KEY
@@ -78,57 +78,64 @@ spec:
           imagePullPolicy: {{ .Values.aeterna.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: {{ .Values.aeterna.service.port | default 8080 }}
               protocol: TCP
             - name: metrics
-              containerPort: 9090
+              containerPort: {{ .Values.aeterna.service.metricsPort | default 9090 }}
               protocol: TCP
           envFrom:
             - configMapRef:
                 name: {{ include "aeterna.fullname" . }}
           env:
+            ## PostgreSQL connection
             - name: PG_HOST
               value: {{ include "aeterna.postgresql.host" . | quote }}
             - name: PG_PORT
               value: {{ include "aeterna.postgresql.port" . | quote }}
             - name: PG_DATABASE
               value: {{ include "aeterna.postgresql.database" . | quote }}
-            - name: RD_HOST
-              value: {{ include "aeterna.redis.host" . | quote }}
-            - name: RD_PORT
-              value: {{ include "aeterna.redis.port" . | quote }}
-            - name: QD_HOST
-              value: {{ include "aeterna.qdrant.host" . | quote }}
-            - name: QD_PORT
-              value: {{ include "aeterna.qdrant.port" . | quote }}
-            - name: AETERNA_POSTGRESQL_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "aeterna.postgresql.secretName" . }}
-                  key: username
-                  optional: true
             - name: PG_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "aeterna.postgresql.secretName" . }}
-                  key: username
-                  optional: true
-            - name: AETERNA_POSTGRESQL_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "aeterna.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+              value: {{ .Values.postgresql.username | default "aeterna" | quote }}
+            - name: AETERNA_POSTGRESQL_USERNAME
+              value: {{ .Values.postgresql.username | default "aeterna" | quote }}
+            {{- if .Values.postgresql.existingSecret }}
             - name: PG_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "aeterna.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
-            {{- if .Values.cache.external.enabled }}
+                  key: {{ include "aeterna.postgresql.passwordKey" . }}
+            - name: AETERNA_POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aeterna.postgresql.secretName" . }}
+                  key: {{ include "aeterna.postgresql.passwordKey" . }}
+            {{- end }}
+            ## Redis connection
+            - name: RD_HOST
+              value: {{ include "aeterna.redis.host" . | quote }}
+            - name: RD_PORT
+              value: {{ include "aeterna.redis.port" . | quote }}
+            {{- if .Values.redis.existingSecret }}
             - name: AETERNA_REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.cache.external.existingSecret | default (printf "%s-redis" (include "aeterna.fullname" .)) }}
-                  key: {{ .Values.cache.external.secretKey | default "redis-password" }}
+                  name: {{ include "aeterna.redis.secretName" . }}
+                  key: {{ include "aeterna.redis.passwordKey" . }}
+            {{- end }}
+            ## Vector store connection
+            {{- if .Values.vectorStore.host }}
+            - name: QD_HOST
+              value: {{ include "aeterna.vectorStore.host" . | quote }}
+            - name: QD_PORT
+              value: {{ include "aeterna.vectorStore.port" . | quote }}
+            {{- end }}
+            {{- if .Values.vectorStore.existingSecret }}
+            - name: AETERNA_VECTOR_STORE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vectorStore.existingSecret }}
+                  key: {{ .Values.vectorStore.apiKeyKey | default "api-key" }}
+                  optional: true
             {{- end }}
             {{- if and (ne .Values.deploymentMode "local") .Values.central.url }}
             - name: AETERNA_CENTRAL_API_KEY
@@ -159,26 +166,26 @@ spec:
             - name: GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES
               value: "0"
             {{- end }}
-            {{- if and (eq .Values.vectorBackend.type "pinecone") }}
+            {{- if and (eq .Values.vectorStore.type "pinecone") .Values.vectorStore.existingSecret }}
             - name: AETERNA_PINECONE_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.vectorBackend.pinecone.existingSecret | default (printf "%s-pinecone" (include "aeterna.fullname" .)) }}
-                  key: api-key
+                  name: {{ .Values.vectorStore.existingSecret }}
+                  key: {{ .Values.vectorStore.apiKeyKey | default "api-key" }}
             {{- end }}
-            {{- if and (eq .Values.vectorBackend.type "qdrant") (not .Values.vectorBackend.qdrant.bundled) }}
+            {{- if and (eq .Values.vectorStore.type "qdrant") .Values.vectorStore.existingSecret }}
             - name: AETERNA_QDRANT_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.vectorBackend.qdrant.external.existingSecret | default (printf "%s-qdrant" (include "aeterna.fullname" .)) }}
-                  key: api-key
+                  name: {{ .Values.vectorStore.existingSecret }}
+                  key: {{ .Values.vectorStore.apiKeyKey | default "api-key" }}
                   optional: true
             {{- end }}
             {{- if .Values.observability.tracing.enabled }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.observability.tracing.endpoint | quote }}
             - name: OTEL_SERVICE_NAME
-              value: "aeterna"
+              value: {{ include "aeterna.fullname" . | quote }}
             - name: OTEL_TRACES_SAMPLER
               value: "parentbased_traceidratio"
             - name: OTEL_TRACES_SAMPLER_ARG
@@ -286,6 +293,10 @@ spec:
                   key: webhook-secret
             {{- end }}
             {{- end }}
+            {{- if .Values.adminUi.enabled }}
+            - name: AETERNA_ADMIN_UI_PATH
+              value: {{ .Values.adminUi.path | default "/app/admin-ui/dist" | quote }}
+            {{- end }}
             {{- if .Values.adminBootstrap.email }}
             - name: AETERNA_ADMIN_BOOTSTRAP_EMAIL
               value: {{ .Values.adminBootstrap.email | quote }}
@@ -295,6 +306,10 @@ spec:
             - name: AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT
               value: {{ .Values.adminBootstrap.providerSubject | quote }}
             {{- end }}
+            {{- end }}
+            {{- if .Values.k8sAuth.syncSaSubject }}
+            - name: AETERNA_ADMIN_BOOTSTRAP_K8S_SA_SUBJECT
+              value: {{ .Values.k8sAuth.syncSaSubject | quote }}
             {{- end }}
           livenessProbe:
             {{- toYaml .Values.aeterna.livenessProbe | nindent 12 }}
@@ -340,7 +355,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "aeterna.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+                  key: {{ include "aeterna.postgresql.passwordKey" . }}
           {{- end }}
           {{- if and (eq .Values.codesearch.embedder.type "openai") }}
             - name: OPENAI_API_KEY

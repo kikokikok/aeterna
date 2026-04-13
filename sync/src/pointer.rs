@@ -147,6 +147,25 @@ impl SummaryPointerState {
         count
     }
 
+    /// Mark stale only the pointers whose `layer` matches the given layer.
+    pub fn mark_stale_for_entry_and_layer(
+        &mut self,
+        entry_id: &str,
+        layer: mk_core::types::MemoryLayer,
+    ) -> u32 {
+        let mut count = 0;
+        if let Some(entry) = self.pointers.get_mut(entry_id) {
+            for ptr in entry.values_mut() {
+                if ptr.layer == layer && !ptr.is_stale {
+                    ptr.is_stale = true;
+                    self.stale_count += 1;
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
     pub fn get_stale_pointers(&self) -> Vec<&SummaryPointer> {
         self.pointers
             .values()

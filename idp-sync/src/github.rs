@@ -3,6 +3,7 @@ use crate::error::{IdpSyncError, IdpSyncResult};
 use crate::okta::{GroupPage, GroupType, IdpClient, IdpGroup, IdpUser, UserPage, UserStatus};
 use async_trait::async_trait;
 use chrono::Utc;
+use mk_core::types::PROVIDER_GITHUB;
 use serde::Deserialize;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -271,7 +272,7 @@ impl IdpClient for GitHubClient {
                 status: UserStatus::Active,
                 created_at: now,
                 updated_at: now,
-                idp_provider: "github".to_string(),
+                idp_provider: PROVIDER_GITHUB.to_string(),
                 idp_subject: member.login,
             });
         }
@@ -380,7 +381,7 @@ impl IdpClient for GitHubClient {
                     status: UserStatus::Active,
                     created_at: now,
                     updated_at: now,
-                    idp_provider: "github".to_string(),
+                    idp_provider: PROVIDER_GITHUB.to_string(),
                     idp_subject: member.login,
                 });
             }
@@ -434,7 +435,7 @@ impl IdpClient for GitHubClient {
             status: UserStatus::Active,
             created_at: created,
             updated_at: updated,
-            idp_provider: "github".to_string(),
+            idp_provider: PROVIDER_GITHUB.to_string(),
             idp_subject: user.login,
         })
     }

@@ -32,7 +32,7 @@ spec:
           echo "Testing Aeterna health endpoint..."
           curl -s http://{{ include "aeterna.fullname" . }}:{{ .Values.aeterna.service.port }}/health || true
           echo "Aeterna health endpoint is reachable"
-    {{- if .Values.postgresql.bundled }}
+    {{- if .Values.postgresql.host }}
     - name: test-postgresql
       image: postgres:16-alpine
       securityContext:
@@ -47,10 +47,10 @@ spec:
         - |
           set -e
           echo "Testing PostgreSQL connection..."
-          pg_isready -h {{ include "aeterna.postgresql.host" . }} -p {{ include "aeterna.postgresql.port" . }}
+          pg_isready -h {{ .Values.postgresql.host }} -p {{ .Values.postgresql.port | default 5432 }}
           echo "PostgreSQL is ready!"
     {{- end }}
-    {{- if and (eq .Values.vectorBackend.type "qdrant") .Values.vectorBackend.qdrant.bundled }}
+    {{- if and (eq .Values.vectorStore.type "qdrant") .Values.vectorStore.host }}
     - name: test-qdrant
       image: curlimages/curl:8.5.0
       securityContext:
@@ -65,7 +65,7 @@ spec:
         - |
           set -e
           echo "Testing Qdrant connection..."
-          curl -sf http://{{ include "aeterna.qdrant.host" . }}:{{ include "aeterna.qdrant.port" . }}/readyz
+          curl -sf http://{{ .Values.vectorStore.host }}:{{ .Values.vectorStore.port | default 6333 }}/readyz
           echo "Qdrant is ready!"
     {{- end }}
     {{- if .Values.opal.enabled }}

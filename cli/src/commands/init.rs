@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use clap::Args;
 use colored::Colorize;
 use context::ContextResolver;
+use mk_core::types::DEFAULT_TENANT_SLUG;
 
 use crate::output;
 
@@ -59,13 +60,13 @@ pub fn run(args: InitArgs) -> Result<()> {
     let tenant_id = args
         .tenant_id
         .or_else(|| {
-            if ctx.tenant_id.value == "default" {
+            if ctx.tenant_id.value == DEFAULT_TENANT_SLUG {
                 None
             } else {
                 Some(ctx.tenant_id.value.clone())
             }
         })
-        .unwrap_or_else(|| "default".to_string());
+        .unwrap_or_else(|| DEFAULT_TENANT_SLUG.to_string());
 
     let user_id = args.user_id.unwrap_or_else(|| ctx.user_id.value.clone());
 

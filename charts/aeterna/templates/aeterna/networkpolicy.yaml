@@ -38,32 +38,18 @@ spec:
         - protocol: TCP
           port: 9090
   egress:
-    {{- /* Allow egress to PostgreSQL */}}
-    - to:
-        - podSelector:
-            matchLabels:
-              cnpg.io/cluster: {{ include "aeterna.fullname" . }}-cnpg
-      ports:
+    {{- /* Allow egress to PostgreSQL (external service) */}}
+    - ports:
         - protocol: TCP
-          port: 5432
-    {{- /* Allow egress to Qdrant */}}
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: qdrant
-      ports:
+          port: {{ .Values.postgresql.port | default 5432 }}
+    {{- /* Allow egress to vector store (external service) */}}
+    - ports:
         - protocol: TCP
-          port: 6333
+          port: {{ .Values.vectorStore.port | default 6333 }}
+    {{- /* Allow egress to Redis cache (external service) */}}
+    - ports:
         - protocol: TCP
-          port: 6334
-    {{- /* Allow egress to Dragonfly/Redis cache */}}
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: dragonfly
-      ports:
-        - protocol: TCP
-          port: 6379
+          port: {{ .Values.redis.port | default 6379 }}
     {{- /* Allow egress to OPAL server */}}
     - to:
         - podSelector:

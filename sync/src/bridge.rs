@@ -13,7 +13,12 @@ use mk_core::types::{KnowledgeEntry, KnowledgeLayer, MemoryEntry, TenantContext}
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use storage::dead_letter::DeadLetterQueue;
 use tokio::sync::RwLock;
+
+/// Maximum number of sync retries before an item is moved to the dead-letter
+/// queue for manual inspection.
+const MAX_SYNC_RETRIES: u32 = 5;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DeltaResult {
@@ -285,77 +290,122 @@ impl SyncManager {
         {
             tracing::info!("Sync triggered by {:?}", trigger);
 
+            let cycle_start = std::time::Instant::now();
             self.create_checkpoint(&ctx.tenant_id).await?;
 
-            if let Some(fed_manager) = &self.federation_manager {
-                let fed_start = std::time::Instant::now();
-                if let Err(e) = self
-                    .sync_federation(ctx.clone(), fed_manager.as_ref())
-                    .await
-                {
-                    tracing::error!("Federation sync failed, rolling back: {}", e);
-                    metrics::counter!("sync.federation.failures").increment(1);
-                    self.rollback(&ctx.tenant_id).await?;
-                    return Err(e);
-                }
-                metrics::histogram!("sync.federation.duration_ms")
-                    .record(fed_start.elapsed().as_millis() as f64);
-            }
+            // Run the entire sync body under a catch-all rollback guard so that
+            // any unexpected failure restores the pre-cycle state.
+            let result = self
+                .run_sync_cycle_body(ctx.clone(), cycle_start)
+                .await;
 
-            let inc_start = std::time::Instant::now();
-            let mut retry_count = 0;
-            let max_retries = 3;
-            let mut sync_result = self.sync_incremental(ctx.clone()).await;
+            let elapsed = cycle_start.elapsed();
+            let tenant_str = ctx.tenant_id.as_str().to_string();
+            metrics::counter!("aeterna_sync_cycles_total", "tenant" => tenant_str.clone())
+                .increment(1);
+            metrics::gauge!("aeterna_sync_duration_ms", "tenant" => tenant_str.clone())
+                .set(elapsed.as_millis() as f64);
 
-            while let Err(e) = sync_result {
-                if retry_count >= max_retries {
-                    tracing::error!(
-                        "Incremental sync failed after {} retries, rolling back: {}",
-                        max_retries,
-                        e
-                    );
-                    metrics::counter!("sync.incremental.failures").increment(1);
-                    self.rollback(&ctx.tenant_id).await?;
-                    return Err(e);
-                }
-
-                retry_count += 1;
-                let backoff_ms = 100 * 2u64.pow(retry_count);
-                tracing::warn!(
-                    "Sync failed, retrying in {}ms (attempt {}/{}): {}",
-                    backoff_ms,
-                    retry_count,
-                    max_retries,
+            if let Err(e) = &result {
+                tracing::error!(
+                    "Sync cycle failed for tenant {}, rolling back checkpoint: {}",
+                    ctx.tenant_id,
                     e
                 );
-                tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
-                sync_result = self.sync_incremental(ctx.clone()).await;
+                metrics::counter!("sync.cycle.rollback_triggered", "tenant" => tenant_str.clone())
+                    .increment(1);
+                if let Err(rb_err) = self.rollback(&ctx.tenant_id).await {
+                    tracing::error!(
+                        "Rollback also failed for tenant {}: {}",
+                        ctx.tenant_id,
+                        rb_err
+                    );
+                }
+                return result;
             }
 
-            metrics::histogram!("sync.incremental.duration_ms")
-                .record(inc_start.elapsed().as_millis() as f64);
-
-            self.prune_failed_items(ctx.clone(), 30).await?;
-
-            let conflicts = self.detect_conflicts(ctx.clone()).await?;
-            if !conflicts.is_empty() {
-                tracing::info!("Found {} conflicts during sync cycle", conflicts.len());
-                metrics::counter!("sync.conflicts.detected").increment(conflicts.len() as u64);
-                let mut state = self.get_or_load_state(&ctx.tenant_id).await?;
-                state.stats.total_conflicts += conflicts.len() as u64;
-                self.update_state(&ctx.tenant_id, state).await;
-
-                let tenant_id = ctx.tenant_id.clone();
-                if let Err(e) = self.resolve_conflicts(ctx, conflicts).await {
-                    tracing::error!("Conflict resolution failed, rolling back: {}", e);
-                    metrics::counter!("sync.conflicts.resolution_failures").increment(1);
-                    self.rollback(&tenant_id).await?;
-                    return Err(e);
-                }
-                metrics::counter!("sync.conflicts.resolved").increment(1);
+            // Emit failed-items gauge after a successful cycle
+            if let Ok(state) = self.get_or_load_state(&ctx.tenant_id).await {
+                metrics::gauge!("aeterna_sync_failed_items", "tenant" => tenant_str)
+                    .set(state.failed_items.len() as f64);
             }
         }
 
+        Ok(())
+    }
+
+    /// Inner body of a sync cycle, separated so that the caller can rollback on
+    /// any error without duplicating the guard logic.
+    async fn run_sync_cycle_body(
+        &self,
+        ctx: TenantContext,
+        cycle_start: std::time::Instant,
+    ) -> Result<()> {
+        if let Some(fed_manager) = &self.federation_manager {
+            let fed_start = std::time::Instant::now();
+            if let Err(e) = self
+                .sync_federation(ctx.clone(), fed_manager.as_ref())
+                .await
+            {
+                tracing::error!("Federation sync failed: {}", e);
+                metrics::counter!("sync.federation.failures").increment(1);
+                return Err(e);
+            }
+            metrics::histogram!("sync.federation.duration_ms")
+                .record(fed_start.elapsed().as_millis() as f64);
+        }
+
+        let inc_start = std::time::Instant::now();
+        let mut retry_count = 0;
+        let max_retries = 3;
+        let mut sync_result = self.sync_incremental(ctx.clone()).await;
+
+        while let Err(e) = sync_result {
+            if retry_count >= max_retries {
+                tracing::error!(
+                    "Incremental sync failed after {} retries: {}",
+                    max_retries,
+                    e
+                );
+                metrics::counter!("sync.incremental.failures").increment(1);
+                return Err(e);
+            }
+
+            retry_count += 1;
+            let backoff_ms = 100 * 2u64.pow(retry_count);
+            tracing::warn!(
+                "Sync failed, retrying in {}ms (attempt {}/{}): {}",
+                backoff_ms,
+                retry_count,
+                max_retries,
+                e
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+            sync_result = self.sync_incremental(ctx.clone()).await;
+        }
+
+        metrics::histogram!("sync.incremental.duration_ms")
+            .record(inc_start.elapsed().as_millis() as f64);
+
+        self.prune_failed_items(ctx.clone(), 30).await?;
+
+        let conflicts = self.detect_conflicts(ctx.clone()).await?;
+        if !conflicts.is_empty() {
+            tracing::info!("Found {} conflicts during sync cycle", conflicts.len());
+            metrics::counter!("sync.conflicts.detected").increment(conflicts.len() as u64);
+            let mut state = self.get_or_load_state(&ctx.tenant_id).await?;
+            state.stats.total_conflicts += conflicts.len() as u64;
+            self.update_state(&ctx.tenant_id, state).await;
+
+            if let Err(e) = self.resolve_conflicts(ctx.clone(), conflicts).await {
+                tracing::error!("Conflict resolution failed: {}", e);
+                metrics::counter!("sync.conflicts.resolution_failures").increment(1);
+                return Err(e);
+            }
+            metrics::counter!("sync.conflicts.resolved").increment(1);
+        }
+
+        let _ = cycle_start; // suppress unused warning
         Ok(())
     }
 
@@ -515,7 +565,8 @@ impl SyncManager {
 
         state.last_sync_at = Some(chrono::Utc::now().timestamp());
         state.last_knowledge_commit = head_commit;
-        state.failed_items.extend(sync_errors);
+        self.merge_sync_errors(&mut state, sync_errors, ctx.tenant_id.as_str())
+            .await;
         state.stats.total_syncs += 1;
         let duration = start_time.elapsed().as_millis() as u64;
         state.stats.avg_sync_duration_ms = duration;
@@ -582,7 +633,8 @@ impl SyncManager {
 
         state.last_sync_at = Some(chrono::Utc::now().timestamp());
         state.last_knowledge_commit = head_commit;
-        state.failed_items.extend(sync_errors);
+        self.merge_sync_errors(state, sync_errors, ctx.tenant_id.as_str())
+            .await;
         state.stats.total_syncs += 1;
         let duration = start_time.elapsed().as_millis() as u64;
         state.stats.avg_sync_duration_ms = duration;
@@ -1214,6 +1266,52 @@ impl SyncManager {
         }
 
         Ok(())
+    }
+
+    /// Merge new sync errors into the state's `failed_items`, incrementing
+    /// retry counts for items that failed before.  Items that exceed
+    /// [`MAX_SYNC_RETRIES`] are moved to the global dead-letter queue instead
+    /// of remaining in `failed_items`.
+    async fn merge_sync_errors(
+        &self,
+        state: &mut SyncState,
+        new_errors: Vec<SyncFailure>,
+        tenant_id: &str,
+    ) {
+        for mut failure in new_errors {
+            // Check whether this item already has a prior failure entry.
+            if let Some(pos) = state
+                .failed_items
+                .iter()
+                .position(|f| f.knowledge_id == failure.knowledge_id)
+            {
+                let existing = &state.failed_items[pos];
+                failure.retry_count = existing.retry_count + 1;
+                state.failed_items.remove(pos);
+            }
+
+            if failure.retry_count >= MAX_SYNC_RETRIES {
+                tracing::warn!(
+                    knowledge_id = %failure.knowledge_id,
+                    retry_count = failure.retry_count,
+                    "Sync item exceeded max retries, moving to dead-letter queue"
+                );
+                metrics::counter!("sync.dead_letter.items_added", "tenant" => tenant_id.to_string())
+                    .increment(1);
+                DeadLetterQueue::global()
+                    .add(
+                        "sync_entry",
+                        &failure.knowledge_id,
+                        tenant_id,
+                        &failure.error,
+                        failure.retry_count,
+                        MAX_SYNC_RETRIES,
+                    )
+                    .await;
+            } else {
+                state.failed_items.push(failure);
+            }
+        }
     }
 
     pub fn find_memory_id_by_knowledge_id_for_test(

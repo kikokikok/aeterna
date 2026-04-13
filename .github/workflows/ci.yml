@@ -165,6 +165,43 @@ jobs:
             tarpaulin-report.html
             tarpaulin-report.json
 
+  admin-ui:
+    name: Admin UI Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: admin-ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: admin-ui
+        run: npm ci
+
+      - name: TypeScript typecheck
+        working-directory: admin-ui
+        run: npx tsc -b
+
+      - name: Build production bundle
+        working-directory: admin-ui
+        run: npm run build
+
+      - name: Verify bundle size
+        working-directory: admin-ui
+        run: |
+          MAIN_SIZE=$(find dist/assets -name 'index-*.js' -exec wc -c {} \; | awk '{print $1}')
+          echo "Main bundle size: ${MAIN_SIZE} bytes"
+          if [ "$MAIN_SIZE" -gt 512000 ]; then
+            echo "::error::Main bundle exceeds 500KB ($MAIN_SIZE bytes)"
+            exit 1
+          fi
+
   mutation-testing:
     name: Mutation Testing
     runs-on: ubuntu-latest

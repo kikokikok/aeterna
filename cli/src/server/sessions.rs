@@ -5,6 +5,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Json, Router};
+use mk_core::types::SYSTEM_USER_ID;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -139,7 +140,7 @@ fn authenticated_user_id(
     let user_id = fallback_user_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or("system");
+        .unwrap_or(SYSTEM_USER_ID);
     Ok(user_id.chars().take(100).collect())
 }
 

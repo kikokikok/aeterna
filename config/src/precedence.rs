@@ -10,6 +10,13 @@
 
 use crate::config::{
     Config, ObservabilityConfig, PostgresConfig, QdrantConfig, RedisConfig, SyncConfig, ToolConfig,
+    default_observability_logging_level, default_observability_metrics_port,
+    default_postgres_database, default_postgres_host, default_postgres_pool_size,
+    default_postgres_port, default_postgres_timeout, default_postgres_username,
+    default_qdrant_collection, default_qdrant_host, default_qdrant_port, default_qdrant_timeout,
+    default_redis_db, default_redis_host, default_redis_pool_size, default_redis_port,
+    default_redis_timeout, default_sync_batch_size, default_sync_conflict_resolution,
+    default_sync_interval, default_tools_host, default_tools_port, default_tools_rate_limit,
 };
 
 /// Merge multiple configuration sources with precedence.
@@ -158,28 +165,32 @@ fn merge_postgres(
     _source: &str,
     changes: &mut Vec<String>,
 ) {
-    if override_config.host != "localhost" && override_config.host != base.host {
+    if override_config.host != default_postgres_host() && override_config.host != base.host {
         changes.push(format!(
             "providers.postgres.host = {}",
             override_config.host
         ));
         base.host.clone_from(&override_config.host);
     }
-    if override_config.port != 5432 && override_config.port != base.port {
+    if override_config.port != default_postgres_port() && override_config.port != base.port {
         changes.push(format!(
             "providers.postgres.port = {}",
             override_config.port
         ));
         base.port = override_config.port;
     }
-    if override_config.database != "memory_knowledge" && override_config.database != base.database {
+    if override_config.database != default_postgres_database()
+        && override_config.database != base.database
+    {
         changes.push(format!(
             "providers.postgres.database = {}",
             override_config.database
         ));
         base.database.clone_from(&override_config.database);
     }
-    if override_config.username != "postgres" && override_config.username != base.username {
+    if override_config.username != default_postgres_username()
+        && override_config.username != base.username
+    {
         changes.push(format!(
             "providers.postgres.username = {}",
             override_config.username
@@ -190,14 +201,16 @@ fn merge_postgres(
         changes.push("providers.postgres.password = ***".to_string());
         base.password.clone_from(&override_config.password);
     }
-    if override_config.pool_size != 10 && override_config.pool_size != base.pool_size {
+    if override_config.pool_size != default_postgres_pool_size()
+        && override_config.pool_size != base.pool_size
+    {
         changes.push(format!(
             "providers.postgres.pool_size = {}",
             override_config.pool_size
         ));
         base.pool_size = override_config.pool_size;
     }
-    if override_config.timeout_seconds != 30
+    if override_config.timeout_seconds != default_postgres_timeout()
         && override_config.timeout_seconds != base.timeout_seconds
     {
         changes.push(format!(
@@ -214,15 +227,15 @@ fn merge_qdrant(
     _source: &str,
     changes: &mut Vec<String>,
 ) {
-    if override_config.host != "localhost" && override_config.host != base.host {
+    if override_config.host != default_qdrant_host() && override_config.host != base.host {
         changes.push(format!("providers.qdrant.host = {}", override_config.host));
         base.host.clone_from(&override_config.host);
     }
-    if override_config.port != 6333 && override_config.port != base.port {
+    if override_config.port != default_qdrant_port() && override_config.port != base.port {
         changes.push(format!("providers.qdrant.port = {}", override_config.port));
         base.port = override_config.port;
     }
-    if override_config.collection != "memory_embeddings"
+    if override_config.collection != default_qdrant_collection()
         && override_config.collection != base.collection
     {
         changes.push(format!(
@@ -231,7 +244,7 @@ fn merge_qdrant(
         ));
         base.collection.clone_from(&override_config.collection);
     }
-    if override_config.timeout_seconds != 30
+    if override_config.timeout_seconds != default_qdrant_timeout()
         && override_config.timeout_seconds != base.timeout_seconds
     {
         changes.push(format!(
@@ -248,26 +261,28 @@ fn merge_redis(
     _source: &str,
     changes: &mut Vec<String>,
 ) {
-    if override_config.host != "localhost" && override_config.host != base.host {
+    if override_config.host != default_redis_host() && override_config.host != base.host {
         changes.push(format!("providers.redis.host = {}", override_config.host));
         base.host.clone_from(&override_config.host);
     }
-    if override_config.port != 6379 && override_config.port != base.port {
+    if override_config.port != default_redis_port() && override_config.port != base.port {
         changes.push(format!("providers.redis.port = {}", override_config.port));
         base.port = override_config.port;
     }
-    if override_config.db != 0 && override_config.db != base.db {
+    if override_config.db != default_redis_db() && override_config.db != base.db {
         changes.push(format!("providers.redis.db = {}", override_config.db));
         base.db = override_config.db;
     }
-    if override_config.pool_size != 10 && override_config.pool_size != base.pool_size {
+    if override_config.pool_size != default_redis_pool_size()
+        && override_config.pool_size != base.pool_size
+    {
         changes.push(format!(
             "providers.redis.pool_size = {}",
             override_config.pool_size
         ));
         base.pool_size = override_config.pool_size;
     }
-    if override_config.timeout_seconds != 30
+    if override_config.timeout_seconds != default_redis_timeout()
         && override_config.timeout_seconds != base.timeout_seconds
     {
         changes.push(format!(
@@ -288,7 +303,7 @@ fn merge_sync(
         changes.push(format!("sync.enabled = {}", override_config.enabled));
         base.enabled = override_config.enabled;
     }
-    if override_config.sync_interval_seconds != 60
+    if override_config.sync_interval_seconds != default_sync_interval()
         && override_config.sync_interval_seconds != base.sync_interval_seconds
     {
         changes.push(format!(
@@ -297,7 +312,9 @@ fn merge_sync(
         ));
         base.sync_interval_seconds = override_config.sync_interval_seconds;
     }
-    if override_config.batch_size != 100 && override_config.batch_size != base.batch_size {
+    if override_config.batch_size != default_sync_batch_size()
+        && override_config.batch_size != base.batch_size
+    {
         changes.push(format!("sync.batch_size = {}", override_config.batch_size));
         base.batch_size = override_config.batch_size;
     }
@@ -310,7 +327,7 @@ fn merge_sync(
         ));
         base.checkpoint_enabled = override_config.checkpoint_enabled;
     }
-    if override_config.conflict_resolution != "prefer_knowledge"
+    if override_config.conflict_resolution != default_sync_conflict_resolution()
         && override_config.conflict_resolution != base.conflict_resolution
     {
         changes.push(format!(
@@ -332,11 +349,11 @@ fn merge_tools(
         changes.push(format!("tools.enabled = {}", override_config.enabled));
         base.enabled = override_config.enabled;
     }
-    if override_config.host != "localhost" && override_config.host != base.host {
+    if override_config.host != default_tools_host() && override_config.host != base.host {
         changes.push(format!("tools.host = {}", override_config.host));
         base.host.clone_from(&override_config.host);
     }
-    if override_config.port != 8080 && override_config.port != base.port {
+    if override_config.port != default_tools_port() && override_config.port != base.port {
         changes.push(format!("tools.port = {}", override_config.port));
         base.port = override_config.port;
     }
@@ -350,7 +367,7 @@ fn merge_tools(
         }
         base.api_key.clone_from(&override_config.api_key);
     }
-    if override_config.rate_limit_requests_per_minute != 60
+    if override_config.rate_limit_requests_per_minute != default_tools_rate_limit()
         && override_config.rate_limit_requests_per_minute != base.rate_limit_requests_per_minute
     {
         changes.push(format!(
@@ -381,7 +398,7 @@ fn merge_observability(
         ));
         base.tracing_enabled = override_config.tracing_enabled;
     }
-    if override_config.logging_level != "info"
+    if override_config.logging_level != default_observability_logging_level()
         && override_config.logging_level != base.logging_level
     {
         changes.push(format!(
@@ -391,7 +408,9 @@ fn merge_observability(
         base.logging_level
             .clone_from(&override_config.logging_level);
     }
-    if override_config.metrics_port != 9090 && override_config.metrics_port != base.metrics_port {
+    if override_config.metrics_port != default_observability_metrics_port()
+        && override_config.metrics_port != base.metrics_port
+    {
         changes.push(format!(
             "observability.metrics_port = {}",
             override_config.metrics_port

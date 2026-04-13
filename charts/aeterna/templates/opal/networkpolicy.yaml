@@ -47,37 +47,18 @@ spec:
         - protocol: TCP
           port: 7003
   egress:
-    # Allow to PostgreSQL
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "aeterna.postgresql.selectorLabels" . | nindent 14 }}
-      ports:
+    # Allow to PostgreSQL (external service)
+    - ports:
         - protocol: TCP
-          port: 5432
-    # Allow to Redis/Dragonfly
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: dragonfly
-      ports:
+          port: {{ .Values.postgresql.port | default 5432 }}
+    # Allow to Redis (external service)
+    - ports:
         - protocol: TCP
-          port: 6379
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: valkey
-      ports:
+          port: {{ .Values.redis.port | default 6379 }}
+    # Allow to vector store (external service)
+    - ports:
         - protocol: TCP
-          port: 6379
-    # Allow to Qdrant
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "aeterna.qdrant.selectorLabels" . | nindent 14 }}
-      ports:
-        - protocol: TCP
-          port: 6333
+          port: {{ .Values.vectorStore.port | default 6333 }}
     # Allow DNS
     - to:
         - namespaceSelector: {}
@@ -185,14 +166,10 @@ spec:
           port: 7002
         - protocol: TCP
           port: 7003
-    # Allow to PostgreSQL
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "aeterna.postgresql.selectorLabels" . | nindent 14 }}
-      ports:
+    # Allow to PostgreSQL (external service)
+    - ports:
         - protocol: TCP
-          port: 5432
+          port: {{ .Values.postgresql.port | default 5432 }}
     # Allow DNS
     - to:
         - namespaceSelector: {}

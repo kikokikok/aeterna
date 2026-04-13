@@ -1,5 +1,6 @@
 use crate::circuit_breaker::ReasoningCircuitBreaker;
 use crate::governance::GovernanceService;
+use crate::provider_registry::TenantProviderRegistry;
 use crate::reasoning::ReflectiveReasoner;
 use crate::reasoning_cache::{InMemoryReasoningCacheBackend, ReasoningCache};
 use crate::rlm::ComplexityRouter;
@@ -96,6 +97,7 @@ pub struct MemoryManager {
     circuit_breaker: Option<Arc<ReasoningCircuitBreaker>>,
     rlm_router: Arc<ComplexityRouter>,
     rlm_executor: Option<Arc<RlmExecutor>>,
+    provider_registry: Option<Arc<TenantProviderRegistry>>,
 }
 
 impl Default for MemoryManager {
@@ -122,6 +124,7 @@ impl MemoryManager {
             circuit_breaker: None,
             rlm_router: Arc::new(ComplexityRouter::new(config::RlmConfig::default())),
             rlm_executor: None,
+            provider_registry: None,
         }
     }
 
@@ -219,6 +222,64 @@ impl MemoryManager {
         self
     }
 
+    /// Attach a per-tenant LLM/embedding provider registry.
+    ///
+    /// When set, the registry enables tenant-specific LLM and embedding
+    /// service resolution that falls back to platform defaults.
+    pub fn with_provider_registry(
+        mut self,
+        registry: Arc<TenantProviderRegistry>,
+    ) -> Self {
+        self.provider_registry = Some(registry);
+        self
+    }
+
+    /// Returns a reference to the provider registry, if configured.
+    pub fn provider_registry(&self) -> Option<&Arc<TenantProviderRegistry>> {
+        self.provider_registry.as_ref()
+    }
+
+    /// Resolve the embedding service for a tenant context.
+    ///
+    /// Uses the per-tenant provider registry when available, falling back to
+    /// the singleton `embedding_service`. This enables per-tenant LLM provider
+    /// configuration while preserving backward compatibility.
+    async fn resolve_embedding_service(
+        &self,
+        ctx: &TenantContext,
+    ) -> Option<
+        Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
+    > {
+        if let Some(registry) = &self.provider_registry {
+            if let Some(service) = registry.resolve_embedding(&ctx.tenant_id).await {
+                return Some(service);
+            }
+        }
+        self.embedding_service.clone()
+    }
+
+    /// Resolve the LLM service for a tenant context.
+    ///
+    /// Uses the per-tenant provider registry when available, falling back to
+    /// the singleton `llm_service`.
+    async fn resolve_llm_service(
+        &self,
+        ctx: &TenantContext,
+    ) -> Option<
+        Arc<
+            dyn mk_core::traits::LlmService<Error = Box<dyn std::error::Error + Send + Sync>>
+                + Send
+                + Sync,
+        >,
+    > {
+        if let Some(registry) = &self.provider_registry {
+            if let Some(service) = registry.resolve_llm(&ctx.tenant_id).await {
+                return Some(service);
+            }
+        }
+        self.llm_service.clone()
+    }
+
     pub fn with_knowledge_manager(
         mut self,
         knowledge_manager: Arc<knowledge::manager::KnowledgeManager>,
@@ -270,8 +331,8 @@ impl MemoryManager {
         }
 
         let embedding_service = self
-            .embedding_service
-            .as_ref()
+            .resolve_embedding_service(&ctx)
+            .await
             .ok_or("Embedding service not configured")?;
         let vector = embedding_service.embed(content).await?;
 
@@ -434,8 +495,8 @@ impl MemoryManager {
         }
 
         let embedding_service = self
-            .embedding_service
-            .as_ref()
+            .resolve_embedding_service(&ctx)
+            .await
             .ok_or("Embedding service not configured")?;
 
         let reasoning_config = &self.config.reasoning;
@@ -589,6 +650,7 @@ impl MemoryManager {
                 circuit_breaker: self.circuit_breaker.clone(),
                 rlm_router: self.rlm_router.clone(),
                 rlm_executor: self.rlm_executor.clone(),
+                provider_registry: self.provider_registry.clone(),
             }),
             self.knowledge_manager
                 .clone()
@@ -597,7 +659,7 @@ impl MemoryManager {
 
         promotion_service.optimize_layer(layer).await?;
 
-        if let Some(llm) = &self.llm_service {
+        if let Some(llm) = self.resolve_llm_service(&ctx).await {
             let compression_manager =
                 CompressionManager::new(llm.clone(), self.trajectories.clone());
             let memories = self.list_all_from_layer(ctx.clone(), layer).await?;
@@ -777,6 +839,7 @@ impl MemoryManager {
                 circuit_breaker: self.circuit_breaker.clone(),
                 rlm_router: self.rlm_router.clone(),
                 rlm_executor: self.rlm_executor.clone(),
+                provider_registry: self.provider_registry.clone(),
             }),
             self.knowledge_manager
                 .clone()
@@ -972,7 +1035,24 @@ impl MemoryManager {
             .get(&layer)
             .ok_or_else(|| format!("No provider for layer {:?}", layer))?;
 
-        provider.delete(ctx, id).await
+        provider.delete(ctx.clone(), id).await?;
+
+        // Cascade: soft-delete corresponding graph nodes so DuckDB does not
+        // retain orphan references to the deleted memory entry.
+        if let Some(ref graph) = self.graph_store {
+            if let Err(e) = graph
+                .soft_delete_nodes_by_source_memory_id(ctx, id)
+                .await
+            {
+                tracing::warn!(
+                    memory_id = id,
+                    error = %e,
+                    "Graph cascade failed after memory delete — orphan graph nodes may remain"
+                );
+            }
+        }
+
+        Ok(())
     }
 
     #[tracing::instrument(skip_all, fields(layer = ?layer))]

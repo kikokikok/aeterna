@@ -1,0 +1,174 @@
+## Aeterna Prerequisites Chart Values
+## Deploys backing services for dev/test environments.
+## Use this chart to provision PostgreSQL, Redis cache, and vector store,
+## then point the main aeterna chart at them.
+
+## ==========================================================================
+## PostgreSQL (CloudNativePG)
+## ==========================================================================
+postgresql:
+  ## @param postgresql.enabled Enable PostgreSQL via CloudNativePG
+  enabled: true
+  ## @param postgresql.instances Number of PostgreSQL instances
+  instances: 1
+  ## @param postgresql.imageName PostgreSQL image (leave empty for operator default)
+  imageName: ""
+  ## @param postgresql.database Database name
+  database: "aeterna"
+  ## @param postgresql.owner Database owner
+  owner: "aeterna"
+  storage:
+    ## @param postgresql.storage.size Storage size per instance
+    size: 10Gi
+    ## @param postgresql.storage.storageClass Storage class (empty = cluster default)
+    storageClass: ""
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  ## PostgreSQL engine parameters
+  parameters: {}
+  ## Custom pg_hba entries
+  pg_hba: []
+  ## pgvector extension support
+  pgvector:
+    ## @param postgresql.pgvector.enabled Install pgvector extension on bootstrap
+    enabled: true
+  ## Backup configuration (CloudNativePG native)
+  backup:
+    ## @param postgresql.backup.enabled Enable CNPG native backup
+    enabled: false
+    ## @param postgresql.backup.schedule Backup cron schedule
+    schedule: "0 2 * * *"
+    ## @param postgresql.backup.retentionPolicy Backup retention policy
+    retentionPolicy: "30d"
+    ## @param postgresql.backup.provider Backup provider: s3, gcs, azure
+    provider: "s3"
+    ## @param postgresql.backup.destinationPath Full backup destination path
+    destinationPath: ""
+    ## @param postgresql.backup.endpointURL Custom S3-compatible endpoint URL
+    endpointURL: ""
+    s3Credentials:
+      accessKeyId:
+        name: ""
+        key: "ACCESS_KEY_ID"
+      secretAccessKey:
+        name: ""
+        key: "ACCESS_SECRET_KEY"
+    googleCredentials:
+      applicationCredentials:
+        name: ""
+        key: "gcs-credentials"
+    azureCredentials:
+      storageAccount:
+        name: ""
+        key: "AZURE_STORAGE_ACCOUNT"
+      storageKey:
+        name: ""
+        key: "AZURE_STORAGE_KEY"
+
+## ==========================================================================
+## Cache (Redis-compatible)
+## ==========================================================================
+cache:
+  ## @param cache.type Cache backend: dragonfly or valkey
+  type: dragonfly
+
+  ## Dragonfly configuration (Redis-compatible, default)
+  dragonfly:
+    ## @param cache.dragonfly.enabled Enable Dragonfly
+    enabled: true
+    ## @param cache.dragonfly.replicas Number of Dragonfly replicas
+    replicas: 1
+    ## @param cache.dragonfly.args Additional Dragonfly arguments
+    args: []
+
+  ## Valkey configuration (alternative Redis fork)
+  valkey:
+    ## @param cache.valkey.enabled Enable Valkey (mutually exclusive with dragonfly)
+    enabled: false
+
+## ==========================================================================
+## Vector Store
+## ==========================================================================
+vectorStore:
+  ## @param vectorStore.type Vector store backend: qdrant or none
+  type: qdrant
+
+  ## Qdrant configuration
+  qdrant:
+    ## @param vectorStore.qdrant.enabled Enable Qdrant
+    enabled: true
+
+## ==========================================================================
+## Connection Secret
+## ==========================================================================
+## The chart creates a Kubernetes Secret with connection info for the main
+## aeterna chart to consume.
+connectionSecret:
+  ## @param connectionSecret.name Name of the connection secret
+  name: ""
+  ## @param connectionSecret.create Create the connection secret
+  create: true
+
+## ==========================================================================
+## Subchart overrides
+## ==========================================================================
+
+## Dragonfly subchart
+dragonfly:
+  enabled: true
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+## Qdrant subchart
+qdrant:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    size: 10Gi
+  containerSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 2000
+    allowPrivilegeEscalation: false
+    privileged: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  podSecurityContext:
+    fsGroup: 3000
+    fsGroupChangePolicy: Always
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 50m
+      memory: 256Mi
+
+## Valkey subchart (alternative to Dragonfly)
+valkey:
+  enabled: false
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi

@@ -4,7 +4,7 @@ use clap::Args;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
 
-use crate::server::{bootstrap, metrics, router};
+use crate::server::{bootstrap, lifecycle, metrics, router};
 
 #[derive(Args)]
 pub struct ServeArgs {
@@ -50,6 +50,11 @@ pub async fn run(args: ServeArgs) -> anyhow::Result<()> {
     tracing::info!(address = %app_addr, "Aeterna API server starting");
     tracing::info!(address = %metrics_addr, "Aeterna metrics server starting");
 
+    // Start the lifecycle manager — handles all periodic background tasks
+    // (job cleanup, retention purge, remediation expiry, etc.)
+    let lifecycle_mgr = lifecycle::LifecycleManager::new();
+    lifecycle_mgr.start(state.clone());
+
     let app_listener = TcpListener::bind(app_addr).await?;
     let metrics_listener = TcpListener::bind(metrics_addr).await?;
 
@@ -80,6 +85,8 @@ pub async fn run(args: ServeArgs) -> anyhow::Result<()> {
         .with_graceful_shutdown(await_shutdown(shutdown_rx_metrics));
 
     tokio::try_join!(app_server, metrics_server)?;
+
+    lifecycle_mgr.shutdown();
 
     signal_task.abort();
     #[cfg(unix)]

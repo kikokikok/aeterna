@@ -1,0 +1,37 @@
+Aeterna Prerequisites deployed successfully!
+
+=== Connection Details ===
+
+{{- if .Values.postgresql.enabled }}
+PostgreSQL:
+  Host: {{ include "prereqs.postgresql.host" . }}
+  Port: 5432
+  Database: {{ .Values.postgresql.database | default "aeterna" }}
+  Secret: {{ include "prereqs.postgresql.secretName" . }} (keys: username, password)
+{{- end }}
+
+Cache (Redis-compatible):
+  Host: {{ include "prereqs.redis.host" . }}
+  Port: 6379
+
+{{- if .Values.vectorStore.qdrant.enabled }}
+Vector Store (Qdrant):
+  Host: {{ include "prereqs.vectorStore.host" . }}
+  Port: {{ include "prereqs.vectorStore.port" . }}
+{{- end }}
+
+=== Using with the Aeterna chart ===
+
+Install the main Aeterna chart with connection parameters:
+
+  helm install aeterna charts/aeterna \
+    --set postgresql.host={{ include "prereqs.postgresql.host" . }} \
+    --set postgresql.existingSecret={{ include "prereqs.postgresql.secretName" . }} \
+    --set redis.host={{ include "prereqs.redis.host" . }} \
+{{- if .Values.vectorStore.qdrant.enabled }}
+    --set vectorStore.host={{ include "prereqs.vectorStore.host" . }} \
+    --set vectorStore.port={{ include "prereqs.vectorStore.port" . }}
+{{- end }}
+
+Or use the connection secret:
+  Secret name: {{ include "prereqs.connectionSecretName" . }}

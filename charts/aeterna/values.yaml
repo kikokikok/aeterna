@@ -1,5 +1,83 @@
 ## Aeterna Helm Chart Values
-## Universal Memory & Knowledge Framework for Enterprise AI Agent Systems
+## Application-only chart — stateful services are provided externally.
+## For dev/test backends, use the aeterna-prereqs chart.
+
+## ==========================================================================
+## EXTERNAL SERVICE CONNECTIONS (REQUIRED)
+## ==========================================================================
+## Aeterna requires PostgreSQL, a Redis-compatible cache, and a vector store.
+## Provide connection details for pre-existing instances.
+## For development, use the aeterna-prereqs chart to deploy these services.
+
+## PostgreSQL connection
+postgresql:
+  ## @param postgresql.host PostgreSQL hostname
+  host: ""
+  ## @param postgresql.port PostgreSQL port
+  port: 5432
+  ## @param postgresql.database Database name
+  database: "aeterna"
+  ## @param postgresql.username Database username
+  username: "aeterna"
+  ## @param postgresql.existingSecret Kubernetes Secret containing the password (key: password)
+  existingSecret: ""
+  ## @param postgresql.passwordKey Key in the secret containing the password
+  passwordKey: "password"
+  ## @param postgresql.sslMode SSL mode for PostgreSQL connection
+  sslMode: "prefer"
+
+## Redis-compatible cache connection (Redis, Dragonfly, Valkey, ElastiCache)
+redis:
+  ## @param redis.host Redis hostname
+  host: ""
+  ## @param redis.port Redis port
+  port: 6379
+  ## @param redis.existingSecret Kubernetes Secret containing the password (key: password)
+  existingSecret: ""
+  ## @param redis.passwordKey Key in the secret containing the password
+  passwordKey: "password"
+  ## @param redis.tls Enable TLS for Redis connection
+  tls: false
+
+## Vector store connection
+vectorStore:
+  ## @param vectorStore.type Vector store type: qdrant, weaviate, pgvector, pinecone, mongodb, vertexai, databricks
+  type: "qdrant"
+  ## @param vectorStore.host Vector store hostname (not needed for pgvector, pinecone, vertexai, databricks)
+  host: ""
+  ## @param vectorStore.port Vector store port (6333 for Qdrant, 8080 for Weaviate)
+  port: 6333
+  ## @param vectorStore.existingSecret Kubernetes Secret containing API key (if needed)
+  existingSecret: ""
+  ## @param vectorStore.apiKeyKey Key in the secret containing the API key
+  apiKeyKey: "api-key"
+
+  ## Pinecone-specific configuration (when type=pinecone)
+  pinecone:
+    ## @param vectorStore.pinecone.environment Pinecone environment
+    environment: ""
+    ## @param vectorStore.pinecone.indexName Pinecone index name
+    indexName: "aeterna"
+
+  ## Vertex AI-specific configuration (when type=vertexai)
+  vertexai:
+    ## @param vectorStore.vertexai.project GCP project ID
+    project: ""
+    ## @param vectorStore.vertexai.region GCP region
+    region: "us-central1"
+    ## @param vectorStore.vertexai.endpoint Vertex AI endpoint ID
+    endpoint: ""
+
+  ## Databricks-specific configuration (when type=databricks)
+  databricks:
+    ## @param vectorStore.databricks.workspaceUrl Databricks workspace URL
+    workspaceUrl: ""
+    ## @param vectorStore.databricks.catalog Unity Catalog name
+    catalog: ""
+
+## ==========================================================================
+## DEPLOYMENT CONFIGURATION
+## ==========================================================================
 
 ## Deployment mode configuration
 ## @param deploymentMode Deployment mode: local (all components), hybrid (local cache + remote), remote (thin client)
@@ -41,6 +119,8 @@ aeterna:
   nameOverride: ""
   ## @param aeterna.fullnameOverride Override full name
   fullnameOverride: ""
+
+  name: ""
 
   ## Service account configuration
   serviceAccount:
@@ -233,6 +313,8 @@ aeterna:
 githubOrgSync:
   ## @param githubOrgSync.enabled Enable GitHub Organization sync
   enabled: false
+  ## @param githubOrgSync.perTenantMode When true, credentials are read from per-tenant config. When false (default), reads from env vars.
+  perTenantMode: false
   ## @param githubOrgSync.orgName GitHub Organization name to sync (e.g. "acme-corp")
   orgName: ""
   ## @param githubOrgSync.teamFilter Optional regex to filter teams (e.g. "^platform-")
@@ -263,6 +345,18 @@ githubOrgSync:
         cpu: 100m
         memory: 128Mi
 
+# Kubernetes Service Account authentication for machine identities (e.g. CronJobs).
+# When enabled, the server validates K8s SA bearer tokens via the TokenReview API.
+k8sAuth:
+  enabled: false
+  # Audience used in projected token and TokenReview request.
+  tokenReviewAudience: "aeterna"
+  # Name of the dedicated ServiceAccount for the sync CronJob.
+  syncServiceAccountName: "aeterna-sync"
+  # Subject of the SA to bootstrap as PlatformAdmin (set via AETERNA_ADMIN_BOOTSTRAP_K8S_SA_SUBJECT env or here).
+  # Format: "system:serviceaccount:<namespace>:<name>"
+  syncSaSubject: ""
+
 tenantConfigProvider:
   enabled: true
   seedTenants: []
@@ -270,11 +364,21 @@ tenantConfigProvider:
 ## Plugin auth configuration
 ## Configures the OpenCode plugin authentication boundary (GitHub OAuth)
 pluginAuth:
+  ## @param pluginAuth.enabled Enable plugin authentication boundary
+  enabled: false
 
 ## @param defaultTenantId Default tenant ID for tenant resolution (maps to AETERNA_DEFAULT_TENANT_ID).
 ## Used by plugin auth, webhooks, and any other flow that requires a fallback tenant.
 ## Leave empty to require explicit per-user tenant mapping (fail-closed).
 defaultTenantId: ""
+
+## Admin UI configuration
+## Browser-based admin dashboard served at /admin/* by the Aeterna server
+adminUi:
+  ## @param adminUi.enabled Enable the admin dashboard (built into the container image by default)
+  enabled: true
+  ## @param adminUi.path Path to the admin UI static assets inside the container
+  path: "/app/admin-ui/dist"
 
 ## Admin bootstrap configuration
 ## Seeds an initial PlatformAdmin user on first startup so the system is operational without manual DB intervention
@@ -334,235 +438,10 @@ knowledgeRepo:
     ## @param knowledgeRepo.webhook.secretName Existing secret containing webhook secret (key: webhook-secret)
     secretName: ""
 
-## Vector backend configuration
-vectorBackend:
-  ## @param vectorBackend.type Vector backend type: qdrant, pgvector, pinecone, weaviate, mongodb, vertexai, databricks
-  type: qdrant
-
-  ## Qdrant configuration
-  qdrant:
-    ## @param vectorBackend.qdrant.bundled Use bundled Qdrant (subchart)
-    bundled: true
-    ## External Qdrant configuration (when bundled=false)
-    external:
-      ## @param vectorBackend.qdrant.external.host External Qdrant host
-      host: ""
-      ## @param vectorBackend.qdrant.external.port External Qdrant port
-      port: 6333
-      ## @param vectorBackend.qdrant.external.apiKey External Qdrant API key
-      apiKey: ""
-      ## @param vectorBackend.qdrant.external.existingSecret Secret containing Qdrant API key
-      existingSecret: ""
-
-  ## pgvector configuration (uses PostgreSQL)
-  pgvector:
-    ## @param vectorBackend.pgvector.enabled Enable pgvector (requires PostgreSQL with pgvector extension)
-    enabled: false
-
-  ## Pinecone configuration
-  pinecone:
-    ## @param vectorBackend.pinecone.enabled Enable Pinecone
-    enabled: false
-    ## @param vectorBackend.pinecone.apiKey Pinecone API key
-    apiKey: ""
-    ## @param vectorBackend.pinecone.environment Pinecone environment
-    environment: ""
-    ## @param vectorBackend.pinecone.indexName Pinecone index name
-    indexName: "aeterna"
-    ## @param vectorBackend.pinecone.existingSecret Secret containing Pinecone API key
-    existingSecret: ""
-
-  ## Weaviate configuration
-  weaviate:
-    ## @param vectorBackend.weaviate.enabled Enable Weaviate (bundled subchart)
-    enabled: false
-    ## External Weaviate configuration
-    external:
-      ## @param vectorBackend.weaviate.external.host External Weaviate host
-      host: ""
-      ## @param vectorBackend.weaviate.external.apiKey External Weaviate API key
-      apiKey: ""
-      ## @param vectorBackend.weaviate.external.existingSecret Secret containing Weaviate API key
-      existingSecret: ""
-
-  ## MongoDB Atlas Vector Search configuration
-  mongodb:
-    ## @param vectorBackend.mongodb.enabled Enable MongoDB (bundled Percona operator)
-    enabled: false
-    ## External MongoDB configuration
-    external:
-      ## @param vectorBackend.mongodb.external.uri MongoDB connection URI
-      uri: ""
-      ## @param vectorBackend.mongodb.external.existingSecret Secret containing MongoDB URI
-      existingSecret: ""
-
-  ## Vertex AI Vector Search configuration
-  vertexai:
-    ## @param vectorBackend.vertexai.enabled Enable Vertex AI
-    enabled: false
-    ## @param vectorBackend.vertexai.project GCP project ID
-    project: ""
-    ## @param vectorBackend.vertexai.region GCP region
-    region: "us-central1"
-    ## @param vectorBackend.vertexai.endpoint Vertex AI endpoint ID
-    endpoint: ""
-    ## @param vectorBackend.vertexai.serviceAccountKey GCP service account key JSON
-    serviceAccountKey: ""
-    ## @param vectorBackend.vertexai.existingSecret Secret containing service account key
-    existingSecret: ""
-
-  ## Databricks Vector Search configuration
-  databricks:
-    ## @param vectorBackend.databricks.enabled Enable Databricks
-    enabled: false
-    ## @param vectorBackend.databricks.workspaceUrl Databricks workspace URL
-    workspaceUrl: ""
-    ## @param vectorBackend.databricks.token Databricks access token
-    token: ""
-    ## @param vectorBackend.databricks.catalog Unity Catalog name
-    catalog: ""
-    ## @param vectorBackend.databricks.existingSecret Secret containing Databricks token
-    existingSecret: ""
-
 ## Database migration configuration
 migration:
   ## @param migration.ttlSecondsAfterFinished TTL for completed migration jobs (seconds)
   ttlSecondsAfterFinished: 300
-
-## Cache configuration
-cache:
-  ## @param cache.type Cache type: dragonfly, valkey, external
-  type: dragonfly
-
-  ## Dragonfly configuration (Redis-compatible)
-  dragonfly:
-    ## @param cache.dragonfly.enabled Enable bundled Dragonfly
-    enabled: true
-    ## @param cache.dragonfly.replicas Number of Dragonfly replicas (1 standalone, 3+ for HA)
-    replicas: 1
-    ## @param cache.dragonfly.args Additional Dragonfly arguments
-    args: []
-    #  - --cache_mode=true
-    #  - --memcache_port=11211
-
-  ## Valkey configuration (Redis fork)
-  valkey:
-    ## @param cache.valkey.enabled Enable bundled Valkey
-    enabled: false
-    ## @param cache.valkey.maxmemory Maximum memory for Valkey (e.g., "256mb")
-    maxmemory: "256mb"
-    ## @param cache.valkey.maxmemoryPolicy Eviction policy: allkeys-lru, volatile-lru, noeviction, etc.
-    maxmemoryPolicy: "allkeys-lru"
-
-  ## External Redis configuration
-  external:
-    ## @param cache.external.enabled Use external Redis
-    enabled: false
-    ## @param cache.external.host External Redis host
-    host: ""
-    ## @param cache.external.port External Redis port
-    port: 6379
-    ## @param cache.external.password External Redis password
-    password: ""
-    ## @param cache.external.existingSecret Secret containing Redis password
-    existingSecret: ""
-    ## @param cache.external.secretKey Key in secret containing password
-    secretKey: "redis-password"
-
-## PostgreSQL configuration
-postgresql:
-  ## @param postgresql.bundled Use bundled CloudNativePG
-  bundled: true
-
-  ## CloudNativePG cluster configuration (when bundled=true)
-  cloudnativepg:
-    ## @param postgresql.cloudnativepg.enabled Enable CloudNativePG cluster creation
-    enabled: true
-    ## @param postgresql.cloudnativepg.instances Number of PostgreSQL instances
-    instances: 1
-    ## @param postgresql.cloudnativepg.imageName PostgreSQL image (leave empty for operator default)
-    imageName: ""
-    storage:
-      ## @param postgresql.cloudnativepg.storage.size Storage size per instance
-      size: 10Gi
-      ## @param postgresql.cloudnativepg.storage.storageClass Storage class (empty = cluster default)
-      storageClass: ""
-    resources:
-      limits:
-        cpu: 1000m
-        memory: 1Gi
-      requests:
-        cpu: 100m
-        memory: 256Mi
-    ## PostgreSQL engine parameters
-    postgresql:
-      ## @param postgresql.cloudnativepg.postgresql.parameters Extra PostgreSQL parameters
-      parameters: {}
-      ## @param postgresql.cloudnativepg.postgresql.pg_hba Custom pg_hba entries
-      pg_hba: []
-    ## Bootstrap configuration
-    bootstrap:
-      initdb:
-        database: "aeterna"
-        owner: "aeterna"
-    ## pgvector extension support
-    pgvector:
-      ## @param postgresql.cloudnativepg.pgvector.enabled Install pgvector extension on bootstrap
-      enabled: true
-    ## Backup configuration (CloudNativePG native)
-    backup:
-      ## @param postgresql.cloudnativepg.backup.enabled Enable CNPG native backup
-      enabled: false
-      ## @param postgresql.cloudnativepg.backup.schedule Backup cron schedule
-      schedule: "0 2 * * *"
-      ## @param postgresql.cloudnativepg.backup.retentionPolicy Backup retention policy
-      retentionPolicy: "30d"
-      ## @param postgresql.cloudnativepg.backup.provider Backup provider: s3, gcs, azure
-      provider: "s3"
-      ## @param postgresql.cloudnativepg.backup.destinationPath Full backup destination path (e.g., s3://bucket/path)
-      destinationPath: ""
-      ## @param postgresql.cloudnativepg.backup.endpointURL Custom S3-compatible endpoint URL
-      endpointURL: ""
-      s3Credentials:
-        ## @param postgresql.cloudnativepg.backup.s3Credentials.accessKeyId S3 access key secret reference
-        accessKeyId:
-          name: ""
-          key: "ACCESS_KEY_ID"
-        secretAccessKey:
-          name: ""
-          key: "ACCESS_SECRET_KEY"
-      googleCredentials:
-        applicationCredentials:
-          name: ""
-          key: "gcs-credentials"
-      azureCredentials:
-        storageAccount:
-          name: ""
-          key: "AZURE_STORAGE_ACCOUNT"
-        storageKey:
-          name: ""
-          key: "AZURE_STORAGE_KEY"
-
-  ## External PostgreSQL configuration (when bundled=false)
-  external:
-    ## @param postgresql.external.enabled Enable external PostgreSQL
-    enabled: false
-    ## @param postgresql.external.host External PostgreSQL host
-    host: ""
-    ## @param postgresql.external.port External PostgreSQL port
-    port: 5432
-    ## @param postgresql.external.database Database name
-    database: "aeterna"
-    ## @param postgresql.external.username Username
-    username: "aeterna"
-    ## @param postgresql.external.password Password
-    password: ""
-    ## @param postgresql.external.existingSecret Secret containing PostgreSQL password
-    existingSecret: ""
-    ## @param postgresql.external.secretKey Key in secret containing password
-    secretKey: "postgres-password"
-    ## @param postgresql.external.sslMode SSL mode
-    sslMode: "prefer"
 
 ## OPAL authorization stack
 opal:
@@ -573,6 +452,8 @@ opal:
   server:
     ## @param opal.server.replicaCount Number of OPAL Server replicas (>=2 for HA)
     replicaCount: 3
+    httpPort: 7002
+    broadcastPort: 7003
     ## @param opal.server.logLevel Log level for OPAL Server: DEBUG, INFO, WARNING, ERROR
     logLevel: INFO
     image:
@@ -606,6 +487,8 @@ opal:
   cedarAgent:
     ## @param opal.cedarAgent.enabled Enable Cedar Agent
     enabled: true
+    httpPort: 7000
+    oidcPort: 8180
     ## @param opal.cedarAgent.replicaCount Number of Cedar Agent replicas (runs as Deployment, namespace-scoped)
     replicaCount: 1
     image:
@@ -624,6 +507,7 @@ opal:
   fetcher:
     ## @param opal.fetcher.enabled Enable OPAL Fetcher
     enabled: true
+    httpPort: 7000
     image:
       repository: permitio/opal-client
       tag: "0.8.0"
@@ -966,101 +850,15 @@ backup:
     enabled: false
     schedule: "0 6 * * *"
 
-## Subchart configuration overrides
-
-## Dragonfly subchart
-dragonfly:
-  enabled: true
-  resources:
-    limits:
-      cpu: 500m
-      memory: 512Mi
-    requests:
-      cpu: 50m
-      memory: 128Mi
-
-## Qdrant subchart
-qdrant:
-  enabled: true
-  replicaCount: 1
-  persistence:
-    size: 10Gi
-  containerSecurityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 2000
-    allowPrivilegeEscalation: false
-    privileged: false
-    readOnlyRootFilesystem: true
-    capabilities:
-      drop:
-        - ALL
-  podSecurityContext:
-    fsGroup: 3000
-    fsGroupChangePolicy: Always
-    seccompProfile:
-      type: RuntimeDefault
-  resources:
-    limits:
-      cpu: 500m
-      memory: 1Gi
-    requests:
-      cpu: 50m
-      memory: 256Mi
-  ## Qdrant snapshot/backup configuration
-  ## Snapshots create point-in-time backups of collections.
-  ## For production, enable snapshots and configure an S3/GCS destination.
-  snapshots:
-    ## @param qdrant.snapshots.enabled Enable periodic snapshot creation
-    enabled: false
-    ## @param qdrant.snapshots.schedule Cron schedule for snapshots
-    schedule: "0 3 * * *"
-    ## @param qdrant.snapshots.destination Snapshot upload destination (s3://bucket/path or gs://bucket/path)
-    destination: ""
-
-## Weaviate subchart (disabled by default)
-weaviate:
-  enabled: false
-  ## @param weaviate.multiTenancy.enabled Enable Weaviate multi-tenancy (isolates data per tenant)
-  multiTenancy:
-    enabled: false
-
-## MongoDB Percona operator subchart (disabled by default)
-mongodb:
-  enabled: false
-  ## Percona Server for MongoDB configuration (passed to psmdb-operator subchart)
-  percona:
-    ## @param mongodb.percona.enabled Enable PerconaServerMongoDB CRD creation
-    enabled: false
-    ## @param mongodb.percona.image Percona MongoDB image
-    image: "percona/percona-server-mongodb:7.0"
-    replsets:
-      ## @param mongodb.percona.replsets.members Number of replica set members (3 for HA)
-      members: 3
-    mongod:
-      storage:
-        engine: wiredTiger
-      net:
-        port: 27017
-    resources:
-      limits:
-        cpu: 500m
-        memory: 1Gi
-      requests:
-        cpu: 100m
-        memory: 256Mi
-
-## Valkey subchart (alternative to Dragonfly)
-valkey:
-  enabled: false
-  architecture: standalone
-  auth:
-    enabled: true
-    existingSecret: ""
-  resources:
-    limits:
-      cpu: 500m
-      memory: 512Mi
-    requests:
-      cpu: 50m
-      memory: 128Mi
+## ==========================================================================
+## MIGRATION NOTES (from pre-0.7.0 bundled subcharts)
+## ==========================================================================
+## Previously, this chart bundled dragonfly, qdrant, weaviate, psmdb-operator,
+## and valkey as subchart dependencies. Those have been extracted into the
+## separate aeterna-prereqs chart.
+##
+## To migrate:
+##   1. Deploy aeterna-prereqs to create backing services
+##   2. Set postgresql.host, redis.host, vectorStore.host to point at them
+##   3. Set postgresql.existingSecret / redis.existingSecret for passwords
+##   4. Remove old subchart overrides (dragonfly.*, qdrant.*, etc.)

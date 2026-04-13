@@ -8,6 +8,7 @@ use axum::response::IntoResponse;
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use knowledge::tenant_repo_resolver::RepoResolutionError;
+use memory::provider_registry::config_keys;
 use mk_core::traits::{StorageBackend, TenantConfigProvider};
 use mk_core::types::{
     BranchPolicy, CredentialKind, GitProviderConnection, GitProviderKind, GovernanceEvent,
@@ -24,6 +25,8 @@ use storage::tenant_store::UpsertTenantRepositoryBinding;
 use uuid::Uuid;
 
 use super::{AppState, authenticated_tenant_context, tenant_scoped_context};
+
+const OWNERSHIP_PLATFORM: &str = "platform";
 
 #[derive(Debug, Deserialize)]
 pub struct CreateTenantRequest {
@@ -165,6 +168,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(deactivate_tenant),
         )
         .route(
+            "/admin/tenants/{tenant}/purge",
+            post(purge_tenant),
+        )
+        .route(
             "/admin/tenants/{tenant}/domain-mappings",
             post(add_domain_mapping),
         )
@@ -251,6 +258,23 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/admin/tenants/provision",
             post(provision_tenant),
+        )
+        // Provider configuration routes
+        .route(
+            "/admin/tenants/{tenant}/providers",
+            get(get_tenant_providers),
+        )
+        .route(
+            "/admin/tenants/{tenant}/providers/llm",
+            put(set_tenant_llm_provider).delete(delete_tenant_llm_provider),
+        )
+        .route(
+            "/admin/tenants/{tenant}/providers/embedding",
+            put(set_tenant_embedding_provider).delete(delete_tenant_embedding_provider),
+        )
+        .route(
+            "/admin/tenants/{tenant}/providers/status",
+            get(test_tenant_provider_connectivity),
         )
         .with_state(state)
 }
@@ -389,6 +413,7 @@ async fn upsert_tenant_config(
 
     match state.tenant_config_provider.upsert_config(document).await {
         Ok(config) => {
+            state.provider_registry.invalidate_tenant(&tenant_record.id);
             audit_tenant_action(
                 state.as_ref(),
                 &ctx,
@@ -481,6 +506,7 @@ async fn set_tenant_secret(
         .await
     {
         Ok(reference) => {
+            state.provider_registry.invalidate_tenant(&tenant_record.id);
             audit_tenant_action(
                 state.as_ref(),
                 &ctx,
@@ -549,6 +575,7 @@ async fn delete_tenant_secret(
         .await
     {
         Ok(deleted) => {
+            state.provider_registry.invalidate_tenant(&tenant_record.id);
             audit_tenant_action(
                 state.as_ref(),
                 &ctx,
@@ -636,6 +663,7 @@ async fn upsert_my_tenant_config(
 
     match state.tenant_config_provider.upsert_config(document).await {
         Ok(config) => {
+            state.provider_registry.invalidate_tenant(&tenant_record.id);
             audit_tenant_action(
                 state.as_ref(),
                 &ctx,
@@ -746,6 +774,7 @@ async fn set_my_tenant_secret(
         .await
     {
         Ok(reference) => {
+            state.provider_registry.invalidate_tenant(&tenant_record.id);
             audit_tenant_action(
                 state.as_ref(),
                 &ctx,
@@ -820,6 +849,7 @@ async fn delete_my_tenant_secret(
         .await
     {
         Ok(deleted) => {
+            state.provider_registry.invalidate_tenant(&tenant_record.id);
             audit_tenant_action(
                 state.as_ref(),
                 &ctx,
@@ -1058,6 +1088,52 @@ async fn deactivate_tenant(
             &err.to_string(),
         ),
     }
+}
+
+/// Full data purge for a deactivated tenant.
+///
+/// This endpoint cascades deletion across PostgreSQL, DuckDB graph, and Redis.
+/// It should only be called after the quarantine period has elapsed.
+async fn purge_tenant(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(tenant): Path<String>,
+) -> impl IntoResponse {
+    let ctx = match require_platform_admin(&state, &headers).await {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+
+    let cascade = storage::CascadeDeleter::new(&state.postgres, state.graph_store.clone());
+    let report = cascade
+        .cascade_tenant_purge::<fn(String) -> std::future::Ready<Result<(), Box<dyn std::error::Error + Send + Sync>>>, _>(
+            &tenant,
+            None, // Redis connection not available here; GDPR flow handles Redis separately
+            None, // Qdrant callback — future: wire through MemoryManager providers
+        )
+        .await;
+
+    audit_tenant_action(
+        &state,
+        &ctx,
+        "tenant_purge",
+        Some(&tenant),
+        json!({
+            "memories_deleted": report.memories.postgres_deleted,
+            "knowledge_deleted": report.knowledge_items_deleted,
+            "org_units_deleted": report.org_units_deleted,
+            "user_roles_deleted": report.user_roles_deleted,
+            "unit_policies_deleted": report.unit_policies_deleted,
+            "errors": report.errors,
+        }),
+    )
+    .await;
+
+    (
+        StatusCode::OK,
+        Json(json!({ "success": true, "report": report })),
+    )
+        .into_response()
 }
 
 async fn add_domain_mapping(
@@ -2130,6 +2206,650 @@ async fn persist_governance_event(state: &AppState, event: &GovernanceEvent) {
         .postgres
         .persist_event(PersistentEvent::new(event.clone()))
         .await;
+}
+
+// ---------------------------------------------------------------------------
+// Provider configuration API (tenant-specific LLM/embedding providers)
+// ---------------------------------------------------------------------------
+
+/// Request body for setting an LLM or embedding provider.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetProviderRequest {
+    pub provider: String,
+    pub model: String,
+    pub api_key: Option<String>,
+    pub google_project_id: Option<String>,
+    pub google_location: Option<String>,
+    pub bedrock_region: Option<String>,
+}
+
+/// Provider info returned in the GET response.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderInfo {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub configured: bool,
+}
+
+/// Response body for `GET /admin/tenants/{tenant}/providers`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantProvidersResponse {
+    pub llm: ProviderInfo,
+    pub embedding: ProviderInfo,
+    pub source: String,
+}
+
+/// Status of a single provider connectivity test.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStatusInfo {
+    pub status: String,
+    pub latency_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dimension: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Response body for `GET /admin/tenants/{tenant}/providers/status`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantProviderStatusResponse {
+    pub llm: ProviderStatusInfo,
+    pub embedding: ProviderStatusInfo,
+}
+
+/// Helper to extract a provider info block from tenant config.
+fn extract_provider_info(
+    config: &Option<TenantConfigDocument>,
+    provider_key: &str,
+    model_key: &str,
+    api_key_name: &str,
+) -> ProviderInfo {
+    let (provider, model, configured) = match config {
+        Some(doc) => {
+            let provider = doc
+                .fields
+                .get(provider_key)
+                .and_then(|f| f.value.as_str().map(String::from));
+            let model = doc
+                .fields
+                .get(model_key)
+                .and_then(|f| f.value.as_str().map(String::from));
+            let has_secret = doc.secret_references.contains_key(api_key_name);
+            let configured =
+                provider.is_some() && (has_secret || provider.as_deref() != Some("openai"));
+            (provider, model, configured)
+        }
+        None => (None, None, false),
+    };
+    ProviderInfo {
+        provider,
+        model,
+        configured,
+    }
+}
+
+/// `GET /api/v1/admin/tenants/{tenant}/providers`
+///
+/// Returns the current LLM and embedding provider configuration for a tenant.
+/// Does NOT return API keys -- only indicates whether they are configured.
+#[tracing::instrument(skip_all, fields(tenant))]
+async fn get_tenant_providers(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(tenant): Path<String>,
+) -> impl IntoResponse {
+    if let Err(response) = require_platform_admin(&state, &headers).await {
+        return response;
+    }
+
+    let tenant_record =
+        match resolve_tenant_record_or_404(&state, &tenant, "provider_config_get_failed").await {
+            Ok(record) => record,
+            Err(response) => return response,
+        };
+
+    let config = state
+        .tenant_config_provider
+        .get_config(&tenant_record.id)
+        .await
+        .ok()
+        .flatten();
+
+    let has_tenant_config = config.as_ref().is_some_and(|c| {
+        c.fields.contains_key(config_keys::LLM_PROVIDER)
+            || c.fields.contains_key(config_keys::EMBEDDING_PROVIDER)
+    });
+
+    let llm = extract_provider_info(
+        &config,
+        config_keys::LLM_PROVIDER,
+        config_keys::LLM_MODEL,
+        config_keys::LLM_API_KEY,
+    );
+    let embedding = extract_provider_info(
+        &config,
+        config_keys::EMBEDDING_PROVIDER,
+        config_keys::EMBEDDING_MODEL,
+        config_keys::EMBEDDING_API_KEY,
+    );
+
+    let source = if has_tenant_config {
+        "tenant"
+    } else {
+        OWNERSHIP_PLATFORM
+    };
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "llm": llm,
+            "embedding": embedding,
+            "source": source,
+        })),
+    )
+        .into_response()
+}
+
+/// `PUT /api/v1/admin/tenants/{tenant}/providers/llm`
+///
+/// Set the LLM provider configuration for a tenant.
+#[tracing::instrument(skip_all, fields(tenant))]
+async fn set_tenant_llm_provider(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(tenant): Path<String>,
+    Json(req): Json<SetProviderRequest>,
+) -> impl IntoResponse {
+    let ctx = match require_platform_admin(&state, &headers).await {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+
+    let tenant_record =
+        match resolve_tenant_record_or_404(&state, &tenant, "provider_llm_set_failed").await {
+            Ok(record) => record,
+            Err(response) => return response,
+        };
+
+    // Build config fields
+    let mut fields = BTreeMap::new();
+    fields.insert(
+        config_keys::LLM_PROVIDER.to_string(),
+        TenantConfigField {
+            ownership: TenantConfigOwnership::Platform,
+            value: serde_json::json!(req.provider),
+        },
+    );
+    fields.insert(
+        config_keys::LLM_MODEL.to_string(),
+        TenantConfigField {
+            ownership: TenantConfigOwnership::Platform,
+            value: serde_json::json!(req.model),
+        },
+    );
+    if let Some(project_id) = &req.google_project_id {
+        fields.insert(
+            config_keys::LLM_GOOGLE_PROJECT_ID.to_string(),
+            TenantConfigField {
+                ownership: TenantConfigOwnership::Platform,
+                value: serde_json::json!(project_id),
+            },
+        );
+    }
+    if let Some(location) = &req.google_location {
+        fields.insert(
+            config_keys::LLM_GOOGLE_LOCATION.to_string(),
+            TenantConfigField {
+                ownership: TenantConfigOwnership::Platform,
+                value: serde_json::json!(location),
+            },
+        );
+    }
+    if let Some(region) = &req.bedrock_region {
+        fields.insert(
+            config_keys::LLM_BEDROCK_REGION.to_string(),
+            TenantConfigField {
+                ownership: TenantConfigOwnership::Platform,
+                value: serde_json::json!(region),
+            },
+        );
+    }
+
+    let document = TenantConfigDocument {
+        tenant_id: tenant_record.id.clone(),
+        fields,
+        secret_references: BTreeMap::new(),
+    };
+
+    if let Err(err) = state.tenant_config_provider.upsert_config(document).await {
+        return map_tenant_config_provider_error("provider_llm_set", err);
+    }
+
+    // Store API key secret if provided
+    if let Some(api_key) = &req.api_key {
+        let secret = TenantSecretEntry {
+            logical_name: config_keys::LLM_API_KEY.to_string(),
+            ownership: TenantConfigOwnership::Platform,
+            secret_value: api_key.clone(),
+        };
+        if let Err(err) = state
+            .tenant_config_provider
+            .set_secret_entry(&tenant_record.id, secret)
+            .await
+        {
+            return map_tenant_config_provider_error("provider_llm_secret_set", err);
+        }
+    }
+
+    state.provider_registry.invalidate_tenant(&tenant_record.id);
+
+    audit_tenant_action(
+        state.as_ref(),
+        &ctx,
+        "provider_llm_set",
+        Some(tenant_record.id.as_str()),
+        json!({
+            "tenantId": tenant_record.id.as_str(),
+            "provider": req.provider,
+            "model": req.model,
+        }),
+    )
+    .await;
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "provider": req.provider,
+            "model": req.model,
+        })),
+    )
+        .into_response()
+}
+
+/// `PUT /api/v1/admin/tenants/{tenant}/providers/embedding`
+///
+/// Set the embedding provider configuration for a tenant.
+#[tracing::instrument(skip_all, fields(tenant))]
+async fn set_tenant_embedding_provider(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(tenant): Path<String>,
+    Json(req): Json<SetProviderRequest>,
+) -> impl IntoResponse {
+    let ctx = match require_platform_admin(&state, &headers).await {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+
+    let tenant_record = match resolve_tenant_record_or_404(
+        &state,
+        &tenant,
+        "provider_embedding_set_failed",
+    )
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+
+    // Check if changing embedding model when vectors already exist
+    let existing_config = state
+        .tenant_config_provider
+        .get_config(&tenant_record.id)
+        .await
+        .ok()
+        .flatten();
+    let existing_model = existing_config.as_ref().and_then(|c| {
+        c.fields
+            .get(config_keys::EMBEDDING_MODEL)
+            .and_then(|f| f.value.as_str().map(String::from))
+    });
+    let model_changed = existing_model.as_ref().is_some_and(|m| m != &req.model);
+
+    // Build config fields
+    let mut fields = BTreeMap::new();
+    fields.insert(
+        config_keys::EMBEDDING_PROVIDER.to_string(),
+        TenantConfigField {
+            ownership: TenantConfigOwnership::Platform,
+            value: serde_json::json!(req.provider),
+        },
+    );
+    fields.insert(
+        config_keys::EMBEDDING_MODEL.to_string(),
+        TenantConfigField {
+            ownership: TenantConfigOwnership::Platform,
+            value: serde_json::json!(req.model),
+        },
+    );
+    if let Some(project_id) = &req.google_project_id {
+        fields.insert(
+            config_keys::EMBEDDING_GOOGLE_PROJECT_ID.to_string(),
+            TenantConfigField {
+                ownership: TenantConfigOwnership::Platform,
+                value: serde_json::json!(project_id),
+            },
+        );
+    }
+    if let Some(location) = &req.google_location {
+        fields.insert(
+            config_keys::EMBEDDING_GOOGLE_LOCATION.to_string(),
+            TenantConfigField {
+                ownership: TenantConfigOwnership::Platform,
+                value: serde_json::json!(location),
+            },
+        );
+    }
+    if let Some(region) = &req.bedrock_region {
+        fields.insert(
+            config_keys::EMBEDDING_BEDROCK_REGION.to_string(),
+            TenantConfigField {
+                ownership: TenantConfigOwnership::Platform,
+                value: serde_json::json!(region),
+            },
+        );
+    }
+
+    let document = TenantConfigDocument {
+        tenant_id: tenant_record.id.clone(),
+        fields,
+        secret_references: BTreeMap::new(),
+    };
+
+    if let Err(err) = state.tenant_config_provider.upsert_config(document).await {
+        return map_tenant_config_provider_error("provider_embedding_set", err);
+    }
+
+    // Store API key secret if provided
+    if let Some(api_key) = &req.api_key {
+        let secret = TenantSecretEntry {
+            logical_name: config_keys::EMBEDDING_API_KEY.to_string(),
+            ownership: TenantConfigOwnership::Platform,
+            secret_value: api_key.clone(),
+        };
+        if let Err(err) = state
+            .tenant_config_provider
+            .set_secret_entry(&tenant_record.id, secret)
+            .await
+        {
+            return map_tenant_config_provider_error("provider_embedding_secret_set", err);
+        }
+    }
+
+    state.provider_registry.invalidate_tenant(&tenant_record.id);
+
+    audit_tenant_action(
+        state.as_ref(),
+        &ctx,
+        "provider_embedding_set",
+        Some(tenant_record.id.as_str()),
+        json!({
+            "tenantId": tenant_record.id.as_str(),
+            "provider": req.provider,
+            "model": req.model,
+        }),
+    )
+    .await;
+
+    let mut response = json!({
+        "success": true,
+        "provider": req.provider,
+        "model": req.model,
+    });
+
+    if model_changed {
+        response["warning"] = serde_json::json!(
+            "Embedding model changed. Existing vectors may have different dimensions and should be re-indexed."
+        );
+    }
+
+    (StatusCode::OK, Json(response)).into_response()
+}
+
+/// `DELETE /api/v1/admin/tenants/{tenant}/providers/llm`
+///
+/// Remove the tenant LLM provider override, falling back to platform default.
+#[tracing::instrument(skip_all, fields(tenant))]
+async fn delete_tenant_llm_provider(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(tenant): Path<String>,
+) -> impl IntoResponse {
+    let ctx = match require_platform_admin(&state, &headers).await {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+
+    let tenant_record =
+        match resolve_tenant_record_or_404(&state, &tenant, "provider_llm_delete_failed").await {
+            Ok(record) => record,
+            Err(response) => return response,
+        };
+
+    // Clear LLM-related config fields by upserting empty values
+    let fields_to_clear = [
+        config_keys::LLM_PROVIDER,
+        config_keys::LLM_MODEL,
+        config_keys::LLM_GOOGLE_PROJECT_ID,
+        config_keys::LLM_GOOGLE_LOCATION,
+        config_keys::LLM_BEDROCK_REGION,
+    ];
+
+    let mut fields = BTreeMap::new();
+    for key in &fields_to_clear {
+        fields.insert(
+            (*key).to_string(),
+            TenantConfigField {
+                ownership: TenantConfigOwnership::Platform,
+                value: serde_json::Value::Null,
+            },
+        );
+    }
+    let document = TenantConfigDocument {
+        tenant_id: tenant_record.id.clone(),
+        fields,
+        secret_references: BTreeMap::new(),
+    };
+    let _ = state.tenant_config_provider.upsert_config(document).await;
+
+    // Remove the API key secret
+    let _ = state
+        .tenant_config_provider
+        .delete_secret_entry(&tenant_record.id, config_keys::LLM_API_KEY)
+        .await;
+
+    state.provider_registry.invalidate_tenant(&tenant_record.id);
+
+    audit_tenant_action(
+        state.as_ref(),
+        &ctx,
+        "provider_llm_delete",
+        Some(tenant_record.id.as_str()),
+        json!({ "tenantId": tenant_record.id.as_str() }),
+    )
+    .await;
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "message": "LLM provider override removed; tenant will use platform default",
+        })),
+    )
+        .into_response()
+}
+
+/// `DELETE /api/v1/admin/tenants/{tenant}/providers/embedding`
+///
+/// Remove the tenant embedding provider override, falling back to platform default.
+#[tracing::instrument(skip_all, fields(tenant))]
+async fn delete_tenant_embedding_provider(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(tenant): Path<String>,
+) -> impl IntoResponse {
+    let ctx = match require_platform_admin(&state, &headers).await {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+
+    let tenant_record =
+        match resolve_tenant_record_or_404(&state, &tenant, "provider_embedding_delete_failed")
+            .await
+        {
+            Ok(record) => record,
+            Err(response) => return response,
+        };
+
+    let fields_to_clear = [
+        config_keys::EMBEDDING_PROVIDER,
+        config_keys::EMBEDDING_MODEL,
+        config_keys::EMBEDDING_GOOGLE_PROJECT_ID,
+        config_keys::EMBEDDING_GOOGLE_LOCATION,
+        config_keys::EMBEDDING_BEDROCK_REGION,
+    ];
+
+    let mut fields = BTreeMap::new();
+    for key in &fields_to_clear {
+        fields.insert(
+            (*key).to_string(),
+            TenantConfigField {
+                ownership: TenantConfigOwnership::Platform,
+                value: serde_json::Value::Null,
+            },
+        );
+    }
+    let document = TenantConfigDocument {
+        tenant_id: tenant_record.id.clone(),
+        fields,
+        secret_references: BTreeMap::new(),
+    };
+    let _ = state.tenant_config_provider.upsert_config(document).await;
+
+    let _ = state
+        .tenant_config_provider
+        .delete_secret_entry(&tenant_record.id, config_keys::EMBEDDING_API_KEY)
+        .await;
+
+    state.provider_registry.invalidate_tenant(&tenant_record.id);
+
+    audit_tenant_action(
+        state.as_ref(),
+        &ctx,
+        "provider_embedding_delete",
+        Some(tenant_record.id.as_str()),
+        json!({ "tenantId": tenant_record.id.as_str() }),
+    )
+    .await;
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "message": "Embedding provider override removed; tenant will use platform default",
+        })),
+    )
+        .into_response()
+}
+
+/// `GET /api/v1/admin/tenants/{tenant}/providers/status`
+///
+/// Test provider connectivity by attempting a simple operation with both the
+/// LLM and embedding services.
+#[tracing::instrument(skip_all, fields(tenant))]
+async fn test_tenant_provider_connectivity(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(tenant): Path<String>,
+) -> impl IntoResponse {
+    if let Err(response) = require_platform_admin(&state, &headers).await {
+        return response;
+    }
+
+    let tenant_record =
+        match resolve_tenant_record_or_404(&state, &tenant, "provider_status_failed").await {
+            Ok(record) => record,
+            Err(response) => return response,
+        };
+
+    // Test LLM service
+    let llm_status = {
+        let start = std::time::Instant::now();
+        match state
+            .provider_registry
+            .get_llm_service(&tenant_record.id, state.tenant_config_provider.as_ref())
+            .await
+        {
+            Some(llm) => match llm.generate("Say hello in one word.").await {
+                Ok(_) => ProviderStatusInfo {
+                    status: "ok".to_string(),
+                    latency_ms: Some(start.elapsed().as_millis()),
+                    dimension: None,
+                    error: None,
+                },
+                Err(e) => ProviderStatusInfo {
+                    status: "error".to_string(),
+                    latency_ms: Some(start.elapsed().as_millis()),
+                    dimension: None,
+                    error: Some(format!("{e}")),
+                },
+            },
+            None => ProviderStatusInfo {
+                status: "not_configured".to_string(),
+                latency_ms: None,
+                dimension: None,
+                error: Some("No LLM service available for this tenant".to_string()),
+            },
+        }
+    };
+
+    // Test embedding service
+    let embedding_status = {
+        let start = std::time::Instant::now();
+        match state
+            .provider_registry
+            .get_embedding_service(&tenant_record.id, state.tenant_config_provider.as_ref())
+            .await
+        {
+            Some(emb) => match emb.embed("test embedding connectivity").await {
+                Ok(vector) => ProviderStatusInfo {
+                    status: "ok".to_string(),
+                    latency_ms: Some(start.elapsed().as_millis()),
+                    dimension: Some(vector.len()),
+                    error: None,
+                },
+                Err(e) => ProviderStatusInfo {
+                    status: "error".to_string(),
+                    latency_ms: Some(start.elapsed().as_millis()),
+                    dimension: None,
+                    error: Some(format!("{e}")),
+                },
+            },
+            None => ProviderStatusInfo {
+                status: "not_configured".to_string(),
+                latency_ms: None,
+                dimension: None,
+                error: Some("No embedding service available for this tenant".to_string()),
+            },
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "llm": llm_status,
+            "embedding": embedding_status,
+        })),
+    )
+        .into_response()
 }
 
 fn error_response(status: StatusCode, error: &str, message: &str) -> axum::response::Response {
@@ -3404,7 +4124,7 @@ async fn provision_tenant(
 mod tests {
     use super::*;
     use crate::server::PluginAuthState;
-    use crate::server::plugin_auth::RefreshTokenStore;
+    use crate::server::plugin_auth::{RefreshTokenStore, RefreshTokenStoreBackend};
     use agent_a2a::config::TrustedIdentityConfig;
     use async_trait::async_trait;
     use axum::body::Body;
@@ -3679,8 +4399,9 @@ mod tests {
             plugin_auth_state: Arc::new(PluginAuthState {
                 config: config::PluginAuthConfig::default(),
                 postgres: Some(postgres.clone()),
-                refresh_store: RefreshTokenStore::new(),
+                refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
             }),
+            k8s_auth_config: config::KubernetesAuthConfig::default(),
             idp_config: None,
             idp_sync_service: None,
             idp_client: None,
@@ -3689,7 +4410,11 @@ mod tests {
             tenant_repository_binding_store,
             tenant_repo_resolver,
             tenant_config_provider,
+            provider_registry: Arc::new(memory::provider_registry::TenantProviderRegistry::new(
+                None, None,
+            )),
             git_provider_connection_registry,
+            redis_conn: None,
         });
 
         Some((router(state), tenant))
@@ -5257,6 +5982,197 @@ mod tests {
                     missing
                 );
             }
+        }
+    }
+
+    mod provider_api_serde_tests {
+        use super::super::*;
+
+        #[test]
+        fn set_provider_request_deserializes_minimal() {
+            let json = r#"{"provider":"openai","model":"gpt-4o"}"#;
+            let req: SetProviderRequest = serde_json::from_str(json).unwrap();
+            assert_eq!(req.provider, "openai");
+            assert_eq!(req.model, "gpt-4o");
+            assert!(req.api_key.is_none());
+            assert!(req.google_project_id.is_none());
+            assert!(req.google_location.is_none());
+            assert!(req.bedrock_region.is_none());
+        }
+
+        #[test]
+        fn set_provider_request_deserializes_full() {
+            let json = r#"{
+                "provider": "google",
+                "model": "gemini-1.5-pro",
+                "apiKey": "sk-test",
+                "googleProjectId": "my-project",
+                "googleLocation": "us-central1",
+                "bedrockRegion": "us-east-1"
+            }"#;
+            let req: SetProviderRequest = serde_json::from_str(json).unwrap();
+            assert_eq!(req.provider, "google");
+            assert_eq!(req.model, "gemini-1.5-pro");
+            assert_eq!(req.api_key.as_deref(), Some("sk-test"));
+            assert_eq!(req.google_project_id.as_deref(), Some("my-project"));
+            assert_eq!(req.google_location.as_deref(), Some("us-central1"));
+            assert_eq!(req.bedrock_region.as_deref(), Some("us-east-1"));
+        }
+
+        #[test]
+        fn provider_info_serializes_camel_case() {
+            let info = ProviderInfo {
+                provider: Some("openai".to_string()),
+                model: Some("gpt-4o".to_string()),
+                configured: true,
+            };
+            let json = serde_json::to_value(&info).unwrap();
+            assert_eq!(json["provider"], "openai");
+            assert_eq!(json["model"], "gpt-4o");
+            assert_eq!(json["configured"], true);
+        }
+
+        #[test]
+        fn provider_info_serializes_unconfigured() {
+            let info = ProviderInfo {
+                provider: None,
+                model: None,
+                configured: false,
+            };
+            let json = serde_json::to_value(&info).unwrap();
+            assert!(json["provider"].is_null());
+            assert!(json["model"].is_null());
+            assert_eq!(json["configured"], false);
+        }
+
+        #[test]
+        fn tenant_providers_response_serializes() {
+            let resp = TenantProvidersResponse {
+                llm: ProviderInfo {
+                    provider: Some("openai".to_string()),
+                    model: Some("gpt-4o".to_string()),
+                    configured: true,
+                },
+                embedding: ProviderInfo {
+                    provider: None,
+                    model: None,
+                    configured: false,
+                },
+                source: "tenant".to_string(),
+            };
+            let json = serde_json::to_value(&resp).unwrap();
+            assert_eq!(json["source"], "tenant");
+            assert_eq!(json["llm"]["provider"], "openai");
+            assert_eq!(json["embedding"]["configured"], false);
+        }
+
+        #[test]
+        fn provider_status_info_serializes_ok() {
+            let info = ProviderStatusInfo {
+                status: "ok".to_string(),
+                latency_ms: Some(42),
+                dimension: Some(1536),
+                error: None,
+            };
+            let json = serde_json::to_value(&info).unwrap();
+            assert_eq!(json["status"], "ok");
+            assert_eq!(json["latencyMs"], 42);
+            assert_eq!(json["dimension"], 1536);
+            assert!(json.get("error").is_none());
+        }
+
+        #[test]
+        fn provider_status_info_serializes_error() {
+            let info = ProviderStatusInfo {
+                status: "error".to_string(),
+                latency_ms: Some(150),
+                dimension: None,
+                error: Some("connection refused".to_string()),
+            };
+            let json = serde_json::to_value(&info).unwrap();
+            assert_eq!(json["status"], "error");
+            assert_eq!(json["error"], "connection refused");
+            assert!(json.get("dimension").is_none());
+        }
+
+        #[test]
+        fn tenant_provider_status_response_serializes() {
+            let resp = TenantProviderStatusResponse {
+                llm: ProviderStatusInfo {
+                    status: "ok".to_string(),
+                    latency_ms: Some(50),
+                    dimension: None,
+                    error: None,
+                },
+                embedding: ProviderStatusInfo {
+                    status: "not_configured".to_string(),
+                    latency_ms: None,
+                    dimension: None,
+                    error: Some("No embedding service".to_string()),
+                },
+            };
+            let json = serde_json::to_value(&resp).unwrap();
+            assert_eq!(json["llm"]["status"], "ok");
+            assert_eq!(json["embedding"]["status"], "not_configured");
+        }
+
+        #[test]
+        fn extract_provider_info_from_none_config() {
+            let info = extract_provider_info(
+                &None,
+                config_keys::LLM_PROVIDER,
+                config_keys::LLM_MODEL,
+                config_keys::LLM_API_KEY,
+            );
+            assert!(info.provider.is_none());
+            assert!(info.model.is_none());
+            assert!(!info.configured);
+        }
+
+        #[test]
+        fn extract_provider_info_from_populated_config() {
+            let tenant_id =
+                mk_core::types::TenantId::new("11111111-1111-1111-1111-111111111111".to_string())
+                    .unwrap();
+            let mut fields = BTreeMap::new();
+            fields.insert(
+                config_keys::LLM_PROVIDER.to_string(),
+                TenantConfigField {
+                    ownership: TenantConfigOwnership::Platform,
+                    value: serde_json::json!("openai"),
+                },
+            );
+            fields.insert(
+                config_keys::LLM_MODEL.to_string(),
+                TenantConfigField {
+                    ownership: TenantConfigOwnership::Platform,
+                    value: serde_json::json!("gpt-4o"),
+                },
+            );
+            let mut secret_references = BTreeMap::new();
+            secret_references.insert(
+                config_keys::LLM_API_KEY.to_string(),
+                TenantSecretReference {
+                    logical_name: config_keys::LLM_API_KEY.to_string(),
+                    ownership: TenantConfigOwnership::Platform,
+                    secret_name: "test-secret".to_string(),
+                    secret_key: "api-key".to_string(),
+                },
+            );
+            let config = TenantConfigDocument {
+                tenant_id,
+                fields,
+                secret_references,
+            };
+            let info = extract_provider_info(
+                &Some(config),
+                config_keys::LLM_PROVIDER,
+                config_keys::LLM_MODEL,
+                config_keys::LLM_API_KEY,
+            );
+            assert_eq!(info.provider.as_deref(), Some("openai"));
+            assert_eq!(info.model.as_deref(), Some("gpt-4o"));
+            assert!(info.configured);
         }
     }
 }

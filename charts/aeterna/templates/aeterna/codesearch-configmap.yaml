@@ -26,28 +26,18 @@ data:
   
   {{- if eq .Values.codesearch.store.type "qdrant" }}
   # Qdrant configuration
-  {{- if .Values.vectorBackend.qdrant.bundled }}
-  CODESEARCH_QDRANT_URL: "http://{{ include "aeterna.fullname" . }}-qdrant:6333"
-  {{- else }}
-  CODESEARCH_QDRANT_URL: "http://{{ .Values.vectorBackend.qdrant.external.host }}:{{ .Values.vectorBackend.qdrant.external.port }}"
-  {{- end }}
+  CODESEARCH_QDRANT_URL: "http://{{ include "aeterna.vectorStore.host" . }}:{{ include "aeterna.vectorStore.port" . }}"
   CODESEARCH_QDRANT_COLLECTION_PREFIX: {{ .Values.codesearch.store.qdrant.collectionPrefix | default "codesearch_" | quote }}
   {{- end }}
-  
+
   {{- if eq .Values.codesearch.store.type "postgres" }}
   # PostgreSQL configuration
-  {{- if .Values.postgresql.bundled }}
-  CODESEARCH_POSTGRES_HOST: "{{ include "aeterna.postgresql.host" . }}"
-  CODESEARCH_POSTGRES_PORT: "5432"
+  CODESEARCH_POSTGRES_HOST: {{ include "aeterna.postgresql.host" . | quote }}
+  CODESEARCH_POSTGRES_PORT: {{ include "aeterna.postgresql.port" . | quote }}
   CODESEARCH_POSTGRES_DATABASE: {{ include "aeterna.postgresql.database" . | quote }}
-  {{- else }}
-  CODESEARCH_POSTGRES_HOST: {{ .Values.postgresql.external.host | quote }}
-  CODESEARCH_POSTGRES_PORT: {{ .Values.postgresql.external.port | quote }}
-  CODESEARCH_POSTGRES_DATABASE: {{ .Values.postgresql.external.database | quote }}
-  {{- end }}
   CODESEARCH_POSTGRES_SCHEMA: {{ .Values.codesearch.store.postgres.schema | default "codesearch" | quote }}
-  CODESEARCH_POSTGRES_USERNAME: {{ .Values.postgresql.external.username | default "aeterna" | quote }}
-  CODESEARCH_POSTGRES_SSL_MODE: {{ .Values.postgresql.external.sslMode | default "prefer" | quote }}
+  CODESEARCH_POSTGRES_USERNAME: {{ .Values.postgresql.username | default "aeterna" | quote }}
+  CODESEARCH_POSTGRES_SSL_MODE: {{ .Values.postgresql.sslMode | default "prefer" | quote }}
   {{- end }}
   
   # Init script for projects

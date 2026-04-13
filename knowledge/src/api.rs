@@ -8,8 +8,8 @@ use axum::{Json, Router};
 use config::config::DeploymentConfig;
 use mk_core::traits::StorageBackend;
 use mk_core::types::{
-    DriftConfig, DriftResult, DriftSuppression, GovernanceEvent, KnowledgeLayer, TenantContext,
-    TenantId, UserId,
+    DEFAULT_TENANT_SLUG, DriftConfig, DriftResult, DriftSuppression, GovernanceEvent,
+    KnowledgeLayer, SYSTEM_USER_ID, TenantContext, TenantId, UserId,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -310,18 +310,19 @@ fn tenant_context_from_headers(headers: &HeaderMap) -> TenantContext {
         .and_then(|value| value.to_str().ok())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or("default");
+        .unwrap_or(DEFAULT_TENANT_SLUG);
     let user_id = headers
         .get("x-user-id")
         .and_then(|value| value.to_str().ok())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or("system");
+        .unwrap_or(SYSTEM_USER_ID);
 
-    let tenant_id = TenantId::new(tenant_id.to_string())
-        .unwrap_or_else(|| TenantId::new("default".to_string()).expect("default tenant id"));
+    let tenant_id = TenantId::new(tenant_id.to_string()).unwrap_or_else(|| {
+        TenantId::new(DEFAULT_TENANT_SLUG.to_string()).expect("default tenant id")
+    });
     let user_id = UserId::new(user_id.to_string())
-        .unwrap_or_else(|| UserId::new("system".to_string()).expect("default user id"));
+        .unwrap_or_else(|| UserId::new(SYSTEM_USER_ID.to_string()).expect("default user id"));
 
     TenantContext::new(tenant_id, user_id)
 }

@@ -14,34 +14,34 @@ data:
   AETERNA_FEATURE_RADKIT: {{ .Values.aeterna.features.radkit | quote }}
   AETERNA_FEATURE_RLM: {{ .Values.aeterna.features.rlm | quote }}
   AETERNA_FEATURE_REFLECTIVE: {{ .Values.aeterna.features.reflective | quote }}
-  AETERNA_VECTOR_BACKEND: {{ .Values.vectorBackend.type | quote }}
+  AETERNA_VECTOR_BACKEND: {{ .Values.vectorStore.type | quote }}
   AETERNA_POSTGRESQL_HOST: {{ include "aeterna.postgresql.host" . | quote }}
   AETERNA_POSTGRESQL_PORT: {{ include "aeterna.postgresql.port" . | quote }}
   AETERNA_POSTGRESQL_DATABASE: {{ include "aeterna.postgresql.database" . | quote }}
   AETERNA_REDIS_HOST: {{ include "aeterna.redis.host" . | quote }}
   AETERNA_REDIS_PORT: {{ include "aeterna.redis.port" . | quote }}
-  {{- if eq .Values.vectorBackend.type "qdrant" }}
-  AETERNA_QDRANT_HOST: {{ include "aeterna.qdrant.host" . | quote }}
-  AETERNA_QDRANT_PORT: {{ include "aeterna.qdrant.port" . | quote }}
+  {{- if eq .Values.vectorStore.type "qdrant" }}
+  AETERNA_QDRANT_HOST: {{ include "aeterna.vectorStore.host" . | quote }}
+  AETERNA_QDRANT_PORT: {{ include "aeterna.vectorStore.port" . | quote }}
   {{- end }}
-  {{- if eq .Values.vectorBackend.type "pgvector" }}
+  {{- if eq .Values.vectorStore.type "pgvector" }}
   AETERNA_PGVECTOR_ENABLED: "true"
   {{- end }}
-  {{- if eq .Values.vectorBackend.type "pinecone" }}
-  AETERNA_PINECONE_ENVIRONMENT: {{ .Values.vectorBackend.pinecone.environment | quote }}
-  AETERNA_PINECONE_INDEX_NAME: {{ .Values.vectorBackend.pinecone.indexName | quote }}
+  {{- if eq .Values.vectorStore.type "pinecone" }}
+  AETERNA_PINECONE_ENVIRONMENT: {{ .Values.vectorStore.pinecone.environment | quote }}
+  AETERNA_PINECONE_INDEX_NAME: {{ .Values.vectorStore.pinecone.indexName | quote }}
   {{- end }}
-  {{- if eq .Values.vectorBackend.type "weaviate" }}
-  AETERNA_WEAVIATE_HOST: {{ .Values.vectorBackend.weaviate.external.host | quote }}
+  {{- if eq .Values.vectorStore.type "weaviate" }}
+  AETERNA_WEAVIATE_HOST: {{ include "aeterna.vectorStore.host" . | quote }}
   {{- end }}
-  {{- if eq .Values.vectorBackend.type "vertexai" }}
-  AETERNA_VERTEXAI_PROJECT: {{ .Values.vectorBackend.vertexai.project | quote }}
-  AETERNA_VERTEXAI_REGION: {{ .Values.vectorBackend.vertexai.region | quote }}
-  AETERNA_VERTEXAI_ENDPOINT: {{ .Values.vectorBackend.vertexai.endpoint | quote }}
+  {{- if eq .Values.vectorStore.type "vertexai" }}
+  AETERNA_VERTEXAI_PROJECT: {{ .Values.vectorStore.vertexai.project | quote }}
+  AETERNA_VERTEXAI_REGION: {{ .Values.vectorStore.vertexai.region | quote }}
+  AETERNA_VERTEXAI_ENDPOINT: {{ .Values.vectorStore.vertexai.endpoint | quote }}
   {{- end }}
-  {{- if eq .Values.vectorBackend.type "databricks" }}
-  AETERNA_DATABRICKS_WORKSPACE_URL: {{ .Values.vectorBackend.databricks.workspaceUrl | quote }}
-  AETERNA_DATABRICKS_CATALOG: {{ .Values.vectorBackend.databricks.catalog | quote }}
+  {{- if eq .Values.vectorStore.type "databricks" }}
+  AETERNA_DATABRICKS_WORKSPACE_URL: {{ .Values.vectorStore.databricks.workspaceUrl | quote }}
+  AETERNA_DATABRICKS_CATALOG: {{ .Values.vectorStore.databricks.catalog | quote }}
   {{- end }}
   {{- if .Values.opal.enabled }}
   AETERNA_OPAL_ENABLED: "true"
@@ -71,6 +71,10 @@ data:
   {{- end }}
   {{- if .Values.defaultTenantId }}
   AETERNA_DEFAULT_TENANT_ID: {{ .Values.defaultTenantId | quote }}
+  {{- end }}
+  {{- if .Values.k8sAuth.enabled }}
+  AETERNA_K8S_AUTH_ENABLED: "true"
+  AETERNA_K8S_AUTH_TOKEN_REVIEW_AUDIENCE: {{ .Values.k8sAuth.tokenReviewAudience | default "aeterna" | quote }}
   {{- end }}
   {{- if and (ne .Values.deploymentMode "local") .Values.central.url }}
   AETERNA_CENTRAL_URL: {{ .Values.central.url | quote }}

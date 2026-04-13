@@ -8,6 +8,8 @@ use thiserror::Error;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+const DEFAULT_K8S_NAMESPACE: &str = "default";
+
 #[derive(Debug, Error)]
 pub enum TenantConfigProviderError {
     #[error("invalid tenant id for kubernetes tenant config provider: {0}")]
@@ -58,6 +60,15 @@ impl KubernetesTenantConfigProvider {
             TenantConfigProviderError::InvalidTenantId(tenant_id.as_str().to_string())
         })?;
         Ok(())
+    }
+}
+
+impl Default for KubernetesTenantConfigProvider {
+    fn default() -> Self {
+        Self::new(
+            std::env::var("AETERNA_K8S_NAMESPACE")
+                .unwrap_or_else(|_| DEFAULT_K8S_NAMESPACE.to_string()),
+        )
     }
 }
 
@@ -167,6 +178,20 @@ impl TenantConfigProvider for KubernetesTenantConfigProvider {
         Ok(removed_from_secret || removed_from_config)
     }
 
+    async fn get_secret_value(
+        &self,
+        tenant_id: &TenantId,
+        logical_name: &str,
+    ) -> Result<Option<String>, Self::Error> {
+        Self::validate_tenant_id(tenant_id)?;
+        let secret_name = Self::secret_name_for_tenant(tenant_id);
+        let state = self.state.read().await;
+        Ok(state
+            .secrets
+            .get(&secret_name)
+            .and_then(|secret_data| secret_data.get(logical_name).cloned()))
+    }
+
     async fn validate(&self, config: &TenantConfigDocument) -> Result<(), Self::Error> {
         Self::validate_tenant_id(&config.tenant_id)?;
 
@@ -213,7 +238,7 @@ mod tests {
     }
 
     fn provider() -> KubernetesTenantConfigProvider {
-        KubernetesTenantConfigProvider::new("default".to_string())
+        KubernetesTenantConfigProvider::new(DEFAULT_K8S_NAMESPACE.to_string())
     }
 
     #[tokio::test]

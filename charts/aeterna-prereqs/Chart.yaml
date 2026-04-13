@@ -1,0 +1,47 @@
+apiVersion: v2
+name: aeterna-prereqs
+description: >-
+  Prerequisites for Aeterna — deploys PostgreSQL (CloudNativePG),
+  Redis-compatible cache (Dragonfly or Valkey), and vector store (Qdrant)
+  for development and testing environments.
+type: application
+version: 0.6.0
+appVersion: "0.6.0"
+
+home: https://github.com/kikokikok/aeterna
+sources:
+  - https://github.com/kikokikok/aeterna
+
+maintainers:
+  - name: kikokikok
+    url: https://github.com/kikokikok
+
+keywords:
+  - aeterna
+  - prerequisites
+  - postgresql
+  - redis
+  - qdrant
+
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: ai-machine-learning
+
+dependencies:
+  - name: dragonfly
+    version: "v1.37.0"
+    repository: oci://ghcr.io/dragonflydb/dragonfly/helm
+    condition: cache.dragonfly.enabled
+    alias: dragonfly
+
+  - name: qdrant
+    version: "0.10.*"
+    repository: https://qdrant.github.io/qdrant-helm
+    condition: vectorStore.qdrant.enabled
+    alias: qdrant
+
+  - name: valkey
+    version: "0.9.*"
+    repository: https://valkey.io/valkey-helm/
+    condition: cache.valkey.enabled
+    alias: valkey

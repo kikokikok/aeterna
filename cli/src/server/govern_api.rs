@@ -6,7 +6,7 @@ use axum::response::IntoResponse;
 use axum::routing::{delete, get};
 use axum::{Json, Router};
 use mk_core::traits::StorageBackend;
-use mk_core::types::{Role, TenantContext, UnitType};
+use mk_core::types::{Role, SYSTEM_USER_ID, TenantContext, UnitType};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use storage::governance::{
@@ -613,7 +613,7 @@ async fn assign_role(
     let principal_type = match req.principal_type.as_deref().unwrap_or("user") {
         "user" => PrincipalType::User,
         "agent" => PrincipalType::Agent,
-        "system" => PrincipalType::System,
+        SYSTEM_USER_ID => PrincipalType::System,
         _ => {
             return error_response(
                 StatusCode::BAD_REQUEST,

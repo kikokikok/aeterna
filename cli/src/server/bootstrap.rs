@@ -20,11 +20,12 @@ use knowledge::tenant_repo_resolver::TenantRepositoryResolver;
 use memory::embedding::create_embedding_service_from_env;
 use memory::llm::create_llm_service_from_env;
 use memory::manager::MemoryManager;
+use memory::provider_registry::TenantProviderRegistry;
 use memory::reasoning::{DefaultReflectiveReasoner, ReflectiveReasoner};
 use mk_core::traits::AuthorizationService;
 use mk_core::types::{
-    INSTANCE_SCOPE_TENANT_ID, ReasoningStrategy, ReasoningTrace, Role, RoleIdentifier,
-    TenantContext, UserId,
+    DEFAULT_TENANT_SLUG, INSTANCE_SCOPE_TENANT_ID, PROVIDER_GITHUB, ReasoningStrategy,
+    ReasoningTrace, Role, RoleIdentifier, TenantContext, UserId,
 };
 use storage::git_provider_connection_store::InMemoryGitProviderConnectionStore;
 use storage::governance::GovernanceStorage;
@@ -38,8 +39,13 @@ use sync::state_persister::DatabasePersister;
 use sync::websocket::{AuthToken, TokenValidator, WsResult, WsServer};
 use tools::server::McpServer;
 
-use super::plugin_auth::RefreshTokenStore;
+use super::plugin_auth::{RefreshTokenStore, RefreshTokenStoreBackend};
 use super::{AppState, PluginAuthState};
+
+const DEFAULT_K8S_NAMESPACE: &str = "default";
+
+const ENV_AUTH_BACKEND: &str = "AETERNA_AUTH_BACKEND";
+const AUTH_BACKEND_ALLOW_ALL: &str = "allow-all";
 
 pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     validate_required_env()?;
@@ -48,9 +54,8 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     let postgres = Arc::new(PostgresBackend::new(&postgres_connection_url(&config)).await?);
     postgres.initialize_schema().await?;
 
-    if config.admin_bootstrap.email.is_some() {
-        seed_platform_admin(postgres.pool(), &config.admin_bootstrap).await?;
-    }
+    seed_platform_admin(postgres.pool(), &config.admin_bootstrap).await?;
+    seed_k8s_service_account(postgres.pool(), &config.admin_bootstrap).await?;
 
     let governance_storage = Some(Arc::new(GovernanceStorage::new(postgres.pool().clone())));
 
@@ -144,11 +149,51 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         tracing::info!("Radkit/A2A feature disabled via AETERNA_FEATURE_RADKIT");
     }
 
+    let platform_embedding = create_embedding_service_from_env()?;
+    let platform_llm = llm_service.clone();
+
+    let tenant_config_provider = Arc::new(KubernetesTenantConfigProvider::new(
+        tenant_config_provider_namespace_from_config(&config.k8s_auth),
+    ));
+
+    let mut registry =
+        TenantProviderRegistry::new(platform_llm.clone(), platform_embedding.clone());
+
+    // Wire type-erased config/secret resolvers so the registry can resolve
+    // tenant-specific providers without a generic TenantConfigProvider param.
+    {
+        use memory::provider_registry::{ConfigResolver, SecretResolver};
+        use mk_core::traits::TenantConfigProvider;
+
+        let cp_for_config: Arc<KubernetesTenantConfigProvider> = tenant_config_provider.clone();
+        let config_resolver: ConfigResolver = Arc::new(move |tenant_id| {
+            let provider = cp_for_config.clone();
+            Box::pin(async move { provider.get_config(&tenant_id).await.ok().flatten() })
+        });
+
+        let cp_for_secret: Arc<KubernetesTenantConfigProvider> = tenant_config_provider.clone();
+        let secret_resolver: SecretResolver = Arc::new(move |tenant_id, logical_name| {
+            let provider = cp_for_secret.clone();
+            Box::pin(async move {
+                provider
+                    .get_secret_value(&tenant_id, &logical_name)
+                    .await
+                    .ok()
+                    .flatten()
+            })
+        });
+
+        registry.set_resolvers(config_resolver, secret_resolver);
+    }
+
+    let provider_registry = Arc::new(registry);
+
     let mut memory_manager = MemoryManager::new()
         .with_config(memory_config)
-        .with_auth_service(auth_for_memory);
+        .with_auth_service(auth_for_memory)
+        .with_provider_registry(provider_registry.clone());
 
-    if let Some(embedding_service) = create_embedding_service_from_env()? {
+    if let Some(embedding_service) = platform_embedding {
         memory_manager = memory_manager.with_embedding_service(embedding_service.clone());
     }
 
@@ -223,14 +268,53 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         trusted_identity: a2a_config.auth.trusted_identity.clone(),
     });
     a2a_auth_state.validate()?;
+    // Build a Redis connection manager for shared state stores.
+    // If Redis is available, use Redis-backed stores for HA; otherwise fall back to in-memory.
+    let redis_conn: Option<Arc<redis::aio::ConnectionManager>> = {
+        let rc = &config.providers.redis;
+        let url = format!("redis://{}:{}/{}", rc.host, rc.port, rc.db);
+        match redis::Client::open(url.as_str()) {
+            Ok(client) => match client.get_connection_manager().await {
+                Ok(cm) => {
+                    tracing::info!("Redis connection manager established for shared state stores");
+                    Some(Arc::new(cm))
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to connect to Redis ({url}): {e}. Falling back to in-memory stores."
+                    );
+                    None
+                }
+            },
+            Err(e) => {
+                tracing::warn!("Invalid Redis URL ({url}): {e}. Falling back to in-memory stores.");
+                None
+            }
+        }
+    };
+
+    let refresh_store = match &redis_conn {
+        Some(conn) => {
+            let store = storage::RedisStore::new(conn.clone(), "aeterna:refresh_tokens");
+            RefreshTokenStoreBackend::Redis(super::plugin_auth::RedisRefreshTokenStore::new(store))
+        }
+        None => RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
+    };
+
     let plugin_auth_state = Arc::new(PluginAuthState {
         config: config.plugin_auth.clone(),
         postgres: Some(postgres.clone()),
-        refresh_store: RefreshTokenStore::new(),
+        refresh_store,
     });
+    let k8s_auth_config = config.k8s_auth.clone();
+
+    // Initialize backup job stores (export/import) with Redis when available.
+    super::backup_api::init_job_stores(redis_conn.as_ref());
 
     let (idp_config, idp_client, idp_sync_service) = build_optional_idp_services(postgres.clone())?;
-    let ws_server = Arc::new(WsServer::new(Arc::new(AllowAllTokenValidator)));
+    let ws_server = Arc::new(WsServer::new(Arc::new(AllowAllTokenValidator {
+        access_token_ttl_seconds: config.plugin_auth.access_token_ttl_seconds.unwrap_or(3600),
+    })));
     let webhook_secret = config.knowledge_repo.webhook_secret.clone();
 
     let (shutdown_tx, _) = tokio::sync::watch::channel(false);
@@ -249,10 +333,6 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         )
         .with_connection_registry(git_provider_connection_registry.clone()),
     );
-    let tenant_config_provider = Arc::new(KubernetesTenantConfigProvider::new(
-        tenant_config_provider_namespace(),
-    ));
-
     Ok(Arc::new(AppState {
         config,
         postgres,
@@ -274,6 +354,7 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         a2a_config,
         a2a_auth_state,
         plugin_auth_state,
+        k8s_auth_config,
         idp_config,
         idp_sync_service,
         idp_client,
@@ -282,7 +363,9 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         tenant_repository_binding_store,
         tenant_repo_resolver,
         tenant_config_provider,
+        provider_registry,
         git_provider_connection_registry,
+        redis_conn,
     }))
 }
 
@@ -351,7 +434,15 @@ fn knowledge_repo_path() -> PathBuf {
 }
 
 fn tenant_config_provider_namespace() -> String {
-    std::env::var("AETERNA_K8S_NAMESPACE").unwrap_or_else(|_| "default".to_string())
+    std::env::var("AETERNA_K8S_NAMESPACE").unwrap_or_else(|_| DEFAULT_K8S_NAMESPACE.to_string())
+}
+
+fn tenant_config_provider_namespace_from_config(k8s_auth: &config::KubernetesAuthConfig) -> String {
+    k8s_auth
+        .namespace
+        .as_deref()
+        .unwrap_or(DEFAULT_K8S_NAMESPACE)
+        .to_string()
 }
 
 fn create_graph_store(config: &config::Config) -> anyhow::Result<Option<Arc<DuckDbGraphStore>>> {
@@ -395,7 +486,8 @@ fn build_governance_engine(
 
 fn build_anyhow_auth_service()
 -> anyhow::Result<Arc<dyn AuthorizationService<Error = anyhow::Error> + Send + Sync>> {
-    let backend = std::env::var("AETERNA_AUTH_BACKEND").unwrap_or_else(|_| "allow-all".to_string());
+    let backend =
+        std::env::var(ENV_AUTH_BACKEND).unwrap_or_else(|_| AUTH_BACKEND_ALLOW_ALL.to_string());
 
     match backend.as_str() {
         "cedar" => {
@@ -429,10 +521,16 @@ fn build_anyhow_auth_service()
             if permissive_mode != "dev" {
                 tracing::warn!(
                     backend = %backend,
-                    "Using allow-all authorization service.                      This grants every caller full access and MUST NOT be used in production.                      Set AETERNA_AUTH_BACKEND=cedar or AETERNA_AUTH_BACKEND=permit,                      or set AETERNA_ALLOW_PERMISSIVE_AUTH=dev to silence this warning."
+                    "Using {} authorization service. This grants every caller full access and MUST NOT be used in production. Set {}=cedar or {}=permit, or set AETERNA_ALLOW_PERMISSIVE_AUTH=dev to silence this warning.",
+                    AUTH_BACKEND_ALLOW_ALL,
+                    ENV_AUTH_BACKEND,
+                    ENV_AUTH_BACKEND,
                 );
             } else {
-                tracing::debug!("Allow-all auth active (AETERNA_ALLOW_PERMISSIVE_AUTH=dev)");
+                tracing::debug!(
+                    "{} auth active (AETERNA_ALLOW_PERMISSIVE_AUTH=dev)",
+                    AUTH_BACKEND_ALLOW_ALL
+                );
             }
             Ok(Arc::new(AllowAllAuthService))
         }
@@ -483,7 +581,7 @@ fn build_optional_idp_services(
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(false),
         }),
-        "github" => {
+        PROVIDER_GITHUB => {
             tracing::info!("GitHub org sync uses the dedicated /api/v1/admin/sync/github endpoint");
             return Ok((None, None, None));
         }
@@ -694,16 +792,18 @@ impl ReflectiveReasoner for NoopReflectiveReasoner {
     }
 }
 
-struct AllowAllTokenValidator;
+struct AllowAllTokenValidator {
+    access_token_ttl_seconds: u64,
+}
 
 #[async_trait]
 impl TokenValidator for AllowAllTokenValidator {
     async fn validate(&self, token: &str) -> WsResult<AuthToken> {
         Ok(AuthToken {
             user_id: token.to_string(),
-            tenant_id: "default".to_string(),
+            tenant_id: mk_core::types::DEFAULT_TENANT_SLUG.to_string(),
             permissions: vec!["read".to_string(), "write".to_string()],
-            expires_at: Utc::now().timestamp() + 3600,
+            expires_at: Utc::now().timestamp() + self.access_token_ttl_seconds as i64,
         })
     }
 }
@@ -741,14 +841,16 @@ async fn seed_platform_admin(
     sqlx::query(
         "UPDATE user_roles
          SET tenant_id = $1, unit_id = $1
-         WHERE role = 'PlatformAdmin' AND tenant_id = 'default'",
+         WHERE role = $2 AND tenant_id = $3",
     )
     .bind(INSTANCE_SCOPE_TENANT_ID)
+    .bind(Role::PlatformAdmin.to_string())
+    .bind(DEFAULT_TENANT_SLUG)
     .execute(&mut *tx)
     .await
     .context("migrate legacy PlatformAdmin rows to instance scope")?;
 
-    let company_id = "default";
+    let company_id = cfg.company_slug.as_str();
     sqlx::query(
         "INSERT INTO organizational_units (id, name, type, parent_id, tenant_id, metadata, created_at, updated_at)
          VALUES ($1, $2, 'company', NULL, $3, '{}', $4, $4)
@@ -762,7 +864,7 @@ async fn seed_platform_admin(
     .await
     .context("upsert organizational_units company")?;
 
-    let company_slug = "default";
+    let company_slug = cfg.company_slug.as_str();
     sqlx::query(
         "INSERT INTO companies (slug, name, settings, created_at, updated_at)
          VALUES ($1, $2, '{}', NOW(), NOW())
@@ -782,35 +884,38 @@ async fn seed_platform_admin(
 
     sqlx::query(
         "INSERT INTO organizations (company_id, slug, name, created_at, updated_at)
-         VALUES ($1, 'platform', 'Platform', NOW(), NOW())
+         VALUES ($1, $2, 'Platform', NOW(), NOW())
          ON CONFLICT (company_id, slug) DO NOTHING",
     )
     .bind(company_uuid)
+    .bind(cfg.org_slug.as_str())
     .execute(&mut *tx)
     .await
     .context("upsert bootstrap organization")?;
 
-    let org_uuid: uuid::Uuid = sqlx::query_scalar(
-        "SELECT id FROM organizations WHERE company_id = $1 AND slug = 'platform'",
-    )
-    .bind(company_uuid)
-    .fetch_one(&mut *tx)
-    .await
-    .context("fetch org uuid")?;
+    let org_uuid: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM organizations WHERE company_id = $1 AND slug = $2")
+            .bind(company_uuid)
+            .bind(cfg.org_slug.as_str())
+            .fetch_one(&mut *tx)
+            .await
+            .context("fetch org uuid")?;
 
     sqlx::query(
         "INSERT INTO teams (org_id, slug, name, created_at, updated_at)
-         VALUES ($1, 'admins', 'Admins', NOW(), NOW())
+         VALUES ($1, $2, 'Admins', NOW(), NOW())
          ON CONFLICT (org_id, slug) DO NOTHING",
     )
     .bind(org_uuid)
+    .bind(cfg.team_slug.as_str())
     .execute(&mut *tx)
     .await
     .context("upsert bootstrap team")?;
 
     let team_uuid: uuid::Uuid =
-        sqlx::query_scalar("SELECT id FROM teams WHERE org_id = $1 AND slug = 'admins'")
+        sqlx::query_scalar("SELECT id FROM teams WHERE org_id = $1 AND slug = $2")
             .bind(org_uuid)
+            .bind(cfg.team_slug.as_str())
             .fetch_one(&mut *tx)
             .await
             .context("fetch team uuid")?;
@@ -860,6 +965,83 @@ async fn seed_platform_admin(
         provider = %provider,
         subject = %subject,
         "platform admin seeded successfully"
+    );
+
+    Ok(())
+}
+
+/// Seeds a Kubernetes service account identity as a PlatformAdmin.
+///
+/// Idempotent — safe to call on every server restart.  Only runs when
+/// `AdminBootstrapConfig::k8s_sa_subject` is configured.
+async fn seed_k8s_service_account(
+    pool: &sqlx::Pool<sqlx::Postgres>,
+    cfg: &config::AdminBootstrapConfig,
+) -> anyhow::Result<()> {
+    let sa_subject = match &cfg.k8s_sa_subject {
+        Some(s) => s,
+        None => return Ok(()),
+    };
+
+    let now_epoch = chrono::Utc::now().timestamp();
+    let synthetic_email = format!("k8s+{}@local", sa_subject.replace([':', '/'], "."));
+
+    let mut tx = pool
+        .begin()
+        .await
+        .context("begin k8s SA seed transaction")?;
+
+    sqlx::query(
+        "INSERT INTO organizational_units (id, name, type, parent_id, tenant_id, metadata, created_at, updated_at)
+         VALUES ($1, $2, 'company', NULL, $1, '{}', $3, $3)
+         ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(INSTANCE_SCOPE_TENANT_ID)
+    .bind("Instance")
+    .bind(now_epoch)
+    .execute(&mut *tx)
+    .await
+    .context("upsert instance-scope organizational unit for k8s SA")?;
+
+    let user_uuid: uuid::Uuid = sqlx::query_scalar(
+        "WITH inserted AS (
+             INSERT INTO users (email, name, idp_provider, idp_subject, status, created_at, updated_at)
+             VALUES ($1, $2, 'kubernetes', $3, 'active', NOW(), NOW())
+             ON CONFLICT (idp_provider, idp_subject) DO NOTHING
+             RETURNING id
+         )
+         SELECT id FROM inserted
+         UNION ALL
+         SELECT id FROM users WHERE idp_provider = 'kubernetes' AND idp_subject = $3
+         LIMIT 1",
+    )
+    .bind(&synthetic_email)
+    .bind(sa_subject)
+    .bind(sa_subject)
+    .fetch_one(&mut *tx)
+    .await
+    .context("upsert kubernetes service account user")?;
+
+    sqlx::query(
+        "INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at)
+         VALUES ($1, $2, $3, 'PlatformAdmin', $4)
+         ON CONFLICT (user_id, tenant_id, unit_id, role) DO NOTHING",
+    )
+    .bind(user_uuid.to_string())
+    .bind(INSTANCE_SCOPE_TENANT_ID)
+    .bind(INSTANCE_SCOPE_TENANT_ID)
+    .bind(now_epoch)
+    .execute(&mut *tx)
+    .await
+    .context("upsert PlatformAdmin role for kubernetes service account")?;
+
+    tx.commit()
+        .await
+        .context("commit k8s service account seed transaction")?;
+
+    tracing::info!(
+        subject = %sa_subject,
+        "kubernetes service account PlatformAdmin seeded successfully"
     );
 
     Ok(())

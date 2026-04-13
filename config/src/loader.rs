@@ -14,10 +14,11 @@
 //! - `OB_*`: Observability settings
 
 use crate::config::{
-    Config, ContentionAlertConfig, GraphConfig, KnowledgeRepoConfig, MemoryConfig,
-    ObservabilityConfig, PluginAuthConfig, PostgresConfig, ProviderConfig, QdrantConfig,
-    ReasoningConfig, RedisConfig, RlmConfig, SyncConfig, ToolConfig,
+    Config, ContentionAlertConfig, GraphConfig, KnowledgeRepoConfig, KubernetesAuthConfig,
+    MemoryConfig, ObservabilityConfig, PluginAuthConfig, PostgresConfig, ProviderConfig,
+    QdrantConfig, ReasoningConfig, RedisConfig, RlmConfig, SyncConfig, ToolConfig,
 };
+use mk_core::types::PROVIDER_GITHUB;
 use std::env;
 
 /// Load configuration from environment variables.
@@ -99,6 +100,7 @@ pub fn load_from_env() -> anyhow::Result<Config> {
         job: load_job_from_env()?,
         knowledge_repo: load_knowledge_repo_from_env()?,
         plugin_auth: load_plugin_auth_from_env()?,
+        k8s_auth: load_k8s_auth_from_env()?,
         admin_bootstrap: load_admin_bootstrap_from_env()?,
         cca: crate::cca::CcaConfig::default(),
     };
@@ -146,8 +148,22 @@ fn load_knowledge_repo_from_env() -> anyhow::Result<KnowledgeRepoConfig> {
 fn load_plugin_auth_from_env() -> anyhow::Result<PluginAuthConfig> {
     Ok(PluginAuthConfig {
         enabled: parse_env("AETERNA_PLUGIN_AUTH_ENABLED").unwrap_or(false),
+        allowed_providers: env::var("AETERNA_PLUGIN_ALLOWED_PROVIDERS")
+            .ok()
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|providers| !providers.is_empty())
+            .unwrap_or_else(|| vec![PROVIDER_GITHUB.to_string()]),
         github_client_id: env::var("AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_ID").ok(),
         github_client_secret: env::var("AETERNA_PLUGIN_AUTH_GITHUB_CLIENT_SECRET").ok(),
+        github_api_base_url: env::var("AETERNA_GITHUB_API_BASE_URL").ok(),
+        github_oauth_base_url: env::var("AETERNA_GITHUB_OAUTH_BASE_URL").ok(),
         github_app_id: env::var("AETERNA_PLUGIN_AUTH_GITHUB_APP_ID")
             .ok()
             .and_then(|v| v.parse::<u64>().ok()),
@@ -166,12 +182,28 @@ fn load_plugin_auth_from_env() -> anyhow::Result<PluginAuthConfig> {
     })
 }
 
+fn load_k8s_auth_from_env() -> anyhow::Result<KubernetesAuthConfig> {
+    Ok(KubernetesAuthConfig {
+        enabled: parse_env("AETERNA_K8S_AUTH_ENABLED").unwrap_or(false),
+        api_server_url: env::var("AETERNA_K8S_AUTH_API_SERVER_URL").ok(),
+        token_review_audience: env::var("AETERNA_K8S_AUTH_TOKEN_REVIEW_AUDIENCE").ok(),
+        sa_token_path: env::var("AETERNA_K8S_AUTH_SA_TOKEN_PATH").ok(),
+        ca_bundle_path: env::var("AETERNA_K8S_AUTH_CA_BUNDLE_PATH").ok(),
+        namespace: env::var("AETERNA_K8S_NAMESPACE").ok(),
+    })
+}
+
 fn load_admin_bootstrap_from_env() -> anyhow::Result<crate::config::AdminBootstrapConfig> {
     Ok(crate::config::AdminBootstrapConfig {
         email: env::var("AETERNA_ADMIN_BOOTSTRAP_EMAIL").ok(),
         provider: env::var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER")
-            .unwrap_or_else(|_| "github".to_string()),
+            .unwrap_or_else(|_| PROVIDER_GITHUB.to_string()),
         provider_subject: env::var("AETERNA_ADMIN_BOOTSTRAP_PROVIDER_SUBJECT").ok(),
+        company_slug: env::var("AETERNA_BOOTSTRAP_COMPANY_SLUG")
+            .unwrap_or_else(|_| "default".to_string()),
+        org_slug: env::var("AETERNA_BOOTSTRAP_ORG_SLUG").unwrap_or_else(|_| "platform".to_string()),
+        team_slug: env::var("AETERNA_BOOTSTRAP_TEAM_SLUG").unwrap_or_else(|_| "admins".to_string()),
+        k8s_sa_subject: env::var("AETERNA_ADMIN_BOOTSTRAP_K8S_SA_SUBJECT").ok(),
     })
 }
 

@@ -1,5 +1,9 @@
+use aeterna_backup::archive::{ArchiveReader, ArchiveWriter};
+use aeterna_backup::manifest::{BackupManifest, CURRENT_SCHEMA_VERSION, ExportScope};
+use aeterna_backup::validate::validate_archive;
 use clap::{Args, Subcommand, ValueEnum};
 use context::ContextResolver;
+use mk_core::types::PROVIDER_GITHUB;
 use serde::Serialize;
 use serde_json::json;
 use std::path::PathBuf;
@@ -35,6 +39,9 @@ pub enum AdminCommand {
     #[command(about = "Sync organizational data from identity provider")]
     Sync(AdminSyncArgs),
 
+    #[command(subcommand, about = "Backup and restore operations")]
+    Backup(AdminBackupCommand),
+
     #[command(subcommand, about = "Tenant provisioning operations (PlatformAdmin)")]
     Tenant(AdminTenantCommand),
 }
@@ -54,6 +61,22 @@ pub struct AdminTenantProvisionArgs {
     /// Dry run - validate manifest without provisioning
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Subcommand)]
+pub enum AdminBackupCommand {
+    #[command(about = "Validate a backup archive integrity offline")]
+    Validate(AdminBackupValidateArgs),
+}
+
+#[derive(Args)]
+pub struct AdminBackupValidateArgs {
+    /// Path to the backup archive file
+    pub archive: PathBuf,
 
     /// Output as JSON
     #[arg(long)]
@@ -235,6 +258,9 @@ pub async fn run(cmd: AdminCommand) -> anyhow::Result<()> {
         AdminCommand::Export(args) => run_export(args).await,
         AdminCommand::Import(args) => run_import(args).await,
         AdminCommand::Sync(args) => run_sync(args).await,
+        AdminCommand::Backup(sub) => match sub {
+            AdminBackupCommand::Validate(args) => run_backup_validate(args).await,
+        },
         AdminCommand::Tenant(sub) => match sub {
             AdminTenantCommand::Provision(args) => run_tenant_provision(args).await,
         },
@@ -660,6 +686,16 @@ fn embedded_migrations() -> Vec<EmbeddedMigration> {
             name: "017_tenants_tables",
             sql: include_str!("../../../storage/migrations/017_tenants_tables.sql"),
         },
+        EmbeddedMigration {
+            version: 18,
+            name: "018_add_last_accessed_at",
+            sql: include_str!("../../../storage/migrations/018_add_last_accessed_at.sql"),
+        },
+        EmbeddedMigration {
+            version: 19,
+            name: "019_day2_operations_tables",
+            sql: include_str!("../../../storage/migrations/019_day2_operations_tables.sql"),
+        },
     ]
 }
 
@@ -1006,36 +1042,145 @@ async fn run_export(args: AdminExportArgs) -> anyhow::Result<()> {
     let resolver = ContextResolver::new();
     let _ctx = resolver.resolve()?;
 
-    let _output_path = args.output.unwrap_or_else(|| {
+    let output_path = args.output.unwrap_or_else(|| {
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-        let ext = match args.format {
-            ExportFormat::Json => "json",
-            ExportFormat::Yaml => "yaml",
-            ExportFormat::Tar => "tar",
-        };
-        let suffix = if args.compress { ".gz" } else { "" };
-        PathBuf::from(format!("aeterna_export_{timestamp}.{ext}{suffix}"))
+        PathBuf::from(format!("aeterna_export_{timestamp}.tar.gz"))
     });
 
-    // Export requires a live backend connection to read actual data.
-    if args.json {
-        let err_output = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "message": "Export requires a live Aeterna server connection. Set AETERNA_SERVER_URL and ensure the server is running."
-        });
-        println!("{}", serde_json::to_string_pretty(&err_output)?);
+    let server_url = std::env::var("AETERNA_SERVER_URL").ok();
+
+    if let Some(url) = &server_url {
+        // Server-based export: call the admin export API.
+        let client = reqwest::Client::new();
+        let api_url = format!("{url}/api/v1/admin/export");
+
+        if !args.json {
+            output::header("Data Export");
+            println!();
+            println!("  Server:  {url}");
+            println!("  Target:  {}", args.target);
+            println!("  Output:  {}", output_path.display());
+            println!();
+            println!("  Requesting export from server...");
+        }
+
+        match client
+            .post(&api_url)
+            .json(&json!({
+                "target": args.target,
+                "include_audit": args.include_audit,
+                "layer": args.layer,
+            }))
+            .send()
+            .await
+        {
+            Ok(resp) if resp.status().is_success() => {
+                let bytes = resp.bytes().await?;
+                std::fs::write(&output_path, &bytes)?;
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&json!({
+                            "success": true,
+                            "output_path": output_path.to_string_lossy(),
+                            "size_bytes": bytes.len(),
+                        }))?
+                    );
+                } else {
+                    output::success(&format!(
+                        "Export saved to {} ({} bytes)",
+                        output_path.display(),
+                        bytes.len()
+                    ));
+                }
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&json!({
+                            "success": false,
+                            "error": "server_error",
+                            "status": status.as_u16(),
+                            "message": body,
+                        }))?
+                    );
+                } else {
+                    ux_error::UxError::new("Export failed: server returned an error")
+                        .why(&format!("HTTP {status}: {body}"))
+                        .fix("Check server logs for details")
+                        .display();
+                }
+                anyhow::bail!("Server export failed with HTTP {status}");
+            }
+            Err(e) => {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&json!({
+                            "success": false,
+                            "error": "connection_error",
+                            "message": e.to_string(),
+                        }))?
+                    );
+                } else {
+                    ux_error::UxError::new("Cannot reach Aeterna server for export")
+                        .why(&format!("Connection error: {e}"))
+                        .fix("Verify the server is running and AETERNA_SERVER_URL is correct")
+                        .suggest("aeterna serve")
+                        .display();
+                }
+                anyhow::bail!("Failed to connect to server: {e}");
+            }
+        }
     } else {
-        ux_error::UxError::new("Cannot export: server not connected")
-            .why("Export reads live data from the memory and knowledge backends")
-            .fix("Start the Aeterna server: aeterna serve")
-            .fix("Ensure AETERNA_SERVER_URL is set and the server is reachable")
-            .suggest("aeterna serve")
-            .display();
+        // Offline mode: create a valid-but-empty archive to prove wiring works.
+        let hostname = hostname_or_default();
+        let scope = match args.layer.as_deref() {
+            Some(layer) => ExportScope::Layer {
+                layer: layer.to_string(),
+            },
+            None => ExportScope::FullInstance,
+        };
+        let manifest = BackupManifest::new(hostname, scope);
+
+        let mut writer = ArchiveWriter::new(&output_path)?;
+        writer.add_manifest(&manifest)?;
+        let archive_path = writer.finalize()?;
+
+        if args.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "success": true,
+                    "output_path": archive_path.to_string_lossy(),
+                    "schema_version": CURRENT_SCHEMA_VERSION,
+                    "note": "Empty archive created (no server connection). Connect to server for full data export.",
+                }))?
+            );
+        } else {
+            output::header("Data Export (Offline)");
+            println!();
+            println!("  Output:          {}", archive_path.display());
+            println!("  Schema version:  {CURRENT_SCHEMA_VERSION}");
+            println!("  Target:          {}", args.target);
+            println!();
+            output::hint("No server connection (AETERNA_SERVER_URL not set).");
+            output::hint("Created a valid archive with manifest only.");
+            output::hint("For a full data export, start the server and set AETERNA_SERVER_URL.");
+        }
     }
-    anyhow::bail!(
-        "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running."
-    )
+
+    Ok(())
+}
+
+/// Return the machine hostname, falling back to "unknown".
+fn hostname_or_default() -> String {
+    std::env::var("HOSTNAME")
+        .or_else(|_| std::env::var("HOST"))
+        .unwrap_or_else(|_| "unknown".to_string())
 }
 
 async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
@@ -1051,108 +1196,296 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    // Simulated import analysis
-    let analysis = ImportAnalysis {
-        format: "json".to_string(),
-        source_version: "2024.1.0".to_string(),
-        memories: 1247,
-        knowledge_items: 89,
-        policies: 23,
-        conflicts: vec![
-            ImportConflict {
-                item_type: "memory".to_string(),
-                id: "mem_abc123".to_string(),
-                reason: "Already exists with different content".to_string(),
-            },
-            ImportConflict {
-                item_type: "policy".to_string(),
-                id: "security-baseline".to_string(),
-                reason: "Version mismatch".to_string(),
-            },
-        ],
+    // Open and validate the archive using the backup crate.
+    let report = if args.skip_validation {
+        None
+    } else {
+        Some(validate_archive(&args.input)?)
     };
 
+    // If validation failed, report and bail.
+    if let Some(ref rpt) = report {
+        if !rpt.valid {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "success": false,
+                        "error": "validation_failed",
+                        "manifest_ok": rpt.manifest_ok,
+                        "schema_compatible": rpt.schema_compatible,
+                        "checksum_mismatches": rpt.checksum_mismatches.len(),
+                        "errors": rpt.errors,
+                    }))?
+                );
+            } else {
+                ux_error::UxError::new("Archive validation failed")
+                    .why(&rpt.errors.join("; "))
+                    .fix("Ensure the archive is not corrupted")
+                    .fix("Re-export from the source instance")
+                    .display();
+            }
+            anyhow::bail!("Archive validation failed: {}", rpt.errors.join("; "));
+        }
+    }
+
+    // Read the manifest from the archive for display.
+    let reader = ArchiveReader::open(&args.input)?;
+    let manifest = reader.manifest();
+
     if args.json {
-        let output = json!({
+        let output_val = json!({
             "input_path": args.input.to_string_lossy(),
             "mode": format!("{:?}", args.mode).to_lowercase(),
             "dry_run": args.dry_run,
-            "analysis": {
-                "format": analysis.format,
-                "source_version": analysis.source_version,
-                "memories": analysis.memories,
-                "knowledge_items": analysis.knowledge_items,
-                "policies": analysis.policies,
-                "conflicts": analysis.conflicts.len(),
+            "archive": {
+                "schema_version": manifest.schema_version,
+                "source_instance": manifest.source_instance,
+                "created_at": manifest.created_at,
+                "scope": manifest.scope,
+                "incremental": manifest.incremental,
             },
-            "conflicts": analysis.conflicts.iter().map(|c| json!({
-                "type": c.item_type,
-                "id": c.id,
-                "reason": c.reason,
-            })).collect::<Vec<_>>(),
+            "entity_counts": {
+                "memories": manifest.entity_counts.memories,
+                "knowledge_items": manifest.entity_counts.knowledge_items,
+                "policies": manifest.entity_counts.policies,
+                "org_units": manifest.entity_counts.org_units,
+                "graph_nodes": manifest.entity_counts.graph_nodes,
+                "graph_edges": manifest.entity_counts.graph_edges,
+            },
+            "file_checksums": manifest.file_checksums.len(),
+            "validation": report.as_ref().map(|r| json!({
+                "valid": r.valid,
+                "manifest_ok": r.manifest_ok,
+                "schema_compatible": r.schema_compatible,
+            })),
         });
-        println!("{}", serde_json::to_string_pretty(&output)?);
+        println!("{}", serde_json::to_string_pretty(&output_val)?);
     } else {
         output::header("Data Import");
         println!();
 
-        println!("  Input:   {}", args.input.display());
-        println!("  Mode:    {:?}", args.mode);
+        println!("  Input:            {}", args.input.display());
+        println!("  Mode:             {:?}", args.mode);
         if args.dry_run {
-            println!("  Status:  DRY RUN (no changes will be made)");
+            println!("  Status:           DRY RUN (no changes will be made)");
         }
         println!();
 
-        output::subheader("Import Analysis");
-        println!("  Format:          {}", analysis.format);
-        println!("  Source Version:  {}", analysis.source_version);
-        println!("  Memories:        {}", analysis.memories);
-        println!("  Knowledge Items: {}", analysis.knowledge_items);
-        println!("  Policies:        {}", analysis.policies);
+        output::subheader("Archive Details");
+        println!("  Schema version:   {}", manifest.schema_version);
+        println!("  Source instance:   {}", manifest.source_instance);
+        println!("  Created at:       {}", manifest.created_at);
+        println!("  Incremental:      {}", manifest.incremental);
+        println!("  Data files:       {}", manifest.file_checksums.len());
         println!();
 
-        if !analysis.conflicts.is_empty() {
-            output::subheader(&format!("Conflicts ({} items)", analysis.conflicts.len()));
-            for conflict in &analysis.conflicts {
-                println!(
-                    "  ! {} [{}]: {}",
-                    conflict.item_type, conflict.id, conflict.reason
-                );
-            }
-            println!();
+        output::subheader("Entity Counts");
+        println!("  Memories:         {}", manifest.entity_counts.memories);
+        println!(
+            "  Knowledge items:  {}",
+            manifest.entity_counts.knowledge_items
+        );
+        println!("  Policies:         {}", manifest.entity_counts.policies);
+        println!("  Org units:        {}", manifest.entity_counts.org_units);
+        println!("  Graph nodes:      {}", manifest.entity_counts.graph_nodes);
+        println!("  Graph edges:      {}", manifest.entity_counts.graph_edges);
+        println!();
 
-            match args.mode {
-                ImportMode::Merge => {
-                    println!("  Mode 'merge': Conflicts will be resolved by keeping newer data");
+        if let Some(ref rpt) = report {
+            output::subheader("Validation");
+            println!(
+                "  Manifest:    {}",
+                if rpt.manifest_ok { "OK" } else { "FAIL" }
+            );
+            println!(
+                "  Schema:      {}",
+                if rpt.schema_compatible {
+                    "compatible"
+                } else {
+                    "INCOMPATIBLE"
                 }
-                ImportMode::Replace => {
-                    println!("  Mode 'replace': Import data will overwrite existing data");
+            );
+            println!(
+                "  Checksums:   {}",
+                if rpt.checksum_mismatches.is_empty() {
+                    "all verified".to_string()
+                } else {
+                    format!("{} mismatch(es)", rpt.checksum_mismatches.len())
                 }
-                ImportMode::SkipExisting => {
-                    println!("  Mode 'skip-existing': Conflicting items will be skipped");
-                }
-            }
+            );
             println!();
         }
+    }
 
-        if args.dry_run {
-            output::hint("Remove --dry-run to execute import");
+    if args.dry_run {
+        if !args.json {
+            output::success("Dry-run validation complete. Archive is valid.");
+            output::hint("Remove --dry-run to execute import against a running server.");
+        }
+    } else {
+        // Actual import requires a server connection.
+        let server_url = std::env::var("AETERNA_SERVER_URL").ok();
+        if let Some(url) = server_url {
+            let client = reqwest::Client::new();
+            let archive_bytes = std::fs::read(&args.input)?;
+            let mode_str = format!("{:?}", args.mode).to_lowercase();
+            let api_url = format!("{url}/api/v1/admin/import?mode={mode_str}");
+
+            let result: Result<reqwest::Response, reqwest::Error> = client
+                .post(&api_url)
+                .header("content-type", "application/gzip")
+                .body(archive_bytes)
+                .send()
+                .await;
+
+            match result {
+                Ok(resp) if resp.status().is_success() => {
+                    if args.json {
+                        let body = resp.text().await.unwrap_or_default();
+                        println!("{body}");
+                    } else {
+                        output::success("Import completed successfully.");
+                    }
+                }
+                Ok(resp) => {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    if !args.json {
+                        ux_error::UxError::new("Import failed: server returned an error")
+                            .why(&format!("HTTP {status}: {body}"))
+                            .fix("Check server logs for details")
+                            .display();
+                    }
+                    anyhow::bail!("Server import failed with HTTP {status}");
+                }
+                Err(e) => {
+                    if !args.json {
+                        ux_error::UxError::new("Cannot reach Aeterna server for import")
+                            .why(&format!("Connection error: {e}"))
+                            .fix("Verify the server is running and AETERNA_SERVER_URL is correct")
+                            .suggest("aeterna serve")
+                            .display();
+                    }
+                    anyhow::bail!("Failed to connect to server: {e}");
+                }
+            }
         } else {
-            // Non-dry-run import requires a live backend connection.
-            ux_error::UxError::new("Cannot import: server not connected")
-                .why("Import writes to the live memory and knowledge backends")
-                .fix("Start the Aeterna server: aeterna serve")
-                .fix("Ensure AETERNA_SERVER_URL is set and the server is reachable")
-                .fix("Use --dry-run to validate the import file without connecting")
-                .suggest("aeterna admin import --dry-run")
-                .display();
-            return Err(anyhow::anyhow!(
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "success": false,
+                        "error": "server_not_connected",
+                        "message": "Import requires a live Aeterna server connection. Use --dry-run to validate offline."
+                    }))?
+                );
+            } else {
+                ux_error::UxError::new("Cannot import: server not connected")
+                    .why("Import writes to the live memory and knowledge backends")
+                    .fix("Start the Aeterna server: aeterna serve")
+                    .fix("Ensure AETERNA_SERVER_URL is set and the server is reachable")
+                    .fix("Use --dry-run to validate the import file without connecting")
+                    .suggest("aeterna admin import --dry-run <file>")
+                    .display();
+            }
+            anyhow::bail!(
                 "Aeterna server not connected. Set AETERNA_SERVER_URL and ensure the server is running."
-            ));
+            );
         }
     }
 
     Ok(())
+}
+
+async fn run_backup_validate(args: AdminBackupValidateArgs) -> anyhow::Result<()> {
+    if !args.archive.exists() {
+        ux_error::UxError::new(format!("Archive not found: {}", args.archive.display()))
+            .why("The specified archive file does not exist")
+            .fix("Check the file path is correct")
+            .display();
+        std::process::exit(1);
+    }
+
+    let report = validate_archive(&args.archive)?;
+
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "archive": args.archive.to_string_lossy(),
+                "valid": report.valid,
+                "manifest_ok": report.manifest_ok,
+                "schema_compatible": report.schema_compatible,
+                "checksum_mismatches": report.checksum_mismatches.iter().map(|m| json!({
+                    "filename": m.filename,
+                    "expected": m.expected,
+                    "actual": m.actual,
+                })).collect::<Vec<_>>(),
+                "errors": report.errors,
+            }))?
+        );
+    } else {
+        output::header("Backup Archive Validation");
+        println!();
+        println!("  Archive:     {}", args.archive.display());
+        println!();
+
+        println!(
+            "  Manifest:    {}",
+            if report.manifest_ok { "OK" } else { "FAIL" }
+        );
+        println!(
+            "  Schema:      {}",
+            if report.schema_compatible {
+                "compatible"
+            } else {
+                "INCOMPATIBLE"
+            }
+        );
+        println!(
+            "  Checksums:   {}",
+            if report.checksum_mismatches.is_empty() {
+                "all verified".to_string()
+            } else {
+                format!("{} mismatch(es)", report.checksum_mismatches.len())
+            }
+        );
+
+        if !report.checksum_mismatches.is_empty() {
+            println!();
+            output::subheader("Checksum Mismatches");
+            for m in &report.checksum_mismatches {
+                println!("  ! {}:", m.filename);
+                println!("      expected: {}", m.expected);
+                println!("      actual:   {}", m.actual);
+            }
+        }
+
+        if !report.errors.is_empty() {
+            println!();
+            output::subheader("Errors");
+            for err in &report.errors {
+                println!("  - {err}");
+            }
+        }
+
+        println!();
+        if report.valid {
+            output::success("Archive is valid and ready for import.");
+        } else {
+            ux_error::UxError::new("Archive validation failed")
+                .why("See errors above")
+                .fix("Re-export from the source instance")
+                .display();
+        }
+    }
+
+    if report.valid {
+        Ok(())
+    } else {
+        anyhow::bail!("Archive validation failed")
+    }
 }
 
 async fn run_tenant_provision(args: AdminTenantProvisionArgs) -> anyhow::Result<()> {
@@ -1395,7 +1728,7 @@ fn colored_status(icon: &str, color: &str) -> String {
 
 async fn run_sync(args: AdminSyncArgs) -> anyhow::Result<()> {
     match args.provider.as_str() {
-        "github" => run_sync_github(args).await,
+        p if p == PROVIDER_GITHUB => run_sync_github(args).await,
         provider => {
             if args.json {
                 println!(
@@ -1455,7 +1788,7 @@ async fn run_sync_github(args: AdminSyncArgs) -> anyhow::Result<()> {
                 "{}",
                 serde_json::to_string_pretty(&json!({
                     "dry_run": true,
-                    "provider": "github",
+                    "provider": PROVIDER_GITHUB,
                     "org_name": org_name,
                     "app_id": app_id,
                     "installation_id": installation_id,
@@ -1488,7 +1821,8 @@ async fn run_sync_github(args: AdminSyncArgs) -> anyhow::Result<()> {
 
     let pool = sqlx::PgPool::connect(&database_url).await?;
 
-    let tenant_str = std::env::var("AETERNA_TENANT_ID").unwrap_or_else(|_| "default".to_string());
+    let tenant_str =
+        std::env::var(crate::env_vars::AETERNA_TENANT_ID).unwrap_or_else(|_| "default".to_string());
     let tenant_id: uuid::Uuid = {
         let row: Option<(uuid::Uuid,)> =
             sqlx::query_as("SELECT id FROM tenants WHERE name = $1 OR id::text = $1 LIMIT 1")

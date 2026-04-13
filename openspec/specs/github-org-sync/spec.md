@@ -78,9 +78,27 @@ A user's effective Aeterna role MUST be the highest role across all their member
 ### Requirement: On-Demand Sync API
 The system SHALL expose a REST API endpoint for administrators to trigger GitHub org synchronization on demand.
 
+#### Credential Resolution Order
+- Tenant-scoped sync and fan-out sync SHALL resolve credentials in this order:
+  1. Tenant config fields and secret references (`github.org_name`, `github.app_id`, `github.installation_id`, `github.app_pem`)
+  2. Environment variable fallback (`AETERNA_GITHUB_ORG_NAME`, `AETERNA_GITHUB_APP_ID`, `AETERNA_GITHUB_INSTALLATION_ID`, `AETERNA_GITHUB_APP_PEM`)
+- The tenant-scoped endpoint `POST /api/v1/admin/tenants/{tenant}/sync/github` SHALL be available for a single tenant by name or UUID.
+
 #### Scenario: Trigger sync via API
 - **WHEN** an admin sends `POST /api/v1/admin/sync/github` with a valid admin API key
 - **THEN** the system SHALL execute a full two-phase sync (hierarchy creation + membership sync)
+- **AND** the system SHALL return a tenant result list that includes `SyncReport` data for each successful tenant sync
+
+#### Scenario: Per-tenant config takes precedence over env vars
+- **WHEN** a tenant has `github.org_name`, `github.app_id`, `github.installation_id`, and `github.app_pem` configured
+- **AND** instance-level GitHub sync environment variables are also set
+- **THEN** the system SHALL use the tenant-scoped config and secret values for that tenant sync
+- **AND** it SHALL ignore conflicting environment variable values for that tenant
+
+#### Scenario: Trigger tenant-scoped sync via API
+- **WHEN** an admin sends `POST /api/v1/admin/tenants/{tenant}/sync/github`
+- **THEN** the system SHALL resolve `{tenant}` by tenant name or UUID
+- **AND** the system SHALL execute a full two-phase sync only for that tenant
 - **AND** the system SHALL return a `SyncReport` JSON response with counts of created, updated, and deactivated entities
 
 #### Scenario: Unauthorized sync attempt
@@ -154,4 +172,3 @@ The system SHALL allow GitHub or IdP-managed hierarchy sync to coexist with manu
 - **WHEN** a GitHub organization sync updates tenant-linked identity data
 - **THEN** admin-managed verified tenant mappings SHALL remain unchanged unless an explicit source-ownership rule marks them as sync-owned
 - **AND** the sync report SHALL identify any skipped mapping mutations caused by source ownership
-

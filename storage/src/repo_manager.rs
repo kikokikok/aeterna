@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use errors::CodeSearchError;
+use mk_core::types::{PROVIDER_GITHUB, SYSTEM_USER_ID};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool, Type};
 use std::sync::Arc;
@@ -739,7 +740,7 @@ impl RepoManager {
             })?;
 
         // Trigger indexing
-        self.reindex_repository("system", vec!["lead".to_string()], id, None, false)
+        self.reindex_repository(SYSTEM_USER_ID, vec!["lead".to_string()], id, None, false)
             .await?;
 
         Ok(())
@@ -1173,7 +1174,7 @@ impl RepoManager {
                             );
                             if let Err(e) = self
                                 .reindex_repository(
-                                    "system",
+                                    SYSTEM_USER_ID,
                                     vec!["lead".to_string()],
                                     repo.id,
                                     None,
@@ -1208,64 +1209,60 @@ impl RepoManager {
         provider: &str,
         payload: serde_json::Value,
     ) -> Result<(), CodeSearchError> {
-        match provider {
-            "github" => {
-                // ... same extraction ...
-                let repo_url = payload["repository"]["clone_url"].as_str().ok_or_else(|| {
-                    CodeSearchError::GitError {
-                        reason: "Missing clone_url in GitHub payload".to_string(),
-                    }
+        if provider == PROVIDER_GITHUB {
+            let repo_url = payload["repository"]["clone_url"].as_str().ok_or_else(|| {
+                CodeSearchError::GitError {
+                    reason: "Missing clone_url in GitHub payload".to_string(),
+                }
+            })?;
+
+            let ref_str = payload["ref"]
+                .as_str()
+                .ok_or_else(|| CodeSearchError::GitError {
+                    reason: "Missing ref in GitHub payload".to_string(),
                 })?;
 
-                let ref_str = payload["ref"]
-                    .as_str()
-                    .ok_or_else(|| CodeSearchError::GitError {
-                        reason: "Missing ref in GitHub payload".to_string(),
-                    })?;
+            let branch = ref_str.strip_prefix("refs/heads/").unwrap_or(ref_str);
 
-                let branch = ref_str.strip_prefix("refs/heads/").unwrap_or(ref_str);
+            if let Some(repo) = self
+                .storage
+                .get_repository_by_url(tenant_id, repo_url)
+                .await
+                .map_err(|e| CodeSearchError::DatabaseError {
+                    reason: e.to_string(),
+                })?
+            {
+                if repo.sync_strategy == SyncStrategy::Hook && repo.current_branch == branch {
+                    tracing::info!(
+                        "Webhook received for repository {}. Triggering incremental re-index.",
+                        repo.name
+                    );
 
-                if let Some(repo) = self
-                    .storage
-                    .get_repository_by_url(tenant_id, repo_url)
-                    .await
-                    .map_err(|e| CodeSearchError::DatabaseError {
-                        reason: e.to_string(),
-                    })?
-                {
-                    if repo.sync_strategy == SyncStrategy::Hook && repo.current_branch == branch {
-                        tracing::info!(
-                            "Webhook received for repository {}. Triggering incremental re-index.",
-                            repo.name
+                    // First fetch updates to update the local clone
+                    if let Err(e) = self.fetch_updates(repo.id).await {
+                        tracing::error!(
+                            "Failed to fetch updates for {} from webhook: {:?}",
+                            repo.name,
+                            e
                         );
-
-                        // First fetch updates to update the local clone
-                        if let Err(e) = self.fetch_updates(repo.id).await {
-                            tracing::error!(
-                                "Failed to fetch updates for {} from webhook: {:?}",
-                                repo.name,
-                                e
-                            );
-                            return Err(e);
-                        }
-
-                        // Then re-index (using 'agent' role for webhooks)
-                        self.reindex_repository(
-                            "webhook-agent",
-                            vec!["lead".to_string()],
-                            repo.id,
-                            Some(branch.to_string()),
-                            true,
-                        )
-                        .await?;
+                        return Err(e);
                     }
+
+                    // Then re-index (using 'agent' role for webhooks)
+                    self.reindex_repository(
+                        "webhook-agent",
+                        vec!["lead".to_string()],
+                        repo.id,
+                        Some(branch.to_string()),
+                        true,
+                    )
+                    .await?;
                 }
             }
-            _ => {
-                return Err(CodeSearchError::GitError {
-                    reason: format!("Unsupported webhook provider: {}", provider),
-                });
-            }
+        } else {
+            return Err(CodeSearchError::GitError {
+                reason: format!("Unsupported webhook provider: {}", provider),
+            });
         }
 
         Ok(())
@@ -1776,7 +1773,7 @@ impl RepoManager {
             })?;
 
         match identity.provider.as_str() {
-            "github" => self.verify_github_permissions(repo_url, &token).await,
+            p if p == PROVIDER_GITHUB => self.verify_github_permissions(repo_url, &token).await,
             _ => {
                 // Default to true for local or unknown for now, but in production we'd enforce it
                 Ok(true)

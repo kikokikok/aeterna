@@ -39,11 +39,11 @@ spec:
                 - ALL
           ports:
             - name: http
-              containerPort: 7000
+              containerPort: {{ .Values.opal.fetcher.httpPort }}
               protocol: TCP
           env:
             - name: OPAL_SERVER_URL
-              value: "http://{{ include "aeterna.fullname" . }}-opal-server:7002"
+              value: "http://{{ include "aeterna.fullname" . }}-opal-server:{{ .Values.opal.server.httpPort }}"
             - name: OPAL_CLIENT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -54,7 +54,7 @@ spec:
             - name: OPAL_INLINE_CEDAR_ENABLED
               value: "false"
             - name: OPAL_POLICY_STORE_URL
-              value: "http://{{ include "aeterna.fullname" . }}-cedar-agent:8180"
+              value: "http://{{ include "aeterna.fullname" . }}-cedar-agent:{{ .Values.opal.cedarAgent.oidcPort }}"
             - name: OPAL_POLICY_STORE_TYPE
               value: "CEDAR"
             - name: OPAL_DATA_UPDATER_ENABLED
@@ -66,16 +66,14 @@ spec:
             - name: POSTGRES_DB
               value: {{ include "aeterna.postgresql.database" . | quote }}
             - name: POSTGRES_USER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "aeterna.postgresql.secretName" . }}
-                  key: username
-                  optional: true
+              value: {{ .Values.postgresql.username | default "aeterna" | quote }}
+            {{- if .Values.postgresql.existingSecret }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "aeterna.postgresql.secretName" . }}
-                  key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+                  key: {{ include "aeterna.postgresql.passwordKey" . }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthcheck
@@ -122,7 +120,7 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 7000
+    - port: {{ .Values.opal.fetcher.httpPort }}
       targetPort: http
       protocol: TCP
       name: http

@@ -16,6 +16,12 @@ use uuid::Uuid;
 
 use crate::governance::{PrincipalType, RiskLevel};
 
+const DEFAULT_SESSION_TIMEOUT_HOURS: u64 = 12;
+const DEFAULT_ACTIONS_PER_MINUTE: u64 = 20;
+const DEFAULT_ACTIONS_PER_HOUR: u64 = 300;
+const DEFAULT_MEMORY_WRITES_PER_HOUR: u64 = 50;
+const DEFAULT_GOVERNANCE_SUBMISSIONS_PER_DAY: u64 = 5;
+
 /// Defines the governance layer where a meta-governance policy applies.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -700,12 +706,12 @@ pub fn create_default_policies() -> Vec<MetaGovernancePolicy> {
                     GovernanceActionType::RevokeRole,
                     GovernanceActionType::ModifyGovernanceConfig,
                 ],
-                session_timeout_hours: 12,
+                session_timeout_hours: DEFAULT_SESSION_TIMEOUT_HOURS as i32,
                 rate_limits: Some(AgentRateLimits {
-                    actions_per_minute: 20,
-                    actions_per_hour: 300,
-                    governance_submissions_per_day: 5,
-                    memory_writes_per_hour: 50,
+                    actions_per_minute: DEFAULT_ACTIONS_PER_MINUTE as i32,
+                    actions_per_hour: DEFAULT_ACTIONS_PER_HOUR as i32,
+                    governance_submissions_per_day: DEFAULT_GOVERNANCE_SUBMISSIONS_PER_DAY as i32,
+                    memory_writes_per_hour: DEFAULT_MEMORY_WRITES_PER_HOUR as i32,
                 }),
             },
             escalation_config: EscalationConfig::default(),

@@ -24,7 +24,11 @@ spec:
         spec:
           restartPolicy: OnFailure
           {{- include "aeterna.imagePullSecrets" . | nindent 10 }}
+          {{- if .Values.k8sAuth.enabled }}
+          serviceAccountName: {{ .Values.k8sAuth.syncServiceAccountName | default "aeterna-sync" }}
+          {{- else }}
           serviceAccountName: {{ include "aeterna.serviceAccountName" . }}
+          {{- end }}
           securityContext:
             {{- toYaml .Values.aeterna.podSecurityContext | nindent 12 }}
           containers:
@@ -33,9 +37,26 @@ spec:
                 {{- toYaml .Values.aeterna.securityContext | nindent 16 }}
               image: {{ include "aeterna.image" . | quote }}
               imagePullPolicy: {{ .Values.aeterna.image.pullPolicy }}
+              {{- if .Values.githubOrgSync.perTenantMode }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  wget -qO- \
+                    --method=POST \
+                    {{- if .Values.k8sAuth.enabled }}
+                    --header="Authorization: Bearer $(cat /var/run/secrets/aeterna/token)" \
+                    {{- else }}
+                    --header="X-User-Role: PlatformAdmin" \
+                    --header="X-User-ID: cronjob-github-sync" \
+                    {{- end }}
+                    --header="X-Tenant-ID: {{ .Values.githubOrgSync.tenantId }}" \
+                    http://{{ include "aeterna.fullname" . }}.{{ .Release.Namespace }}.svc/api/v1/admin/sync/github >/dev/null
+              {{- else }}
               command: ["aeterna"]
               args: ["admin", "sync", "github"]
+              {{- end }}
               env:
+                {{- if not .Values.githubOrgSync.perTenantMode }}
                 - name: AETERNA_GITHUB_ORG_NAME
                   value: {{ .Values.githubOrgSync.orgName | quote }}
                 {{- if .Values.githubOrgSync.teamFilter }}
@@ -61,6 +82,7 @@ spec:
                       name: {{ .Values.knowledgeRepo.github.pemSecret }}
                       key: pem-key
                 {{- end }}
+                {{- end }}
                 - name: PG_HOST
                   value: {{ include "aeterna.postgresql.host" . | quote }}
                 - name: PG_PORT
@@ -68,16 +90,14 @@ spec:
                 - name: PG_DATABASE
                   value: {{ include "aeterna.postgresql.database" . | quote }}
                 - name: PG_USERNAME
-                  valueFrom:
-                    secretKeyRef:
-                      name: {{ include "aeterna.postgresql.secretName" . }}
-                      key: username
-                      optional: true
+                  value: {{ .Values.postgresql.username | default "aeterna" | quote }}
+                {{- if .Values.postgresql.existingSecret }}
                 - name: PG_PASSWORD
                   valueFrom:
                     secretKeyRef:
                       name: {{ include "aeterna.postgresql.secretName" . }}
-                      key: {{ if .Values.postgresql.bundled }}password{{ else }}{{ .Values.postgresql.external.secretKey | default "postgres-password" }}{{ end }}
+                      key: {{ include "aeterna.postgresql.passwordKey" . }}
+                {{- end }}
                 - name: RUST_LOG
                   value: {{ .Values.observability.logging.level | default "info" | quote }}
                 - name: LOG_FORMAT
@@ -85,11 +105,25 @@ spec:
               volumeMounts:
                 - name: tmp
                   mountPath: /tmp
+                {{- if .Values.k8sAuth.enabled }}
+                - name: aeterna-sa-token
+                  mountPath: /var/run/secrets/aeterna
+                  readOnly: true
+                {{- end }}
               resources:
                 {{- toYaml .Values.githubOrgSync.cronJob.resources | nindent 16 }}
           volumes:
             - name: tmp
               emptyDir: {}
+            {{- if .Values.k8sAuth.enabled }}
+            - name: aeterna-sa-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      path: token
+                      expirationSeconds: 3600
+                      audience: {{ .Values.k8sAuth.tokenReviewAudience | default "aeterna" }}
+            {{- end }}
           {{- with .Values.aeterna.nodeSelector }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}
