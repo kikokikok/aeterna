@@ -1,13 +1,19 @@
-//! In-process registry of platform-owned Git provider connections.
+//! Registry of platform-owned Git provider connections.
 //!
-//! [`InMemoryGitProviderConnectionStore`] stores [`GitProviderConnection`]
-//! records in a `DashMap` so that the resolver and server handlers can
-//! look up connection metadata without hitting a database on every request.
+//! Two implementations are provided:
+//!
+//! - [`InMemoryGitProviderConnectionStore`]: stores records in a `DashMap`.
+//!   Fast and dependency-free, but not shared across replicas and lost on
+//!   restart.  Use only in single-instance deployments or tests.
+//!
+//! - [`RedisGitProviderConnectionStore`]: persists records to Redis using
+//!   [`crate::redis_store::RedisStore`].  Safe across Kubernetes ReplicaSets
+//!   and survives pod restarts.  Prefer this when a Redis connection is
+//!   available.
 //!
 //! # Design notes
 //! - The store is the authoritative source for connection visibility checks.
 //! - PEM material is never stored inline; only the `pem_secret_ref` handle is kept.
-//! - Thread-safe via `DashMap`; no external locking required.
 
 use std::sync::Arc;
 
@@ -16,6 +22,8 @@ use dashmap::DashMap;
 use mk_core::traits::GitProviderConnectionRegistry;
 use mk_core::types::{GitProviderConnection, TenantId};
 use thiserror::Error;
+
+use crate::redis_store::RedisStore;
 
 /// Errors returned by [`InMemoryGitProviderConnectionStore`].
 #[derive(Debug, Error, Clone)]
@@ -149,6 +157,137 @@ impl GitProviderConnectionRegistry for InMemoryGitProviderConnectionStore {
                 },
             )
             .unwrap_or(false))
+    }
+}
+
+const REDIS_PREFIX: &str = "aeterna:git_provider_connections";
+
+pub struct RedisGitProviderConnectionStore {
+    store: RedisStore,
+}
+
+impl RedisGitProviderConnectionStore {
+    pub fn new(conn: Arc<redis::aio::ConnectionManager>) -> Self {
+        Self {
+            store: RedisStore::new(conn, REDIS_PREFIX),
+        }
+    }
+}
+
+impl std::fmt::Debug for RedisGitProviderConnectionStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RedisGitProviderConnectionStore").finish()
+    }
+}
+
+#[async_trait]
+impl GitProviderConnectionRegistry for RedisGitProviderConnectionStore {
+    type Error = GitProviderConnectionError;
+
+    async fn create_connection(
+        &self,
+        connection: GitProviderConnection,
+    ) -> Result<GitProviderConnection, Self::Error> {
+        if connection.id.trim().is_empty() {
+            return Err(GitProviderConnectionError::Validation(
+                "connection id must not be empty".to_string(),
+            ));
+        }
+        if !connection.has_valid_pem_ref() {
+            return Err(GitProviderConnectionError::Validation(format!(
+                "pem_secret_ref '{}' must use a supported secret-provider prefix \
+                 (local/, secret/, arn:aws:)",
+                connection.pem_secret_ref
+            )));
+        }
+        self.store
+            .set(&connection.id, &connection, None)
+            .await
+            .map_err(|e| GitProviderConnectionError::Validation(e.to_string()))?;
+        Ok(connection)
+    }
+
+    async fn get_connection(&self, id: &str) -> Result<Option<GitProviderConnection>, Self::Error> {
+        self.store
+            .get::<GitProviderConnection>(id)
+            .await
+            .map_err(|e| GitProviderConnectionError::Validation(e.to_string()))
+    }
+
+    async fn list_connections(&self) -> Result<Vec<GitProviderConnection>, Self::Error> {
+        let mut connections: Vec<GitProviderConnection> = self
+            .store
+            .list_all::<GitProviderConnection>()
+            .await
+            .map_err(|e| GitProviderConnectionError::Validation(e.to_string()))?;
+        connections.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(connections)
+    }
+
+    async fn list_connections_for_tenant(
+        &self,
+        tenant_id: &TenantId,
+    ) -> Result<Vec<GitProviderConnection>, Self::Error> {
+        let all = self.list_connections().await?;
+        let mut visible: Vec<GitProviderConnection> = all
+            .into_iter()
+            .filter(|c| c.is_visible_to(tenant_id))
+            .collect();
+        visible.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(visible)
+    }
+
+    async fn grant_tenant_visibility(
+        &self,
+        connection_id: &str,
+        tenant_id: &TenantId,
+    ) -> Result<(), Self::Error> {
+        let updated = self
+            .store
+            .update::<GitProviderConnection>(
+                connection_id,
+                |c| {
+                    if !c.allowed_tenant_ids.contains(tenant_id) {
+                        c.allowed_tenant_ids.push(tenant_id.clone());
+                    }
+                },
+                None,
+            )
+            .await
+            .map_err(|e| GitProviderConnectionError::Validation(e.to_string()))?;
+        updated.ok_or_else(|| GitProviderConnectionError::NotFound(connection_id.to_string()))?;
+        Ok(())
+    }
+
+    async fn revoke_tenant_visibility(
+        &self,
+        connection_id: &str,
+        tenant_id: &TenantId,
+    ) -> Result<(), Self::Error> {
+        let updated = self
+            .store
+            .update::<GitProviderConnection>(
+                connection_id,
+                |c| {
+                    c.allowed_tenant_ids.retain(|t| t != tenant_id);
+                },
+                None,
+            )
+            .await
+            .map_err(|e| GitProviderConnectionError::Validation(e.to_string()))?;
+        updated.ok_or_else(|| GitProviderConnectionError::NotFound(connection_id.to_string()))?;
+        Ok(())
+    }
+
+    async fn tenant_can_use(
+        &self,
+        connection_id: &str,
+        tenant_id: &TenantId,
+    ) -> Result<bool, Self::Error> {
+        match self.get_connection(connection_id).await? {
+            Some(c) => Ok(c.is_visible_to(tenant_id)),
+            None => Ok(false),
+        }
     }
 }
 

@@ -27,7 +27,9 @@ use mk_core::types::{
     DEFAULT_TENANT_SLUG, INSTANCE_SCOPE_TENANT_ID, PROVIDER_GITHUB, ReasoningStrategy,
     ReasoningTrace, Role, RoleIdentifier, TenantContext, UserId,
 };
-use storage::git_provider_connection_store::InMemoryGitProviderConnectionStore;
+use storage::git_provider_connection_store::{
+    InMemoryGitProviderConnectionStore, RedisGitProviderConnectionStore,
+};
 use storage::governance::GovernanceStorage;
 use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore};
 use storage::postgres::PostgresBackend;
@@ -324,7 +326,15 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     let tenant_repository_binding_store =
         Arc::new(TenantRepositoryBindingStore::new(postgres.pool().clone()));
     let secret_provider = Arc::new(LocalSecretProvider::new(std::collections::HashMap::new()));
-    let git_provider_connection_registry = Arc::new(InMemoryGitProviderConnectionStore::new());
+    let git_provider_connection_registry: Arc<
+        dyn mk_core::traits::GitProviderConnectionRegistry<
+                Error = storage::git_provider_connection_store::GitProviderConnectionError,
+            > + Send
+            + Sync,
+    > = match &redis_conn {
+        Some(conn) => Arc::new(RedisGitProviderConnectionStore::new(conn.clone())),
+        None => Arc::new(InMemoryGitProviderConnectionStore::new()),
+    };
     let tenant_repo_resolver = Arc::new(
         TenantRepositoryResolver::new(
             tenant_repository_binding_store.clone(),
