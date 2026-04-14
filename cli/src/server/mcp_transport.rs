@@ -359,7 +359,6 @@ mod tests {
                 config: config::PluginAuthConfig::default(),
                 postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
-                oauth_state_store: super::plugin_auth::OAuthStateStore::new(),
             }),
             k8s_auth_config: config::KubernetesAuthConfig::default(),
             idp_config: None,

@@ -15,7 +15,6 @@ use axum::response::{IntoResponse, Redirect};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::Utc;
-use dashmap::DashMap;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use mk_core::types::{
     DEFAULT_TENANT_SLUG, PROVIDER_GITHUB, RoleIdentifier, SYSTEM_USER_ID, TenantContext, TenantId,
@@ -965,26 +964,46 @@ fn sanitize_identifier(value: &str, fallback: &str) -> String {
 
 const DEFAULT_GITHUB_OAUTH_BASE: &str = "https://github.com";
 
-#[derive(Debug, Default)]
-pub struct OAuthStateStore {
-    states: DashMap<String, i64>,
+const OAUTH_STATE_TTL_SECS: usize = 600;
+
+fn oauth_state_redis_key(state: &str) -> String {
+    format!("oauth:state:{state}")
 }
 
-impl OAuthStateStore {
-    pub fn new() -> Self {
-        Self::default()
+async fn oauth_state_insert(
+    redis_conn: &mut redis::aio::ConnectionManager,
+    state: &str,
+) -> Result<(), ()> {
+    let key = oauth_state_redis_key(state);
+    let result: Option<String> = redis::cmd("SET")
+        .arg(&key)
+        .arg("1")
+        .arg("EX")
+        .arg(OAUTH_STATE_TTL_SECS)
+        .arg("NX")
+        .query_async(redis_conn)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Redis SET failed for OAuth state");
+        })?;
+    if result.is_some() {
+        Ok(())
+    } else {
+        tracing::warn!(state = %state, "OAuth state key already exists in Redis");
+        Err(())
     }
+}
 
-    pub fn insert(&self, state: String) {
-        self.states.insert(state, Utc::now().timestamp());
-    }
-
-    pub fn consume(&self, state: &str) -> bool {
-        match self.states.remove(state) {
-            Some((_, created_at)) => Utc::now().timestamp() - created_at < 600,
-            None => false,
+async fn oauth_state_consume(redis_conn: &mut redis::aio::ConnectionManager, state: &str) -> bool {
+    let key = oauth_state_redis_key(state);
+    let deleted: i64 = match redis::cmd("DEL").arg(&key).query_async(redis_conn).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "Redis DEL failed for OAuth state");
+            return false;
         }
-    }
+    };
+    deleted == 1
 }
 
 #[derive(Debug, Deserialize)]
@@ -1033,11 +1052,32 @@ async fn web_authorize_handler(State(state): State<Arc<AppState>>) -> impl IntoR
         .as_deref()
         .unwrap_or(DEFAULT_GITHUB_OAUTH_BASE);
 
+    let mut redis_conn = match state.redis_conn.as_ref() {
+        Some(c) => c.as_ref().clone(),
+        None => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "configuration_error",
+                    "message": "Redis is not available"
+                })),
+            ));
+        }
+    };
+
     let csrf_state = Uuid::new_v4().to_string();
-    state
-        .plugin_auth_state
-        .oauth_state_store
-        .insert(csrf_state.clone());
+    if oauth_state_insert(&mut redis_conn, &csrf_state)
+        .await
+        .is_err()
+    {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "state_error",
+                "message": "Failed to store OAuth state"
+            })),
+        ));
+    }
 
     let redirect_url = format!(
         "{oauth_base}/login/oauth/authorize?client_id={client_id}&state={csrf_state}&scope=read:user,user:email"
@@ -1081,11 +1121,18 @@ async fn web_callback_handler(
         }
     };
 
-    if !state
-        .plugin_auth_state
-        .oauth_state_store
-        .consume(&incoming_state)
-    {
+    let state_valid = match state.redis_conn.as_ref() {
+        Some(c) => {
+            let mut conn = c.as_ref().clone();
+            oauth_state_consume(&mut conn, &incoming_state).await
+        }
+        None => {
+            tracing::error!("Redis not available for OAuth state validation");
+            false
+        }
+    };
+
+    if !state_valid {
         tracing::warn!("Web callback state mismatch or expired");
         return Redirect::to(&format!("{error_redirect}?error=invalid_state"));
     }

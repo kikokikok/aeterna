@@ -57,13 +57,12 @@ use storage::tenant_config_provider::KubernetesTenantConfigProvider;
 use storage::tenant_store::{TenantRepositoryBindingStore, TenantStore};
 use tools::server::McpServer;
 
-use plugin_auth::{OAuthStateStore, RefreshTokenStoreBackend};
+use plugin_auth::RefreshTokenStoreBackend;
 
 pub struct PluginAuthState {
     pub config: config::PluginAuthConfig,
     pub postgres: Option<Arc<PostgresBackend>>,
     pub refresh_store: RefreshTokenStoreBackend,
-    pub oauth_state_store: OAuthStateStore,
 }
 
 impl std::fmt::Debug for PluginAuthState {
