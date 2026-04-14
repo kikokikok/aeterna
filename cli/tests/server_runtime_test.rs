@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use aeterna::server::plugin_auth::{
-    PluginTokenClaims, RefreshTokenStore, RefreshTokenStoreBackend,
+    OAuthStateStore, PluginTokenClaims, RefreshTokenStore, RefreshTokenStoreBackend,
 };
 use aeterna::server::{AppState, PluginAuthState, health, metrics, router};
 use agent_a2a::config::TrustedIdentityConfig;
@@ -337,6 +337,7 @@ async fn test_app_state_with_plugin_auth(
                 config: plugin_auth_config,
                 postgres: Some(postgres.clone()),
                 refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
+                oauth_state_store: OAuthStateStore::new(),
             }),
             k8s_auth_config: config::KubernetesAuthConfig::default(),
             idp_config: None,
@@ -1158,6 +1159,7 @@ async fn user_role_revoke_fails_closed_when_assignment_scope_is_ambiguous() {
         },
         postgres: Some(state.postgres.clone()),
         refresh_store: RefreshTokenStoreBackend::InMemory(RefreshTokenStore::new()),
+        oauth_state_store: OAuthStateStore::new(),
     });
     let app = router::build_router(Arc::new(state));
 

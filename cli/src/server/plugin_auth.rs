@@ -9,12 +9,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode, header::AUTHORIZATION};
-use axum::response::IntoResponse;
-use axum::routing::post;
+use axum::response::{IntoResponse, Redirect};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::Utc;
+use dashmap::DashMap;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use mk_core::types::{
     DEFAULT_TENANT_SLUG, PROVIDER_GITHUB, RoleIdentifier, SYSTEM_USER_ID, TenantContext, TenantId,
@@ -962,9 +963,274 @@ fn sanitize_identifier(value: &str, fallback: &str) -> String {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+const DEFAULT_GITHUB_OAUTH_BASE: &str = "https://github.com";
+
+#[derive(Debug, Default)]
+pub struct OAuthStateStore {
+    states: DashMap<String, i64>,
+}
+
+impl OAuthStateStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert(&self, state: String) {
+        self.states.insert(state, Utc::now().timestamp());
+    }
+
+    pub fn consume(&self, state: &str) -> bool {
+        match self.states.remove(state) {
+            Some((_, created_at)) => Utc::now().timestamp() - created_at < 600,
+            None => false,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct WebCallbackQuery {
+    code: Option<String>,
+    state: Option<String>,
+    error: Option<String>,
+    error_description: Option<String>,
+}
+
+pub fn web_oauth_router(state: Arc<AppState>) -> Router {
+    Router::new()
+        .route("/auth/web/authorize", get(web_authorize_handler))
+        .route("/auth/web/callback", get(web_callback_handler))
+        .with_state(state)
+}
+
+async fn web_authorize_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let cfg = &state.plugin_auth_state.config;
+
+    if !cfg.enabled {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "plugin_auth_disabled",
+                "message": "Plugin authentication is not enabled on this server"
+            })),
+        ));
+    }
+
+    let client_id = match &cfg.github_client_id {
+        Some(id) => id.clone(),
+        None => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "configuration_error",
+                    "message": "GitHub OAuth client ID is not configured"
+                })),
+            ));
+        }
+    };
+
+    let oauth_base = cfg
+        .github_oauth_base_url
+        .as_deref()
+        .unwrap_or(DEFAULT_GITHUB_OAUTH_BASE);
+
+    let csrf_state = Uuid::new_v4().to_string();
+    state
+        .plugin_auth_state
+        .oauth_state_store
+        .insert(csrf_state.clone());
+
+    let redirect_url = format!(
+        "{oauth_base}/login/oauth/authorize?client_id={client_id}&state={csrf_state}&scope=read:user,user:email"
+    );
+
+    Ok(Redirect::to(&redirect_url))
+}
+
+async fn web_callback_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<WebCallbackQuery>,
+) -> impl IntoResponse {
+    let cfg = &state.plugin_auth_state.config;
+
+    let redirect_base = cfg
+        .redirect_base_url
+        .as_deref()
+        .unwrap_or("")
+        .trim_end_matches('/');
+    let error_redirect = format!("{redirect_base}/admin/login");
+
+    if let Some(err) = params.error {
+        let desc = params.error_description.unwrap_or_default();
+        tracing::warn!(error = %err, description = %desc, "GitHub OAuth callback error");
+        return Redirect::to(&format!("{error_redirect}?error={err}"));
+    }
+
+    let code = match params.code {
+        Some(c) if !c.is_empty() => c,
+        _ => {
+            tracing::warn!("Web callback received without code");
+            return Redirect::to(&format!("{error_redirect}?error=missing_code"));
+        }
+    };
+
+    let incoming_state = match params.state {
+        Some(s) if !s.is_empty() => s,
+        _ => {
+            tracing::warn!("Web callback received without state");
+            return Redirect::to(&format!("{error_redirect}?error=missing_state"));
+        }
+    };
+
+    if !state
+        .plugin_auth_state
+        .oauth_state_store
+        .consume(&incoming_state)
+    {
+        tracing::warn!("Web callback state mismatch or expired");
+        return Redirect::to(&format!("{error_redirect}?error=invalid_state"));
+    }
+
+    let client_id = match &cfg.github_client_id {
+        Some(id) => id.clone(),
+        None => {
+            tracing::error!("GitHub OAuth client ID not configured");
+            return Redirect::to(&format!("{error_redirect}?error=configuration_error"));
+        }
+    };
+
+    let client_secret = match &cfg.github_client_secret {
+        Some(s) => s.clone(),
+        None => {
+            tracing::error!("GitHub OAuth client secret not configured");
+            return Redirect::to(&format!("{error_redirect}?error=configuration_error"));
+        }
+    };
+
+    let jwt_secret = match &cfg.jwt_secret {
+        Some(s) => s.clone(),
+        None => {
+            tracing::error!("JWT secret not configured");
+            return Redirect::to(&format!("{error_redirect}?error=configuration_error"));
+        }
+    };
+
+    let github_access_token =
+        match exchange_github_code(&code, &client_id, &client_secret, cfg).await {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!("GitHub code exchange failed: {e}");
+                return Redirect::to(&format!("{error_redirect}?error=token_exchange_failed"));
+            }
+        };
+
+    let github_user = match fetch_github_user(&github_access_token, cfg).await {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::warn!("GitHub user fetch failed: {e}");
+            return Redirect::to(&format!("{error_redirect}?error=user_fetch_failed"));
+        }
+    };
+
+    let access_ttl = cfg.access_token_ttl_seconds.unwrap_or(3600);
+    let refresh_ttl = cfg
+        .refresh_token_ttl_seconds
+        .unwrap_or(DEFAULT_REFRESH_TOKEN_TTL_SECS);
+    let issuer = cfg
+        .token_issuer
+        .clone()
+        .unwrap_or_else(|| "aeterna".to_string());
+
+    let tenant_id = match resolve_tenant_for_github_user(&github_user.login, cfg) {
+        Some(t) => t,
+        None => {
+            tracing::error!(login = %github_user.login, "No tenant configured for web OAuth login");
+            return Redirect::to(&format!("{error_redirect}?error=tenant_not_configured"));
+        }
+    };
+
+    let access_token =
+        match mint_access_token(&jwt_secret, &issuer, &tenant_id, &github_user, access_ttl) {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::error!("Failed to mint access token: {e}");
+                return Redirect::to(&format!("{error_redirect}?error=token_mint_failed"));
+            }
+        };
+
+    let refresh_token = Uuid::new_v4().to_string();
+    state
+        .plugin_auth_state
+        .refresh_store
+        .insert(
+            refresh_token.clone(),
+            tenant_id,
+            github_user.login.clone(),
+            github_user.id,
+            github_user.email.clone(),
+            refresh_ttl,
+        )
+        .await;
+
+    let encoded_access = urlencoding_encode(&access_token);
+    let encoded_refresh = urlencoding_encode(&refresh_token);
+    let encoded_login = urlencoding_encode(&github_user.login);
+    let expires_in = access_ttl;
+
+    let admin_url = format!(
+        "{redirect_base}/admin#access_token={encoded_access}&refresh_token={encoded_refresh}&expires_in={expires_in}&github_login={encoded_login}"
+    );
+
+    Redirect::to(&admin_url)
+}
+
+async fn exchange_github_code(
+    code: &str,
+    client_id: &str,
+    client_secret: &str,
+    cfg: &config::PluginAuthConfig,
+) -> anyhow::Result<String> {
+    let oauth_base = cfg
+        .github_oauth_base_url
+        .as_deref()
+        .unwrap_or(DEFAULT_GITHUB_OAUTH_BASE);
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{oauth_base}/login/oauth/access_token"))
+        .header("Accept", "application/json")
+        .header("User-Agent", "aeterna-web-auth/1.0")
+        .json(&serde_json::json!({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "code": code,
+        }))
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let token_resp: GitHubOAuthTokenResponse = resp.json().await?;
+
+    if let Some(err) = token_resp.error {
+        let desc = token_resp.error_description.unwrap_or_default();
+        anyhow::bail!("GitHub token exchange error: {err} — {desc}");
+    }
+
+    token_resp
+        .access_token
+        .ok_or_else(|| anyhow::anyhow!("GitHub response missing access_token"))
+}
+
+fn urlencoding_encode(s: &str) -> String {
+    s.chars()
+        .flat_map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {
+                vec![c]
+            } else {
+                format!("%{:02X}", c as u32).chars().collect()
+            }
+        })
+        .collect()
+}
 
 #[cfg(test)]
 mod tests {

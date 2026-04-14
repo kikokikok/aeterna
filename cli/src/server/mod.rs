@@ -57,21 +57,13 @@ use storage::tenant_config_provider::KubernetesTenantConfigProvider;
 use storage::tenant_store::{TenantRepositoryBindingStore, TenantStore};
 use tools::server::McpServer;
 
-use plugin_auth::RefreshTokenStoreBackend;
+use plugin_auth::{OAuthStateStore, RefreshTokenStoreBackend};
 
-/// Plugin-auth runtime state: configuration + in-process token store.
-///
-/// Held as `Arc<PluginAuthState>` inside `AppState` so handlers can access it
-/// via `State<Arc<AppState>>` without an extra extraction layer.
 pub struct PluginAuthState {
     pub config: config::PluginAuthConfig,
     pub postgres: Option<Arc<PostgresBackend>>,
-    /// Single-use refresh-token store (rotated on every refresh).
-    ///
-    /// For multi-instance (Kubernetes) deployments, use
-    /// `RefreshTokenStoreBackend::Redis`. The in-memory variant is for
-    /// single-instance or test deployments.
     pub refresh_store: RefreshTokenStoreBackend,
+    pub oauth_state_store: OAuthStateStore,
 }
 
 impl std::fmt::Debug for PluginAuthState {

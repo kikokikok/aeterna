@@ -307,6 +307,7 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         config: config.plugin_auth.clone(),
         postgres: Some(postgres.clone()),
         refresh_store,
+        oauth_state_store: super::plugin_auth::OAuthStateStore::new(),
     });
     let k8s_auth_config = config.k8s_auth.clone();
 

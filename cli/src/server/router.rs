@@ -28,7 +28,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     // - Auth bootstrap: /api/v1/auth/plugin/{bootstrap,refresh,logout}
     let unauthenticated = Router::new()
         .merge(health::router(state.clone()))
-        .nest("/api/v1", plugin_auth::router(state.clone()));
+        .nest("/api/v1", plugin_auth::router(state.clone()))
+        .nest("/api/v1", plugin_auth::web_oauth_router(state.clone()));
 
     // All other /api/v1/* routes go through the auth layer.
     let protected_api = Router::new()
