@@ -701,6 +701,11 @@ fn embedded_migrations() -> Vec<EmbeddedMigration> {
             name: "020_fix_codesearch_views",
             sql: include_str!("../../../storage/migrations/020_fix_codesearch_views.sql"),
         },
+        EmbeddedMigration {
+            version: 21,
+            name: "021_add_user_idp_columns",
+            sql: include_str!("../../../storage/migrations/021_add_user_idp_columns.sql"),
+        },
     ]
 }
 
