@@ -1224,7 +1224,7 @@ async fn web_callback_handler(
     let expires_in = access_ttl;
 
     let admin_url = format!(
-        "{redirect_base}/admin#access_token={encoded_access}&refresh_token={encoded_refresh}&expires_in={expires_in}&github_login={encoded_login}"
+        "{redirect_base}/admin/login#access_token={encoded_access}&refresh_token={encoded_refresh}&expires_in={expires_in}&github_login={encoded_login}"
     );
 
     Redirect::to(&admin_url)
