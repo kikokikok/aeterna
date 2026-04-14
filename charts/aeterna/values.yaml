@@ -378,7 +378,18 @@ adminUi:
   ## @param adminUi.enabled Enable the admin dashboard (built into the container image by default)
   enabled: true
   ## @param adminUi.path Path to the admin UI static assets inside the container
+  ## Ignored when adminUi.image.repository is set (path is fixed to /mnt/admin-ui)
   path: "/app/admin-ui/dist"
+  ## @param adminUi.image Optional separate admin UI image (nginx:alpine with static assets)
+  ## When set, an init container copies the assets to an emptyDir volume mounted at /mnt/admin-ui
+  ## This allows independent admin UI deploys without rebuilding the main Rust image
+  image:
+    ## @param adminUi.image.repository Image repository (empty = use assets baked into main image)
+    repository: ""
+    ## @param adminUi.image.tag Image tag
+    tag: ""
+    ## @param adminUi.image.pullPolicy Image pull policy
+    pullPolicy: IfNotPresent
 
 ## Admin bootstrap configuration
 ## Seeds an initial PlatformAdmin user on first startup so the system is operational without manual DB intervention

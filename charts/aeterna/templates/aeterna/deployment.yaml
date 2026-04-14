@@ -30,8 +30,32 @@ spec:
       serviceAccountName: {{ include "aeterna.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.aeterna.podSecurityContext | nindent 8 }}
-      {{- if and .Values.codesearch.enabled .Values.codesearch.initContainer.enabled }}
+      {{- if or (and .Values.codesearch.enabled .Values.codesearch.initContainer.enabled) (and .Values.adminUi.enabled .Values.adminUi.image.repository) }}
       initContainers:
+        {{- if and .Values.adminUi.enabled .Values.adminUi.image.repository }}
+        - name: admin-ui-init
+          image: {{ .Values.adminUi.image.repository }}:{{ .Values.adminUi.image.tag }}
+          imagePullPolicy: {{ .Values.adminUi.image.pullPolicy }}
+          command: ["/bin/sh", "-c", "cp -r /usr/share/nginx/html/. /mnt/admin-ui/"]
+          volumeMounts:
+            - name: admin-ui-dist
+              mountPath: /mnt/admin-ui
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+        {{- end }}
+        {{- if and .Values.codesearch.enabled .Values.codesearch.initContainer.enabled }}
         - name: codesearch-init
           image: {{ .Values.codesearch.image.repository }}:{{ .Values.codesearch.image.tag }}
           imagePullPolicy: {{ .Values.codesearch.image.pullPolicy }}
@@ -69,6 +93,7 @@ spec:
             requests:
               cpu: 100m
               memory: 256Mi
+        {{- end }}
       {{- end }}
       containers:
         - name: aeterna
@@ -295,7 +320,7 @@ spec:
             {{- end }}
             {{- if .Values.adminUi.enabled }}
             - name: AETERNA_ADMIN_UI_PATH
-              value: {{ .Values.adminUi.path | default "/app/admin-ui/dist" | quote }}
+              value: {{ if and .Values.adminUi.image.repository }}"/mnt/admin-ui"{{ else }}{{ .Values.adminUi.path | default "/app/admin-ui/dist" | quote }}{{ end }}
             {{- end }}
             {{- if .Values.adminBootstrap.email }}
             - name: AETERNA_ADMIN_BOOTSTRAP_EMAIL
@@ -335,6 +360,10 @@ spec:
             - name: google-external-account-token
               mountPath: {{ dir .Values.llm.google.wifTokenFile }}
               readOnly: true
+            {{- end }}
+            {{- if and .Values.adminUi.enabled .Values.adminUi.image.repository }}
+            - name: admin-ui-dist
+              mountPath: /mnt/admin-ui
             {{- end }}
         {{- if .Values.codesearch.enabled }}
         - name: codesearch
@@ -424,6 +453,10 @@ spec:
               - key: init-projects.sh
                 path: init-projects.sh
         - name: codesearch-data
+          emptyDir: {}
+        {{- end }}
+        {{- if and .Values.adminUi.enabled .Values.adminUi.image.repository }}
+        - name: admin-ui-dist
           emptyDir: {}
         {{- end }}
       {{- with .Values.aeterna.nodeSelector }}
