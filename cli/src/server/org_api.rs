@@ -80,8 +80,10 @@ async fn list_orgs(
             return error_response(StatusCode::BAD_REQUEST, "org_list_failed", &err.to_string());
         }
     };
-    units
-        .retain(|unit| unit.tenant_id == ctx.tenant_id && unit.unit_type == UnitType::Organization);
+    units.retain(|unit| unit.unit_type == UnitType::Organization);
+    if !ctx.has_known_role(&Role::PlatformAdmin) {
+        units.retain(|unit| unit.tenant_id == ctx.tenant_id);
+    }
     if let Some(company_id) = query.company.as_deref() {
         units.retain(|unit| unit.parent_id.as_deref() == Some(company_id));
     }

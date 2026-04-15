@@ -125,9 +125,11 @@ export default function PendingRequestsPage() {
           className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
         >
           <option value="">All types</option>
-          <option value="promotion">Promotion</option>
-          <option value="deletion">Deletion</option>
-          <option value="override">Override</option>
+          <option value="policy">Policy</option>
+          <option value="knowledge">Knowledge</option>
+          <option value="memory">Memory</option>
+          <option value="role">Role</option>
+          <option value="config">Config</option>
         </select>
       </div>
 

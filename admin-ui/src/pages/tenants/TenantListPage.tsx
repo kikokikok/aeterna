@@ -107,12 +107,12 @@ function TenantListPageContent() {
   const [search, setSearch] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const { data, isLoading, error, refetch } = useQuery<{ items: TenantRecord[] }>({
+  const { data, isLoading, error, refetch } = useQuery<{ tenants: TenantRecord[] }>({
     queryKey: ["tenants"],
     queryFn: () => apiClient.get("/api/v1/admin/tenants"),
   })
 
-  const tenants = (data?.items ?? (Array.isArray(data) ? data : [])) as TenantRecord[]
+  const tenants = data?.tenants ?? []
   const filtered = tenants.filter(
     (t) =>
       (t.name?.toLowerCase() ?? "").includes(search.toLowerCase()) ||
