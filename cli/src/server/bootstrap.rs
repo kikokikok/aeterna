@@ -933,7 +933,7 @@ async fn seed_platform_admin(
     let user_uuid: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO users (email, name, idp_provider, idp_subject, status, created_at, updated_at)
          VALUES ($1, $1, $2, $3, 'active', NOW(), NOW())
-         ON CONFLICT (email) DO UPDATE SET idp_provider = EXCLUDED.idp_provider, idp_subject = EXCLUDED.idp_subject, updated_at = NOW()
+         ON CONFLICT (idp_provider, idp_subject) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name, updated_at = NOW()
          RETURNING id",
     )
     .bind(email)

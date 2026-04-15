@@ -48,8 +48,9 @@ build_rs_cov.profraw
 .aeterna/cache/
 cli/.aeterna/
 
-# Claude worktrees
+# Claude worktrees and local settings
 .claude/worktrees/
+.claude/settings.local.json
 
 website/node_modules/
 website/build/
