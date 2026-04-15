@@ -564,9 +564,15 @@ async fn logout_handler(
 /// token). It returns the authenticated user's profile, roles across all
 /// tenants (including `__root__` PlatformAdmin grants), and tenant memberships
 /// in a single response for efficient admin UI bootstrap.
+///
+/// Routes:
+/// - `POST /auth/admin/session` — Legacy endpoint for OpenCode plugin consumers.
+/// - `GET  /auth/session`       — Used by the admin UI after OAuth redirect to
+///   validate the token and fetch the session profile.
 pub fn admin_session_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/auth/admin/session", post(admin_session_handler))
+        .route("/auth/session", get(admin_session_handler))
         .with_state(state)
 }
 
