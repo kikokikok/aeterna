@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Settings2, Loader2, CheckCircle2, XCircle, RefreshCw, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/api/client"
+import { useAuth } from "@/auth/AuthContext"
 import type { HealthResponse, ReadinessResponse } from "@/api/types"
 
 interface ExportJob {
@@ -57,6 +58,7 @@ export function Component() {
 
 export default function SystemHealthPage() {
   const queryClient = useQueryClient()
+  const { isAuthenticated } = useAuth()
 
   const {
     data: health,
@@ -81,19 +83,20 @@ export default function SystemHealthPage() {
   const {
     data: exportsData,
     isLoading: exportsLoading,
-  } = useQuery<{ items: ExportJob[] }>({
+  } = useQuery<{ jobs: ExportJob[] }>({
     queryKey: ["admin", "exports"],
     queryFn: () => apiClient.get("/api/v1/admin/exports"),
+    enabled: isAuthenticated,
   })
 
   const triggerExport = useMutation({
-    mutationFn: () => apiClient.post("/api/v1/admin/exports", { format: "json" }),
+    mutationFn: () => apiClient.post("/api/v1/admin/export", { format: "json" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "exports"] })
     },
   })
 
-  const exports = exportsData?.items ?? []
+  const exports = exportsData?.jobs ?? []
 
   const statusColor: Record<string, string> = {
     completed: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",

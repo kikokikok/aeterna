@@ -6,6 +6,7 @@ class ApiClient {
   private getTokens: () => AuthTokens | null
   private onTokenRefresh: (tokens: AuthTokens) => void
   private onUnauthorized: () => void
+  private activeTenantId: string | null = null
   private targetTenantId: string | null = null
   private refreshPromise: Promise<AuthTokens> | null = null
 
@@ -14,6 +15,14 @@ class ApiClient {
     this.getTokens = config.getTokens
     this.onTokenRefresh = config.onTokenRefresh
     this.onUnauthorized = config.onUnauthorized
+  }
+
+  setActiveTenant(tenantId: string | null) {
+    this.activeTenantId = tenantId
+  }
+
+  getActiveTenant(): string | null {
+    return this.activeTenantId
   }
 
   setTargetTenant(tenantId: string | null) {
@@ -30,6 +39,9 @@ class ApiClient {
     }
     if (tokens) {
       headers["Authorization"] = `Bearer ${tokens.access_token}`
+    }
+    if (this.activeTenantId) {
+      headers["X-Tenant-ID"] = this.activeTenantId
     }
     if (this.targetTenantId) {
       headers["X-Target-Tenant-ID"] = this.targetTenantId

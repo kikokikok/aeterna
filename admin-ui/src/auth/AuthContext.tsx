@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           session.tenants.length > 0 ? session.tenants[0].id : null
 
         if (activeTenantId) {
-          apiClient.setTargetTenant(activeTenantId)
+          apiClient.setActiveTenant(activeTenantId)
         }
 
         setState({
@@ -136,12 +136,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     clearRefreshTimer()
     clearTokens()
+    apiClient.setActiveTenant(null)
     apiClient.setTargetTenant(null)
     setState({ ...initialState, isLoading: false })
   }, [clearRefreshTimer])
 
   const setActiveTenant = useCallback((tenantId: string | null) => {
-    apiClient.setTargetTenant(tenantId)
+    apiClient.setActiveTenant(tenantId)
     setState((prev) => ({ ...prev, activeTenantId: tenantId }))
   }, [])
 

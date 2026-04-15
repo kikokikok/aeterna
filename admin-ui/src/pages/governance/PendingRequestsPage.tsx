@@ -92,9 +92,7 @@ export default function PendingRequestsPage() {
     action: "approve" | "reject"
   }>({ open: false, requestId: "", action: "approve" })
 
-  const { data, isLoading, error, refetch } = useQuery<{
-    items: GovernanceRequest[]
-  }>({
+  const { data, isLoading, error, refetch } = useQuery<GovernanceRequest[]>({
     queryKey: ["governance", "pending", typeFilter],
     queryFn: () => {
       const params = new URLSearchParams()
@@ -104,7 +102,7 @@ export default function PendingRequestsPage() {
     },
   })
 
-  const requests = data?.items ?? []
+  const requests = data ?? []
 
   const statusColor: Record<string, string> = {
     pending: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",

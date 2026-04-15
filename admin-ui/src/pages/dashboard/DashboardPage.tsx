@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/api/client"
+import { useAuth } from "@/auth/AuthContext"
 import type { HealthResponse, GovernanceRequest } from "@/api/types"
 
 interface ExportJob {
@@ -72,13 +73,15 @@ function HealthCard() {
 }
 
 function PendingApprovalsCard() {
-  const { data } = useQuery<{ items: GovernanceRequest[]; total?: number }>({
+  const { isAuthenticated } = useAuth()
+  const { data } = useQuery<GovernanceRequest[]>({
     queryKey: ["governance", "pending"],
     queryFn: () => apiClient.get("/api/v1/govern/pending"),
     refetchInterval: 30_000,
+    enabled: isAuthenticated,
   })
 
-  const count = data?.total ?? data?.items?.length ?? 0
+  const count = data?.length ?? 0
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
@@ -103,6 +106,7 @@ function PendingApprovalsCard() {
 }
 
 function QuickStatsCard() {
+  const { isAuthenticated } = useAuth()
   const { data: stats } = useQuery<{
     tenantCount: number
     userCount: number
@@ -112,6 +116,7 @@ function QuickStatsCard() {
     queryKey: ["admin", "stats"],
     queryFn: () => apiClient.get("/api/v1/admin/stats"),
     refetchInterval: 30_000,
+    enabled: isAuthenticated,
   })
 
   const items = [
@@ -145,13 +150,15 @@ function QuickStatsCard() {
 }
 
 function RecentExportsCard() {
-  const { data } = useQuery<{ items: ExportJob[] }>({
+  const { isAuthenticated } = useAuth()
+  const { data } = useQuery<{ jobs: ExportJob[] }>({
     queryKey: ["admin", "exports"],
     queryFn: () => apiClient.get("/api/v1/admin/exports"),
     refetchInterval: 30_000,
+    enabled: isAuthenticated,
   })
 
-  const jobs = (data?.items ?? []).slice(0, 3)
+  const jobs = (data?.jobs ?? []).slice(0, 3)
 
   const statusBadge = (status: string) => {
     const colors: Record<string, string> = {
