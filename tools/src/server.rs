@@ -40,14 +40,14 @@ use tracing::{Span, debug, error, info, instrument, warn};
 
 pub fn tool_to_cedar_action(tool_name: &str) -> &'static str {
     match tool_name {
-        "memory_add" => "AddMemory",
+        "memory_add" => "CreateMemory",
         "memory_search" => "SearchMemory",
         "memory_delete" => "DeleteMemory",
         "memory_reason" => "ReasonMemory",
         "memory_close" => "CloseMemory",
         "memory_feedback" => "FeedbackMemory",
         "memory_optimize" => "OptimizeMemory",
-        "aeterna_memory_promote" => "AddMemory",
+        "aeterna_memory_promote" => "PromoteMemory",
         "aeterna_memory_auto_promote" => "OptimizeMemory",
 
         "graph_query" => "QueryGraph",
@@ -88,18 +88,18 @@ pub fn tool_to_cedar_action(tool_name: &str) -> &'static str {
         "governance_policy_add" => "EditPolicy",
         "governance_role_assign" => "AssignRoles",
         "governance_role_remove" => "AssignRoles",
-        "governance_hierarchy_navigate" => "ViewGovernance",
+        "governance_hierarchy_navigate" => "ViewGovernanceRequest",
         "governance_configure" => "EditPolicy",
-        "governance_config_get" => "ViewGovernance",
-        "governance_request_create" => "SubmitGovernance",
-        "governance_approve" => "ApprovePolicy",
-        "governance_reject" => "ApprovePolicy",
-        "governance_request_list" => "ViewGovernance",
-        "governance_request_get" => "ViewGovernance",
+        "governance_config_get" => "ViewGovernanceRequest",
+        "governance_request_create" => "SubmitGovernanceRequest",
+        "governance_approve" => "ApproveGovernanceRequest",
+        "governance_reject" => "RejectGovernanceRequest",
+        "governance_request_list" => "ViewGovernanceRequest",
+        "governance_request_get" => "ViewGovernanceRequest",
         "governance_audit_list" => "ViewAuditLog",
         "governance_principal_role_assign" => "AssignRoles",
         "governance_role_revoke" => "AssignRoles",
-        "governance_role_list" => "ViewGovernance",
+        "governance_role_list" => "ViewGovernanceRequest",
 
         "aeterna_policy_propose" => "EditPolicy",
         "aeterna_policy_list_pending" => "ViewGovernance",
@@ -455,9 +455,13 @@ impl McpServer {
                     warn!(tool = %name, "No specific Cedar action mapping; using InvokeMcpTool fallback");
                 }
 
+                let cedar_resource = format!(
+                    "Aeterna::Company::\"{}\"",
+                    tenant_context.tenant_id.as_str()
+                );
                 let auth_result = self
                     .auth_service
-                    .check_permission(&tenant_context, cedar_action, &name)
+                    .check_permission(&tenant_context, cedar_action, &cedar_resource)
                     .await;
 
                 match auth_result {
