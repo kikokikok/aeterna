@@ -173,19 +173,18 @@ async fn search_handler(
             // Touch last_accessed_at for returned entries so importance decay
             // knows when a memory was last useful.
             if !items.is_empty() {
-                let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+                let ids: Vec<String> = items.iter().map(|i| i.id.clone()).collect();
                 let now_epoch = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs() as i64;
-                // Fire-and-forget — a failed timestamp update must not break search.
                 let pool = state.postgres.pool().clone();
                 tokio::spawn(async move {
                     let res = sqlx::query(
                         "UPDATE memory_entries SET last_accessed_at = $1 WHERE id = ANY($2)",
                     )
                     .bind(now_epoch)
-                    .bind(&ids.iter().map(|s| s.to_string()).collect::<Vec<String>>())
+                    .bind(&ids)
                     .execute(&pool)
                     .await;
                     if let Err(e) = res {

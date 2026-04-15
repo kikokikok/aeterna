@@ -1004,6 +1004,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(handle_confirm_import),
         )
         .route("/admin/imports", get(handle_list_imports))
+        .route("/admin/stats", get(handle_admin_stats))
         .with_state(state)
 }
 
@@ -1429,6 +1430,58 @@ async fn handle_list_imports(
 
     let jobs = import_store().list_all().await;
     (StatusCode::OK, Json(json!({ "jobs": jobs }))).into_response()
+}
+
+#[tracing::instrument(skip_all)]
+async fn handle_admin_stats(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let ctx = match authenticated_tenant_context(&state, &headers).await {
+        Ok(ctx) => ctx,
+        Err(resp) => return resp,
+    };
+    let pool = state.postgres.pool();
+    let tenant_id = ctx.tenant_id.as_str();
+
+    let tenant_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM tenants WHERE status != 'inactive'")
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
+
+    let user_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT u.id) FROM users u JOIN user_roles ur ON ur.user_id = u.id WHERE ur.tenant_id = $1",
+    )
+    .bind(tenant_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    let memory_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM memory_entries WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
+
+    let knowledge_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM knowledge_items WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "tenantCount": tenant_count,
+            "userCount": user_count,
+            "memoryCount": memory_count,
+            "knowledgeCount": knowledge_count,
+        })),
+    )
+        .into_response()
 }
 
 // ---------------------------------------------------------------------------

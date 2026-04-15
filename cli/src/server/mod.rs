@@ -9,6 +9,7 @@ pub mod knowledge_api;
 pub mod lifecycle;
 pub mod lifecycle_api;
 pub mod mcp_transport;
+pub mod memory_api;
 pub mod metrics;
 pub mod org_api;
 pub mod plugin_auth;

@@ -40,7 +40,7 @@ export default function KnowledgeSearchPage() {
   }>({
     queryKey: ["knowledge", "search", submittedQuery, typeFilter, layerFilter],
     queryFn: () =>
-      apiClient.post("/api/v1/knowledge/search", {
+      apiClient.post("/api/v1/knowledge/query", {
         query: submittedQuery,
         ...(typeFilter && { kind: typeFilter }),
         ...(layerFilter && { layer: layerFilter }),

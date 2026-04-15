@@ -7,7 +7,8 @@ use axum::routing::{delete, get};
 use axum::{Json, Router};
 use mk_core::traits::StorageBackend;
 use mk_core::types::{
-    OrganizationalUnit, RecordSource, Role, SYSTEM_USER_ID, TenantContext, UnitType,
+    KnowledgeLayer, OrganizationalUnit, Policy, PolicyMode, RecordSource, Role, RuleMergeStrategy,
+    SYSTEM_USER_ID, TenantContext, UnitType,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -96,6 +97,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/govern/audit", get(list_audit))
         .route("/govern/roles", get(list_roles).post(assign_role))
         .route("/govern/roles/{principal}/{role}", delete(revoke_role))
+        .route("/govern/policies", get(list_policies).post(create_policy))
         .with_state(state)
 }
 
@@ -854,13 +856,7 @@ async fn resolve_company_scope(
             }
             id
         }
-        _ => {
-            return Err(error_response(
-                StatusCode::CONFLICT,
-                "ambiguous_company_scope",
-                "Multiple company units exist for the target tenant",
-            ));
-        }
+        companies => companies[0].id.clone(),
     };
     Uuid::parse_str(&company_id_str).map_err(|_| {
         error_response(
@@ -937,6 +933,107 @@ fn govern_scope_string(entry: &storage::governance::GovernanceRole) -> String {
 
 fn actor_uuid(value: &str) -> Uuid {
     Uuid::parse_str(value).unwrap_or_else(|_| Uuid::new_v5(&Uuid::NAMESPACE_URL, value.as_bytes()))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreatePolicyRequest {
+    name: String,
+    description: Option<String>,
+    layer: Option<String>,
+    mode: Option<String>,
+}
+
+async fn list_policies(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let ctx = match require_admin_context(&state, &headers).await {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+    let company_id = match resolve_company_scope(&state, &ctx).await {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
+    match state
+        .postgres
+        .get_unit_policies(&ctx, company_id.to_string().as_str())
+        .await
+    {
+        Ok(policies) => Json(json!({ "policies": policies })).into_response(),
+        Err(err) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "policy_list_failed",
+            &err.to_string(),
+        ),
+    }
+}
+
+async fn create_policy(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<CreatePolicyRequest>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_context(&state, &headers).await {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+    let company_id = match resolve_company_scope(&state, &ctx).await {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
+    let layer = match body.layer.as_deref().unwrap_or("company") {
+        "company" => KnowledgeLayer::Company,
+        "org" | "organization" => KnowledgeLayer::Org,
+        "team" => KnowledgeLayer::Team,
+        "project" => KnowledgeLayer::Project,
+        other => {
+            return error_response(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_layer",
+                &format!("Unsupported policy layer: {other}"),
+            );
+        }
+    };
+    let mode = match body.mode.as_deref().unwrap_or("optional") {
+        "mandatory" => PolicyMode::Mandatory,
+        "optional" => PolicyMode::Optional,
+        other => {
+            return error_response(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_mode",
+                &format!("Unsupported policy mode: {other}"),
+            );
+        }
+    };
+    let policy = Policy {
+        id: Uuid::new_v4().to_string(),
+        name: body.name,
+        description: body.description,
+        layer,
+        mode,
+        merge_strategy: RuleMergeStrategy::Merge,
+        rules: vec![],
+        metadata: std::collections::HashMap::new(),
+    };
+    let policy_id = policy.id.clone();
+    match state
+        .postgres
+        .add_unit_policy(&ctx, company_id.to_string().as_str(), &policy)
+        .await
+    {
+        Ok(()) => (
+            StatusCode::CREATED,
+            Json(json!({ "id": policy_id, "name": policy.name })),
+        )
+            .into_response(),
+        Err(err) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "policy_create_failed",
+            &err.to_string(),
+        ),
+    }
 }
 
 fn error_response(status: StatusCode, error: &str, message: &str) -> axum::response::Response {

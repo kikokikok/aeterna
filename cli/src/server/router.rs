@@ -16,8 +16,8 @@ use tower_http::trace::TraceLayer;
 use super::auth_middleware::AuthenticationLayer;
 use super::{
     AppState, admin_sync, backup_api, govern_api, health, knowledge_api, lifecycle_api,
-    mcp_transport, org_api, plugin_auth, project_api, role_grants, sessions, sync, team_api,
-    tenant_api, user_api, webhooks,
+    mcp_transport, memory_api, org_api, plugin_auth, project_api, role_grants, sessions, sync,
+    team_api, tenant_api, user_api, webhooks,
 };
 
 pub fn build_router(state: Arc<AppState>) -> Router {
@@ -46,6 +46,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .nest("/admin", role_grants::router(state.clone()))
         .merge(govern_api::router(state.clone()))
         .merge(sync::router(state.clone()))
+        .merge(memory_api::router(state.clone()))
         .merge(backup_api::router(state.clone()))
         .merge(lifecycle_api::router(state.clone()))
         .merge(plugin_auth::admin_session_router(state.clone()))

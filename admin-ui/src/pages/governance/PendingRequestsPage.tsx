@@ -21,7 +21,7 @@ function ActionDialog({
 
   const doAction = useMutation({
     mutationFn: () =>
-      apiClient.post(`/api/v1/govern/${requestId}/${action}`, {
+      apiClient.post(`/api/v1/govern/${action}/${requestId}`, {
         comment: comment || undefined,
       }),
     onSuccess: () => {

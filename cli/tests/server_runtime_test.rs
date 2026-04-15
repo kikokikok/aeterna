@@ -3508,3 +3508,238 @@ async fn govern_status_config_audit_and_pending() {
     .unwrap();
     assert_eq!(body["error"], "reason_required");
 }
+
+// ─── Test: GET /api/v1/admin/stats ───────────────────────────────────────────
+
+#[tokio::test]
+async fn admin_stats_returns_counts() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let tenant_id = TenantId::new("default".to_string()).unwrap();
+    let _company_id = seed_company_unit(&state, &tenant_id).await;
+    let app = router::build_router(state);
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/admin/stats")
+                .header("x-user-id", "admin-user")
+                .header("x-user-role", "admin")
+                .header("x-tenant-id", "default")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        body["tenantCount"].is_number(),
+        "tenantCount must be a number"
+    );
+    assert!(body["userCount"].is_number(), "userCount must be a number");
+    assert!(
+        body["memoryCount"].is_number(),
+        "memoryCount must be a number"
+    );
+    assert!(
+        body["knowledgeCount"].is_number(),
+        "knowledgeCount must be a number"
+    );
+}
+
+// ─── Test: GET + POST /api/v1/govern/policies ────────────────────────────────
+
+#[tokio::test]
+async fn govern_policies_list_and_create() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let tenant_id = TenantId::new("default".to_string()).unwrap();
+    let _company_id = seed_company_unit(&state, &tenant_id).await;
+    let app = router::build_router(state);
+
+    // GET /govern/policies – empty list initially
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/govern/policies")
+                .header("x-user-id", "admin-user")
+                .header("x-user-role", "admin")
+                .header("x-tenant-id", "default")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(body["policies"].is_array(), "policies must be an array");
+
+    // POST /govern/policies – create a new policy
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/govern/policies")
+                .header("x-user-id", "admin-user")
+                .header("x-user-role", "admin")
+                .header("x-tenant-id", "default")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "name": "test-policy",
+                        "description": "integration test policy",
+                        "layer": "company",
+                        "mode": "optional"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(body["id"].is_string(), "id must be a string");
+    assert_eq!(body["name"], "test-policy");
+
+    // POST /govern/policies – invalid layer returns 422
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/govern/policies")
+                .header("x-user-id", "admin-user")
+                .header("x-user-role", "admin")
+                .header("x-tenant-id", "default")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({ "name": "bad", "layer": "unknown_layer" }))
+                        .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "invalid_layer");
+}
+
+// ─── Test: POST /api/v1/memory/search is reachable ───────────────────────────
+
+#[tokio::test]
+async fn memory_search_route_is_mounted() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/memory/search")
+                .header("x-user-id", "admin-user")
+                .header("x-user-role", "admin")
+                .header("x-tenant-id", "default")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({ "query": "test", "limit": 5 })).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // The route must exist – 404 is the only unacceptable status
+    assert_ne!(
+        resp.status(),
+        StatusCode::NOT_FOUND,
+        "POST /api/v1/memory/search must be mounted"
+    );
+}
+
+// ─── Test: govern/approve and govern/reject path order ───────────────────────
+
+#[tokio::test]
+async fn govern_approve_reject_path_order() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let tenant_id = TenantId::new("default".to_string()).unwrap();
+    let _company_id = seed_company_unit(&state, &tenant_id).await;
+    let app = router::build_router(state);
+
+    // /govern/approve/{id} must be routable (not 404 / 405)
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/govern/approve/00000000-0000-0000-0000-000000000001")
+                .header("x-user-id", "admin-user")
+                .header("x-user-role", "admin")
+                .header("x-tenant-id", "default")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({ "comment": "lgtm" })).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(resp.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_ne!(resp.status(), StatusCode::NOT_FOUND);
+
+    // /govern/reject/{id} must be routable (not 404 / 405)
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/govern/reject/00000000-0000-0000-0000-000000000001")
+                .header("x-user-id", "admin-user")
+                .header("x-user-role", "admin")
+                .header("x-tenant-id", "default")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({ "reason": "not good" })).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(resp.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_ne!(resp.status(), StatusCode::NOT_FOUND);
+}
