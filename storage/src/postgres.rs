@@ -135,7 +135,7 @@ impl PostgresBackend {
                 event_type TEXT NOT NULL,
                 tenant_id TEXT NOT NULL,
                 payload JSONB NOT NULL,
-                timestamp BIGINT NOT NULL
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )",
         )
         .execute(&self.pool)
@@ -1557,13 +1557,12 @@ impl PostgresBackend {
         };
 
         sqlx::query(
-            "INSERT INTO governance_events (event_type, tenant_id, payload, timestamp)
-             VALUES ($1, $2, $3, $4)",
+            "INSERT INTO governance_events (event_type, tenant_id, payload)
+             VALUES ($1, $2, $3)",
         )
         .bind(event_type)
         .bind(tenant_id.as_str())
         .bind(serde_json::to_value(event)?)
-        .bind(timestamp)
         .execute(&self.pool)
         .await?;
 
@@ -1578,8 +1577,8 @@ impl PostgresBackend {
     ) -> Result<Vec<mk_core::types::GovernanceEvent>, PostgresError> {
         let rows = sqlx::query(
             "SELECT payload FROM governance_events 
-             WHERE tenant_id = $1 AND timestamp > $2 
-             ORDER BY timestamp ASC LIMIT $3",
+             WHERE tenant_id = $1 AND EXTRACT(EPOCH FROM created_at)::BIGINT > $2 
+             ORDER BY created_at ASC LIMIT $3",
         )
         .bind(ctx.tenant_id.as_str())
         .bind(since_timestamp)

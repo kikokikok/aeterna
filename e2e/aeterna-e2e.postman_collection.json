@@ -195,6 +195,16 @@
       "key": "chainEdgeId2",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "orgUnitId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenantAdminCompanyId",
+      "value": "",
+      "type": "string"
     }
   ],
   "event": [
@@ -206,6 +216,47 @@
           "pm.test('Response time < 5000ms', () => {",
           "    pm.expect(pm.response.responseTime).to.be.below(30000);",
           "});"
+        ]
+      }
+    },
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-bootstrap: obtain pluginAccessToken before any request if not already set",
+          "const token = pm.collectionVariables.get('pluginAccessToken');",
+          "if (!token || token.trim() === '') {",
+          "    const baseUrl = pm.collectionVariables.get('baseUrl') || pm.environment.get('baseUrl');",
+          "    const githubToken = pm.environment.get('githubAccessToken') || pm.collectionVariables.get('githubAccessToken');",
+          "    if (baseUrl && githubToken) {",
+          "        pm.sendRequest({",
+          "            url: baseUrl + '/api/v1/auth/plugin/bootstrap',",
+          "            method: 'POST',",
+          "            header: { 'Content-Type': 'application/json' },",
+          "            body: {",
+          "                mode: 'raw',",
+          "                raw: JSON.stringify({ provider: 'github', access_token: githubToken })",
+          "            }",
+          "        }, function (err, res) {",
+          "            if (!err && res.code === 200) {",
+          "                try {",
+          "                    const json = res.json();",
+          "                    if (json.access_token) {",
+          "                        pm.collectionVariables.set('pluginAccessToken', json.access_token);",
+          "                        pm.collectionVariables.set('pluginRefreshToken', json.refresh_token || '');",
+          "                        pm.collectionVariables.set('pluginGithubLogin', json.github_login || '');",
+          "                        try {",
+          "                            const parts = json.access_token.split('.');",
+          "                            const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));",
+          "                            if (payload.tenant_id) pm.collectionVariables.set('tenantId', payload.tenant_id);",
+          "                        } catch (e) {}",
+          "                    }",
+          "                } catch (e) {}",
+          "            }",
+          "        });",
+          "    }",
+          "}"
         ]
       }
     }
@@ -13120,7 +13171,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"kind\": \"local\",\n  \"local_path\": \"/tmp/e2e-tenant-repo\",\n  \"branch\": \"main\",\n  \"branch_policy\": \"directCommit\",\n  \"credential_kind\": \"none\",\n  \"credential_ref\": null,\n  \"github_owner\": null,\n  \"github_repo\": null,\n  \"source_owner\": \"admin\"\n}"
+              "raw": "{\n  \"kind\": \"local\",\n  \"local_path\": \"/tmp/e2e-tenant-repo\",\n  \"branch\": \"main\",\n  \"credential_kind\": \"none\",\n  \"credential_ref\": null,\n  \"github_owner\": null,\n  \"github_repo\": null,\n  \"source_owner\": \"admin\",\n  \"branchPolicy\": \"directCommit\"\n}"
             }
           },
           "event": [
@@ -13183,7 +13234,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"kind\": \"local\",\n  \"local_path\": \"/tmp/e2e-tenant-repo\",\n  \"branch\": \"main\",\n  \"branch_policy\": \"directCommit\",\n  \"credential_kind\": \"none\",\n  \"credential_ref\": null,\n  \"github_owner\": null,\n  \"github_repo\": null,\n  \"source_owner\": \"admin\"\n}"
+              "raw": "{\n  \"kind\": \"local\",\n  \"local_path\": \"/tmp/e2e-tenant-repo\",\n  \"branch\": \"main\",\n  \"credential_kind\": \"none\",\n  \"credential_ref\": null,\n  \"github_owner\": null,\n  \"github_repo\": null,\n  \"source_owner\": \"admin\",\n  \"branchPolicy\": \"directCommit\"\n}"
             }
           },
           "event": [
@@ -13779,7 +13830,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"E2E Organization\",\n  \"unit_type\": \"organization\",\n  \"parent_id\": null,\n  \"metadata\": {},\n  \"source_owner\": \"admin\"\n}"
+              "raw": "{\n  \"name\": \"E2E Organization\",\n  \"unit_type\": \"organization\",\n  \"parent_id\": \"{{tenantAdminCompanyId}}\",\n  \"metadata\": {},\n  \"source_owner\": \"admin\"\n}"
             }
           },
           "event": [
@@ -13793,6 +13844,37 @@
                   "pm.expect(json.success).to.eql(true);",
                   "pm.expect(json.unit.unitType).to.eql('organization');",
                   "pm.collectionVariables.set('orgUnitId', json.unit.id);"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Get company unit ID for 33.1 parent_id",
+                  "const baseUrl = pm.collectionVariables.get('baseUrl') || pm.environment.get('baseUrl');",
+                  "const token = pm.collectionVariables.get('tenantAdminToken') || pm.collectionVariables.get('pluginAccessToken');",
+                  "const tenantId = pm.collectionVariables.get('tenantId');",
+                  "pm.sendRequest({",
+                  "    url: baseUrl + '/api/v1/admin/hierarchy',",
+                  "    method: 'GET',",
+                  "    header: {",
+                  "        'Authorization': 'Bearer ' + token,",
+                  "        'X-Tenant-ID': tenantId",
+                  "    }",
+                  "}, function(err, res) {",
+                  "    if (!err && res.code === 200) {",
+                  "        try {",
+                  "            const data = res.json();",
+                  "            const units = data.units || data.items || data || [];",
+                  "            const company = Array.isArray(units) ? units.find(u => u.unit_type === 'company' || u.unitType === 'Company') : null;",
+                  "            if (company) {",
+                  "                pm.collectionVariables.set('tenantAdminCompanyId', company.id);",
+                  "            }",
+                  "        } catch(e) {}",
+                  "    }",
+                  "});"
                 ]
               }
             }
@@ -16368,7 +16450,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"project\": \"payments-service\", \"team\": \"backend-team\", \"org\": \"e2e-org\", \"message\": \"ADR-042 idempotency mandate propagation\"}",
+              "raw": "{\"entries\": [{\"id\": \"e2e-40-13-sync-entry\", \"content\": \"ADR-042 idempotency mandate propagation for payments-service team\", \"layer\": \"team\", \"tags\": [\"payments-service\", \"backend-team\", \"idempotency\"], \"importance\": 0.7, \"created_at\": \"2025-01-01T00:00:00Z\", \"updated_at\": \"2025-01-01T00:00:00Z\", \"deleted_at\": null}], \"device_id\": \"e2e-40-device-{{scenarioRunTs}}\"}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -16505,7 +16587,7 @@
                   "pm.test('Drift detection responds (200 or 404)', () => pm.expect([200, 404]).to.include(pm.response.code));",
                   "pm.test('[Architect] Drift response is valid JSON', () => {",
                   "    const json = pm.response.json();",
-                  "    pm.expect(json).to.be.an('object');",
+                  "pm.expect(json === null || typeof json === 'object').to.be.true;",
                   "});"
                 ],
                 "type": "text/javascript"

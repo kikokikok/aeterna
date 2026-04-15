@@ -1919,7 +1919,7 @@ async fn export_governance_events(
     let rows: Vec<serde_json::Value> = if scope == "full" {
         if let Some(since_ts) = since {
             sqlx::query_scalar(
-                "SELECT row_to_json(t) FROM (SELECT id, event_type, tenant_id, payload, timestamp FROM governance_events WHERE timestamp >= $1 ORDER BY timestamp) t",
+                "SELECT row_to_json(t) FROM (SELECT id, event_type, tenant_id, payload, EXTRACT(EPOCH FROM created_at)::BIGINT AS timestamp FROM governance_events WHERE EXTRACT(EPOCH FROM created_at)::BIGINT >= $1 ORDER BY created_at) t",
             )
             .bind(since_ts)
             .fetch_all(pool)
@@ -1927,7 +1927,7 @@ async fn export_governance_events(
             .unwrap_or_default()
         } else {
             sqlx::query_scalar(
-                "SELECT row_to_json(t) FROM (SELECT id, event_type, tenant_id, payload, timestamp FROM governance_events ORDER BY timestamp) t",
+                "SELECT row_to_json(t) FROM (SELECT id, event_type, tenant_id, payload, EXTRACT(EPOCH FROM created_at)::BIGINT AS timestamp FROM governance_events ORDER BY created_at) t",
             )
             .fetch_all(pool)
             .await
@@ -1935,7 +1935,7 @@ async fn export_governance_events(
         }
     } else if let Some(since_ts) = since {
         sqlx::query_scalar(
-            "SELECT row_to_json(t) FROM (SELECT id, event_type, tenant_id, payload, timestamp FROM governance_events WHERE tenant_id = $1 AND timestamp >= $2 ORDER BY timestamp) t",
+            "SELECT row_to_json(t) FROM (SELECT id, event_type, tenant_id, payload, EXTRACT(EPOCH FROM created_at)::BIGINT AS timestamp FROM governance_events WHERE tenant_id = $1 AND EXTRACT(EPOCH FROM created_at)::BIGINT >= $2 ORDER BY created_at) t",
         )
         .bind(tenant_id)
         .bind(since_ts)
@@ -1944,7 +1944,7 @@ async fn export_governance_events(
         .unwrap_or_default()
     } else {
         sqlx::query_scalar(
-            "SELECT row_to_json(t) FROM (SELECT id, event_type, tenant_id, payload, timestamp FROM governance_events WHERE tenant_id = $1 ORDER BY timestamp) t",
+            "SELECT row_to_json(t) FROM (SELECT id, event_type, tenant_id, payload, EXTRACT(EPOCH FROM created_at)::BIGINT AS timestamp FROM governance_events WHERE tenant_id = $1 ORDER BY created_at) t",
         )
         .bind(tenant_id)
         .fetch_all(pool)

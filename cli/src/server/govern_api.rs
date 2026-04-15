@@ -6,7 +6,9 @@ use axum::response::IntoResponse;
 use axum::routing::{delete, get};
 use axum::{Json, Router};
 use mk_core::traits::StorageBackend;
-use mk_core::types::{Role, SYSTEM_USER_ID, TenantContext, UnitType};
+use mk_core::types::{
+    OrganizationalUnit, RecordSource, Role, SYSTEM_USER_ID, TenantContext, UnitType,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use storage::governance::{
@@ -828,14 +830,29 @@ async fn resolve_company_scope(
         .into_iter()
         .filter(|unit| unit.tenant_id == ctx.tenant_id && unit.unit_type == UnitType::Company)
         .collect();
-    let company = match companies.as_slice() {
-        [company] => company,
+    let company_id_str = match companies.as_slice() {
+        [company] => company.id.clone(),
         [] => {
-            return Err(error_response(
-                StatusCode::NOT_FOUND,
-                "company_not_found",
-                "No company unit exists for the target tenant",
-            ));
+            let new_unit = OrganizationalUnit {
+                id: Uuid::new_v4().to_string(),
+                name: ctx.tenant_id.to_string(),
+                unit_type: UnitType::Company,
+                parent_id: None,
+                tenant_id: ctx.tenant_id.clone(),
+                metadata: Default::default(),
+                source_owner: RecordSource::Admin,
+                created_at: chrono::Utc::now().timestamp(),
+                updated_at: chrono::Utc::now().timestamp(),
+            };
+            let id = new_unit.id.clone();
+            if let Err(err) = state.postgres.create_unit(&new_unit).await {
+                return Err(error_response(
+                    StatusCode::NOT_FOUND,
+                    "company_not_found",
+                    &format!("No company unit exists and auto-creation failed: {err}"),
+                ));
+            }
+            id
         }
         _ => {
             return Err(error_response(
@@ -845,7 +862,7 @@ async fn resolve_company_scope(
             ));
         }
     };
-    Uuid::parse_str(&company.id).map_err(|_| {
+    Uuid::parse_str(&company_id_str).map_err(|_| {
         error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
             "invalid_company_id",
