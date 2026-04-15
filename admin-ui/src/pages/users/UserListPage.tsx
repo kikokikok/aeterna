@@ -106,8 +106,8 @@ export default function UserListPage() {
   const users: UserRecord[] = Array.isArray(data) ? data : (data?.items ?? [])
   const filtered = users.filter(
     (u) =>
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()),
+      (u.name?.toLowerCase() ?? "").includes(search.toLowerCase()) ||
+      (u.email?.toLowerCase() ?? "").includes(search.toLowerCase()),
   )
 
   return (
@@ -184,15 +184,15 @@ export default function UserListPage() {
                   >
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
                       <div className="flex items-center gap-3">
-                        {user.avatar_url ? (
+                        {user.avatarUrl ? (
                           <img
-                            src={user.avatar_url}
+                            src={user.avatarUrl}
                             alt=""
                             className="h-8 w-8 rounded-full"
                           />
                         ) : (
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                            {user.name.charAt(0).toUpperCase()}
+                            {user.name?.charAt(0)?.toUpperCase() ?? "?"}
                           </div>
                         )}
                         <span className="font-medium text-gray-900 dark:text-gray-100">

@@ -3,16 +3,16 @@ export interface TenantRecord {
   slug: string
   name: string
   status: string
-  created_at: string
-  updated_at: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface OrganizationalUnit {
   id: string
   name: string
-  unit_type: string
-  parent_id: string | null
-  tenant_id: string
+  unitType: string
+  parentId: string | null
+  tenantId: string
   metadata: Record<string, unknown>
 }
 
@@ -20,7 +20,7 @@ export interface UserRecord {
   id: string
   email: string
   name: string
-  avatar_url: string | null
+  avatarUrl: string | null
   status: string
 }
 
@@ -55,10 +55,10 @@ export interface MemoryEntry {
   id: string
   content: string
   layer: MemoryLayer
-  importance_score: number
+  importanceScore: number
   metadata: Record<string, unknown>
-  created_at: string
-  updated_at: string
+  createdAt: string
+  updatedAt: string
 }
 
 export type KnowledgeLayer = "Company" | "Organization" | "Team" | "Project"
@@ -95,7 +95,7 @@ export interface GovernanceRequest {
   id: string
   request_type: string
   status: string
-  requestor: string
+  requestor_id: string
   created_at: string
 }
 
@@ -104,7 +104,7 @@ export interface GovernanceEvent {
   action: string
   actor: string
   resource_type: string
-  resource_id: string
+  resource_id: string | null
   timestamp: string
   details: Record<string, unknown>
 }

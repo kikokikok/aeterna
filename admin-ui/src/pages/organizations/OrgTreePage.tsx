@@ -45,7 +45,7 @@ function OrgNode({ unit, children, allUnits, onSelect, selectedId }: OrgNodeProp
         </button>
         <span className="font-medium text-gray-900 dark:text-gray-100">{unit.name}</span>
         <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400">
-          {unit.unit_type}
+          {unit.unitType}
         </span>
       </div>
       {expanded && hasChildren && (
@@ -54,7 +54,7 @@ function OrgNode({ unit, children, allUnits, onSelect, selectedId }: OrgNodeProp
             <OrgNode
               key={child.id}
               unit={child}
-              children={allUnits.filter((u) => u.parent_id === child.id)}
+              children={allUnits.filter((u) => u.parentId === child.id)}
               allUnits={allUnits}
               onSelect={onSelect}
               selectedId={selectedId}
@@ -161,7 +161,7 @@ function DetailPanel({ unit }: { unit: OrganizationalUnit }) {
     <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{unit.name}</h3>
       <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        Type: {unit.unit_type} | ID: {unit.id.slice(0, 8)}
+        Type: {unit.unitType} | ID: {unit.id?.slice(0, 8)}
       </p>
 
       <div className="mt-4">
@@ -210,7 +210,7 @@ export default function OrgTreePage() {
   })
 
   const units: OrganizationalUnit[] = Array.isArray(data) ? data : (data?.items ?? [])
-  const roots = units.filter((u) => !u.parent_id)
+  const roots = units.filter((u) => !u.parentId)
 
   return (
     <div>
@@ -253,7 +253,7 @@ export default function OrgTreePage() {
                 <OrgNode
                   key={root.id}
                   unit={root}
-                  children={units.filter((u) => u.parent_id === root.id)}
+                  children={units.filter((u) => u.parentId === root.id)}
                   allUnits={units}
                   onSelect={setSelected}
                   selectedId={selected?.id ?? null}

@@ -5,25 +5,25 @@ import { useState } from 'react'
 
 interface RemediationRequest {
   id: string
-  requestType: string
-  riskTier: string
-  entityType: string
-  entityIds: string[]
-  tenantId: string | null
+  request_type: string
+  risk_tier: string
+  entity_type: string
+  entity_ids: string[]
+  tenant_id: string | null
   description: string
-  proposedAction: string
-  detectedBy: string
+  proposed_action: string
+  detected_by: string
   status: string
-  createdAt: number
-  reviewedBy: string | null
-  reviewedAt: number | null
-  resolutionNotes: string | null
+  created_at: number
+  reviewed_by: string | null
+  reviewed_at: number | null
+  resolution_notes: string | null
 }
 
 interface LifecycleStatus {
   enabled: boolean
-  tasks: Record<string, { lastRun: string | null; nextRun: string | null; interval: string }>
-  remediationSummary: { pending: number; approved: number; rejected: number; expired: number }
+  tasks: Record<string, { last_run: string | null; next_run: string | null; interval: string }>
+  remediation_summary: { pending: number; approved: number; rejected: number; expired: number }
 }
 
 function statusBadge(status: string) {
@@ -42,15 +42,16 @@ function statusBadge(status: string) {
   )
 }
 
-function riskBadge(tier: string) {
+function riskBadge(tier: string | null | undefined) {
   const colors: Record<string, string> = {
     auto_execute: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
     notify_and_execute: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
     require_approval: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
   }
+  const t = tier ?? ''
   return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${colors[tier] || 'bg-gray-100 text-gray-800'}`}>
-      {tier.replace(/_/g, ' ')}
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${colors[t] || 'bg-gray-100 text-gray-800'}`}>
+      {t.replace(/_/g, ' ')}
     </span>
   )
 }
@@ -116,7 +117,7 @@ export default function LifecyclePage() {
             <Clock className="w-4 h-4" /> Pending Remediations
           </div>
           <div className="text-lg font-semibold text-yellow-600 dark:text-yellow-400">
-            {statusLoading ? '...' : status?.remediationSummary?.pending || 0}
+            {statusLoading ? '...' : status?.remediation_summary?.pending || 0}
           </div>
         </div>
 
@@ -125,7 +126,7 @@ export default function LifecyclePage() {
             <CheckCircle className="w-4 h-4" /> Approved
           </div>
           <div className="text-lg font-semibold text-green-600 dark:text-green-400">
-            {statusLoading ? '...' : status?.remediationSummary?.approved || 0}
+            {statusLoading ? '...' : status?.remediation_summary?.approved || 0}
           </div>
         </div>
 
@@ -134,7 +135,7 @@ export default function LifecyclePage() {
             <XCircle className="w-4 h-4" /> Rejected / Expired
           </div>
           <div className="text-lg font-semibold text-gray-600 dark:text-gray-400">
-            {statusLoading ? '...' : (status?.remediationSummary?.rejected || 0) + (status?.remediationSummary?.expired || 0)}
+            {statusLoading ? '...' : (status?.remediation_summary?.rejected || 0) + (status?.remediation_summary?.expired || 0)}
           </div>
         </div>
       </div>
@@ -172,15 +173,15 @@ export default function LifecyclePage() {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {remediations.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-900">
-                    <td className="px-4 py-3 text-gray-900 dark:text-white">{r.requestType}</td>
-                    <td className="px-4 py-3">{riskBadge(r.riskTier)}</td>
+                    <td className="px-4 py-3 text-gray-900 dark:text-white">{r.request_type}</td>
+                    <td className="px-4 py-3">{riskBadge(r.risk_tier)}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                      {r.entityType} ({r.entityIds.length} items)
+                      {r.entity_type} ({r.entity_ids?.length ?? 0} items)
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400 max-w-xs truncate">{r.description}</td>
                     <td className="px-4 py-3">{statusBadge(r.status)}</td>
                     <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
-                      {new Date(r.createdAt * 1000).toLocaleString()}
+                      {new Date(r.created_at * 1000).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
                       {r.status === 'pending' && (
@@ -230,8 +231,8 @@ export default function LifecyclePage() {
                   <tr key={name} className="hover:bg-gray-50 dark:hover:bg-gray-900">
                     <td className="px-4 py-3 text-gray-900 dark:text-white font-medium">{name.replace(/_/g, ' ')}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{task.interval}</td>
-                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{task.lastRun || 'Never'}</td>
-                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{task.nextRun || 'N/A'}</td>
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{task.last_run || 'Never'}</td>
+                     <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{task.next_run || 'N/A'}</td>
                   </tr>
                 ))}
               </tbody>

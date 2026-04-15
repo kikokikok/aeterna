@@ -182,7 +182,7 @@ export default function PendingRequestsPage() {
                       {req.request_type}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                      {req.requestor}
+                      {req.requestor_id}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                       {new Date(req.created_at).toLocaleDateString()}
@@ -191,14 +191,14 @@ export default function PendingRequestsPage() {
                       <span
                         className={cn(
                           "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                          statusColor[req.status.toLowerCase()] ?? "bg-gray-100 text-gray-700",
+                          statusColor[req.status?.toLowerCase() ?? ""] ?? "bg-gray-100 text-gray-700",
                         )}
                       >
                         {req.status}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
-                      {req.status.toLowerCase() === "pending" && (
+                      {req.status?.toLowerCase() === "pending" && (
                         <div className="flex justify-end gap-2">
                           <button
                             onClick={() =>

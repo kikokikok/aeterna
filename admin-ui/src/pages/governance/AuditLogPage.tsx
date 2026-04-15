@@ -141,9 +141,11 @@ export default function AuditLogPage() {
                       {event.resource_type}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-sm text-gray-500 dark:text-gray-400">
-                      {event.resource_id.length > 12
-                        ? `${event.resource_id.slice(0, 12)}...`
-                        : event.resource_id}
+                      {event.resource_id != null
+                        ? event.resource_id.length > 12
+                          ? `${event.resource_id.slice(0, 12)}...`
+                          : event.resource_id
+                        : '—'}
                     </td>
                   </tr>
                 ))

@@ -115,8 +115,8 @@ function TenantListPageContent() {
   const tenants = (data?.items ?? (Array.isArray(data) ? data : [])) as TenantRecord[]
   const filtered = tenants.filter(
     (t) =>
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.slug.toLowerCase().includes(search.toLowerCase()),
+      (t.name?.toLowerCase() ?? "").includes(search.toLowerCase()) ||
+      (t.slug?.toLowerCase() ?? "").includes(search.toLowerCase()),
   )
 
   if (isLoading) {
@@ -200,9 +200,9 @@ function TenantListPageContent() {
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm">
                     <span
-                      className={cn(
+                        className={cn(
                         "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                        tenant.status === "active"
+                        tenant.status?.toLowerCase() === "active"
                           ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
                           : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
                       )}
@@ -211,7 +211,7 @@ function TenantListPageContent() {
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                    {new Date(tenant.created_at).toLocaleDateString()}
+                    {new Date(tenant.createdAt).toLocaleDateString()}
                   </td>
                 </tr>
               ))

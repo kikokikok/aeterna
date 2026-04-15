@@ -37,7 +37,7 @@ function OverviewTab({ tenant }: { tenant: TenantRecord }) {
             <span
               className={cn(
                 "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                tenant.status === "active"
+                tenant.status?.toLowerCase() === "active"
                   ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
                   : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
               )}
@@ -49,12 +49,12 @@ function OverviewTab({ tenant }: { tenant: TenantRecord }) {
         <div>
           <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</dt>
           <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-            {new Date(tenant.created_at).toLocaleString()}
+            {new Date(tenant.createdAt).toLocaleString()}
           </dd>
         </div>
       </div>
       <div className="flex gap-3">
-        {tenant.status === "active" && (
+        {tenant.status?.toLowerCase() === "active" && (
           <button
             onClick={() => deactivate.mutate()}
             disabled={deactivate.isPending}

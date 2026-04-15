@@ -183,7 +183,7 @@ export default function MemorySearchPage() {
                     {entry.layer}
                   </span>
                   <span className="text-xs text-gray-500 dark:text-gray-400">
-                    Importance: {entry.importance_score.toFixed(2)}
+                    Importance: {(entry.importanceScore ?? 0).toFixed(2)}
                   </span>
                   {entry.relevance_score !== undefined && (
                     <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -191,7 +191,7 @@ export default function MemorySearchPage() {
                     </span>
                   )}
                   <span className="text-xs text-gray-400">
-                    {new Date(entry.created_at).toLocaleDateString()}
+                    {new Date(entry.createdAt).toLocaleDateString()}
                   </span>
                 </div>
               </div>

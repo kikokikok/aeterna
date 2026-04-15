@@ -182,11 +182,11 @@ export default function UserDetailPage() {
           {/* Profile Card */}
           <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <div className="flex items-center gap-4">
-              {user.avatar_url ? (
-                <img src={user.avatar_url} alt="" className="h-16 w-16 rounded-full" />
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt="" className="h-16 w-16 rounded-full" />
               ) : (
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-2xl font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                  {user.name.charAt(0).toUpperCase()}
+                  {user.name?.charAt(0)?.toUpperCase() ?? "?"}
                 </div>
               )}
               <div>

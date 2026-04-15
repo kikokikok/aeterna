@@ -6,9 +6,9 @@ import { useAuth } from "@/auth/AuthContext"
 import type { HealthResponse, ReadinessResponse } from "@/api/types"
 
 interface ExportJob {
-  id: string
+  jobId: string
   status: string
-  created_at: string
+  createdAt: string
   format?: string
 }
 
@@ -231,21 +231,21 @@ export default function SystemHealthPage() {
           <div className="space-y-2">
             {exports.map((job) => (
               <div
-                key={job.id}
+                key={job.jobId}
                 className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-700"
               >
                 <div>
                   <span className="font-mono text-sm text-gray-700 dark:text-gray-300">
-                    {job.id.slice(0, 12)}
+                    {job.jobId?.slice(0, 12)}
                   </span>
                   <span className="ml-2 text-xs text-gray-400">
-                    {new Date(job.created_at).toLocaleString()}
+                    {new Date(job.createdAt).toLocaleString()}
                   </span>
                 </div>
                 <span
                   className={cn(
                     "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                    statusColor[job.status.toLowerCase()] ?? "bg-gray-100 text-gray-700",
+                    statusColor[job.status?.toLowerCase() ?? ""] ?? "bg-gray-100 text-gray-700",
                   )}
                 >
                   {job.status}

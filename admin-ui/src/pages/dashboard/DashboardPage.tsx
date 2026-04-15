@@ -18,9 +18,9 @@ import { useAuth } from "@/auth/AuthContext"
 import type { HealthResponse, GovernanceRequest } from "@/api/types"
 
 interface ExportJob {
-  id: string
+  jobId: string
   status: string
-  created_at: string
+  createdAt: string
   format?: string
 }
 
@@ -171,7 +171,7 @@ function RecentExportsCard() {
       <span
         className={cn(
           "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-          colors[status.toLowerCase()] ?? "bg-gray-100 text-gray-700",
+          colors[status?.toLowerCase() ?? ""] ?? "bg-gray-100 text-gray-700",
         )}
       >
         {status}
@@ -190,11 +190,11 @@ function RecentExportsCard() {
           <p className="text-sm text-gray-400">No recent exports</p>
         ) : (
           jobs.map((job) => (
-            <div key={job.id} className="flex items-center justify-between text-sm">
+            <div key={job.jobId} className="flex items-center justify-between text-sm">
               <div>
-                <span className="text-gray-700 dark:text-gray-300">{job.id.slice(0, 8)}</span>
+                <span className="text-gray-700 dark:text-gray-300">{job.jobId?.slice(0, 8)}</span>
                 <span className="ml-2 text-xs text-gray-400">
-                  {new Date(job.created_at).toLocaleDateString()}
+                  {new Date(job.createdAt).toLocaleDateString()}
                 </span>
               </div>
               {statusBadge(job.status)}
