@@ -2,7 +2,7 @@ name: RBAC Policy Tests
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master]
     paths:
       - 'adapters/src/auth/**'
       - 'adapters/tests/rbac_matrix_test.rs'

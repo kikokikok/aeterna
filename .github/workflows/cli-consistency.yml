@@ -2,14 +2,14 @@ name: CLI Consistency
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master]
     paths:
       - "cli/**"
       - "docs/guides/cli-quick-reference.md"
       - "install.sh"
       - ".github/workflows/cli-consistency.yml"
   pull_request:
-    branches: [main, develop]
+    branches: [master]
     paths:
       - "cli/**"
       - "docs/guides/cli-quick-reference.md"

@@ -2,14 +2,14 @@ name: OpenCode Plugin CI
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [master]
     tags:
       - 'plugin-v*'
     paths:
       - 'packages/opencode-plugin/**'
       - '.github/workflows/opencode-plugin-ci.yml'
   pull_request:
-    branches: [main, master, develop]
+    branches: [master]
     paths:
       - 'packages/opencode-plugin/**'
       - '.github/workflows/opencode-plugin-ci.yml'

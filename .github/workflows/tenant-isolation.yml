@@ -2,7 +2,7 @@ name: Tenant Isolation Tests
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master]
     paths:
       - 'storage/**'
       - 'mk_core/**'
