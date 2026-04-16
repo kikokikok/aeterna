@@ -31,7 +31,7 @@ pub fn compute_sha256<R: Read>(mut reader: R) -> anyhow::Result<String> {
         }
         hasher.update(&buf[..n]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex::encode(hasher.finalize()))
 }
 
 /// Compute the SHA-256 hex digest of a file on disk.

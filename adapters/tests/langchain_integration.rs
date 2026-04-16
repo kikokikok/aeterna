@@ -121,7 +121,7 @@ async fn setup_server() -> Arc<McpServer> {
     let sync_manager = Arc::new(
         SyncManager::new(
             memory_manager.clone(),
-            knowledge_manager,
+            knowledge_manager.clone(),
             deployment_config,
             None,
             Arc::new(MockPersister),
@@ -140,6 +140,7 @@ async fn setup_server() -> Arc<McpServer> {
     Arc::new(McpServer::new(
         memory_manager,
         sync_manager,
+        knowledge_manager,
         repo,
         Arc::new(MockStorageBackend),
         governance,

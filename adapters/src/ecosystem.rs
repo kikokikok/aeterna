@@ -560,7 +560,7 @@ mod tests {
         let sync_manager = Arc::new(
             sync::bridge::SyncManager::new(
                 memory_manager.clone(),
-                knowledge_manager,
+                knowledge_manager.clone(),
                 config::config::DeploymentConfig::default(),
                 None,
                 Arc::new(MockPersister),
@@ -573,6 +573,7 @@ mod tests {
         let server = Arc::new(McpServer::new(
             memory_manager,
             sync_manager,
+            knowledge_manager,
             repo,
             Arc::new(MockStorage),
             governance,
@@ -610,7 +611,7 @@ mod tests {
         let sync_manager = Arc::new(
             sync::bridge::SyncManager::new(
                 memory_manager.clone(),
-                knowledge_manager,
+                knowledge_manager.clone(),
                 config::config::DeploymentConfig::default(),
                 None,
                 Arc::new(MockPersister),
@@ -623,6 +624,7 @@ mod tests {
         let server = Arc::new(McpServer::new(
             memory_manager,
             sync_manager,
+            knowledge_manager,
             repo,
             Arc::new(MockStorage),
             governance,
@@ -690,7 +692,7 @@ mod tests {
         let sync_manager = Arc::new(
             sync::bridge::SyncManager::new(
                 memory_manager.clone(),
-                knowledge_manager,
+                knowledge_manager.clone(),
                 config::config::DeploymentConfig::default(),
                 None,
                 Arc::new(MockPersister),
@@ -703,6 +705,7 @@ mod tests {
         let server = Arc::new(McpServer::new(
             memory_manager,
             sync_manager,
+            knowledge_manager,
             repo,
             Arc::new(MockStorage),
             governance,
@@ -742,7 +745,7 @@ mod tests {
         let sync_manager = Arc::new(
             sync::bridge::SyncManager::new(
                 memory_manager.clone(),
-                knowledge_manager,
+                knowledge_manager.clone(),
                 config::config::DeploymentConfig::default(),
                 None,
                 Arc::new(MockPersister),
@@ -755,6 +758,7 @@ mod tests {
         let server = Arc::new(McpServer::new(
             memory_manager,
             sync_manager,
+            knowledge_manager,
             repo,
             Arc::new(MockStorage),
             governance,

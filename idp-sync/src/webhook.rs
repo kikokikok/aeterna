@@ -195,7 +195,7 @@ fn compute_okta_signature(secret: &str, timestamp: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(secret.as_bytes());
     hasher.update(timestamp.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 #[derive(Debug, Deserialize)]

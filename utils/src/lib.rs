@@ -25,7 +25,7 @@ use uuid::Uuid;
 pub fn compute_content_hash(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 /// Compute hash of knowledge item for change detection
@@ -50,7 +50,7 @@ pub fn compute_knowledge_hash(item: &serde_json::Value) -> String {
         hasher.update(status_str.as_bytes());
     }
 
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 /// Generate UUID v4 string

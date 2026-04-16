@@ -41,7 +41,7 @@ chrono = { workspace = true }
 sqlx = { workspace = true }
 
 # Scheduling
-tokio-cron-scheduler = "0.14"
+tokio-cron-scheduler = "0.15"
 
 # Web server for webhooks
 axum = { workspace = true }
@@ -59,6 +59,7 @@ metrics = { workspace = true }
 
 # Crypto
 sha2 = { workspace = true }
+hex = "0.4"
 hmac = { workspace = true }
 
 # GitHub App auth

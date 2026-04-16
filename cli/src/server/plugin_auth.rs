@@ -1287,6 +1287,7 @@ fn urlencoding_encode(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
     use super::*;
 
     fn secret() -> String {
@@ -1432,6 +1433,7 @@ mod tests {
     // ── Task 4.1: bootstrap fail-closed – resolve_tenant_for_github_user ──────
 
     #[test]
+    #[serial]
     fn resolve_tenant_returns_none_when_no_config_and_no_env() {
         // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
         unsafe { std::env::remove_var("AETERNA_DEFAULT_TENANT_ID") };
@@ -1448,6 +1450,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_tenant_prefers_config_field_over_env() {
         // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
         unsafe { std::env::set_var("AETERNA_DEFAULT_TENANT_ID", "env-tenant") };
@@ -1463,6 +1466,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_tenant_falls_back_to_env_when_config_absent() {
         // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
         unsafe { std::env::set_var("AETERNA_DEFAULT_TENANT_ID", "env-tenant") };
@@ -1478,6 +1482,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_tenant_ignores_blank_config_field() {
         // SAFETY: test-only env manipulation, tests run single-threaded via --test-threads=1
         unsafe { std::env::remove_var("AETERNA_DEFAULT_TENANT_ID") };

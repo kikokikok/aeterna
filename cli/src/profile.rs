@@ -25,6 +25,9 @@ use serde::{Deserialize, Serialize};
 
 /// Returns `~/.config/aeterna/` (user-level config directory).
 pub fn user_config_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("AETERNA_CONFIG_DIR") {
+        return Some(PathBuf::from(dir));
+    }
     dirs::config_dir().map(|d| d.join("aeterna"))
 }
 
