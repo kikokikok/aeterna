@@ -1,0 +1,456 @@
+openapi: '3.1.0'
+info:
+  title: Aeterna Admin API
+  version: 0.8.0
+  description: |
+    REST API for the Aeterna memory and knowledge platform.
+    All list endpoints return a `PaginatedResponse` envelope.
+servers:
+  - url: http://localhost:7777/api/v1
+    description: Local dev
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    LimitParam:
+      name: limit
+      in: query
+      schema: { type: integer, default: 50, minimum: 1, maximum: 500 }
+    OffsetParam:
+      name: offset
+      in: query
+      schema: { type: integer, default: 0, minimum: 0 }
+  schemas:
+    PaginatedResponse:
+      type: object
+      required: [items, limit, offset]
+      properties:
+        items: { type: array, items: {} }
+        total: { type: integer, nullable: true }
+        limit: { type: integer }
+        offset: { type: integer }
+    TenantRecord:
+      type: object
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    UserRecord:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        avatarUrl: { type: string, nullable: true }
+        status: { type: string }
+    RoleAssignment:
+      type: object
+      properties:
+        principal: { type: string }
+        principalType: { type: string }
+        role: { type: string }
+        scope: { type: string }
+        unitId: { type: string, nullable: true }
+    GovernanceAuditEntry:
+      type: object
+      properties:
+        id: { type: string }
+        action: { type: string }
+        requestId: { type: string, nullable: true }
+        targetType: { type: string, nullable: true }
+        targetId: { type: string, nullable: true }
+        actorType: { type: string }
+        actorId: { type: string, nullable: true }
+        actorEmail: { type: string, nullable: true }
+        details: { type: object }
+        oldValues: { type: object, nullable: true }
+        createdAt: { type: string, format: date-time }
+    PolicyRecord:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        layer: { type: string }
+        mode: { type: string }
+        rules: { type: object }
+    KnowledgeItem:
+      type: object
+      properties:
+        id: { type: string }
+        path: { type: string }
+        content: { type: string }
+        layer: { type: string, enum: [company, org, team, project] }
+        tags: { type: array, items: { type: string } }
+        variantRole: { type: string, nullable: true }
+        metadata: { type: object }
+    MemoryEntry:
+      type: object
+      properties:
+        id: { type: string }
+        content: { type: string }
+        layer: { type: string }
+        importanceScore: { type: number }
+        metadata: { type: object }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    MemoryFeedbackRequest:
+      type: object
+      required: [layer, rewardType, score]
+      properties:
+        memoryId: { type: string }
+        layer: { type: string }
+        rewardType: { type: string }
+        score: { type: number }
+        reasoning: { type: string }
+    GovernanceRequest:
+      type: object
+      properties:
+        id: { type: string }
+        requestNumber: { type: string }
+        requestType: { type: string }
+        targetType: { type: string }
+        targetId: { type: string, nullable: true }
+        title: { type: string }
+        status: { type: string }
+        requestorId: { type: string }
+        createdAt: { type: string, format: date-time }
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ---- Tenants ----
+  /admin/tenants:
+    get:
+      summary: List tenants
+      tags: [Admin]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Paginated list of tenants
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - properties:
+                      items:
+                        items: { $ref: '#/components/schemas/TenantRecord' }
+  /admin/tenants/{id}:
+    get:
+      summary: Get tenant by ID
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Tenant record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  tenant: { $ref: '#/components/schemas/TenantRecord' }
+
+  # ---- Users ----
+  /user:
+    get:
+      summary: List users
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Paginated list of users
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - properties:
+                      items:
+                        items: { $ref: '#/components/schemas/UserRecord' }
+
+  # ---- Governance ----
+  /govern/audit:
+    get:
+      summary: List audit log entries
+      tags: [Governance]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string }
+        - name: to
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated audit log
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - properties:
+                      items:
+                        items: { $ref: '#/components/schemas/GovernanceAuditEntry' }
+
+  /govern/roles:
+    get:
+      summary: List role assignments
+      tags: [Governance]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Paginated roles
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - properties:
+                      items:
+                        items: { $ref: '#/components/schemas/RoleAssignment' }
+
+  /govern/pending:
+    get:
+      summary: List pending governance requests
+      tags: [Governance]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Paginated pending requests
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - properties:
+                      items:
+                        items: { $ref: '#/components/schemas/GovernanceRequest' }
+
+  /govern/policies:
+    get:
+      summary: List policies
+      tags: [Governance]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Paginated policies
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - properties:
+                      items:
+                        items: { $ref: '#/components/schemas/PolicyRecord' }
+
+  # ---- Knowledge ----
+  /knowledge/{id}:
+    get:
+      summary: Get knowledge entry by ID
+      tags: [Knowledge]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Full knowledge item
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KnowledgeItem' }
+        '404':
+          description: Not found
+
+  /knowledge/query:
+    post:
+      summary: Semantic knowledge search
+      tags: [Knowledge]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string }
+                limit: { type: integer, default: 10 }
+                offset: { type: integer, default: 0 }
+                layer: { type: string }
+                tags: { type: array, items: { type: string } }
+                resolve: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Search results with total
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/KnowledgeItem' } }
+                  total: { type: integer }
+                  resolved: { type: array, nullable: true }
+
+  /knowledge/promotions:
+    get:
+      summary: List promotion requests
+      tags: [Knowledge]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated promotions
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedResponse' }
+
+  # ---- Memory ----
+  /memory/search:
+    post:
+      summary: Semantic memory search
+      tags: [Memory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string }
+                limit: { type: integer, default: 10 }
+                offset: { type: integer, default: 0 }
+                threshold: { type: number, default: 0 }
+                filters: { type: object }
+                contextSummary: { type: string }
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/MemoryEntry' } }
+                  total: { type: integer }
+                  reasoning: { type: string, nullable: true }
+
+  /memory/list:
+    post:
+      summary: List memory entries from a layer
+      tags: [Memory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [layer]
+              properties:
+                layer: { type: string }
+                limit: { type: integer, default: 50 }
+                offset: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Memory entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/MemoryEntry' } }
+                  total: { type: integer }
+
+  /memory/{id}/feedback:
+    post:
+      summary: Submit feedback for a memory entry
+      tags: [Memory]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MemoryFeedbackRequest' }
+      responses:
+        '200':
+          description: Feedback recorded
+
+  # ---- Exports / Imports ----
+  /admin/exports:
+    get:
+      summary: List export jobs
+      tags: [Admin]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Paginated export jobs
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedResponse' }
+
+  /admin/imports:
+    get:
+      summary: List import jobs
+      tags: [Admin]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Paginated import jobs
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedResponse' }
+
+  /admin/git-provider-connections:
+    get:
+      summary: List git provider connections
+      tags: [Admin]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Paginated git provider connections
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedResponse' }
