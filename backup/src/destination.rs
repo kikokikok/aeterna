@@ -58,7 +58,9 @@ pub struct ExportStorageConfig {
 impl ExportStorageConfig {
     /// Resolve the effective destination (tenant override > platform default).
     pub fn effective_destination(&self) -> &ExportDestination {
-        self.tenant_override.as_ref().unwrap_or(&self.platform_default)
+        self.tenant_override
+            .as_ref()
+            .unwrap_or(&self.platform_default)
     }
 }
 
@@ -113,7 +115,10 @@ mod tests {
             path: PathBuf::from("/data/backups"),
         };
         let key = dest.archive_key("tenant-1", "20260412_120000", "full");
-        assert_eq!(key, "/data/backups/tenant-1/exports/20260412_120000-full.tar.gz");
+        assert_eq!(
+            key,
+            "/data/backups/tenant-1/exports/20260412_120000-full.tar.gz"
+        );
     }
 
     #[test]
@@ -126,7 +131,10 @@ mod tests {
             force_path_style: false,
         };
         let key = dest.archive_key("acme", "20260412_120000", "incremental");
-        assert_eq!(key, "prod/region-a/acme/exports/20260412_120000-incremental.tar.gz");
+        assert_eq!(
+            key,
+            "prod/region-a/acme/exports/20260412_120000-incremental.tar.gz"
+        );
     }
 
     #[test]
@@ -237,8 +245,7 @@ mod tests {
             }),
         };
         let json = serde_json::to_string(&config).expect("serialize");
-        let deserialized: ExportStorageConfig =
-            serde_json::from_str(&json).expect("deserialize");
+        let deserialized: ExportStorageConfig = serde_json::from_str(&json).expect("deserialize");
         assert!(deserialized.tenant_override.is_some());
     }
 }

@@ -333,9 +333,7 @@ impl IncrementalSummarySync {
         let mut events = Vec::new();
 
         // Invalidate the requested layer itself.
-        if let Some(event) =
-            self.invalidate_summaries_for_layer(entry_id, layer, reason, state)
-        {
+        if let Some(event) = self.invalidate_summaries_for_layer(entry_id, layer, reason, state) {
             events.push(event);
         }
 
@@ -889,8 +887,8 @@ mod tests {
 
     #[test]
     fn test_invalidate_summaries_cascade_no_children_when_leaf() {
-        let sync = IncrementalSummarySync::new()
-            .with_config(create_test_config(MemoryLayer::Project));
+        let sync =
+            IncrementalSummarySync::new().with_config(create_test_config(MemoryLayer::Project));
 
         let mut state = SummaryPointerState::default();
         state.set_pointer(SummaryPointer::new(

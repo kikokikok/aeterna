@@ -184,6 +184,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// TODO(wave-2a-followup): move useAuth() into src/auth/useAuth.ts so this file
+// only exports components (fixes react-refresh/only-export-components properly).
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext)
   if (!ctx) {

@@ -1287,8 +1287,8 @@ fn urlencoding_encode(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use serial_test::serial;
     use super::*;
+    use serial_test::serial;
 
     fn secret() -> String {
         "super-secret-test-key-at-least-32-chars".to_string()

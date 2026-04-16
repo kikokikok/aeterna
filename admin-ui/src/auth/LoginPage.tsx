@@ -33,6 +33,9 @@ export default function LoginPage() {
 
     const oauthError = params.get("error")
     if (oauthError) {
+      // TODO(wave-2a-followup): refactor to derive error state from URL params
+      // via useMemo / useSyncExternalStore instead of setState in effect.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError(`GitHub OAuth error: ${oauthError}`)
     }
   }, [login, navigate])

@@ -295,9 +295,7 @@ impl SyncManager {
 
             // Run the entire sync body under a catch-all rollback guard so that
             // any unexpected failure restores the pre-cycle state.
-            let result = self
-                .run_sync_cycle_body(ctx.clone(), cycle_start)
-                .await;
+            let result = self.run_sync_cycle_body(ctx.clone(), cycle_start).await;
 
             let elapsed = cycle_start.elapsed();
             let tenant_str = ctx.tenant_id.as_str().to_string();

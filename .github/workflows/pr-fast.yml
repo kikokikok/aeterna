@@ -95,17 +95,30 @@ jobs:
       - name: Helm dependency build
         run: helm dependency build charts/aeterna
       - name: Helm lint
+        # Note: lint returns 0 even when template 'fail' functions fire — they're
+        # logged as INFO. That's fine: we want lint to catch STRUCTURAL issues here.
         run: helm lint charts/aeterna
-      - name: Helm template
-        run: helm template aeterna charts/aeterna --debug > /dev/null
+      - name: Helm template (with minimal connection overrides)
+        # The chart requires postgresql.host, redis.host, vectorStore.host at
+        # render time (enforced by fail() in templates). None of the fixtures
+        # in charts/aeterna/ci/ provide these (they assume aeterna-prereqs is
+        # deployed separately). For a render-only gate we inject stubs via --set.
+        run: |
+          helm template aeterna charts/aeterna \
+            --set postgresql.host=pg.ci.local \
+            --set redis.host=redis.ci.local \
+            --set vectorStore.host=qdrant.ci.local \
+            --debug > /tmp/manifest.yaml
+          echo "Rendered $(wc -l < /tmp/manifest.yaml) lines across $(grep -c '^kind:' /tmp/manifest.yaml) K8s objects"
       - name: Install kubeconform
         run: |
           curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz | tar xz
           sudo mv kubeconform /usr/local/bin/
       - name: Kubeconform (strict, ignore-missing-schemas)
         run: |
-          helm template aeterna charts/aeterna | kubeconform \
+          kubeconform \
             -strict \
             -ignore-missing-schemas \
             -kubernetes-version 1.29.0 \
-            -summary
+            -summary \
+            /tmp/manifest.yaml

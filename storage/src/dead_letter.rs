@@ -116,11 +116,7 @@ impl DeadLetterQueue {
         items
             .values()
             .filter(|item| item.status == DeadLetterStatus::Active)
-            .filter(|item| {
-                tenant_id
-                    .map(|tid| item.tenant_id == tid)
-                    .unwrap_or(true)
-            })
+            .filter(|item| tenant_id.map(|tid| item.tenant_id == tid).unwrap_or(true))
             .cloned()
             .collect()
     }
@@ -274,11 +270,7 @@ impl RedisDeadLetterQueue {
         Ok(all
             .into_iter()
             .filter(|item| item.status == DeadLetterStatus::Active)
-            .filter(|item| {
-                tenant_id
-                    .map(|tid| item.tenant_id == tid)
-                    .unwrap_or(true)
-            })
+            .filter(|item| tenant_id.map(|tid| item.tenant_id == tid).unwrap_or(true))
             .collect())
     }
 
@@ -379,9 +371,7 @@ mod tests {
     #[tokio::test]
     async fn add_and_get_item() {
         let q = new_queue();
-        let id = q
-            .add("sync_entry", "e1", "tenant1", "timeout", 3, 3)
-            .await;
+        let id = q.add("sync_entry", "e1", "tenant1", "timeout", 3, 3).await;
         let item = q.get(&id).await.expect("item should exist");
         assert_eq!(item.item_type, "sync_entry");
         assert_eq!(item.item_id, "e1");

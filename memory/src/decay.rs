@@ -246,10 +246,7 @@ mod tests {
         let config = DecayConfig::from_env();
         let defaults = DecayConfig::default();
         for layer in defaults.rates.keys() {
-            assert!(
-                config.rates.contains_key(layer),
-                "Missing layer: {layer}"
-            );
+            assert!(config.rates.contains_key(layer), "Missing layer: {layer}");
         }
     }
 }

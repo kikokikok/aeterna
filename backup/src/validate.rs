@@ -39,9 +39,7 @@ pub fn validate_archive(path: &Path) -> anyhow::Result<ValidationReport> {
     let reader = match ArchiveReader::open(path) {
         Ok(r) => r,
         Err(e) => {
-            report
-                .errors
-                .push(format!("Failed to open archive: {e}"));
+            report.errors.push(format!("Failed to open archive: {e}"));
             return Ok(report);
         }
     };
@@ -78,7 +76,10 @@ pub fn validate_archive(path: &Path) -> anyhow::Result<ValidationReport> {
     }
 
     // 5. Overall verdict.
-    report.valid = report.manifest_ok && report.schema_compatible && report.checksum_mismatches.is_empty() && report.errors.is_empty();
+    report.valid = report.manifest_ok
+        && report.schema_compatible
+        && report.checksum_mismatches.is_empty()
+        && report.errors.is_empty();
 
     Ok(report)
 }
@@ -88,8 +89,8 @@ mod tests {
     use super::*;
     use crate::archive::ArchiveWriter;
     use crate::manifest::{BackupManifest, ExportScope};
-    use flate2::write::GzEncoder;
     use flate2::Compression;
+    use flate2::write::GzEncoder;
     use std::fs::File;
     use std::io::BufWriter;
 
@@ -98,9 +99,7 @@ mod tests {
         let mut writer = ArchiveWriter::new(&archive_path).unwrap();
         {
             let mut ndjson = writer.create_ndjson_writer("data.ndjson").unwrap();
-            ndjson
-                .write_record(&serde_json::json!({"id": 1}))
-                .unwrap();
+            ndjson.write_record(&serde_json::json!({"id": 1})).unwrap();
             ndjson.finish().unwrap();
         }
         writer
@@ -159,8 +158,7 @@ mod tests {
         let archive_path = dir.path().join("old-schema.tar.gz");
 
         let mut writer = ArchiveWriter::new(&archive_path).unwrap();
-        let mut manifest =
-            BackupManifest::new("host".into(), ExportScope::FullInstance);
+        let mut manifest = BackupManifest::new("host".into(), ExportScope::FullInstance);
         manifest.schema_version = "99.0.0".to_string();
         writer.add_manifest(&manifest).unwrap();
         writer.finalize().unwrap();
@@ -184,15 +182,12 @@ mod tests {
         let mut writer = ArchiveWriter::new(&archive_path).unwrap();
         {
             let mut ndjson = writer.create_ndjson_writer("data.ndjson").unwrap();
-            ndjson
-                .write_record(&serde_json::json!({"x": 1}))
-                .unwrap();
+            ndjson.write_record(&serde_json::json!({"x": 1})).unwrap();
             ndjson.finish().unwrap();
         }
 
         // Write manifest with a wrong checksum
-        let mut manifest =
-            BackupManifest::new("host".into(), ExportScope::FullInstance);
+        let mut manifest = BackupManifest::new("host".into(), ExportScope::FullInstance);
         manifest
             .file_checksums
             .insert("data.ndjson".to_string(), "0000dead".to_string());

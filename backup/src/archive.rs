@@ -7,9 +7,9 @@
 use crate::checksum;
 use crate::manifest::BackupManifest;
 use crate::ndjson::{NdjsonReader, NdjsonWriter};
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use serde::de::DeserializeOwned;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
@@ -220,14 +220,19 @@ mod tests {
 
         // Checksum verification
         let mismatches = reader.validate_checksums().unwrap();
-        assert!(mismatches.is_empty(), "unexpected mismatches: {mismatches:?}");
+        assert!(
+            mismatches.is_empty(),
+            "unexpected mismatches: {mismatches:?}"
+        );
 
         // Read back NDJSON data
         let ndjson_reader = reader.open_ndjson::<Row>("memories.ndjson").unwrap();
-        let rows: Vec<Row> = ndjson_reader.map(|r| {
-            let val = r.unwrap();
-            serde_json::from_value(val).unwrap()
-        }).collect();
+        let rows: Vec<Row> = ndjson_reader
+            .map(|r| {
+                let val = r.unwrap();
+                serde_json::from_value(val).unwrap()
+            })
+            .collect();
         assert_eq!(rows.len(), 3);
         assert_eq!(rows[0].id, 0);
         assert_eq!(rows[2].text, "mem-2");
@@ -294,7 +299,9 @@ mod tests {
 
         for name in &["memories.ndjson", "knowledge.ndjson", "policies.ndjson"] {
             let mut ndjson = writer.create_ndjson_writer(name).unwrap();
-            ndjson.write_record(&serde_json::json!({"file": name})).unwrap();
+            ndjson
+                .write_record(&serde_json::json!({"file": name}))
+                .unwrap();
             ndjson.finish().unwrap();
         }
 

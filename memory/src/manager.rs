@@ -226,10 +226,7 @@ impl MemoryManager {
     ///
     /// When set, the registry enables tenant-specific LLM and embedding
     /// service resolution that falls back to platform defaults.
-    pub fn with_provider_registry(
-        mut self,
-        registry: Arc<TenantProviderRegistry>,
-    ) -> Self {
+    pub fn with_provider_registry(mut self, registry: Arc<TenantProviderRegistry>) -> Self {
         self.provider_registry = Some(registry);
         self
     }
@@ -1040,10 +1037,7 @@ impl MemoryManager {
         // Cascade: soft-delete corresponding graph nodes so DuckDB does not
         // retain orphan references to the deleted memory entry.
         if let Some(ref graph) = self.graph_store {
-            if let Err(e) = graph
-                .soft_delete_nodes_by_source_memory_id(ctx, id)
-                .await
-            {
+            if let Err(e) = graph.soft_delete_nodes_by_source_memory_id(ctx, id).await {
                 tracing::warn!(
                     memory_id = id,
                     error = %e,
