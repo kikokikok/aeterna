@@ -1,0 +1,56 @@
+name: PR Integration Gate
+
+on:
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: pr-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Shipped-path smoke tests (migrated from ci.yml shipped-smoke job)
+  shipped-smoke:
+    name: shipped-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: CLI entrypoints + fail-closed smoke tests
+        run: |
+          cargo nextest run -p aeterna --test cli_e2e_test \
+            serve_and_migration_entrypoints check_subcommand sync_subcommand codesearch_runtime_subcommand
+      - name: Agent-a2a runtime smoke tests
+        run: cargo nextest run -p agent-a2a --test a2a_test
+
+  # Docker build (x86_64 only, no push) — verifies Dockerfile still builds
+  docker-build:
+    name: docker-build-x86
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=pr-amd64
+          cache-to: type=gha,mode=max,scope=pr-amd64
+          build-args: |
+            RUST_VERSION=1.93
+            BUILD_DATE=${{ github.event.pull_request.updated_at }}
+            VCS_REF=${{ github.sha }}
+
+  # Wave 2c will expand this file with:
+  # - integration-rust (postgres/redis/qdrant service containers)
+  # - k8s-e2e (kind + helm install)
+  # - cross-tests/phase1_ha, memory_throughput --quick

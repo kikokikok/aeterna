@@ -1,18 +1,14 @@
-name: Docker Build
+name: Docker Build (tag releases only)
+
+# NOTE: Wave 2a moved PR builds → pr-integration.yml (no push)
+#       and master builds → post-merge.yml (multi-arch push).
+# This file now handles ONLY tag-based releases (v*) and manual dispatches.
+# Wave 2b will replace this entirely with release.yml (unified release).
 
 on:
   push:
-    branches: [master]
     tags:
       - 'v*'
-  pull_request:
-    branches: [master]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '**/Cargo.toml'
-      - '**/*.rs'
-      - 'Dockerfile'
   workflow_dispatch:
 
 permissions:

@@ -1,0 +1,103 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  coverage:
+    name: tarpaulin coverage (80% gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
+      - run: cargo tarpaulin --config tarpaulin.toml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            tarpaulin-report.html
+            tarpaulin-report.json
+
+  mutants-full:
+    name: cargo-mutants (full workspace)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - run: cargo mutants --workspace --no-shuffle --timeout 120
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutants-report
+          path: mutants.out/
+
+  audit:
+    name: cargo-audit + cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-deny
+      - run: cargo audit
+        continue-on-error: true
+      - run: cargo deny check advisories bans licenses sources
+        continue-on-error: true
+
+  load-and-dr:
+    name: cross-tests load + DR drills
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: aeterna_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 3s --health-retries 5
+      qdrant:
+        image: qdrant/qdrant:v1.12.1
+        ports: ['6333:6333']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Run cross-tests phase2 + DR drill + throughput
+        env:
+          DATABASE_URL: postgres://test:test@localhost:5432/aeterna_test
+          REDIS_URL: redis://localhost:6379
+          QDRANT_URL: http://localhost:6333
+        run: |
+          cargo nextest run -p cross-tests --test phase2_scaling || echo "::warning::phase2_scaling failed"
+          cargo nextest run -p cross-tests --test drill_automation || echo "::warning::drill_automation failed"
+          cargo nextest run -p cross-tests --test memory_throughput || echo "::warning::memory_throughput failed"
+        continue-on-error: true

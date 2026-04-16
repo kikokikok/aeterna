@@ -1,0 +1,45 @@
+name: PR Deep (opt-in)
+
+on:
+  pull_request:
+    types: [labeled, synchronize, opened, reopened]
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: pr-deep-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Only runs if the PR has the 'deep' label.
+  coverage:
+    name: tarpaulin coverage (80% gate)
+    if: contains(github.event.pull_request.labels.*.name, 'deep')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
+      - run: cargo tarpaulin --config tarpaulin.toml
+
+  mutants-diff:
+    name: cargo-mutants (diff vs master)
+    if: contains(github.event.pull_request.labels.*.name, 'deep')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - name: Run mutants on diff only
+        run: cargo mutants --in-diff origin/master --workspace --timeout 120
