@@ -476,13 +476,15 @@ impl MockPolicyStorage {
         }
 
         if let Some(ref cedar) = policy.cedar_policy
-            && !cedar.contains("permit") && !cedar.contains("forbid") {
-                errors.push(ValidationError {
-                    code: "E003".to_string(),
-                    message: "Cedar policy must contain permit or forbid statement".to_string(),
-                    location: Some("cedar_policy".to_string()),
-                });
-            }
+            && !cedar.contains("permit")
+            && !cedar.contains("forbid")
+        {
+            errors.push(ValidationError {
+                code: "E003".to_string(),
+                message: "Cedar policy must contain permit or forbid statement".to_string(),
+                location: Some("cedar_policy".to_string()),
+            });
+        }
 
         ValidationResult {
             valid: errors.is_empty(),

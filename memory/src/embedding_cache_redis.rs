@@ -1,10 +1,10 @@
-///! # Redis Embedding Cache Backend
-///!
-///! Redis-based implementation of the embedding cache with support for:
-///! - Exact match lookups using simple key-value
-///! - Semantic similarity search using RediSearch (if available)
-///! - TTL management
-///! - Per-tenant isolation
+//! # Redis Embedding Cache Backend
+//!
+//! Redis-based implementation of the embedding cache with support for:
+//! - Exact match lookups using simple key-value
+//! - Semantic similarity search using RediSearch (if available)
+//! - TTL management
+//! - Per-tenant isolation
 use crate::embedding_cache::{CacheError, CachedEmbedding, EmbeddingCacheBackend};
 use async_trait::async_trait;
 use mk_core::types::TenantContext;

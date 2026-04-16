@@ -3,9 +3,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use super::types::{
-    CacheType, DeploymentMode, DeploymentTarget, PostgresqlType, SetupConfig, VectorBackend,
-};
+// Wildcard import retained: test code (see #[cfg(test)] below) uses many of
+// the type enums (HybridConfig, PineconeConfig, WeaviateConfig, MongodbConfig,
+// VertexAiConfig, DatabricksConfig, ExternalRedisConfig, ExternalPostgresConfig,
+// etc.). Don't let clippy's "unused imports" fix collapse this to an explicit
+// list without considering --all-targets.
+#[allow(clippy::wildcard_imports)]
+use super::types::*;
 
 pub fn generate_all(config: &SetupConfig, output_dir: &Path) -> Result<Vec<PathBuf>> {
     let mut generated = Vec::new();

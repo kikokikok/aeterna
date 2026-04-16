@@ -254,7 +254,6 @@ impl std::fmt::Debug for ToolRegistry {
 }
 
 #[allow(clippy::new_without_default)]
-
 impl ToolRegistry {
     pub fn new() -> Self {
         Self::default()

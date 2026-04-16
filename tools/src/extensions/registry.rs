@@ -140,7 +140,7 @@ impl ExtensionRegistry {
             if self
                 .extensions
                 .values()
-                .any(|ext| ext.tool_config.overrides.get(key).is_some())
+                .any(|ext| ext.tool_config.overrides.contains_key(key))
             {
                 return Err(ExtensionError::InvalidRegistration(
                     "Conflicting tool override".to_string(),

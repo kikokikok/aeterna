@@ -1,7 +1,7 @@
-///! # Anomaly Detection Module
-///!
-///! Statistical anomaly detection for system metrics.
-///! Detects unusual patterns in latency, error rates, and resource usage.
+//! # Anomaly Detection Module
+//!
+//! Statistical anomaly detection for system metrics.
+//! Detects unusual patterns in latency, error rates, and resource usage.
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
