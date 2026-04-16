@@ -1,3 +1,23 @@
+# PARKED — Wave 2a follow-up (see PR #35 commit 406030d / follow-up issue).
+#
+# This workflow's original trigger referenced `branches: [main, develop]`,
+# but the default branch is `master` — so it had never actually run.
+# Wave 2a fixed the trigger, which immediately exposed pre-existing
+# template bugs in the "Lint hardened fixtures" and "Template Validation"
+# jobs: EVERY fixture in charts/aeterna/{ci,examples}/ fails `helm
+# template` because the chart requires postgresql.host / redis.host /
+# vectorStore.host at render time (enforced by fail()) and none of the
+# fixtures stub these.
+#
+# For PR gating we now rely on pr-fast.yml's `helm-lint-template` job,
+# which uses `--set` overrides to render + kubeconform-validate.
+#
+# This workflow needs a follow-up PR that either:
+#   (a) Updates all ci/*.yaml + examples/*.yaml fixtures to stub prereqs.
+#   (b) Wraps them with `helm template ... | xargs -r ...` using
+#       aeterna-prereqs chart alongside.
+#   (c) Deletes the `.bak` if the coverage is deemed redundant.
+
 name: Helm Chart CI
 
 on:
