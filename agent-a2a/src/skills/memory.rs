@@ -59,7 +59,7 @@ impl Default for MemorySkill {
 
 #[async_trait]
 impl Skill for MemorySkill {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "memory"
     }
 
@@ -75,10 +75,12 @@ impl Skill for MemorySkill {
                     .as_str()
                     .ok_or("Missing content")?
                     .to_string();
-                let layer = params["layer"].as_str().map(|s| s.to_string());
+                let layer = params["layer"]
+                    .as_str()
+                    .map(std::string::ToString::to_string);
                 let tags = params["tags"].as_array().map(|arr| {
                     arr.iter()
-                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .filter_map(|v| v.as_str().map(std::string::ToString::to_string))
                         .collect()
                 });
 
@@ -89,7 +91,9 @@ impl Skill for MemorySkill {
             "memory_search" => {
                 let query = params["query"].as_str().ok_or("Missing query")?.to_string();
                 let limit = params["limit"].as_u64().map(|n| n as usize);
-                let layer = params["layer"].as_str().map(|s| s.to_string());
+                let layer = params["layer"]
+                    .as_str()
+                    .map(std::string::ToString::to_string);
 
                 self.memory_search(tenant, query, limit, layer)
                     .await
@@ -102,7 +106,7 @@ impl Skill for MemorySkill {
                     .await
                     .map_err(|e| e.to_string())
             }
-            _ => Err(format!("Unknown tool: {}", tool)),
+            _ => Err(format!("Unknown tool: {tool}")),
         }
     }
 }

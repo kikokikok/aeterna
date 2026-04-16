@@ -339,17 +339,17 @@ impl IncrementalSummarySync {
 
         // Cascade to child layers below the current one.
         for child_layer in child_layers(layer) {
-            if self.config_by_layer.contains_key(&child_layer) {
-                if let Some(event) = self.invalidate_summaries_for_layer(
+            if self.config_by_layer.contains_key(&child_layer)
+                && let Some(event) = self.invalidate_summaries_for_layer(
                     entry_id,
                     child_layer,
                     InvalidationReason::ParentLayerChanged {
                         parent_layer: layer,
                     },
                     state,
-                ) {
-                    events.push(event);
-                }
+                )
+            {
+                events.push(event);
             }
         }
 

@@ -65,7 +65,7 @@ impl Default for KnowledgeSkill {
 
 #[async_trait]
 impl Skill for KnowledgeSkill {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "knowledge"
     }
 
@@ -78,7 +78,9 @@ impl Skill for KnowledgeSkill {
         match tool {
             "knowledge_query" => {
                 let query = params["query"].as_str().ok_or("Missing query")?.to_string();
-                let doc_type = params["doc_type"].as_str().map(|s| s.to_string());
+                let doc_type = params["doc_type"]
+                    .as_str()
+                    .map(std::string::ToString::to_string);
                 let limit = params["limit"].as_u64().map(|n| n as usize);
 
                 self.knowledge_query(tenant, query, doc_type, limit)
@@ -106,7 +108,7 @@ impl Skill for KnowledgeSkill {
                     .await
                     .map_err(|e| e.to_string())
             }
-            _ => Err(format!("Unknown tool: {}", tool)),
+            _ => Err(format!("Unknown tool: {tool}")),
         }
     }
 }

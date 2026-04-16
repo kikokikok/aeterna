@@ -150,20 +150,12 @@ impl MockGovernanceStorage {
         let filtered: Vec<ApprovalRequest> = requests
             .values()
             .filter(|r| r.status == RequestStatus::Pending)
-            .filter(|r| {
-                filters
-                    .company_id
-                    .map_or(true, |id| r.company_id == Some(id))
-            })
-            .filter(|r| filters.org_id.map_or(true, |id| r.org_id == Some(id)))
-            .filter(|r| filters.team_id.map_or(true, |id| r.team_id == Some(id)))
-            .filter(|r| {
-                filters
-                    .project_id
-                    .map_or(true, |id| r.project_id == Some(id))
-            })
-            .filter(|r| filters.requestor_id.map_or(true, |id| r.requestor_id == id))
-            .filter(|r| filters.request_type.map_or(true, |t| r.request_type == t))
+            .filter(|r| filters.company_id.is_none_or(|id| r.company_id == Some(id)))
+            .filter(|r| filters.org_id.is_none_or(|id| r.org_id == Some(id)))
+            .filter(|r| filters.team_id.is_none_or(|id| r.team_id == Some(id)))
+            .filter(|r| filters.project_id.is_none_or(|id| r.project_id == Some(id)))
+            .filter(|r| filters.requestor_id.is_none_or(|id| r.requestor_id == id))
+            .filter(|r| filters.request_type.is_none_or(|t| r.request_type == t))
             .take(limit as usize)
             .cloned()
             .collect();
@@ -306,9 +298,9 @@ impl MockGovernanceStorage {
         let filtered: Vec<GovernanceRole> = roles
             .iter()
             .filter(|r| r.revoked_at.is_none())
-            .filter(|r| company_id.map_or(true, |id| r.company_id == Some(id)))
-            .filter(|r| org_id.map_or(true, |id| r.org_id == Some(id)))
-            .filter(|r| team_id.map_or(true, |id| r.team_id == Some(id)))
+            .filter(|r| company_id.is_none_or(|id| r.company_id == Some(id)))
+            .filter(|r| org_id.is_none_or(|id| r.org_id == Some(id)))
+            .filter(|r| team_id.is_none_or(|id| r.team_id == Some(id)))
             .cloned()
             .collect();
         Ok(filtered)
@@ -355,13 +347,13 @@ impl MockGovernanceStorage {
 
         let filtered: Vec<GovernanceAuditEntry> = logs
             .iter()
-            .filter(|e| filters.action.as_ref().map_or(true, |a| &e.action == a))
-            .filter(|e| filters.actor_id.map_or(true, |id| e.actor_id == Some(id)))
+            .filter(|e| filters.action.as_ref().is_none_or(|a| &e.action == a))
+            .filter(|e| filters.actor_id.is_none_or(|id| e.actor_id == Some(id)))
             .filter(|e| {
                 filters
                     .target_type
                     .as_ref()
-                    .map_or(true, |t| e.target_type.as_ref() == Some(t))
+                    .is_none_or(|t| e.target_type.as_ref() == Some(t))
             })
             .filter(|e| e.created_at >= filters.since)
             .take(limit as usize)

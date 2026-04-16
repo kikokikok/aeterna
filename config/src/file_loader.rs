@@ -187,7 +187,7 @@ logging_level = "debug"
         assert_eq!(config.providers.qdrant.host, "qdranthost");
         assert_eq!(config.providers.qdrant.port, 7333);
         assert_eq!(config.providers.redis.host, "redishost");
-        assert_eq!(config.sync.enabled, false);
+        assert!(!config.sync.enabled);
         assert_eq!(config.sync.sync_interval_seconds, 120);
         assert_eq!(config.tools.port, 9090);
         assert_eq!(config.observability.logging_level, "debug");
@@ -231,7 +231,7 @@ observability:
         assert_eq!(config.providers.postgres.host, "testhost");
         assert_eq!(config.providers.postgres.port, 5433);
         assert_eq!(config.providers.qdrant.host, "qdranthost");
-        assert_eq!(config.sync.enabled, false);
+        assert!(!config.sync.enabled);
         assert_eq!(config.tools.port, 9090);
         assert_eq!(config.observability.logging_level, "debug");
     }

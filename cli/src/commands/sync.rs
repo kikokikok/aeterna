@@ -85,7 +85,9 @@ pub async fn run(args: SyncArgs) -> Result<()> {
         offline.display_cache_age_warning().await;
         let stats = offline.queue_stats().await;
 
-        if !args.dry_run {
+        if args.dry_run {
+            output::warn("Server not reachable - showing offline sync status only");
+        } else {
             let payload = serde_json::json!({
                 "direction": args.direction,
                 "force": args.force,
@@ -96,8 +98,6 @@ pub async fn run(args: SyncArgs) -> Result<()> {
                 .await?;
             output::warn("Server not reachable - queued sync request for later processing");
             println!("  Queue operation: {op_id}");
-        } else {
-            output::warn("Server not reachable - showing offline sync status only");
         }
 
         println!(
@@ -112,8 +112,7 @@ pub async fn run(args: SyncArgs) -> Result<()> {
     };
 
     let profile_name = crate::profile::load_resolved(None, None)
-        .map(|r| r.profile_name)
-        .unwrap_or_else(|_| "default".to_string());
+        .map_or_else(|_| "default".to_string(), |r| r.profile_name);
     Err(crate::backend::unsupported("sync", &profile_name))
 }
 
@@ -164,8 +163,7 @@ async fn run_json(args: SyncArgs, ctx: &context::ResolvedContext) -> Result<()> 
     }
 
     let profile_name = crate::profile::load_resolved(None, None)
-        .map(|r| r.profile_name)
-        .unwrap_or_else(|_| "default".to_string());
+        .map_or_else(|_| "default".to_string(), |r| r.profile_name);
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({

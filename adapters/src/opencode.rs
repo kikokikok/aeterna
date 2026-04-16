@@ -161,6 +161,6 @@ mod tests {
 
     #[test]
     fn test_enhancer_default() {
-        let _ = CodeSearchContextEnhancer::default();
+        let _ = CodeSearchContextEnhancer;
     }
 }

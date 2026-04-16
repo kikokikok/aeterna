@@ -203,7 +203,7 @@ impl AeternaClient {
         }
         req.send()
             .await
-            .with_context(|| format!("GET {} failed", path))
+            .with_context(|| format!("GET {path} failed"))
     }
 
     /// Make an authenticated POST request with a JSON body.
@@ -218,7 +218,7 @@ impl AeternaClient {
         }
         req.send()
             .await
-            .with_context(|| format!("POST {} failed", path))
+            .with_context(|| format!("POST {path} failed"))
     }
 
     /// Make an authenticated DELETE request.
@@ -232,7 +232,7 @@ impl AeternaClient {
         }
         req.send()
             .await
-            .with_context(|| format!("DELETE {} failed", path))
+            .with_context(|| format!("DELETE {path} failed"))
     }
 
     pub async fn delete_json<B: Serialize>(&self, path: &str, body: &B) -> Result<Response> {
@@ -246,7 +246,7 @@ impl AeternaClient {
         }
         req.send()
             .await
-            .with_context(|| format!("DELETE {} failed", path))
+            .with_context(|| format!("DELETE {path} failed"))
     }
 
     pub async fn memory_search(&self, req: &MemorySearchRequest) -> Result<MemorySearchResponse> {
@@ -293,7 +293,7 @@ impl AeternaClient {
         }
         req.send()
             .await
-            .with_context(|| format!("PUT {} failed", path))
+            .with_context(|| format!("PUT {path} failed"))
     }
 
     // -----------------------------------------------------------------------
@@ -312,7 +312,7 @@ impl AeternaClient {
         }
         req.send()
             .await
-            .with_context(|| format!("PATCH {} failed", path))
+            .with_context(|| format!("PATCH {path} failed"))
     }
 
     // -----------------------------------------------------------------------
@@ -563,7 +563,7 @@ impl AeternaClient {
     /// GET /api/v1/knowledge/{id}/metadata — get metadata for a knowledge item.
     pub async fn knowledge_metadata(&self, id: &str) -> Result<serde_json::Value> {
         parse_json_response(
-            self.get(&format!("/api/v1/knowledge/{}/metadata", id))
+            self.get(&format!("/api/v1/knowledge/{id}/metadata"))
                 .await?,
         )
         .await
@@ -584,7 +584,7 @@ impl AeternaClient {
             .bearer_auth(&self.access_token)
             .send()
             .await
-            .with_context(|| format!("DELETE /api/v1/knowledge/{} failed", id))?;
+            .with_context(|| format!("DELETE /api/v1/knowledge/{id} failed"))?;
         if resp.status() == reqwest::StatusCode::NO_CONTENT {
             return Ok(serde_json::json!({"success": true, "id": id}));
         }
@@ -1253,7 +1253,7 @@ pub async fn bootstrap_github(
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        bail!("Login failed (HTTP {}): {}", status, text);
+        bail!("Login failed (HTTP {status}): {text}");
     }
 
     resp.json::<TokenResponse>()
@@ -1294,7 +1294,7 @@ pub async fn request_device_code(
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        bail!("Device code request failed (HTTP {}): {}", status, text);
+        bail!("Device code request failed (HTTP {status}): {text}");
     }
 
     resp.json::<DeviceCodeResponse>()
@@ -1335,11 +1335,7 @@ pub async fn poll_device_authorization(
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            bail!(
-                "Device authorization polling failed (HTTP {}): {}",
-                status,
-                text
-            );
+            bail!("Device authorization polling failed (HTTP {status}): {text}");
         }
 
         let body = resp
@@ -1403,7 +1399,7 @@ pub async fn refresh_token(server_url: &str, refresh_token: &str) -> Result<Toke
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        bail!("Token refresh failed (HTTP {}): {}", status, text);
+        bail!("Token refresh failed (HTTP {status}): {text}");
     }
 
     resp.json::<TokenResponse>()
@@ -1439,7 +1435,7 @@ pub async fn server_logout(server_url: &str, refresh_token_val: &str) -> Result<
         if status == 401 || status == 404 {
             return Ok(());
         }
-        bail!("Logout failed (HTTP {}): {}", status, text);
+        bail!("Logout failed (HTTP {status}): {text}");
     }
 
     Ok(())
@@ -1490,7 +1486,7 @@ fn urlencoding_simple(s: &str) -> String {
             'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => out.push(c),
             _ => {
                 for byte in c.to_string().as_bytes() {
-                    out.push_str(&format!("%{:02X}", byte));
+                    out.push_str(&format!("%{byte:02X}"));
                 }
             }
         }
@@ -1501,7 +1497,7 @@ async fn parse_json_response<T: for<'de> Deserialize<'de>>(resp: Response) -> Re
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        bail!("Request failed (HTTP {}): {}", status, text);
+        bail!("Request failed (HTTP {status}): {text}");
     }
 
     resp.json::<T>()

@@ -410,49 +410,47 @@ impl GitRepository {
             // Walk commits and find the most recent one touching this file.
             let mut file_commit: Option<String> = None;
             'walk: for oid in revwalk.flatten() {
-                if let Ok(commit) = repo.find_commit(oid) {
-                    if let Ok(tree) = commit.tree() {
-                        if tree
+                if let Ok(commit) = repo.find_commit(oid)
+                    && let Ok(tree) = commit.tree()
+                    && tree
+                        .get_path(std::path::Path::new(relative_str.as_ref()))
+                        .is_ok()
+                {
+                    // Check parent to see if this commit modified the file
+                    let parent_has_file = commit
+                        .parent(0)
+                        .ok()
+                        .and_then(|p| p.tree().ok())
+                        .map(|pt| {
+                            pt.get_path(std::path::Path::new(relative_str.as_ref()))
+                                .is_ok()
+                        })
+                        .unwrap_or(false);
+                    // First commit (no parent) or file changed → this is the last touch
+                    if commit.parent_count() == 0 || !parent_has_file {
+                        file_commit = Some(oid.to_string());
+                        break 'walk;
+                    }
+                    // Compare blob OIDs between parent and this commit
+                    if let Ok(parent) = commit.parent(0) {
+                        let parent_tree = parent.tree().ok();
+                        let cur_entry = tree
                             .get_path(std::path::Path::new(relative_str.as_ref()))
-                            .is_ok()
-                        {
-                            // Check parent to see if this commit modified the file
-                            let parent_has_file = commit
-                                .parent(0)
+                            .ok();
+                        let par_entry = parent_tree.as_ref().and_then(|pt| {
+                            pt.get_path(std::path::Path::new(relative_str.as_ref()))
                                 .ok()
-                                .and_then(|p| p.tree().ok())
-                                .map(|pt| {
-                                    pt.get_path(std::path::Path::new(relative_str.as_ref()))
-                                        .is_ok()
-                                })
-                                .unwrap_or(false);
-                            // First commit (no parent) or file changed → this is the last touch
-                            if commit.parent_count() == 0 || !parent_has_file {
+                        });
+                        match (cur_entry, par_entry) {
+                            (Some(c), Some(p)) if c.id() != p.id() => {
                                 file_commit = Some(oid.to_string());
                                 break 'walk;
                             }
-                            // Compare blob OIDs between parent and this commit
-                            if let Some(parent) = commit.parent(0).ok() {
-                                let parent_tree = parent.tree().ok();
-                                let cur_entry = tree
-                                    .get_path(std::path::Path::new(relative_str.as_ref()))
-                                    .ok();
-                                let par_entry = parent_tree.as_ref().and_then(|pt| {
-                                    pt.get_path(std::path::Path::new(relative_str.as_ref()))
-                                        .ok()
-                                });
-                                match (cur_entry, par_entry) {
-                                    (Some(c), Some(p)) if c.id() != p.id() => {
-                                        file_commit = Some(oid.to_string());
-                                        break 'walk;
-                                    }
-                                    (Some(_), None) => {
-                                        file_commit = Some(oid.to_string());
-                                        break 'walk;
-                                    }
-                                    _ => continue,
-                                }
+                            (Some(_), None) => {
+                                file_commit = Some(oid.to_string());
+                                break 'walk;
                             }
+                            _ => continue,
                         }
                     }
                 }
@@ -875,10 +873,10 @@ impl GitRepository {
             .filter(|e| e.file_type().is_file())
         {
             let content = tokio::fs::read_to_string(entry.path()).await?;
-            if let Ok(req) = serde_json::from_str::<mk_core::types::PromotionRequest>(&content) {
-                if status.as_ref().map_or(true, |s| &req.status == s) {
-                    results.push(req);
-                }
+            if let Ok(req) = serde_json::from_str::<mk_core::types::PromotionRequest>(&content)
+                && status.as_ref().is_none_or(|s| &req.status == s)
+            {
+                results.push(req);
             }
         }
         Ok(results)
@@ -918,10 +916,10 @@ impl GitRepository {
             .filter(|e| e.file_type().is_file())
         {
             let content = tokio::fs::read_to_string(entry.path()).await?;
-            if let Ok(rel) = serde_json::from_str::<mk_core::types::KnowledgeRelation>(&content) {
-                if rel.source_id == item_id || rel.target_id == item_id {
-                    results.push(rel);
-                }
+            if let Ok(rel) = serde_json::from_str::<mk_core::types::KnowledgeRelation>(&content)
+                && (rel.source_id == item_id || rel.target_id == item_id)
+            {
+                results.push(rel);
             }
         }
         Ok(results)

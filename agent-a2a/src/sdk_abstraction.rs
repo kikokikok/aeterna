@@ -35,7 +35,7 @@ impl Default for RadkitV0Adapter {
 }
 
 impl RadkitAdapter for RadkitV0Adapter {
-    fn version(&self) -> &str {
+    fn version(&self) -> &'static str {
         "0.0.4"
     }
 

@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use super::types::*;
+use super::types::{
+    CacheType, DeploymentMode, DeploymentTarget, PostgresqlType, SetupConfig, VectorBackend,
+};
 
 pub fn generate_all(config: &SetupConfig, output_dir: &Path) -> Result<Vec<PathBuf>> {
     let mut generated = Vec::new();
@@ -74,7 +76,7 @@ pub fn generate_config_toml(config: &SetupConfig) -> String {
 
     if let Some(url) = &config.central_url {
         content.push_str("[central]\n");
-        content.push_str(&format!("url = \"{}\"\n", url));
+        content.push_str(&format!("url = \"{url}\"\n"));
         content.push_str(&format!("auth = \"{:?}\"\n", config.central_auth).to_lowercase());
         content.push('\n');
     }
@@ -144,7 +146,7 @@ pub fn generate_config_toml(config: &SetupConfig) -> String {
     content.push_str("[llm]\n");
     content.push_str(&format!("provider = \"{:?}\"\n", config.llm_provider).to_lowercase());
     if let Some(host) = &config.ollama_host {
-        content.push_str(&format!("ollama_host = \"{}\"\n", host));
+        content.push_str(&format!("ollama_host = \"{host}\"\n"));
     }
     if let Some(google) = &config.google_llm {
         content.push_str(&format!("google_project_id = \"{}\"\n", google.project_id));
@@ -307,7 +309,7 @@ pub fn generate_helm_values(config: &SetupConfig) -> String {
 
     if let Some(url) = &config.central_url {
         content.push_str("  central:\n");
-        content.push_str(&format!("    url: \"{}\"\n", url));
+        content.push_str(&format!("    url: \"{url}\"\n"));
         content.push_str(&format!("    auth: {:?}\n", config.central_auth).to_lowercase());
     }
     content.push('\n');
@@ -438,7 +440,7 @@ pub fn generate_helm_values(config: &SetupConfig) -> String {
     content.push_str(&format!("  enabled: {}\n", config.ingress_enabled));
     if let Some(host) = &config.ingress_host {
         content.push_str("  hosts:\n");
-        content.push_str(&format!("    - host: \"{}\"\n", host));
+        content.push_str(&format!("    - host: \"{host}\"\n"));
         content.push_str("      paths:\n");
         content.push_str("        - path: /\n");
         content.push_str("          pathType: Prefix\n");
@@ -480,9 +482,8 @@ fn generate_opencode_config(config: &SetupConfig) -> Result<Option<PathBuf>> {
         format!(
             r#"{{
         "type": "http",
-        "url": "{}/mcp"
-      }}"#,
-            url
+        "url": "{url}/mcp"
+      }}"#
         )
     };
 
@@ -494,12 +495,11 @@ fn generate_opencode_config(config: &SetupConfig) -> Result<Option<PathBuf>> {
   ],
   "mcpServers": {{
     "aeterna": {{
-      "transport": {}
+      "transport": {mcp_transport}
     }}
   }}
 }}
-"#,
-        mcp_transport
+"#
     );
 
     fs::write(&opencode_jsonc_path, content)?;

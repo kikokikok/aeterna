@@ -725,10 +725,10 @@ impl KnowledgeManager {
         .await?;
 
         // Task 8.1 — optimistic concurrency: reject if caller's version is stale
-        if let Some(v) = client_version {
-            if v != req.updated_at {
-                return Err(KnowledgeManagerError::OptimisticConflict(req.updated_at));
-            }
+        if let Some(v) = client_version
+            && v != req.updated_at
+        {
+            return Err(KnowledgeManagerError::OptimisticConflict(req.updated_at));
         }
 
         // Task 8.2 — idempotency: already approved → return existing result
@@ -836,10 +836,10 @@ impl KnowledgeManager {
         Self::enforce_reviewer_layer_authority(&ctx, req.target_layer)?;
 
         // Task 8.1 — optimistic concurrency
-        if let Some(v) = client_version {
-            if v != req.updated_at {
-                return Err(KnowledgeManagerError::OptimisticConflict(req.updated_at));
-            }
+        if let Some(v) = client_version
+            && v != req.updated_at
+        {
+            return Err(KnowledgeManagerError::OptimisticConflict(req.updated_at));
         }
 
         // Task 8.2 — idempotency: already rejected → return existing result
@@ -898,10 +898,10 @@ impl KnowledgeManager {
         Self::enforce_reviewer_layer_authority(&ctx, req.target_layer)?;
 
         // Task 8.1 — optimistic concurrency
-        if let Some(v) = client_version {
-            if v != req.updated_at {
-                return Err(KnowledgeManagerError::OptimisticConflict(req.updated_at));
-            }
+        if let Some(v) = client_version
+            && v != req.updated_at
+        {
+            return Err(KnowledgeManagerError::OptimisticConflict(req.updated_at));
         }
 
         if req.status != PromotionRequestStatus::PendingReview {
@@ -1062,46 +1062,43 @@ impl KnowledgeManager {
             }
             PromotionMode::Partial => {
                 // Task 2.9: store residual content as a new entry at source layer
-                if let Some(residual_content) = &req.residual_content {
-                    if !residual_content.is_empty() {
-                        let residual_id = uuid::Uuid::new_v4().to_string();
-                        let residual_path = format!("residual/{}", residual_id);
-                        let variant_role = req
-                            .residual_role
-                            .unwrap_or(KnowledgeVariantRole::Specialization);
-                        let residual_entry = KnowledgeEntry {
-                            path: residual_path.clone(),
-                            content: residual_content.clone(),
-                            layer: source_entry.layer,
-                            kind: source_entry.kind,
-                            status: KnowledgeStatus::Accepted,
-                            summaries: HashMap::new(),
-                            metadata: {
-                                let mut m = HashMap::new();
-                                m.insert(
-                                    "variant_role".to_string(),
-                                    serde_json::json!(variant_role),
-                                );
-                                m.insert(
-                                    "residual_from_id".to_string(),
-                                    serde_json::json!(req.source_item_id),
-                                );
-                                m
-                            },
-                            commit_hash: None,
-                            author: Some(actor.to_string()),
-                            updated_at: now,
-                        };
-                        self.repository
-                            .store(
-                                ctx.clone(),
-                                residual_entry,
-                                &format!("[residual] {promotion_id}"),
-                            )
-                            .await?;
-                        residual_item_id = Some(residual_path.clone());
-                        req.residual_item_id = Some(residual_path.clone());
-                    }
+                if let Some(residual_content) = &req.residual_content
+                    && !residual_content.is_empty()
+                {
+                    let residual_id = uuid::Uuid::new_v4().to_string();
+                    let residual_path = format!("residual/{}", residual_id);
+                    let variant_role = req
+                        .residual_role
+                        .unwrap_or(KnowledgeVariantRole::Specialization);
+                    let residual_entry = KnowledgeEntry {
+                        path: residual_path.clone(),
+                        content: residual_content.clone(),
+                        layer: source_entry.layer,
+                        kind: source_entry.kind,
+                        status: KnowledgeStatus::Accepted,
+                        summaries: HashMap::new(),
+                        metadata: {
+                            let mut m = HashMap::new();
+                            m.insert("variant_role".to_string(), serde_json::json!(variant_role));
+                            m.insert(
+                                "residual_from_id".to_string(),
+                                serde_json::json!(req.source_item_id),
+                            );
+                            m
+                        },
+                        commit_hash: None,
+                        author: Some(actor.to_string()),
+                        updated_at: now,
+                    };
+                    self.repository
+                        .store(
+                            ctx.clone(),
+                            residual_entry,
+                            &format!("[residual] {promotion_id}"),
+                        )
+                        .await?;
+                    residual_item_id = Some(residual_path.clone());
+                    req.residual_item_id = Some(residual_path.clone());
                 }
             }
         }

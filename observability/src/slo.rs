@@ -223,8 +223,10 @@ impl SloMonitor {
         let actual_downtime = 1.0 - availability;
         let error_budget_remaining = if allowed_downtime > 0.0 {
             1.0 - (actual_downtime / allowed_downtime).min(2.0)
+        } else if availability >= 1.0 {
+            1.0
         } else {
-            if availability >= 1.0 { 1.0 } else { -1.0 }
+            -1.0
         };
 
         let burn_rate = if allowed_downtime > 0.0 {

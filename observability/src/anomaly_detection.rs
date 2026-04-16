@@ -94,9 +94,7 @@ impl AnomalyDetector {
         // Add data point
         {
             let mut data = self.data.write().unwrap();
-            let points = data
-                .entry(metric_name.to_string())
-                .or_insert_with(VecDeque::new);
+            let points = data.entry(metric_name.to_string()).or_default();
             points.push_back(value);
 
             // Keep only window_size recent points

@@ -2680,7 +2680,7 @@ mod tests {
         state.failed_items.push(SyncFailure {
             knowledge_id: "recent_failure.md".to_string(),
             error: "recent error".to_string(),
-            failed_at: now - (1 * 24 * 60 * 60),
+            failed_at: now - (24 * 60 * 60),
             retry_count: 1,
         });
 

@@ -1161,7 +1161,7 @@ async fn add_domain_mapping(
                 json!({
                     "domain": req.domain,
                     "tenantId": record.id.as_str(),
-                    "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(|value| value.as_str())
+                    "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(mk_core::TenantId::as_str)
                 }),
             )
             .await;
@@ -2133,7 +2133,7 @@ async fn audit_tenant_action(
             None,
             serde_json::json!({
                 "actorTenantId": ctx.tenant_id.as_str(),
-                "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(|value| value.as_str()),
+                "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(mk_core::TenantId::as_str),
                 "details": details,
             }),
         )
@@ -2163,7 +2163,7 @@ async fn audit_hierarchy_action(
             None,
             serde_json::json!({
                 "actorTenantId": ctx.tenant_id.as_str(),
-                "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(|value| value.as_str()),
+                "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(mk_core::TenantId::as_str),
                 "details": details,
             }),
         )
@@ -2193,7 +2193,7 @@ async fn audit_membership_action(
             None,
             serde_json::json!({
                 "actorTenantId": ctx.tenant_id.as_str(),
-                "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(|value| value.as_str()),
+                "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(mk_core::TenantId::as_str),
                 "details": details,
             }),
         )
@@ -3141,7 +3141,10 @@ async fn list_git_provider_connections(
         .await
     {
         Ok(connections) => {
-            let redacted: Vec<_> = connections.iter().map(|c| c.redacted()).collect();
+            let redacted: Vec<_> = connections
+                .iter()
+                .map(mk_core::types::GitProviderConnection::redacted)
+                .collect();
             (
                 StatusCode::OK,
                 Json(json!({ "success": true, "connections": redacted })),
@@ -3320,7 +3323,10 @@ async fn list_tenant_git_provider_connections(
         .await
     {
         Ok(connections) => {
-            let redacted: Vec<_> = connections.iter().map(|c| c.redacted()).collect();
+            let redacted: Vec<_> = connections
+                .iter()
+                .map(mk_core::types::GitProviderConnection::redacted)
+                .collect();
             (
                 StatusCode::OK,
                 Json(json!({ "success": true, "connections": redacted })),
@@ -3481,8 +3487,7 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
         || slug.ends_with('-')
     {
         errors.push(format!(
-            "tenant.slug '{}' must be kebab-case (lowercase letters, digits, hyphens; no leading/trailing hyphens)",
-            slug
+            "tenant.slug '{slug}' must be kebab-case (lowercase letters, digits, hyphens; no leading/trailing hyphens)"
         ));
     }
 
@@ -3741,13 +3746,13 @@ async fn provision_tenant(
                     .await
                 {
                     Ok(allowed) => {
-                        if !allowed {
+                        if allowed {
+                            Ok(())
+                        } else {
                             Err(format!(
                                 "Tenant '{}' is not in the allow-list for connection '{conn_id}'",
                                 tenant_id.as_str()
                             ))
-                        } else {
-                            Ok(())
                         }
                     }
                     Err(e) => Err(e.to_string()),
@@ -3756,56 +3761,55 @@ async fn provision_tenant(
                 Ok(())
             };
 
-            match conn_allowed {
-                Err(msg) => ProvisionStep::fail("repository", msg),
-                Ok(()) => {
-                    let binding_request = UpsertTenantRepositoryBinding {
-                        tenant_id: tenant_id.clone(),
-                        kind: repo.kind.clone(),
-                        local_path: repo.local_path.clone(),
-                        remote_url: repo.remote_url.clone(),
-                        branch: repo.branch.clone(),
-                        branch_policy: repo.branch_policy.clone(),
-                        credential_kind: repo.credential_kind.clone(),
-                        credential_ref: repo.credential_ref.clone(),
-                        github_owner: repo.github_owner.clone(),
-                        github_repo: repo.github_repo.clone(),
-                        source_owner: repo.source_owner.clone(),
-                        git_provider_connection_id: repo.git_provider_connection_id.clone(),
-                    };
-                    match state
-                        .tenant_repository_binding_store
-                        .upsert_binding(binding_request)
-                        .await
-                    {
-                        Ok(binding) => {
-                            let now = chrono::Utc::now().timestamp();
-                            persist_governance_event(
-                                state.as_ref(),
-                                &GovernanceEvent::RepositoryBindingCreated {
-                                    binding_id: binding.id.clone(),
-                                    tenant_id: tenant_id.clone(),
-                                    timestamp: now,
-                                },
-                            )
-                            .await;
-                            state.tenant_repo_resolver.invalidate(&tenant_id);
-                            audit_tenant_action(
-                                state.as_ref(),
-                                &ctx,
-                                "tenant_provision_repository",
-                                Some(binding.id.as_str()),
-                                json!({
-                                    "tenantId": tenant_id.as_str(),
-                                    "kind": binding.kind,
-                                    "branch": binding.branch,
-                                }),
-                            )
-                            .await;
-                            ProvisionStep::ok("repository", format!("binding id={}", binding.id))
-                        }
-                        Err(err) => ProvisionStep::fail("repository", err.to_string()),
+            if let Err(msg) = conn_allowed {
+                ProvisionStep::fail("repository", msg)
+            } else {
+                let binding_request = UpsertTenantRepositoryBinding {
+                    tenant_id: tenant_id.clone(),
+                    kind: repo.kind.clone(),
+                    local_path: repo.local_path.clone(),
+                    remote_url: repo.remote_url.clone(),
+                    branch: repo.branch.clone(),
+                    branch_policy: repo.branch_policy.clone(),
+                    credential_kind: repo.credential_kind.clone(),
+                    credential_ref: repo.credential_ref.clone(),
+                    github_owner: repo.github_owner.clone(),
+                    github_repo: repo.github_repo.clone(),
+                    source_owner: repo.source_owner.clone(),
+                    git_provider_connection_id: repo.git_provider_connection_id.clone(),
+                };
+                match state
+                    .tenant_repository_binding_store
+                    .upsert_binding(binding_request)
+                    .await
+                {
+                    Ok(binding) => {
+                        let now = chrono::Utc::now().timestamp();
+                        persist_governance_event(
+                            state.as_ref(),
+                            &GovernanceEvent::RepositoryBindingCreated {
+                                binding_id: binding.id.clone(),
+                                tenant_id: tenant_id.clone(),
+                                timestamp: now,
+                            },
+                        )
+                        .await;
+                        state.tenant_repo_resolver.invalidate(&tenant_id);
+                        audit_tenant_action(
+                            state.as_ref(),
+                            &ctx,
+                            "tenant_provision_repository",
+                            Some(binding.id.as_str()),
+                            json!({
+                                "tenantId": tenant_id.as_str(),
+                                "kind": binding.kind,
+                                "branch": binding.branch,
+                            }),
+                        )
+                        .await;
+                        ProvisionStep::ok("repository", format!("binding id={}", binding.id))
                     }
+                    Err(err) => ProvisionStep::fail("repository", err.to_string()),
                 }
             }
         };
@@ -3844,26 +3848,22 @@ async fn provision_tenant(
                 created_at: now,
                 updated_at: now,
             };
-            match state.postgres.create_unit(&company_unit).await {
-                Err(err) => {
-                    hierarchy_errors.push(format!("company '{}': {err}", company_unit.name));
-                    continue;
-                }
-                Ok(()) => {
-                    persist_governance_event(
-                        state.as_ref(),
-                        &GovernanceEvent::UnitCreated {
-                            unit_id: company_unit.id.clone(),
-                            unit_type: company_unit.unit_type,
-                            tenant_id: tenant_id.clone(),
-                            parent_id: None,
-                            timestamp: now,
-                        },
-                    )
-                    .await;
-                    units_created += 1;
-                }
+            if let Err(err) = state.postgres.create_unit(&company_unit).await {
+                hierarchy_errors.push(format!("company '{}': {err}", company_unit.name));
+                continue;
             }
+            persist_governance_event(
+                state.as_ref(),
+                &GovernanceEvent::UnitCreated {
+                    unit_id: company_unit.id.clone(),
+                    unit_type: company_unit.unit_type,
+                    tenant_id: tenant_id.clone(),
+                    parent_id: None,
+                    timestamp: now,
+                },
+            )
+            .await;
+            units_created += 1;
 
             let company_id = company_unit.id.clone();
 
@@ -3879,41 +3879,37 @@ async fn provision_tenant(
                     created_at: now,
                     updated_at: now,
                 };
-                match state.postgres.create_unit(&org_unit).await {
-                    Err(err) => {
-                        hierarchy_errors.push(format!("org '{}': {err}", org_unit.name));
-                        continue;
-                    }
-                    Ok(()) => {
-                        persist_governance_event(
-                            state.as_ref(),
-                            &GovernanceEvent::UnitCreated {
-                                unit_id: org_unit.id.clone(),
-                                unit_type: org_unit.unit_type,
-                                tenant_id: tenant_id.clone(),
-                                parent_id: Some(company_id.clone()),
-                                timestamp: now,
-                            },
-                        )
-                        .await;
-                        units_created += 1;
-                    }
+                if let Err(err) = state.postgres.create_unit(&org_unit).await {
+                    hierarchy_errors.push(format!("org '{}': {err}", org_unit.name));
+                    continue;
                 }
+                persist_governance_event(
+                    state.as_ref(),
+                    &GovernanceEvent::UnitCreated {
+                        unit_id: org_unit.id.clone(),
+                        unit_type: org_unit.unit_type,
+                        tenant_id: tenant_id.clone(),
+                        parent_id: Some(company_id.clone()),
+                        timestamp: now,
+                    },
+                )
+                .await;
+                units_created += 1;
 
                 let org_id = org_unit.id.clone();
 
                 // Assign org-level members
                 for member in org.members.iter().flatten() {
-                    let user_id = match mk_core::types::UserId::new(member.user_id.clone()) {
-                        Some(id) => id,
-                        None => {
+                    let user_id =
+                        if let Some(id) = mk_core::types::UserId::new(member.user_id.clone()) {
+                            id
+                        } else {
                             hierarchy_errors.push(format!(
                                 "org '{}' member: invalid user_id '{}'",
                                 org.name, member.user_id
                             ));
                             continue;
-                        }
-                    };
+                        };
                     if let Err(err) = state
                         .postgres
                         .assign_role(&user_id, &tenant_id, &org_id, member.role.clone())
@@ -3950,41 +3946,37 @@ async fn provision_tenant(
                         created_at: now,
                         updated_at: now,
                     };
-                    match state.postgres.create_unit(&team_unit).await {
-                        Err(err) => {
-                            hierarchy_errors.push(format!("team '{}': {err}", team_unit.name));
-                            continue;
-                        }
-                        Ok(()) => {
-                            persist_governance_event(
-                                state.as_ref(),
-                                &GovernanceEvent::UnitCreated {
-                                    unit_id: team_unit.id.clone(),
-                                    unit_type: team_unit.unit_type,
-                                    tenant_id: tenant_id.clone(),
-                                    parent_id: Some(org_id.clone()),
-                                    timestamp: now,
-                                },
-                            )
-                            .await;
-                            units_created += 1;
-                        }
+                    if let Err(err) = state.postgres.create_unit(&team_unit).await {
+                        hierarchy_errors.push(format!("team '{}': {err}", team_unit.name));
+                        continue;
                     }
+                    persist_governance_event(
+                        state.as_ref(),
+                        &GovernanceEvent::UnitCreated {
+                            unit_id: team_unit.id.clone(),
+                            unit_type: team_unit.unit_type,
+                            tenant_id: tenant_id.clone(),
+                            parent_id: Some(org_id.clone()),
+                            timestamp: now,
+                        },
+                    )
+                    .await;
+                    units_created += 1;
 
                     let team_id = team_unit.id.clone();
 
                     // Assign team-level members
                     for member in team.members.iter().flatten() {
-                        let user_id = match mk_core::types::UserId::new(member.user_id.clone()) {
-                            Some(id) => id,
-                            None => {
+                        let user_id =
+                            if let Some(id) = mk_core::types::UserId::new(member.user_id.clone()) {
+                                id
+                            } else {
                                 hierarchy_errors.push(format!(
                                     "team '{}' member: invalid user_id '{}'",
                                     team.name, member.user_id
                                 ));
                                 continue;
-                            }
-                        };
+                            };
                         if let Err(err) = state
                             .postgres
                             .assign_role(&user_id, &tenant_id, &team_id, member.role.clone())
@@ -4033,12 +4025,12 @@ async fn provision_tenant(
         let now = chrono::Utc::now().timestamp();
 
         for assignment in role_assignments {
-            let user_id = match mk_core::types::UserId::new(assignment.user_id.clone()) {
-                Some(id) => id,
-                None => {
-                    role_errors.push(format!("invalid user_id '{}'", assignment.user_id));
-                    continue;
-                }
+            let user_id = if let Some(id) = mk_core::types::UserId::new(assignment.user_id.clone())
+            {
+                id
+            } else {
+                role_errors.push(format!("invalid user_id '{}'", assignment.user_id));
+                continue;
             };
 
             // Resolve unit: if a unit name/id is given look it up; otherwise use

@@ -372,18 +372,17 @@ async fn bootstrap_handler(
         .token_issuer
         .clone()
         .unwrap_or_else(|| "aeterna".to_string());
-    let tenant_id = match resolve_tenant_for_github_user(&github_user.login, cfg) {
-        Some(t) => t,
-        None => {
-            tracing::error!(login = %github_user.login, "No tenant configured for plugin auth bootstrap");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": "tenant_not_configured",
-                    "message": "No tenant configured for plugin authentication. Set AETERNA_DEFAULT_TENANT_ID or configure default_tenant_id."
-                })),
-            );
-        }
+    let tenant_id = if let Some(t) = resolve_tenant_for_github_user(&github_user.login, cfg) {
+        t
+    } else {
+        tracing::error!(login = %github_user.login, "No tenant configured for plugin auth bootstrap");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "tenant_not_configured",
+                "message": "No tenant configured for plugin authentication. Set AETERNA_DEFAULT_TENANT_ID or configure default_tenant_id."
+            })),
+        );
     };
 
     let access_token =
@@ -770,12 +769,11 @@ pub fn tenant_context_from_plugin_bearer(
     let identity = validate_plugin_bearer(headers, jwt_secret)?;
     let tenant = sanitize_identifier(&identity.tenant_id, "");
     let login = identity.github_login.chars().take(100).collect::<String>();
-    match (TenantId::new(tenant), UserId::new(login)) {
-        (Some(tenant_id), Some(user_id)) => Some(TenantContext::new(tenant_id, user_id)),
-        _ => {
-            tracing::warn!("Plugin token carried invalid tenant_id or user_id; rejecting context");
-            None
-        }
+    if let (Some(tenant_id), Some(user_id)) = (TenantId::new(tenant), UserId::new(login)) {
+        Some(TenantContext::new(tenant_id, user_id))
+    } else {
+        tracing::warn!("Plugin token carried invalid tenant_id or user_id; rejecting context");
+        None
     }
 }
 
@@ -1127,15 +1125,12 @@ async fn web_callback_handler(
         }
     };
 
-    let state_valid = match state.redis_conn.as_ref() {
-        Some(c) => {
-            let mut conn = c.as_ref().clone();
-            oauth_state_consume(&mut conn, &incoming_state).await
-        }
-        None => {
-            tracing::error!("Redis not available for OAuth state validation");
-            false
-        }
+    let state_valid = if let Some(c) = state.redis_conn.as_ref() {
+        let mut conn = c.as_ref().clone();
+        oauth_state_consume(&mut conn, &incoming_state).await
+    } else {
+        tracing::error!("Redis not available for OAuth state validation");
+        false
     };
 
     if !state_valid {
@@ -1143,28 +1138,25 @@ async fn web_callback_handler(
         return Redirect::to(&format!("{error_redirect}?error=invalid_state"));
     }
 
-    let client_id = match &cfg.github_client_id {
-        Some(id) => id.clone(),
-        None => {
-            tracing::error!("GitHub OAuth client ID not configured");
-            return Redirect::to(&format!("{error_redirect}?error=configuration_error"));
-        }
+    let client_id = if let Some(id) = &cfg.github_client_id {
+        id.clone()
+    } else {
+        tracing::error!("GitHub OAuth client ID not configured");
+        return Redirect::to(&format!("{error_redirect}?error=configuration_error"));
     };
 
-    let client_secret = match &cfg.github_client_secret {
-        Some(s) => s.clone(),
-        None => {
-            tracing::error!("GitHub OAuth client secret not configured");
-            return Redirect::to(&format!("{error_redirect}?error=configuration_error"));
-        }
+    let client_secret = if let Some(s) = &cfg.github_client_secret {
+        s.clone()
+    } else {
+        tracing::error!("GitHub OAuth client secret not configured");
+        return Redirect::to(&format!("{error_redirect}?error=configuration_error"));
     };
 
-    let jwt_secret = match &cfg.jwt_secret {
-        Some(s) => s.clone(),
-        None => {
-            tracing::error!("JWT secret not configured");
-            return Redirect::to(&format!("{error_redirect}?error=configuration_error"));
-        }
+    let jwt_secret = if let Some(s) = &cfg.jwt_secret {
+        s.clone()
+    } else {
+        tracing::error!("JWT secret not configured");
+        return Redirect::to(&format!("{error_redirect}?error=configuration_error"));
     };
 
     let github_access_token =
@@ -1193,12 +1185,11 @@ async fn web_callback_handler(
         .clone()
         .unwrap_or_else(|| "aeterna".to_string());
 
-    let tenant_id = match resolve_tenant_for_github_user(&github_user.login, cfg) {
-        Some(t) => t,
-        None => {
-            tracing::error!(login = %github_user.login, "No tenant configured for web OAuth login");
-            return Redirect::to(&format!("{error_redirect}?error=tenant_not_configured"));
-        }
+    let tenant_id = if let Some(t) = resolve_tenant_for_github_user(&github_user.login, cfg) {
+        t
+    } else {
+        tracing::error!(login = %github_user.login, "No tenant configured for web OAuth login");
+        return Redirect::to(&format!("{error_redirect}?error=tenant_not_configured"));
     };
 
     let access_token =

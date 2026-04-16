@@ -202,7 +202,7 @@ async fn test_duckdb_graph_multi_hop_reasoning()
         graph_store.add_node(ctx.clone(), node).await?;
     }
 
-    let edges = vec![
+    let edges = [
         ("PaymentsService", "StripeAPI", "CALLS"),
         ("PaymentsService", "PaymentsDB", "READS_FROM"),
         ("OrdersService", "PaymentsService", "DEPENDS_ON"),
@@ -337,7 +337,7 @@ async fn test_duckdb_graph_community_detection()
         graph_store.add_node(ctx.clone(), node).await?;
     }
 
-    let cluster_a_edges = vec![
+    let cluster_a_edges = [
         ("cluster_a_1", "cluster_a_2"),
         ("cluster_a_2", "cluster_a_3"),
         ("cluster_a_3", "cluster_a_4"),
@@ -355,7 +355,7 @@ async fn test_duckdb_graph_community_detection()
         graph_store.add_edge(ctx.clone(), edge).await?;
     }
 
-    let cluster_b_edges = vec![
+    let cluster_b_edges = [
         ("cluster_b_1", "cluster_b_2"),
         ("cluster_b_2", "cluster_b_3"),
     ];

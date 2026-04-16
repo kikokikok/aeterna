@@ -65,7 +65,7 @@ impl GovernanceSkill {
 
 #[async_trait]
 impl Skill for GovernanceSkill {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "governance"
     }
 
@@ -90,7 +90,7 @@ impl Skill for GovernanceSkill {
                 .governance_drift_check(tenant)
                 .await
                 .map_err(|e| e.to_string()),
-            _ => Err(format!("Unknown tool: {}", tool)),
+            _ => Err(format!("Unknown tool: {tool}")),
         }
     }
 }

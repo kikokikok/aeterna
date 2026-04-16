@@ -138,9 +138,9 @@ fn ha_backup_scripts_exist_for_all_datastores() {
 
     for script in &required {
         let path = root.join(script);
-        assert!(path.exists(), "Backup script must exist: {}", script);
+        assert!(path.exists(), "Backup script must exist: {script}");
 
         let content = std::fs::read_to_string(&path).expect("failed to read backup script");
-        assert!(!content.is_empty(), "{} must not be empty", script);
+        assert!(!content.is_empty(), "{script} must not be empty");
     }
 }

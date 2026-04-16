@@ -23,7 +23,7 @@ pub fn validate_config(config_path: &Path) -> Result<ValidationResult> {
     let content = std::fs::read_to_string(config_path)?;
 
     if let Err(e) = toml::from_str::<toml::Value>(&content) {
-        issues.push(format!("Invalid TOML syntax: {}", e));
+        issues.push(format!("Invalid TOML syntax: {e}"));
     }
 
     Ok(ValidationResult {

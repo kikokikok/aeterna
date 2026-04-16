@@ -2163,7 +2163,7 @@ async fn admin_permissions_matrix_and_effective_endpoints_return_expected_shapes
     )
     .unwrap();
     assert_eq!(effective_json["userId"], "alice");
-    assert!(effective_json["roles"].as_array().unwrap().len() >= 1);
+    assert!(!effective_json["roles"].as_array().unwrap().is_empty());
     assert!(effective_json["granted"].as_array().is_some());
     assert!(effective_json["denied"].as_array().is_some());
 }

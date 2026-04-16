@@ -70,11 +70,11 @@ impl WebhookServer {
 
         let listener = TcpListener::bind(&addr)
             .await
-            .map_err(|e| IdpSyncError::ConfigError(format!("Failed to bind: {}", e)))?;
+            .map_err(|e| IdpSyncError::ConfigError(format!("Failed to bind: {e}")))?;
 
         axum::serve(listener, app)
             .await
-            .map_err(|e| IdpSyncError::ConfigError(format!("Server error: {}", e)))?;
+            .map_err(|e| IdpSyncError::ConfigError(format!("Server error: {e}")))?;
 
         Ok(())
     }
@@ -246,7 +246,7 @@ async fn process_azure_notification(
         .unwrap_or("unknown");
 
     match (notification.change_type.as_str(), resource_type) {
-        ("created", "#microsoft.graph.user") | ("updated", "#microsoft.graph.user") => {
+        ("created" | "updated", "#microsoft.graph.user") => {
             info!(
                 user_id = %notification.resource_data.id,
                 change_type = %notification.change_type,

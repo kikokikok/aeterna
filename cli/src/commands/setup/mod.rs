@@ -257,7 +257,7 @@ fn run_show(output_dir: &PathBuf) -> Result<()> {
     println!();
 
     let masked = mask_sensitive_values(&content);
-    println!("{}", masked);
+    println!("{masked}");
 
     Ok(())
 }

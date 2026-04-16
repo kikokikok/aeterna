@@ -560,8 +560,7 @@ async fn run_list(args: KnowledgeListArgs) -> anyhow::Result<()> {
     }
 
     let profile_name = crate::profile::load_resolved(None, None)
-        .map(|r| r.profile_name)
-        .unwrap_or_else(|_| "default".to_string());
+        .map_or_else(|_| "default".to_string(), |r| r.profile_name);
     Err(crate::backend::unsupported("knowledge list", &profile_name))
 }
 
@@ -630,8 +629,7 @@ async fn run_check(args: KnowledgeCheckArgs) -> anyhow::Result<()> {
     }
 
     let profile_name = crate::profile::load_resolved(None, None)
-        .map(|r| r.profile_name)
-        .unwrap_or_else(|_| "default".to_string());
+        .map_or_else(|_| "default".to_string(), |r| r.profile_name);
     Err(crate::backend::unsupported(
         "knowledge check",
         &profile_name,
@@ -817,7 +815,7 @@ async fn run_promotion_preview(args: KnowledgePromotionPreviewArgs) -> anyhow::R
         let result = client
             .knowledge_promotion_preview(&args.id, &target_layer, args.mode.as_deref())
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -830,11 +828,10 @@ async fn run_promotion_preview(args: KnowledgePromotionPreviewArgs) -> anyhow::R
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -999,7 +996,7 @@ async fn run_promote(args: KnowledgePromoteArgs) -> anyhow::Result<()> {
         let result = client
             .knowledge_promote(&args.id, &body)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1012,11 +1009,10 @@ async fn run_promote(args: KnowledgePromoteArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -1069,7 +1065,7 @@ async fn run_pending(args: KnowledgePendingArgs) -> anyhow::Result<()> {
         let result = client
             .knowledge_promotions_list(status_filter)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1081,11 +1077,10 @@ async fn run_pending(args: KnowledgePendingArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -1093,7 +1088,7 @@ async fn run_pending(args: KnowledgePendingArgs) -> anyhow::Result<()> {
         } else {
             let items = result.as_array().cloned().unwrap_or_default();
             let count = items.len();
-            output::header(&format!("Pending Promotions ({})", count));
+            output::header(&format!("Pending Promotions ({count})"));
             println!();
 
             if count == 0 {
@@ -1111,8 +1106,8 @@ async fn run_pending(args: KnowledgePendingArgs) -> anyhow::Result<()> {
                     let status = item["status"].as_str().unwrap_or("?");
                     let created = item["created_at"].as_str().unwrap_or("?");
 
-                    println!("  [{}]  {} → {}  ({})", id, source_id, target_layer, mode);
-                    println!("        Status: {}  |  Created: {}", status, created);
+                    println!("  [{id}]  {source_id} → {target_layer}  ({mode})");
+                    println!("        Status: {status}  |  Created: {created}");
                     println!();
                 }
                 output::hint(
@@ -1155,7 +1150,7 @@ async fn run_approve(args: KnowledgeApproveArgs) -> anyhow::Result<()> {
         let result = client
             .knowledge_promotion_approve(&args.promotion_id, &args.decision)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1168,11 +1163,10 @@ async fn run_approve(args: KnowledgeApproveArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -1238,7 +1232,7 @@ async fn run_reject(args: KnowledgeRejectArgs) -> anyhow::Result<()> {
         let result = client
             .knowledge_promotion_reject(&args.promotion_id, &args.reason)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1251,11 +1245,10 @@ async fn run_reject(args: KnowledgeRejectArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -1268,7 +1261,7 @@ async fn run_reject(args: KnowledgeRejectArgs) -> anyhow::Result<()> {
             println!();
             println!("  ✗ Promotion rejected");
             if let Some(proposer) = result["proposer"].as_str() {
-                println!("  ℹ Proposer '{}' has been notified", proposer);
+                println!("  ℹ Proposer '{proposer}' has been notified");
             } else {
                 println!("  ℹ Proposer has been notified");
             }
@@ -1318,7 +1311,7 @@ async fn run_retarget(args: KnowledgeRetargetArgs) -> anyhow::Result<()> {
         let result = client
             .knowledge_promotion_retarget(&args.promotion_id, &target_layer)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1331,11 +1324,10 @@ async fn run_retarget(args: KnowledgeRetargetArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -1411,7 +1403,7 @@ async fn run_relate(args: KnowledgeRelateArgs) -> anyhow::Result<()> {
         let result = client
             .knowledge_relate(&args.id, &args.target_id, &relation_type)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1425,11 +1417,10 @@ async fn run_relate(args: KnowledgeRelateArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {

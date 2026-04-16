@@ -344,16 +344,16 @@ impl ReasoningCacheBackend for InMemoryReasoningCacheBackend {
     async fn get(&self, key: &str) -> Result<Option<CachedReasoning>, CacheError> {
         let now = chrono::Utc::now().timestamp();
         let cache = self.cache.read().await;
-        if let Some((_, expires_at)) = cache.get(key) {
-            if now < *expires_at {
-                drop(cache);
-                self.update_access_order(key).await;
-                let mut cache = self.cache.write().await;
-                if let Some((cached, _)) = cache.get_mut(key) {
-                    cached.access_count += 1;
-                    cached.last_accessed_at = now;
-                    return Ok(Some(cached.clone()));
-                }
+        if let Some((_, expires_at)) = cache.get(key)
+            && now < *expires_at
+        {
+            drop(cache);
+            self.update_access_order(key).await;
+            let mut cache = self.cache.write().await;
+            if let Some((cached, _)) = cache.get_mut(key) {
+                cached.access_count += 1;
+                cached.last_accessed_at = now;
+                return Ok(Some(cached.clone()));
             }
         }
         Ok(None)

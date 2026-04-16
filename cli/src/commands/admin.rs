@@ -460,30 +460,29 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
     migrations.sort_by_key(|m| m.version);
 
     match args.direction.as_str() {
-        "status" => match connect_migration_pool().await {
-            Ok(pool) => {
+        "status" => {
+            if let Ok(pool) = connect_migration_pool().await {
                 ensure_migration_table(&pool).await?;
                 let applied = get_applied_migrations(&pool).await?;
                 verify_applied_checksums(&migrations, &applied)?;
                 let report = build_migration_report(&migrations, &applied);
                 print_migration_report("status", args.dry_run, args.json, &report)?;
-            }
-            Err(_) => {
+            } else {
                 let report = build_offline_status_report(&migrations);
                 print_migration_report("status", args.dry_run, args.json, &report)?;
                 output::warn(
                     "Database not connected — showing embedded migrations only. \
-                         Set DATABASE_URL or PG_HOST to see applied status.",
+                     Set DATABASE_URL or PG_HOST to see applied status.",
                 );
             }
-        },
+        }
         "up" => {
             let target_version = parse_target_version(args.target.as_deref())?;
 
             if args.dry_run {
                 let selected: Vec<&EmbeddedMigration> = migrations
                     .iter()
-                    .filter(|m| target_version.map_or(true, |target| m.version <= target))
+                    .filter(|m| target_version.is_none_or(|target| m.version <= target))
                     .collect();
                 let report = build_dry_run_report(&selected);
                 print_migration_report("up", true, args.json, &report)?;
@@ -521,7 +520,7 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
             let mut pending: Vec<&EmbeddedMigration> = migrations
                 .iter()
                 .filter(|m| !applied.iter().any(|a| a.version == m.version))
-                .filter(|m| target_version.map_or(true, |target| m.version <= target))
+                .filter(|m| target_version.is_none_or(|target| m.version <= target))
                 .collect();
             pending.sort_by_key(|m| m.version);
 
@@ -730,14 +729,14 @@ async fn connect_migration_pool() -> anyhow::Result<PgPool> {
 
 async fn ensure_migration_table(pool: &PgPool) -> anyhow::Result<()> {
     sqlx::query(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS _aeterna_migrations (
             version INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             checksum TEXT NOT NULL,
             applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
-        "#,
+        ",
     )
     .execute(pool)
     .await?;
@@ -809,8 +808,7 @@ fn parse_target_version(target: Option<&str>) -> anyhow::Result<Option<i32>> {
         Some(raw) => {
             let parsed = raw.parse::<i32>().map_err(|_| {
                 anyhow::anyhow!(
-                    "Invalid --target value '{}'. Expected integer migration version (e.g. 16).",
-                    raw
+                    "Invalid --target value '{raw}'. Expected integer migration version (e.g. 16)."
                 )
             })?;
             Ok(Some(parsed))
@@ -921,8 +919,7 @@ fn print_migration_report(
         "  Current Version: {}",
         report
             .current_version
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "none".to_string())
+            .map_or_else(|| "none".to_string(), |v| v.to_string())
     );
     println!("  Direction:       {direction}");
     if dry_run {
@@ -1118,7 +1115,7 @@ async fn run_export(args: AdminExportArgs) -> anyhow::Result<()> {
                     );
                 } else {
                     ux_error::UxError::new("Export failed: server returned an error")
-                        .why(&format!("HTTP {status}: {body}"))
+                        .why(format!("HTTP {status}: {body}"))
                         .fix("Check server logs for details")
                         .display();
                 }
@@ -1136,7 +1133,7 @@ async fn run_export(args: AdminExportArgs) -> anyhow::Result<()> {
                     );
                 } else {
                     ux_error::UxError::new("Cannot reach Aeterna server for export")
-                        .why(&format!("Connection error: {e}"))
+                        .why(format!("Connection error: {e}"))
                         .fix("Verify the server is running and AETERNA_SERVER_URL is correct")
                         .suggest("aeterna serve")
                         .display();
@@ -1204,7 +1201,7 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
                 );
             } else {
                 ux_error::UxError::new("Archive validation failed")
-                    .why(&rpt.errors.join("; "))
+                    .why(rpt.errors.join("; "))
                     .fix("Ensure the archive is not corrupted")
                     .fix("Re-export from the source instance")
                     .display();
@@ -1337,7 +1334,7 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
                     let body = resp.text().await.unwrap_or_default();
                     if !args.json {
                         ux_error::UxError::new("Import failed: server returned an error")
-                            .why(&format!("HTTP {status}: {body}"))
+                            .why(format!("HTTP {status}: {body}"))
                             .fix("Check server logs for details")
                             .display();
                     }
@@ -1346,7 +1343,7 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
                 Err(e) => {
                     if !args.json {
                         ux_error::UxError::new("Cannot reach Aeterna server for import")
-                            .why(&format!("Connection error: {e}"))
+                            .why(format!("Connection error: {e}"))
                             .fix("Verify the server is running and AETERNA_SERVER_URL is correct")
                             .suggest("aeterna serve")
                             .display();
@@ -1503,14 +1500,14 @@ async fn run_tenant_provision(args: AdminTenantProvisionArgs) -> anyhow::Result<
                 .and_then(|t| t.get("slug"))
                 .and_then(|s| s.as_str())
             {
-                println!("  Tenant:  {}", slug);
+                println!("  Tenant:  {slug}");
             }
             if let Some(name) = manifest
                 .get("tenant")
                 .and_then(|t| t.get("name"))
                 .and_then(|s| s.as_str())
             {
-                println!("  Name:    {}", name);
+                println!("  Name:    {name}");
             }
             println!();
             println!("  Manifest parsed successfully. Run without --dry-run to provision.");
@@ -1534,7 +1531,7 @@ async fn run_tenant_provision(args: AdminTenantProvisionArgs) -> anyhow::Result<
     } else {
         let success = result
             .get("success")
-            .and_then(|v| v.as_bool())
+            .and_then(serde_json::Value::as_bool)
             .unwrap_or(false);
         let slug = result
             .get("slug")
@@ -1559,7 +1556,10 @@ async fn run_tenant_provision(args: AdminTenantProvisionArgs) -> anyhow::Result<
             println!("  Steps:");
             for step in steps {
                 let name = step.get("step").and_then(|v| v.as_str()).unwrap_or("?");
-                let ok = step.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+                let ok = step
+                    .get("ok")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
                 let icon = if ok { "✓" } else { "✗" };
                 let detail = step.get("detail").and_then(|v| v.as_str()).unwrap_or("");
                 let error = step.get("error").and_then(|v| v.as_str()).unwrap_or("");
@@ -1724,7 +1724,7 @@ async fn run_sync(args: AdminSyncArgs) -> anyhow::Result<()> {
                     }))?
                 );
             } else {
-                ux_error::UxError::new(&format!("Unsupported sync provider: {provider}"))
+                ux_error::UxError::new(format!("Unsupported sync provider: {provider}"))
                     .why("Currently supported providers: github")
                     .fix("Use: aeterna admin sync github")
                     .display();
@@ -1813,17 +1813,16 @@ async fn run_sync_github(args: AdminSyncArgs) -> anyhow::Result<()> {
                 .bind(&tenant_str)
                 .fetch_optional(&pool)
                 .await?;
-        match row {
-            Some((id,)) => id,
-            None => {
-                let id = uuid::Uuid::new_v4();
-                sqlx::query("INSERT INTO tenants (id, name, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id")
-                    .bind(id)
-                    .bind(&tenant_str)
-                    .execute(&pool)
-                    .await?;
-                id
-            }
+        if let Some((id,)) = row {
+            id
+        } else {
+            let id = uuid::Uuid::new_v4();
+            sqlx::query("INSERT INTO tenants (id, name, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id")
+                .bind(id)
+                .bind(&tenant_str)
+                .execute(&pool)
+                .await?;
+            id
         }
     };
 

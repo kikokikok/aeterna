@@ -172,6 +172,12 @@ pub struct MockPolicyStorage {
     drafts: Arc<RwLock<HashMap<String, PolicyDraft>>>,
 }
 
+impl Default for MockPolicyStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockPolicyStorage {
     pub fn new() -> Self {
         Self {
@@ -347,6 +353,12 @@ pub struct MockGovernanceStorage {
     roles: Arc<RwLock<Vec<GovernanceRole>>>,
     audit_logs: Arc<RwLock<Vec<GovernanceAuditEntry>>>,
     request_counter: Arc<RwLock<u64>>,
+}
+
+impl Default for MockGovernanceStorage {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockGovernanceStorage {
@@ -600,13 +612,13 @@ impl MockGovernanceStorage {
 
         let filtered: Vec<GovernanceAuditEntry> = logs
             .iter()
-            .filter(|e| filters.action.as_ref().map_or(true, |a| &e.action == a))
-            .filter(|e| filters.actor_id.map_or(true, |id| e.actor_id == Some(id)))
+            .filter(|e| filters.action.as_ref().is_none_or(|a| &e.action == a))
+            .filter(|e| filters.actor_id.is_none_or(|id| e.actor_id == Some(id)))
             .filter(|e| {
                 filters
                     .target_type
                     .as_ref()
-                    .map_or(true, |t| e.target_type.as_ref() == Some(t))
+                    .is_none_or(|t| e.target_type.as_ref() == Some(t))
             })
             .filter(|e| e.created_at >= filters.since)
             .take(limit as usize)

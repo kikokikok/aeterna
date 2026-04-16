@@ -904,7 +904,10 @@ mod admin_subcommand {
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(json.get("valid").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            json.get("valid").and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
     }
 
     #[test]
@@ -991,8 +994,7 @@ mod admin_subcommand {
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(
             stdout.contains("server_not_connected") || stdout.contains("not connected"),
-            "expected server_not_connected in output, got: {}",
-            stdout,
+            "expected server_not_connected in output, got: {stdout}",
         );
     }
 
@@ -2439,7 +2441,10 @@ mod agent_subcommand {
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(json.get("dryRun").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            json.get("dryRun").and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
         assert!(json.get("agent").is_some());
     }
 
@@ -2854,7 +2859,10 @@ mod org_subcommand {
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(json.get("dryRun").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            json.get("dryRun").and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
         assert!(json.get("org").is_some());
     }
 

@@ -181,15 +181,14 @@ impl OktaClient {
 #[async_trait]
 impl IdpClient for OktaClient {
     async fn list_users(&self, page_token: Option<&str>) -> IdpSyncResult<UserPage> {
-        let path = match page_token {
-            Some(token) => format!("/users?after={}&limit=200", token),
-            None => {
-                let mut path = "/users?limit=200".to_string();
-                if let Some(filter) = &self.config.user_filter {
-                    path.push_str(&format!("&filter={}", urlencoding::encode(filter)));
-                }
-                path
+        let path = if let Some(token) = page_token {
+            format!("/users?after={token}&limit=200")
+        } else {
+            let mut path = "/users?limit=200".to_string();
+            if let Some(filter) = &self.config.user_filter {
+                path.push_str(&format!("&filter={}", urlencoding::encode(filter)));
             }
+            path
         };
 
         let (users, next_token): (Vec<OktaUserResponse>, _) = self.get(&path).await?;
@@ -203,21 +202,20 @@ impl IdpClient for OktaClient {
                 url.split("after=")
                     .nth(1)
                     .and_then(|s| s.split('&').next())
-                    .map(|s| s.to_string())
+                    .map(std::string::ToString::to_string)
             }),
         })
     }
 
     async fn list_groups(&self, page_token: Option<&str>) -> IdpSyncResult<GroupPage> {
-        let path = match page_token {
-            Some(token) => format!("/groups?after={}&limit=200", token),
-            None => {
-                let mut path = "/groups?limit=200".to_string();
-                if let Some(filter) = &self.config.group_filter {
-                    path.push_str(&format!("&filter={}", urlencoding::encode(filter)));
-                }
-                path
+        let path = if let Some(token) = page_token {
+            format!("/groups?after={token}&limit=200")
+        } else {
+            let mut path = "/groups?limit=200".to_string();
+            if let Some(filter) = &self.config.group_filter {
+                path.push_str(&format!("&filter={}", urlencoding::encode(filter)));
             }
+            path
         };
 
         let (groups, next_token): (Vec<OktaGroupResponse>, _) = self.get(&path).await?;
@@ -243,13 +241,13 @@ impl IdpClient for OktaClient {
                 url.split("after=")
                     .nth(1)
                     .and_then(|s| s.split('&').next())
-                    .map(|s| s.to_string())
+                    .map(std::string::ToString::to_string)
             }),
         })
     }
 
     async fn get_group_members(&self, group_id: &str) -> IdpSyncResult<Vec<IdpUser>> {
-        let path = format!("/groups/{}/users?limit=200", group_id);
+        let path = format!("/groups/{group_id}/users?limit=200");
         let mut all_members = Vec::new();
         let mut current_path = path;
 
@@ -264,7 +262,7 @@ impl IdpClient for OktaClient {
                         .nth(1)
                         .and_then(|s| s.split('&').next())
                         .unwrap_or("");
-                    current_path = format!("/groups/{}/users?after={}&limit=200", group_id, after);
+                    current_path = format!("/groups/{group_id}/users?after={after}&limit=200");
                 }
                 _ => break,
             }
@@ -274,7 +272,7 @@ impl IdpClient for OktaClient {
     }
 
     async fn get_user(&self, user_id: &str) -> IdpSyncResult<IdpUser> {
-        let path = format!("/users/{}", user_id);
+        let path = format!("/users/{user_id}");
         let (user, _): (OktaUserResponse, _) = self.get(&path).await?;
         Ok(self.okta_user_to_idp_user(user))
     }

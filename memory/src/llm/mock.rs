@@ -40,6 +40,59 @@ impl Default for MockLlmService {
     }
 }
 
+#[async_trait]
+impl LlmService for MockLlmService {
+    type Error = Box<dyn std::error::Error + Send + Sync>;
+
+    async fn generate(&self, prompt: &str) -> Result<String, Self::Error> {
+        let mut ordered = self.ordered_responses.write().await;
+        if let Some(response) = ordered.pop_front() {
+            return Ok(response);
+        }
+
+        let responses = self.responses.read().await;
+        if let Some(response) = responses.get(prompt) {
+            Ok(response.clone())
+        } else if let Some(response) = responses.get("DEFAULT") {
+            Ok(response.clone())
+        } else {
+            Ok(format!("Mock response for: {}", prompt))
+        }
+    }
+
+    async fn analyze_drift(
+        &self,
+        content: &str,
+        policies: &[Policy],
+    ) -> Result<ValidationResult, Self::Error> {
+        let mut is_valid = true;
+        let mut violations = Vec::new();
+
+        for policy in policies {
+            for rule in &policy.rules {
+                if content.contains(&format!("violate:{}", rule.id)) {
+                    is_valid = false;
+                    violations.push(mk_core::types::PolicyViolation {
+                        rule_id: rule.id.clone(),
+                        policy_id: policy.id.clone(),
+                        severity: rule.severity,
+                        message: format!(
+                            "Semantic violation of rule {}: {}",
+                            rule.id, rule.message
+                        ),
+                        context: std::collections::HashMap::new(),
+                    });
+                }
+            }
+        }
+
+        Ok(ValidationResult {
+            is_valid,
+            violations,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,58 +202,5 @@ mod tests {
         let service = MockLlmService::default();
         let result = service.generate("test").await.unwrap();
         assert!(result.contains("Mock response for:"));
-    }
-}
-
-#[async_trait]
-impl LlmService for MockLlmService {
-    type Error = Box<dyn std::error::Error + Send + Sync>;
-
-    async fn generate(&self, prompt: &str) -> Result<String, Self::Error> {
-        let mut ordered = self.ordered_responses.write().await;
-        if let Some(response) = ordered.pop_front() {
-            return Ok(response);
-        }
-
-        let responses = self.responses.read().await;
-        if let Some(response) = responses.get(prompt) {
-            Ok(response.clone())
-        } else if let Some(response) = responses.get("DEFAULT") {
-            Ok(response.clone())
-        } else {
-            Ok(format!("Mock response for: {}", prompt))
-        }
-    }
-
-    async fn analyze_drift(
-        &self,
-        content: &str,
-        policies: &[Policy],
-    ) -> Result<ValidationResult, Self::Error> {
-        let mut is_valid = true;
-        let mut violations = Vec::new();
-
-        for policy in policies {
-            for rule in &policy.rules {
-                if content.contains(&format!("violate:{}", rule.id)) {
-                    is_valid = false;
-                    violations.push(mk_core::types::PolicyViolation {
-                        rule_id: rule.id.clone(),
-                        policy_id: policy.id.clone(),
-                        severity: rule.severity,
-                        message: format!(
-                            "Semantic violation of rule {}: {}",
-                            rule.id, rule.message
-                        ),
-                        context: std::collections::HashMap::new(),
-                    });
-                }
-            }
-        }
-
-        Ok(ValidationResult {
-            is_valid,
-            violations,
-        })
     }
 }

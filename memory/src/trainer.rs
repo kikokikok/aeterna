@@ -902,7 +902,7 @@ mod tests {
         }
 
         // All weights should be clamped to max
-        for (_, weight) in trainer.get_all_weights() {
+        for weight in trainer.get_all_weights().values() {
             assert!(*weight <= 5.0);
         }
     }

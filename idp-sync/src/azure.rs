@@ -75,13 +75,12 @@ impl AzureAdClient {
             let status = response.status().as_u16();
             let error_body = response.text().await.unwrap_or_default();
             return Err(IdpSyncError::OAuthError(format!(
-                "Token request failed: {} - {}",
-                status, error_body
+                "Token request failed: {status} - {error_body}"
             )));
         }
 
         let token_response: OAuthTokenResponse = response.json().await.map_err(|e| {
-            IdpSyncError::OAuthError(format!("Failed to parse token response: {}", e))
+            IdpSyncError::OAuthError(format!("Failed to parse token response: {e}"))
         })?;
 
         let expires_at = Utc::now() + chrono::Duration::seconds(token_response.expires_in as i64);
@@ -104,7 +103,7 @@ impl AzureAdClient {
         let response = self
             .http_client
             .get(url)
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .header("Accept", "application/json")
             .send()
             .await?;
@@ -166,15 +165,14 @@ impl AzureAdClient {
 #[async_trait]
 impl IdpClient for AzureAdClient {
     async fn list_users(&self, page_token: Option<&str>) -> IdpSyncResult<UserPage> {
-        let url = match page_token {
-            Some(next_link) => next_link.to_string(),
-            None => {
-                let mut url = "https://graph.microsoft.com/v1.0/users?$top=100&$select=id,mail,userPrincipalName,givenName,surname,displayName,accountEnabled,createdDateTime".to_string();
-                if let Some(filter) = &self.config.group_filter {
-                    url.push_str(&format!("&$filter={}", urlencoding::encode(filter)));
-                }
-                url
+        let url = if let Some(next_link) = page_token {
+            next_link.to_string()
+        } else {
+            let mut url = "https://graph.microsoft.com/v1.0/users?$top=100&$select=id,mail,userPrincipalName,givenName,surname,displayName,accountEnabled,createdDateTime".to_string();
+            if let Some(filter) = &self.config.group_filter {
+                url.push_str(&format!("&$filter={}", urlencoding::encode(filter)));
             }
+            url
         };
 
         let response: GraphListResponse<GraphUser> = self.get(&url).await?;
@@ -190,15 +188,14 @@ impl IdpClient for AzureAdClient {
     }
 
     async fn list_groups(&self, page_token: Option<&str>) -> IdpSyncResult<GroupPage> {
-        let url = match page_token {
-            Some(next_link) => next_link.to_string(),
-            None => {
-                let mut url = "https://graph.microsoft.com/v1.0/groups?$top=100&$select=id,displayName,description,groupTypes,createdDateTime".to_string();
-                if let Some(filter) = &self.config.group_filter {
-                    url.push_str(&format!("&$filter={}", urlencoding::encode(filter)));
-                }
-                url
+        let url = if let Some(next_link) = page_token {
+            next_link.to_string()
+        } else {
+            let mut url = "https://graph.microsoft.com/v1.0/groups?$top=100&$select=id,displayName,description,groupTypes,createdDateTime".to_string();
+            if let Some(filter) = &self.config.group_filter {
+                url.push_str(&format!("&$filter={}", urlencoding::encode(filter)));
             }
+            url
         };
 
         let response: GraphListResponse<GraphGroup> = self.get(&url).await?;
@@ -227,8 +224,7 @@ impl IdpClient for AzureAdClient {
     async fn get_group_members(&self, group_id: &str) -> IdpSyncResult<Vec<IdpUser>> {
         let mut all_members = Vec::new();
         let mut url = format!(
-            "https://graph.microsoft.com/v1.0/groups/{}/members?$top=100&$select=id,mail,userPrincipalName,givenName,surname,displayName,accountEnabled,createdDateTime",
-            group_id
+            "https://graph.microsoft.com/v1.0/groups/{group_id}/members?$top=100&$select=id,mail,userPrincipalName,givenName,surname,displayName,accountEnabled,createdDateTime"
         );
 
         loop {
@@ -248,8 +244,7 @@ impl IdpClient for AzureAdClient {
 
         if self.config.include_nested_groups {
             let transitive_url = format!(
-                "https://graph.microsoft.com/v1.0/groups/{}/transitiveMembers?$top=100&$select=id,mail,userPrincipalName,givenName,surname,displayName,accountEnabled,createdDateTime",
-                group_id
+                "https://graph.microsoft.com/v1.0/groups/{group_id}/transitiveMembers?$top=100&$select=id,mail,userPrincipalName,givenName,surname,displayName,accountEnabled,createdDateTime"
             );
             let response: GraphListResponse<GraphUser> = self.get(&transitive_url).await?;
             for user in response.value {
@@ -265,8 +260,7 @@ impl IdpClient for AzureAdClient {
 
     async fn get_user(&self, user_id: &str) -> IdpSyncResult<IdpUser> {
         let url = format!(
-            "https://graph.microsoft.com/v1.0/users/{}?$select=id,mail,userPrincipalName,givenName,surname,displayName,accountEnabled,createdDateTime",
-            user_id
+            "https://graph.microsoft.com/v1.0/users/{user_id}?$select=id,mail,userPrincipalName,givenName,surname,displayName,accountEnabled,createdDateTime"
         );
         let user: GraphUser = self.get(&url).await?;
         Ok(self.graph_user_to_idp_user(user))

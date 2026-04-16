@@ -144,23 +144,20 @@ impl IdpSyncService {
         for user in users {
             seen_idp_subjects.insert(user.idp_subject.clone());
 
-            match existing_users.get(&user.idp_subject) {
-                Some(existing) => {
-                    if self.user_needs_update(existing, user) {
-                        if !self.config.dry_run {
-                            self.update_user(existing.id, user).await?;
-                        }
-                        report.users_updated += 1;
-                        debug!(email = %user.email, "Updated user");
-                    }
-                }
-                None => {
+            if let Some(existing) = existing_users.get(&user.idp_subject) {
+                if self.user_needs_update(existing, user) {
                     if !self.config.dry_run {
-                        self.create_user(user).await?;
+                        self.update_user(existing.id, user).await?;
                     }
-                    report.users_created += 1;
-                    debug!(email = %user.email, "Created user");
+                    report.users_updated += 1;
+                    debug!(email = %user.email, "Updated user");
                 }
+            } else {
+                if !self.config.dry_run {
+                    self.create_user(user).await?;
+                }
+                report.users_created += 1;
+                debug!(email = %user.email, "Created user");
             }
         }
 
@@ -185,12 +182,11 @@ impl IdpSyncService {
         let group_to_team_mapping = self.get_group_to_team_mapping().await?;
 
         for group in groups {
-            let team_id = match group_to_team_mapping.get(&group.id) {
-                Some(id) => *id,
-                None => {
-                    debug!(group_id = %group.id, group_name = %group.name, "No team mapping for group, skipping");
-                    continue;
-                }
+            let team_id = if let Some(id) = group_to_team_mapping.get(&group.id) {
+                *id
+            } else {
+                debug!(group_id = %group.id, group_name = %group.name, "No team mapping for group, skipping");
+                continue;
             };
 
             let members = match self.client.get_group_members(&group.id).await {
@@ -270,11 +266,11 @@ impl IdpSyncService {
         provider: &str,
     ) -> IdpSyncResult<HashMap<String, ExistingUser>> {
         let rows = sqlx::query_as::<_, ExistingUser>(
-            r#"
+            r"
             SELECT id, email, first_name, last_name, display_name, idp_subject, is_active
             FROM users
             WHERE idp_provider = $1
-            "#,
+            ",
         )
         .bind(provider)
         .fetch_all(&self.db_pool)
@@ -289,7 +285,7 @@ impl IdpSyncService {
     async fn create_user(&self, user: &IdpUser) -> IdpSyncResult<Uuid> {
         let id = Uuid::new_v4();
         let row = sqlx::query_as::<_, (Uuid,)>(
-            r#"
+            r"
             INSERT INTO users (id, email, first_name, last_name, display_name, idp_provider, idp_subject, is_active, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
             ON CONFLICT (email) DO UPDATE SET
@@ -301,7 +297,7 @@ impl IdpSyncService {
                 is_active = EXCLUDED.is_active,
                 updated_at = NOW()
             RETURNING id
-            "#,
+            ",
         )
         .bind(id)
         .bind(&user.email)
@@ -319,11 +315,11 @@ impl IdpSyncService {
 
     async fn update_user(&self, user_id: Uuid, user: &IdpUser) -> IdpSyncResult<()> {
         sqlx::query(
-            r#"
+            r"
             UPDATE users
             SET email = $2, first_name = $3, last_name = $4, display_name = $5, is_active = $6, updated_at = NOW()
             WHERE id = $1
-            "#,
+            ",
         )
         .bind(user_id)
         .bind(&user.email)
@@ -339,10 +335,10 @@ impl IdpSyncService {
 
     async fn deactivate_user(&self, user_id: Uuid) -> IdpSyncResult<()> {
         sqlx::query(
-            r#"
+            r"
             UPDATE users SET is_active = false, deactivated_at = NOW(), updated_at = NOW()
             WHERE id = $1
-            "#,
+            ",
         )
         .bind(user_id)
         .execute(&self.db_pool)
@@ -353,11 +349,11 @@ impl IdpSyncService {
 
     async fn get_group_to_team_mapping(&self) -> IdpSyncResult<HashMap<String, Uuid>> {
         let rows = sqlx::query_as::<_, (String, Uuid)>(
-            r#"
+            r"
             SELECT idp_group_id, team_id
             FROM idp_group_mappings
             WHERE idp_group_id IS NOT NULL
-            "#,
+            ",
         )
         .fetch_all(&self.db_pool)
         .await?;
@@ -367,9 +363,9 @@ impl IdpSyncService {
 
     async fn get_team_memberships(&self, team_id: Uuid) -> IdpSyncResult<HashSet<Uuid>> {
         let rows = sqlx::query_as::<_, (Uuid,)>(
-            r#"
+            r"
             SELECT user_id FROM memberships WHERE team_id = $1
-            "#,
+            ",
         )
         .bind(team_id)
         .fetch_all(&self.db_pool)
@@ -380,9 +376,9 @@ impl IdpSyncService {
 
     async fn get_user_id_by_idp_subject(&self, idp_subject: &str) -> IdpSyncResult<Option<Uuid>> {
         let row = sqlx::query_as::<_, (Uuid,)>(
-            r#"
+            r"
             SELECT id FROM users WHERE idp_subject = $1
-            "#,
+            ",
         )
         .bind(idp_subject)
         .fetch_optional(&self.db_pool)
@@ -398,11 +394,11 @@ impl IdpSyncService {
         role: &str,
     ) -> IdpSyncResult<()> {
         sqlx::query(
-            r#"
+            r"
             INSERT INTO memberships (id, team_id, user_id, role, created_at, updated_at)
             VALUES ($1, $2, $3, $4, NOW(), NOW())
             ON CONFLICT (team_id, user_id) DO NOTHING
-            "#,
+            ",
         )
         .bind(Uuid::new_v4())
         .bind(team_id)
@@ -416,9 +412,9 @@ impl IdpSyncService {
 
     async fn remove_team_membership(&self, team_id: Uuid, user_id: Uuid) -> IdpSyncResult<()> {
         sqlx::query(
-            r#"
+            r"
             DELETE FROM memberships WHERE team_id = $1 AND user_id = $2
-            "#,
+            ",
         )
         .bind(team_id)
         .bind(user_id)

@@ -1438,7 +1438,7 @@ mod tests {
     fn test_config_default() {
         let config = Config::default();
         assert_eq!(config.providers.postgres.host, "localhost");
-        assert_eq!(config.sync.enabled, true);
+        assert!(config.sync.enabled);
         assert_eq!(config.tools.port, 8080);
         assert_eq!(config.observability.logging_level, "info");
     }
@@ -1454,7 +1454,7 @@ mod tests {
     #[test]
     fn test_sync_config_default() {
         let sync = SyncConfig::default();
-        assert_eq!(sync.enabled, true);
+        assert!(sync.enabled);
         assert_eq!(sync.sync_interval_seconds, 60);
         assert_eq!(sync.conflict_resolution, "prefer_knowledge");
     }

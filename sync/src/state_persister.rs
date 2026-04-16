@@ -565,10 +565,7 @@ mod tests {
                 _key: &str,
                 _value: &[u8],
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn retrieve(
@@ -576,10 +573,7 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _key: &str,
             ) -> Result<Option<Vec<u8>>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn delete(
@@ -587,10 +581,7 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _key: &str,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn exists(
@@ -598,10 +589,7 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _key: &str,
             ) -> Result<bool, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn get_ancestors(
@@ -609,10 +597,7 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _unit_id: &str,
             ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn get_descendants(
@@ -620,10 +605,7 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _unit_id: &str,
             ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn get_unit_policies(
@@ -631,20 +613,14 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _unit_id: &str,
             ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn create_unit(
                 &self,
                 _unit: &mk_core::types::OrganizationalUnit,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn add_unit_policy(
@@ -653,10 +629,7 @@ mod tests {
                 _unit_id: &str,
                 _policy: &mk_core::types::Policy,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn assign_role(
@@ -666,10 +639,7 @@ mod tests {
                 _unit_id: &str,
                 _role: mk_core::types::RoleIdentifier,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn remove_role(
@@ -679,20 +649,14 @@ mod tests {
                 _unit_id: &str,
                 _role: mk_core::types::RoleIdentifier,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn store_drift_result(
                 &self,
                 _result: mk_core::types::DriftResult,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn get_latest_drift_result(
@@ -700,19 +664,13 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _project_id: &str,
             ) -> Result<Option<mk_core::types::DriftResult>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn list_all_units(
                 &self,
             ) -> Result<Vec<mk_core::types::OrganizationalUnit>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn record_job_status(
@@ -724,10 +682,7 @@ mod tests {
                 _started_at: i64,
                 _finished_at: Option<i64>,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn get_governance_events(
@@ -736,20 +691,14 @@ mod tests {
                 _since_timestamp: i64,
                 _limit: usize,
             ) -> Result<Vec<mk_core::types::GovernanceEvent>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn create_suppression(
                 &self,
                 _suppression: mk_core::types::DriftSuppression,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn list_suppressions(
@@ -757,10 +706,7 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _project_id: &str,
             ) -> Result<Vec<mk_core::types::DriftSuppression>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn delete_suppression(
@@ -768,10 +714,7 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _suppression_id: &str,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn get_drift_config(
@@ -779,30 +722,21 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _project_id: &str,
             ) -> Result<Option<mk_core::types::DriftConfig>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn save_drift_config(
                 &self,
                 _config: mk_core::types::DriftConfig,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn persist_event(
                 &self,
                 _event: mk_core::types::PersistentEvent,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn get_pending_events(
@@ -810,10 +744,7 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _limit: usize,
             ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn update_event_status(
@@ -822,10 +753,7 @@ mod tests {
                 _status: mk_core::types::EventStatus,
                 _error: Option<String>,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn get_dead_letter_events(
@@ -833,10 +761,7 @@ mod tests {
                 _ctx: mk_core::types::TenantContext,
                 _limit: usize,
             ) -> Result<Vec<mk_core::types::PersistentEvent>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn check_idempotency(
@@ -844,20 +769,14 @@ mod tests {
                 _consumer_group: &str,
                 _idempotency_key: &str,
             ) -> Result<bool, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn record_consumer_state(
                 &self,
                 _state: mk_core::types::ConsumerState,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn get_event_metrics(
@@ -866,20 +785,14 @@ mod tests {
                 _period_start: i64,
                 _period_end: i64,
             ) -> Result<Vec<mk_core::types::EventDeliveryMetrics>, Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn record_event_metrics(
                 &self,
                 _metrics: mk_core::types::EventDeliveryMetrics,
             ) -> Result<(), Self::Error> {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "storage error",
-                ))
+                Err(std::io::Error::other("storage error"))
             }
 
             async fn get_unit_by_id(

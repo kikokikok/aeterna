@@ -199,7 +199,7 @@ pub fn load_resolved(
     // Determine active profile name (precedence: CLI flag > AETERNA_PROFILE env > project default > user default)
     let env_profile = std::env::var("AETERNA_PROFILE").ok();
     let profile_name: String = profile_name_override
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .or(env_profile)
         .or_else(|| {
             project_cfg
@@ -222,7 +222,7 @@ pub fn load_resolved(
 
     // Apply env-var overrides on top of the profile
     let server_url = server_url_override
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .or_else(|| std::env::var("AETERNA_SERVER_URL").ok())
         .unwrap_or_else(|| profile.server_url.clone());
 

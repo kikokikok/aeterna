@@ -45,10 +45,10 @@ impl DecayConfig {
         for (layer, default_rate) in &defaults.rates {
             let env_key = format!("AETERNA_DECAY_RATE_{}", layer.to_uppercase());
             if let Ok(val) = std::env::var(&env_key) {
-                if let Ok(rate) = val.parse::<f64>() {
-                    if (0.0..=1.0).contains(&rate) {
-                        rates.insert(layer.clone(), rate);
-                    }
+                if let Ok(rate) = val.parse::<f64>()
+                    && (0.0..=1.0).contains(&rate)
+                {
+                    rates.insert(layer.clone(), rate);
                 }
             } else {
                 rates.insert(layer.clone(), *default_rate);

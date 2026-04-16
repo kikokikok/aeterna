@@ -461,7 +461,7 @@ mod tests {
             .register_extension(
                 crate::extensions::ExtensionRegistration::new(
                     "ext",
-                    Arc::new(extension_test_helpers::NoopCallback::default()),
+                    Arc::new(extension_test_helpers::NoopCallback),
                 )
                 .with_tool_config(config),
             )

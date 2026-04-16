@@ -365,7 +365,7 @@ mod tests {
         let (tx, _handle) =
             create_redis_publisher_with_tenant_isolation("redis://localhost:6379".to_string());
 
-        assert!(tx.is_closed() == false);
+        assert!(!tx.is_closed());
     }
 
     #[tokio::test]
@@ -374,7 +374,7 @@ mod tests {
         let (tx, _handle) =
             create_redis_publisher_for_tenant("redis://localhost:6379".to_string(), &tenant_id);
 
-        assert!(tx.is_closed() == false);
+        assert!(!tx.is_closed());
     }
 
     #[tokio::test]
@@ -384,7 +384,7 @@ mod tests {
             "my:custom:stream".to_string(),
         );
 
-        assert!(tx.is_closed() == false);
+        assert!(!tx.is_closed());
     }
 
     #[test]
@@ -578,7 +578,7 @@ mod tests {
         for unit_type in unit_types {
             let event = GovernanceEvent::UnitCreated {
                 unit_id: "unit-1".to_string(),
-                unit_type: unit_type.clone(),
+                unit_type,
                 tenant_id: tenant_id.clone(),
                 parent_id: None,
                 timestamp: 1234567890,
@@ -647,7 +647,7 @@ mod tests {
         for layer in layers {
             let event = GovernanceEvent::PolicyUpdated {
                 policy_id: "policy-1".to_string(),
-                layer: layer.clone(),
+                layer,
                 tenant_id: tenant_id.clone(),
                 timestamp: 1234567890,
             };

@@ -198,7 +198,7 @@ pub fn create_llm_service(
                 let service = AnyhowLlmAdapter {
                     inner: super::openai::OpenAILlmService::new(openai.api_key, openai.model),
                 };
-                return Ok(Some(Arc::new(service)));
+                Ok(Some(Arc::new(service)))
             }
 
             #[cfg(not(feature = "embedding-integration"))]
@@ -220,7 +220,7 @@ pub fn create_llm_service(
                     google.location,
                     google.model,
                 );
-                return Ok(Some(Arc::new(service)));
+                Ok(Some(Arc::new(service)))
             }
 
             #[cfg(not(feature = "google-provider"))]
@@ -240,7 +240,7 @@ pub fn create_llm_service(
             {
                 let service =
                     super::bedrock::BedrockLlmService::new(bedrock.region, bedrock.model_id);
-                return Ok(Some(Arc::new(service)));
+                Ok(Some(Arc::new(service)))
             }
 
             #[cfg(not(feature = "bedrock-provider"))]
