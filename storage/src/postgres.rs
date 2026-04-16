@@ -1395,7 +1395,7 @@ impl PostgresBackend {
         &self,
         event: &mk_core::types::GovernanceEvent,
     ) -> Result<(), PostgresError> {
-        let (event_type, tenant_id, timestamp) = match event {
+        let (event_type, tenant_id, _timestamp) = match event {
             mk_core::types::GovernanceEvent::UnitCreated {
                 unit_id: _,
                 unit_type: _,

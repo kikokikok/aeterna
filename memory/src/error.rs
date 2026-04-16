@@ -128,7 +128,7 @@ where
                     let mut actual_backoff = backoff;
 
                     if config.jitter {
-                        let jitter = rand::random::<f32>() * 0.3 + 0.85;
+                        let jitter = rand::random_range(0.0f32..1.0) * 0.3 + 0.85;
                         actual_backoff = std::time::Duration::from_millis(
                             (actual_backoff.as_millis() as f32 * jitter) as u64,
                         );

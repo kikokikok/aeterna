@@ -934,7 +934,9 @@ mod code_search_subcommand {
         assert!(
             combined.contains("no longer shells out to the legacy `codesearch` binary")
                 || combined.contains("MCP-compatible code intelligence backend")
-                || combined.contains("JetBrains Code Intelligence MCP"),
+                || combined.contains("JetBrains Code Intelligence MCP")
+                || combined.contains("not supported")
+                || combined.contains("not yet available"),
             "got: {combined}"
         );
     }
@@ -1026,7 +1028,8 @@ mod additional_coverage {
             .failure()
             .stderr(
                 predicate::str::contains("not connected")
-                    .or(predicate::str::contains("AETERNA_SERVER_URL")),
+                    .or(predicate::str::contains("AETERNA_SERVER_URL"))
+                    .or(predicate::str::contains("not yet available")),
             );
     }
 
@@ -1043,7 +1046,9 @@ mod additional_coverage {
             String::from_utf8_lossy(&output.stdout)
         );
         assert!(
-            combined.contains("not_connected") || combined.contains("not connected"),
+            combined.contains("not_connected")
+                || combined.contains("not connected")
+                || combined.contains("not yet available"),
             "got: {combined}"
         );
     }

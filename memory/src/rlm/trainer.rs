@@ -295,8 +295,8 @@ impl DecompositionTrainer {
             panic!("No actions available for selection");
         }
 
-        if rand::random::<f32>() < self.policy_state.epsilon {
-            let idx = rand::random::<usize>() % available_actions.len();
+        if rand::random_range(0.0f32..1.0) < self.policy_state.epsilon {
+            let idx = rand::random_range(0..available_actions.len());
             return &available_actions[idx];
         }
 

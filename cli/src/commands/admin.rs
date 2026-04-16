@@ -1,5 +1,4 @@
-use aeterna_backup::archive::{ArchiveReader, ArchiveWriter};
-use aeterna_backup::manifest::{BackupManifest, CURRENT_SCHEMA_VERSION, ExportScope};
+use aeterna_backup::archive::ArchiveReader;
 use aeterna_backup::validate::validate_archive;
 use clap::{Args, Subcommand, ValueEnum};
 use context::ContextResolver;
@@ -757,7 +756,7 @@ async fn get_applied_migrations(pool: &PgPool) -> anyhow::Result<Vec<AppliedMigr
 fn migration_checksum(sql: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(sql.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 fn verify_applied_checksums(
@@ -1146,51 +1145,26 @@ async fn run_export(args: AdminExportArgs) -> anyhow::Result<()> {
             }
         }
     } else {
-        // Offline mode: create a valid-but-empty archive to prove wiring works.
-        let hostname = hostname_or_default();
-        let scope = match args.layer.as_deref() {
-            Some(layer) => ExportScope::Layer {
-                layer: layer.to_string(),
-            },
-            None => ExportScope::FullInstance,
-        };
-        let manifest = BackupManifest::new(hostname, scope);
-
-        let mut writer = ArchiveWriter::new(&output_path)?;
-        writer.add_manifest(&manifest)?;
-        let archive_path = writer.finalize()?;
-
         if args.json {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&json!({
-                    "success": true,
-                    "output_path": archive_path.to_string_lossy(),
-                    "schema_version": CURRENT_SCHEMA_VERSION,
-                    "note": "Empty archive created (no server connection). Connect to server for full data export.",
+                    "success": false,
+                    "error": "server_not_connected",
+                    "message": "AETERNA_SERVER_URL is not set. Export requires a running server.",
                 }))?
             );
         } else {
-            output::header("Data Export (Offline)");
-            println!();
-            println!("  Output:          {}", archive_path.display());
-            println!("  Schema version:  {CURRENT_SCHEMA_VERSION}");
-            println!("  Target:          {}", args.target);
-            println!();
-            output::hint("No server connection (AETERNA_SERVER_URL not set).");
-            output::hint("Created a valid archive with manifest only.");
-            output::hint("For a full data export, start the server and set AETERNA_SERVER_URL.");
+            ux_error::UxError::new("Cannot export: server not connected")
+                .why("AETERNA_SERVER_URL is not set")
+                .fix("Start the Aeterna server and set AETERNA_SERVER_URL")
+                .suggest("aeterna serve")
+                .display();
         }
+        anyhow::bail!("Export requires a running server (AETERNA_SERVER_URL not set)");
     }
 
     Ok(())
-}
-
-/// Return the machine hostname, falling back to "unknown".
-fn hostname_or_default() -> String {
-    std::env::var("HOSTNAME")
-        .or_else(|_| std::env::var("HOST"))
-        .unwrap_or_else(|_| "unknown".to_string())
 }
 
 async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {

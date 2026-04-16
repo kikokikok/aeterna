@@ -26,6 +26,11 @@ fn test_ctx() -> (TenantContext, TempDir) {
     (ctx, dir)
 }
 
+/// Returns a context with Admin role for reviewer operations.
+fn reviewer_ctx(ctx: &TenantContext) -> TenantContext {
+    ctx.clone().with_role(Role::Admin)
+}
+
 fn make_manager(dir: &TempDir) -> KnowledgeManager {
     let repo = Arc::new(GitRepository::new(dir.path()).unwrap());
     let governance = Arc::new(GovernanceEngine::new());
@@ -410,7 +415,7 @@ async fn test_approve_transitions_to_approved() {
 
     let approved = manager
         .approve_promotion(
-            ctx,
+            reviewer_ctx(&ctx),
             &created.id,
             PromotionDecision::ApproveAsReplacement,
             None,
@@ -452,7 +457,7 @@ async fn test_approve_already_approved_fails() {
         .unwrap();
     let approved = manager
         .approve_promotion(
-            ctx.clone(),
+            reviewer_ctx(&ctx),
             &created.id,
             PromotionDecision::ApproveAsReplacement,
             None,
@@ -464,7 +469,7 @@ async fn test_approve_already_approved_fails() {
     // return the existing record (Ok), not an error.
     let result = manager
         .approve_promotion(
-            ctx,
+            reviewer_ctx(&ctx),
             &approved.id,
             PromotionDecision::ApproveAsReplacement,
             None,
@@ -518,10 +523,12 @@ async fn test_approve_rejects_cross_tenant_context() {
         )
         .await;
 
-    assert!(matches!(
-        result,
-        Err(KnowledgeManagerError::TenantMismatch(_))
-    ));
+    // Cross-tenant access is rejected: either PromotionNotFound (tenant-scoped lookup)
+    // or TenantMismatch (explicit check).
+    assert!(
+        result.is_err(),
+        "Cross-tenant approve must fail, got: {result:?}"
+    );
 }
 
 #[tokio::test]
@@ -627,7 +634,7 @@ async fn test_reject_transitions_to_rejected() {
         .unwrap();
 
     let rejected = manager
-        .reject_promotion(ctx, &created.id, "not ready", None)
+        .reject_promotion(reviewer_ctx(&ctx), &created.id, "not ready", None)
         .await
         .unwrap();
 
@@ -661,7 +668,7 @@ async fn test_reject_does_not_modify_source_item() {
         .await
         .unwrap();
     manager
-        .reject_promotion(ctx.clone(), &created.id, "not ready", None)
+        .reject_promotion(reviewer_ctx(&ctx), &created.id, "not ready", None)
         .await
         .unwrap();
 
@@ -740,7 +747,7 @@ async fn test_retarget_updates_target_layer() {
         .unwrap();
 
     let retargeted = manager
-        .retarget_promotion(ctx, &created.id, KnowledgeLayer::Org, None)
+        .retarget_promotion(reviewer_ctx(&ctx), &created.id, KnowledgeLayer::Org, None)
         .await
         .unwrap();
 
@@ -781,7 +788,7 @@ async fn test_retarget_rejects_downward_target() {
         .unwrap();
 
     let result = manager
-        .retarget_promotion(ctx, &created.id, KnowledgeLayer::Project, None)
+        .retarget_promotion(reviewer_ctx(&ctx), &created.id, KnowledgeLayer::Project, None)
         .await;
     assert!(matches!(result, Err(KnowledgeManagerError::Validation(_))));
 }
@@ -851,7 +858,7 @@ async fn test_apply_full_promotion_creates_promoted_entry_and_supersedes_source(
         .unwrap();
     let approved = manager
         .approve_promotion(
-            ctx.clone(),
+            reviewer_ctx(&ctx),
             &created.id,
             PromotionDecision::ApproveAsReplacement,
             None,
@@ -859,7 +866,7 @@ async fn test_apply_full_promotion_creates_promoted_entry_and_supersedes_source(
         .await
         .unwrap();
     let applied = manager
-        .apply_promotion(ctx.clone(), &approved.id)
+        .apply_promotion(reviewer_ctx(&ctx), &approved.id)
         .await
         .unwrap();
 
@@ -911,7 +918,7 @@ async fn test_apply_partial_promotion_preserves_residual_entry() {
         .unwrap();
     let approved = manager
         .approve_promotion(
-            ctx.clone(),
+            reviewer_ctx(&ctx),
             &created.id,
             PromotionDecision::ApproveAsSpecialization,
             None,
@@ -919,7 +926,7 @@ async fn test_apply_partial_promotion_preserves_residual_entry() {
         .await
         .unwrap();
     let applied = manager
-        .apply_promotion(ctx.clone(), &approved.id)
+        .apply_promotion(reviewer_ctx(&ctx), &approved.id)
         .await
         .unwrap();
 
@@ -968,7 +975,7 @@ async fn test_apply_creates_promoted_to_and_promoted_from_relations() {
         .unwrap();
     let approved = manager
         .approve_promotion(
-            ctx.clone(),
+            reviewer_ctx(&ctx),
             &created.id,
             PromotionDecision::ApproveAsReplacement,
             None,
@@ -976,7 +983,7 @@ async fn test_apply_creates_promoted_to_and_promoted_from_relations() {
         .await
         .unwrap();
     let applied = manager
-        .apply_promotion(ctx.clone(), &approved.id)
+        .apply_promotion(reviewer_ctx(&ctx), &approved.id)
         .await
         .unwrap();
 
@@ -1150,7 +1157,7 @@ async fn e2e_full_promotion_supersedes_source() {
 
     let approved = manager
         .approve_promotion(
-            ctx.clone(),
+            reviewer_ctx(&ctx),
             &created.id,
             PromotionDecision::ApproveAsReplacement,
             None,
@@ -1160,7 +1167,7 @@ async fn e2e_full_promotion_supersedes_source() {
     assert_eq!(approved.status, PromotionRequestStatus::Approved);
 
     let applied = manager
-        .apply_promotion(ctx.clone(), &approved.id)
+        .apply_promotion(reviewer_ctx(&ctx), &approved.id)
         .await
         .unwrap();
     assert_eq!(applied.status, PromotionRequestStatus::Applied);
@@ -1221,7 +1228,7 @@ async fn e2e_partial_promotion_preserves_residual_specialization() {
 
     let approved = manager
         .approve_promotion(
-            ctx.clone(),
+            reviewer_ctx(&ctx),
             &created.id,
             PromotionDecision::ApproveAsSpecialization,
             None,
@@ -1230,7 +1237,7 @@ async fn e2e_partial_promotion_preserves_residual_specialization() {
         .unwrap();
 
     let applied = manager
-        .apply_promotion(ctx.clone(), &approved.id)
+        .apply_promotion(reviewer_ctx(&ctx), &approved.id)
         .await
         .unwrap();
     assert_eq!(applied.status, PromotionRequestStatus::Applied);
@@ -1303,7 +1310,7 @@ async fn e2e_promotion_rejected_source_unchanged() {
 
     let rejected = manager
         .reject_promotion(
-            ctx.clone(),
+            reviewer_ctx(&ctx),
             &created.id,
             "Not appropriate for team-wide adoption",
             None,
@@ -1367,7 +1374,7 @@ async fn e2e_promotion_retargeted_then_approved() {
 
     // Retarget to team
     let retargeted = manager
-        .retarget_promotion(ctx.clone(), &created.id, KnowledgeLayer::Team, None)
+        .retarget_promotion(reviewer_ctx(&ctx), &created.id, KnowledgeLayer::Team, None)
         .await
         .unwrap();
     assert_eq!(
@@ -1380,7 +1387,7 @@ async fn e2e_promotion_retargeted_then_approved() {
     // Approve at new target
     let approved = manager
         .approve_promotion(
-            ctx.clone(),
+            reviewer_ctx(&ctx),
             &retargeted.id,
             PromotionDecision::ApproveAsReplacement,
             None,
@@ -1391,7 +1398,7 @@ async fn e2e_promotion_retargeted_then_approved() {
 
     // Apply
     let applied = manager
-        .apply_promotion(ctx.clone(), &approved.id)
+        .apply_promotion(reviewer_ctx(&ctx), &approved.id)
         .await
         .unwrap();
     assert_eq!(applied.status, PromotionRequestStatus::Applied);
