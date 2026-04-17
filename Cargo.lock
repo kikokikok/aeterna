@@ -46,7 +46,7 @@ dependencies = [
 
 [[package]]
 name = "adapters"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "aeterna"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "adapters",
  "aeterna-backup",
@@ -200,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "agent-a2a"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "a2a-types",
  "anyhow",
@@ -1969,7 +1969,7 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "anyhow",
  "errors",
@@ -2033,7 +2033,7 @@ dependencies = [
 
 [[package]]
 name = "context"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "backoff",
  "chrono",
@@ -2174,7 +2174,7 @@ dependencies = [
 
 [[package]]
 name = "cross-tests"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "chrono",
  "memory",
@@ -2966,7 +2966,7 @@ dependencies = [
 
 [[package]]
 name = "errors"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -4090,7 +4090,7 @@ dependencies = [
 
 [[package]]
 name = "idp-sync"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4352,7 +4352,7 @@ dependencies = [
 
 [[package]]
 name = "knowledge"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4804,7 +4804,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "memory"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "aisdk",
  "anyhow",
@@ -4968,7 +4968,7 @@ dependencies = [
 
 [[package]]
 name = "mk_core"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5329,7 +5329,7 @@ dependencies = [
 
 [[package]]
 name = "observability"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5403,7 +5403,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "opal-fetcher"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7993,7 +7993,7 @@ dependencies = [
 
 [[package]]
 name = "storage"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "adapters",
  "aes-gcm",
@@ -8162,7 +8162,7 @@ dependencies = [
 
 [[package]]
 name = "sync"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -8341,7 +8341,7 @@ dependencies = [
 
 [[package]]
 name = "testing"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8745,7 +8745,7 @@ dependencies = [
 
 [[package]]
 name = "tools"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "adapters",
  "anyhow",
@@ -9221,7 +9221,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "utils"
-version = "0.7.0"
+version = "0.8.0-rc.1"
 dependencies = [
  "anyhow",
  "hex",
