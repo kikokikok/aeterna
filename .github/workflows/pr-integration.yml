@@ -79,22 +79,35 @@ jobs:
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────────────
-  # Docker build validation — amd64 only (no push). Kept single-arch on PR
-  # for feedback speed. Multi-arch (amd64+arm64) is exercised on
-  # post-merge.yml and release.yml where wall-clock budget is relaxed.
+  # Docker build validation — multi-arch (amd64 + arm64), no push.
+  #
+  # Uses GitHub's native arm64 runner (`ubuntu-24.04-arm`, GA 2025) instead
+  # of QEMU emulation. Both arches build in parallel on native hardware, so
+  # wall-clock = max(amd64, arm64), not amd64 + 4×arm64. Mirrors the matrix
+  # used by post-merge.yml::docker-publish so cache layouts line up.
   #
   # Cache strategy: registry-scoped buildx cache (ghcr.io/{repo}-cache)
   # instead of `type=gha` (10GB quota shared across all scopes → evicted
-  # every few PRs → cold rebuild → 40 min). Seeded by post-merge.yml.
+  # every few PRs → cold rebuild → 40 min). Per-arch cache tags are seeded
+  # by post-merge.yml on each master push.
   # ──────────────────────────────────────────────────────────────────────
   docker-build:
-    name: docker-build-amd64
-    runs-on: ubuntu-latest
-    # First build after a cold registry cache is ~30 min (full Rust release
-    # build). After the first post-merge.yml run seeds
-    # ghcr.io/{repo}-cache:buildcache-master-amd64, subsequent PR builds
-    # pull warm layers and finish in <10 min.
+    name: docker-build-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    # First build after a cold cache is ~30 min (full Rust release build).
+    # After post-merge.yml seeds ghcr.io/{repo}-cache:buildcache-master-{arch},
+    # subsequent PR builds pull warm layers and finish in <10 min.
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -108,12 +121,12 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64
+          platforms: ${{ matrix.platform }}
           push: false
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:buildcache-amd64
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:buildcache-master-amd64
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:buildcache-amd64,mode=max,image-manifest=true,oci-mediatypes=true
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:buildcache-${{ matrix.arch }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:buildcache-master-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:buildcache-${{ matrix.arch }},mode=max,image-manifest=true,oci-mediatypes=true
           build-args: |
             RUST_VERSION=1.93
             BUILD_DATE=${{ github.event.pull_request.updated_at }}
