@@ -185,7 +185,6 @@ impl BackendCapabilities {
             supports_delete_by_filter: true,
         }
     }
-
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

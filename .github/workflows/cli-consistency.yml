@@ -8,6 +8,7 @@ on:
       - "docs/guides/cli-quick-reference.md"
       - "install.sh"
       - ".github/workflows/cli-consistency.yml"
+      - ".github/workflows/release.yml"
 
 jobs:
   cli-consistency:
@@ -45,13 +46,13 @@ jobs:
           grep -q 'macos' install.sh
           echo "Platform coverage in install.sh: OK"
 
-      - name: Check cli-release.yml covers all four target platforms
+      - name: Check release.yml covers all four CLI target platforms
         run: |
-          grep -q 'x86_64-unknown-linux-musl' .github/workflows/cli-release.yml
-          grep -q 'aarch64-unknown-linux-musl' .github/workflows/cli-release.yml
-          grep -q 'x86_64-apple-darwin'        .github/workflows/cli-release.yml
-          grep -q 'aarch64-apple-darwin'        .github/workflows/cli-release.yml
-          echo "Platform coverage in cli-release.yml: OK"
+          grep -q 'x86_64-unknown-linux-gnu'  .github/workflows/release.yml
+          grep -q 'aarch64-unknown-linux-gnu' .github/workflows/release.yml
+          grep -q 'x86_64-apple-darwin'       .github/workflows/release.yml
+          grep -q 'aarch64-apple-darwin'      .github/workflows/release.yml
+          echo "Platform coverage in release.yml: OK"
 
       - name: Verify docs reference binary install path
         run: |

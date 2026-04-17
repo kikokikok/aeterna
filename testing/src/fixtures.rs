@@ -89,11 +89,7 @@ pub async fn postgres() -> Option<&'static PostgresFixture> {
             // (`CREATE TABLE IF NOT EXISTS` throughout), so tests
             // calling it again on their own backend instances remain
             // safe.
-            let pool = match PgPoolOptions::new()
-                .max_connections(2)
-                .connect(&url)
-                .await
-            {
+            let pool = match PgPoolOptions::new().max_connections(2).connect(&url).await {
                 Ok(p) => p,
                 Err(e) => {
                     tracing::warn!("Failed to open setup pool on fixture DB: {e:?}");

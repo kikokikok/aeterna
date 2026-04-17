@@ -6,13 +6,23 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write   # required for registry-scoped buildx cache
 
 concurrency:
   group: pr-integration-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Shipped-path smoke tests (migrated from ci.yml shipped-smoke job)
+  # ──────────────────────────────────────────────────────────────────────
+  # Shipped-path smoke tests — exercises the exact binary paths a user hits
+  # via `aeterna serve`, migrations, `check`, `sync`, `codesearch`.
+  # Emits JUnit XML so failures show in the PR summary, not just the raw log.
+  # ──────────────────────────────────────────────────────────────────────
   shipped-smoke:
     name: shipped-smoke
     runs-on: ubuntu-latest
@@ -20,31 +30,69 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: pr-shipped-smoke
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
       - name: CLI entrypoints + fail-closed smoke tests
+        # Nextest filterset (`-E`) is explicit about which modules to run.
+        # Bare positional args resolve to substring matches that can fail
+        # silently when the target test is renamed — filtersets don't.
         run: |
-          cargo nextest run -p aeterna --test cli_e2e_test \
-            serve_and_migration_entrypoints check_subcommand sync_subcommand codesearch_runtime_subcommand
+          cargo nextest run --profile ci -p aeterna --test cli_e2e_test \
+            -E 'test(/serve_and_migration_entrypoints/) + test(/check_subcommand/) + test(/sync_subcommand/) + test(/codesearch_runtime_subcommand/)'
       - name: Agent-a2a runtime smoke tests
-        run: cargo nextest run -p agent-a2a --test a2a_test
+        run: cargo nextest run --profile ci -p agent-a2a --test a2a_test
+      - name: Publish test summary
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          check_name: "Shipped-smoke tests"
+          junit_files: "target/nextest/ci/junit.xml"
+          comment_mode: off
+          job_summary: true
+      - name: Upload JUnit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-shipped-smoke
+          path: target/nextest/ci/junit.xml
+          if-no-files-found: warn
+          retention-days: 7
 
-  # Docker build (x86_64 only, no push) — verifies Dockerfile still builds
+  # ──────────────────────────────────────────────────────────────────────
+  # Docker build validation — amd64 only (no push). Kept single-arch on PR
+  # for feedback speed. Multi-arch (amd64+arm64) is exercised on
+  # post-merge.yml and release.yml where wall-clock budget is relaxed.
+  #
+  # Cache strategy: registry-scoped buildx cache (ghcr.io/{repo}-cache)
+  # instead of `type=gha` (10GB quota shared across all scopes → evicted
+  # every few PRs → cold rebuild → 40 min). Seeded by post-merge.yml.
+  # ──────────────────────────────────────────────────────────────────────
   docker-build:
-    name: docker-build-x86
+    name: docker-build-amd64
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR (cache pulls)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build (no push)
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
           push: false
-          cache-from: type=gha,scope=pr-amd64
-          cache-to: type=gha,mode=max,scope=pr-amd64
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:buildcache-amd64
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:buildcache-master-amd64
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:buildcache-amd64,mode=max,image-manifest=true,oci-mediatypes=true
           build-args: |
             RUST_VERSION=1.93
             BUILD_DATE=${{ github.event.pull_request.updated_at }}

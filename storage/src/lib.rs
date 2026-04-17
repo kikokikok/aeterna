@@ -1,6 +1,5 @@
 pub mod approval_workflow;
 pub mod budget_storage;
-pub mod migrations;
 pub mod cascade;
 pub mod code_graph;
 pub mod dead_letter;
@@ -14,6 +13,7 @@ pub mod graph_duckdb;
 pub mod graphrag;
 pub mod kms_integration;
 pub mod meta_governance;
+pub mod migrations;
 pub mod policy_evaluator;
 pub mod positional_index;
 pub mod postgres;

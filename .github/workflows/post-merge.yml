@@ -50,8 +50,11 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+          # Registry-scoped buildx cache. Durable across runs (unlike GHA
+          # cache quota). pr-integration.yml reads from this same scope —
+          # every merge seeds PR builds, slashing the 40-min cold rebuild.
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:buildcache-master-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:buildcache-master-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }},mode=max,image-manifest=true,oci-mediatypes=true
           build-args: |
             RUST_VERSION=1.93
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
