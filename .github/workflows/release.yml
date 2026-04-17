@@ -355,10 +355,94 @@ jobs:
           path: .cr-release-packages/*.tgz
           retention-days: 30
 
-  # ─── 4. Single GitHub Release with all assets attached ────────────────
+  # ─── 4. npm publish (@aeterna-org/opencode-plugin) ────────────────────
+  # Publishes the opencode plugin to the public npm registry with the same
+  # version string as the release tag. Package version was already pinned
+  # in the cut-release PR via scripts/bump-version.sh, so this step just
+  # runs `npm publish`.
+  #
+  # Dist-tag:
+  #   - stable releases (0.8.0, 1.2.3)           → --tag latest
+  #   - prereleases (0.8.0-rc.1, 1.0.0-beta.2)   → --tag next
+  # This keeps `npm install @aeterna-org/opencode-plugin` from accidentally
+  # picking up an RC.
+  #
+  # Provenance is enabled (OIDC keyless) so the package appears verified
+  # on npmjs.com and links back to this workflow run.
+  npm-release:
+    name: npm publish (@aeterna-org/opencode-plugin)
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write           # OIDC for npm provenance
+    defaults:
+      run:
+        working-directory: packages/opencode-plugin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+          cache-dependency-path: packages/opencode-plugin/package-lock.json
+
+      - name: Verify package.json version matches release tag
+        env:
+          EXPECTED: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          PKG=$(jq -r '.version' package.json)
+          if [[ "$PKG" != "$EXPECTED" ]]; then
+              echo "::error::packages/opencode-plugin/package.json is at $PKG but release tag is $EXPECTED"
+              echo "::error::This should be impossible after cut-release + version-consistency — investigate."
+              exit 1
+          fi
+          echo "✅ package.json version $PKG matches release tag"
+
+      - name: Pick dist-tag (latest vs next)
+        id: disttag
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          # Anything containing `-` (0.8.0-rc.1, 1.0.0-beta.2, etc.) is a prerelease.
+          if [[ "$VERSION" == *-* ]]; then
+              echo "tag=next"   >> "$GITHUB_OUTPUT"
+              echo "This is a prerelease — will publish with --tag next"
+          else
+              echo "tag=latest" >> "$GITHUB_OUTPUT"
+              echo "This is a stable release — will publish with --tag latest"
+          fi
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
+      - name: Publish to npm
+        run: npm publish --access public --provenance --tag ${{ steps.disttag.outputs.tag }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "### Published to npm" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`@aeterna-org/opencode-plugin@${{ needs.resolve-version.outputs.version }}\` with dist-tag \`${{ steps.disttag.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ steps.disttag.outputs.tag }}" == "next" ]]; then
+            echo "npm install @aeterna-org/opencode-plugin@next" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "npm install @aeterna-org/opencode-plugin" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─── 5. Single GitHub Release with all assets attached ────────────────
   github-release:
     name: github release
-    needs: [resolve-version, docker-merge, docker-scan-sbom, cli-build, helm-release]
+    needs: [resolve-version, docker-merge, docker-scan-sbom, cli-build, helm-release, npm-release]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
