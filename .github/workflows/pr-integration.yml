@@ -182,21 +182,10 @@ jobs:
           platforms=$(docker buildx imagetools inspect "$tag" --raw \
             | jq -r '.manifests[] | "\(.platform.os)/\(.platform.architecture)"' \
             | sort -u)
-          echo "Manifest platforms: $platforms"
-          echo "$platforms" | grep -q '^linux/amd64
-
-  # Wave 2c will expand this file with:
-  # - integration-rust (postgres/redis/qdrant service containers)
-  # - k8s-e2e (kind + helm install)
-  # - cross-tests/phase1_ha, memory_throughput --quick
-
-          echo "$platforms" | grep -q '^linux/arm64
-
-  # Wave 2c will expand this file with:
-  # - integration-rust (postgres/redis/qdrant service containers)
-  # - k8s-e2e (kind + helm install)
-  # - cross-tests/phase1_ha, memory_throughput --quick
-
+          echo "Manifest platforms:"
+          echo "$platforms"
+          echo "$platforms" | grep -qx 'linux/amd64'
+          echo "$platforms" | grep -qx 'linux/arm64'
 
   # Wave 2c will expand this file with:
   # - integration-rust (postgres/redis/qdrant service containers)
