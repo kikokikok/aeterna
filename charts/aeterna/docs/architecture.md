@@ -132,7 +132,7 @@ Request processing in Aeterna follows a structured flow through the system layer
 3. **Reasoning (Reflective)**: If enabled, the system performs pre-retrieval reasoning to identify required context.
 4. **Retrieval**: The server queries the memory hierarchy.
     - **Working Memory**: Checked in the local cache (Dragonfly/Valkey).
-    - **Semantic Memory**: Retrieved from the vector store (Qdrant/pgvector).
+    - **Semantic Memory**: Retrieved from the Qdrant vector store.
     - **Knowledge**: Retrieved from the PostgreSQL-backed knowledge repository.
 5. **Code Intelligence**: If code context is needed, the Codesearch sidecar provides semantic search and call graph analysis.
 6. **Execution**: The request is processed, often involving an LLM call with the gathered context.

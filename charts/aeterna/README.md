@@ -66,7 +66,6 @@ Choose from 7 supported vector backends:
 | Backend | Best For | Bundled |
 |---------|----------|---------|
 | **qdrant** | Default, self-hosted | Yes |
-| **pgvector** | Simplicity, existing PostgreSQL | No (uses PostgreSQL) |
 | **pinecone** | Managed, serverless | No |
 | **weaviate** | Hybrid search, GraphQL | Yes |
 | **mongodb** | Existing MongoDB Atlas | Yes (Percona) |
@@ -114,19 +113,6 @@ vectorBackend:
     environment: "us-west1-gcp"
     indexName: "aeterna-prod"
     existingSecret: "pinecone-credentials"
-
-qdrant:
-  enabled: false
-```
-
-### Using pgvector
-
-```yaml
-vectorBackend:
-  type: pgvector
-  pgvector:
-    enabled: true
-# Uses the same PostgreSQL instance with pgvector extension
 
 qdrant:
   enabled: false
@@ -712,6 +698,11 @@ Key parameters:
 | `aeterna.replicaCount` | Aeterna replicas | `1` |
 | `aeterna.autoscaling.enabled` | Enable HPA | `false` |
 | `networkPolicy.enabled` | Enable network policies | `false` |
+
+## License
+
+Apache License 2.0 - See [LICENSE](../../LICENSE) for details.
+e network policies | `false` |
 
 ## License
 

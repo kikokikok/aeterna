@@ -405,7 +405,7 @@ fn default_branch() -> String {
 ///
 /// ## Purpose
 /// Centralizes connection configuration for all storage backends:
-/// - PostgreSQL: Primary data storage with pgvector extension
+/// - PostgreSQL: Primary data storage (metadata, governance, RLS)
 /// - Qdrant: Vector similarity search
 /// - Redis: Caching layer
 /// - Graph: DuckDB-based knowledge graph

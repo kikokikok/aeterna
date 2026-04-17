@@ -12,7 +12,7 @@ Universal Memory & Knowledge Framework for Enterprise AI Agent Systems. Provides
 |---|---|
 | **Language** | Rust (Edition 2024 — NEVER 2021) |
 | **Async runtime** | Tokio (full features) |
-| **Memory storage** | Redis 7+ (Working/Session), PostgreSQL 16+ + pgvector (Episodic/Procedural/User/Org), Qdrant 1.12+ (Semantic/Archival) |
+| **Memory storage** | Redis 7+ (Working/Session), PostgreSQL 16+ (Episodic/Procedural/User/Org metadata), Qdrant 1.12+ (all semantic vectors) |
 | **Graph layer** | DuckDB 0.9+ |
 | **Embeddings** | rust-genai 0.4+ (OpenAI, Anthropic, Gemini, Z.AI, xAI, Ollama, Groq, Cohere…) |
 | **Authorization** | Cedar policies + Permit.io + OPAL |
@@ -63,11 +63,11 @@ aeterna/
 ```
 Working       µs  — Redis in-memory
 Session       ms  — Redis with TTL
-Episodic       h  — PostgreSQL + pgvector
+Episodic       h  — PostgreSQL + Qdrant
 Semantic       d  — Qdrant vector search
 Procedural     w  — PostgreSQL facts
-User          mo  — PostgreSQL + pgvector
-Organization  mo  — PostgreSQL + pgvector
+User          mo  — PostgreSQL + Qdrant
+Organization  mo  — PostgreSQL + Qdrant
 Archival      yr  — Qdrant long-term
 ```
 

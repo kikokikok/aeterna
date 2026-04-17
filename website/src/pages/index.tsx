@@ -39,7 +39,7 @@ const features = [
     title: 'Pluggable Adapters',
     emoji: '🔄',
     description:
-      'Swap storage backends (Qdrant, pgvector, Pinecone, Weaviate, MongoDB, Vertex AI, Databricks) and LLM providers without lock-in.',
+      'Swap storage backends (Qdrant, Pinecone, Weaviate, MongoDB, Vertex AI, Databricks) and LLM providers without lock-in.',
     link: '/docs/specs/adapter-architecture',
   },
   {
@@ -179,7 +179,7 @@ function TechStackSection() {
         <div className={styles.techGrid}>
           {[
             { name: 'Rust', detail: 'Edition 2024, Axum HTTP' },
-            { name: 'PostgreSQL', detail: '16+ with pgvector' },
+            { name: 'PostgreSQL', detail: '16+ (stock)' },
             { name: 'Cedar', detail: 'Authorization policies' },
             { name: 'OPAL', detail: 'Real-time policy sync' },
             { name: 'Helm', detail: 'K8s deployment' },

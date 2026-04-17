@@ -58,7 +58,7 @@ Local mode requires sufficient resources for HA (high availability) clusters:
 
 | Component | CPU | Memory | Storage | Notes |
 |-----------|-----|--------|---------|-------|
-| PostgreSQL (3 nodes) | 500m each | 2Gi each | 50Gi-200Gi | pgvector extension |
+| PostgreSQL (3 nodes) | 500m each | 2Gi each | 50Gi-200Gi | Stock Postgres (no extensions) |
 | Dragonfly (3 nodes) | 250m each | 512Mi each | 10Gi | Redis-compatible cache |
 | Qdrant (3 nodes) | 300m each | 512Mi each | 20Gi-100Gi | Vector embeddings |
 | OPAL (2 nodes) | 200m each | 256Mi each | 1Gi | Cedar policies |
@@ -231,8 +231,6 @@ postgresql:
       instances: 3
       postgresql:
         version: 16
-        parameters:
-          shared_preload_libraries: "pgvector"
       storage:
         size: 100Gi
         storageClass: standard

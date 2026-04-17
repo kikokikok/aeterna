@@ -302,7 +302,7 @@ Lock-in is the enemy. Aeterna abstracts storage providers:
 
 | Layer | Recommended | Alternatives |
 |-------|-------------|--------------|
-| Vector Search | Qdrant | Pinecone, Chroma, Weaviate, pgvector |
+| Vector Search | Qdrant | Pinecone, Chroma, Weaviate |
 | Structured Data | PostgreSQL | MySQL, SQLite (dev only) |
 | Cache | Redis | Dragonfly, Valkey |
 | Embeddings | OpenAI | Anthropic, Cohere, local models |

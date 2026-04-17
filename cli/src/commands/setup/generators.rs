@@ -214,7 +214,7 @@ pub fn generate_docker_compose(config: &SetupConfig) -> String {
 
         if matches!(config.postgresql, PostgresqlType::CloudNativePg) {
             content.push_str("  postgres:\n");
-            content.push_str("    image: pgvector/pgvector:pg16\n");
+            content.push_str("    image: postgres:17-alpine\n");
             content.push_str("    environment:\n");
             content.push_str("      POSTGRES_USER: aeterna\n");
             content.push_str("      POSTGRES_PASSWORD: aeterna\n");
@@ -380,7 +380,6 @@ pub fn generate_helm_values(config: &SetupConfig) -> String {
                 content.push_str(&format!("    catalog: \"{}\"\n", dc.catalog));
             }
         }
-        _ => {}
     }
     content.push('\n');
 

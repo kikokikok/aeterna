@@ -114,8 +114,8 @@ sequenceDiagram
         activate Qdrant
         Qdrant-->>MemManager: results_org[8]
         deactivate Qdrant
-    and Search Layer: Company (PostgreSQL)
-        MemManager->>Postgres: SELECT with pgvector
+    and Search Layer: Company (PostgreSQL metadata + Qdrant vectors)
+        MemManager->>Postgres: SELECT metadata WHERE tenant=...
         activate Postgres
         Postgres-->>MemManager: results_company[3]
         deactivate Postgres
@@ -955,7 +955,7 @@ sequenceDiagram
                 Assembler->>Assembler: Add Level 3 (detailed)
             else Medium relevance (0.7-0.9)
                 Assembler->>Assembler: Add Level 2 (paragraph)
-            else Low relevance (\<0.7)
+            else Low relevance (<0.7)
                 Assembler->>Assembler: Add Level 1 (sentence)
             end
         else Budget exhausted
@@ -1217,7 +1217,7 @@ sequenceDiagram
                 Redis-->>Fallback: Cache miss
                 deactivate Redis
                 
-                Fallback->>Postgres: search_with_pgvector(query)
+                Fallback->>Postgres: search_with_keywords(query)
                 activate Postgres
                 Postgres-->>Fallback: results[8]
                 deactivate Postgres
@@ -1248,7 +1248,7 @@ sequenceDiagram
         
         MemManager->>Fallback: execute_fallback(query)
         activate Fallback
-        Fallback->>Postgres: search_with_pgvector(query)
+        Fallback->>Postgres: search_with_keywords(query)
         activate Postgres
         Postgres-->>Fallback: results[8]
         deactivate Postgres
@@ -1285,7 +1285,7 @@ sequenceDiagram
             
             MemManager->>Fallback: execute_fallback(query)
             activate Fallback
-            Fallback->>Postgres: search_with_pgvector(query)
+            Fallback->>Postgres: search_with_keywords(query)
             activate Postgres
             Postgres-->>Fallback: results[8]
             deactivate Postgres

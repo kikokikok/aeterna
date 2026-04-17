@@ -15,14 +15,11 @@ CCA introduces two PostgreSQL migrations and extends the Redis schema:
 
 Before running migrations:
 
-1. **PostgreSQL 16+** with pgvector extension installed
+1. **PostgreSQL 16+** (stock; no extensions required — semantic vectors live in Qdrant)
 2. **Existing Aeterna schema** (migrations 001-006 already applied)
 3. **Database backup** taken before migration
 
 ```bash
-# Verify pgvector is installed
-psql -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
-
 # Check current migration state
 psql -c "SELECT * FROM schema_migrations ORDER BY version;"
 

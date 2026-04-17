@@ -7,7 +7,7 @@ OpenSpec-compliant Knowledge Provider specification for universal memory and kno
 - **Primary Language**: Rust (for implementation references)
 - **Memory Storage**:
   - Redis 7+ (Working/Session cache)
-  - PostgreSQL 16+ with pgvector (Episodic, Procedural, User, Org)
+  - PostgreSQL 16+ (Episodic, Procedural, User, Org metadata)
   - Qdrant 1.12+ (Semantic, Archival vectors)
 - **Embedding**: rust-genai 0.4+ (multi-provider: OpenAI, Anthropic, Gemini, Z.AI)
 - **API**: OpenSpec v1.0.0 protocol
@@ -26,11 +26,11 @@ OpenSpec-compliant Knowledge Provider specification for universal memory and kno
 - **8-Layer Memory Hierarchy**:
   - Working (µs, in-memory Redis)
   - Session (ms, Redis with TTL)
-  - Episodic (h, PostgreSQL + pgvector)
+  - Episodic (h, PostgreSQL + Qdrant)
   - Semantic (d, Qdrant vector search)
   - Procedural (w, PostgreSQL facts)
-  - User Personal (mo, PostgreSQL + pgvector)
-  - Organization (mo, PostgreSQL + pgvector)
+  - User Personal (mo, PostgreSQL + Qdrant)
+  - Organization (mo, PostgreSQL + Qdrant)
   - Archival (yr, Qdrant long-term storage)
 
 - **Cross-Layer Queries**: Concurrent queries across multiple memory tiers
@@ -81,11 +81,11 @@ interface KnowledgeEntry {
 |--------|-----------------|----------|
 | Working Memory | ~5ms | In-memory Redis |
 | Session Memory | ~20ms | Redis with TTL |
-| Episodic Memory | ~50ms | PostgreSQL + pgvector |
+| Episodic Memory | ~50ms | PostgreSQL + Qdrant |
 | Semantic Memory | ~100ms | Qdrant |
 | Procedural Memory | ~30ms | PostgreSQL |
-| User Personal | ~50ms | PostgreSQL + pgvector |
-| Organization | ~200ms | PostgreSQL + pgvector |
+| User Personal | ~50ms | PostgreSQL + Qdrant |
+| Organization | ~200ms | PostgreSQL + Qdrant |
 | Archival | ~500ms | Qdrant secondary |
 
 ## Important Constraints

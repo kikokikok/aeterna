@@ -25,7 +25,6 @@ pub enum AuthMethod {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
 pub enum VectorBackend {
     Qdrant,
-    Pgvector,
     Pinecone,
     Weaviate,
     Mongodb,

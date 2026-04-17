@@ -38,8 +38,8 @@ The system SHALL implement a PostgreSQL backend for structured data storage.
 
 #### Scenario: Create schema for user personal memories
 - **WHEN** creating user memory table
-- **THEN** system SHALL create table with fields: id, userId, content, embedding, metadata, createdAt, updatedAt
-- **AND** system SHALL add pgvector index for semantic search
+- **THEN** system SHALL create table with fields: id, userId, content, metadata, createdAt, updatedAt
+- **AND** semantic vectors SHALL be stored in the Qdrant backend, not Postgres
 
 #### Scenario: Create schema for organization data
 - **WHEN** creating organization table
@@ -58,9 +58,9 @@ The system SHALL implement a PostgreSQL backend for structured data storage.
 - **AND** system SHALL support pagination with limit and offset
 - **AND** system SHALL complete in < 50ms (P95)
 
-#### Scenario: pgvector similarity search
+#### Scenario: Semantic similarity search
 - **WHEN** searching user memories semantically
-- **THEN** system SHALL use pgvector cosine similarity
+- **THEN** system SHALL delegate to the Qdrant backend using cosine similarity
 - **AND** system SHALL return top N results by score
 - **AND** system SHALL complete in < 100ms (P95)
 

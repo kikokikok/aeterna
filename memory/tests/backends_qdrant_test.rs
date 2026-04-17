@@ -14,7 +14,6 @@ fn qdrant_config() -> BackendConfig {
             collection_prefix: "test_backends".to_string(),
         }),
         pinecone: None,
-        pgvector: None,
         vertex_ai: None,
         databricks: None,
         weaviate: None,

@@ -18,10 +18,6 @@ spec:
     initdb:
       database: {{ .Values.postgresql.database | quote }}
       owner: {{ .Values.postgresql.owner | quote }}
-      {{- if .Values.postgresql.pgvector.enabled }}
-      postInitSQL:
-        - "CREATE EXTENSION IF NOT EXISTS vector;"
-      {{- end }}
 
   postgresql:
     {{- with .Values.postgresql.parameters }}

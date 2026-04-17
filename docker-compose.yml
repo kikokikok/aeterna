@@ -18,9 +18,9 @@ services:
   # Core Storage Services
   # ==========================================================================
 
-  # PostgreSQL with pgvector extension
+  # PostgreSQL (stock). Semantic vectors live in Qdrant — no pgvector needed.
   postgres:
-    image: pgvector/pgvector:pg16
+    image: postgres:17-alpine
     container_name: aeterna-postgres
     environment:
       POSTGRES_USER: postgres

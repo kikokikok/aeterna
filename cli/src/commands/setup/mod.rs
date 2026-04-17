@@ -521,7 +521,6 @@ mod tests {
     fn test_setup_all_vector_backends() {
         for backend in [
             "qdrant",
-            "pgvector",
             "pinecone",
             "weaviate",
             "mongodb",

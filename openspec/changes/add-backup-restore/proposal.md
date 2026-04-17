@@ -1,6 +1,6 @@
 ## Why
 
-Aeterna stores critical enterprise data across multiple backends (PostgreSQL+pgvector, Qdrant, DuckDB, Redis) with no supported path for exporting, backing up, restoring, or migrating that data between environments. The CLI already stubs `aeterna admin export` and `aeterna admin import` commands, but both return "server not connected" errors with simulated analysis data. This gap blocks three enterprise requirements:
+Aeterna stores critical enterprise data across multiple backends (PostgreSQL, Qdrant, DuckDB, Redis) with no supported path for exporting, backing up, restoring, or migrating that data between environments. The CLI already stubs `aeterna admin export` and `aeterna admin import` commands, but both return "server not connected" errors with simulated analysis data. This gap blocks three enterprise requirements:
 
 1. **Business Continuity / Disaster Recovery (BCP/DR)**: Operators have no way to create point-in-time backups or restore a tenant's data after a failure.
 2. **Data Portability and Tenant Migration**: Moving a tenant between Aeterna instances (e.g., staging to production, region migration) requires manual database dumps with no integrity verification.

@@ -7,7 +7,7 @@ OpenSpec-compliant Memory-Knowledge System specification implementation. Provide
 - **Primary Language**: Rust (for implementation references)
 - **Memory Storage**:
   - Redis 7+ (Working/Session cache)
-  - PostgreSQL 16+ with pgvector (Episodic, Procedural, User, Org)
+  - PostgreSQL 16+ (Episodic, Procedural, User, Org metadata)
   - Qdrant 1.12+ (Semantic, Archival vectors)
 - **Embedding**: rust-genai 0.4+ (multi-provider: OpenAI, Anthropic, Gemini, Z.AI)
 - **API**: OpenSpec v1.0.0 protocol
@@ -26,11 +26,11 @@ OpenSpec-compliant Memory-Knowledge System specification implementation. Provide
 - **8-Layer Memory Hierarchy**:
   - Working (µs, in-memory Redis)
   - Session (ms, Redis with TTL)
-  - Episodic (h, PostgreSQL + pgvector)
+  - Episodic (h, PostgreSQL + Qdrant)
   - Semantic (d, Qdrant vector search)
   - Procedural (w, PostgreSQL facts)
-  - User Personal (mo, PostgreSQL + pgvector)
-  - Organization (mo, PostgreSQL + pgvector)
+  - User Personal (mo, PostgreSQL + Qdrant)
+  - Organization (mo, PostgreSQL + Qdrant)
   - Archival (yr, Qdrant long-term storage)
 
 - **Cross-Layer Queries**: Concurrent queries across multiple memory tiers

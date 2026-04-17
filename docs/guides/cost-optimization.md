@@ -38,7 +38,7 @@ Aeterna manages data across three tiers to balance performance and cost.
    - **Purpose**: Low-latency search and frequent access.
    - **Cost**: High (RAM-based).
 
-2. **Warm Tier (PostgreSQL + pgvector)**:
+2. **Warm Tier (PostgreSQL + Qdrant)**:
    - **Data**: Memories from 7 to 90 days.
    - **Purpose**: Reliable long-term storage and occasional retrieval.
    - **Cost**: Moderate (SSD-based).

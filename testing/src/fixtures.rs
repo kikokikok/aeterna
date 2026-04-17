@@ -37,24 +37,14 @@ static POSTGRES: OnceCell<Option<PostgresFixture>> = OnceCell::const_new();
 pub async fn postgres() -> Option<&'static PostgresFixture> {
     POSTGRES
         .get_or_init(|| async {
-            // We use the pgvector-enabled Postgres image (not the stock
-            // `postgres:*-alpine` that testcontainers_modules::postgres
-            // defaults to) because the aeterna schema declares `VECTOR(N)`
-            // columns — e.g. `memory_entries.embedding VECTOR(1536)` — and
-            // the `vector` type only exists once the pgvector extension is
-            // installed. On stock Postgres those `CREATE TABLE` statements
-            // either fail outright or are silently swallowed by inline
-            // `.ok()` in `PostgresBackend::initialize_schema`, leaving
-            // downstream tests with partial schemas.
-            //
-            // In production the same extension is provided by the CNPG
-            // operator managing the Helm-deployed Postgres cluster.
+            // Stock Postgres is sufficient — the schema no longer declares
+            // any `VECTOR(N)` columns. Semantic vectors live in Qdrant
+            // (see `memory::backends::qdrant`); Postgres stores only
+            // memory/knowledge *metadata* + tenant/RLS scoping.
             let container_result = Postgres::default()
                 .with_db_name("testdb")
                 .with_user("testuser")
                 .with_password("testpass")
-                .with_name("pgvector/pgvector")
-                .with_tag("pg16")
                 .start()
                 .await;
 

@@ -44,7 +44,6 @@ mod pinecone_tests {
                 index_name: std::env::var("PINECONE_INDEX_NAME")
                     .unwrap_or_else(|_| "aeterna-test".to_string()),
             }),
-            pgvector: None,
             vertex_ai: None,
             databricks: None,
             weaviate: None,

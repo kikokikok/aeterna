@@ -43,7 +43,7 @@ graph TB
     end
 
     subgraph Storage["Storage Adapters"]
-        PG["PostgreSQL + pgvector"]
+        PG[PostgreSQL]
         QD[Qdrant]
         RD[Redis]
         DK[DuckDB Graph]
@@ -120,8 +120,8 @@ Git-versioned knowledge base supporting:
 ## Tech Stack
 
 - **Language**: Rust (Edition 2024) with Axum HTTP
-- **Database**: PostgreSQL 16+ with pgvector
-- **Vector Store**: Qdrant, pgvector, Pinecone, Weaviate, MongoDB, Vertex AI, Databricks
+- **Database**: PostgreSQL 16+ (stock; no extensions required)
+- **Vector Store**: Qdrant, Pinecone, Weaviate, MongoDB, Vertex AI, Databricks
 - **Graph**: DuckDB
 - **Authorization**: Cedar + OPAL
 - **Cache**: Redis / Dragonfly

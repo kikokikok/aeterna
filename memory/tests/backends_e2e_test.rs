@@ -160,26 +160,6 @@ async fn test_qdrant_e2e() {
 }
 
 #[tokio::test]
-#[ignore = "requires running PostgreSQL with pgvector"]
-async fn test_pgvector_e2e() {
-    let config = BackendConfig {
-        backend_type: VectorBackendType::Pgvector,
-        embedding_dimension: 128,
-        pgvector: Some(memory::backends::factory::PgvectorConfig {
-            connection_string: std::env::var("PGVECTOR_URL")
-                .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/aeterna_test".into()),
-            schema: "public".into(),
-            table_name: "e2e_vectors".into(),
-        }),
-        ..Default::default()
-    };
-
-    let backend = create_backend(config).await.unwrap();
-    run_backend_test_suite(backend.clone(), "e2e-pgvector", 128).await;
-    run_tenant_isolation_test(backend, 128).await;
-}
-
-#[tokio::test]
 #[ignore = "requires Pinecone API key"]
 async fn test_pinecone_e2e() {
     let api_key = std::env::var("PINECONE_API_KEY").expect("PINECONE_API_KEY required");
@@ -287,7 +267,6 @@ async fn test_backend_switching_config() {
     for backend_type in [
         VectorBackendType::Qdrant,
         VectorBackendType::Pinecone,
-        VectorBackendType::Pgvector,
         VectorBackendType::Weaviate,
         VectorBackendType::Mongodb,
         VectorBackendType::VertexAi,

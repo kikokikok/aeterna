@@ -36,7 +36,6 @@ mod databricks_tests {
             embedding_dimension: 3,
             qdrant: None,
             pinecone: None,
-            pgvector: None,
             vertex_ai: None,
             databricks: Some(memory::backends::factory::DatabricksConfig {
                 workspace_url: std::env::var("DATABRICKS_HOST").unwrap_or_default(),

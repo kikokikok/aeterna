@@ -1126,30 +1126,6 @@ The system SHALL support Pinecone as a managed vector database backend.
 - **THEN** system SHALL retry with exponential backoff
 - **AND** system SHALL emit rate_limit metric
 
-### Requirement: pgvector Backend
-The system SHALL support pgvector as a self-hosted vector database backend using PostgreSQL.
-
-#### Scenario: pgvector backend initialization
-- **WHEN** vector.backend is set to "pgvector"
-- **THEN** system SHALL connect to PostgreSQL using configured connection string
-- **AND** system SHALL verify pgvector extension is installed
-- **AND** system SHALL create vector tables and indexes as needed
-
-#### Scenario: pgvector tenant isolation via schema
-- **WHEN** storing vectors for a tenant in pgvector
-- **THEN** system SHALL use tenant-specific schema or row-level tenant_id filter
-- **AND** queries SHALL include tenant_id WHERE clause
-
-#### Scenario: pgvector index type selection
-- **WHEN** configuring pgvector backend
-- **THEN** system SHALL support HNSW and IVFFlat index types
-- **AND** system SHALL default to HNSW for better recall
-
-#### Scenario: pgvector distance metric
-- **WHEN** searching vectors in pgvector
-- **THEN** system SHALL use configured distance metric: cosine (<=>), L2 (<->), or inner product (<#>)
-- **AND** system SHALL default to cosine distance
-
 ### Requirement: Vertex AI Vector Search Backend
 The system SHALL support Google Vertex AI Vector Search as a managed vector database backend.
 

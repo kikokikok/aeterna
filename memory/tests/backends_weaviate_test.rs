@@ -42,7 +42,6 @@ mod weaviate_tests {
             embedding_dimension: 3,
             qdrant: None,
             pinecone: None,
-            pgvector: None,
             vertex_ai: None,
             databricks: None,
             weaviate: Some(memory::backends::factory::WeaviateConfig {

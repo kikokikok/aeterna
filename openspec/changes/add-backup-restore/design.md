@@ -1,6 +1,6 @@
 ## Context
 
-Aeterna persists enterprise AI agent data across four storage backends: PostgreSQL+pgvector (memories, knowledge metadata, governance, org units, policies, promotions), Qdrant (semantic/archival vector embeddings), DuckDB (graph nodes and edges), and Redis (working/session memory). The existing CLI exposes `aeterna admin export` and `aeterna admin import` subcommands with argument parsing for target selection, format, layer filtering, import modes, dry-run, and compression, but both commands return hardcoded "server not connected" errors or simulated analysis results.
+Aeterna persists enterprise AI agent data across four storage backends: PostgreSQL (memories, knowledge metadata, governance, org units, policies, promotions), Qdrant (all vector embeddings — semantic, episodic, archival), DuckDB (graph nodes and edges), and Redis (working/session memory). The existing CLI exposes `aeterna admin export` and `aeterna admin import` subcommands with argument parsing for target selection, format, layer filtering, import modes, dry-run, and compression, but both commands return hardcoded "server not connected" errors or simulated analysis results.
 
 The server already has an authenticated admin API surface under `/api/v1/admin/` with role-based access control. The CLI uses a shared authenticated client layer that resolves profiles, credentials, and server URLs. This change builds on both surfaces to deliver real export/import functionality.
 

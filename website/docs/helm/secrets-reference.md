@@ -46,7 +46,6 @@ kubectl create secret generic aeterna-google-llm \
 |---|---|---|---|
 | Qdrant (external) | `vectorBackend.qdrant.external.existingSecret` | `api-key` | When using external Qdrant |
 | Pinecone | `vectorBackend.pinecone.existingSecret` | `api-key` | When `vectorBackend.type: pinecone` |
-| pgvector | Uses PostgreSQL secret | Same as PostgreSQL | Shares PG credentials |
 | Weaviate | N/A (internal) | N/A | Bundled subchart, no auth by default |
 | MongoDB Atlas | N/A | N/A | Configure via connection string |
 | Vertex AI Vector | Uses Google ADC | Same as Google LLM | Shares Vertex AI credentials |
@@ -208,7 +207,6 @@ These are set via the ConfigMap and Helm values — no secrets involved:
 | Backend | Variables |
 |---|---|
 | Pinecone | `AETERNA_PINECONE_ENVIRONMENT`, `AETERNA_PINECONE_INDEX_NAME` |
-| pgvector | `AETERNA_PGVECTOR_ENABLED` |
 | Weaviate | `AETERNA_WEAVIATE_HOST` |
 | Vertex AI | `AETERNA_VERTEXAI_PROJECT`, `AETERNA_VERTEXAI_REGION`, `AETERNA_VERTEXAI_ENDPOINT` |
 | Databricks | `AETERNA_DATABRICKS_WORKSPACE_URL`, `AETERNA_DATABRICKS_CATALOG` |

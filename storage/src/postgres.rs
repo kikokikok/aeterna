@@ -244,9 +244,11 @@ impl PostgresBackend {
         .execute(&self.pool)
         .await?;
 
+        // NOTE: No `embedding VECTOR(N)` column here — semantic vectors live in
+        // Qdrant (see `memory::backends::qdrant`). Postgres stores only metadata.
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS memory_entries ( id TEXT PRIMARY KEY, tenant_id TEXT NOT \
-             NULL, content TEXT NOT NULL, embedding VECTOR(1536), memory_layer TEXT NOT NULL, \
+             NULL, content TEXT NOT NULL, memory_layer TEXT NOT NULL, \
              properties JSONB DEFAULT '{}', device_id TEXT, importance_score REAL DEFAULT 0.0, \
              created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL, deleted_at BIGINT )",
         )

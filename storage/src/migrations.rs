@@ -20,7 +20,7 @@
 //!      for the "core" tables operated on by `PostgresBackend` directly
 //!      (including several tables only defined inline, such as
 //!      `organizational_units`, `graph_nodes`, `sync_state`).
-//!   2. [`apply_all`] (this module) — the 19 migrations that add the
+//!   2. [`apply_all`] (this module) — the 20 migrations that add the
 //!      rest of the schema (`users`, referential integrity tables,
 //!      governance workflow, codesearch, etc.) and run `ALTER TABLE`
 //!      statements to extend the inline-created tables with additional
@@ -141,6 +141,11 @@ pub const MIGRATIONS: &[EmbeddedMigration] = &[
         version: 21,
         name: "021_add_user_idp_columns",
         sql: include_str!("../migrations/021_add_user_idp_columns.sql"),
+    },
+    EmbeddedMigration {
+        version: 22,
+        name: "022_drop_dead_vector_columns",
+        sql: include_str!("../migrations/022_drop_dead_vector_columns.sql"),
     },
 ];
 

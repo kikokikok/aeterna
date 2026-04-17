@@ -1,9 +1,10 @@
 -- CCA Summary Schema Extensions
 -- Adds summary columns to memory_entries for hierarchical context compression
 
+-- NOTE: `context_vector` column intentionally omitted; CCA does not persist
+-- embeddings in Postgres — vectors live in Qdrant.
 ALTER TABLE memory_entries 
     ADD COLUMN IF NOT EXISTS summaries JSONB DEFAULT '{}',
-    ADD COLUMN IF NOT EXISTS context_vector VECTOR(1536),
     ADD COLUMN IF NOT EXISTS summary_updated_at BIGINT;
 
 CREATE INDEX IF NOT EXISTS idx_memory_entries_summary_updated 
