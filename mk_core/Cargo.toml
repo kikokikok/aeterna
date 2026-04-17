@@ -1,6 +1,6 @@
 [package]
 name = "mk_core"
-version = "0.7.0"
+version.workspace = true
 edition = "2024"
 description = "Shared types and traits for the Memory-Knowledge system"
 

@@ -1,9 +1,16 @@
 name: OpenCode Plugin CI
 
+# PR-only: build + typecheck + test for the opencode plugin.
+#
+# npm publish lives in .github/workflows/release.yml (`npm-release` job),
+# which fires on every product `v*` tag. The plugin is published in lockstep
+# with the rest of the product so there's one tag per release, not two.
+#
+# To emergency-publish the plugin out-of-band (without a product release),
+# use `workflow_dispatch` on release.yml with a version input — it will
+# verify, build, and publish everything including npm.
+
 on:
-  push:
-    tags:
-      - 'plugin-v*'
   pull_request:
     branches: [master]
     paths:
@@ -61,31 +68,7 @@ jobs:
       - name: Run tests
         run: npm run test
 
-  publish:
-    name: Publish to npm
-    needs: [build, test]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/plugin-v')
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-          cache: npm
-          cache-dependency-path: packages/opencode-plugin/package-lock.json
-
-      - run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Publish
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  # NOTE: the `publish` job was moved to .github/workflows/release.yml so
+  # that `@aeterna-org/opencode-plugin` is published in lockstep with the
+  # rest of the product on every `v*` tag (not on a separate `plugin-v*`
+  # tag that could drift from the product version).
