@@ -445,18 +445,34 @@ jobs:
     needs: [resolve-version, docker-merge, docker-scan-sbom, cli-build, helm-release, npm-release]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      # Download ONLY the artifacts we actually attach to the release.
+      # Historically this step downloaded every artifact in the run (incl.
+      # `.dockerbuild` metadata ~100MB each and `digests-*` bookkeeping).
+      # On v0.8.0-rc.1 that caused two transient Azure Blob 500s during the
+      # parallel download of 9 artifacts, failing the entire release job
+      # after the actual release content (docker, helm, npm, cli) had
+      # already succeeded. Cherry-picking avoids the unnecessary surface.
+      - name: Download CLI binaries
+        uses: actions/download-artifact@v4
         with:
           path: assets
+          pattern: cli-*
+
+      - name: Download SBOM
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+          pattern: sbom-aeterna-*
       - name: Flatten assets
         run: |
           mkdir -p release-files
-          find assets -type f \( -name '*.tar.gz' -o -name '*.sha256' -o -name '*.tgz' -o -name 'sbom.spdx.json' \) \
+          # Copy CLI tarballs, their .sha256 sidecars, and the SBOM.
+          # (Helm .tgz used to be here but charts are now published directly
+          # to OCI — no artifact attached to the GH Release.)
+          find assets -type f \( -name '*.tar.gz' -o -name '*.sha256' -o -name 'sbom-aeterna-*.spdx.json' \) \
             -exec cp {} release-files/ \;
-          if [ -f release-files/sbom.spdx.json ]; then
-            mv release-files/sbom.spdx.json release-files/sbom-aeterna-v${{ needs.resolve-version.outputs.version }}.spdx.json
-          fi
-          (cd release-files && sha256sum *.tar.gz *.tgz 2>/dev/null > checksums.sha256 || true)
+          # Generate consolidated checksums file for the CLI tarballs.
+          (cd release-files && sha256sum *.tar.gz 2>/dev/null > checksums.sha256 || true)
           ls -la release-files/
       - uses: softprops/action-gh-release@v2
         with:
