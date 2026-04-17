@@ -11,7 +11,9 @@ env:
 
 permissions:
   contents: read
-  packages: write   # required for registry-scoped buildx cache
+  packages: write        # required for registry-scoped buildx cache
+  checks: write          # EnricoMi/publish-unit-test-result-action → create check runs
+  pull-requests: write   # attach test summary to the PR
 
 concurrency:
   group: pr-integration-${{ github.ref }}
@@ -73,7 +75,11 @@ jobs:
   docker-build:
     name: docker-build-amd64
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # First build after a cold registry cache is ~30 min (full Rust release
+    # build). After the first post-merge.yml run seeds
+    # ghcr.io/{repo}-cache:buildcache-master-amd64, subsequent PR builds
+    # pull warm layers and finish in <10 min.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

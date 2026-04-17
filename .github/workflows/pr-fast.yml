@@ -7,6 +7,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+  checks: write          # EnricoMi/publish-unit-test-result-action → create check runs
+  pull-requests: write   # attach test summary to the PR
+
 concurrency:
   group: pr-fast-${{ github.ref }}
   cancel-in-progress: true

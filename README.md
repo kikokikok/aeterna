@@ -514,6 +514,17 @@ Aeterna addresses **93 production readiness gaps** identified across enterprise 
 
 ### Installation
 
+**Prebuilt binary (recommended):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/main/install.sh | sh
+```
+
+Platforms: Linux `x86_64` / `aarch64` (gnu), macOS `x86_64` / `aarch64`. See the
+[CLI Quick Reference](docs/guides/cli-quick-reference.md) for details.
+
+**From source:**
+
 ```bash
 git clone https://github.com/kikokikok/aeterna.git
 cd aeterna
