@@ -54,17 +54,19 @@ jobs:
           grep -q 'aarch64-apple-darwin'      .github/workflows/release.yml
           echo "Platform coverage in release.yml: OK"
 
-      - name: Verify docs reference binary install path
+      # docs/guides/cli-quick-reference.md is the canonical CLI contract.
+      # README.md intentionally only links to it — don't force duplicate
+      # coverage there.
+      - name: Verify CLI quick-reference covers install + auth
         run: |
           grep -q 'install.sh' docs/guides/cli-quick-reference.md
-          grep -q 'install.sh' README.md
-          echo "Docs reference binary install path: OK"
-
-      - name: Verify docs reference auth login
-        run: |
           grep -q 'auth login' docs/guides/cli-quick-reference.md
-          grep -q 'auth login' README.md
-          echo "Docs reference auth login: OK"
+          echo "CLI quick-reference coverage: OK"
+
+      - name: Verify README links to the CLI quick-reference
+        run: |
+          grep -q 'cli-quick-reference' README.md
+          echo "README cross-link: OK"
 
       - name: Verify CLI binary supports auth subcommand
         run: |

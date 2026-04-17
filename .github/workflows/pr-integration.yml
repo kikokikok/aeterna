@@ -29,6 +29,21 @@ jobs:
     name: shipped-smoke
     runs-on: ubuntu-latest
     steps:
+      # GitHub-hosted runners ship with ~14 GB free. Two sequential Rust
+      # test-binary compiles (cli_e2e_test + agent-a2a::a2a_test, which
+      # transitively vendors libduckdb-sys ~ 4-5 GB of C++) fill the disk
+      # and the second `ar` invocation dies with ENOSPC. Freeing ~35 GB
+      # of preinstalled Android/dotnet/ghc images up front is the
+      # standard workaround.
+      - name: Free runner disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false      # keep rustup/cargo bits cached by the runner
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false  # apt purge is slow; skip
+          swap-storage: true
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
