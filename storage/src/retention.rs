@@ -183,12 +183,11 @@ impl RetentionEnforcer {
         let days = self.config.audit_log_days;
         let interval = format!("{days} days");
 
-        let result = sqlx::query(
-            "DELETE FROM gdpr_audit_logs WHERE created_at < NOW() - $1::interval",
-        )
-        .bind(&interval)
-        .execute(&self.pool)
-        .await?;
+        let result =
+            sqlx::query("DELETE FROM gdpr_audit_logs WHERE created_at < NOW() - $1::interval")
+                .bind(&interval)
+                .execute(&self.pool)
+                .await?;
 
         let count = result.rows_affected();
         info!(purged = count, days = days, "Purged GDPR audit logs");
@@ -202,12 +201,11 @@ impl RetentionEnforcer {
         let days = self.config.governance_event_days;
         let interval = format!("{days} days");
 
-        let result = sqlx::query(
-            "DELETE FROM governance_events WHERE timestamp < NOW() - $1::interval",
-        )
-        .bind(&interval)
-        .execute(&self.pool)
-        .await?;
+        let result =
+            sqlx::query("DELETE FROM governance_events WHERE timestamp < NOW() - $1::interval")
+                .bind(&interval)
+                .execute(&self.pool)
+                .await?;
 
         let count = result.rows_affected();
         info!(purged = count, days = days, "Purged governance events");
@@ -244,12 +242,11 @@ impl RetentionEnforcer {
         let days = self.config.drift_result_days;
         let interval = format!("{days} days");
 
-        let result = sqlx::query(
-            "DELETE FROM drift_results WHERE created_at < NOW() - $1::interval",
-        )
-        .bind(&interval)
-        .execute(&self.pool)
-        .await?;
+        let result =
+            sqlx::query("DELETE FROM drift_results WHERE created_at < NOW() - $1::interval")
+                .bind(&interval)
+                .execute(&self.pool)
+                .await?;
 
         let count = result.rows_affected();
         info!(purged = count, days = days, "Purged drift results");
@@ -276,7 +273,11 @@ impl RetentionEnforcer {
         .await?;
 
         let count = result.rows_affected();
-        info!(purged = count, days = days, "Purged stale promotion requests");
+        info!(
+            purged = count,
+            days = days,
+            "Purged stale promotion requests"
+        );
         Ok(count)
     }
 }

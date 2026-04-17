@@ -100,7 +100,7 @@ pub fn unsupported(command: &str, profile_name: &str) -> anyhow::Error {
         .fix("Track progress: https://github.com/kikokikok/aeterna")
         .suggest("aeterna auth status")
         .display();
-    anyhow::anyhow!("Backend API for '{}' not yet available", command)
+    anyhow::anyhow!("Backend API for '{command}' not yet available")
 }
 
 /// Like [`unsupported`] but for cases where no profile has been loaded yet

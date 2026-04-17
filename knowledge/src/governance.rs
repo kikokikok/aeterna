@@ -131,17 +131,14 @@ impl GovernanceEngine {
     pub async fn publish_event(&self, event: GovernanceEvent) -> Result<(), EventError> {
         // Task 9.8 — deliver promotion lifecycle notifications BEFORE publishing
         // (fire-and-forget; errors are logged but do not fail the request).
-        if let Some(ns) = &self.notification_service {
-            if let Some(notification) = Self::event_to_notification(&event) {
-                if let Err(e) = ns.notify_promotion(notification.clone()).await {
-                    tracing::warn!(error = %e, "Promotion notification delivery failed");
-                    // Task 11.3 — alert-grade counter for notification delivery failures
-                    self.telemetry.record_notification_delivery_failed(&format!(
-                        "{:?}",
-                        notification.event_type
-                    ));
-                }
-            }
+        if let Some(ns) = &self.notification_service
+            && let Some(notification) = Self::event_to_notification(&event)
+            && let Err(e) = ns.notify_promotion(notification.clone()).await
+        {
+            tracing::warn!(error = %e, "Promotion notification delivery failed");
+            // Task 11.3 — alert-grade counter for notification delivery failures
+            self.telemetry
+                .record_notification_delivery_failed(&format!("{:?}", notification.event_type));
         }
 
         if let Some(publisher) = &self.event_publisher {

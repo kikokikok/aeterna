@@ -41,9 +41,9 @@ redis:
 
 ## Vector store connection
 vectorStore:
-  ## @param vectorStore.type Vector store type: qdrant, weaviate, pgvector, pinecone, mongodb, vertexai, databricks
+  ## @param vectorStore.type Vector store type: qdrant, weaviate, pinecone, mongodb, vertexai, databricks
   type: "qdrant"
-  ## @param vectorStore.host Vector store hostname (not needed for pgvector, pinecone, vertexai, databricks)
+  ## @param vectorStore.host Vector store hostname (not needed for pinecone, vertexai, databricks)
   host: ""
   ## @param vectorStore.port Vector store port (6333 for Qdrant, 8080 for Weaviate)
   port: 6333

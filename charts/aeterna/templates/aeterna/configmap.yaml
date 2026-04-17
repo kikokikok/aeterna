@@ -24,9 +24,6 @@ data:
   AETERNA_QDRANT_HOST: {{ include "aeterna.vectorStore.host" . | quote }}
   AETERNA_QDRANT_PORT: {{ include "aeterna.vectorStore.port" . | quote }}
   {{- end }}
-  {{- if eq .Values.vectorStore.type "pgvector" }}
-  AETERNA_PGVECTOR_ENABLED: "true"
-  {{- end }}
   {{- if eq .Values.vectorStore.type "pinecone" }}
   AETERNA_PINECONE_ENVIRONMENT: {{ .Values.vectorStore.pinecone.environment | quote }}
   AETERNA_PINECONE_INDEX_NAME: {{ .Values.vectorStore.pinecone.indexName | quote }}

@@ -220,8 +220,7 @@ mod tests {
             };
             assert_eq!(
                 result, expected,
-                "Table '{}' should map to {:?}",
-                table, expected
+                "Table '{table}' should map to {expected:?}"
             );
         }
     }

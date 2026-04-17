@@ -1,0 +1,380 @@
+name: Release (tag v*)
+
+# ─────────────────────────────────────────────────────────────────────────
+# Unified release pipeline. Single source of truth for cutting a release.
+#
+# Trigger: push a tag matching `v*` (e.g. `v0.8.0`).
+#
+# Produces, in parallel, all pinned to the same version:
+#   1. Multi-arch Docker image (linux/amd64 + linux/arm64) on GHCR,
+#      tagged `vX.Y.Z`, `X.Y`, `X`, `latest`, `sha-<sha>`; cosign-signed; SBOM.
+#   2. CLI binaries for 4 platforms (Linux x86_64/aarch64 gnu, macOS x86_64/aarch64).
+#   3. Helm charts (`aeterna` + `aeterna-prereqs`) packaged and pushed to
+#      GHCR OCI + gh-pages index, version bumped to match the tag.
+#   4. A single GitHub Release with all of the above attached and
+#      auto-generated release notes.
+#
+# Supersedes: docker.yml (tag-based), cli-release.yml, helm-release.yml.
+# ─────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.8.0 — no leading v)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write          # cosign keyless
+  security-events: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve-version:
+    name: resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag:     ${{ steps.v.outputs.tag }}
+    steps:
+      - id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}"    >> "$GITHUB_OUTPUT"
+          echo "Releasing version: ${VERSION}"
+
+  # ─── 1. Docker multi-arch image (amd64 + arm64) → GHCR ───────────────
+  docker-build:
+    name: docker build (${{ matrix.platform }})
+    needs: resolve-version
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            cache_tag: buildcache-master-amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            cache_tag: buildcache-master-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+      - name: Build & push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:${{ matrix.cache_tag }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:${{ matrix.cache_tag }},mode=max,image-manifest=true,oci-mediatypes=true
+          build-args: |
+            RUST_VERSION=1.93
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.runner }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  docker-merge:
+    name: docker merge manifest + sign
+    needs: [resolve-version, docker-build]
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.inspect.outputs.digest }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=v${{ needs.resolve-version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ needs.resolve-version.outputs.version }}
+            type=semver,pattern={{major}},value=v${{ needs.resolve-version.outputs.version }}
+            type=raw,value=latest
+            type=sha,prefix=sha-
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+      - name: Inspect image
+        id: inspect
+        run: |
+          primary_tag="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ needs.resolve-version.outputs.version }}"
+          digest=$(docker buildx imagetools inspect "$primary_tag" --raw | jq -r '.manifests[0].digest // .digest')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@v3.4.0
+      - name: Sign image (cosign keyless)
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.inspect.outputs.digest }}
+      - name: Verify signature
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          cosign verify ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.inspect.outputs.digest }} \
+            --certificate-identity-regexp="https://github.com/${{ github.repository }}/.*" \
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+
+  docker-scan-sbom:
+    name: docker scan + sbom
+    needs: [resolve-version, docker-merge]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.docker-merge.outputs.digest }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          vuln-type: 'os,library'
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.docker-merge.outputs.digest }}
+          artifact-name: sbom-aeterna-v${{ needs.resolve-version.outputs.version }}.spdx.json
+          output-file: ./sbom.spdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: ./sbom.spdx.json
+          retention-days: 30
+
+  # ─── 2. CLI binaries for 4 target triples ─────────────────────────────
+  cli-build:
+    name: cli ${{ matrix.target }}
+    needs: resolve-version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target:  x86_64-unknown-linux-gnu
+            os:      ubuntu-latest
+            archive: aeterna-x86_64-linux.tar.gz
+          - target:  aarch64-unknown-linux-gnu
+            os:      ubuntu-latest
+            archive: aeterna-aarch64-linux.tar.gz
+          - target:  x86_64-apple-darwin
+            os:      macos-latest
+            archive: aeterna-x86_64-macos.tar.gz
+          - target:  aarch64-apple-darwin
+            os:      macos-latest
+            archive: aeterna-aarch64-macos.tar.gz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install aarch64-linux cross toolchain
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          {
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc"
+            echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc"
+            echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++"
+          } >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-cli-${{ matrix.target }}
+      - run: cargo build --release --package aeterna --target ${{ matrix.target }} --features vendored-openssl
+      - name: Package
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/aeterna"
+          strip "$BIN" || true
+          tar -czf "${{ matrix.archive }}" -C "$(dirname "$BIN")" aeterna
+          sha256sum "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.target }}
+          path: |
+            ${{ matrix.archive }}
+            ${{ matrix.archive }}.sha256
+          retention-days: 7
+
+  # ─── 3. Helm charts (aeterna + aeterna-prereqs) ──────────────────────
+  helm-release:
+    name: helm charts
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+      - name: Bump chart versions to match release
+        run: |
+          V="${{ needs.resolve-version.outputs.version }}"
+          for chart in charts/aeterna charts/aeterna-prereqs; do
+            sed -i "s/^version:.*/version: ${V}/"       "${chart}/Chart.yaml"
+            sed -i "s/^appVersion:.*/appVersion: \"${V}\"/" "${chart}/Chart.yaml"
+          done
+      - name: Embed Cedar policies into values.yaml
+        run: |
+          cat policies/cedar/*.cedar       > /tmp/cedar-policy-text.txt
+          cat policies/cedar/*.cedarschema > /tmp/cedar-schema-text.txt
+          python3 scripts/embed_cedar_into_values.py \
+            charts/aeterna/values.yaml \
+            /tmp/cedar-policy-text.txt \
+            /tmp/cedar-schema-text.txt
+      - name: Add dependency repos
+        run: |
+          helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
+          helm repo add qdrant         https://qdrant.github.io/qdrant-helm
+          helm repo add weaviate       https://weaviate.github.io/weaviate-helm/
+          helm repo add percona        https://percona.github.io/percona-helm-charts/
+          helm repo update
+      - run: helm dependency build charts/aeterna
+      - run: helm dependency build charts/aeterna-prereqs
+      - name: Package charts
+        run: |
+          mkdir -p .cr-release-packages
+          helm package charts/aeterna         -d .cr-release-packages
+          helm package charts/aeterna-prereqs -d .cr-release-packages
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push to GHCR OCI
+        run: |
+          for chart in .cr-release-packages/*.tgz; do
+            helm push "$chart" oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+          done
+      - name: Update gh-pages Helm repo index
+        run: |
+          git fetch origin gh-pages:gh-pages 2>/dev/null || git branch gh-pages
+          git worktree add /tmp/gh-pages gh-pages
+          cp .cr-release-packages/*.tgz /tmp/gh-pages/
+          (cd /tmp/gh-pages && \
+            helm repo index . --url https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }} && \
+            git add . && \
+            git commit -m "Release charts v${{ needs.resolve-version.outputs.version }}" --allow-empty && \
+            git push origin gh-pages)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helm-charts
+          path: .cr-release-packages/*.tgz
+          retention-days: 30
+
+  # ─── 4. Single GitHub Release with all assets attached ────────────────
+  github-release:
+    name: github release
+    needs: [resolve-version, docker-merge, docker-scan-sbom, cli-build, helm-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+      - name: Flatten assets
+        run: |
+          mkdir -p release-files
+          find assets -type f \( -name '*.tar.gz' -o -name '*.sha256' -o -name '*.tgz' -o -name 'sbom.spdx.json' \) \
+            -exec cp {} release-files/ \;
+          if [ -f release-files/sbom.spdx.json ]; then
+            mv release-files/sbom.spdx.json release-files/sbom-aeterna-v${{ needs.resolve-version.outputs.version }}.spdx.json
+          fi
+          (cd release-files && sha256sum *.tar.gz *.tgz 2>/dev/null > checksums.sha256 || true)
+          ls -la release-files/
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name:  v${{ needs.resolve-version.outputs.version }}
+          name:      Aeterna v${{ needs.resolve-version.outputs.version }}
+          generate_release_notes: true
+          body: |
+            ## Aeterna v${{ needs.resolve-version.outputs.version }}
+
+            **Container image**
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ needs.resolve-version.outputs.version }}
+            # digest: ${{ needs.docker-merge.outputs.digest }}
+            ```
+
+            **Helm chart (OCI)**
+            ```bash
+            helm install aeterna \
+              oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/aeterna \
+              --version ${{ needs.resolve-version.outputs.version }}
+            ```
+
+            **CLI**
+            ```bash
+            curl -sSL https://github.com/${{ github.repository }}/releases/download/v${{ needs.resolve-version.outputs.version }}/aeterna-$(uname -m)-$(uname -s | tr A-Z a-z).tar.gz | tar xz
+            ```
+
+            Image is cosign-signed (keyless, GitHub OIDC). SBOM + checksums attached.
+          files: |
+            release-files/*

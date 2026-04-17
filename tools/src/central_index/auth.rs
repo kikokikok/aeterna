@@ -121,7 +121,7 @@ fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
     };
 
     // Pad key to block size.
-    let mut padded_key = vec![0u8; BLOCK_SIZE];
+    let mut padded_key = [0u8; BLOCK_SIZE];
     padded_key[..key.len()].copy_from_slice(&key);
 
     // Inner and outer pads.

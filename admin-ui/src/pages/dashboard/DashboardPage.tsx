@@ -10,7 +10,6 @@ import {
   Brain,
   BookOpen,
   Download,
-  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/api/client"

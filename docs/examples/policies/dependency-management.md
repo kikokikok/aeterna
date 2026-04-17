@@ -26,7 +26,7 @@ when {
 ```
 
 **Explanation**:
-Standardizing on PostgreSQL reduces operational complexity and enables advanced features like JSONB, full-text search, and pgvector for AI applications.
+Standardizing on PostgreSQL reduces operational complexity and enables advanced features like JSONB and full-text search.
 
 **Use Cases**:
 - Database standardization

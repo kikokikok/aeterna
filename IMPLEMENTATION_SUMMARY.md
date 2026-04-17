@@ -116,7 +116,6 @@ Every `GraphNode` and `GraphEdge` has `tenant_id` field with validation.
 | **Weaviate** | Native multi-tenancy | `memory/src/backends/weaviate.rs:156` |
 | **Databricks** | Separate index per tenant | `memory/src/backends/databricks.rs` |
 | **MongoDB** | Tenant filtering | `memory/src/backends/mongodb.rs` |
-| **pgvector** | Inherits PostgreSQL RLS | `memory/src/backends/pgvector.rs` |
 | **Vertex AI** | Tenant metadata filtering | `memory/src/backends/vertex_ai.rs` |
 | **Others** | All support tenant isolation | Various files |
 

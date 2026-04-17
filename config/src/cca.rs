@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn test_cca_config_default() {
         let config = CcaConfig::default();
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
         assert_eq!(config.context_architect.default_token_budget, 4000);
         assert_eq!(config.hindsight.max_results, 5);
         assert_eq!(config.meta_agent.max_iterations, 3);
@@ -296,24 +296,24 @@ mod tests {
     #[test]
     fn test_context_architect_config_default() {
         let config = ContextArchitectConfig::default();
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
         assert_eq!(config.default_token_budget, 4000);
         assert_eq!(config.min_relevance_score, 0.3);
-        assert!(config.layer_priorities.len() > 0);
+        assert!(!config.layer_priorities.is_empty());
     }
 
     #[test]
     fn test_note_taking_config_default() {
         let config = NoteTakingConfig::default();
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
         assert_eq!(config.auto_distill_threshold, 10);
-        assert_eq!(config.manual_trigger_enabled, true);
+        assert!(config.manual_trigger_enabled);
     }
 
     #[test]
     fn test_hindsight_config_default() {
         let config = HindsightConfig::default();
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
         assert_eq!(config.semantic_threshold, 0.8);
         assert_eq!(config.max_results, 5);
         assert_eq!(config.promotion_threshold, 0.8);
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_meta_agent_config_default() {
         let config = MetaAgentConfig::default();
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
         assert_eq!(config.max_iterations, 3);
         assert_eq!(config.iteration_timeout_secs, 300);
         assert_eq!(config.build_timeout_secs, 120);

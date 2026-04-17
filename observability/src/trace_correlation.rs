@@ -1,7 +1,7 @@
-///! # Trace Correlation Module
-///!
-///! Correlates traces, logs, and metrics across distributed services.
-///! Provides unified view of system behavior for debugging and analysis.
+//! # Trace Correlation Module
+//!
+//! Correlates traces, logs, and metrics across distributed services.
+//! Provides unified view of system behavior for debugging and analysis.
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -39,7 +39,7 @@ bootstrap:
         archive_mode: "on"
         archive_command: "/scripts/backup-postgres.sh wal %p %f"
         archive_timeout: 60
-        shared_preload_libraries: "pg_stat_statements,pgvector"
+        shared_preload_libraries: "pg_stat_statements"
         max_connections: 200
         shared_buffers: "2GB"
         effective_cache_size: "6GB"

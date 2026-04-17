@@ -1,7 +1,7 @@
-///! # Anomaly Detection Module
-///!
-///! Statistical anomaly detection for system metrics.
-///! Detects unusual patterns in latency, error rates, and resource usage.
+//! # Anomaly Detection Module
+//!
+//! Statistical anomaly detection for system metrics.
+//! Detects unusual patterns in latency, error rates, and resource usage.
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
@@ -94,9 +94,7 @@ impl AnomalyDetector {
         // Add data point
         {
             let mut data = self.data.write().unwrap();
-            let points = data
-                .entry(metric_name.to_string())
-                .or_insert_with(VecDeque::new);
+            let points = data.entry(metric_name.to_string()).or_default();
             points.push_back(value);
 
             // Keep only window_size recent points

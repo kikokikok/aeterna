@@ -231,11 +231,11 @@ impl ParallelContextResolver {
         let comparison = ResolutionComparison {
             timestamp: Utc::now(),
             operation: operation.to_string(),
-            heuristic_result: format!("{:?}", heuristic),
-            cedar_result: format!("{:?}", cedar),
+            heuristic_result: format!("{heuristic:?}"),
+            cedar_result: format!("{cedar:?}"),
             match_status: match (heuristic, cedar) {
                 (Ok(h), Ok(c)) => {
-                    if format!("{:?}", h) == format!("{:?}", c) {
+                    if format!("{h:?}") == format!("{c:?}") {
                         MatchStatus::Match
                     } else {
                         MatchStatus::Mismatch
@@ -357,7 +357,10 @@ impl AuditableAuthorizer {
             resource: resource.to_string(),
             context: context.clone(),
             cedar_decision: audit_decision,
-            cedar_error: cedar_result.as_ref().err().map(|e| e.to_string()),
+            cedar_error: cedar_result
+                .as_ref()
+                .err()
+                .map(std::string::ToString::to_string),
             duration_ms: duration.as_millis() as u64,
             audit_mode: self.config.audit_mode,
         };
@@ -708,8 +711,8 @@ mod tests {
             let json = serde_json::to_string(&status).unwrap();
             let back: MatchStatus = serde_json::from_str(&json).unwrap();
             // Verify they serialise to the expected variant name strings
-            let s = format!("{:?}", back);
-            let orig = format!("{:?}", status);
+            let s = format!("{back:?}");
+            let orig = format!("{status:?}");
             assert_eq!(s, orig);
         }
     }

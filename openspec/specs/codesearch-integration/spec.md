@@ -84,17 +84,12 @@ The system SHALL expose Code Search tools through Aeterna's MCP interface as `co
 ---
 
 ### Requirement: Shared Vector Backend
-The system SHALL support configuring Code Search to use Aeterna's vector backend (Qdrant or PostgreSQL/pgvector).
+The system SHALL support configuring Code Search to use Aeterna's Qdrant vector backend.
 
 #### Scenario: Shared Qdrant backend
 - **GIVEN** Aeterna deployed with Qdrant
 - **WHEN** Code Search is configured with `store.backend: qdrant`
 - **THEN** Code Search creates collections prefixed with `codesearch_` in the same Qdrant instance
-
-#### Scenario: Shared PostgreSQL backend
-- **GIVEN** Aeterna deployed with PostgreSQL/pgvector
-- **WHEN** Code Search is configured with `store.backend: postgres`
-- **THEN** Code Search creates tables in `codesearch` schema in the same PostgreSQL database
 
 #### Scenario: Collection isolation by tenant
 - **GIVEN** multi-tenant deployment with Code Search enabled

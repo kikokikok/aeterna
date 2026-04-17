@@ -48,19 +48,6 @@ impl mk_core::traits::LlmService for AnyhowLlmWrapper {
             .map_err(|e| anyhow::anyhow!("{}", e))
     }
 }
-
-#[cfg(test)]
-pub mod tests {
-    use mk_core::types::{TenantContext, TenantId, UserId};
-
-    pub fn test_ctx() -> TenantContext {
-        use std::str::FromStr;
-        TenantContext::new(
-            TenantId::from_str("test-tenant").unwrap(),
-            UserId::from_str("test-user").unwrap(),
-        )
-    }
-}
 pub struct MemoryManager {
     providers: Arc<RwLock<ProviderMap>>,
     embedding_service: Option<
@@ -226,10 +213,7 @@ impl MemoryManager {
     ///
     /// When set, the registry enables tenant-specific LLM and embedding
     /// service resolution that falls back to platform defaults.
-    pub fn with_provider_registry(
-        mut self,
-        registry: Arc<TenantProviderRegistry>,
-    ) -> Self {
+    pub fn with_provider_registry(mut self, registry: Arc<TenantProviderRegistry>) -> Self {
         self.provider_registry = Some(registry);
         self
     }
@@ -250,10 +234,10 @@ impl MemoryManager {
     ) -> Option<
         Arc<dyn EmbeddingService<Error = Box<dyn std::error::Error + Send + Sync>> + Send + Sync>,
     > {
-        if let Some(registry) = &self.provider_registry {
-            if let Some(service) = registry.resolve_embedding(&ctx.tenant_id).await {
-                return Some(service);
-            }
+        if let Some(registry) = &self.provider_registry
+            && let Some(service) = registry.resolve_embedding(&ctx.tenant_id).await
+        {
+            return Some(service);
         }
         self.embedding_service.clone()
     }
@@ -272,10 +256,10 @@ impl MemoryManager {
                 + Sync,
         >,
     > {
-        if let Some(registry) = &self.provider_registry {
-            if let Some(service) = registry.resolve_llm(&ctx.tenant_id).await {
-                return Some(service);
-            }
+        if let Some(registry) = &self.provider_registry
+            && let Some(service) = registry.resolve_llm(&ctx.tenant_id).await
+        {
+            return Some(service);
         }
         self.llm_service.clone()
     }
@@ -1039,17 +1023,14 @@ impl MemoryManager {
 
         // Cascade: soft-delete corresponding graph nodes so DuckDB does not
         // retain orphan references to the deleted memory entry.
-        if let Some(ref graph) = self.graph_store {
-            if let Err(e) = graph
-                .soft_delete_nodes_by_source_memory_id(ctx, id)
-                .await
-            {
-                tracing::warn!(
-                    memory_id = id,
-                    error = %e,
-                    "Graph cascade failed after memory delete — orphan graph nodes may remain"
-                );
-            }
+        if let Some(ref graph) = self.graph_store
+            && let Err(e) = graph.soft_delete_nodes_by_source_memory_id(ctx, id).await
+        {
+            tracing::warn!(
+                memory_id = id,
+                error = %e,
+                "Graph cascade failed after memory delete — orphan graph nodes may remain"
+            );
         }
 
         Ok(())
@@ -1068,5 +1049,18 @@ impl MemoryManager {
 
         let (entries, _) = provider.list(ctx, layer, 1000, None).await?;
         Ok(entries)
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use mk_core::types::{TenantContext, TenantId, UserId};
+
+    pub fn test_ctx() -> TenantContext {
+        use std::str::FromStr;
+        TenantContext::new(
+            TenantId::from_str("test-tenant").unwrap(),
+            UserId::from_str("test-user").unwrap(),
+        )
     }
 }

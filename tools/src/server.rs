@@ -184,7 +184,7 @@ impl McpServer {
         )));
         registry.register(Box::new(KnowledgeProposeTool::new(
             Arc::new(InMemoryKnowledgeProposalStorage::default()),
-            Arc::new(SimpleKnowledgeInterpreter::default()),
+            Arc::new(SimpleKnowledgeInterpreter),
         )));
         registry.register(Box::new(KnowledgePromotionPreviewTool::new(
             knowledge_manager.clone(),
@@ -662,39 +662,38 @@ impl McpServer {
         mut request: JsonRpcRequest,
         caller_tenant: Option<&str>,
     ) -> JsonRpcResponse {
-        if let Some(caller) = caller_tenant {
-            if request.method == "tools/call" {
-                if let Some(ref params) = request.params {
-                    let payload_tenant = params["tenantContext"]["tenant_id"]
-                        .as_str()
-                        .or_else(|| params["tenantContext"]["tenantId"].as_str());
+        if let Some(caller) = caller_tenant
+            && request.method == "tools/call"
+            && let Some(ref params) = request.params
+        {
+            let payload_tenant = params["tenantContext"]["tenant_id"]
+                .as_str()
+                .or_else(|| params["tenantContext"]["tenantId"].as_str());
 
-                    if let Some(payload) = payload_tenant {
-                        if payload != caller {
-                            tracing::warn!(
-                                caller_tenant = %caller,
-                                payload_tenant = %payload,
-                                "MCP tenantContext mismatch: payload tenant exceeds authenticated scope"
-                            );
-                            return JsonRpcResponse {
-                                jsonrpc: "2.0".to_string(),
-                                id: request.id,
-                                result: None,
-                                error: Some(JsonRpcError::unauthorized(
-                                    "tenantContext in payload does not match authenticated caller tenant",
-                                )),
-                            };
-                        }
-                    } else {
-                        // No tenantContext provided: inject caller's tenant so tools
-                        // operate in the correct tenant scope.
-                        let params_mut = request.params.get_or_insert(serde_json::json!({}));
-                        if let Some(obj) = params_mut.as_object_mut() {
-                            obj.entry("tenantContext").or_insert_with(
-                                || serde_json::json!({"tenant_id": caller, "user_id": SYSTEM_USER_ID}),
-                            );
-                        }
-                    }
+            if let Some(payload) = payload_tenant {
+                if payload != caller {
+                    tracing::warn!(
+                        caller_tenant = %caller,
+                        payload_tenant = %payload,
+                        "MCP tenantContext mismatch: payload tenant exceeds authenticated scope"
+                    );
+                    return JsonRpcResponse {
+                        jsonrpc: "2.0".to_string(),
+                        id: request.id,
+                        result: None,
+                        error: Some(JsonRpcError::unauthorized(
+                            "tenantContext in payload does not match authenticated caller tenant",
+                        )),
+                    };
+                }
+            } else {
+                // No tenantContext provided: inject caller's tenant so tools
+                // operate in the correct tenant scope.
+                let params_mut = request.params.get_or_insert(serde_json::json!({}));
+                if let Some(obj) = params_mut.as_object_mut() {
+                    obj.entry("tenantContext").or_insert_with(
+                        || serde_json::json!({"tenant_id": caller, "user_id": SYSTEM_USER_ID}),
+                    );
                 }
             }
         }

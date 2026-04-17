@@ -8,7 +8,7 @@ This guide evaluates three managed service alternatives to Aeterna's default sel
 |---------------------|---------------------|-----------------|
 | Qdrant (cluster mode) | **Qdrant Cloud** | Vector database for memory embeddings |
 | Redis Sentinel | **Upstash Redis** | Hot-tier cache, session state, pub/sub |
-| PostgreSQL + Patroni | **Neon** | Relational store, pgvector, knowledge metadata |
+| PostgreSQL + Patroni | **Neon** | Relational store and knowledge metadata |
 
 ## 1. Qdrant Cloud
 
@@ -102,7 +102,7 @@ Storage: ~$0.25/GB-month.
 
 - **Branching for staging/preview**: Create instant, zero-copy database branches for staging environments, PR previews, or migration testing. Each branch is a full PostgreSQL instance at near-zero additional storage cost (copy-on-write).
 - **Scale-to-zero**: Compute scales down to zero after inactivity (configurable), eliminating cost for idle dev/staging databases.
-- **pgvector support**: Full pgvector extension support including HNSW indexes. Aeterna's `PgvectorBackend` works without modification.
+- **Stock Postgres parity**: Aeterna requires no PostgreSQL extensions — semantic vectors live in Qdrant. Neon's stock Postgres is a drop-in replacement.
 - **Automatic backups and PITR**: Point-in-time recovery without manual WAL archiving configuration. Replaces the S3-based WAL archiving in the HA/DR design.
 - **Connection pooling built in**: PgBouncer-compatible pooling included, which simplifies Aeterna's connection management.
 - **Autoscaling compute**: Compute units scale automatically based on load, from 0.25 to 10 CU.
@@ -112,7 +112,7 @@ Storage: ~$0.25/GB-month.
 - **Cold start latency**: Scale-to-zero instances incur 0.5–3 second cold starts on first connection. Problematic for latency-sensitive production workloads unless "always-on" is enabled.
 - **Storage-compute separation latency**: Neon's architecture adds ~1–5 ms read latency compared to local-disk PostgreSQL for random reads.
 - **No synchronous replication control**: Patroni allows fine-grained synchronous replication tuning. Neon manages replication internally with eventual consistency for read replicas.
-- **Limited extensions**: Most common extensions (pgvector, pg_trgm, hstore) are supported, but some system-level extensions may be unavailable.
+- **Limited extensions**: Most common extensions (`pg_trgm`, `hstore`, etc.) are supported, but some system-level extensions may be unavailable. Aeterna itself requires none.
 - **Vendor lock-in**: Uses a proprietary storage engine. Exporting data is straightforward (standard pg_dump), but the branching and scale-to-zero features are not portable.
 
 ### Pricing Model
@@ -128,21 +128,11 @@ Compute: ~$0.16/CU-hour. Storage: ~$0.033/GB-month (beyond included).
 
 **Example**: 2 CU average × 730 hrs + 100 GB storage ≈ $234 + $1.65 = ~$236/month.
 
-### pgvector Support Details
-
-Neon supports pgvector 0.7+ with:
-- `CREATE EXTENSION vector;` — available out of the box
-- HNSW indexes (`CREATE INDEX ... USING hnsw`)
-- IVFFlat indexes
-- All distance operators (`<->`, `<#>`, `<=>`)
-
-Aeterna's `PgvectorBackend` auto-creates the extension and HNSW index on first use — no changes needed.
-
 ### Migration Path
 
 1. Create a Neon project and database.
 2. Run `pg_dump` from existing Patroni primary, `pg_restore` to Neon.
-3. Update `PGVECTOR_URL` / `DATABASE_URL` to the Neon connection string.
+3. Update `DATABASE_URL` to the Neon connection string.
 4. Enable "always-on" for the production branch to avoid cold-start latency.
 5. Create branches for staging and CI environments.
 
@@ -157,7 +147,7 @@ Aeterna's `PgvectorBackend` auto-creates the extension and HNSW index on first u
 | **Scalability** | Excellent (managed sharding) | Excellent (serverless) | Excellent (autoscale CU) |
 | **Data residency control** | Medium | Medium | Medium |
 | **Migration effort** | Config change only | Config change + Sentinel bypass | pg_dump/restore + config |
-| **Feature parity** | Full (same API) | ~95% Redis compat | Full pgvector support |
+| **Feature parity** | Full (same API) | ~95% Redis compat | Stock Postgres — full parity |
 | **Lock-in risk** | Low (same API) | Low (Redis protocol) | Medium (proprietary storage) |
 
 ### Cost Comparison at Scale

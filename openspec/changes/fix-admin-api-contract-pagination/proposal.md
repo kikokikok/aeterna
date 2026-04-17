@@ -47,7 +47,7 @@ The admin UI is broken across 6 of 10 page areas due to systematic mismatches be
 - **Fix `list_repositories` / `list_identities` (repo_manager.rs:285/1531)**: Per-tenant but unbounded. A tenant with 10K indexed repos will OOM the server.
 - **Fix `list_roles` (governance.rs:995)**: `governance_roles` is append-only (soft-deleted via `revoked_at`), grows without bound. Add LIMIT.
 - **Fix `RedisStore::list_all<T>` (redis_store.rs:93)**: Uses `SMEMBERS` on unbounded sets. Migrate to `SSCAN` with cursor pagination. Affects git-provider-connections, dead letters, and remediations.
-- **Fix `list_all_from_layer` (memory/manager.rs:1059)**: Hard-codes `limit=1000` at application level but the underlying provider `list()` call may not push this to SQL/vector-DB. Verify Qdrant and pgvector providers enforce the limit.
+- **Fix `list_all_from_layer` (memory/manager.rs:1059)**: Hard-codes `limit=1000` at application level but the underlying provider `list()` call may not push this to the vector backend. Verify the Qdrant provider enforces the limit.
 - **Fix `list_snapshots` (graph_duckdb.rs:1851)**: S3 `ListObjectsV2` caps at 1000 objects by default but does not loop on `continuation_token`. Silent data loss for large snapshot histories.
 - **Fix `get_all_layer_usage` (budget_storage.rs:230)**: Fetches all rows for tenant+window_type with no LIMIT.
 - **Add `PaginationParams` / `PaginatedResult<T>` to storage trait**: Introduce `PaginationParams { limit: usize, offset: usize }` and `PaginatedResult<T> { items: Vec<T>, total: Option<u64> }` at the storage trait level.

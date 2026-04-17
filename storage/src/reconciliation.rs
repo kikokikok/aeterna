@@ -65,7 +65,11 @@ pub trait VectorStoreChecker: Send + Sync {
 #[async_trait]
 pub trait GraphStoreChecker: Send + Sync {
     /// Returns `true` if a node with the given ID exists (non-deleted).
-    async fn node_exists(&self, node_id: &str, tenant_id: &str) -> Result<bool, ReconciliationError>;
+    async fn node_exists(
+        &self,
+        node_id: &str,
+        tenant_id: &str,
+    ) -> Result<bool, ReconciliationError>;
 
     /// Find graph nodes whose `deleted_at` is older than `retention_days` days ago.
     async fn find_stale_soft_deleted_nodes(
@@ -347,8 +351,13 @@ impl Reconciler {
             }
         };
 
-        let stale = checker.find_stale_soft_deleted_nodes(retention_days).await?;
-        info!(stale_count = stale.len(), retention_days, "Found stale soft-deleted nodes");
+        let stale = checker
+            .find_stale_soft_deleted_nodes(retention_days)
+            .await?;
+        info!(
+            stale_count = stale.len(),
+            retention_days, "Found stale soft-deleted nodes"
+        );
         Ok(stale)
     }
 

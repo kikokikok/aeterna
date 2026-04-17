@@ -354,7 +354,7 @@ WHERE resource_id = 'resource-456'
 
 For hybrid mode to work, the central server must:
 
-1. **PostgreSQL 16+** with pgvector for semantic search
+1. **PostgreSQL 16+** for relational storage (semantic search delegated to Qdrant)
 2. **Qdrant** or **Weaviate** for complete vector knowledge graph
 3. **OPAL** Cedar authorization engine
 4. **Sync API** endpoints:
@@ -378,8 +378,6 @@ postgresql:
       instances: 5  # HA for central
       postgresql:
         version: 16
-        parameters:
-          shared_preload_libraries: "pgvector"
       storage:
         size: 500Gi  # Large for global data
 

@@ -601,8 +601,7 @@ async fn run_list(args: MemoryListArgs) -> anyhow::Result<()> {
 
 async fn run_show(_args: MemoryShowArgs) -> anyhow::Result<()> {
     let profile_name = crate::profile::load_resolved(None, None)
-        .map(|r| r.profile_name)
-        .unwrap_or_else(|_| "default".to_string());
+        .map_or_else(|_| "default".to_string(), |r| r.profile_name);
     Err(crate::backend::unsupported("memory show", &profile_name))
 }
 
@@ -783,8 +782,7 @@ async fn run_promote(args: MemoryPromoteArgs) -> anyhow::Result<()> {
     }
 
     let profile_name = crate::profile::load_resolved(None, None)
-        .map(|r| r.profile_name)
-        .unwrap_or_else(|_| "default".to_string());
+        .map_or_else(|_| "default".to_string(), |r| r.profile_name);
     Err(crate::backend::unsupported("memory promote", &profile_name))
 }
 

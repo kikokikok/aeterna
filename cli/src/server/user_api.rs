@@ -92,7 +92,7 @@ async fn list_users(
 
     let rows = match variant {
         UserTableVariant::Main => match sqlx::query(
-            r#"
+            r"
             SELECT
                 u.id::text AS user_id,
                 u.email,
@@ -123,7 +123,7 @@ async fn list_users(
                       AND ur.user_id IN (u.id::text, u.email)
               ))
             ORDER BY u.created_at DESC
-            "#,
+            ",
         )
         .bind(query.org.as_deref())
         .bind(query.team.as_deref())
@@ -141,7 +141,7 @@ async fn list_users(
             }
         },
         UserTableVariant::IdpSync => match sqlx::query(
-            r#"
+            r"
             SELECT
                 u.id::text AS user_id,
                 u.email,
@@ -172,7 +172,7 @@ async fn list_users(
                       AND ur.user_id IN (u.id::text, u.email)
               ))
             ORDER BY u.created_at DESC
-            "#,
+            ",
         )
         .bind(query.org.as_deref())
         .bind(query.team.as_deref())
@@ -652,11 +652,11 @@ async fn detect_user_table_variant(
     state: &AppState,
 ) -> Result<UserTableVariant, axum::response::Response> {
     let rows = sqlx::query(
-        r#"
+        r"
         SELECT column_name
         FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'users'
-        "#,
+        ",
     )
     .fetch_all(state.postgres.pool())
     .await
@@ -692,7 +692,7 @@ async fn get_user_row(
 ) -> Result<Option<sqlx::postgres::PgRow>, axum::response::Response> {
     let sql = match variant {
         UserTableVariant::Main => {
-            r#"
+            r"
             SELECT
                 u.id::text AS user_id,
                 u.email,
@@ -705,10 +705,10 @@ async fn get_user_row(
             FROM users u
             WHERE u.deleted_at IS NULL AND (u.id::text = $1 OR u.email = $1)
             LIMIT 1
-            "#
+            "
         }
         UserTableVariant::IdpSync => {
-            r#"
+            r"
             SELECT
                 u.id::text AS user_id,
                 u.email,
@@ -721,7 +721,7 @@ async fn get_user_row(
             FROM users u
             WHERE u.id::text = $1 OR u.email = $1
             LIMIT 1
-            "#
+            "
         }
     };
 
@@ -748,7 +748,7 @@ async fn insert_or_update_user(
 ) -> Result<sqlx::postgres::PgRow, axum::response::Response> {
     match variant {
         UserTableVariant::Main => sqlx::query(
-            r#"
+            r"
             INSERT INTO users (id, email, name, status, settings, created_at, updated_at)
             VALUES ($1, $2, $3, $4, '{}'::jsonb, NOW(), NOW())
             ON CONFLICT (email) DO UPDATE SET
@@ -764,7 +764,7 @@ async fn insert_or_update_user(
                 settings,
                 created_at,
                 updated_at
-            "#,
+            ",
         )
         .bind(user_id)
         .bind(email)
@@ -780,7 +780,7 @@ async fn insert_or_update_user(
             )
         }),
         UserTableVariant::IdpSync => sqlx::query(
-            r#"
+            r"
             INSERT INTO users (
                 id, email, first_name, last_name, display_name,
                 idp_provider, idp_subject, is_active, created_at, updated_at
@@ -799,7 +799,7 @@ async fn insert_or_update_user(
                 '{}'::jsonb AS settings,
                 created_at,
                 updated_at
-            "#,
+            ",
         )
         .bind(user_id)
         .bind(email)
@@ -825,12 +825,12 @@ async fn load_roles_for_user(
     keys: &[String],
 ) -> Result<Vec<serde_json::Value>, axum::response::Response> {
     let rows = sqlx::query(
-        r#"
+        r"
         SELECT user_id, unit_id, role
         FROM user_roles
         WHERE tenant_id = $1 AND user_id = ANY($2)
         ORDER BY unit_id, role
-        "#,
+        ",
     )
     .bind(ctx.tenant_id.as_str())
     .bind(keys)
@@ -1016,7 +1016,7 @@ async fn resolve_scope_target(
         ("org", Some(id)) => Ok((id.to_string(), format!("org:{id}"))),
         ("team", Some(id)) => Ok((id.to_string(), format!("team:{id}"))),
         ("project", Some(id)) => Ok((id.to_string(), format!("project:{id}"))),
-        ("org", None) | ("team", None) | ("project", None) => Err(error_response(
+        ("org" | "team" | "project", None) => Err(error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
             "explicit_scope_target_required",
             "Use an explicit scope target such as org:<unit-id>, team:<unit-id>, or project:<unit-id>",

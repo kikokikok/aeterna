@@ -256,7 +256,7 @@ fn govern_server_required(operation: &str, message: &str) -> anyhow::Result<()> 
 
 async fn run_status(args: GovernStatusArgs) -> anyhow::Result<()> {
     if let Some(client) = get_live_client().await {
-        let result = client.govern_status().await.map_err(|e| {
+        let result = client.govern_status().await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -266,11 +266,10 @@ async fn run_status(args: GovernStatusArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {
@@ -289,15 +288,13 @@ async fn run_status(args: GovernStatusArgs) -> anyhow::Result<()> {
                     "  Min Approvers:    {}",
                     config["min_approvers"]
                         .as_u64()
-                        .map(|v| v.to_string())
-                        .unwrap_or_else(|| "?".to_string())
+                        .map_or_else(|| "?".to_string(), |v| v.to_string())
                 );
                 println!(
                     "  Timeout:          {} hours",
                     config["timeout_hours"]
                         .as_u64()
-                        .map(|v| v.to_string())
-                        .unwrap_or_else(|| "?".to_string())
+                        .map_or_else(|| "?".to_string(), |v| v.to_string())
                 );
                 let auto = config["auto_approve_enabled"].as_bool().unwrap_or(false);
                 println!(
@@ -333,10 +330,7 @@ async fn run_status(args: GovernStatusArgs) -> anyhow::Result<()> {
 
                 let your_pending = metrics["your_pending_approvals"].as_u64().unwrap_or(0);
                 if your_pending > 0 {
-                    println!(
-                        "  ⚡ You have {} request(s) awaiting your approval",
-                        your_pending
-                    );
+                    println!("  ⚡ You have {your_pending} request(s) awaiting your approval");
                     println!();
                     output::hint(
                         "Run 'aeterna govern pending --mine' to see your pending approvals",
@@ -386,7 +380,7 @@ async fn run_pending(args: GovernPendingArgs) -> anyhow::Result<()> {
                 args.mine,
             )
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -396,20 +390,19 @@ async fn run_pending(args: GovernPendingArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
             println!("{}", serde_json::to_string_pretty(&result)?);
         } else {
             let requests = result["requests"].as_array();
-            let count = requests.map(|r| r.len()).unwrap_or(0);
+            let count = requests.map_or(0, std::vec::Vec::len);
 
-            output::header(&format!("Pending Requests ({})", count));
+            output::header(&format!("Pending Requests ({count})"));
             println!();
 
             if count == 0 {
@@ -435,12 +428,11 @@ async fn run_pending(args: GovernPendingArgs) -> anyhow::Result<()> {
                     let required = req["required_approvals"].as_u64().unwrap_or(0);
                     let created = req["created_at"].as_str().unwrap_or("?");
 
-                    println!("  {} [{}] {} ({})", status_icon, id, title, rtype);
+                    println!("  {status_icon} [{id}] {title} ({rtype})");
                     println!(
-                        "      Requestor: {}  |  Layer: {}  |  Approvals: {}/{}",
-                        requestor, layer, approvals, required
+                        "      Requestor: {requestor}  |  Layer: {layer}  |  Approvals: {approvals}/{required}"
                     );
-                    println!("      Created: {}", created);
+                    println!("      Created: {created}");
                     println!();
                 }
 
@@ -486,7 +478,7 @@ async fn run_approve(args: GovernApproveArgs) -> anyhow::Result<()> {
         let result = client
             .govern_approve(&args.request_id, &body)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -496,11 +488,10 @@ async fn run_approve(args: GovernApproveArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -511,13 +502,13 @@ async fn run_approve(args: GovernApproveArgs) -> anyhow::Result<()> {
 
             println!("  Request ID: {}", args.request_id);
             if let Some(title) = result["title"].as_str() {
-                println!("  Title:      {}", title);
+                println!("  Title:      {title}");
             }
             if let Some(rtype) = result["type"]
                 .as_str()
                 .or_else(|| result["request_type"].as_str())
             {
-                println!("  Type:       {}", rtype);
+                println!("  Type:       {rtype}");
             }
             println!();
 
@@ -534,10 +525,7 @@ async fn run_approve(args: GovernApproveArgs) -> anyhow::Result<()> {
                     .or_else(|| result["approvals"].as_u64())
                     .unwrap_or(0);
                 let required = result["required_approvals"].as_u64().unwrap_or(0);
-                println!(
-                    "  ⚡ Request is now fully approved ({}/{})",
-                    approvals, required
-                );
+                println!("  ⚡ Request is now fully approved ({approvals}/{required})");
                 println!("    The change will be applied automatically.");
             } else {
                 let approvals = result["new_approval_count"]
@@ -545,7 +533,7 @@ async fn run_approve(args: GovernApproveArgs) -> anyhow::Result<()> {
                     .or_else(|| result["approvals"].as_u64())
                     .unwrap_or(0);
                 let required = result["required_approvals"].as_u64().unwrap_or(0);
-                println!("  ○ Approval recorded ({}/{})", approvals, required);
+                println!("  ○ Approval recorded ({approvals}/{required})");
                 if required > approvals {
                     println!("    Waiting for {} more approval(s).", required - approvals);
                 }
@@ -599,7 +587,7 @@ async fn run_reject(args: GovernRejectArgs) -> anyhow::Result<()> {
         let result = client
             .govern_reject(&args.request_id, &body)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -609,11 +597,10 @@ async fn run_reject(args: GovernRejectArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -624,16 +611,16 @@ async fn run_reject(args: GovernRejectArgs) -> anyhow::Result<()> {
 
             println!("  Request ID: {}", args.request_id);
             if let Some(title) = result["title"].as_str() {
-                println!("  Title:      {}", title);
+                println!("  Title:      {title}");
             }
             if let Some(rtype) = result["type"]
                 .as_str()
                 .or_else(|| result["request_type"].as_str())
             {
-                println!("  Type:       {}", rtype);
+                println!("  Type:       {rtype}");
             }
             if let Some(requestor) = result["requestor"].as_str() {
-                println!("  Requestor:  {}", requestor);
+                println!("  Requestor:  {requestor}");
             }
             println!();
 
@@ -641,7 +628,7 @@ async fn run_reject(args: GovernRejectArgs) -> anyhow::Result<()> {
             println!("    Reason: {}", args.reason);
             println!();
             if let Some(requestor) = result["requestor"].as_str() {
-                println!("  ℹ Requestor '{}' has been notified", requestor);
+                println!("  ℹ Requestor '{requestor}' has been notified");
             } else {
                 println!("  ℹ Requestor has been notified");
             }
@@ -743,7 +730,7 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
 
     if args.show || !has_changes {
         if let Some(client) = get_live_client().await {
-            let result = client.govern_config_show().await.map_err(|e| {
+            let result = client.govern_config_show().await.inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -753,11 +740,10 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
             if args.json {
@@ -779,15 +765,13 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
                     "  Min Approvers:       {}",
                     cfg["min_approvers"]
                         .as_u64()
-                        .map(|v| v.to_string())
-                        .unwrap_or_else(|| "?".to_string())
+                        .map_or_else(|| "?".to_string(), |v| v.to_string())
                 );
                 println!(
                     "  Timeout:             {} hours",
                     cfg["timeout_hours"]
                         .as_u64()
-                        .map(|v| v.to_string())
-                        .unwrap_or_else(|| "?".to_string())
+                        .map_or_else(|| "?".to_string(), |v| v.to_string())
                 );
                 let auto = cfg["auto_approve_enabled"].as_bool().unwrap_or(false);
                 println!(
@@ -870,7 +854,7 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
     }
 
     if let Some(client) = get_live_client().await {
-        let result = client.govern_config_update(&body).await.map_err(|e| {
+        let result = client.govern_config_update(&body).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -880,11 +864,10 @@ async fn run_configure(args: GovernConfigureArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {
@@ -926,7 +909,7 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
     match args.action.as_str() {
         "list" => {
             if let Some(client) = get_live_client().await {
-                let result = client.govern_roles_list().await.map_err(|e| {
+                let result = client.govern_roles_list().await.inspect_err(|e| {
                     if args.json {
                         println!(
                             "{}",
@@ -936,11 +919,10 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
                             .unwrap()
                         );
                     } else {
-                        ux_error::UxError::new(&e.to_string())
+                        ux_error::UxError::new(e.to_string())
                             .fix("Run: aeterna auth login")
                             .display();
                     }
-                    e
                 })?;
 
                 if args.json {
@@ -1002,7 +984,7 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
                         "scope": scope,
                     }))
                     .await
-                    .map_err(|e| {
+                    .inspect_err(|e| {
                         if args.json {
                             println!(
                                 "{}",
@@ -1012,11 +994,10 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
                                 .unwrap()
                             );
                         } else {
-                            ux_error::UxError::new(&e.to_string())
+                            ux_error::UxError::new(e.to_string())
                                 .fix("Run: aeterna auth login")
                                 .display();
                         }
-                        e
                     })?;
 
                 if args.json {
@@ -1058,7 +1039,7 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("--role is required for revoke action"))?;
 
             if let Some(client) = get_live_client().await {
-                let result = client.govern_role_revoke(principal, role).await.map_err(|e| {
+                let result = client.govern_role_revoke(principal, role).await.inspect_err(|e| {
                     if args.json {
                         println!(
                             "{}",
@@ -1068,11 +1049,10 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
                             .unwrap()
                         );
                     } else {
-                        ux_error::UxError::new(&e.to_string())
+                        ux_error::UxError::new(e.to_string())
                             .fix("Run: aeterna auth login")
                             .display();
                     }
-                    e
                 })?;
 
                 if args.json {
@@ -1130,7 +1110,7 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
                 args.limit,
             )
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1140,11 +1120,10 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         let filtered: Vec<_> = result.as_array().cloned().unwrap_or_default();
@@ -1193,7 +1172,7 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
                                 action.to_uppercase(),
                                 actor
                             );
-                            println!("      {} {} - {}", target_type, target_id, details);
+                            println!("      {target_type} {target_id} - {details}");
                             println!();
                         }
                     }
@@ -1212,7 +1191,7 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
                     std::fs::write(&path, serde_json::to_string_pretty(&output)?)?;
                     println!(
                         "Exported {} entries to {}",
-                        output["entries"].as_array().map(|v| v.len()).unwrap_or(0),
+                        output["entries"].as_array().map_or(0, std::vec::Vec::len),
                         path
                     );
                 } else {

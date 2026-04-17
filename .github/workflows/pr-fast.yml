@@ -1,0 +1,175 @@
+name: PR Fast Gate
+
+on:
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+  checks: write          # EnricoMi/publish-unit-test-result-action → create check runs
+  pull-requests: write   # attach test summary to the PR
+
+concurrency:
+  group: pr-fast-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # Wave 2a: clippy gate blocks on CORRECTNESS lints only (actual bugs
+      # like cast_sign_loss, match_wildcard_for_single_variants, etc. → errors).
+      # Style/perf/pedantic → warnings. This is the minimum gate that provides
+      # value without requiring a multi-hundred-change pre-existing-debt
+      # cleanup outside Wave 2a scope.
+      # Follow-up: tighten to `-D warnings` after tech debt cleanup (see
+      # issue filed alongside PR #35).
+      - run: |
+          cargo clippy --workspace --all-targets -- \
+            -D clippy::correctness \
+            -D clippy::suspicious \
+            -W clippy::style \
+            -W clippy::complexity \
+            -W clippy::perf \
+            -A clippy::pedantic \
+            -A clippy::nursery
+
+  unit:
+    name: unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      # See pr-integration.yml::shipped-smoke for rationale. duckdb-sys
+      # vendor build pushes the default ~14 GB runner disk over the edge
+      # when combined with the full workspace test compile.
+      - name: Free runner disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          swap-storage: true
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: pr-unit
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Run workspace unit + bin tests (JUnit output via .config/nextest.toml)
+        run: cargo nextest run --profile ci --workspace --lib --bins --locked
+      - name: Publish test summary
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          check_name: "Unit tests (nextest)"
+          junit_files: "target/nextest/ci/junit.xml"
+          comment_mode: off
+          job_summary: true
+      - name: Upload JUnit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-unit
+          path: target/nextest/ci/junit.xml
+          if-no-files-found: warn
+          retention-days: 7
+
+  admin-ui:
+    name: admin-ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-ui/package-lock.json
+      - name: Install
+        working-directory: admin-ui
+        run: npm ci
+      - name: Lint
+        working-directory: admin-ui
+        run: npm run lint
+      - name: Typecheck
+        working-directory: admin-ui
+        run: npx tsc -b
+      - name: Build
+        working-directory: admin-ui
+        run: npm run build
+      - name: Bundle size gate (500KB)
+        working-directory: admin-ui
+        run: |
+          MAIN_SIZE=$(find dist/assets -name 'index-*.js' -exec wc -c {} \; | awk '{print $1}')
+          echo "Main bundle size: ${MAIN_SIZE} bytes"
+          if [ "$MAIN_SIZE" -gt 512000 ]; then
+            echo "::error::Main bundle exceeds 500KB ($MAIN_SIZE bytes)"
+            exit 1
+          fi
+
+  helm:
+    name: helm-lint-template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+      - name: Add dependency repos
+        run: |
+          helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
+          helm repo add qdrant https://qdrant.github.io/qdrant-helm
+          helm repo add weaviate https://weaviate.github.io/weaviate-helm/
+          helm repo add percona https://percona.github.io/percona-helm-charts/
+          helm repo update
+      - name: Helm dependency build
+        run: helm dependency build charts/aeterna
+      - name: Helm lint
+        # Note: lint returns 0 even when template 'fail' functions fire — they're
+        # logged as INFO. That's fine: we want lint to catch STRUCTURAL issues here.
+        run: helm lint charts/aeterna
+      - name: Helm template (with minimal connection overrides)
+        # The chart requires postgresql.host, redis.host, vectorStore.host at
+        # render time (enforced by fail() in templates). None of the fixtures
+        # in charts/aeterna/ci/ provide these (they assume aeterna-prereqs is
+        # deployed separately). For a render-only gate we inject stubs via --set.
+        run: |
+          helm template aeterna charts/aeterna \
+            --set postgresql.host=pg.ci.local \
+            --set redis.host=redis.ci.local \
+            --set vectorStore.host=qdrant.ci.local \
+            --debug > /tmp/manifest.yaml
+          echo "Rendered $(wc -l < /tmp/manifest.yaml) lines across $(grep -c '^kind:' /tmp/manifest.yaml) K8s objects"
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+      - name: Kubeconform (strict, ignore-missing-schemas)
+        run: |
+          kubeconform \
+            -strict \
+            -ignore-missing-schemas \
+            -kubernetes-version 1.29.0 \
+            -summary \
+            /tmp/manifest.yaml

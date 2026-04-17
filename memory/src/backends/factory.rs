@@ -8,7 +8,6 @@ pub enum VectorBackendType {
     #[default]
     Qdrant,
     Pinecone,
-    Pgvector,
     VertexAi,
     Databricks,
     Weaviate,
@@ -20,7 +19,6 @@ impl std::fmt::Display for VectorBackendType {
         match self {
             VectorBackendType::Qdrant => write!(f, "qdrant"),
             VectorBackendType::Pinecone => write!(f, "pinecone"),
-            VectorBackendType::Pgvector => write!(f, "pgvector"),
             VectorBackendType::VertexAi => write!(f, "vertex_ai"),
             VectorBackendType::Databricks => write!(f, "databricks"),
             VectorBackendType::Weaviate => write!(f, "weaviate"),
@@ -36,13 +34,12 @@ impl std::str::FromStr for VectorBackendType {
         match s.to_lowercase().as_str() {
             "qdrant" => Ok(VectorBackendType::Qdrant),
             "pinecone" => Ok(VectorBackendType::Pinecone),
-            "pgvector" => Ok(VectorBackendType::Pgvector),
             "vertex_ai" | "vertexai" => Ok(VectorBackendType::VertexAi),
             "databricks" => Ok(VectorBackendType::Databricks),
             "weaviate" => Ok(VectorBackendType::Weaviate),
             "mongodb" | "mongo" => Ok(VectorBackendType::Mongodb),
             _ => Err(BackendError::Configuration(format!(
-                "Unknown backend type: {}. Valid options: qdrant, pinecone, pgvector, vertex_ai, \
+                "Unknown backend type: {}. Valid options: qdrant, pinecone, vertex_ai, \
                  databricks, weaviate, mongodb",
                 s
             ))),
@@ -60,9 +57,6 @@ pub struct BackendConfig {
 
     #[serde(default)]
     pub pinecone: Option<PineconeConfig>,
-
-    #[serde(default)]
-    pub pgvector: Option<PgvectorConfig>,
 
     #[serde(default)]
     pub vertex_ai: Option<VertexAiConfig>,
@@ -84,7 +78,6 @@ impl Default for BackendConfig {
             embedding_dimension: 1536,
             qdrant: Some(QdrantConfig::default()),
             pinecone: None,
-            pgvector: None,
             vertex_ai: None,
             databricks: None,
             weaviate: None,
@@ -111,7 +104,6 @@ impl BackendConfig {
             embedding_dimension,
             qdrant: QdrantConfig::from_env().ok(),
             pinecone: PineconeConfig::from_env().ok(),
-            pgvector: PgvectorConfig::from_env().ok(),
             vertex_ai: VertexAiConfig::from_env().ok(),
             databricks: DatabricksConfig::from_env().ok(),
             weaviate: WeaviateConfig::from_env().ok(),
@@ -167,37 +159,6 @@ impl PineconeConfig {
                 .map_err(|_| BackendError::Configuration("PINECONE_ENVIRONMENT not set".into()))?,
             index_name: std::env::var("PINECONE_INDEX_NAME")
                 .unwrap_or_else(|_| "aeterna-memories".to_string()),
-        })
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct PgvectorConfig {
-    pub connection_string: String,
-    pub schema: String,
-    pub table_name: String,
-}
-
-impl Default for PgvectorConfig {
-    fn default() -> Self {
-        Self {
-            connection_string: "postgres://localhost/aeterna".to_string(),
-            schema: "public".to_string(),
-            table_name: "vectors".to_string(),
-        }
-    }
-}
-
-impl PgvectorConfig {
-    pub fn from_env() -> Result<Self, BackendError> {
-        Ok(Self {
-            connection_string: std::env::var("PGVECTOR_URL")
-                .or_else(|_| std::env::var("DATABASE_URL"))
-                .map_err(|_| {
-                    BackendError::Configuration("PGVECTOR_URL or DATABASE_URL not set".into())
-                })?,
-            schema: std::env::var("PGVECTOR_SCHEMA").unwrap_or_else(|_| "public".to_string()),
-            table_name: std::env::var("PGVECTOR_TABLE").unwrap_or_else(|_| "vectors".to_string()),
         })
     }
 }
@@ -326,26 +287,6 @@ pub async fn create_backend(config: BackendConfig) -> Result<Arc<dyn VectorBacke
                 ))
             }
         }
-        VectorBackendType::Pgvector => {
-            #[cfg(feature = "pgvector")]
-            {
-                let pgvector_config = config
-                    .pgvector
-                    .ok_or_else(|| BackendError::Configuration("pgvector config missing".into()))?;
-                let backend = super::pgvector::PgvectorBackend::new(
-                    pgvector_config,
-                    config.embedding_dimension,
-                )
-                .await?;
-                Ok(Arc::new(backend))
-            }
-            #[cfg(not(feature = "pgvector"))]
-            {
-                Err(BackendError::Configuration(
-                    "pgvector backend not enabled. Compile with --features pgvector".into(),
-                ))
-            }
-        }
         VectorBackendType::VertexAi => {
             #[cfg(feature = "vertex-ai")]
             {
@@ -426,10 +367,6 @@ mod tests {
         assert_eq!(
             "pinecone".parse::<VectorBackendType>().unwrap(),
             VectorBackendType::Pinecone
-        );
-        assert_eq!(
-            "pgvector".parse::<VectorBackendType>().unwrap(),
-            VectorBackendType::Pgvector
         );
         assert_eq!(
             "vertex_ai".parse::<VectorBackendType>().unwrap(),

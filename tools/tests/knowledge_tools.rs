@@ -51,7 +51,12 @@ async fn test_knowledge_tools() -> Result<(), Box<dyn std::error::Error + Send +
 
     // THEN it should find the entry
     assert!(query_resp["success"].as_bool().unwrap());
-    assert!(query_resp["results"]["keyword"].as_array().unwrap().len() >= 1);
+    assert!(
+        !query_resp["results"]["keyword"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         query_resp["results"]["keyword"][0]["path"],
         "architecture/core.md"

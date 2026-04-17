@@ -64,9 +64,7 @@ mod tests {
             archive: "0.9.0".into(),
             system: "1.0.0".into(),
         };
-        assert!(err
-            .to_string()
-            .contains("archive=0.9.0, system=1.0.0"));
+        assert!(err.to_string().contains("archive=0.9.0, system=1.0.0"));
     }
 
     #[test]

@@ -162,9 +162,12 @@ mod tests {
 
     #[test]
     fn round_trip_tenant_scope() {
-        let manifest = BackupManifest::new("host1".into(), ExportScope::Tenant {
-            tenant_id: "acme".into(),
-        });
+        let manifest = BackupManifest::new(
+            "host1".into(),
+            ExportScope::Tenant {
+                tenant_id: "acme".into(),
+            },
+        );
         let json = serde_json::to_string(&manifest).expect("serialize");
         let back: BackupManifest = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(
@@ -177,9 +180,12 @@ mod tests {
 
     #[test]
     fn round_trip_layer_scope() {
-        let manifest = BackupManifest::new("host1".into(), ExportScope::Layer {
-            layer: "episodic".into(),
-        });
+        let manifest = BackupManifest::new(
+            "host1".into(),
+            ExportScope::Layer {
+                layer: "episodic".into(),
+            },
+        );
         let json = serde_json::to_string(&manifest).expect("serialize");
         let back: BackupManifest = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(

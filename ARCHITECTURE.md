@@ -25,7 +25,7 @@ Aeterna provides hierarchical memory storage, governed organizational knowledge,
 |       (LLM + Embedding with DashMap cache)          |
 +---------+---------+-----------+--------------------+
 |PostgreSQL| Qdrant  |  DuckDB  |     Redis           |
-|+pgvector | (vector)|  (graph) |   (session)         |
+|          | (vector)|  (graph) |   (session)         |
 +----------+---------+----------+---------------------+
 ```
 
@@ -33,7 +33,7 @@ Aeterna provides hierarchical memory storage, governed organizational knowledge,
 
 | Backend | Purpose | Crate |
 |---|---|---|
-| PostgreSQL 16+ with pgvector | Relational data, memories (episodic/procedural/user/org), governance, tenant config, RLS-based isolation. **ReplicaSet**: shared across all replicas via connection pool. | `storage` |
+| PostgreSQL 16+ | Relational data, memories (episodic/procedural/user/org) metadata, governance, tenant config, RLS-based isolation. Semantic vectors live in Qdrant. **ReplicaSet**: shared across all replicas via connection pool. | `storage` |
 | Qdrant 1.12+ | Vector search for semantic and archival memory layers. **ReplicaSet**: shared across all replicas. | `storage` |
 | DuckDB 0.9+ | In-process graph layer for memory relationships. **ReplicaSet**: each replica has its own instance, rebuilt from PostgreSQL on startup. | `storage` |
 | Redis 7+ | Working/session memory, job state, refresh tokens, distributed locks. **ReplicaSet**: shared across all replicas; the coordination backbone for multi-instance deployment. | `storage` |
@@ -233,10 +233,10 @@ Defined in `mk_core/src/types.rs` as the `MemoryLayer` enum:
 |---|---|---|
 | Working | Redis in-memory | < 10ms |
 | Session | Redis with TTL | < 50ms |
-| Episodic | PostgreSQL + pgvector | hours |
+| Episodic | PostgreSQL (metadata) + Qdrant (vectors) | hours |
 | Semantic | Qdrant vector search | < 200ms |
 | Procedural | PostgreSQL facts | weeks |
-| User/Org | PostgreSQL + pgvector | months |
+| User/Org | PostgreSQL (metadata) + Qdrant (vectors) | months |
 | Archival | Qdrant long-term | years |
 
 ### Key Components

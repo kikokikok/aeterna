@@ -114,12 +114,12 @@ fn load_anomaly_detection_throughput() {
     let iterations = 10_000;
     let start = Instant::now();
     for i in 0..iterations {
-        let value = 100.0 + (i as f64 % 20.0);
+        let value = 100.0 + (f64::from(i) % 20.0);
         detector.record_and_detect("load_metric", value);
     }
     let elapsed = start.elapsed();
 
-    let ops_per_sec = iterations as f64 / elapsed.as_secs_f64();
+    let ops_per_sec = f64::from(iterations) / elapsed.as_secs_f64();
     eprintln!(
         "Anomaly detection throughput: {ops_per_sec:.0} ops/sec ({iterations} ops in {elapsed:.2?})"
     );

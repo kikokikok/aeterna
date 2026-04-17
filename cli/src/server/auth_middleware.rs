@@ -124,16 +124,15 @@ where
             }
 
             // ── Auth enabled: validate bearer token ────────────────────
-            let jwt_secret = match &auth_state.config.jwt_secret {
-                Some(s) => s.clone(),
-                None => {
-                    tracing::error!("Plugin auth enabled but JWT secret is not configured");
-                    return Ok(error_response(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "configuration_error",
-                        "Authentication is misconfigured",
-                    ));
-                }
+            let jwt_secret = if let Some(s) = &auth_state.config.jwt_secret {
+                s.clone()
+            } else {
+                tracing::error!("Plugin auth enabled but JWT secret is not configured");
+                return Ok(error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "configuration_error",
+                    "Authentication is misconfigured",
+                ));
             };
 
             let identity = match validate_plugin_bearer(req.headers(), &jwt_secret) {

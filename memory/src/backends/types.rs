@@ -116,17 +116,12 @@ impl DeleteResult {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum DistanceMetric {
+    #[default]
     Cosine,
     Euclidean,
     DotProduct,
-}
-
-impl Default for DistanceMetric {
-    fn default() -> Self {
-        Self::Cosine
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,23 +182,6 @@ impl BackendCapabilities {
                 DistanceMetric::DotProduct,
             ],
             max_batch_size: 100,
-            supports_delete_by_filter: true,
-        }
-    }
-
-    pub fn pgvector() -> Self {
-        Self {
-            max_vector_dimensions: 2000,
-            supports_metadata_filter: true,
-            supports_hybrid_search: false,
-            supports_batch_upsert: true,
-            supports_namespaces: false,
-            distance_metrics: vec![
-                DistanceMetric::Cosine,
-                DistanceMetric::Euclidean,
-                DistanceMetric::DotProduct,
-            ],
-            max_batch_size: 1000,
             supports_delete_by_filter: true,
         }
     }
@@ -290,8 +268,5 @@ mod tests {
         let pinecone = BackendCapabilities::pinecone();
         assert!(pinecone.supports_namespaces);
         assert!(!pinecone.supports_hybrid_search);
-
-        let pgvector = BackendCapabilities::pgvector();
-        assert_eq!(pgvector.max_vector_dimensions, 2000);
     }
 }

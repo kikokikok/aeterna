@@ -1,3 +1,4 @@
+use serde::Serialize;
 /// Streaming NDJSON (Newline-Delimited JSON) reader and writer.
 ///
 /// The writer serialises one JSON object per line, separated by `'\n'`.
@@ -5,7 +6,6 @@
 /// arbitrarily large files can be processed without loading them entirely
 /// into memory.
 use serde::de::DeserializeOwned;
-use serde::Serialize;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
 /// Streams serialised records as NDJSON lines to the underlying writer.
@@ -184,8 +184,7 @@ mod tests {
             writer.finish().unwrap();
         }
 
-        let records: Vec<TestRecord> =
-            read_typed(Cursor::new(&buf)).map(|r| r.unwrap()).collect();
+        let records: Vec<TestRecord> = read_typed(Cursor::new(&buf)).map(|r| r.unwrap()).collect();
         assert_eq!(records.len(), 2);
         assert_eq!(
             records[0],
@@ -246,8 +245,7 @@ mod tests {
             writer.finish().unwrap();
         }
 
-        let records: Vec<TestRecord> =
-            read_typed(Cursor::new(&buf)).map(|r| r.unwrap()).collect();
+        let records: Vec<TestRecord> = read_typed(Cursor::new(&buf)).map(|r| r.unwrap()).collect();
         assert_eq!(records.len(), count as usize);
         assert_eq!(records[999].id, 999);
     }

@@ -225,6 +225,12 @@ pub struct PolicyTemplate {
     pub default_mode: PolicyMode,
 }
 
+impl Default for MockPolicyStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockPolicyStorage {
     pub fn new() -> Self {
         let mut templates = HashMap::new();
@@ -423,8 +429,8 @@ impl MockPolicyStorage {
             .values()
             .filter(|p| {
                 p.tenant_id == tenant_id
-                    && layer.map_or(true, |l| p.layer == l)
-                    && mode.map_or(true, |m| p.mode == m)
+                    && layer.is_none_or(|l| p.layer == l)
+                    && mode.is_none_or(|m| p.mode == m)
             })
             .cloned()
             .collect())
@@ -469,14 +475,15 @@ impl MockPolicyStorage {
             }
         }
 
-        if let Some(ref cedar) = policy.cedar_policy {
-            if !cedar.contains("permit") && !cedar.contains("forbid") {
-                errors.push(ValidationError {
-                    code: "E003".to_string(),
-                    message: "Cedar policy must contain permit or forbid statement".to_string(),
-                    location: Some("cedar_policy".to_string()),
-                });
-            }
+        if let Some(ref cedar) = policy.cedar_policy
+            && !cedar.contains("permit")
+            && !cedar.contains("forbid")
+        {
+            errors.push(ValidationError {
+                code: "E003".to_string(),
+                message: "Cedar policy must contain permit or forbid statement".to_string(),
+                location: Some("cedar_policy".to_string()),
+            });
         }
 
         ValidationResult {

@@ -247,7 +247,7 @@ async fn run_register(args: UserRegisterArgs) -> anyhow::Result<()> {
             "org": args.org,
             "team": args.team,
         });
-        let result = client.user_register(&body).await.map_err(|e| {
+        let result = client.user_register(&body).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -257,11 +257,10 @@ async fn run_register(args: UserRegisterArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {
@@ -306,7 +305,7 @@ async fn run_list(args: UserListArgs) -> anyhow::Result<()> {
                 args.all,
             )
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -316,11 +315,10 @@ async fn run_list(args: UserListArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -374,7 +372,7 @@ async fn run_show(args: UserShowArgs) -> anyhow::Result<()> {
         .unwrap_or_else(|| resolved.user_id.value.clone());
 
     if let Some(client) = get_live_client().await {
-        let result = client.user_show(&user_id).await.map_err(|e| {
+        let result = client.user_show(&user_id).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -384,11 +382,10 @@ async fn run_show(args: UserShowArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {
@@ -465,7 +462,7 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
             let result = client
                 .user_role_grant(&user_id, &json!({"role": role_to_grant, "scope": scope}))
                 .await
-                .map_err(|e| {
+                .inspect_err(|e| {
                     if args.json {
                         println!(
                             "{}",
@@ -475,11 +472,10 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
                             .unwrap()
                         );
                     } else {
-                        ux_error::UxError::new(&e.to_string())
+                        ux_error::UxError::new(e.to_string())
                             .fix("Run: aeterna auth login")
                             .display();
                     }
-                    e
                 })?;
 
             if args.json {
@@ -524,7 +520,7 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
             let result = client
                 .user_role_revoke(&user_id, role_to_revoke)
                 .await
-                .map_err(|e| {
+                .inspect_err(|e| {
                     if args.json {
                         println!(
                             "{}",
@@ -534,11 +530,10 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
                             .unwrap()
                         );
                     } else {
-                        ux_error::UxError::new(&e.to_string())
+                        ux_error::UxError::new(e.to_string())
                             .fix("Run: aeterna auth login")
                             .display();
                     }
-                    e
                 })?;
 
             if args.json {
@@ -576,7 +571,7 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
     }
 
     if let Some(client) = get_live_client().await {
-        let result = client.user_roles_list(&user_id).await.map_err(|e| {
+        let result = client.user_roles_list(&user_id).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -586,11 +581,10 @@ async fn run_roles(args: UserRolesArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {
@@ -853,7 +847,7 @@ async fn run_invite(args: UserInviteArgs) -> anyhow::Result<()> {
             "role": role_lower,
             "message": args.message,
         });
-        let result = client.user_invite(&body).await.map_err(|e| {
+        let result = client.user_invite(&body).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -863,11 +857,10 @@ async fn run_invite(args: UserInviteArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {

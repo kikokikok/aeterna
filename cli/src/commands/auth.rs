@@ -102,91 +102,90 @@ async fn run_login(args: LoginArgs) -> anyhow::Result<()> {
         resolved.server_url.clone()
     };
 
-    let github_token = match args.github_token {
-        Some(t) => t,
-        None => {
-            let github_client_id = std::env::var("AETERNA_GITHUB_CLIENT_ID")
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-                .or_else(|| {
-                    resolved
-                        .profile
-                        .github_client_id
-                        .clone()
-                        .filter(|v| !v.trim().is_empty())
-                })
-                .ok_or_else(|| {
-                    let err = ux_error::UxError::new("Missing GitHub OAuth client ID")
-                        .why("Device-flow login requires a GitHub OAuth App client ID")
-                        .fix("Set AETERNA_GITHUB_CLIENT_ID in your environment")
-                        .fix("Or configure profile.github_client_id in your Aeterna profile")
-                        .suggest("aeterna auth login --github-token <PAT>");
-                    err.display();
-                    anyhow::anyhow!(
-                        "Missing GitHub OAuth client ID. Set AETERNA_GITHUB_CLIENT_ID or configure profile.github_client_id."
-                    )
-                })?;
-
-            let github_oauth_base_url = std::env::var("AETERNA_GITHUB_OAUTH_BASE_URL").ok();
-
-            let device = client::request_device_code(
-                &github_client_id,
-                "read:user,user:email",
-                github_oauth_base_url.as_deref(),
-            )
-            .await
-            .map_err(|e| {
-                let err = ux_error::UxError::new("GitHub device flow setup failed")
-                    .why(e.to_string())
-                    .fix("Verify the GitHub OAuth client ID is correct")
-                    .fix("Check network access to github.com")
-                    .suggest("aeterna auth login");
+    let github_token = if let Some(t) = args.github_token {
+        t
+    } else {
+        let github_client_id = std::env::var("AETERNA_GITHUB_CLIENT_ID")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| {
+                resolved
+                    .profile
+                    .github_client_id
+                    .clone()
+                    .filter(|v| !v.trim().is_empty())
+            })
+            .ok_or_else(|| {
+                let err = ux_error::UxError::new("Missing GitHub OAuth client ID")
+                    .why("Device-flow login requires a GitHub OAuth App client ID")
+                    .fix("Set AETERNA_GITHUB_CLIENT_ID in your environment")
+                    .fix("Or configure profile.github_client_id in your Aeterna profile")
+                    .suggest("aeterna auth login --github-token <PAT>");
                 err.display();
-                anyhow::anyhow!("Device flow setup failed: {e}")
+                anyhow::anyhow!(
+                    "Missing GitHub OAuth client ID. Set AETERNA_GITHUB_CLIENT_ID or configure profile.github_client_id."
+                )
             })?;
 
-            if !args.json {
-                output::info(&format!(
-                    "Open {} and enter code {}",
-                    device.verification_uri.bold().underline(),
-                    device.user_code.bold().yellow()
-                ));
+        let github_oauth_base_url = std::env::var("AETERNA_GITHUB_OAUTH_BASE_URL").ok();
+
+        let device = client::request_device_code(
+            &github_client_id,
+            "read:user,user:email",
+            github_oauth_base_url.as_deref(),
+        )
+        .await
+        .map_err(|e| {
+            let err = ux_error::UxError::new("GitHub device flow setup failed")
+                .why(e.to_string())
+                .fix("Verify the GitHub OAuth client ID is correct")
+                .fix("Check network access to github.com")
+                .suggest("aeterna auth login");
+            err.display();
+            anyhow::anyhow!("Device flow setup failed: {e}")
+        })?;
+
+        if !args.json {
+            output::info(&format!(
+                "Open {} and enter code {}",
+                device.verification_uri.bold().underline(),
+                device.user_code.bold().yellow()
+            ));
+        }
+
+        let _ = try_open_browser(&device.verification_uri);
+
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::with_template("{spinner} {msg}")
+                .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+        );
+        spinner.set_message("Waiting for authorization...");
+        spinner.enable_steady_tick(std::time::Duration::from_millis(120));
+
+        let token_result = client::poll_device_authorization(
+            &github_client_id,
+            &device.device_code,
+            device.interval,
+            device.expires_in,
+            github_oauth_base_url.as_deref(),
+        )
+        .await;
+
+        match token_result {
+            Ok(token) => {
+                spinner.finish_and_clear();
+                token
             }
-
-            let _ = try_open_browser(&device.verification_uri);
-
-            let spinner = ProgressBar::new_spinner();
-            spinner.set_style(
-                ProgressStyle::with_template("{spinner} {msg}")
-                    .unwrap_or_else(|_| ProgressStyle::default_spinner()),
-            );
-            spinner.set_message("Waiting for authorization...");
-            spinner.enable_steady_tick(std::time::Duration::from_millis(120));
-
-            let token_result = client::poll_device_authorization(
-                &github_client_id,
-                &device.device_code,
-                device.interval,
-                device.expires_in,
-                github_oauth_base_url.as_deref(),
-            )
-            .await;
-
-            match token_result {
-                Ok(token) => {
-                    spinner.finish_and_clear();
-                    token
-                }
-                Err(e) => {
-                    spinner.finish_and_clear();
-                    let err = ux_error::UxError::new("GitHub device authorization failed")
-                        .why(e.to_string())
-                        .fix("Complete the device authorization in your browser")
-                        .fix("Retry login if the code expired")
-                        .suggest("aeterna auth login");
-                    err.display();
-                    return Err(anyhow::anyhow!("Device authorization failed: {e}"));
-                }
+            Err(e) => {
+                spinner.finish_and_clear();
+                let err = ux_error::UxError::new("GitHub device authorization failed")
+                    .why(e.to_string())
+                    .fix("Complete the device authorization in your browser")
+                    .fix("Retry login if the code expired")
+                    .suggest("aeterna auth login");
+                err.display();
+                return Err(anyhow::anyhow!("Device authorization failed: {e}"));
             }
         }
     };
@@ -260,9 +259,7 @@ async fn run_login(args: LoginArgs) -> anyhow::Result<()> {
             println!("  Email:        {email}");
         }
         println!();
-        output::hint(&format!(
-            "Credentials stored. Run 'aeterna auth status' to verify."
-        ));
+        output::hint("Credentials stored. Run 'aeterna auth status' to verify.");
     }
 
     Ok(())
@@ -396,8 +393,10 @@ async fn run_status(args: StatusArgs) -> anyhow::Result<()> {
                 println!("  Email:        {email}");
             }
             let expires = chrono::DateTime::<chrono::Utc>::from_timestamp(c.expires_at, 0)
-                .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
-                .unwrap_or_else(|| "unknown".to_string());
+                .map_or_else(
+                    || "unknown".to_string(),
+                    |d| d.format("%Y-%m-%d %H:%M UTC").to_string(),
+                );
             println!("  Token valid until: {expires}");
         }
         "expired" => {

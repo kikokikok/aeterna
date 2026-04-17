@@ -341,7 +341,7 @@ mod tests {
         assert_eq!(config.providers.postgres.host, "localhost");
         assert_eq!(config.providers.qdrant.host, "localhost");
         assert_eq!(config.providers.redis.host, "localhost");
-        assert_eq!(config.sync.enabled, true);
+        assert!(config.sync.enabled);
         assert_eq!(config.tools.port, 8080);
         assert_eq!(config.observability.logging_level, "info");
     }
@@ -358,7 +358,7 @@ mod tests {
         let config = load_from_env().unwrap();
         assert_eq!(config.providers.postgres.host, "testhost");
         assert_eq!(config.providers.postgres.port, 9999);
-        assert_eq!(config.sync.enabled, false);
+        assert!(!config.sync.enabled);
 
         unsafe {
             env::remove_var("PG_HOST");

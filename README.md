@@ -76,7 +76,7 @@ Modern enterprises face critical challenges when deploying AI agents:
 │                                                                              │
 │   Vector Backends (Pluggable):                                              │
 │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐  │
-│   │ Qdrant  │ │pgvector │ │Pinecone │ │Weaviate │ │ MongoDB │ │VertexAI │  │
+│   │ Qdrant  │ │Pinecone │ │Weaviate │ │ MongoDB │ │VertexAI │             │
 │   └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘  │
 │   ┌───────────┐                                                              │
 │   │Databricks │                                                              │
@@ -507,12 +507,23 @@ Aeterna addresses **93 production readiness gaps** identified across enterprise 
 ### Prerequisites
 
 - **Rust**: 1.70+ (Edition 2024)
-- **PostgreSQL**: 16+ with pgvector extension
+- **PostgreSQL**: 16+ (stock; no extensions required)
 - **Qdrant**: 1.12+
 - **Redis**: 7+
 - **DuckDB**: 0.9+ (for graph layer)
 
 ### Installation
+
+**Prebuilt binary (recommended):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/main/install.sh | sh
+```
+
+Platforms: Linux `x86_64` / `aarch64` (gnu), macOS `x86_64` / `aarch64`. See the
+[CLI Quick Reference](docs/guides/cli-quick-reference.md) for details.
+
+**From source:**
 
 ```bash
 git clone https://github.com/kikokikok/aeterna.git
@@ -786,7 +797,7 @@ cargo test --all -- --include-ignored
 ### Tech Stack
 
 - **Language**: Rust (Edition 2024)
-- **Memory Storage**: Redis 7+, PostgreSQL 16+ with pgvector, Qdrant 1.12+
+- **Memory Storage**: Redis 7+, PostgreSQL 16+, Qdrant 1.12+
 - **Graph Storage**: DuckDB 0.9+
 - **Embedding**: rust-genai 0.4+ (multi-provider)
 - **Authorization**: Cedar + Permit.io + OPAL
@@ -821,3 +832,4 @@ Built with insights from:
 - [Permit.io](https://permit.io) - ReBAC authorization
 - [Radkit](https://radkit.dev) - Agent-to-Agent protocol
 - [OPAL](https://opal.ac) - Policy administration
+Policy administration

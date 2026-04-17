@@ -86,14 +86,13 @@ impl TenantContext {
     }
 
     pub fn trusted_proxy_verified(headers: &HeaderMap, config: &TrustedIdentityConfig) -> bool {
-        header_value(headers, &config.proxy_header)
-            .map(|value| config.proxy_header_value == "*" || value == config.proxy_header_value)
-            .unwrap_or(false)
+        header_value(headers, &config.proxy_header).is_some_and(|value| {
+            config.proxy_header_value == "*" || value == config.proxy_header_value
+        })
     }
 
     pub fn from_auth_header(auth_header: &str) -> Option<Self> {
-        if auth_header.starts_with("Bearer ") {
-            let token = &auth_header[7..];
+        if let Some(token) = auth_header.strip_prefix("Bearer ") {
             Self::from_jwt(token)
         } else {
             None
@@ -245,7 +244,7 @@ pub async fn auth_middleware(
     if let Some(api_key) = &state.api_key {
         if let Some(auth_header) = request.headers().get(AUTHORIZATION) {
             if let Ok(auth_str) = auth_header.to_str() {
-                if auth_str == format!("Bearer {}", api_key) {
+                if auth_str == format!("Bearer {api_key}") {
                     return Ok(next.run(request).await);
                 }
             }

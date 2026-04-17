@@ -74,12 +74,11 @@ The `list_snapshots` function (graph_duckdb.rs:1851) MUST loop on the S3 `contin
 - **AND** MUST log a warning that results are truncated
 
 ### Requirement: Memory Manager list_all_from_layer SQL Enforcement
-The `list_all_from_layer` function (memory/manager.rs:1059) MUST verify that the underlying provider implementations (Qdrant, pgvector) enforce the limit at their query level, not just at the application level.
+The `list_all_from_layer` function (memory/manager.rs:1059) MUST verify that the underlying Qdrant provider enforces the limit at its query level, not just at the application level.
 
 #### Scenario: Provider enforces limit at query level
 - **WHEN** `list_all_from_layer` is called with `limit=100`
 - **THEN** the Qdrant provider MUST use `limit: 100` in the scroll/search request
-- **AND** the pgvector provider MUST include `LIMIT 100` in the SQL query
 - **AND** the application-level hard-coded `limit=1000` cap MUST be replaced with the caller-provided limit
 
 ### Requirement: Budget Storage Pagination

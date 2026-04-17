@@ -326,16 +326,17 @@ impl KmsProvider for LocalKmsProvider {
     }
 
     async fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, KmsError> {
-        for master_key in self.keys.values() {
-            return Ok(ciphertext
-                .iter()
-                .zip(master_key.iter().cycle())
-                .map(|(a, b)| a ^ b)
-                .collect());
-        }
-        Err(KmsError::OperationFailed(
-            "Failed to decrypt data key".to_string(),
-        ))
+        // Mock KMS: XOR-decrypt with any available master key. Real KMS impls
+        // would disambiguate via key-id embedded in ciphertext. For this
+        // in-memory stub the first key is sufficient.
+        let master_key = self.keys.values().next().ok_or_else(|| {
+            KmsError::OperationFailed("Failed to decrypt data key: no keys configured".to_string())
+        })?;
+        Ok(ciphertext
+            .iter()
+            .zip(master_key.iter().cycle())
+            .map(|(a, b)| a ^ b)
+            .collect())
     }
 
     async fn get_key_metadata(&self, key_id: &str) -> Result<KmsKeyMetadata, KmsError> {

@@ -69,7 +69,7 @@ pub fn cedar_role_entity_id(
     resource_type: &ResourceType,
     resource_id: &str,
 ) -> String {
-    format!("{}@{}::{}", role, resource_type, resource_id)
+    format!("{role}@{resource_type}::{resource_id}")
 }
 
 pub fn validate_scope(role: &Role, resource_type: &ResourceType) -> Result<(), String> {

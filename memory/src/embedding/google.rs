@@ -1,4 +1,4 @@
-#![cfg(feature = "google-provider")]
+// Feature-gated at mod.rs — no #![cfg] here (would duplicate the gate).
 
 use async_trait::async_trait;
 use gcp_auth::TokenProvider;

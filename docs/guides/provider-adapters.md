@@ -188,7 +188,6 @@ Every mutating and query method takes `tenant_id: &str` as its first argument. T
 |---------|-------------------|
 | Qdrant | Collection per tenant (`{prefix}_{tenant_id}`) |
 | Pinecone | Namespace per tenant |
-| pgvector | Row-level filter on `tenant_id` column |
 | Weaviate | Tenant key in multi-tenancy class |
 | MongoDB | Collection-level or filter-level isolation |
 | Vertex AI | Metadata restricts filter |
@@ -206,7 +205,6 @@ Edit `memory/Cargo.toml`:
 [features]
 default = []
 pinecone = ["dep:reqwest"]
-pgvector = ["dep:sqlx"]
 weaviate = ["dep:reqwest"]
 mongodb = ["dep:mongodb"]
 milvus = ["dep:tonic"]  # ← add your feature
@@ -489,7 +487,6 @@ let instrumented = InstrumentedBackend::new(backend)
 |---------|------|-------------|-----------|-------|
 | Qdrant | `qdrant.rs` | *(always compiled)* | Collection per tenant | Default backend |
 | Pinecone | `pinecone.rs` | `pinecone` | Namespace per tenant | Serverless |
-| pgvector | `pgvector.rs` | `pgvector` | Row-level filter | Requires PostgreSQL 16+ |
 | Weaviate | `weaviate.rs` | `weaviate` | Multi-tenancy class | GraphQL + hybrid search |
 | MongoDB Atlas | `mongodb.rs` | `mongodb` | Collection filter | `$vectorSearch` aggregation |
 | Vertex AI | `vertex_ai.rs` | `vertex-ai` | Metadata restricts | GCP native |

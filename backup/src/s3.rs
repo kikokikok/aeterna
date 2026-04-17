@@ -240,7 +240,7 @@ mod tests {
             last_modified: "2026-01-01T00:00:00Z".into(),
         };
         let cloned = entry.clone();
-        assert_eq!(format!("{:?}", cloned), format!("{:?}", entry));
+        assert_eq!(format!("{cloned:?}"), format!("{:?}", entry));
     }
 
     // Integration tests for upload_archive, download_archive, list_archives,

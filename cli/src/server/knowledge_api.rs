@@ -353,9 +353,10 @@ async fn query_handler(
     // search only that layer; otherwise we search all layers and apply
     // canonical-vs-residual precedence (task 6.1).
     let layers: Vec<mk_core::types::KnowledgeLayer> = match req.layer.as_deref() {
-        Some(l) => parse_layer(Some(l))
-            .map(|kl| vec![kl])
-            .unwrap_or_else(|| vec![mk_core::types::KnowledgeLayer::Project]),
+        Some(l) => parse_layer(Some(l)).map_or_else(
+            || vec![mk_core::types::KnowledgeLayer::Project],
+            |kl| vec![kl],
+        ),
         None => vec![
             mk_core::types::KnowledgeLayer::Company,
             mk_core::types::KnowledgeLayer::Org,
@@ -742,8 +743,14 @@ async fn metadata_handler(
                     id: entry.path.clone(),
                     layer: layer_str.to_string(),
                     path: entry.path,
-                    created_at: entry.metadata.get("created_at").and_then(|v| v.as_i64()),
-                    updated_at: entry.metadata.get("updated_at").and_then(|v| v.as_i64()),
+                    created_at: entry
+                        .metadata
+                        .get("created_at")
+                        .and_then(serde_json::Value::as_i64),
+                    updated_at: entry
+                        .metadata
+                        .get("updated_at")
+                        .and_then(serde_json::Value::as_i64),
                     tags: if tags_from_metadata(&entry.metadata).is_empty() {
                         None
                     } else {
@@ -903,8 +910,10 @@ async fn create_promotion_handler(
             "sensitive_content_detected",
             "Promotion content appears to contain sensitive material",
         ),
-        Err(knowledge::manager::KnowledgeManagerError::TenantMismatch(_))
-        | Err(knowledge::manager::KnowledgeManagerError::ForbiddenCrossTenant) => error_response(
+        Err(
+            knowledge::manager::KnowledgeManagerError::TenantMismatch(_)
+            | knowledge::manager::KnowledgeManagerError::ForbiddenCrossTenant,
+        ) => error_response(
             StatusCode::FORBIDDEN,
             "cross_tenant_forbidden",
             "Promotion belongs to a different tenant; cross-tenant promotion is not permitted",
@@ -914,10 +923,10 @@ async fn create_promotion_handler(
             "policy_violation",
             &format!("Promotion blocked by governance policy: {message}"),
         ),
-        Err(knowledge::manager::KnowledgeManagerError::Validation(message))
-        | Err(knowledge::manager::KnowledgeManagerError::StalePromotion(message)) => {
-            error_response(StatusCode::BAD_REQUEST, "invalid_promotion", &message)
-        }
+        Err(
+            knowledge::manager::KnowledgeManagerError::Validation(message)
+            | knowledge::manager::KnowledgeManagerError::StalePromotion(message),
+        ) => error_response(StatusCode::BAD_REQUEST, "invalid_promotion", &message),
         Err(err) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "promotion_create_failed",
@@ -1047,8 +1056,10 @@ async fn approve_promotion_handler(
             "sensitive_content_detected",
             "Promotion content appears to contain sensitive material",
         ),
-        Err(knowledge::manager::KnowledgeManagerError::TenantMismatch(_))
-        | Err(knowledge::manager::KnowledgeManagerError::ForbiddenCrossTenant) => error_response(
+        Err(
+            knowledge::manager::KnowledgeManagerError::TenantMismatch(_)
+            | knowledge::manager::KnowledgeManagerError::ForbiddenCrossTenant,
+        ) => error_response(
             StatusCode::FORBIDDEN,
             "cross_tenant_forbidden",
             "Promotion belongs to a different tenant; cross-tenant promotion is not permitted",
@@ -1128,8 +1139,10 @@ async fn reject_promotion_handler(
             "not_found",
             "Promotion request not found",
         ),
-        Err(knowledge::manager::KnowledgeManagerError::TenantMismatch(_))
-        | Err(knowledge::manager::KnowledgeManagerError::ForbiddenCrossTenant) => error_response(
+        Err(
+            knowledge::manager::KnowledgeManagerError::TenantMismatch(_)
+            | knowledge::manager::KnowledgeManagerError::ForbiddenCrossTenant,
+        ) => error_response(
             StatusCode::FORBIDDEN,
             "cross_tenant_forbidden",
             "Promotion belongs to a different tenant; cross-tenant promotion is not permitted",
@@ -1201,8 +1214,10 @@ async fn retarget_promotion_handler(
             "not_found",
             "Promotion request not found",
         ),
-        Err(knowledge::manager::KnowledgeManagerError::TenantMismatch(_))
-        | Err(knowledge::manager::KnowledgeManagerError::ForbiddenCrossTenant) => error_response(
+        Err(
+            knowledge::manager::KnowledgeManagerError::TenantMismatch(_)
+            | knowledge::manager::KnowledgeManagerError::ForbiddenCrossTenant,
+        ) => error_response(
             StatusCode::FORBIDDEN,
             "cross_tenant_forbidden",
             "Promotion belongs to a different tenant; cross-tenant promotion is not permitted",
@@ -1299,7 +1314,7 @@ async fn check_reviewer_permission(
     ctx: &mk_core::types::TenantContext,
     promotion_id: &str,
 ) -> Option<axum::response::Response> {
-    let resource = format!("Aeterna::KnowledgePromotion::\"{}\"", promotion_id);
+    let resource = format!("Aeterna::KnowledgePromotion::\"{promotion_id}\"");
     match state
         .auth_service
         .check_permission(ctx, "ApproveKnowledge", &resource)
@@ -1371,7 +1386,7 @@ fn reject_invalid_plugin_bearer(
 fn parse_layer(s: Option<&str>) -> Option<mk_core::types::KnowledgeLayer> {
     match s {
         Some("company") => Some(mk_core::types::KnowledgeLayer::Company),
-        Some("org") | Some("organization") => Some(mk_core::types::KnowledgeLayer::Org),
+        Some("org" | "organization") => Some(mk_core::types::KnowledgeLayer::Org),
         Some("team") => Some(mk_core::types::KnowledgeLayer::Team),
         Some("project") => Some(mk_core::types::KnowledgeLayer::Project),
         _ => None,
@@ -1419,7 +1434,7 @@ fn knowledge_entry_to_item(entry: mk_core::types::KnowledgeEntry) -> KnowledgeIt
         .metadata
         .get("variant_role")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .map(std::string::ToString::to_string);
     KnowledgeItem {
         id: entry.path.clone(),
         content: entry.content,
@@ -1452,7 +1467,7 @@ fn knowledge_entry_with_relations_to_item(
         .metadata
         .get("variant_role")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .map(std::string::ToString::to_string);
     KnowledgeItem {
         id: ewr.entry.path.clone(),
         content: ewr.entry.content,

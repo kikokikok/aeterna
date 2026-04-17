@@ -929,7 +929,7 @@ async fn test_multiple_roles_same_user_different_scopes() {
         .list_roles(Some(hierarchy.company_id), None, None)
         .await
         .unwrap();
-    assert!(company_roles.len() >= 1);
+    assert!(!company_roles.is_empty());
 
     let team_roles = governance
         .list_roles(None, None, Some(hierarchy.api_team_id))

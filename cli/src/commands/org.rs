@@ -251,7 +251,7 @@ async fn run_create(args: OrgCreateArgs) -> anyhow::Result<()> {
             "description": args.description,
             "companyId": company_id,
         });
-        let result = client.org_create(&body).await.map_err(|e| {
+        let result = client.org_create(&body).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -261,11 +261,10 @@ async fn run_create(args: OrgCreateArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {
@@ -315,7 +314,7 @@ async fn run_list(args: OrgListArgs) -> anyhow::Result<()> {
         let result = client
             .org_list(args.company.as_deref(), args.all)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -325,11 +324,10 @@ async fn run_list(args: OrgListArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -378,7 +376,7 @@ async fn run_show(args: OrgShowArgs) -> anyhow::Result<()> {
     let org_id = resolve_current_org(args.org_id.clone())?;
 
     if let Some(client) = get_live_client().await {
-        let result = client.org_show(&org_id).await.map_err(|e| {
+        let result = client.org_show(&org_id).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -388,11 +386,10 @@ async fn run_show(args: OrgShowArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {
@@ -462,7 +459,7 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
             let result = client
                 .org_member_add(&org_id, &json!({"userId": user_to_add, "role": role}))
                 .await
-                .map_err(|e| {
+                .inspect_err(|e| {
                     if args.json {
                         println!(
                             "{}",
@@ -472,11 +469,10 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
                             .unwrap()
                         );
                     } else {
-                        ux_error::UxError::new(&e.to_string())
+                        ux_error::UxError::new(e.to_string())
                             .fix("Run: aeterna auth login")
                             .display();
                     }
-                    e
                 })?;
 
             if args.json {
@@ -523,7 +519,7 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
             let result = client
                 .org_member_remove(&org_id, user_to_remove)
                 .await
-                .map_err(|e| {
+                .inspect_err(|e| {
                     if args.json {
                         println!(
                             "{}",
@@ -533,11 +529,10 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
                             .unwrap()
                         );
                     } else {
-                        ux_error::UxError::new(&e.to_string())
+                        ux_error::UxError::new(e.to_string())
                             .fix("Run: aeterna auth login")
                             .display();
                     }
-                    e
                 })?;
 
             if args.json {
@@ -592,7 +587,7 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
             let result = client
                 .org_member_set_role(&org_id, user_id, &json!({"role": role}))
                 .await
-                .map_err(|e| {
+                .inspect_err(|e| {
                     if args.json {
                         println!(
                             "{}",
@@ -602,11 +597,10 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
                             .unwrap()
                         );
                     } else {
-                        ux_error::UxError::new(&e.to_string())
+                        ux_error::UxError::new(e.to_string())
                             .fix("Run: aeterna auth login")
                             .display();
                     }
-                    e
                 })?;
 
             if args.json {
@@ -649,7 +643,7 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
     }
 
     if let Some(client) = get_live_client().await {
-        let result = client.org_members_list(&org_id).await.map_err(|e| {
+        let result = client.org_members_list(&org_id).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -659,11 +653,10 @@ async fn run_members(args: OrgMembersArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {

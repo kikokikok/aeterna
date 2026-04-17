@@ -439,8 +439,7 @@ fn postgres_connection_url(config: &config::Config) -> String {
 
 fn knowledge_repo_path() -> PathBuf {
     std::env::var("AETERNA_KNOWLEDGE_REPO_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("./knowledge-repo"))
+        .map_or_else(|_| PathBuf::from("./knowledge-repo"), PathBuf::from)
 }
 
 fn tenant_config_provider_namespace() -> String {
@@ -528,18 +527,18 @@ fn build_anyhow_auth_service()
             // AETERNA_ALLOW_PERMISSIVE_AUTH=dev.
             let permissive_mode =
                 std::env::var("AETERNA_ALLOW_PERMISSIVE_AUTH").unwrap_or_default();
-            if permissive_mode != "dev" {
+            if permissive_mode == "dev" {
+                tracing::debug!(
+                    "{} auth active (AETERNA_ALLOW_PERMISSIVE_AUTH=dev)",
+                    AUTH_BACKEND_ALLOW_ALL
+                );
+            } else {
                 tracing::warn!(
                     backend = %backend,
                     "Using {} authorization service. This grants every caller full access and MUST NOT be used in production. Set {}=cedar or {}=permit, or set AETERNA_ALLOW_PERMISSIVE_AUTH=dev to silence this warning.",
                     AUTH_BACKEND_ALLOW_ALL,
                     ENV_AUTH_BACKEND,
                     ENV_AUTH_BACKEND,
-                );
-            } else {
-                tracing::debug!(
-                    "{} auth active (AETERNA_ALLOW_PERMISSIVE_AUTH=dev)",
-                    AUTH_BACKEND_ALLOW_ALL
                 );
             }
             Ok(Arc::new(AllowAllAuthService))
@@ -822,12 +821,11 @@ async fn seed_platform_admin(
     pool: &sqlx::Pool<sqlx::Postgres>,
     cfg: &config::AdminBootstrapConfig,
 ) -> anyhow::Result<()> {
-    let email = match &cfg.email {
-        Some(e) => e,
-        None => {
-            tracing::warn!("admin bootstrap skipped: AETERNA_ADMIN_BOOTSTRAP_EMAIL not set");
-            return Ok(());
-        }
+    let email = if let Some(e) = &cfg.email {
+        e
+    } else {
+        tracing::warn!("admin bootstrap skipped: AETERNA_ADMIN_BOOTSTRAP_EMAIL not set");
+        return Ok(());
     };
 
     let provider = &cfg.provider;

@@ -40,6 +40,12 @@ pub struct MockOnboardingStorage {
     agents: Arc<RwLock<HashMap<String, Agent>>>,
 }
 
+impl Default for MockOnboardingStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockOnboardingStorage {
     pub fn new() -> Self {
         Self {

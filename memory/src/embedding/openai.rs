@@ -82,12 +82,12 @@ impl EmbeddingService for OpenAIEmbeddingService {
         if let Some(redis) = &self.redis {
             let redis = redis.write().await;
             let key = format!("emb:{}:{}", self.model, text);
-            if let Ok(Some(cached_json)) = redis.get(&key).await {
-                if let Ok(embedding) = serde_json::from_str::<Vec<f32>>(&cached_json) {
-                    let mut cache = self.cache.write().await;
-                    cache.put(text.to_string(), embedding.clone());
-                    return Ok(embedding);
-                }
+            if let Ok(Some(cached_json)) = redis.get(&key).await
+                && let Ok(embedding) = serde_json::from_str::<Vec<f32>>(&cached_json)
+            {
+                let mut cache = self.cache.write().await;
+                cache.put(text.to_string(), embedding.clone());
+                return Ok(embedding);
             }
         }
 

@@ -39,7 +39,6 @@ mod vertex_ai_tests {
             embedding_dimension: 3,
             qdrant: None,
             pinecone: None,
-            pgvector: None,
             vertex_ai: Some(memory::backends::factory::VertexAiConfig {
                 project_id: std::env::var("GCP_PROJECT_ID").unwrap_or_default(),
                 location: std::env::var("VERTEX_AI_LOCATION")

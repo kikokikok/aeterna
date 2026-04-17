@@ -88,10 +88,10 @@ impl CedarAuthorizer {
 
         {
             let cache = self.entity_cache.read().await;
-            if let Some(cached) = cache.as_ref() {
-                if cached.fetched_at.elapsed() < self.cache_ttl {
-                    return Ok(cached.entities.clone());
-                }
+            if let Some(cached) = cache.as_ref()
+                && cached.fetched_at.elapsed() < self.cache_ttl
+            {
+                return Ok(cached.entities.clone());
             }
         }
 
@@ -224,7 +224,7 @@ impl CedarAuthorizer {
         let assignments = self.role_assignments.read().await;
 
         let user_roles = assignments.get(&ctx.user_id);
-        if user_roles.map_or(true, |r| r.is_empty()) {
+        if user_roles.is_none_or(|r| r.is_empty()) {
             return Ok(base_entities);
         }
 

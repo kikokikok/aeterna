@@ -173,7 +173,7 @@ pub fn create_embedding_service(
             {
                 let service =
                     super::openai::OpenAIEmbeddingService::new(openai.api_key, &openai.model);
-                return Ok(Some(Arc::new(service)));
+                Ok(Some(Arc::new(service)))
             }
 
             #[cfg(not(feature = "embedding-integration"))]
@@ -195,7 +195,7 @@ pub fn create_embedding_service(
                     google.location,
                     google.model,
                 );
-                return Ok(Some(Arc::new(service)));
+                Ok(Some(Arc::new(service)))
             }
 
             #[cfg(not(feature = "google-provider"))]
@@ -215,7 +215,7 @@ pub fn create_embedding_service(
             {
                 let service =
                     super::bedrock::BedrockEmbeddingService::new(bedrock.region, bedrock.model_id);
-                return Ok(Some(Arc::new(service)));
+                Ok(Some(Arc::new(service)))
             }
 
             #[cfg(not(feature = "bedrock-provider"))]

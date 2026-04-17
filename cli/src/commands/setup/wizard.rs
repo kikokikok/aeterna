@@ -3,7 +3,12 @@ use colored::Colorize;
 use console::Term;
 use dialoguer::{Confirm, Input, MultiSelect, Select, theme::ColorfulTheme};
 
-use super::types::*;
+use super::types::{
+    AuthMethod, BedrockLlmConfig, CacheType, DatabricksConfig, DeploymentMode, DeploymentTarget,
+    ExternalPostgresConfig, ExternalRedisConfig, GoogleLlmConfig, HybridConfig, LlmProvider,
+    MongodbConfig, PineconeConfig, PostgresqlType, SetupConfig, VectorBackend, VertexAiConfig,
+    WeaviateConfig, validate_server_connectivity,
+};
 
 pub struct SetupWizard {
     term: Term,
@@ -231,7 +236,6 @@ impl SetupWizard {
     fn select_vector_backend(&mut self) -> Result<()> {
         let options = vec![
             "Qdrant (default, self-hosted)",
-            "pgvector (PostgreSQL extension)",
             "Pinecone (managed cloud)",
             "Weaviate (hybrid search)",
             "MongoDB Atlas (managed)",
@@ -247,12 +251,11 @@ impl SetupWizard {
 
         self.config.vector_backend = match selection {
             0 => VectorBackend::Qdrant,
-            1 => VectorBackend::Pgvector,
-            2 => VectorBackend::Pinecone,
-            3 => VectorBackend::Weaviate,
-            4 => VectorBackend::Mongodb,
-            5 => VectorBackend::VertexAi,
-            6 => VectorBackend::Databricks,
+            1 => VectorBackend::Pinecone,
+            2 => VectorBackend::Weaviate,
+            3 => VectorBackend::Mongodb,
+            4 => VectorBackend::VertexAi,
+            5 => VectorBackend::Databricks,
             _ => unreachable!(),
         };
 

@@ -310,7 +310,7 @@ USING (
 | Full Index | 10,000 | 30-60 min | 10,000 |
 | Incremental (10 files) | 10 | 5-10 sec | 10 |
 | Incremental (100 files) | 100 | 30-60 sec | 100 |
-| Watch Mode (1 file) | 1 | \<1 sec | 1 |
+| Watch Mode (1 file) | 1 | <1 sec | 1 |
 
 **Optimization Strategies**:
 1. **Batch Processing**: Group file changes into batches
@@ -324,7 +324,6 @@ USING (
 | Backend | Index Size (10k files) | Query Latency | Best For |
 |---------|------------------------|---------------|----------|
 | Qdrant | 500 MB | 10-50ms | Production, multi-tenant |
-| PostgreSQL + pgvector | 800 MB | 20-100ms | Unified storage |
 | GOB (file-based) | 400 MB | 50-200ms | Dev/test, single-tenant |
 
 ### Multi-Branch Strategy

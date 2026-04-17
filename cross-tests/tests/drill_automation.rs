@@ -100,7 +100,7 @@ fn execute_drill_step(step: DrDrillStep) -> (bool, String) {
             if missing.is_empty() {
                 (true, "All backup scripts present".to_string())
             } else {
-                (false, format!("Missing backup scripts: {:?}", missing))
+                (false, format!("Missing backup scripts: {missing:?}"))
             }
         }
 

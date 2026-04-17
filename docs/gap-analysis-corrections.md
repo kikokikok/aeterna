@@ -150,13 +150,10 @@ fn index_name(&self, tenant_id: &str) -> String {
 **MongoDB** (`mongodb.rs`):
 - ✅ Tenant filtering in queries
 
-**pgvector** (`pgvector.rs`):
-- ✅ Inherits PostgreSQL RLS
-
 **Vertex AI** (`vertex_ai.rs`):
 - ✅ Tenant filtering in metadata
 
-**Conclusion**: Multi-tenancy is COMPREHENSIVELY implemented across ALL 8 vector backends plus PostgreSQL, Redis, and DuckDB.
+**Conclusion**: Multi-tenancy is COMPREHENSIVELY implemented across all supported vector backends plus PostgreSQL, Redis, and DuckDB.
 
 ---
 

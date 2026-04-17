@@ -267,7 +267,7 @@ async fn run_retention_purge(state: &AppState) {
     }
 
     // 4. Purge old governance events past retention (default 180 days)
-    let cutoff_secs = config.governance_event_days as i64 * 86400;
+    let cutoff_secs = i64::from(config.governance_event_days) * 86400;
     let cutoff = chrono::Utc::now().timestamp() - cutoff_secs;
     match sqlx::query("DELETE FROM governance_events WHERE created_at < $1")
         .bind(cutoff)
@@ -288,7 +288,7 @@ async fn run_retention_purge(state: &AppState) {
     }
 
     // 5. Purge old drift results past retention (default 30 days)
-    let cutoff_secs = config.drift_result_days as i64 * 86400;
+    let cutoff_secs = i64::from(config.drift_result_days) * 86400;
     let cutoff = chrono::Utc::now().timestamp() - cutoff_secs;
     match sqlx::query("DELETE FROM drift_results WHERE created_at < $1")
         .bind(cutoff)

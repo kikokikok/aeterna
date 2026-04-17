@@ -50,15 +50,11 @@ pub enum Role {
 )]
 #[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
+#[derive(Default)]
 pub enum TenantStatus {
+    #[default]
     Active,
     Inactive,
-}
-
-impl Default for TenantStatus {
-    fn default() -> Self {
-        Self::Active
-    }
 }
 
 /// Who owns/manages a record: a human admin or an automated sync process.
@@ -67,15 +63,11 @@ impl Default for TenantStatus {
 )]
 #[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
+#[derive(Default)]
 pub enum RecordSource {
+    #[default]
     Admin,
     Sync,
-}
-
-impl Default for RecordSource {
-    fn default() -> Self {
-        Self::Admin
-    }
 }
 
 /// Canonical kind of backing repository for a tenant knowledge binding.

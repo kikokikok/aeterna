@@ -13,7 +13,7 @@ kubectl get deployment -n cnpg-system cnpg-controller-manager -o jsonpath='{.spe
 
 Verify compatibility with your PostgreSQL instances:
 - CNPG 0.23.x supports PostgreSQL 12, 13, 14, 15, 16
-- Extensions (pgvector, PostGIS, etc.) must match PostgreSQL minor version
+- Any extensions you have enabled (PostGIS, etc.) must match PostgreSQL minor version. Aeterna itself ships **no required extensions** — semantic vectors live in Qdrant.
 
 ## Pre-Upgrade Checklist
 
@@ -47,9 +47,6 @@ metadata:
   namespace: aeterna
 spec:
   instances: 3
-  postgresql:
-    parameters:
-      shared_preload_libraries: "pgvector"
   bootstrap:
     recovery:
       source: aeterna-db-prod-backup
@@ -73,8 +70,8 @@ kubectl get pod -n aeterna -l cnpg.io/cluster=aeterna-db
 kubectl exec -it aeterna-db-1 -n aeterna -- psql -U postgres -c "\x" -c "SELECT * FROM pg_stat_replication;"
 # Should show all replicas in "streaming" state
 
-# Check extension versions
-kubectl exec -it aeterna-db-1 -n aeterna -- psql -U postgres -c "SELECT name, version FROM pg_available_extensions WHERE name IN ('pgvector', 'uuid-ossp');"
+# Check extension versions for any extensions you have enabled
+kubectl exec -it aeterna-db-1 -n aeterna -- psql -U postgres -c "SELECT name, version FROM pg_available_extensions WHERE name IN ('uuid-ossp');"
 ```
 
 ## Operator Upgrade Steps
@@ -157,14 +154,13 @@ psql -h localhost -U postgres -d postgres -c "SELECT name, installed_version FRO
 
 ### 2. Extension Verification
 
-Critical for pgvector and other extensions:
+Aeterna ships **no required PostgreSQL extensions** — semantic vectors live in
+Qdrant, not Postgres. If your deployment has enabled additional extensions
+(PostGIS, etc.), verify them here. Otherwise this step is a no-op.
 
 ```bash
-# Check pgvector extension is available
-kubectl exec -it aeterna-db-1 -n aeterna -- psql -U postgres -d aeterna -c "CREATE EXTENSION IF NOT EXISTS pgvector;"
-
-# Verify vector operations work
-kubectl exec -it aeterna-db-1 -n aeterna -- psql -U postgres -d aeterna -c "SELECT (ARRAY[1,2,3]::vector) <-> (ARRAY[1,1,1]::vector) AS distance;"
+# Example: list extensions actually installed in the aeterna database
+kubectl exec -it aeterna-db-1 -n aeterna -- psql -U postgres -d aeterna -c "\dx"
 ```
 
 ### 3. Replication Status
@@ -271,8 +267,8 @@ kubectl exec -it aeterna-db-2 -n aeterna -- psql -U postgres -c "SELECT version(
 # Analyze tables after major version upgrade (required)
 kubectl exec -it aeterna-db-1 -n aeterna -- psql -U postgres -d aeterna -c "ANALYZE;"
 
-# Check extension compatibility with new version
-kubectl exec -it aeterna-db-1 -n aeterna -- psql -U postgres -c "SELECT * FROM pg_extension WHERE extname = 'pgvector';"
+# Check installed extensions still work after upgrade (none required by Aeterna)
+kubectl exec -it aeterna-db-1 -n aeterna -- psql -U postgres -d aeterna -c "\dx"
 ```
 
 ## Monitoring During Upgrade
@@ -357,8 +353,6 @@ postgresql:
       instances: 3  # Number of PostgreSQL replicas
       postgresql:
         version: 16
-        parameters:
-          shared_preload_libraries: "pgvector"
       storage:
         size: 100Gi
         storageClass: fast-ssd
@@ -375,8 +369,9 @@ postgresql:
 1. **Always backup** before any upgrade
 2. **Test in staging** to catch issues early
 3. **Monitor closely** during operator restart
-4. **Verify extensions** work after upgrade (pgvector, PostGIS, etc.)
+4. **Verify extensions** work after upgrade (PostGIS, etc., if you have any — Aeterna requires none)
 5. **Plan PostgreSQL major version upgrades** separately (pg_upgrade is automatic but slow)
 6. **Have rollback procedure ready** in case of issues
 
 For additional help, consult the [official CNPG upgrade guide](https://cloudnative-pg.io/documentation/current/upgrade/).
+e-pg.io/documentation/current/upgrade/).

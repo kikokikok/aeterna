@@ -1,6 +1,6 @@
 use assert_cmd::{Command, cargo_bin_cmd};
-use wiremock::{MockServer, Mock, ResponseTemplate};
 use wiremock::matchers::{method, path, path_regex};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn aeterna() -> Command {
     cargo_bin_cmd!("aeterna")
@@ -18,11 +18,11 @@ struct MockEnv {
 fn aeterna_mock(env: &MockEnv) -> Command {
     let mut cmd = aeterna();
     cmd.env_clear()
-       .env("HOME", std::env::var("HOME").unwrap_or_default())
-       .env("PATH", std::env::var("PATH").unwrap_or_default())
-       .env("AETERNA_SERVER_URL", &env.url)
-       .env("AETERNA_PROFILE", "__mock__")
-       .env("AETERNA_CONFIG_DIR", &env.config_path);
+        .env("HOME", std::env::var("HOME").unwrap_or_default())
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        .env("AETERNA_SERVER_URL", &env.url)
+        .env("AETERNA_PROFILE", "__mock__")
+        .env("AETERNA_CONFIG_DIR", &env.config_path);
     cmd
 }
 
@@ -37,7 +37,8 @@ async fn start_mock_api() -> (MockServer, String) {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "userId": "test-user", "email": "test@test.com"
         })))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     // Agent list
     Mock::given(method("GET"))
@@ -49,7 +50,8 @@ async fn start_mock_api() -> (MockServer, String) {
                 "type": "autonomous", "delegatedBy": "alice", "status": "active"
             }], "total": 1, "limit": 50, "offset": 0
         })))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     // Agent show
     Mock::given(method("GET"))
@@ -61,7 +63,8 @@ async fn start_mock_api() -> (MockServer, String) {
             "config": { "model": "gpt-4", "maxTokens": 4096 },
             "status": "active"
         })))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     // Agent permissions GET
     Mock::given(method("GET"))
@@ -71,7 +74,8 @@ async fn start_mock_api() -> (MockServer, String) {
             "items": [{"permission": "memory:read", "scope": "*"}],
             "total": 1, "limit": 50, "offset": 0
         })))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     // Agent permissions POST (grant)
     Mock::given(method("POST"))
@@ -80,7 +84,8 @@ async fn start_mock_api() -> (MockServer, String) {
             "operation": "agent_permission_grant",
             "agentId": "agent-test-123", "permission": "memory:write", "success": true
         })))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     // Agent permissions DELETE (revoke)
     Mock::given(method("DELETE"))
@@ -88,7 +93,8 @@ async fn start_mock_api() -> (MockServer, String) {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "operation": "agent_permission_revoke", "success": true
         })))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     // Agent DELETE (revoke agent)
     Mock::given(method("DELETE"))
@@ -96,7 +102,8 @@ async fn start_mock_api() -> (MockServer, String) {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "operation": "agent_revoke", "agentId": "agent-test-123", "success": true
         })))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     // Sync
     Mock::given(path_regex(r"^/api/v1/sync"))
@@ -104,19 +111,22 @@ async fn start_mock_api() -> (MockServer, String) {
             "success": false, "error": "server_not_connected",
             "dry_run": false, "direction": "ALL"
         })))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     // Knowledge
     Mock::given(path_regex(r"^/api/v1/knowledge"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "status": "not_connected", "items": []
         })))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     // Catch-all
     Mock::given(wiremock::matchers::any())
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let url = server.uri();
     (server, url)
@@ -894,7 +904,10 @@ mod admin_subcommand {
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(json.get("valid").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            json.get("valid").and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
     }
 
     #[test]
@@ -981,8 +994,7 @@ mod admin_subcommand {
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(
             stdout.contains("server_not_connected") || stdout.contains("not connected"),
-            "expected server_not_connected in output, got: {}",
-            stdout,
+            "expected server_not_connected in output, got: {stdout}",
         );
     }
 
@@ -2429,7 +2441,10 @@ mod agent_subcommand {
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(json.get("dryRun").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            json.get("dryRun").and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
         assert!(json.get("agent").is_some());
     }
 
@@ -2844,7 +2859,10 @@ mod org_subcommand {
             .stdout
             .clone();
         let json: serde_json::Value = serde_json::from_slice(&output).expect("Valid JSON");
-        assert_eq!(json.get("dryRun").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            json.get("dryRun").and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
         assert!(json.get("org").is_some());
     }
 
@@ -4230,7 +4248,10 @@ mod sync_subcommand {
     #[test]
     fn test_sync_force() {
         let env = mock_server();
-        aeterna_mock(&env).args(["sync", "--force"]).assert().failure();
+        aeterna_mock(&env)
+            .args(["sync", "--force"])
+            .assert()
+            .failure();
     }
 }
 

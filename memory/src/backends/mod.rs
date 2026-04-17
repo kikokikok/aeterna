@@ -10,7 +10,6 @@
 //! |---------|--------|---------------|---------------|----------------|----------|
 //! | Qdrant | ✅ Ready | Collection/filter | ✅ | 65536 | Self-hosted, full control |
 //! | Pinecone | ✅ Ready | Namespace | ❌ | 20000 | Serverless, minimal ops |
-//! | pgvector | ✅ Ready | Schema/filter | ❌ | 2000 | Existing PostgreSQL |
 //! | Weaviate | ✅ Ready | Tenant key | ✅ | 65536 | GraphQL, hybrid search |
 //! | MongoDB Atlas | ✅ Ready | Collection/filter | ✅ | 4096 | Existing MongoDB |
 //! | Vertex AI | ⏳ Planned | Index/filter | ❌ | 2048 | GCP native |
@@ -22,7 +21,6 @@
 //!
 //! ## Self-Hosted / Full Control
 //! - **Qdrant**: Best for teams wanting full control, supports hybrid search
-//! - **pgvector**: Best if you already have PostgreSQL infrastructure
 //!
 //! ## Managed / Serverless
 //! - **Pinecone**: Simplest setup, pay-per-query, good for prototypes
@@ -39,12 +37,11 @@
 //!
 //! ```toml
 //! [dependencies]
-//! memory = { version = "0.1", features = ["pinecone", "pgvector", "weaviate", "mongodb"] }
+//! memory = { version = "0.1", features = ["pinecone", "weaviate", "mongodb"] }
 //! ```
 //!
 //! Available features:
 //! - `pinecone` - Pinecone serverless backend
-//! - `pgvector` - PostgreSQL with pgvector extension
 //! - `weaviate` - Weaviate vector database
 //! - `mongodb` - MongoDB Atlas Vector Search
 //! - `vertex-ai` - Google Vertex AI (planned)
@@ -64,10 +61,6 @@
 //! export PINECONE_API_KEY=your-api-key
 //! export PINECONE_ENVIRONMENT=us-east-1-aws
 //! export PINECONE_INDEX_NAME=aeterna-memories
-//!
-//! # pgvector
-//! export VECTOR_BACKEND=pgvector
-//! export PGVECTOR_URL=postgres://user:pass@localhost/aeterna
 //!
 //! # Weaviate
 //! export VECTOR_BACKEND=weaviate
@@ -103,8 +96,6 @@
 //!
 //! ### ConnectionFailed
 //! - **Qdrant**: Check `QDRANT_URL` is reachable, default port is 6334
-//! - **pgvector**: Verify `PGVECTOR_URL` connection string and pgvector
-//!   extension installed
 //! - **Weaviate**: Ensure `WEAVIATE_URL` points to running instance (default
 //!   port 8080)
 //! - **MongoDB**: Verify `MONGODB_URI` and network access to Atlas cluster
@@ -132,11 +123,6 @@
 //! ### Qdrant
 //! - Collection not found: Will be auto-created on first upsert
 //! - Dimension mismatch: Ensure `embedding_dimension` matches your vectors
-//!
-//! ### pgvector
-//! - Extension not installed: Run `CREATE EXTENSION vector;`
-//! - Index not created: Backend auto-creates HNSW index on first use
-//! - Slow queries: Check `EXPLAIN ANALYZE` and index settings
 //!
 //! ### Pinecone
 //! - Namespace limits: Free tier has namespace restrictions
@@ -167,9 +153,6 @@ pub mod types;
 
 #[cfg(feature = "pinecone")]
 pub mod pinecone;
-
-#[cfg(feature = "pgvector")]
-pub mod pgvector;
 
 #[cfg(feature = "vertex-ai")]
 pub mod vertex_ai;
@@ -205,7 +188,6 @@ use async_trait::async_trait;
 /// Each backend implements isolation differently:
 /// - Qdrant: Collection per tenant or payload filter
 /// - Pinecone: Namespace per tenant
-/// - pgvector: Schema per tenant or row-level filter
 /// - Vertex AI: Index per tenant or metadata filter
 /// - Databricks: Unity Catalog + Delta table per tenant
 /// - Weaviate: Tenant key filter

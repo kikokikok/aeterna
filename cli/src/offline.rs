@@ -115,7 +115,7 @@ impl OfflineCliClient {
     /// Initialize SQLite schema.
     async fn init_schema(pool: &Pool<Sqlite>) -> Result<(), OfflineError> {
         sqlx::query(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS policy_cache (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -141,7 +141,7 @@ impl OfflineCliClient {
             
             CREATE INDEX IF NOT EXISTS idx_queue_status ON operation_queue(status);
             CREATE INDEX IF NOT EXISTS idx_cache_cached_at ON policy_cache(cached_at);
-            "#,
+            ",
         )
         .execute(pool)
         .await
@@ -177,7 +177,7 @@ impl OfflineCliClient {
 
     /// Display cache age warning (13.6.5).
     pub async fn display_cache_age_warning(&self) {
-        let last_sync = self.last_sync.read().await.clone();
+        let last_sync = *self.last_sync.read().await;
 
         if let Some(last) = last_sync {
             let age = Utc::now() - last;
@@ -188,10 +188,7 @@ impl OfflineCliClient {
                     "OFFLINE MODE: Cache is {} hours old. Data may be stale.",
                     age_hours
                 );
-                println!(
-                    "⚠️  Warning: Operating in offline mode with {} hour old cache",
-                    age_hours
-                );
+                println!("⚠️  Warning: Operating in offline mode with {age_hours} hour old cache");
             } else {
                 debug!("Cache age: {} hours", age_hours);
             }
@@ -222,10 +219,10 @@ impl OfflineCliClient {
 
         // Store in SQLite
         sqlx::query(
-            r#"
+            r"
             INSERT INTO operation_queue (id, operation_type, entity_type, entity_id, payload, created_at, retry_count, status)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-            "#
+            "
         )
         .bind(&operation.id)
         .bind(&operation.operation_type)
@@ -329,7 +326,7 @@ impl OfflineCliClient {
                 .sync_single_operation(&id, &op_type, &entity_type, &entity_id, &payload)
                 .await
             {
-                Ok(_) => {
+                Ok(()) => {
                     // Mark as resolved
                     sqlx::query("UPDATE operation_queue SET status = 'Resolved' WHERE id = ?1")
                         .bind(&id)

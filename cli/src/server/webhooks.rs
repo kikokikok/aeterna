@@ -156,25 +156,16 @@ async fn handle_org_sync_webhook(
     let org_name = payload
         .organization
         .as_ref()
-        .map(|o| o.login.as_str())
-        .unwrap_or("unknown");
+        .map_or("unknown", |o| o.login.as_str());
 
     match event_type {
         "organization" => match payload.action.as_str() {
             "member_added" => {
-                let login = payload
-                    .member
-                    .as_ref()
-                    .map(|m| m.login.as_str())
-                    .unwrap_or("?");
+                let login = payload.member.as_ref().map_or("?", |m| m.login.as_str());
                 tracing::info!(org = org_name, member = login, "GitHub org member added");
             }
             "member_removed" => {
-                let login = payload
-                    .member
-                    .as_ref()
-                    .map(|m| m.login.as_str())
-                    .unwrap_or("?");
+                let login = payload.member.as_ref().map_or("?", |m| m.login.as_str());
                 tracing::info!(org = org_name, member = login, "GitHub org member removed");
             }
             action => {
@@ -183,24 +174,15 @@ async fn handle_org_sync_webhook(
             }
         },
         "team" => {
-            let slug = payload
-                .team
-                .as_ref()
-                .map(|t| t.slug.as_str())
-                .unwrap_or("?");
-            let name = payload
-                .team
-                .as_ref()
-                .map(|t| t.name.as_str())
-                .unwrap_or("?");
+            let slug = payload.team.as_ref().map_or("?", |t| t.slug.as_str());
+            let name = payload.team.as_ref().map_or("?", |t| t.name.as_str());
             match payload.action.as_str() {
                 "created" => {
                     let parent = payload
                         .team
                         .as_ref()
                         .and_then(|t| t.parent.as_ref())
-                        .map(|p| p.slug.as_str())
-                        .unwrap_or("(top-level)");
+                        .map_or("(top-level)", |p| p.slug.as_str());
                     tracing::info!(org = org_name, slug, name, parent, "GitHub team created");
                 }
                 "deleted" => {
@@ -211,8 +193,7 @@ async fn handle_org_sync_webhook(
                         .team
                         .as_ref()
                         .and_then(|t| t.parent.as_ref())
-                        .map(|p| p.slug.as_str())
-                        .unwrap_or("(top-level)");
+                        .map_or("(top-level)", |p| p.slug.as_str());
                     tracing::info!(
                         org = org_name,
                         slug,

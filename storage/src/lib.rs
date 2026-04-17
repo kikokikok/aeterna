@@ -13,6 +13,7 @@ pub mod graph_duckdb;
 pub mod graphrag;
 pub mod kms_integration;
 pub mod meta_governance;
+pub mod migrations;
 pub mod policy_evaluator;
 pub mod positional_index;
 pub mod postgres;

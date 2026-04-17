@@ -627,7 +627,6 @@ repositories:
 | Backend | Index Size | Query Latency | Best For |
 |---------|-----------|---------------|----------|
 | Qdrant | 500 MB | 10-50ms | Production, multi-tenant |
-| PostgreSQL + pgvector | 800 MB | 20-100ms | Unified storage |
 | GOB (file-based) | 400 MB | 50-200ms | Dev/test, single-tenant |
 
 ### Resource Usage

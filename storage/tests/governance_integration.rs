@@ -185,5 +185,5 @@ async fn test_full_governance_workflow() {
     let jobs = knowledge::api::get_job_status(api, &ctx, Some(&job_name))
         .await
         .unwrap();
-    assert!(jobs.as_array().unwrap().len() >= 1);
+    assert!(!jobs.as_array().unwrap().is_empty());
 }

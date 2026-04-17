@@ -1,7 +1,6 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Shield, Loader2, Filter, ArrowUpDown } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { apiClient } from "@/api/client"
 import type { GovernanceEvent } from "@/api/types"
 

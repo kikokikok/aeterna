@@ -788,7 +788,12 @@ async fn test_retarget_rejects_downward_target() {
         .unwrap();
 
     let result = manager
-        .retarget_promotion(reviewer_ctx(&ctx), &created.id, KnowledgeLayer::Project, None)
+        .retarget_promotion(
+            reviewer_ctx(&ctx),
+            &created.id,
+            KnowledgeLayer::Project,
+            None,
+        )
         .await;
     assert!(matches!(result, Err(KnowledgeManagerError::Validation(_))));
 }

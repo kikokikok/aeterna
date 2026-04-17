@@ -104,7 +104,7 @@ fn anomaly_detector_detects_spike_after_baseline() {
 
     // Establish baseline with stable values around 100
     for i in 0..20 {
-        let result = detector.record_and_detect("latency_ms", 100.0 + (i as f64 % 5.0));
+        let result = detector.record_and_detect("latency_ms", 100.0 + (f64::from(i) % 5.0));
         // Should not be an anomaly during baseline build-up
         if i >= 10 {
             assert!(
@@ -129,7 +129,7 @@ fn anomaly_detector_detects_drop_after_baseline() {
     let detector = AnomalyDetector::new(AnomalyDetectorConfig::default());
 
     for i in 0..20 {
-        detector.record_and_detect("throughput", 1000.0 + (i as f64 * 2.0));
+        detector.record_and_detect("throughput", 1000.0 + (f64::from(i) * 2.0));
     }
 
     let drop = detector.record_and_detect("throughput", 100.0);
@@ -145,7 +145,7 @@ fn anomaly_detector_baseline_stats_are_reasonable() {
     let detector = AnomalyDetector::new(AnomalyDetectorConfig::default());
 
     for i in 0..30 {
-        detector.record_and_detect("cpu_pct", 50.0 + (i as f64 % 10.0));
+        detector.record_and_detect("cpu_pct", 50.0 + (f64::from(i) % 10.0));
     }
 
     let baseline = detector

@@ -1,7 +1,7 @@
-///! # Cost Tracking Module
-///!
-///! Per-tenant cost tracking for embeddings, storage, and compute resources.
-///! Provides detailed cost breakdown and budget management.
+//! # Cost Tracking Module
+//!
+//! Per-tenant cost tracking for embeddings, storage, and compute resources.
+//! Provides detailed cost breakdown and budget management.
 use chrono::{DateTime, Utc};
 use mk_core::types::TenantContext;
 use serde::{Deserialize, Serialize};

@@ -342,8 +342,7 @@ where
 
     let team_filter = lookup("AETERNA_GITHUB_TEAM_FILTER").filter(|value| !value.trim().is_empty());
     let sync_repos_as_projects = lookup("AETERNA_GITHUB_SYNC_REPOS_AS_PROJECTS")
-        .map(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"))
-        .unwrap_or(false);
+        .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"));
 
     Ok(GitHubConfig {
         org_name,
@@ -498,18 +497,17 @@ pub(crate) async fn resolve_tenant_id_from_pool(pool: &sqlx::PgPool) -> anyhow::
             .fetch_optional(pool)
             .await?;
 
-    match row {
-        Some((id,)) => Ok(id),
-        None => {
-            tracing::info!(tenant = %tenant_str, "Tenant not found, creating default");
-            let id = Uuid::new_v4();
-            sqlx::query("INSERT INTO tenants (id, name, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id")
-                .bind(id)
-                .bind(&tenant_str)
-                .execute(pool)
-                .await?;
-            Ok(id)
-        }
+    if let Some((id,)) = row {
+        Ok(id)
+    } else {
+        tracing::info!(tenant = %tenant_str, "Tenant not found, creating default");
+        let id = Uuid::new_v4();
+        sqlx::query("INSERT INTO tenants (id, name, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id")
+            .bind(id)
+            .bind(&tenant_str)
+            .execute(pool)
+            .await?;
+        Ok(id)
     }
 }
 

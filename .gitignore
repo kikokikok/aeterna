@@ -1,7 +1,8 @@
 # Rust
 /target/
-Cargo.lock
 .DS_Store
+# Cargo.lock is committed — `aeterna` is a binary crate (see cli/Cargo.toml).
+# Per Cargo docs, binary crates commit Cargo.lock for reproducible builds.
 
 # IDEs
 .idea/

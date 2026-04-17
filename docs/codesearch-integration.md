@@ -596,7 +596,6 @@ postgresql:
 
 **Cons**:
 - Slower semantic search
-- Requires pgvector extension
 - Higher query latency
 
 ### GOB (File-based)

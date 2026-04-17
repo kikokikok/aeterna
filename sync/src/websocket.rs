@@ -347,10 +347,10 @@ impl WsServer {
 
         let mut sent = 0usize;
         for client_id in &members {
-            if let Some(sender) = self.client_senders.get(client_id) {
-                if sender.send(msg.clone()).await.is_ok() {
-                    sent += 1;
-                }
+            if let Some(sender) = self.client_senders.get(client_id)
+                && sender.send(msg.clone()).await.is_ok()
+            {
+                sent += 1;
             }
         }
         Ok(sent)

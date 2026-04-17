@@ -71,8 +71,7 @@ impl RedisStore {
         let result: Option<String> = conn.get(self.key(id)).await?;
         match result {
             Some(json) => Ok(Some(
-                serde_json::from_str(&json)
-                    .map_err(|e| anyhow::anyhow!("deserialization: {e}"))?,
+                serde_json::from_str(&json).map_err(|e| anyhow::anyhow!("deserialization: {e}"))?,
             )),
             None => Ok(None),
         }
@@ -120,8 +119,7 @@ impl RedisStore {
         }
         match result {
             Some(json) => Ok(Some(
-                serde_json::from_str(&json)
-                    .map_err(|e| anyhow::anyhow!("deserialization: {e}"))?,
+                serde_json::from_str(&json).map_err(|e| anyhow::anyhow!("deserialization: {e}"))?,
             )),
             None => Ok(None),
         }

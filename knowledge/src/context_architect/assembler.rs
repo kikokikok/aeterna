@@ -421,55 +421,55 @@ impl ContextAssembler {
     ) -> AssembledContext {
         let start = Instant::now();
 
-        if let Some(handler) = &self.rlm_handler {
-            if handler.should_use_rlm(query_text) {
-                match handler.execute_assembly(query_text, tenant).await {
-                    Ok(rlm_result) => {
-                        let latency_ms = start.elapsed().as_millis() as u64;
-                        let budget = token_budget.unwrap_or(self.config.default_token_budget);
+        if let Some(handler) = &self.rlm_handler
+            && handler.should_use_rlm(query_text)
+        {
+            match handler.execute_assembly(query_text, tenant).await {
+                Ok(rlm_result) => {
+                    let latency_ms = start.elapsed().as_millis() as u64;
+                    let budget = token_budget.unwrap_or(self.config.default_token_budget);
 
-                        let token_count = (rlm_result.content.len() / 4) as u32;
+                    let token_count = (rlm_result.content.len() / 4) as u32;
 
-                        let entry = ContextEntry {
-                            entry_id: format!("rlm-{}", uuid::Uuid::new_v4()),
-                            layer: MemoryLayer::Project,
-                            content: rlm_result.content.clone(),
-                            token_count,
-                            depth: SummaryDepth::Detailed,
-                            relevance_score: 0.95,
-                            context_vector: query_embedding.cloned(),
-                            staleness_status: StalenessStatus::Fresh,
-                        };
+                    let entry = ContextEntry {
+                        entry_id: format!("rlm-{}", uuid::Uuid::new_v4()),
+                        layer: MemoryLayer::Project,
+                        content: rlm_result.content.clone(),
+                        token_count,
+                        depth: SummaryDepth::Detailed,
+                        relevance_score: 0.95,
+                        context_vector: query_embedding.cloned(),
+                        staleness_status: StalenessStatus::Fresh,
+                    };
 
-                        let view = ContextView {
-                            content: rlm_result.content,
-                            metadata: ContextMetadata {
-                                view_type: "rlm_synthesized".to_string(),
-                                includes_trajectory_logs: false,
-                                includes_metrics: false,
-                                includes_traces: false,
-                            },
-                        };
+                    let view = ContextView {
+                        content: rlm_result.content,
+                        metadata: ContextMetadata {
+                            view_type: "rlm_synthesized".to_string(),
+                            includes_trajectory_logs: false,
+                            includes_metrics: false,
+                            includes_traces: false,
+                        },
+                    };
 
-                        self.metrics
-                            .record_assembly(latency_ms, false, false, false);
+                    self.metrics
+                        .record_assembly(latency_ms, false, false, false);
 
-                        return AssembledContext {
-                            view,
-                            entries: vec![entry],
-                            total_tokens: token_count,
-                            token_budget: budget,
-                            layers_included: vec![MemoryLayer::Project],
-                            query_embedding: query_embedding.cloned(),
-                            stale_entries: vec![],
-                            has_stale_content: false,
-                            timed_out: false,
-                            partial: false,
-                        };
-                    }
-                    Err(e) => {
-                        tracing::warn!("RLM assembly failed, falling back to standard: {}", e);
-                    }
+                    return AssembledContext {
+                        view,
+                        entries: vec![entry],
+                        total_tokens: token_count,
+                        token_budget: budget,
+                        layers_included: vec![MemoryLayer::Project],
+                        query_embedding: query_embedding.cloned(),
+                        stale_entries: vec![],
+                        has_stale_content: false,
+                        timed_out: false,
+                        partial: false,
+                    };
+                }
+                Err(e) => {
+                    tracing::warn!("RLM assembly failed, falling back to standard: {}", e);
                 }
             }
         }

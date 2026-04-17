@@ -1,14 +1,14 @@
-///! # Semantic Embedding Cache
-///!
-///! Cost optimization through intelligent caching of embeddings with both exact matching
-///! and semantic similarity matching to reduce API calls by 60-80%.
-///!
-///! ## Features
-///! - Exact match cache for identical content
-///! - Semantic similarity cache (configurable threshold)
-///! - Per-tenant cost tracking
-///! - Cache hit/miss metrics
-///! - TTL management
+//! # Semantic Embedding Cache
+//!
+//! Cost optimization through intelligent caching of embeddings with both exact matching
+//! and semantic similarity matching to reduce API calls by 60-80%.
+//!
+//! ## Features
+//! - Exact match cache for identical content
+//! - Semantic similarity cache (configurable threshold)
+//! - Per-tenant cost tracking
+//! - Cache hit/miss metrics
+//! - TTL management
 use async_trait::async_trait;
 use mk_core::types::TenantContext;
 use sha2::{Digest, Sha256};

@@ -210,25 +210,6 @@ async fn benchmark_qdrant() {
 }
 
 #[tokio::test]
-#[ignore = "requires running PostgreSQL with pgvector"]
-async fn benchmark_pgvector() {
-    let config = BackendConfig {
-        backend_type: VectorBackendType::Pgvector,
-        embedding_dimension: 1536,
-        pgvector: Some(memory::backends::factory::PgvectorConfig {
-            connection_string: std::env::var("PGVECTOR_URL")
-                .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/aeterna".into()),
-            schema: "public".into(),
-            table_name: "benchmark_vectors".into(),
-        }),
-        ..Default::default()
-    };
-
-    let backend = create_backend(config).await.unwrap();
-    run_full_benchmark(backend, 1536).await;
-}
-
-#[tokio::test]
 #[ignore = "requires Pinecone API key"]
 async fn benchmark_pinecone() {
     let api_key = std::env::var("PINECONE_API_KEY").expect("PINECONE_API_KEY required");

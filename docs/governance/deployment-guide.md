@@ -36,7 +36,7 @@ Thin client architecture where all governance operations are delegated to a remo
 
 ### System Requirements
 - **Rust**: 1.70+ with Edition 2024
-- **PostgreSQL**: 16+ with pgvector extension
+- **PostgreSQL**: 16+ (stock; no extensions required)
 - **Redis**: 7+ for caching and pub/sub
 - **Qdrant**: 1.12+ for vector storage
 - **Docker**: 20.10+ (for containerized deployment)
@@ -185,7 +185,7 @@ services:
       - ./config.toml:/app/config.toml
 
   postgres:
-    image: pgvector/pgvector:pg16
+    image: postgres:17-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -333,7 +333,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: pgvector/pgvector:pg16
+    image: postgres:17-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -442,7 +442,7 @@ services:
 
   # Optional: Local storage for non-governance data
   postgres:
-    image: pgvector/pgvector:pg16
+    image: postgres:17-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

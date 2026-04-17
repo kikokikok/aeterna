@@ -247,7 +247,7 @@ async fn run_create(args: TeamCreateArgs) -> anyhow::Result<()> {
             "description": args.description,
             "orgId": org_id,
         });
-        let result = client.team_create(&body).await.map_err(|e| {
+        let result = client.team_create(&body).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -257,11 +257,10 @@ async fn run_create(args: TeamCreateArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {
@@ -314,7 +313,7 @@ async fn run_list(args: TeamListArgs) -> anyhow::Result<()> {
         let result = client
             .team_list(args.org.as_deref(), args.all)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -324,11 +323,10 @@ async fn run_list(args: TeamListArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -374,7 +372,7 @@ async fn run_show(args: TeamShowArgs) -> anyhow::Result<()> {
     let team_id = resolve_current_team(args.team_id.clone())?;
 
     if let Some(client) = get_live_client().await {
-        let result = client.team_show(&team_id).await.map_err(|e| {
+        let result = client.team_show(&team_id).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -384,11 +382,10 @@ async fn run_show(args: TeamShowArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {
@@ -464,7 +461,7 @@ async fn run_members(args: TeamMembersArgs) -> anyhow::Result<()> {
             let result = client
                 .team_member_add(&team_id, &json!({"userId": user_to_add, "role": role}))
                 .await
-                .map_err(|e| {
+                .inspect_err(|e| {
                     if args.json {
                         println!(
                             "{}",
@@ -474,11 +471,10 @@ async fn run_members(args: TeamMembersArgs) -> anyhow::Result<()> {
                             .unwrap()
                         );
                     } else {
-                        ux_error::UxError::new(&e.to_string())
+                        ux_error::UxError::new(e.to_string())
                             .fix("Run: aeterna auth login")
                             .display();
                     }
-                    e
                 })?;
 
             if args.json {
@@ -525,7 +521,7 @@ async fn run_members(args: TeamMembersArgs) -> anyhow::Result<()> {
             let result = client
                 .team_member_remove(&team_id, user_to_remove)
                 .await
-                .map_err(|e| {
+                .inspect_err(|e| {
                     if args.json {
                         println!(
                             "{}",
@@ -535,11 +531,10 @@ async fn run_members(args: TeamMembersArgs) -> anyhow::Result<()> {
                             .unwrap()
                         );
                     } else {
-                        ux_error::UxError::new(&e.to_string())
+                        ux_error::UxError::new(e.to_string())
                             .fix("Run: aeterna auth login")
                             .display();
                     }
-                    e
                 })?;
 
             if args.json {
@@ -594,7 +589,7 @@ async fn run_members(args: TeamMembersArgs) -> anyhow::Result<()> {
             let result = client
                 .team_member_set_role(&team_id, user_id, &json!({"role": role}))
                 .await
-                .map_err(|e| {
+                .inspect_err(|e| {
                     if args.json {
                         println!(
                             "{}",
@@ -604,11 +599,10 @@ async fn run_members(args: TeamMembersArgs) -> anyhow::Result<()> {
                             .unwrap()
                         );
                     } else {
-                        ux_error::UxError::new(&e.to_string())
+                        ux_error::UxError::new(e.to_string())
                             .fix("Run: aeterna auth login")
                             .display();
                     }
-                    e
                 })?;
 
             if args.json {
@@ -651,7 +645,7 @@ async fn run_members(args: TeamMembersArgs) -> anyhow::Result<()> {
     }
 
     if let Some(client) = get_live_client().await {
-        let result = client.team_members_list(&team_id).await.map_err(|e| {
+        let result = client.team_members_list(&team_id).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -661,11 +655,10 @@ async fn run_members(args: TeamMembersArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         if args.json {

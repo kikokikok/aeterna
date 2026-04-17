@@ -79,6 +79,12 @@ pub struct ExportJobStore {
     jobs: RwLock<HashMap<String, ExportJob>>,
 }
 
+impl Default for ExportJobStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExportJobStore {
     pub fn new() -> Self {
         Self {
@@ -514,6 +520,12 @@ pub struct ImportConflict {
 /// In-memory store for import jobs (V1).
 pub struct ImportJobStore {
     jobs: RwLock<HashMap<String, ImportJob>>,
+}
+
+impl Default for ImportJobStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ImportJobStore {
@@ -1180,10 +1192,10 @@ async fn handle_download_export(
 
     let body = Body::from(bytes);
 
-    let filename = archive_path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| format!("{job_id}.tar.gz"));
+    let filename = archive_path.file_name().map_or_else(
+        || format!("{job_id}.tar.gz"),
+        |n| n.to_string_lossy().to_string(),
+    );
 
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/gzip".parse().unwrap());
@@ -2237,7 +2249,7 @@ async fn import_memories(
         Err(_) => return Ok((0, Vec::new())),
     };
 
-    let records: Vec<serde_json::Value> = ndjson.filter_map(|r| r.ok()).collect();
+    let records: Vec<serde_json::Value> = ndjson.filter_map(std::result::Result::ok).collect();
 
     if records.is_empty() {
         return Ok((0, Vec::new()));
@@ -2304,7 +2316,7 @@ async fn import_memories(
                 .unwrap_or("episodic");
             let importance_score: f64 = record
                 .get("importance_score")
-                .and_then(|v| v.as_f64())
+                .and_then(serde_json::Value::as_f64)
                 .unwrap_or(0.5);
             let properties = record
                 .get("properties")
@@ -2383,7 +2395,7 @@ async fn import_knowledge(
         Err(_) => return Ok((0, Vec::new())),
     };
 
-    let records: Vec<serde_json::Value> = ndjson.filter_map(|r| r.ok()).collect();
+    let records: Vec<serde_json::Value> = ndjson.filter_map(std::result::Result::ok).collect();
     if records.is_empty() {
         return Ok((0, Vec::new()));
     }
@@ -2532,9 +2544,36 @@ async fn import_governance(
             Ok(r) => r,
             Err(_) => return Ok(((0, 0, 0), all_conflicts)),
         };
-        let records: Vec<serde_json::Value> = ndjson.filter_map(|r| r.ok()).collect();
+        let records: Vec<serde_json::Value> = ndjson.filter_map(std::result::Result::ok).collect();
 
-        if !dry_run {
+        if dry_run {
+            let ids: Vec<String> = records
+                .iter()
+                .filter_map(|r| r.get("id").and_then(|v| v.as_str()).map(String::from))
+                .collect();
+            let existing: Vec<(String,)> = sqlx::query_as(
+                "SELECT id::text FROM organizational_units WHERE id = ANY($1) AND tenant_id = $2",
+            )
+            .bind(&ids)
+            .bind(tenant_id)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+
+            for (existing_id,) in &existing {
+                let resolution = if mode == "skip_existing" {
+                    "skipped"
+                } else {
+                    "overwritten"
+                };
+                all_conflicts.push(ImportConflict {
+                    entity_type: "org_unit".into(),
+                    entity_id: existing_id.clone(),
+                    reason: "Record already exists".into(),
+                    resolution: resolution.into(),
+                });
+            }
+        } else {
             for record in &records {
                 let id = record
                     .get("id")
@@ -2589,33 +2628,6 @@ async fn import_governance(
                     .execute(pool)
                     .await?;
             }
-        } else {
-            let ids: Vec<String> = records
-                .iter()
-                .filter_map(|r| r.get("id").and_then(|v| v.as_str()).map(String::from))
-                .collect();
-            let existing: Vec<(String,)> = sqlx::query_as(
-                "SELECT id::text FROM organizational_units WHERE id = ANY($1) AND tenant_id = $2",
-            )
-            .bind(&ids)
-            .bind(tenant_id)
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default();
-
-            for (existing_id,) in &existing {
-                let resolution = if mode == "skip_existing" {
-                    "skipped"
-                } else {
-                    "overwritten"
-                };
-                all_conflicts.push(ImportConflict {
-                    entity_type: "org_unit".into(),
-                    entity_id: existing_id.clone(),
-                    reason: "Record already exists".into(),
-                    resolution: resolution.into(),
-                });
-            }
         }
 
         records.len() as u64
@@ -2629,7 +2641,7 @@ async fn import_governance(
                 return Ok(((org_count, 0, 0), all_conflicts));
             }
         };
-        let records: Vec<serde_json::Value> = ndjson.filter_map(|r| r.ok()).collect();
+        let records: Vec<serde_json::Value> = ndjson.filter_map(std::result::Result::ok).collect();
 
         if !dry_run {
             for record in &records {
@@ -2699,7 +2711,7 @@ async fn import_governance(
                 return Ok(((org_count, policy_count, 0), all_conflicts));
             }
         };
-        let records: Vec<serde_json::Value> = ndjson.filter_map(|r| r.ok()).collect();
+        let records: Vec<serde_json::Value> = ndjson.filter_map(std::result::Result::ok).collect();
 
         if !dry_run {
             for record in &records {
@@ -2768,7 +2780,7 @@ async fn import_governance_events(
         Err(_) => return Ok((0, Vec::new())),
     };
 
-    let records: Vec<serde_json::Value> = ndjson.filter_map(|r| r.ok()).collect();
+    let records: Vec<serde_json::Value> = ndjson.filter_map(std::result::Result::ok).collect();
     if records.is_empty() {
         return Ok((0, Vec::new()));
     }

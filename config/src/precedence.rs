@@ -515,7 +515,7 @@ mod tests {
         let mut changes = Vec::new();
         merge_sync(&mut base, &override_config, "test", &mut changes);
 
-        assert_eq!(base.enabled, false);
+        assert!(!base.enabled);
         assert_eq!(base.sync_interval_seconds, 120);
         assert_eq!(changes.len(), 2);
     }
@@ -638,8 +638,8 @@ mod tests {
         let mut changes = Vec::new();
         merge_observability(&mut base, &override_config, "test", &mut changes);
 
-        assert_eq!(base.metrics_enabled, false);
-        assert_eq!(base.tracing_enabled, false);
+        assert!(!base.metrics_enabled);
+        assert!(!base.tracing_enabled);
         assert_eq!(base.logging_level, "debug");
         assert_eq!(base.metrics_port, 9999);
         assert_eq!(changes.len(), 4);
@@ -927,20 +927,20 @@ mod tests {
         assert_eq!(merged.providers.redis.pool_size, 20);
         assert_eq!(merged.providers.redis.timeout_seconds, 60);
 
-        assert_eq!(merged.sync.enabled, false);
+        assert!(!merged.sync.enabled);
         assert_eq!(merged.sync.sync_interval_seconds, 120);
         assert_eq!(merged.sync.batch_size, 200);
-        assert_eq!(merged.sync.checkpoint_enabled, false);
+        assert!(!merged.sync.checkpoint_enabled);
         assert_eq!(merged.sync.conflict_resolution, "prefer_memory");
 
-        assert_eq!(merged.tools.enabled, false);
+        assert!(!merged.tools.enabled);
         assert_eq!(merged.tools.host, "new_tool_host");
         assert_eq!(merged.tools.port, 8081);
         assert_eq!(merged.tools.api_key, Some("new_api_key".to_string()));
         assert_eq!(merged.tools.rate_limit_requests_per_minute, 120);
 
-        assert_eq!(merged.observability.metrics_enabled, false);
-        assert_eq!(merged.observability.tracing_enabled, false);
+        assert!(!merged.observability.metrics_enabled);
+        assert!(!merged.observability.tracing_enabled);
         assert_eq!(merged.observability.logging_level, "debug");
         assert_eq!(merged.observability.metrics_port, 9091);
     }

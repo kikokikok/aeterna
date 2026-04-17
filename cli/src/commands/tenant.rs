@@ -541,8 +541,8 @@ fn tenant_config_ownership(ownership: &str) -> anyhow::Result<&'static str> {
 
 fn read_json_file(path: &str) -> anyhow::Result<Value> {
     let raw = fs::read_to_string(path)?;
-    let payload: Value = serde_json::from_str(&raw)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON in '{}': {}", path, e))?;
+    let payload: Value =
+        serde_json::from_str(&raw).map_err(|e| anyhow::anyhow!("Invalid JSON in '{path}': {e}"))?;
     Ok(payload)
 }
 
@@ -576,7 +576,7 @@ async fn run_create(args: TenantCreateArgs) -> anyhow::Result<()> {
 
     if let Some(client) = get_live_client().await {
         let body = json!({ "slug": args.slug, "name": args.name });
-        let result = client.tenant_create(&body).await.map_err(|e| {
+        let result = client.tenant_create(&body).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -586,11 +586,10 @@ async fn run_create(args: TenantCreateArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
         if args.json {
             println!("{}", serde_json::to_string_pretty(&result)?);
@@ -643,7 +642,7 @@ async fn run_list(args: TenantListArgs) -> anyhow::Result<()> {
         let result = client
             .tenant_list(args.include_inactive)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -653,11 +652,10 @@ async fn run_list(args: TenantListArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
         if args.json {
             println!("{}", serde_json::to_string_pretty(&result)?);
@@ -695,7 +693,7 @@ async fn run_list(args: TenantListArgs) -> anyhow::Result<()> {
 
 async fn run_show(args: TenantShowArgs) -> anyhow::Result<()> {
     if let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await {
-        let result = client.tenant_show(&args.tenant).await.map_err(|e| {
+        let result = client.tenant_show(&args.tenant).await.inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -705,11 +703,10 @@ async fn run_show(args: TenantShowArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
         if args.json {
             println!("{}", serde_json::to_string_pretty(&result)?);
@@ -799,7 +796,7 @@ async fn run_update(args: TenantUpdateArgs) -> anyhow::Result<()> {
         let result = client
             .tenant_update(&args.tenant, &body)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -809,11 +806,10 @@ async fn run_update(args: TenantUpdateArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
         if args.json {
             println!("{}", serde_json::to_string_pretty(&result)?);
@@ -869,22 +865,24 @@ async fn run_deactivate(args: TenantDeactivateArgs) -> anyhow::Result<()> {
     }
 
     if let Some(client) = get_live_client().await {
-        let result = client.tenant_deactivate(&args.tenant).await.map_err(|e| {
-            if args.json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(
-                        &json!({"success": false, "error": e.to_string()})
-                    )
-                    .unwrap()
-                );
-            } else {
-                ux_error::UxError::new(&e.to_string())
-                    .fix("Run: aeterna auth login")
-                    .display();
-            }
-            e
-        })?;
+        let result = client
+            .tenant_deactivate(&args.tenant)
+            .await
+            .inspect_err(|e| {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &json!({"success": false, "error": e.to_string()})
+                        )
+                        .unwrap()
+                    );
+                } else {
+                    ux_error::UxError::new(e.to_string())
+                        .fix("Run: aeterna auth login")
+                        .display();
+                }
+            })?;
         if args.json {
             println!("{}", serde_json::to_string_pretty(&result)?);
         } else {
@@ -955,7 +953,7 @@ async fn run_domain_map(args: TenantDomainMapArgs) -> anyhow::Result<()> {
         let result = client
             .tenant_add_domain_mapping(&args.tenant, &body)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -965,11 +963,10 @@ async fn run_domain_map(args: TenantDomainMapArgs) -> anyhow::Result<()> {
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
         if args.json {
             println!("{}", serde_json::to_string_pretty(&result)?);
@@ -1008,7 +1005,7 @@ async fn run_repo_binding_show(args: TenantRepoBindingShowArgs) -> anyhow::Resul
         let result = client
             .tenant_repo_binding_show(&args.tenant)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1018,11 +1015,10 @@ async fn run_repo_binding_show(args: TenantRepoBindingShowArgs) -> anyhow::Resul
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
         if args.json {
             println!("{}", serde_json::to_string_pretty(&result)?);
@@ -1141,7 +1137,7 @@ async fn run_repo_binding_set(args: TenantRepoBindingSetArgs) -> anyhow::Result<
         let result = client
             .tenant_repo_binding_set(&args.tenant, &body)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1151,11 +1147,10 @@ async fn run_repo_binding_set(args: TenantRepoBindingSetArgs) -> anyhow::Result<
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
         if args.json {
             println!("{}", serde_json::to_string_pretty(&result)?);
@@ -1216,7 +1211,7 @@ async fn run_repo_binding_validate(args: TenantRepoBindingValidateArgs) -> anyho
         let result = client
             .tenant_repo_binding_validate(&args.tenant, &body)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1226,11 +1221,10 @@ async fn run_repo_binding_validate(args: TenantRepoBindingValidateArgs) -> anyho
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
         if args.json {
             println!("{}", serde_json::to_string_pretty(&result)?);
@@ -1281,7 +1275,7 @@ async fn run_config_inspect(args: TenantConfigInspectArgs) -> anyhow::Result<()>
         } else {
             client.my_tenant_config_inspect().await
         }
-        .map_err(|e| {
+        .inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -1291,11 +1285,10 @@ async fn run_config_inspect(args: TenantConfigInspectArgs) -> anyhow::Result<()>
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         let redacted = redacted_json(result);
@@ -1313,13 +1306,11 @@ async fn run_config_inspect(args: TenantConfigInspectArgs) -> anyhow::Result<()>
                 let field_count = config
                     .get("fields")
                     .and_then(|v| v.as_object())
-                    .map(|m| m.len())
-                    .unwrap_or(0);
+                    .map_or(0, serde_json::Map::len);
                 let secret_ref_count = config
                     .get("secretReferences")
                     .and_then(|v| v.as_object())
-                    .map(|m| m.len())
-                    .unwrap_or(0);
+                    .map_or(0, serde_json::Map::len);
                 println!("  Fields:            {field_count}");
                 println!("  Secret References: {secret_ref_count}");
             }
@@ -1378,7 +1369,7 @@ async fn run_config_upsert(args: TenantConfigUpsertArgs) -> anyhow::Result<()> {
         } else {
             client.my_tenant_config_upsert(&payload).await
         }
-        .map_err(|e| {
+        .inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -1388,11 +1379,10 @@ async fn run_config_upsert(args: TenantConfigUpsertArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         let redacted = redacted_json(result);
@@ -1437,7 +1427,7 @@ async fn run_config_validate(args: TenantConfigValidateArgs) -> anyhow::Result<(
         } else {
             client.my_tenant_config_validate(&payload).await
         }
-        .map_err(|e| {
+        .inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -1447,11 +1437,10 @@ async fn run_config_validate(args: TenantConfigValidateArgs) -> anyhow::Result<(
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         let redacted = redacted_json(result);
@@ -1513,7 +1502,7 @@ async fn run_secret_set(args: TenantSecretSetArgs) -> anyhow::Result<()> {
         } else {
             client.my_tenant_secret_set(&args.logical_name, &body).await
         }
-        .map_err(|e| {
+        .inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -1523,11 +1512,10 @@ async fn run_secret_set(args: TenantSecretSetArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         let redacted = redacted_json(result);
@@ -1542,7 +1530,7 @@ async fn run_secret_set(args: TenantSecretSetArgs) -> anyhow::Result<()> {
                 println!("  Scope:        current tenant context");
             }
             println!("  Logical Name: {}", args.logical_name);
-            println!("  Ownership:    {}", ownership);
+            println!("  Ownership:    {ownership}");
             println!();
         }
         return Ok(());
@@ -1574,7 +1562,7 @@ async fn run_secret_delete(args: TenantSecretDeleteArgs) -> anyhow::Result<()> {
         } else {
             client.my_tenant_secret_delete(&args.logical_name).await
         }
-        .map_err(|e| {
+        .inspect_err(|e| {
             if args.json {
                 println!(
                     "{}",
@@ -1584,11 +1572,10 @@ async fn run_secret_delete(args: TenantSecretDeleteArgs) -> anyhow::Result<()> {
                     .unwrap()
                 );
             } else {
-                ux_error::UxError::new(&e.to_string())
+                ux_error::UxError::new(e.to_string())
                     .fix("Run: aeterna auth login")
                     .display();
             }
-            e
         })?;
 
         let redacted = redacted_json(result);
@@ -1694,7 +1681,7 @@ async fn run_connection_list(args: TenantConnectionListArgs) -> anyhow::Result<(
         let result = client
             .tenant_git_provider_connections_list(&args.tenant)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1704,11 +1691,10 @@ async fn run_connection_list(args: TenantConnectionListArgs) -> anyhow::Result<(
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -1757,7 +1743,7 @@ async fn run_connection_grant(args: TenantConnectionGrantArgs) -> anyhow::Result
         let result = client
             .git_provider_connection_grant_tenant(&args.connection, &args.tenant)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1767,11 +1753,10 @@ async fn run_connection_grant(args: TenantConnectionGrantArgs) -> anyhow::Result
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {
@@ -1811,7 +1796,7 @@ async fn run_connection_revoke(args: TenantConnectionRevokeArgs) -> anyhow::Resu
         let result = client
             .git_provider_connection_revoke_tenant(&args.connection, &args.tenant)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 if args.json {
                     println!(
                         "{}",
@@ -1821,11 +1806,10 @@ async fn run_connection_revoke(args: TenantConnectionRevokeArgs) -> anyhow::Resu
                         .unwrap()
                     );
                 } else {
-                    ux_error::UxError::new(&e.to_string())
+                    ux_error::UxError::new(e.to_string())
                         .fix("Run: aeterna auth login")
                         .display();
                 }
-                e
             })?;
 
         if args.json {

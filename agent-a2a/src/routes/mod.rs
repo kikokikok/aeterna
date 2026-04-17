@@ -86,14 +86,14 @@ a2a_requests_total{{skill=\"memory\"}} 0\n\n\
 # HELP a2a_active_connections Active connections\n\
 # TYPE a2a_active_connections gauge\n\
 a2a_active_connections 0\n",
-        if ready { 1 } else { 0 },
-        if auth_ready { 1 } else { 0 },
-        if backend_ready { 1 } else { 0 },
-        if tasks_ready { 1 } else { 0 },
+        i32::from(ready),
+        i32::from(auth_ready),
+        i32::from(backend_ready),
+        i32::from(tasks_ready),
     );
 
     Response::builder()
         .header("Content-Type", "text/plain")
-        .body(metrics_text.to_string())
+        .body(metrics_text.clone())
         .unwrap()
 }

@@ -1359,7 +1359,7 @@ mod integration_tests {
                 assert_eq!(entity_type, "Aeterna::User");
                 assert_eq!(id, "email=unknown@example.com");
             }
-            other => panic!("Expected EntityNotFound, got: {:?}", other),
+            other => panic!("Expected EntityNotFound, got: {other:?}"),
         }
     }
 
@@ -1580,7 +1580,7 @@ mod integration_tests {
             Err(CedarError::Unavailable(msg)) => {
                 assert!(msg.contains("Circuit breaker is open"));
             }
-            other => panic!("Expected Unavailable error, got: {:?}", other),
+            other => panic!("Expected Unavailable error, got: {other:?}"),
         }
     }
 
@@ -1603,7 +1603,7 @@ mod integration_tests {
                 assert_eq!(status, 400);
                 assert_eq!(message, "Bad Request");
             }
-            other => panic!("Expected AgentError, got: {:?}", other),
+            other => panic!("Expected AgentError, got: {other:?}"),
         }
     }
 

@@ -33,10 +33,6 @@ postgresql:
   parameters: {}
   ## Custom pg_hba entries
   pg_hba: []
-  ## pgvector extension support
-  pgvector:
-    ## @param postgresql.pgvector.enabled Install pgvector extension on bootstrap
-    enabled: true
   ## Backup configuration (CloudNativePG native)
   backup:
     ## @param postgresql.backup.enabled Enable CNPG native backup

@@ -547,7 +547,11 @@ mod tests {
             .create(make_request("done-old", RemediationStatus::Executed, old))
             .await;
         store
-            .create(make_request("done-new", RemediationStatus::Executed, recent))
+            .create(make_request(
+                "done-new",
+                RemediationStatus::Executed,
+                recent,
+            ))
             .await;
         store
             .create(make_request("pending", RemediationStatus::Pending, old))

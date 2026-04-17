@@ -233,30 +233,30 @@ impl TenantProviderRegistry {
         }
 
         // Try to build from tenant config
-        if let Ok(Some(config)) = config_provider.get_config(tenant_id).await {
-            if let Some(provider_str) = get_field_str(&config, config_keys::LLM_PROVIDER) {
-                match self
-                    .build_llm_from_tenant_config(tenant_id, provider_str, &config, config_provider)
-                    .await
-                {
-                    Ok(Some(service)) => {
-                        self.tenant_llm_cache
-                            .insert(key, CachedEntry::new(service.clone()));
-                        tracing::info!(
-                            tenant = %tenant_id.as_str(),
-                            provider = provider_str,
-                            "Tenant-specific LLM service initialized"
-                        );
-                        return Some(service);
-                    }
-                    Ok(None) => {}
-                    Err(e) => {
-                        tracing::warn!(
-                            tenant = %tenant_id.as_str(),
-                            error = %e,
-                            "Failed to build tenant LLM service, falling back to platform default"
-                        );
-                    }
+        if let Ok(Some(config)) = config_provider.get_config(tenant_id).await
+            && let Some(provider_str) = get_field_str(&config, config_keys::LLM_PROVIDER)
+        {
+            match self
+                .build_llm_from_tenant_config(tenant_id, provider_str, &config, config_provider)
+                .await
+            {
+                Ok(Some(service)) => {
+                    self.tenant_llm_cache
+                        .insert(key, CachedEntry::new(service.clone()));
+                    tracing::info!(
+                        tenant = %tenant_id.as_str(),
+                        provider = provider_str,
+                        "Tenant-specific LLM service initialized"
+                    );
+                    return Some(service);
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        tenant = %tenant_id.as_str(),
+                        error = %e,
+                        "Failed to build tenant LLM service, falling back to platform default"
+                    );
                 }
             }
         }
@@ -290,35 +290,35 @@ impl TenantProviderRegistry {
         }
 
         // Try to build from tenant config
-        if let Ok(Some(config)) = config_provider.get_config(tenant_id).await {
-            if let Some(provider_str) = get_field_str(&config, config_keys::EMBEDDING_PROVIDER) {
-                match self
-                    .build_embedding_from_tenant_config(
-                        tenant_id,
-                        provider_str,
-                        &config,
-                        config_provider,
-                    )
-                    .await
-                {
-                    Ok(Some(service)) => {
-                        self.tenant_embedding_cache
-                            .insert(key, CachedEntry::new(service.clone()));
-                        tracing::info!(
-                            tenant = %tenant_id.as_str(),
-                            provider = provider_str,
-                            "Tenant-specific embedding service initialized"
-                        );
-                        return Some(service);
-                    }
-                    Ok(None) => {}
-                    Err(e) => {
-                        tracing::warn!(
-                            tenant = %tenant_id.as_str(),
-                            error = %e,
-                            "Failed to build tenant embedding service, falling back to platform default"
-                        );
-                    }
+        if let Ok(Some(config)) = config_provider.get_config(tenant_id).await
+            && let Some(provider_str) = get_field_str(&config, config_keys::EMBEDDING_PROVIDER)
+        {
+            match self
+                .build_embedding_from_tenant_config(
+                    tenant_id,
+                    provider_str,
+                    &config,
+                    config_provider,
+                )
+                .await
+            {
+                Ok(Some(service)) => {
+                    self.tenant_embedding_cache
+                        .insert(key, CachedEntry::new(service.clone()));
+                    tracing::info!(
+                        tenant = %tenant_id.as_str(),
+                        provider = provider_str,
+                        "Tenant-specific embedding service initialized"
+                    );
+                    return Some(service);
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        tenant = %tenant_id.as_str(),
+                        error = %e,
+                        "Failed to build tenant embedding service, falling back to platform default"
+                    );
                 }
             }
         }

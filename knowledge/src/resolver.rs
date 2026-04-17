@@ -91,10 +91,11 @@ pub fn resolve(
         // also include relations where this item is the target
         for rel_list in all_relations.values() {
             for rel in rel_list {
-                if rel.target_id == entry.path && rel.source_id != entry.path {
-                    if !rels.iter().any(|r| r.id == rel.id) {
-                        rels.push(rel.clone());
-                    }
+                if rel.target_id == entry.path
+                    && rel.source_id != entry.path
+                    && !rels.iter().any(|r| r.id == rel.id)
+                {
+                    rels.push(rel.clone());
                 }
             }
         }

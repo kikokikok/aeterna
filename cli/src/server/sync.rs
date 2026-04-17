@@ -327,7 +327,7 @@ async fn pull_handler(
                 embedding: None,
                 tags,
                 metadata: row.3.clone(),
-                importance: row.4 as f64,
+                importance: f64::from(row.4),
                 created_at: format_timestamp(row.5),
                 updated_at: format_timestamp(row.6),
             }
@@ -335,10 +335,10 @@ async fn pull_handler(
         .collect();
 
     let has_more = all_matching.len() > limit as usize;
-    let cursor = entries
-        .last()
-        .map(|entry| parse_timestamp(&entry.updated_at).unwrap_or(0).to_string())
-        .unwrap_or_else(|| since_cursor.to_string());
+    let cursor = entries.last().map_or_else(
+        || since_cursor.to_string(),
+        |entry| parse_timestamp(&entry.updated_at).unwrap_or(0).to_string(),
+    );
 
     (
         StatusCode::OK,
@@ -411,8 +411,7 @@ fn parse_timestamp(s: &str) -> Option<i64> {
 
 fn format_timestamp(millis: i64) -> String {
     chrono::DateTime::from_timestamp_millis(millis)
-        .map(|dt| dt.to_rfc3339())
-        .unwrap_or_else(|| millis.to_string())
+        .map_or_else(|| millis.to_string(), |dt| dt.to_rfc3339())
 }
 
 fn merge_tags_into_properties(

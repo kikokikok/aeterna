@@ -1,20 +1,14 @@
 name: CLI Consistency
 
 on:
-  push:
-    branches: [main, develop]
-    paths:
-      - "cli/**"
-      - "docs/guides/cli-quick-reference.md"
-      - "install.sh"
-      - ".github/workflows/cli-consistency.yml"
   pull_request:
-    branches: [main, develop]
+    branches: [master]
     paths:
       - "cli/**"
       - "docs/guides/cli-quick-reference.md"
       - "install.sh"
       - ".github/workflows/cli-consistency.yml"
+      - ".github/workflows/release.yml"
 
 jobs:
   cli-consistency:
@@ -28,16 +22,10 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
+      - name: Cache cargo (Swatinem)
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cli-consistency-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cli-consistency-cargo-
+          key: cli-consistency
 
       - name: Build CLI (debug)
         run: cargo build --package aeterna
@@ -58,25 +46,27 @@ jobs:
           grep -q 'macos' install.sh
           echo "Platform coverage in install.sh: OK"
 
-      - name: Check cli-release.yml covers all four target platforms
+      - name: Check release.yml covers all four CLI target platforms
         run: |
-          grep -q 'x86_64-unknown-linux-musl' .github/workflows/cli-release.yml
-          grep -q 'aarch64-unknown-linux-musl' .github/workflows/cli-release.yml
-          grep -q 'x86_64-apple-darwin'        .github/workflows/cli-release.yml
-          grep -q 'aarch64-apple-darwin'        .github/workflows/cli-release.yml
-          echo "Platform coverage in cli-release.yml: OK"
+          grep -q 'x86_64-unknown-linux-gnu'  .github/workflows/release.yml
+          grep -q 'aarch64-unknown-linux-gnu' .github/workflows/release.yml
+          grep -q 'x86_64-apple-darwin'       .github/workflows/release.yml
+          grep -q 'aarch64-apple-darwin'      .github/workflows/release.yml
+          echo "Platform coverage in release.yml: OK"
 
-      - name: Verify docs reference binary install path
+      # docs/guides/cli-quick-reference.md is the canonical CLI contract.
+      # README.md intentionally only links to it — don't force duplicate
+      # coverage there.
+      - name: Verify CLI quick-reference covers install + auth
         run: |
           grep -q 'install.sh' docs/guides/cli-quick-reference.md
-          grep -q 'install.sh' README.md
-          echo "Docs reference binary install path: OK"
-
-      - name: Verify docs reference auth login
-        run: |
           grep -q 'auth login' docs/guides/cli-quick-reference.md
-          grep -q 'auth login' README.md
-          echo "Docs reference auth login: OK"
+          echo "CLI quick-reference coverage: OK"
+
+      - name: Verify README links to the CLI quick-reference
+        run: |
+          grep -q 'cli-quick-reference' README.md
+          echo "README cross-link: OK"
 
       - name: Verify CLI binary supports auth subcommand
         run: |

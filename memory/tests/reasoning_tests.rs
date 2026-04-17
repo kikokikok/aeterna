@@ -71,7 +71,7 @@ impl ReflectiveReasoner for ConfigurableMockReasoner {
         };
 
         Ok(ReasoningTrace {
-            strategy: self.strategy.clone(),
+            strategy: self.strategy,
             thought_process,
             refined_query: self
                 .refined_query

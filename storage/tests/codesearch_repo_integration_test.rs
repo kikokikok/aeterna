@@ -160,7 +160,7 @@ fn make_policy_context(principal: &str, roles: Vec<&str>) -> PolicyContext {
 
 #[test]
 fn test_repository_status_variants() {
-    let states = vec![
+    let states = [
         RepositoryStatus::Requested,
         RepositoryStatus::Pending,
         RepositoryStatus::Approved,
@@ -196,7 +196,7 @@ fn test_sync_strategy_variants() {
 
 #[test]
 fn test_repo_request_status_variants() {
-    let variants = vec![
+    let variants = [
         RepoRequestStatus::Requested,
         RepoRequestStatus::Pending,
         RepoRequestStatus::Approved,

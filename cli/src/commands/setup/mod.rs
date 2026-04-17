@@ -257,7 +257,7 @@ fn run_show(output_dir: &PathBuf) -> Result<()> {
     println!();
 
     let masked = mask_sensitive_values(&content);
-    println!("{}", masked);
+    println!("{masked}");
 
     Ok(())
 }
@@ -521,7 +521,6 @@ mod tests {
     fn test_setup_all_vector_backends() {
         for backend in [
             "qdrant",
-            "pgvector",
             "pinecone",
             "weaviate",
             "mongodb",

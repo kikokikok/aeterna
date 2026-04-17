@@ -67,7 +67,6 @@
 
 - [x] 4c.1 Fix `list_snapshots` (graph_duckdb.rs:1851) — add `continuation_token` loop; cap at 10 pages
 - [x] 4c.2 Verify Qdrant provider pushes `limit` into scroll/search request
-- [x] 4c.3 Verify pgvector provider includes `LIMIT` in SQL
 - [x] 4c.4 Replace hard-coded `limit=1000` in `list_all_from_layer` (memory/manager.rs:1059) with caller-provided limit
 - [x] 4c.5 Write integration tests for S3 continuation token handling
 

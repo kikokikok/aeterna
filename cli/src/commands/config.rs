@@ -112,7 +112,7 @@ fn run_show(args: ShowArgs) -> anyhow::Result<()> {
 
     let project_cfg = project_path
         .as_deref()
-        .map(|p| profile::load_config_file(p))
+        .map(profile::load_config_file)
         .transpose()?;
     let user_cfg = user_path
         .as_ref()
@@ -343,7 +343,7 @@ fn run_validate(args: ValidateArgs) -> anyhow::Result<()> {
                                 ));
                             }
                             // Filter by --profile if provided
-                            if args.profile.as_deref().map_or(true, |n| n == name) {
+                            if args.profile.as_deref().is_none_or(|n| n == name) {
                                 all_profiles.push((name.clone(), p.clone()));
                             }
                         }
@@ -422,9 +422,7 @@ fn run_default_profile(args: DefaultProfileArgs) -> anyhow::Result<()> {
         args.profile_name,
         saved_path.display()
     ));
-    output::hint(&format!(
-        "Run 'aeterna config show' to verify the active configuration."
-    ));
+    output::hint("Run 'aeterna config show' to verify the active configuration.");
 
     Ok(())
 }
