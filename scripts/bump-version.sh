@@ -70,13 +70,31 @@ bump_chart "deploy/helm/aeterna-opal/Chart.yaml"
 # Touching it here would hardcode the tag and defeat that design.
 
 # 3. npm packages
+# We use a targeted regex instead of `jq` to avoid reformatting unrelated
+# JSON (jq normalizes arrays/objects, producing cosmetic diff noise).
+# Matches only the top-level `"version": "..."` field in package.json.
 bump_npm() {
     local pkgdir="$1"
     [[ -f "${pkgdir}/package.json" ]] || { echo "  (skip) ${pkgdir}/package.json not found"; return; }
-    local tmp
-    tmp=$(mktemp)
-    jq --arg v "$NEW" '.version = $v' "${pkgdir}/package.json" > "$tmp"
-    mv "$tmp" "${pkgdir}/package.json"
+    python3 - "$NEW" "${pkgdir}/package.json" <<'PY'
+import re, sys, pathlib
+new, path = sys.argv[1], pathlib.Path(sys.argv[2])
+txt = path.read_text()
+# Match the first top-level version field only (2-space indent — the
+# convention in every package.json we touch). Regex anchors on the
+# line-start whitespace so nested `"version":` fields (e.g. inside
+# dependencies) are never matched.
+txt, n = re.subn(
+    r'(^\s{2}"version"\s*:\s*")[^"]+(")',
+    lambda m: f'{m.group(1)}{new}{m.group(2)}',
+    txt,
+    count=1,
+    flags=re.MULTILINE,
+)
+if n != 1:
+    sys.exit(f"ERROR: no top-level version field found in {path}")
+path.write_text(txt)
+PY
     echo "  ${pkgdir}/package.json   ${NEW}"
 }
 bump_npm "packages/opencode-plugin"
