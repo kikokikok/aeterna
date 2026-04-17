@@ -15,3 +15,4 @@ mk_core = { workspace = true }
 async-trait = { workspace = true }
 dashmap = { workspace = true }
 storage = { workspace = true }
+sqlx = { workspace = true }

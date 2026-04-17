@@ -1,5 +1,6 @@
 pub mod approval_workflow;
 pub mod budget_storage;
+pub mod migrations;
 pub mod cascade;
 pub mod code_graph;
 pub mod dead_letter;

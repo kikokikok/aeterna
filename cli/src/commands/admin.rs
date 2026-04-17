@@ -11,6 +11,7 @@ use std::time::Duration;
 use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{FromRow, PgPool};
+use storage::migrations::{EmbeddedMigration, MIGRATIONS};
 
 use crate::output;
 use crate::ux_error;
@@ -456,7 +457,12 @@ async fn run_validate(args: AdminValidateArgs) -> anyhow::Result<()> {
 }
 
 async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
-    let mut migrations = embedded_migrations();
+    // `MIGRATIONS` is defined once in `storage::migrations` and is shared
+    // between this CLI subcommand (production runtime) and test fixtures
+    // (`testing::fixtures::postgres`). `.to_vec()` gives us an owned copy
+    // so we can keep the existing sort-then-filter logic below without
+    // mutating the const slice. Elements are `Copy`, so the copy is cheap.
+    let mut migrations: Vec<EmbeddedMigration> = MIGRATIONS.to_vec();
     migrations.sort_by_key(|m| m.version);
 
     match args.direction.as_str() {
@@ -577,13 +583,6 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Copy)]
-struct EmbeddedMigration {
-    version: i32,
-    name: &'static str,
-    sql: &'static str,
-}
-
 #[derive(Debug, FromRow)]
 struct AppliedMigration {
     version: i32,
@@ -605,106 +604,6 @@ struct MigrationReport {
     current_version: Option<i32>,
     pending_count: usize,
     migrations: Vec<MigrationReportEntry>,
-}
-
-fn embedded_migrations() -> Vec<EmbeddedMigration> {
-    vec![
-        EmbeddedMigration {
-            version: 3,
-            name: "003_create_memory_tables",
-            sql: include_str!("../../../storage/migrations/003_create_memory_tables.sql"),
-        },
-        EmbeddedMigration {
-            version: 4,
-            name: "004_enable_rls",
-            sql: include_str!("../../../storage/migrations/004_enable_rls.sql"),
-        },
-        EmbeddedMigration {
-            version: 5,
-            name: "005_drift_tuning",
-            sql: include_str!("../../../storage/migrations/005_drift_tuning.sql"),
-        },
-        EmbeddedMigration {
-            version: 6,
-            name: "006_event_streaming",
-            sql: include_str!("../../../storage/migrations/006_event_streaming.sql"),
-        },
-        EmbeddedMigration {
-            version: 7,
-            name: "007_cca_summaries",
-            sql: include_str!("../../../storage/migrations/007_cca_summaries.sql"),
-        },
-        EmbeddedMigration {
-            version: 8,
-            name: "008_hindsight_tables",
-            sql: include_str!("../../../storage/migrations/008_hindsight_tables.sql"),
-        },
-        EmbeddedMigration {
-            version: 9,
-            name: "009_organizational_referential",
-            sql: include_str!("../../../storage/migrations/009_organizational_referential.sql"),
-        },
-        EmbeddedMigration {
-            version: 10,
-            name: "010_governance_workflow",
-            sql: include_str!("../../../storage/migrations/010_governance_workflow.sql"),
-        },
-        EmbeddedMigration {
-            version: 11,
-            name: "011_meta_governance",
-            sql: include_str!("../../../storage/migrations/011_meta_governance.sql"),
-        },
-        EmbeddedMigration {
-            version: 12,
-            name: "012_decomposition_weights",
-            sql: include_str!("../../../storage/migrations/012_decomposition_weights.sql"),
-        },
-        EmbeddedMigration {
-            version: 13,
-            name: "013_referential_integrity",
-            sql: include_str!("../../../storage/migrations/013_referential_integrity.sql"),
-        },
-        EmbeddedMigration {
-            version: 14,
-            name: "014_grepai_repo_management",
-            sql: include_str!("../../../storage/migrations/014_grepai_repo_management.sql"),
-        },
-        EmbeddedMigration {
-            version: 15,
-            name: "015_add_device_id_to_memory",
-            sql: include_str!("../../../storage/migrations/015_add_device_id_to_memory.sql"),
-        },
-        EmbeddedMigration {
-            version: 16,
-            name: "016_governance_rls",
-            sql: include_str!("../../../storage/migrations/016_governance_rls.sql"),
-        },
-        EmbeddedMigration {
-            version: 17,
-            name: "017_tenants_tables",
-            sql: include_str!("../../../storage/migrations/017_tenants_tables.sql"),
-        },
-        EmbeddedMigration {
-            version: 18,
-            name: "018_add_last_accessed_at",
-            sql: include_str!("../../../storage/migrations/018_add_last_accessed_at.sql"),
-        },
-        EmbeddedMigration {
-            version: 19,
-            name: "019_day2_operations_tables",
-            sql: include_str!("../../../storage/migrations/019_day2_operations_tables.sql"),
-        },
-        EmbeddedMigration {
-            version: 20,
-            name: "020_fix_codesearch_views",
-            sql: include_str!("../../../storage/migrations/020_fix_codesearch_views.sql"),
-        },
-        EmbeddedMigration {
-            version: 21,
-            name: "021_add_user_idp_columns",
-            sql: include_str!("../../../storage/migrations/021_add_user_idp_columns.sql"),
-        },
-    ]
 }
 
 fn postgres_connection_url(config: &config::Config) -> String {
