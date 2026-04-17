@@ -1,6 +1,6 @@
 [package]
 name = "idp-sync"
-version = "0.7.0"
+version.workspace = true
 edition = "2024"
 license = "Apache-2.0"
 description = "Identity Provider synchronization service for Aeterna"

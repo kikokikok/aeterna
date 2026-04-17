@@ -1,6 +1,6 @@
 [package]
 name = "utils"
-version = "0.7.0"
+version.workspace = true
 edition = "2024"
 description = "Utility functions for the Memory-Knowledge system"
 

@@ -50,6 +50,8 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       tag:     ${{ steps.v.outputs.tag }}
     steps:
+      - uses: actions/checkout@v4
+
       - id: v
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -60,6 +62,31 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}"    >> "$GITHUB_OUTPUT"
           echo "Releasing version: ${VERSION}"
+
+      # Single-source-of-truth guard: the repo's [workspace.package].version
+      # MUST equal the version being released. Every in-workspace crate
+      # inherits from there (version.workspace = true), so if this matches
+      # we know the compiled binary, helm charts, and npm packages all
+      # report the same version the tag claims. Drift detection lives in
+      # .github/workflows/version-consistency.yml which runs on every PR;
+      # this is the tag-time enforcement.
+      - name: Verify repo state matches tag
+        env:
+          EXPECTED: ${{ steps.v.outputs.version }}
+        run: |
+          WS=$(python3 -c "
+          import re, pathlib
+          txt = pathlib.Path('Cargo.toml').read_text()
+          m = re.search(r'\[workspace\.package\][^\[]*?version\s*=\s*\"([^\"]+)\"', txt, re.DOTALL)
+          print(m.group(1) if m else '')
+          ")
+          if [[ "$WS" != "$EXPECTED" ]]; then
+              echo "::error::Release requested for $EXPECTED but repo [workspace.package].version is $WS."
+              echo "::error::Run: gh workflow run cut-release -f version=$EXPECTED"
+              echo "::error::Then merge the resulting PR before pushing the tag."
+              exit 1
+          fi
+          echo "✅ repo state matches release version $EXPECTED"
 
   # ─── 1. Docker multi-arch image (amd64 + arm64) → GHCR ───────────────
   docker-build:
@@ -275,13 +302,11 @@ jobs:
       - uses: azure/setup-helm@v4
         with:
           version: v3.14.0
-      - name: Bump chart versions to match release
-        run: |
-          V="${{ needs.resolve-version.outputs.version }}"
-          for chart in charts/aeterna charts/aeterna-prereqs; do
-            sed -i "s/^version:.*/version: ${V}/"       "${chart}/Chart.yaml"
-            sed -i "s/^appVersion:.*/appVersion: \"${V}\"/" "${chart}/Chart.yaml"
-          done
+      # Chart versions are guaranteed to match the release tag because
+      # scripts/bump-version.sh rewrote them during the cut-release PR
+      # and resolve-version above re-verified repo state matches the tag.
+      # The previous inline sed here was a second source of truth that
+      # could silently disagree with the bump script — removed.
       - name: Embed Cedar policies into values.yaml
         run: |
           cat policies/cedar/*.cedar       > /tmp/cedar-policy-text.txt

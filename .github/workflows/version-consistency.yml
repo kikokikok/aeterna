@@ -1,0 +1,135 @@
+name: Version Consistency
+
+# Enforces the single-source-of-truth contract for the product version:
+# every product-scoped version string in the repo must equal
+# [workspace.package].version in the root Cargo.toml.
+#
+# Source of truth:   Cargo.toml:[workspace.package].version
+# Must match:        charts/aeterna/Chart.yaml (version + appVersion)
+#                    charts/aeterna-prereqs/Chart.yaml (version + appVersion)
+#                    deploy/helm/aeterna-opal/Chart.yaml (version + appVersion)
+#                    packages/opencode-plugin/package.json (version)
+#                    admin-ui/package.json (version)
+#                    website/package.json (version)
+#
+# Explicitly excluded:
+#   - aeterna-backup (independent lifecycle, 0.1.0)
+#   - .opencode/package.json (local opencode agent config, not a product artifact)
+#
+# Also asserted on tag push: the tag must equal v<workspace.version>.
+# This prevents cutting a `v0.8.0-rc.1` tag while the repo still says 0.7.0.
+
+on:
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - '**/Cargo.toml'
+      - 'charts/**/Chart.yaml'
+      - 'charts/aeterna/values.yaml'
+      - 'deploy/helm/**/Chart.yaml'
+      - 'packages/opencode-plugin/package.json'
+      - 'admin-ui/package.json'
+      - 'website/package.json'
+      - '.github/workflows/version-consistency.yml'
+      - 'scripts/bump-version.sh'
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yq + jq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Extract authoritative version
+        id: source
+        run: |
+          # Parse [workspace.package].version without pulling the full cargo toolchain.
+          WS=$(python3 -c "
+          import re, pathlib
+          txt = pathlib.Path('Cargo.toml').read_text()
+          m = re.search(r'\[workspace\.package\][^\[]*?version\s*=\s*\"([^\"]+)\"', txt, re.DOTALL)
+          print(m.group(1) if m else '')
+          ")
+          if [[ -z "$WS" ]]; then
+            echo "::error::[workspace.package].version not found in Cargo.toml" >&2
+            exit 1
+          fi
+          echo "version=${WS}" >> "$GITHUB_OUTPUT"
+          echo "Authoritative version: ${WS}"
+
+      - name: Verify every product surface matches
+        env:
+          EXPECTED: ${{ steps.source.outputs.version }}
+        run: |
+          set -eo pipefail
+          fail=0
+          check() {
+              local label="$1" actual="$2"
+              if [[ "$actual" != "$EXPECTED" ]]; then
+                  printf '  ❌ %-55s %s  (expected %s)\n' "$label" "$actual" "$EXPECTED"
+                  fail=1
+              else
+                  printf '  ✅ %-55s %s\n' "$label" "$actual"
+              fi
+          }
+
+          # Helm charts (version + appVersion both must match)
+          for chart in charts/aeterna/Chart.yaml charts/aeterna-prereqs/Chart.yaml deploy/helm/aeterna-opal/Chart.yaml; do
+              [[ -f "$chart" ]] || continue
+              check "${chart}:version"    "$(yq -r '.version'    "$chart")"
+              check "${chart}:appVersion" "$(yq -r '.appVersion' "$chart")"
+          done
+
+          # npm packages
+          for pkg in packages/opencode-plugin admin-ui website; do
+              [[ -f "${pkg}/package.json" ]] || continue
+              check "${pkg}/package.json" "$(jq -r '.version' "${pkg}/package.json")"
+          done
+
+          # Every in-workspace crate must inherit (not pin its own version)
+          # except aeterna-backup which has its own lifecycle.
+          echo "  ── crate inheritance check ──"
+          for ctoml in $(find . -maxdepth 3 -name Cargo.toml -not -path './target/*' -not -path './.git/*' -not -path './Cargo.toml'); do
+              name=$(python3 -c "import re,sys; t=open(sys.argv[1]).read(); m=re.search(r'\[package\][^\[]*?name\s*=\s*\"([^\"]+)\"', t, re.DOTALL); print(m.group(1) if m else '')" "$ctoml")
+              [[ "$name" == "aeterna-backup" ]] && continue
+              # Skip non-workspace crates (test-project, services/memory if not in workspace).
+              if ! grep -q "\"$(dirname "$ctoml" | sed 's|^\./||')\"" Cargo.toml 2>/dev/null; then
+                  continue
+              fi
+              if grep -qE '^version\s*=\s*"' "$ctoml"; then
+                  printf '  ❌ %-55s pins version literal (should use version.workspace = true)\n' "$ctoml"
+                  fail=1
+              else
+                  printf '  ✅ %-55s inherits workspace version\n' "$ctoml"
+              fi
+          done
+
+          # Tag-push assertion: tag must equal v<workspace.version>
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+              tag_version="${GITHUB_REF#refs/tags/v}"
+              if [[ "$tag_version" != "$EXPECTED" ]]; then
+                  printf '  ❌ tag v%s disagrees with workspace version %s\n' "$tag_version" "$EXPECTED"
+                  fail=1
+              else
+                  printf '  ✅ tag v%s matches workspace version\n' "$tag_version"
+              fi
+          fi
+
+          if [[ $fail -ne 0 ]]; then
+              echo
+              echo "::error::Version drift detected. Run ./scripts/bump-version.sh $EXPECTED to re-sync."
+              exit 1
+          fi
+          echo
+          echo "✅ all product versions agree on ${EXPECTED}"

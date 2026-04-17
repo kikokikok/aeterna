@@ -1,6 +1,6 @@
 [package]
 name = "adapters"
-version = "0.7.0"
+version.workspace = true
 edition = "2024"
 description = "Provider and ecosystem adapters"
 

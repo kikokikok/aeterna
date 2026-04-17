@@ -22,6 +22,18 @@ members = [
     "backup",
 ]
 
+# Single source of truth for the product version.
+#
+# - Every workspace member (except `backup`, which has its own lifecycle)
+#   inherits this via `version.workspace = true` in its own Cargo.toml.
+# - `scripts/bump-version.sh <new-version>` rewrites this value and the
+#   matching entries in charts/, packages/opencode-plugin/, admin-ui/ and
+#   website/ in one atomic step.
+# - `.github/workflows/version-consistency.yml` enforces that all those
+#   surfaces agree on every PR and on every tag push.
+[workspace.package]
+version = "0.7.0"
+
 [workspace.lints.rust]
 unused_imports = "warn"
 dead_code = "allow"
