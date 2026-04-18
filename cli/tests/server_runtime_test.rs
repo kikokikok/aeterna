@@ -2203,6 +2203,8 @@ async fn tenant_list_and_hierarchy_read_operations() {
     .unwrap();
     assert_eq!(body["success"], true);
     assert!(body["tenants"].is_array());
+    // #44.d: cross-tenant list endpoints advertise scope=all.
+    assert_eq!(body["scope"], "all");
 
     // list_tenants – forbidden without platform_admin
     let resp = app

@@ -19,10 +19,10 @@
 ## 2. Handler migration (one commit per handler)
 
 - [ ] 2.1 `GET /admin/tenants` — replace local `require_platform_admin` with `RequestContext` + `list_scope`; default to `All` for backward compat (this endpoint was always cross-tenant).
-- [ ] 2.2 `GET /admin/users` — accept `?tenant=<slug|uuid|*>`; return `scope`+`tenant`+`items[]` envelope; decorate each item with `tenantId`+`tenantSlug` in `scope=all` mode.
-- [ ] 2.3 `GET /admin/projects` — same treatment.
-- [ ] 2.4 `GET /admin/orgs` — same treatment.
-- [ ] 2.5 `GET /admin/audit` — same treatment, plus ensure audit filters (`?actor`, `?since`) compose with `?tenant=*`.
+- [ ] 2.2 `GET /user` — accept `?tenant=<slug|uuid|*>`; return `scope`+`tenant`+`items[]` envelope **only when `scope=all`**, otherwise keep existing body (backward compat); decorate each item with `tenantId`+`tenantSlug` in `scope=all` mode.
+- [ ] 2.3 `GET /project` — same treatment.
+- [ ] 2.4 `GET /org` — same treatment.
+- [ ] 2.5 `GET /govern/audit` — same treatment, plus ensure audit filters (`?actor`, `?since`) compose with `?tenant=*`.
 - [ ] 2.6 Add `tenant_filter` param + new envelope to OpenAPI/Redoc schema for each of the 5.
 
 ## 3. Cross-tenant repository layer

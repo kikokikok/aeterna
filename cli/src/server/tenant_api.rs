@@ -926,7 +926,15 @@ async fn list_tenants(
     headers: HeaderMap,
     Query(query): Query<TenantListQuery>,
 ) -> impl IntoResponse {
-    if let Err(response) = require_platform_admin(&state, &headers).await {
+    // Migrated to the #44.d resolver chain: the old path required an
+    // X-Tenant-ID header to produce a TenantContext, even though this
+    // endpoint never consults it. `request_context` lets PlatformAdmins
+    // hit it with no tenant selected.
+    let ctx = match super::context::request_context(&state, &headers).await {
+        Ok(c) => c,
+        Err(response) => return response,
+    };
+    if let Err(response) = super::context::require_platform_admin(&ctx) {
         return response;
     }
 
@@ -937,7 +945,14 @@ async fn list_tenants(
     {
         Ok(tenants) => (
             StatusCode::OK,
-            Json(json!({ "success": true, "tenants": tenants })),
+            Json(json!({
+                // `scope: "all"` marks the response as cross-tenant per the
+                // RFC envelope convention. The existing `tenants` field is
+                // kept for backward compatibility with pre-#44.d clients.
+                "success": true,
+                "scope": "all",
+                "tenants": tenants,
+            })),
         )
             .into_response(),
         Err(err) => error_response(
