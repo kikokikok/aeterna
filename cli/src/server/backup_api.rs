@@ -1592,14 +1592,17 @@ async fn run_export(
 
     let pool = state.postgres.pool();
 
-    // Set tenant context for RLS (if tenant-scoped)
-    if scope != "full" {
-        sqlx::query("SELECT set_config('app.tenant_id', $1, false)")
-            .bind(tenant_id)
-            .execute(pool)
-            .await
-            .ok();
-    }
+    // NOTE (issue #57): a previous `set_config('app.tenant_id', $1, false)`
+    // call lived here. It was broken in two ways: (a) it ran against the
+    // pool without pinning a connection, so it landed on a random connection
+    // and subsequent export queries using different connections never saw
+    // the setting; (b) with `false` (session-scoped) it leaked tenant
+    // context to the next user of that connection.
+    //
+    // The call has been removed because the export functions below do not
+    // rely on RLS — they all filter with an explicit `WHERE tenant_id = $1`
+    // clause. Proper RLS activation for cross-connection export paths
+    // requires the architectural decision in issue #58.
 
     // Build the export scope for the manifest
     let manifest_scope = if scope == "full" {

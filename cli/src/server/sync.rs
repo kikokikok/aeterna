@@ -116,19 +116,21 @@ async fn push_handler(
     };
     let pool = state.postgres.pool();
 
-    let mut conn = match pool.acquire().await {
-        Ok(c) => c,
+    // Begin an explicit transaction so that SET LOCAL app.tenant_id is scoped
+    // to this request only and cannot leak to the next user of this pooled
+    // connection (see issue #57).
+    let mut tx = match pool.begin().await {
+        Ok(t) => t,
         Err(e) => {
-            tracing::error!("Failed to acquire database connection: {e}");
+            tracing::error!("Failed to begin database transaction: {e}");
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "database_error",
-                "Failed to acquire database connection",
+                "Failed to begin database transaction",
             );
         }
     };
-    if let Err(e) =
-        PostgresBackend::activate_tenant_context(&mut conn, ctx.tenant_id.as_str()).await
+    if let Err(e) = PostgresBackend::activate_tenant_context(&mut tx, ctx.tenant_id.as_str()).await
     {
         tracing::error!("Failed to activate tenant RLS context: {e}");
         return error_response(
@@ -151,7 +153,7 @@ async fn push_handler(
         )
         .bind(&entry.id)
         .bind(ctx.tenant_id.as_str())
-        .fetch_optional(&mut *conn)
+        .fetch_optional(&mut *tx)
         .await
         .unwrap_or(None);
 
@@ -179,7 +181,7 @@ async fn push_handler(
             .bind(&req.device_id)
             .bind(&entry.id)
             .bind(ctx.tenant_id.as_str())
-            .execute(&mut *conn)
+            .execute(&mut *tx)
             .await
             .ok();
         } else {
@@ -199,10 +201,19 @@ async fn push_handler(
             .bind(&req.device_id)
             .bind(created_at)
             .bind(updated_at)
-            .execute(&mut *conn)
+            .execute(&mut *tx)
             .await
             .ok();
         }
+    }
+
+    if let Err(e) = tx.commit().await {
+        tracing::error!("Failed to commit sync push transaction: {e}");
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "database_error",
+            "Failed to commit transaction",
+        );
     }
 
     let cursor = chrono::Utc::now().timestamp_millis().to_string();
@@ -241,19 +252,20 @@ async fn pull_handler(
     };
     let pool = state.postgres.pool();
 
-    let mut conn = match pool.acquire().await {
-        Ok(c) => c,
+    // See issue #57: SET LOCAL requires an active transaction so the setting
+    // cannot leak to the next user of this pooled connection.
+    let mut tx = match pool.begin().await {
+        Ok(t) => t,
         Err(e) => {
-            tracing::error!("Failed to acquire database connection: {e}");
+            tracing::error!("Failed to begin database transaction: {e}");
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "database_error",
-                "Failed to acquire database connection",
+                "Failed to begin database transaction",
             );
         }
     };
-    if let Err(e) =
-        PostgresBackend::activate_tenant_context(&mut conn, ctx.tenant_id.as_str()).await
+    if let Err(e) = PostgresBackend::activate_tenant_context(&mut tx, ctx.tenant_id.as_str()).await
     {
         tracing::error!("Failed to activate tenant RLS context: {e}");
         return error_response(
@@ -296,9 +308,13 @@ async fn pull_handler(
         .bind(ctx.tenant_id.as_str())
         .bind(since_cursor)
         .bind(fetch_limit * 2)
-        .fetch_all(&mut *conn)
+        .fetch_all(&mut *tx)
         .await
         .unwrap_or_default();
+
+    // Pull is read-only: rollback instead of commit. The SET LOCAL is
+    // discarded either way, so correctness is unaffected.
+    let _ = tx.rollback().await;
 
     let layer_set: HashSet<&str> = layers.iter().map(String::as_str).collect();
     let all_matching: Vec<_> = rows
