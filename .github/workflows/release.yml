@@ -302,8 +302,6 @@ jobs:
       contents: read
       packages: write
       id-token: write      # cosign keyless
-    env:
-      IMAGE: ${{ env.REGISTRY }}/${{ github.repository }}-admin-ui
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
