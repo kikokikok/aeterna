@@ -4,7 +4,6 @@ use mk_core::types::{
     INSTANCE_SCOPE_TENANT_ID, OrganizationalUnit, RoleIdentifier, SYSTEM_USER_ID, TenantContext,
     UnitType,
 };
-use sqlx::pool::PoolConnection;
 use sqlx::{Pool, Postgres, Row};
 use thiserror::Error;
 
@@ -45,24 +44,38 @@ impl PostgresBackend {
         Ok(Self { pool })
     }
 
-    /// Arm the Postgres session-level RLS context for the given tenant.
+    /// Arm the Postgres transaction-level RLS context for the given tenant.
     ///
-    /// This sets the `app.tenant_id` configuration parameter on the provided
-    /// connection so that any RLS policies keyed on
-    /// `current_setting('app.tenant_id', true)` will evaluate correctly.
+    /// Uses `set_config('app.tenant_id', $1, true)` — the `true` argument is
+    /// equivalent to `SET LOCAL`, scoping the setting to the **current
+    /// transaction only**. On `COMMIT` or `ROLLBACK` the setting is discarded,
+    /// so a returned-to-pool connection can never leak tenant context to a
+    /// subsequent request.
     ///
-    /// The setting is scoped to the current transaction (`SET LOCAL`) when
-    /// called inside a transaction, or to the session otherwise.  Callers
-    /// that issue multiple tenant-scoped queries SHOULD acquire a single
-    /// connection, call this method once, and then execute all queries on
-    /// that connection.
+    /// # Contract
+    ///
+    /// - Caller MUST be inside an active transaction. Outside a transaction,
+    ///   `SET LOCAL` applies only to the statement itself and is immediately
+    ///   discarded — resulting in a silent no-op. This function takes a
+    ///   `&mut Transaction` rather than a `PoolConnection` to make that
+    ///   requirement compile-time enforced.
+    /// - After this call returns, every tenant-scoped RLS policy keyed on
+    ///   `current_setting('app.tenant_id', true)` will evaluate correctly for
+    ///   the remainder of the transaction.
+    ///
+    /// # See also
+    ///
+    /// - Issue #57: previous session-scoped version leaked tenant context
+    ///   across pooled connections.
+    /// - Issue #58: policies may still be a no-op in prod if the connection
+    ///   role has `BYPASSRLS` — orthogonal, deferred.
     pub async fn activate_tenant_context(
-        conn: &mut PoolConnection<Postgres>,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
         tenant_id: &str,
     ) -> Result<(), PostgresError> {
-        sqlx::query("SELECT set_config('app.tenant_id', $1, false)")
+        sqlx::query("SELECT set_config('app.tenant_id', $1, true)")
             .bind(tenant_id)
-            .execute(&mut **conn)
+            .execute(&mut **tx)
             .await?;
         Ok(())
     }
