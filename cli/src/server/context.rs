@@ -252,6 +252,96 @@ pub fn forbidden_scope_response(required_role: &str) -> Response {
     (StatusCode::FORBIDDEN, axum::Json(body)).into_response()
 }
 
+// ---------------------------------------------------------------------------
+// #44.d — cross-tenant listing dispatch helper
+// ---------------------------------------------------------------------------
+
+/// Three-way outcome of resolving `?tenant=` on a list endpoint.
+///
+/// Each list handler that supports `?tenant=` (see #44.d RFC) uses
+/// [`resolve_list_scope`] to classify the request into one of these:
+///
+/// - [`ListDispatch::TenantScoped`] — no `?tenant` param; caller should
+///   run its existing tenant-scoped logic unchanged (preserves backward
+///   compatibility bit-for-bit).
+/// - [`ListDispatch::CrossTenant`] — `?tenant=*` or the deprecated alias
+///   `?tenant=all` by a PlatformAdmin; caller should dispatch to its
+///   cross-tenant list function which emits the scope-envelope body.
+/// - [`ListDispatch::Response`] — authorization or input error; caller
+///   returns the response verbatim.
+///
+/// This helper was extracted after a third near-identical copy of the
+/// same gate block appeared (user_api, project_api, then org_api). It
+/// prevents drift (trim, case-fold, deprecation warning, error message
+/// formatting) across endpoints.
+pub enum ListDispatch {
+    TenantScoped,
+    CrossTenant,
+    Response(Response),
+}
+
+/// Resolve a `?tenant=` query parameter for a list endpoint.
+///
+/// Grammar (see RFC):
+///
+/// - absent               → [`ListDispatch::TenantScoped`]
+/// - `*`                  → [`ListDispatch::CrossTenant`] (PlatformAdmin
+///                          required; otherwise `403 forbidden_scope`)
+/// - `all` (case-insensitive) → deprecated alias for `*`; logs a compat
+///                          warning and resolves identically
+/// - anything else        → `501 scope_not_implemented` (wiring for
+///                          `?tenant=<slug>` is deferred to a later PR
+///                          cluster; the 501 is a stable, documented
+///                          response that clients can detect)
+///
+/// `endpoint_label` is surfaced in the 501 body to help clients discover
+/// which endpoint they hit (e.g. `"/user"`, `"/project"`, `"/org"`).
+pub async fn resolve_list_scope(
+    state: &AppState,
+    headers: &HeaderMap,
+    raw_tenant_param: Option<&str>,
+    endpoint_label: &str,
+) -> ListDispatch {
+    let Some(raw) = raw_tenant_param else {
+        return ListDispatch::TenantScoped;
+    };
+    let trimmed = raw.trim();
+    // Empty string is treated like the absent case — defensive for clients
+    // that send `?tenant=` with no value (e.g. optional-form-field clients).
+    if trimmed.is_empty() {
+        return ListDispatch::TenantScoped;
+    }
+    let is_all_star = trimmed == "*";
+    let is_all_alias = trimmed.eq_ignore_ascii_case("all");
+    if !is_all_star && !is_all_alias {
+        return ListDispatch::Response(error_response(
+            StatusCode::NOT_IMPLEMENTED,
+            "scope_not_implemented",
+            &format!(
+                "?tenant=<slug> is not yet supported on {endpoint_label}; use ?tenant=* for cross-tenant listing or omit the parameter"
+            ),
+            None,
+        ));
+    }
+    if is_all_alias {
+        tracing::warn!(
+            target: "compat",
+            param = "?tenant=all",
+            replacement = "?tenant=*",
+            endpoint = endpoint_label,
+            "deprecated tenant scope alias — clients should migrate to ?tenant=*"
+        );
+    }
+    let req_ctx = match request_context(state, headers).await {
+        Ok(c) => c,
+        Err(r) => return ListDispatch::Response(r),
+    };
+    if !req_ctx.is_platform_admin {
+        return ListDispatch::Response(forbidden_scope_response("PlatformAdmin"));
+    }
+    ListDispatch::CrossTenant
+}
+
 /// Returns `Ok(())` when the caller is a PlatformAdmin, `403 forbidden` otherwise.
 ///
 /// Unlike the legacy `tenant_scoped_context`-based check, this function has

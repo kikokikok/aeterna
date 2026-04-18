@@ -295,38 +295,14 @@ async fn list_users(
     headers: HeaderMap,
     Query(query): Query<UserListQuery>,
 ) -> impl IntoResponse {
-    // #44.d — cross-tenant listing branch.
-    // The existing tenant-scoped path below is untouched when `?tenant` is
-    // absent, preserving pre-RFC response shape for every existing client.
-    if let Some(raw) = query.tenant.as_deref() {
-        let trimmed = raw.trim();
-        let is_all_star = trimmed == "*";
-        let is_all_alias = trimmed.eq_ignore_ascii_case("all");
-        if !is_all_star && !is_all_alias {
-            // `?tenant=<slug>` is part of the RFC but its wiring for /user
-            // is deferred to PR #65 so this change stays reviewable.
-            return error_response(
-                StatusCode::NOT_IMPLEMENTED,
-                "scope_not_implemented",
-                "?tenant=<slug> is not yet supported on /user; use ?tenant=* for cross-tenant listing or omit the parameter",
-            );
+    // #44.d — cross-tenant listing dispatch via shared helper.
+    // See `context::resolve_list_scope` for the gate semantics.
+    match context::resolve_list_scope(&state, &headers, query.tenant.as_deref(), "/user").await {
+        context::ListDispatch::TenantScoped => { /* fall through */ }
+        context::ListDispatch::CrossTenant => {
+            return list_users_cross_tenant(&state, &query).await;
         }
-        if is_all_alias {
-            tracing::warn!(
-                target: "compat",
-                param = "?tenant=all",
-                replacement = "?tenant=*",
-                "deprecated tenant scope alias — clients should migrate to ?tenant=*"
-            );
-        }
-        let req_ctx = match context::request_context(&state, &headers).await {
-            Ok(c) => c,
-            Err(r) => return r,
-        };
-        if !req_ctx.is_platform_admin {
-            return context::forbidden_scope_response("PlatformAdmin");
-        }
-        return list_users_cross_tenant(&state, &query).await;
+        context::ListDispatch::Response(r) => return r,
     }
 
     let ctx = match require_admin_context(&state, &headers).await {
