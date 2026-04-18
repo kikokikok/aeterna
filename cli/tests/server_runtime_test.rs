@@ -384,6 +384,34 @@ async fn seed_company_unit(state: &Arc<AppState>, tenant_id: &TenantId) -> Strin
     unit_id
 }
 
+/// #44.d §4.1 — seed an Organization unit in the given tenant.
+/// Used by the cross-tenant envelope contract tests below.
+async fn seed_unit_of_type(
+    state: &Arc<AppState>,
+    tenant_id: &TenantId,
+    unit_type: mk_core::types::UnitType,
+    name: &str,
+) -> String {
+    let unit_id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp();
+    state
+        .postgres
+        .create_unit(&mk_core::types::OrganizationalUnit {
+            id: unit_id.clone(),
+            name: name.to_string(),
+            unit_type,
+            parent_id: None,
+            tenant_id: tenant_id.clone(),
+            metadata: HashMap::new(),
+            created_at: now,
+            updated_at: now,
+            source_owner: mk_core::types::RecordSource::Admin,
+        })
+        .await
+        .unwrap();
+    unit_id
+}
+
 fn mint_test_plugin_bearer(secret: &str, tenant_id: &str, github_login: &str) -> String {
     let now = chrono::Utc::now().timestamp();
     encode(
@@ -4076,5 +4104,217 @@ async fn list_users_cross_tenant_scope_gates_and_aliases() {
         assert_eq!(body["scope"], "all");
         assert_eq!(body["success"], true);
         assert!(body["items"].is_array());
+    }
+}
+
+// =============================================================================
+// #44.d §4.1 — cross-tenant response envelope contract
+// =============================================================================
+//
+// Lock down the scope=all envelope shape so it cannot silently drift between
+// endpoints. Applied to the 3 migrated list endpoints today (/user, /project,
+// /org) and intended to be a one-liner to add when /govern/audit lands.
+//
+// Per tasks.md §4.1: "for every scope=all response across the 5 endpoints,
+// every item MUST contain non-empty tenantId and tenantSlug. Failing this
+// test gates the PR."
+//
+// Ideally this would live in its own `cross_tenant_contract_test.rs` (per the
+// tasks doc), but Rust integration tests don't share private helpers without
+// a `tests/common/mod.rs` scaffold. Rather than duplicate ~300 lines of
+// fixture setup, the tests live here next to `test_app_state`. Can be
+// migrated later when a shared common module is introduced.
+
+/// Hit `{endpoint_path}?tenant=*` as PlatformAdmin and assert the full
+/// scope=all envelope contract. This is the single source of truth for
+/// "what a cross-tenant list response looks like".
+///
+/// Contract:
+///   1. HTTP 200
+///   2. body.success == true
+///   3. body.scope   == "all"
+///   4. body.items is an array
+///   5. every item has non-empty string `tenantId` AND `tenantSlug`
+///   6. items span >= `min_tenants` distinct tenants (proves the endpoint
+///      actually reads across tenant boundaries; catches bugs where the
+///      filter accidentally collapses to a single tenant)
+async fn assert_cross_tenant_envelope_contract(
+    app: axum::Router,
+    endpoint_path: &str,
+    min_tenants: usize,
+) {
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(endpoint_path)
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "{endpoint_path}: expected 200 OK for cross-tenant list"
+    );
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        body["success"], true,
+        "{endpoint_path}: envelope success must be true, body={body}"
+    );
+    assert_eq!(
+        body["scope"], "all",
+        "{endpoint_path}: envelope scope must be \"all\", body={body}"
+    );
+    let items = body["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{endpoint_path}: envelope.items must be an array, body={body}"));
+    let mut tenant_ids = std::collections::HashSet::new();
+    for (i, item) in items.iter().enumerate() {
+        let tid = item["tenantId"].as_str().unwrap_or_else(|| {
+            panic!("{endpoint_path}: items[{i}].tenantId must be a string, item={item}")
+        });
+        assert!(
+            !tid.is_empty(),
+            "{endpoint_path}: items[{i}].tenantId must be non-empty, item={item}"
+        );
+        let tslug = item["tenantSlug"].as_str().unwrap_or_else(|| {
+            panic!("{endpoint_path}: items[{i}].tenantSlug must be a string, item={item}")
+        });
+        assert!(
+            !tslug.is_empty(),
+            "{endpoint_path}: items[{i}].tenantSlug must be non-empty, item={item}"
+        );
+        tenant_ids.insert(tid.to_string());
+    }
+    assert!(
+        tenant_ids.len() >= min_tenants,
+        "{endpoint_path}: items must span >= {min_tenants} tenants; got {} ({tenant_ids:?})",
+        tenant_ids.len(),
+    );
+}
+
+/// #44.d §4.1 — Envelope contract for /project and /org across 2 tenants.
+///
+/// Seeds two tenants, each with one Organization and one Project unit,
+/// then asserts the full cross-tenant envelope contract on both endpoints.
+#[tokio::test]
+async fn cross_tenant_envelope_contract_project_and_org() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+
+    // Seed two tenants with content. Using randomized slugs prevents
+    // collisions with fixtures when the postgres container is reused.
+    let suffix = uuid::Uuid::new_v4().simple().to_string();
+    let slug_a = format!("contract-a-{}", &suffix[..8]);
+    let slug_b = format!("contract-b-{}", &suffix[..8]);
+    let tenant_a = state
+        .tenant_store
+        .create_tenant(&slug_a, "Contract Tenant A")
+        .await
+        .expect("create tenant A");
+    let tenant_b = state
+        .tenant_store
+        .create_tenant(&slug_b, "Contract Tenant B")
+        .await
+        .expect("create tenant B");
+    for t in [&tenant_a, &tenant_b] {
+        let tid = TenantId::new(t.id.as_str().to_string()).unwrap();
+        seed_unit_of_type(
+            &state,
+            &tid,
+            mk_core::types::UnitType::Organization,
+            &format!("org-{}", t.slug),
+        )
+        .await;
+        seed_unit_of_type(
+            &state,
+            &tid,
+            mk_core::types::UnitType::Project,
+            &format!("proj-{}", t.slug),
+        )
+        .await;
+    }
+
+    let app = router::build_router(state);
+
+    // Both endpoints must emit identical envelope shape. If a future PR
+    // decorates one endpoint differently (e.g. drops tenantSlug), this
+    // test fails and forces the divergence to be addressed at review time.
+    assert_cross_tenant_envelope_contract(app.clone(), "/api/v1/project?tenant=*", 2).await;
+    assert_cross_tenant_envelope_contract(app, "/api/v1/org?tenant=*", 2).await;
+}
+
+/// #44.d §4.1 — Envelope contract for /user, best-effort.
+///
+/// /user has a storage-variant dependency (the fixture's persistence
+/// layer may not implement the cross-tenant query used in scope=all
+/// mode — see PR #64 for the 503 skip pattern). We still assert the
+/// envelope contract WHEN the endpoint returns 200; a 503 is logged
+/// and treated as a skip, because asserting "there must be users"
+/// would be a fixture-coupling regression.
+#[tokio::test]
+async fn cross_tenant_envelope_contract_user_best_effort() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/user?tenant=*")
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    match resp.status() {
+        StatusCode::OK => {
+            // Full contract applies. Use min_tenants=0 because the fixture
+            // may not seed users and an empty items[] still satisfies the
+            // envelope shape — what we care about here is that NO row violates
+            // the contract when rows DO exist.
+            let body: serde_json::Value = serde_json::from_slice(
+                &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(body["success"], true);
+            assert_eq!(body["scope"], "all");
+            let items = body["items"].as_array().expect("items array");
+            for (i, item) in items.iter().enumerate() {
+                let tid = item["tenantId"].as_str().unwrap_or_else(|| {
+                    panic!("/user: items[{i}].tenantId must be a string, item={item}")
+                });
+                assert!(!tid.is_empty(), "/user: items[{i}].tenantId empty");
+                let tslug = item["tenantSlug"].as_str().unwrap_or_else(|| {
+                    panic!("/user: items[{i}].tenantSlug must be a string, item={item}")
+                });
+                assert!(!tslug.is_empty(), "/user: items[{i}].tenantSlug empty");
+            }
+        }
+        StatusCode::SERVICE_UNAVAILABLE => {
+            eprintln!(
+                "cross_tenant_envelope_contract_user_best_effort: storage returned 503 \
+                 (expected for fixture variants without cross-tenant user query) — skipping"
+            );
+        }
+        other => panic!("/user?tenant=*: unexpected status {other}"),
     }
 }

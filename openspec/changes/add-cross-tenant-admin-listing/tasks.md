@@ -33,7 +33,7 @@
 
 ## 4. Contract tests
 
-- [ ] 4.1 Add `cli/tests/cross_tenant_contract_test.rs`: for every `scope=all` response across the 5 endpoints, every item MUST contain non-empty `tenantId` and `tenantSlug`. Failing this test gates the PR.
+- [~] 4.1 Contract tests landed in `cli/tests/server_runtime_test.rs` (not a dedicated file — sharing the fixture would have duplicated ~300 lines; can be migrated once a `tests/common/mod.rs` exists). `assert_cross_tenant_envelope_contract` helper covers contract for `/project` and `/org` across 2 seeded tenants; `/user` is best-effort (asserts contract when 200, skips on 503 fixture variant). `/govern/audit` will extend this when §2.5 lands.
 - [ ] 4.2 Add RLS regression guard `storage/tests/rls_boundary_test.rs`: asserts each of `users`, `projects`, `orgs`, `tenants`, `referential_audit_log`, `governance_audit_log` has `relrowsecurity = false` in `pg_class`. If a future migration RLS-enables one of these, this test fails and forces a redesign of the cross-tenant reader.
 
 ## 5. Integration tests
