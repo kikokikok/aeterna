@@ -297,10 +297,21 @@ async fn list_users(
 ) -> impl IntoResponse {
     // #44.d — cross-tenant listing dispatch via shared helper.
     // See `context::resolve_list_scope` for the gate semantics.
-    match context::resolve_list_scope(&state, &headers, query.tenant.as_deref(), "/user").await {
+    match context::resolve_list_scope(
+        &state,
+        &headers,
+        query.tenant.as_deref(),
+        "/user",
+        true, // supports ?tenant=<slug>
+    )
+    .await
+    {
         context::ListDispatch::TenantScoped => { /* fall through */ }
         context::ListDispatch::CrossTenant => {
-            return list_users_cross_tenant(&state, &query).await;
+            return list_users_cross_tenant(&state, &query, None).await;
+        }
+        context::ListDispatch::CrossTenantSingle(t) => {
+            return list_users_cross_tenant(&state, &query, Some(&t)).await;
         }
         context::ListDispatch::Response(r) => return r,
     }
@@ -454,6 +465,7 @@ async fn list_users(
 async fn list_users_cross_tenant(
     state: &AppState,
     query: &UserListQuery,
+    single_tenant: Option<&context::ResolvedTenant>,
 ) -> axum::response::Response {
     let variant = match detect_user_table_variant(state).await {
         Ok(variant) => variant,
@@ -565,10 +577,23 @@ async fn list_users_cross_tenant(
         }
     };
 
+    // Build items and, in single-foreign-tenant mode, narrow to rows whose
+    // tenant_id matches the resolved target. The narrowing is done post-
+    // query rather than via SQL because the existing cross-tenant SELECT
+    // already streams each (user, tenant) pairing; applying a `.filter()`
+    // here keeps the SQL single-sourced and avoids drift between an
+    // "all tenants" and a "one tenant" variant of the query.
+    let filter_tenant_id: Option<&str> = single_tenant.map(|t| t.id.as_str());
     let items: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(|row| {
-            json!({
+        .filter_map(|row| {
+            let tid: String = row.get("tenant_id");
+            if let Some(target) = filter_tenant_id
+                && tid != target
+            {
+                return None;
+            }
+            Some(json!({
                 "id":          row.get::<String, _>("user_id"),
                 "email":       row.get::<String, _>("email"),
                 "name":        row.get::<String, _>("display_name"),
@@ -577,24 +602,29 @@ async fn list_users_cross_tenant(
                 "settings":    row.get::<serde_json::Value, _>("settings"),
                 "createdAt":   row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
                 "updatedAt":   row.get::<chrono::DateTime<chrono::Utc>, _>("updated_at"),
-                "tenantId":    row.get::<String, _>("tenant_id"),
+                "tenantId":    tid,
                 "tenantSlug":  row.get::<String, _>("tenant_slug"),
                 "tenantName":  row.get::<String, _>("tenant_name"),
                 // See docstring: per-tenant role aggregation deferred to PR #66.
                 "roles":       Vec::<serde_json::Value>::new(),
-            })
+            }))
         })
         .collect();
 
-    (
-        StatusCode::OK,
-        Json(json!({
+    let body = match single_tenant {
+        None => json!({
             "success": true,
             "scope":   "all",
             "items":   items,
-        })),
-    )
-        .into_response()
+        }),
+        Some(t) => json!({
+            "success": true,
+            "scope":   "tenant",
+            "tenant":  { "id": t.id, "slug": t.slug, "name": t.name },
+            "items":   items,
+        }),
+    };
+    (StatusCode::OK, Json(body)).into_response()
 }
 
 async fn show_user(
@@ -655,8 +685,17 @@ async fn show_user(
 async fn register_user(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
+    axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
     Json(req): Json<RegisterUserRequest>,
 ) -> impl IntoResponse {
+    // #44.d §5.8 — block write-with-?tenant=*. The `?tenant=` param is
+    // strictly a read-side broadening; attempting to write under it is
+    // almost always a client bug (e.g. "I'm listing, let me create one
+    // with the same URL"). 400 is preferable to implicit single-tenant
+    // fallback because the latter could land data in the wrong tenant.
+    if let Some(resp) = context::reject_cross_tenant_write(raw_query.as_deref(), "/user") {
+        return resp;
+    }
     let ctx = match tenant_scoped_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,

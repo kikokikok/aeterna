@@ -107,12 +107,21 @@ async fn list_projects(
     Query(query): Query<ProjectListQuery>,
 ) -> impl IntoResponse {
     // #44.d §2.3 — cross-tenant listing dispatch via shared helper.
-    match super::context::resolve_list_scope(&state, &headers, query.tenant.as_deref(), "/project")
-        .await
+    match super::context::resolve_list_scope(
+        &state,
+        &headers,
+        query.tenant.as_deref(),
+        "/project",
+        true, // supports ?tenant=<slug>
+    )
+    .await
     {
         super::context::ListDispatch::TenantScoped => { /* fall through */ }
         super::context::ListDispatch::CrossTenant => {
-            return list_projects_cross_tenant(&state, &query).await;
+            return list_projects_cross_tenant(&state, &query, None).await;
+        }
+        super::context::ListDispatch::CrossTenantSingle(t) => {
+            return list_projects_cross_tenant(&state, &query, Some(&t)).await;
         }
         super::context::ListDispatch::Response(r) => return r,
     }
@@ -139,14 +148,19 @@ async fn list_projects(
     Json(units).into_response()
 }
 
-/// Cross-tenant project listing (`?tenant=*`, PlatformAdmin only).
+/// Cross-tenant project listing — serves both `?tenant=*` (PlatformAdmin,
+/// `single_tenant=None`) and `?tenant=<slug>` (PlatformAdmin,
+/// `single_tenant=Some(...)`).
 ///
-/// Returns one item per project across all tenants, each decorated with
-/// `tenantId` + `tenantSlug` + `tenantName`. Unlike `/user`, projects
-/// are 1:1 tenant-owned so there is no user-like row duplication.
+/// The only difference between the two modes is an additional row-level
+/// filter when `single_tenant` is Some, plus the envelope's `scope` field
+/// and an echoed `tenant` object so clients can tell which tenant they are
+/// looking at. Per-item decoration (`tenantId`/`tenantSlug`/`tenantName`)
+/// is identical in both modes — this keeps the items-array contract uniform.
 async fn list_projects_cross_tenant(
     state: &AppState,
     query: &ProjectListQuery,
+    single_tenant: Option<&super::context::ResolvedTenant>,
 ) -> axum::response::Response {
     let mut units = match state.postgres.list_all_units().await {
         Ok(units) => units,
@@ -159,6 +173,14 @@ async fn list_projects_cross_tenant(
         }
     };
     units.retain(|unit| unit.unit_type == UnitType::Project);
+    // Single-foreign-tenant narrowing. Applied after list_all_units so the
+    // cross-tenant SELECT is reused verbatim; the alternative would be a
+    // new single-tenant store method which would drift from the all-tenant
+    // one (ordering, filters, decoration — all would need to stay in lock
+    // step across two call sites).
+    if let Some(t) = single_tenant {
+        units.retain(|unit| unit.tenant_id.as_str() == t.id.as_str());
+    }
     if let Some(team_id) = query.team.as_deref() {
         units.retain(|unit| unit.parent_id.as_deref() == Some(team_id));
     }
@@ -204,15 +226,28 @@ async fn list_projects_cross_tenant(
         })
         .collect();
 
-    (
-        StatusCode::OK,
-        Json(json!({
+    // Envelope shape is intentionally consistent across ?tenant=* and
+    // ?tenant=<slug>: same top-level keys, same items[] contract. The only
+    // differentiators are the `scope` discriminant ("all" vs "tenant") and
+    // an echoed `tenant` object in single-tenant mode so clients can render
+    // the current view without a second lookup. We OMIT the key entirely in
+    // "all" mode rather than serializing it as `null` — it would be
+    // meaningless noise and would need to be documented away in the §4.1
+    // contract.
+    let body = match single_tenant {
+        None => json!({
             "success": true,
             "scope":   "all",
             "items":   items,
-        })),
-    )
-        .into_response()
+        }),
+        Some(t) => json!({
+            "success": true,
+            "scope":   "tenant",
+            "tenant":  { "id": t.id, "slug": t.slug, "name": t.name },
+            "items":   items,
+        }),
+    };
+    (StatusCode::OK, Json(body)).into_response()
 }
 
 async fn show_project(
@@ -233,8 +268,14 @@ async fn show_project(
 async fn create_project(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
+    axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
     Json(req): Json<CreateProjectRequest>,
 ) -> impl IntoResponse {
+    // #44.d §5.8 — block write-with-?tenant=* (see user_api for rationale).
+    if let Some(resp) = super::context::reject_cross_tenant_write(raw_query.as_deref(), "/project")
+    {
+        return resp;
+    }
     let ctx = match require_admin_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,

@@ -526,11 +526,18 @@ async fn list_audit(
         &headers,
         query.tenant.as_deref(),
         "/govern/audit",
+        // /govern/audit can't attribute rows to a tenant (see §2.5 notes) —
+        // ?tenant=<slug> therefore stays 501 here until acting_as_tenant_id
+        // is surfaced in AuditRow + SELECT.
+        false,
     )
     .await
     {
         super::context::ListDispatch::CrossTenant => true,
         super::context::ListDispatch::TenantScoped => false,
+        super::context::ListDispatch::CrossTenantSingle(_) => unreachable!(
+            "supports_single=false → resolve_list_scope cannot return CrossTenantSingle"
+        ),
         super::context::ListDispatch::Response(resp) => return resp,
     };
 

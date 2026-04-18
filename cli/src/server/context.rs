@@ -275,8 +275,23 @@ pub fn forbidden_scope_response(required_role: &str) -> Response {
 /// prevents drift (trim, case-fold, deprecation warning, error message
 /// formatting) across endpoints.
 pub enum ListDispatch {
+    /// No `?tenant=` param. Caller runs its legacy tenant-scoped logic
+    /// unchanged against `X-Tenant-ID` / default. Backward compatible bit
+    /// for bit.
     TenantScoped,
+    /// `?tenant=*` or `?tenant=all` by a PlatformAdmin. Caller emits the
+    /// all-tenants envelope (`scope: "all"`).
     CrossTenant,
+    /// `?tenant=<slug-or-uuid>` by a PlatformAdmin, resolved successfully.
+    /// Caller emits the single-foreign-tenant envelope with the resolved
+    /// tenant metadata (`scope: "tenant"`, `tenant: { id, slug, name }`).
+    ///
+    /// Only returned when `resolve_list_scope` was called with
+    /// `supports_single = true`. Endpoints that don't support per-row
+    /// tenant decoration (e.g. /govern/audit — see #44.d §2.5) pass
+    /// `false` and the slug path returns `501 scope_not_implemented`
+    /// instead.
+    CrossTenantSingle(ResolvedTenant),
     Response(Response),
 }
 
@@ -284,23 +299,31 @@ pub enum ListDispatch {
 ///
 /// Grammar (see RFC):
 ///
-/// - absent               → [`ListDispatch::TenantScoped`]
-/// - `*`                  → [`ListDispatch::CrossTenant`] (PlatformAdmin
-///                          required; otherwise `403 forbidden_scope`)
-/// - `all` (case-insensitive) → deprecated alias for `*`; logs a compat
-///                          warning and resolves identically
-/// - anything else        → `501 scope_not_implemented` (wiring for
-///                          `?tenant=<slug>` is deferred to a later PR
-///                          cluster; the 501 is a stable, documented
-///                          response that clients can detect)
+/// - absent: [`ListDispatch::TenantScoped`]
+/// - `*`: [`ListDispatch::CrossTenant`] — PlatformAdmin required, else
+///   `403 forbidden_scope`.
+/// - `all` (case-insensitive): deprecated alias for `*`, logs a compat
+///   warning and resolves identically.
+/// - anything else (slug or uuid): when `supports_single = true`,
+///   resolves via the tenant store to [`ListDispatch::CrossTenantSingle`]
+///   (PlatformAdmin required, `404 tenant_not_found` on miss). When
+///   `supports_single = false`, returns `501 scope_not_implemented`.
 ///
-/// `endpoint_label` is surfaced in the 501 body to help clients discover
+/// `endpoint_label` is surfaced in error bodies to help clients discover
 /// which endpoint they hit (e.g. `"/user"`, `"/project"`, `"/org"`).
+///
+/// `supports_single` controls whether `?tenant=<slug-or-uuid>` is routed to
+/// [`ListDispatch::CrossTenantSingle`] or returns `501 scope_not_implemented`.
+/// Endpoints that cannot (yet) produce a per-row-tenant-decorated envelope
+/// for a single foreign tenant (e.g. `/govern/audit`, see #44.d §2.5) pass
+/// `false`. This keeps the 501 stable for those endpoints while unlocking
+/// the feature on `/user`, `/project`, `/org`.
 pub async fn resolve_list_scope(
     state: &AppState,
     headers: &HeaderMap,
     raw_tenant_param: Option<&str>,
     endpoint_label: &str,
+    supports_single: bool,
 ) -> ListDispatch {
     let Some(raw) = raw_tenant_param else {
         return ListDispatch::TenantScoped;
@@ -313,16 +336,56 @@ pub async fn resolve_list_scope(
     }
     let is_all_star = trimmed == "*";
     let is_all_alias = trimmed.eq_ignore_ascii_case("all");
+
+    // Single-foreign-tenant path. Gate on supports_single, then enforce
+    // PlatformAdmin, then resolve the slug/uuid via the tenant store.
     if !is_all_star && !is_all_alias {
-        return ListDispatch::Response(error_response(
-            StatusCode::NOT_IMPLEMENTED,
-            "scope_not_implemented",
-            &format!(
-                "?tenant=<slug> is not yet supported on {endpoint_label}; use ?tenant=* for cross-tenant listing or omit the parameter"
-            ),
-            None,
-        ));
+        if !supports_single {
+            return ListDispatch::Response(error_response(
+                StatusCode::NOT_IMPLEMENTED,
+                "scope_not_implemented",
+                &format!(
+                    "?tenant=<slug> is not supported on {endpoint_label}; use ?tenant=* for cross-tenant listing or omit the parameter"
+                ),
+                None,
+            ));
+        }
+        // Identity must be resolved before we can return a `tenant_not_found`
+        // (which is information about whether the tenant exists on this
+        // instance) — we do NOT want unauthenticated probes to learn that.
+        let req_ctx = match request_context(state, headers).await {
+            Ok(c) => c,
+            Err(r) => return ListDispatch::Response(r),
+        };
+        if !req_ctx.is_platform_admin {
+            return ListDispatch::Response(forbidden_scope_response("PlatformAdmin"));
+        }
+        let record = match state.tenant_store.get_tenant(trimmed).await {
+            Ok(Some(t)) => t,
+            Ok(None) => {
+                return ListDispatch::Response(error_response(
+                    StatusCode::NOT_FOUND,
+                    "tenant_not_found",
+                    &format!("No tenant matches '{trimmed}'"),
+                    None,
+                ));
+            }
+            Err(e) => {
+                return ListDispatch::Response(error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "tenant_lookup_failed",
+                    &e.to_string(),
+                    None,
+                ));
+            }
+        };
+        return ListDispatch::CrossTenantSingle(ResolvedTenant {
+            id: record.id,
+            slug: record.slug,
+            name: record.name,
+        });
     }
+
     if is_all_alias {
         tracing::warn!(
             target: "compat",
@@ -340,6 +403,46 @@ pub async fn resolve_list_scope(
         return ListDispatch::Response(forbidden_scope_response("PlatformAdmin"));
     }
     ListDispatch::CrossTenant
+}
+
+/// Reject write operations issued with `?tenant=*` / `?tenant=all`.
+///
+/// Cross-tenant **writes** are explicitly out of scope for #44.d — the
+/// `?tenant=` parameter is a READ-side broadening. If a client sends
+/// `POST /user?tenant=*` we return `400 scope_not_allowed_for_write`
+/// instead of silently writing to the caller's tenant or fanning out.
+///
+/// Returns `Some(response)` when the guard fires, `None` otherwise.
+/// Handlers should early-return the Some path verbatim.
+///
+/// Takes a `Query<HashMap>` rather than parsing `raw_query` so we stay
+/// consistent with axum's percent-decoding and multi-value semantics.
+pub fn reject_cross_tenant_write(
+    raw_query: Option<&str>,
+    endpoint_label: &str,
+) -> Option<Response> {
+    let query = raw_query?;
+    // Hand-parse because we only care about one key and want to avoid
+    // pulling serde_urlencoded for a 3-line check. Matches the resolver's
+    // grammar: trimmed "*" or case-insensitive "all".
+    for pair in query.split('&') {
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        if k != "tenant" {
+            continue;
+        }
+        let v = v.trim();
+        if v == "*" || v.eq_ignore_ascii_case("all") {
+            return Some(error_response(
+                StatusCode::BAD_REQUEST,
+                "scope_not_allowed_for_write",
+                &format!(
+                    "?tenant=* is a read-only scope; writes to {endpoint_label} must target a single tenant via X-Tenant-ID"
+                ),
+                None,
+            ));
+        }
+    }
+    None
 }
 
 /// Returns `Ok(())` when the caller is a PlatformAdmin, `403 forbidden` otherwise.

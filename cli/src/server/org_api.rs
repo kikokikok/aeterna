@@ -77,12 +77,21 @@ async fn list_orgs(
     // behavior — PlatformAdmins received all-tenant rows in the bare-array
     // body when ?tenant was absent. That behavior is preserved for
     // backward compat; the new `?tenant=*` path adds the RFC envelope.
-    match super::context::resolve_list_scope(&state, &headers, query.tenant.as_deref(), "/org")
-        .await
+    match super::context::resolve_list_scope(
+        &state,
+        &headers,
+        query.tenant.as_deref(),
+        "/org",
+        true, // supports ?tenant=<slug>
+    )
+    .await
     {
         super::context::ListDispatch::TenantScoped => { /* fall through */ }
         super::context::ListDispatch::CrossTenant => {
-            return list_orgs_cross_tenant(&state, &query).await;
+            return list_orgs_cross_tenant(&state, &query, None).await;
+        }
+        super::context::ListDispatch::CrossTenantSingle(t) => {
+            return list_orgs_cross_tenant(&state, &query, Some(&t)).await;
         }
         super::context::ListDispatch::Response(r) => return r,
     }
@@ -109,13 +118,14 @@ async fn list_orgs(
     Json(units).into_response()
 }
 
-/// Cross-tenant organization listing (`?tenant=*`, PlatformAdmin only).
-///
-/// Same shape as `/project` in scope=all mode — one item per org across
-/// all tenants, each decorated with `tenantId` + `tenantSlug` + `tenantName`.
+/// Cross-tenant organization listing — serves both `?tenant=*`
+/// (`single_tenant=None`) and `?tenant=<slug>` (`single_tenant=Some(...)`).
+/// Symmetric with `list_projects_cross_tenant`; see that function for the
+/// rationale on shape reuse + in-memory narrowing.
 async fn list_orgs_cross_tenant(
     state: &AppState,
     query: &OrgListQuery,
+    single_tenant: Option<&super::context::ResolvedTenant>,
 ) -> axum::response::Response {
     let mut units = match state.postgres.list_all_units().await {
         Ok(units) => units,
@@ -124,6 +134,9 @@ async fn list_orgs_cross_tenant(
         }
     };
     units.retain(|unit| unit.unit_type == UnitType::Organization);
+    if let Some(t) = single_tenant {
+        units.retain(|unit| unit.tenant_id.as_str() == t.id.as_str());
+    }
     if let Some(company_id) = query.company.as_deref() {
         units.retain(|unit| unit.parent_id.as_deref() == Some(company_id));
     }
@@ -166,15 +179,20 @@ async fn list_orgs_cross_tenant(
         })
         .collect();
 
-    (
-        StatusCode::OK,
-        Json(json!({
+    let body = match single_tenant {
+        None => json!({
             "success": true,
             "scope":   "all",
             "items":   items,
-        })),
-    )
-        .into_response()
+        }),
+        Some(t) => json!({
+            "success": true,
+            "scope":   "tenant",
+            "tenant":  { "id": t.id, "slug": t.slug, "name": t.name },
+            "items":   items,
+        }),
+    };
+    (StatusCode::OK, Json(body)).into_response()
 }
 
 async fn show_org(
@@ -196,8 +214,13 @@ async fn show_org(
 async fn create_org(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
+    axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
     Json(req): Json<CreateOrgRequest>,
 ) -> impl IntoResponse {
+    // #44.d §5.8 — block write-with-?tenant=* (see user_api for rationale).
+    if let Some(resp) = super::context::reject_cross_tenant_write(raw_query.as_deref(), "/org") {
+        return resp;
+    }
     let ctx = match require_admin_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
