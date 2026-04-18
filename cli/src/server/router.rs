@@ -2,15 +2,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
+use axum::body::Body;
 use axum::extract::Request;
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::http::{HeaderValue, StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use axum::{Json, Router};
 use metrics::{counter, histogram};
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
 use super::auth_middleware::AuthenticationLayer;
@@ -79,14 +80,52 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     }
 
     // Admin UI static asset serving (optional — skipped if dist directory does not exist).
+    //
+    // SPA fallback policy (see OpenSpec change `fix-spa-fallback-status-code`, #47):
+    //   - Real static assets (main.js, styles.css, favicon, ...) are served
+    //     by ServeDir with their correct status codes.
+    //   - Unknown /admin/* paths fall through to an index.html payload served
+    //     with HTTP 200, not the historic 404. The React Router inside the SPA
+    //     is authoritative for "page not found" rendering — the server has no
+    //     way to know whether /admin/things/42 corresponds to a real client-
+    //     side route without executing the bundle.
+    //   - Serving index.html with 200 matches the behavior of every mainstream
+    //     static host (Netlify, Cloudflare Pages, S3 + CloudFront "SPA mode")
+    //     and fixes false positives on monitoring dashboards.
+    //
+    // The index.html body is read exactly once at startup and cached in an
+    // Arc<Bytes> to avoid per-request disk IO.
     let admin_ui_path =
         std::env::var("AETERNA_ADMIN_UI_PATH").unwrap_or_else(|_| "./admin-ui/dist".to_string());
     let admin_ui_dir = PathBuf::from(&admin_ui_path);
     if admin_ui_dir.is_dir() {
-        let index_html = admin_ui_dir.join("index.html");
-        let serve_dir = ServeDir::new(&admin_ui_dir).not_found_service(ServeFile::new(&index_html));
-        app = app.nest_service("/admin", serve_dir);
-        tracing::info!(path = %admin_ui_path, "Admin UI serving enabled at /admin");
+        let index_path = admin_ui_dir.join("index.html");
+        match std::fs::read(&index_path) {
+            Ok(bytes) => {
+                let cached: Arc<Vec<u8>> = Arc::new(bytes);
+                let spa_fallback = {
+                    let cached = cached.clone();
+                    axum::routing::any(move || {
+                        let body = cached.clone();
+                        async move { spa_index_response(body) }
+                    })
+                };
+                let serve_dir = ServeDir::new(&admin_ui_dir).fallback(spa_fallback);
+                app = app.nest_service("/admin", serve_dir);
+                tracing::info!(
+                    path = %admin_ui_path,
+                    index_bytes = cached.len(),
+                    "Admin UI serving enabled at /admin (SPA fallback -> 200)"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    path = %admin_ui_path,
+                    error = %e,
+                    "Admin UI dist directory present but index.html unreadable — /admin route not registered"
+                );
+            }
+        }
     } else {
         tracing::info!(path = %admin_ui_path, "Admin UI dist directory not found — /admin route not registered");
     }
@@ -137,13 +176,146 @@ async fn not_found() -> impl IntoResponse {
     )
 }
 
+/// Build the SPA fallback response: 200 OK, `text/html; charset=utf-8`, and
+/// the cached `index.html` payload. See OpenSpec `fix-spa-fallback-status-code`.
+fn spa_index_response(body: Arc<Vec<u8>>) -> Response {
+    // Body::from(Vec<u8>) clones into the body; since the cache is an Arc
+    // we deref-clone the inner Vec here. For a ~5-20 KiB index.html shell
+    // this is negligible; we can swap to Bytes later if index.html ever
+    // grows to hundreds of KiB.
+    let mut resp = Response::new(Body::from((*body).clone()));
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/html; charset=utf-8"),
+    );
+    // Do NOT cache the shell — ETag-free so clients always re-fetch to pick
+    // up new hashed asset URLs referenced from within.
+    resp.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-cache"),
+    );
+    resp
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
+    use axum::body::{Body, to_bytes};
     use axum::http::Request;
     use metrics_exporter_prometheus::PrometheusBuilder;
+    use tempfile::TempDir;
     use tower::ServiceExt;
+
+    /// Build a minimal router that mirrors the `/admin` nest in `build_router`.
+    /// Keeps the integration tests independent of full `AppState` plumbing.
+    fn admin_router(admin_ui_dir: &std::path::Path) -> Router {
+        let index_path = admin_ui_dir.join("index.html");
+        let cached: Arc<Vec<u8>> =
+            Arc::new(std::fs::read(&index_path).expect("index.html readable"));
+        let spa_fallback = {
+            let cached = cached.clone();
+            axum::routing::any(move || {
+                let body = cached.clone();
+                async move { spa_index_response(body) }
+            })
+        };
+        let serve_dir = ServeDir::new(admin_ui_dir).fallback(spa_fallback);
+        Router::new()
+            .nest_service("/admin", serve_dir)
+            .fallback(not_found)
+    }
+
+    fn seed_admin_dist() -> TempDir {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("index.html"),
+            b"<!DOCTYPE html>\n<html><body>aeterna admin</body></html>\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("main.js"), b"console.log('aeterna');").unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn admin_spa_fallback_returns_200_html_for_deep_path() {
+        let dir = seed_admin_dist();
+        let app = admin_router(dir.path());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/admin/nonexistent/deep/path")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("text/html; charset=utf-8")
+        );
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert!(
+            body.starts_with(b"<!DOCTYPE html>"),
+            "SPA fallback body must start with <!DOCTYPE html>; got {:?}",
+            std::str::from_utf8(&body).unwrap_or("<binary>")
+        );
+    }
+
+    #[tokio::test]
+    async fn admin_real_static_file_served_with_correct_content_type() {
+        let dir = seed_admin_dist();
+        let app = admin_router(dir.path());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/admin/main.js")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let ct = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert!(
+            ct.starts_with("application/javascript") || ct.starts_with("text/javascript"),
+            "main.js should be served as JavaScript, got {ct:?}"
+        );
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert!(
+            body.starts_with(b"console.log"),
+            "real static file must be returned, not the SPA shell"
+        );
+    }
+
+    #[tokio::test]
+    async fn non_admin_paths_get_default_404() {
+        let dir = seed_admin_dist();
+        let app = admin_router(dir.path());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/nonexistent-top-level-path")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
 
     #[tokio::test]
     async fn fallback_returns_json_404() {
