@@ -19,6 +19,7 @@ Aeterna does **not** auto-generate down-migrations. If a migration needs to be r
 
 ### Per-migration downgrade notes
 
+- **024_normalize_rls_session_variables.sql** -- rewrites three RLS policies from `app.current_tenant_id` to `app.tenant_id`. To revert, re-run the original `CREATE POLICY` blocks from `006_event_streaming.sql:120-138` after `DROP POLICY IF EXISTS`. No data change; policies are metadata only. See issue #59 for context.
 - **023_platform_admin_impersonation.sql** -- safe to drop. All three added columns default to `NULL` and are not read by any code until migration 024+. To revert:
   ```sql
   ALTER TABLE users                  DROP COLUMN IF EXISTS default_tenant_id;
