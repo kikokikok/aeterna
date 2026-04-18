@@ -22,6 +22,12 @@ use super::{AppState, tenant_scoped_context};
 #[serde(rename_all = "camelCase")]
 struct ProjectListQuery {
     team: Option<String>,
+    /// `?tenant=` — see #44.d RFC and `user_api::UserListQuery::tenant`.
+    /// Accepted values: `*` (cross-tenant, PlatformAdmin), `all` (deprecated
+    /// alias), `<slug>` (deferred to PR #65 cluster). Omitted → tenant-scoped
+    /// behavior unchanged.
+    tenant: Option<String>,
+    /// Retained for backward compatibility with pre-RFC experimental clients.
     #[allow(dead_code)]
     all: Option<bool>,
 }
@@ -100,6 +106,38 @@ async fn list_projects(
     headers: HeaderMap,
     Query(query): Query<ProjectListQuery>,
 ) -> impl IntoResponse {
+    // #44.d §2.3 — cross-tenant listing branch.
+    // The existing tenant-scoped path below is untouched when `?tenant` is
+    // absent, preserving pre-RFC response shape for every existing client.
+    if let Some(raw) = query.tenant.as_deref() {
+        let trimmed = raw.trim();
+        let is_all_star = trimmed == "*";
+        let is_all_alias = trimmed.eq_ignore_ascii_case("all");
+        if !is_all_star && !is_all_alias {
+            return error_response(
+                StatusCode::NOT_IMPLEMENTED,
+                "scope_not_implemented",
+                "?tenant=<slug> is not yet supported on /project; use ?tenant=* for cross-tenant listing or omit the parameter",
+            );
+        }
+        if is_all_alias {
+            tracing::warn!(
+                target: "compat",
+                param = "?tenant=all",
+                replacement = "?tenant=*",
+                "deprecated tenant scope alias — clients should migrate to ?tenant=*"
+            );
+        }
+        let req_ctx = match super::context::request_context(&state, &headers).await {
+            Ok(c) => c,
+            Err(r) => return r,
+        };
+        if !req_ctx.is_platform_admin {
+            return super::context::forbidden_scope_response("PlatformAdmin");
+        }
+        return list_projects_cross_tenant(&state, &query).await;
+    }
+
     let ctx = match require_admin_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
@@ -120,6 +158,82 @@ async fn list_projects(
     }
     units.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
     Json(units).into_response()
+}
+
+/// Cross-tenant project listing (`?tenant=*`, PlatformAdmin only).
+///
+/// Returns one item per project across all tenants, each decorated with
+/// `tenantId` + `tenantSlug` + `tenantName`. Unlike `/user`, projects
+/// are 1:1 tenant-owned so there is no user-like row duplication.
+async fn list_projects_cross_tenant(
+    state: &AppState,
+    query: &ProjectListQuery,
+) -> axum::response::Response {
+    let mut units = match state.postgres.list_all_units().await {
+        Ok(units) => units,
+        Err(err) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "project_list_failed",
+                &err.to_string(),
+            );
+        }
+    };
+    units.retain(|unit| unit.unit_type == UnitType::Project);
+    if let Some(team_id) = query.team.as_deref() {
+        units.retain(|unit| unit.parent_id.as_deref() == Some(team_id));
+    }
+    // Stable ordering: tenant first, then project name, then id — makes the
+    // output diffable and safe for clients that paginate visually.
+    units.sort_by(|a, b| {
+        a.tenant_id
+            .cmp(&b.tenant_id)
+            .then(a.name.cmp(&b.name))
+            .then(a.id.cmp(&b.id))
+    });
+
+    // Pre-fetch tenant metadata once and decorate each item. Two DB round
+    // trips total (units + tenants) regardless of project count.
+    let tenants = match state.tenant_store.list_tenants(true).await {
+        Ok(ts) => ts,
+        Err(err) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "tenant_lookup_failed",
+                &err.to_string(),
+            );
+        }
+    };
+    let tenant_by_id: std::collections::HashMap<String, &mk_core::types::TenantRecord> = tenants
+        .iter()
+        .map(|t| (t.id.as_str().to_string(), t))
+        .collect();
+
+    let items: Vec<serde_json::Value> = units
+        .into_iter()
+        .map(|unit| {
+            let t = tenant_by_id.get(unit.tenant_id.as_str());
+            json!({
+                "id":         unit.id,
+                "name":       unit.name,
+                "parentId":   unit.parent_id,
+                "unitType":   "project",
+                "tenantId":   unit.tenant_id,
+                "tenantSlug": t.map(|t| t.slug.clone()),
+                "tenantName": t.map(|t| t.name.clone()),
+            })
+        })
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "scope":   "all",
+            "items":   items,
+        })),
+    )
+        .into_response()
 }
 
 async fn show_project(
