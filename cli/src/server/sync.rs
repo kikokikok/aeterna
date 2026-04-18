@@ -130,8 +130,7 @@ async fn push_handler(
             );
         }
     };
-    if let Err(e) =
-        PostgresBackend::activate_tenant_context(&mut tx, ctx.tenant_id.as_str()).await
+    if let Err(e) = PostgresBackend::activate_tenant_context(&mut tx, ctx.tenant_id.as_str()).await
     {
         tracing::error!("Failed to activate tenant RLS context: {e}");
         return error_response(
@@ -266,8 +265,7 @@ async fn pull_handler(
             );
         }
     };
-    if let Err(e) =
-        PostgresBackend::activate_tenant_context(&mut tx, ctx.tenant_id.as_str()).await
+    if let Err(e) = PostgresBackend::activate_tenant_context(&mut tx, ctx.tenant_id.as_str()).await
     {
         tracing::error!("Failed to activate tenant RLS context: {e}");
         return error_response(

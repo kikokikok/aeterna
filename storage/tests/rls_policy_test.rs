@@ -103,11 +103,10 @@ mod tests {
 
         // Acquisition 2: NEW transaction on a fresh (or recycled) connection.
         // The previous tenant-a context MUST NOT leak. Expected value: empty.
-        let (leaked,): (String,) =
-            sqlx::query_as("SELECT current_setting('app.tenant_id', true)")
-                .fetch_one(pool)
-                .await
-                .expect("fetch current_setting after commit");
+        let (leaked,): (String,) = sqlx::query_as("SELECT current_setting('app.tenant_id', true)")
+            .fetch_one(pool)
+            .await
+            .expect("fetch current_setting after commit");
         assert_eq!(
             leaked, "",
             "tenant context leaked across pool acquisitions \
