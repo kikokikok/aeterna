@@ -332,6 +332,47 @@ impl AeternaClient {
         parse_json_response(self.post("/api/v1/admin/tenants", body).await?).await
     }
 
+    // -----------------------------------------------------------------------
+    // User default tenant (server-side preference, issue #44.b / #45)
+    //
+    // Uses the protected `/api/v1/user/me/default-tenant` endpoints landed
+    // with the RequestContext resolver. The server persists the preference
+    // in `users.default_tenant_id` so it follows the caller across devices.
+    // -----------------------------------------------------------------------
+
+    /// Returns the server-side default tenant for the authenticated user,
+    /// or `Ok(None)` when none is set (the server responds with 204).
+    pub async fn user_default_tenant_get(&self) -> Result<Option<serde_json::Value>> {
+        let resp = self.get("/api/v1/user/me/default-tenant").await?;
+        let status = resp.status();
+        if status == reqwest::StatusCode::NO_CONTENT {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("GET /user/me/default-tenant failed ({status}): {body}");
+        }
+        let value: serde_json::Value = resp.json().await.context("parse default-tenant body")?;
+        Ok(Some(value))
+    }
+
+    /// Set the server-side default tenant. `tenant_ref` may be a slug or UUID.
+    pub async fn user_default_tenant_set(&self, tenant_ref: &str) -> Result<serde_json::Value> {
+        let body = serde_json::json!({ "tenantId": tenant_ref });
+        parse_json_response(self.put("/api/v1/user/me/default-tenant", &body).await?).await
+    }
+
+    /// Clear the server-side default tenant preference.
+    pub async fn user_default_tenant_clear(&self) -> Result<()> {
+        let resp = self.delete("/api/v1/user/me/default-tenant").await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("DELETE /user/me/default-tenant failed ({status}): {body}");
+        }
+        Ok(())
+    }
+
     pub async fn tenant_show(&self, tenant: &str) -> Result<serde_json::Value> {
         parse_json_response(self.get(&format!("/api/v1/admin/tenants/{tenant}")).await?).await
     }
