@@ -3746,6 +3746,126 @@ async fn govern_approve_reject_path_order() {
     assert_ne!(resp.status(), StatusCode::NOT_FOUND);
 }
 
+/// #44.d §2.4 — GET /org with `?tenant=*` / `?tenant=all` / `?tenant=<slug>`:
+/// same gate-layer + full-envelope coverage as /project.
+#[tokio::test]
+async fn list_orgs_cross_tenant_scope_gates_and_aliases() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    // Case 1: ?tenant=* as non-admin → 403 forbidden_scope.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/org?tenant=*")
+                .header("x-user-id", "developer-user")
+                .header("x-user-role", "developer")
+                .header("x-tenant-id", "default")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "forbidden_scope");
+
+    // Case 2: ?tenant=<slug> as PlatformAdmin → 501 NotImplemented,
+    // and the error message mentions /org so clients know which endpoint.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/org?tenant=acme")
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "scope_not_implemented");
+    assert!(
+        body["message"].as_str().unwrap_or("").contains("/org"),
+        "501 body should mention the endpoint path, got: {}",
+        body["message"]
+    );
+
+    // Case 3: ?tenant=* as PlatformAdmin → 200 with scope=all envelope.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/org?tenant=*")
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["success"], true);
+    assert_eq!(body["scope"], "all");
+    assert!(body["items"].is_array());
+
+    // Case 4: ?tenant= (empty) → treated as absent (tenant-scoped path),
+    // defensive for clients sending unfilled form fields. Should NOT 501.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/org?tenant=")
+                .header("x-user-id", "admin-user")
+                .header("x-user-role", "admin")
+                .header("x-tenant-id", "default")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+    // Admin in a tenant-scoped /org call returns a bare array (legacy shape).
+    if resp.status() == StatusCode::OK {
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            body.is_array(),
+            "empty ?tenant= must yield legacy bare-array body"
+        );
+    }
+}
+
 /// #44.d §2.3 — GET /project with `?tenant=*` / `?tenant=all` / `?tenant=<slug>`:
 /// same gate-layer coverage as the /user test, for the project endpoint.
 #[tokio::test]

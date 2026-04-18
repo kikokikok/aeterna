@@ -22,6 +22,9 @@ use super::{AppState, tenant_scoped_context};
 #[serde(rename_all = "camelCase")]
 struct OrgListQuery {
     company: Option<String>,
+    /// `?tenant=` — see #44.d RFC. Accepts `*` / `all` / `<slug>`.
+    tenant: Option<String>,
+    /// Retained for backward compatibility with pre-RFC experimental clients.
     #[allow(dead_code)]
     all: Option<bool>,
 }
@@ -69,6 +72,21 @@ async fn list_orgs(
     headers: HeaderMap,
     Query(query): Query<OrgListQuery>,
 ) -> impl IntoResponse {
+    // #44.d §2.4 — cross-tenant listing dispatch.
+    // Historical note: this handler already had half-baked cross-tenant
+    // behavior — PlatformAdmins received all-tenant rows in the bare-array
+    // body when ?tenant was absent. That behavior is preserved for
+    // backward compat; the new `?tenant=*` path adds the RFC envelope.
+    match super::context::resolve_list_scope(&state, &headers, query.tenant.as_deref(), "/org")
+        .await
+    {
+        super::context::ListDispatch::TenantScoped => { /* fall through */ }
+        super::context::ListDispatch::CrossTenant => {
+            return list_orgs_cross_tenant(&state, &query).await;
+        }
+        super::context::ListDispatch::Response(r) => return r,
+    }
+
     let ctx = match require_admin_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
@@ -89,6 +107,74 @@ async fn list_orgs(
     }
     units.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
     Json(units).into_response()
+}
+
+/// Cross-tenant organization listing (`?tenant=*`, PlatformAdmin only).
+///
+/// Same shape as `/project` in scope=all mode — one item per org across
+/// all tenants, each decorated with `tenantId` + `tenantSlug` + `tenantName`.
+async fn list_orgs_cross_tenant(
+    state: &AppState,
+    query: &OrgListQuery,
+) -> axum::response::Response {
+    let mut units = match state.postgres.list_all_units().await {
+        Ok(units) => units,
+        Err(err) => {
+            return error_response(StatusCode::BAD_REQUEST, "org_list_failed", &err.to_string());
+        }
+    };
+    units.retain(|unit| unit.unit_type == UnitType::Organization);
+    if let Some(company_id) = query.company.as_deref() {
+        units.retain(|unit| unit.parent_id.as_deref() == Some(company_id));
+    }
+    // Stable ordering: tenant first, then org name, then id.
+    units.sort_by(|a, b| {
+        a.tenant_id
+            .cmp(&b.tenant_id)
+            .then(a.name.cmp(&b.name))
+            .then(a.id.cmp(&b.id))
+    });
+
+    let tenants = match state.tenant_store.list_tenants(true).await {
+        Ok(ts) => ts,
+        Err(err) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "tenant_lookup_failed",
+                &err.to_string(),
+            );
+        }
+    };
+    let tenant_by_id: std::collections::HashMap<String, &mk_core::types::TenantRecord> = tenants
+        .iter()
+        .map(|t| (t.id.as_str().to_string(), t))
+        .collect();
+
+    let items: Vec<serde_json::Value> = units
+        .into_iter()
+        .map(|unit| {
+            let t = tenant_by_id.get(unit.tenant_id.as_str());
+            json!({
+                "id":         unit.id,
+                "name":       unit.name,
+                "parentId":   unit.parent_id,
+                "unitType":   "organization",
+                "tenantId":   unit.tenant_id,
+                "tenantSlug": t.map(|t| t.slug.clone()),
+                "tenantName": t.map(|t| t.name.clone()),
+            })
+        })
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "scope":   "all",
+            "items":   items,
+        })),
+    )
+        .into_response()
 }
 
 async fn show_org(
