@@ -1,9 +1,9 @@
 ## 1. Schema migration
 
-- [ ] 1.1 Create `storage/migrations/023_platform_admin_impersonation.sql` adding `users.default_tenant_id UUID NULL REFERENCES tenants(id) ON DELETE SET NULL` with an index `idx_users_default_tenant_id`.
-- [ ] 1.2 In the same migration, add `acting_as_tenant_id UUID NULL REFERENCES tenants(id)` to `referential_audit_log` and `governance_audit_log` with matching indexes `idx_*_audit_log_acting_as_tenant`.
-- [ ] 1.3 Verify migration applies cleanly on a copy of a production-shape database (no backfill required; all existing rows stay `NULL`).
-- [ ] 1.4 Add downgrade notes to `storage/migrations/README.md` (columns are drop-safe).
+- [x] 1.1 Create `storage/migrations/023_platform_admin_impersonation.sql` adding `users.default_tenant_id UUID NULL REFERENCES tenants(id) ON DELETE SET NULL` with an index `idx_users_default_tenant_id`.
+- [x] 1.2 In the same migration, add `acting_as_tenant_id UUID NULL REFERENCES tenants(id)` to `referential_audit_log` and `governance_audit_log` with matching indexes `idx_*_audit_log_acting_as_tenant`.
+- [ ] 1.3 Verify migration applies cleanly on a copy of a production-shape database (no backfill required; all existing rows stay `NULL`). _(deferred to PR CI bootstrap run — no local Postgres available)_
+- [x] 1.4 Add downgrade notes to `storage/migrations/README.md` (columns are drop-safe).
 
 ## 2. Core `RequestContext` resolver
 
