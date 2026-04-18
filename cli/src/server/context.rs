@@ -31,8 +31,6 @@
 //! they are marked `#[deprecated]` and will be removed once all call sites
 //! have been migrated (tracked as slice 44.c).
 
-use std::sync::Arc;
-
 use axum::Json;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -142,7 +140,7 @@ pub fn require_platform_admin(ctx: &RequestContext) -> Result<(), Response> {
 /// `Response` is already a well-formed error that can be returned as-is.
 #[tracing::instrument(skip_all)]
 pub async fn request_context(
-    state: &Arc<AppState>,
+    state: &AppState,
     headers: &HeaderMap,
 ) -> Result<RequestContext, Response> {
     // Delegate identity extraction to the legacy helper. This keeps the
