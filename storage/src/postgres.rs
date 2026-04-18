@@ -1386,12 +1386,11 @@ impl PostgresBackend {
         user_id: &str,
     ) -> Result<Option<String>, PostgresError> {
         use sqlx::Row;
-        let row = sqlx::query(
-            "SELECT default_tenant_id::text AS tid FROM users WHERE id = $1::uuid",
-        )
-        .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row =
+            sqlx::query("SELECT default_tenant_id::text AS tid FROM users WHERE id = $1::uuid")
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?;
         Ok(row.and_then(|r| r.try_get::<Option<String>, _>("tid").ok().flatten()))
     }
 
@@ -1413,9 +1412,7 @@ impl PostgresBackend {
         .execute(&self.pool)
         .await?;
         if res.rows_affected() == 0 {
-            return Err(PostgresError::NotFound(format!(
-                "user {user_id} not found"
-            )));
+            return Err(PostgresError::NotFound(format!("user {user_id} not found")));
         }
         Ok(())
     }
@@ -1429,9 +1426,7 @@ impl PostgresBackend {
         .execute(&self.pool)
         .await?;
         if res.rows_affected() == 0 {
-            return Err(PostgresError::NotFound(format!(
-                "user {user_id} not found"
-            )));
+            return Err(PostgresError::NotFound(format!("user {user_id} not found")));
         }
         Ok(())
     }

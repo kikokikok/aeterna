@@ -92,10 +92,7 @@ pub struct RequestContext {
 
 impl RequestContext {
     /// Returns the resolved tenant or a `400 select_tenant` response.
-    pub fn require_target_tenant(
-        &self,
-        headers: &HeaderMap,
-    ) -> Result<&ResolvedTenant, Response> {
+    pub fn require_target_tenant(&self, headers: &HeaderMap) -> Result<&ResolvedTenant, Response> {
         match &self.tenant {
             Some(t) => Ok(t),
             None => Err(select_tenant_response(&self.available_tenants, headers)),
@@ -104,10 +101,7 @@ impl RequestContext {
 
     /// Convenience: build a `TenantContext` for call sites that still require
     /// the legacy shape. Emits `select_tenant` if no tenant is resolved.
-    pub fn require_tenant_context(
-        &self,
-        headers: &HeaderMap,
-    ) -> Result<TenantContext, Response> {
+    pub fn require_tenant_context(&self, headers: &HeaderMap) -> Result<TenantContext, Response> {
         let tenant = self.require_target_tenant(headers)?;
         Ok(TenantContext {
             tenant_id: tenant.id.clone(),

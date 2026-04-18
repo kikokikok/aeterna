@@ -192,19 +192,18 @@ pub(crate) async fn resolve_identity(
         })?;
 
         if state.plugin_auth_state.config.enabled {
-            let secret =
-                state
-                    .plugin_auth_state
-                    .config
-                    .jwt_secret
-                    .as_deref()
-                    .ok_or_else(|| {
-                        error_json(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "configuration_error",
-                            "Plugin auth JWT secret is not configured",
-                        )
-                    })?;
+            let secret = state
+                .plugin_auth_state
+                .config
+                .jwt_secret
+                .as_deref()
+                .ok_or_else(|| {
+                    error_json(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "configuration_error",
+                        "Plugin auth JWT secret is not configured",
+                    )
+                })?;
             if let Some(identity) = plugin_auth::validate_plugin_bearer(headers, secret) {
                 Resolution::Provider {
                     provider: PROVIDER_GITHUB,
@@ -291,13 +290,17 @@ pub(crate) async fn resolve_identity(
                     )
                 })?;
 
-            let tenant_ids = state.postgres.get_user_tenant_ids(&uid).await.map_err(|err| {
-                error_json(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "tenant_lookup_failed",
-                    &err.to_string(),
-                )
-            })?;
+            let tenant_ids = state
+                .postgres
+                .get_user_tenant_ids(&uid)
+                .await
+                .map_err(|err| {
+                    error_json(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "tenant_lookup_failed",
+                        &err.to_string(),
+                    )
+                })?;
 
             (uid, root_roles, tenant_ids)
         }
