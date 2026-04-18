@@ -115,19 +115,22 @@ Currently used by 6 CLI code paths and 20 handler-side reads. After #44.d:
 
 **Rejected** — we don't ship GraphQL, and inventing a JSON-body scope for GET requests is hostile to CLI/curl workflows.
 
-## Open questions
+## Decisions locked
 
-1. **Q**: Should `?tenant=*` be spelled `?tenant=all` instead?
-   **Proposal**: keep `*` — matches Unix/SQL convention, no confusion with a tenant actually named `all`. Document both if we want.
+1. **`?tenant=*` is the canonical wildcard spelling.** `?tenant=all` is accepted as a deprecated alias that emits a structured warning log to steer clients toward `*`. Removal of the alias is a separate future change.
+2. **No multi-scope `?tenants=t1,t2,t3`.** If demand emerges, the correct response is first-class **Tenant Groups** (`?group=<slug>`) as a separate feature, not URL-param set enumeration. Clients needing multi-tenant reads today use `?tenant=*` with client-side filtering or a client-side loop over `?tenant=<slug>`.
+3. **Flat pagination across the union**, keyset cursor over `(tenant_id, id)`. Per-tenant continuation tokens are explicitly rejected (complex client API, undefined cross-tenant ordering, 3 of 4 real-world workflows want a single flat stream). Workflows needing per-tenant bucketing will get dedicated endpoints (e.g. `/admin/errors/top-per-tenant?limit=10`).
+4. **`403 forbidden_scope`** is a new distinct error code for non-admins attempting `?tenant=*`. Kept separate from `forbidden_tenant` so clients can differentiate "you can't see *any* tenant besides yours" from "you can't do cross-tenant operations at all". Response body carries `required_role: "PlatformAdmin"`.
 
-2. **Q**: Do we need a `?tenants=t1,t2,t3` multi-scope (not `*`, not single)?
-   **Proposal**: no. YAGNI. Every real-world motivator is either single-tenant or all-tenants. Revisit on demand.
+## RLS interaction
 
-3. **Q**: Does `?tenant=*` paginate across tenants, or per-tenant with a continuation token?
-   **Proposal**: flat pagination across the union (sort by `(tenantId, id)` for stable ordering). Per-tenant continuation is a premature optimisation.
+This change intentionally operates on **non-RLS tables**: `users`, `projects`, `orgs`, `tenants`, `referential_audit_log`, `governance_audit_log`. Those tables isolate tenants via application-level `WHERE tenant_id = ?` clauses only. Therefore the flat cross-tenant `SELECT ... FROM <table> ORDER BY (tenant_id, id)` design is valid.
 
-4. **Q**: What error code for a non-admin calling `?tenant=*`?
-   **Proposal**: `403 forbidden_scope` (new code) with `required_role: "PlatformAdmin"` in the body. Distinct from `forbidden_tenant` so clients can differentiate.
+**22 other tables** in the schema **do** have RLS enabled (see `storage/migrations/006,008,016` and `storage/src/rls_migration.rs`). These are not in scope for `?tenant=*` and the 5 migrated endpoints never union them in. This is a deliberate boundary.
+
+**Regression guard** (tasks.md 4.2): a compile-time test asserts the 5 target tables are not RLS-protected. If a future migration RLS-enables one of them, the test fails and forces a redesign decision (add `BYPASSRLS` role? parallel admin view? drop RLS?) before the endpoint silently returns empty results.
+
+**Future work** (out of scope): when an admin endpoint genuinely needs to cross-tenant-read an RLS-protected table, we will have to pick between a `BYPASSRLS` Postgres role (my preference — clean separation + pg-level auditability), policy-level platform-admin escape clauses (uniform but bloats every policy), or `SECURITY DEFINER` views. Documented here for traceability; decision deferred.
 
 ## Implementation plan (sketch — full tasks.md follows in the PR)
 

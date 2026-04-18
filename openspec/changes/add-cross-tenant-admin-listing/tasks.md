@@ -31,9 +31,10 @@
 - [ ] 3.2 Stable sort key `(tenant_id, id)` for deterministic pagination across the union.
 - [ ] 3.3 Ensure `SELECT ... FROM table` does NOT implicitly filter by tenant (these are the *only* queries on the entire codebase allowed to read across tenant boundaries — add a `#[doc(hidden)]` marker and a comment flagging the audit requirement).
 
-## 4. Contract test
+## 4. Contract tests
 
 - [ ] 4.1 Add `cli/tests/cross_tenant_contract_test.rs`: for every `scope=all` response across the 5 endpoints, every item MUST contain non-empty `tenantId` and `tenantSlug`. Failing this test gates the PR.
+- [ ] 4.2 Add RLS regression guard `storage/tests/rls_boundary_test.rs`: asserts each of `users`, `projects`, `orgs`, `tenants`, `referential_audit_log`, `governance_audit_log` has `relrowsecurity = false` in `pg_class`. If a future migration RLS-enables one of these, this test fails and forces a redesign of the cross-tenant reader.
 
 ## 5. Integration tests
 
