@@ -34,12 +34,21 @@
 
 ## 5. PlatformAdmin cross-tenant listing
 
-- [ ] 5.1 `GET /api/v1/admin/users?tenant=*` returns users across all tenants (PlatformAdmin only); response items include `tenantId` + `tenantSlug` columns.
-- [ ] 5.2 `GET /api/v1/admin/projects?tenant=*` same shape for projects.
-- [ ] 5.3 `GET /api/v1/admin/orgs?tenant=*` same shape for organizational units.
-- [ ] 5.4 `?tenant=*` requests by non-PlatformAdmin return `403 forbidden`.
-- [ ] 5.5 Without `?tenant=*`, existing single-tenant listing semantics are preserved (requires `X-Tenant-ID` via `require_target_tenant`).
-- [ ] 5.6 Add `tenant_filter` query param documentation to the OpenAPI/Redoc schema.
+> **Delegated to change [`add-cross-tenant-admin-listing`](../add-cross-tenant-admin-listing/tasks.md) (#44.d).**
+> That change is the single source of truth for every task in this section. Progress tracked there; this list is kept for cross-reference only.
+
+- [x] 5.1 `GET /user?tenant=*` — delivered in [#64](https://github.com/kikokikok/aeterna/pull/64). Items carry `tenantId` + `tenantSlug` per the §4.1 contract.
+- [x] 5.2 `GET /project?tenant=*` — delivered in [#65](https://github.com/kikokikok/aeterna/pull/65). Full contract coverage in [#67](https://github.com/kikokikok/aeterna/pull/67).
+- [x] 5.3 `GET /org?tenant=*` — delivered in [#66](https://github.com/kikokikok/aeterna/pull/66) (plus the shared gate helper).
+- [x] 5.4 `?tenant=*` by non-PlatformAdmin → `403 forbidden_scope`. Gate helper centralized in [#66](https://github.com/kikokikok/aeterna/pull/66); test coverage across all endpoints.
+- [x] 5.5 Without `?tenant=`, legacy single-tenant behavior is preserved on all migrated endpoints (backward-compat explicitly verified in [#64](https://github.com/kikokikok/aeterna/pull/64)/[#65](https://github.com/kikokikok/aeterna/pull/65)/[#66](https://github.com/kikokikok/aeterna/pull/66)).
+- [~] 5.6 No OpenAPI/Redoc generation exists in this repo. Canonical API documentation landed at [`docs/api/admin.md`](../../../docs/api/admin.md) and serves as the source of truth for any future OpenAPI generator. See [#44.d tasks §2.6](../add-cross-tenant-admin-listing/tasks.md#2-handler-migration-one-commit-per-handler).
+
+Bonus work delivered in #44.d beyond the original scope of this section:
+- `GET /admin/tenants?tenant=*` (§2.1, [#63](https://github.com/kikokikok/aeterna/pull/63))
+- `GET /govern/audit?tenant=*` (§2.5, [#68](https://github.com/kikokikok/aeterna/pull/68)) — domain-adapted envelope; per-row tenant decoration deferred pending `acting_as_tenant_id` surfacing.
+- §4.1 envelope contract test ([#67](https://github.com/kikokikok/aeterna/pull/67)) — locks shape across endpoints.
+- §4.2 RLS regression guard — prevents silent breakage if a future migration RLS-enables any cross-tenant-readable table.
 
 ## 6. Audit log impersonation tracking
 

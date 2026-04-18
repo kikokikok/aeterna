@@ -23,7 +23,7 @@
 - [~] 2.3 `GET /project` — same treatment. **Partial:** `?tenant=*`/`all` implemented; `?tenant=<slug>` returns `501 scope_not_implemented` pending PR #65 cluster.
 - [~] 2.4 `GET /org` — same treatment. **Partial:** `?tenant=*`/`all` implemented; `?tenant=<slug>` returns `501 scope_not_implemented` pending PR #65 cluster.
 - [~] 2.5 `GET /govern/audit` — **Partial:** gates + envelope wrapper + `?actor`/`?since` filter composition implemented. Per-item `tenantId`/`tenantSlug` decoration is **explicitly deferred**: `governance_audit_log` has no row-level `tenant_id` (only the nullable `acting_as_tenant_id` from migration 023, which isn't exposed in `AuditRow`). Full tenant decoration requires a follow-up PR that (a) surfaces `acting_as_tenant_id` in `AuditRow` + the SQL, and (b) arguably adds a proper `tenant_id` column via migration + backfill. `?tenant=<slug>` returns `501 scope_not_implemented`. Excluded from the §4.1 `tenantId+tenantSlug` contract test for this reason.
-- [ ] 2.6 Add `tenant_filter` param + new envelope to OpenAPI/Redoc schema for each of the 5.
+- [~] 2.6 Scope-adjusted: the repo has no OpenAPI/Redoc generation in place (no `utoipa` or similar). Landed the **source-of-truth doc** (`docs/api/admin.md`) that a future OpenAPI generator should read from. All 5 endpoints, the `?tenant=` grammar, the envelope contract, error codes, and the audit exception are documented there. Generator work deferred.
 
 ## 3. Cross-tenant repository layer
 
@@ -34,7 +34,7 @@
 ## 4. Contract tests
 
 - [~] 4.1 Contract tests landed in `cli/tests/server_runtime_test.rs` (not a dedicated file — sharing the fixture would have duplicated ~300 lines; can be migrated once a `tests/common/mod.rs` exists). `assert_cross_tenant_envelope_contract` helper covers contract for `/project` and `/org` across 2 seeded tenants; `/user` is best-effort (asserts contract when 200, skips on 503 fixture variant). `/govern/audit` will extend this when §2.5 lands.
-- [ ] 4.2 Add RLS regression guard `storage/tests/rls_boundary_test.rs`: asserts each of `users`, `projects`, `orgs`, `tenants`, `referential_audit_log`, `governance_audit_log` has `relrowsecurity = false` in `pg_class`. If a future migration RLS-enables one of these, this test fails and forces a redesign of the cross-tenant reader.
+- [x] 4.2 `storage/tests/rls_boundary_test.rs` landed. Checks both `relrowsecurity` AND `relforcerowsecurity` in `pg_class` for every table in the cross-tenant readable set (`tenants`, `users`, `organizational_units`, `governance_audit_log`, `referential_audit_log`). Note: this project uses `organizational_units` rather than separate `projects`/`orgs` tables — the original task listed logical entities; the guard tracks the physical tables the readers actually touch. Error message documents 3 resolution paths so a future dev hitting this failure has immediate direction.
 
 ## 5. Integration tests
 
@@ -56,9 +56,9 @@
 
 ## 7. Documentation
 
-- [ ] 7.1 Update `docs/api/admin.md` (or create if absent) with the `?tenant=` convention table from the proposal.
-- [ ] 7.2 Add a "Cross-tenant operations" section to `USER_GUIDE.md` / `DEVELOPER_GUIDE.md` describing when to use `--all-tenants`.
-- [ ] 7.3 Update the 7-stage framework proposal README for `refactor-platform-admin-impersonation` to mark section 5 delegated to this change.
+- [x] 7.1 `docs/api/admin.md` created — canonical reference for the `?tenant=` grammar, envelope contract, error codes, audit exception, ordering invariants, and backward compatibility story.
+- [~] 7.2 `docs/DEVELOPER_GUIDE.md` gained a "Cross-Tenant Operations (#44.d)" section. Links to the canonical doc, summarizes who-can-call-what, calls out the RLS safety net, and includes a common-debugging checklist. `USER_GUIDE.md` does not exist in this repo (only `DEVELOPER_GUIDE.md`); the user-facing content will move there when/if it's created, or be folded into the CLI flags PR (§6) which is where end-user-visible tenancy switching lands.
+- [x] 7.3 `refactor-platform-admin-impersonation/tasks.md` §5 now marked as delegated to this change, with each sub-task linked to the landing PR. Ensures readers of the parent change see #44.d as the single source of truth instead of stale/duplicate tracking.
 
 ## 8. Cleanup (feeds #44.e)
 
