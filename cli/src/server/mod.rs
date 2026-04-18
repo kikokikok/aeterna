@@ -48,7 +48,7 @@ use mk_core::traits::{AuthorizationService, EventPublisher, KnowledgeRepository}
 use mk_core::types::INSTANCE_SCOPE_TENANT_ID;
 use mk_core::types::SYSTEM_USER_ID;
 use mk_core::types::{PROVIDER_GITHUB, PROVIDER_KUBERNETES};
-use mk_core::types::{Role, RoleIdentifier, TenantContext, TenantId, UserId};
+use mk_core::types::{RoleIdentifier, TenantContext, TenantId, UserId};
 use serde_json::json;
 use storage::events::EventError;
 use storage::git_provider_connection_store::GitProviderConnectionError;
@@ -318,6 +318,28 @@ pub(crate) async fn resolve_identity(
     Ok((user_id, instance_roles, tenant_ids))
 }
 
+/// Legacy helper: returns a `TenantContext` for the authenticated request.
+///
+/// **Since #44.c this is a thin shim over [`context::request_context`]** —
+/// every call site automatically picks up the new 4-step resolution chain
+/// (`X-Tenant-ID` → `users.default_tenant_id` → auto-select → error) and
+/// the structured `select_tenant` error body (opt out with
+/// `Accept-Error-Legacy: true`).
+///
+/// The external signature is preserved so the ~40 existing handlers need
+/// no changes. Future work (#44.d) will migrate handlers that need to
+/// distinguish "PlatformAdmin without target tenant" (a case `TenantContext`
+/// cannot express) to `RequestContext` directly.
+///
+/// Behavioural contract preserved from the pre-#44.c implementation:
+/// - `roles` are **tenant-scoped** (re-fetched at the resolved tenant),
+///   matching what handlers expect for RBAC checks.
+/// - `target_tenant_id` is still read from the legacy `X-Target-Tenant-Id`
+///   header for cross-tenant listing handlers that haven't migrated to
+///   `ListTenantScope` yet.
+/// - Dev-headers mode falls back to `plugin_auth_state.config.default_tenant_id`
+///   (or `"default"`) when no `X-Tenant-ID` is provided, preserving the
+///   previous dev UX.
 pub async fn authenticated_tenant_context(
     state: &AppState,
     headers: &HeaderMap,
@@ -325,210 +347,39 @@ pub async fn authenticated_tenant_context(
     let any_provider_configured =
         state.plugin_auth_state.config.enabled || state.k8s_auth_config.enabled;
 
-    enum AuthResolution {
-        Provider {
-            provider: &'static str,
-            subject: String,
-        },
-        DevHeaders {
-            user_id: String,
-            roles: Vec<RoleIdentifier>,
-        },
-    }
-
-    let auth_resolution = if any_provider_configured {
-        let bearer_token = extract_bearer_token(headers).ok_or_else(|| {
-            error_json(
-                StatusCode::UNAUTHORIZED,
-                "missing_bearer_token",
-                "Authorization: Bearer token required",
-            )
-        })?;
-
-        if state.plugin_auth_state.config.enabled {
-            let secret = state
-                .plugin_auth_state
-                .config
-                .jwt_secret
-                .as_deref()
-                .ok_or_else(|| {
-                    error_json(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "configuration_error",
-                        "Plugin auth JWT secret is not configured",
-                    )
-                })?;
-
-            if let Some(identity) = plugin_auth::validate_plugin_bearer(headers, secret) {
-                AuthResolution::Provider {
-                    provider: PROVIDER_GITHUB,
-                    subject: identity.github_login,
-                }
-            } else if state.k8s_auth_config.enabled {
-                if let Some(identity) =
-                    k8s_auth::validate_k8s_bearer(bearer_token, &state.k8s_auth_config).await
-                {
-                    AuthResolution::Provider {
-                        provider: PROVIDER_KUBERNETES,
-                        subject: identity.username,
-                    }
-                } else {
-                    return Err(error_json(
-                        StatusCode::UNAUTHORIZED,
-                        "invalid_bearer_token",
-                        "Bearer token was not accepted by any configured provider",
-                    ));
-                }
-            } else {
-                return Err(error_json(
-                    StatusCode::UNAUTHORIZED,
-                    "invalid_bearer_token",
-                    "Bearer token was not accepted by any configured provider",
-                ));
-            }
-        } else if let Some(identity) =
-            k8s_auth::validate_k8s_bearer(bearer_token, &state.k8s_auth_config).await
-        {
-            AuthResolution::Provider {
-                provider: PROVIDER_KUBERNETES,
-                subject: identity.username,
-            }
-        } else {
-            return Err(error_json(
-                StatusCode::UNAUTHORIZED,
-                "invalid_bearer_token",
-                "Bearer token was not accepted by any configured provider",
-            ));
-        }
-    } else {
-        AuthResolution::DevHeaders {
-            user_id: headers
-                .get("x-user-id")
-                .and_then(|v| v.to_str().ok())
-                .filter(|s| !s.is_empty())
-                .unwrap_or(SYSTEM_USER_ID)
-                .chars()
-                .take(100)
-                .collect(),
-            roles: headers
-                .get("x-user-role")
-                .and_then(|v| v.to_str().ok())
-                .filter(|s| !s.is_empty())
-                .map(|s| vec![RoleIdentifier::from_str_flexible(s)])
-                .unwrap_or_default(),
-        }
-    };
-
-    let (user_id_str, all_roles_root, tenant_ids_from_db) = match &auth_resolution {
-        AuthResolution::Provider { provider, subject } => {
-            let uid = state
-                .postgres
-                .resolve_user_id_by_idp(provider, subject)
-                .await
-                .map_err(|err| {
-                    error_json(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "identity_lookup_failed",
-                        &err.to_string(),
-                    )
-                })?
-                .ok_or_else(|| {
-                    error_json(
-                        StatusCode::UNAUTHORIZED,
-                        "identity_not_provisioned",
-                        "Authenticated identity is not provisioned",
-                    )
-                })?;
-
-            let root_roles = state
-                .postgres
-                .get_user_roles_for_auth(&uid, INSTANCE_SCOPE_TENANT_ID)
-                .await
-                .map_err(|err| {
-                    error_json(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "role_lookup_failed",
-                        &err.to_string(),
-                    )
-                })?;
-
-            let tenant_ids = state
-                .postgres
-                .get_user_tenant_ids(&uid)
-                .await
-                .map_err(|err| {
-                    error_json(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "tenant_lookup_failed",
-                        &err.to_string(),
-                    )
-                })?;
-
-            (uid, root_roles, Some(tenant_ids))
-        }
-        AuthResolution::DevHeaders { user_id, roles } => (user_id.clone(), roles.clone(), None),
-    };
-
-    // --- Resolve tenant ----------------------------------------------------------
-    let explicit_tenant = headers
-        .get("x-tenant-id")
-        .and_then(|v| v.to_str().ok())
-        .filter(|s| !s.is_empty());
-
-    let tenant_id_str: String = match explicit_tenant {
-        Some(t) => t.to_owned(),
-        None => match &auth_resolution {
-            AuthResolution::Provider { .. } => {
-                let is_platform_admin = all_roles_root
-                    .iter()
-                    .any(|r| RoleIdentifier::from(Role::PlatformAdmin) == *r);
-                if is_platform_admin {
-                    return Err(error_json(
-                        StatusCode::BAD_REQUEST,
-                        "tenant_required",
-                        "X-Tenant-ID header required for PlatformAdmin requests",
-                    ));
-                }
-                let tenant_ids = tenant_ids_from_db.as_deref().unwrap_or(&[]);
-                match tenant_ids {
-                    [single] => single.clone(),
-                    [] => {
-                        return Err(error_json(
-                            StatusCode::BAD_REQUEST,
-                            "no_tenant",
-                            "Authenticated user has no tenant assignment",
-                        ));
-                    }
-                    _ => {
-                        return Err(error_json(
-                            StatusCode::BAD_REQUEST,
-                            "ambiguous_tenant",
-                            "User belongs to multiple tenants — provide X-Tenant-ID to select one",
-                        ));
-                    }
-                }
-            }
-            AuthResolution::DevHeaders { .. } => state
+    // Dev-headers mode fallback: when no auth provider is configured and
+    // the request doesn't carry `X-Tenant-ID`, inject the configured
+    // default so `request_context` has something to resolve. Matches the
+    // pre-#44.c dev UX.
+    let injected_headers_owned;
+    let effective_headers: &HeaderMap =
+        if !any_provider_configured && !headers.contains_key("x-tenant-id") {
+            let fallback = state
                 .plugin_auth_state
                 .config
                 .default_tenant_id
                 .clone()
-                .unwrap_or_else(|| "default".to_string()),
-        },
-    };
+                .unwrap_or_else(|| "default".to_string());
+            let mut h = headers.clone();
+            if let Ok(v) = axum::http::HeaderValue::from_str(&fallback) {
+                h.insert("x-tenant-id", v);
+            }
+            injected_headers_owned = h;
+            &injected_headers_owned
+        } else {
+            headers
+        };
 
-    let tenant_id = TenantId::new(tenant_id_str.chars().take(100).collect()).ok_or_else(|| {
-        error_json(
-            StatusCode::BAD_REQUEST,
-            "invalid_tenant_id",
-            "Invalid X-Tenant-ID header",
-        )
-    })?;
+    let ctx = context::request_context(state, effective_headers).await?;
+    let tenant = ctx.require_target_tenant(effective_headers)?.clone();
 
-    let roles: Vec<RoleIdentifier> = match &auth_resolution {
-        AuthResolution::Provider { .. } => state
+    // Tenant-scoped roles: RequestContext carries *instance-scope* roles
+    // (so PlatformAdmin is always visible); legacy handlers expect
+    // TenantContext.roles to be evaluated at the resolved tenant.
+    let roles = if any_provider_configured {
+        state
             .postgres
-            .get_user_roles_for_auth(&user_id_str, tenant_id.as_str())
+            .get_user_roles_for_auth(ctx.user_id.as_str(), tenant.id.as_str())
             .await
             .map_err(|err| {
                 error_json(
@@ -536,27 +387,22 @@ pub async fn authenticated_tenant_context(
                     "role_lookup_failed",
                     &err.to_string(),
                 )
-            })?,
-        AuthResolution::DevHeaders { roles, .. } => roles.clone(),
+            })?
+    } else {
+        // Dev-headers: trust the X-User-Role header as-is (already parsed
+        // into `ctx.roles` by `resolve_identity`).
+        ctx.roles.clone()
     };
 
-    let user_id = UserId::new(user_id_str).ok_or_else(|| {
-        error_json(
-            StatusCode::BAD_REQUEST,
-            "invalid_user_id",
-            "Invalid authenticated user identifier",
-        )
-    })?;
-
-    let target_tenant_id: Option<TenantId> = headers
+    let target_tenant_id = headers
         .get("x-target-tenant-id")
         .and_then(|v| v.to_str().ok())
         .filter(|s| !s.is_empty())
         .and_then(|s| TenantId::new(s.chars().take(100).collect()));
 
     Ok(TenantContext {
-        tenant_id,
-        user_id,
+        tenant_id: tenant.id,
+        user_id: ctx.user_id,
         agent_id: None,
         roles,
         target_tenant_id,
@@ -575,132 +421,20 @@ pub async fn tenant_scoped_context(
     authenticated_tenant_context(state, headers).await
 }
 
+/// Legacy helper: returns `(user_id, instance_scope_roles)` for a request.
+///
+/// Used by platform-level endpoints (lifecycle, global admin) that do a
+/// local `PlatformAdmin` role check and don't care about tenant resolution.
+///
+/// Since #44.c this is a thin wrapper over [`resolve_identity`] — the
+/// pre-existing ~125 lines of auth-provider dance have been removed in
+/// favour of the single extracted helper.
 pub async fn authenticated_platform_context(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<(UserId, Vec<RoleIdentifier>), axum::response::Response> {
-    let any_provider_configured =
-        state.plugin_auth_state.config.enabled || state.k8s_auth_config.enabled;
-
-    if any_provider_configured {
-        let bearer_token = extract_bearer_token(headers).ok_or_else(|| {
-            error_json(
-                StatusCode::UNAUTHORIZED,
-                "missing_bearer_token",
-                "Authorization: Bearer token required",
-            )
-        })?;
-
-        let (provider, subject) = if state.plugin_auth_state.config.enabled {
-            let secret = state
-                .plugin_auth_state
-                .config
-                .jwt_secret
-                .as_deref()
-                .ok_or_else(|| {
-                    error_json(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "configuration_error",
-                        "Plugin auth JWT secret is not configured",
-                    )
-                })?;
-            if let Some(identity) = plugin_auth::validate_plugin_bearer(headers, secret) {
-                (PROVIDER_GITHUB, identity.github_login)
-            } else if state.k8s_auth_config.enabled {
-                k8s_auth::validate_k8s_bearer(bearer_token, &state.k8s_auth_config)
-                    .await
-                    .map(|id| (PROVIDER_KUBERNETES, id.username))
-                    .ok_or_else(|| {
-                        error_json(
-                            StatusCode::UNAUTHORIZED,
-                            "invalid_bearer_token",
-                            "Bearer token was not accepted by any configured provider",
-                        )
-                    })?
-            } else {
-                return Err(error_json(
-                    StatusCode::UNAUTHORIZED,
-                    "invalid_bearer_token",
-                    "Bearer token was not accepted by any configured provider",
-                ));
-            }
-        } else {
-            k8s_auth::validate_k8s_bearer(bearer_token, &state.k8s_auth_config)
-                .await
-                .map(|id| (PROVIDER_KUBERNETES, id.username))
-                .ok_or_else(|| {
-                    error_json(
-                        StatusCode::UNAUTHORIZED,
-                        "invalid_bearer_token",
-                        "Bearer token was not accepted by any configured provider",
-                    )
-                })?
-        };
-
-        let user_id_str = state
-            .postgres
-            .resolve_user_id_by_idp(provider, &subject)
-            .await
-            .map_err(|err| {
-                error_json(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "identity_lookup_failed",
-                    &err.to_string(),
-                )
-            })?
-            .ok_or_else(|| {
-                error_json(
-                    StatusCode::UNAUTHORIZED,
-                    "identity_not_provisioned",
-                    "Authenticated identity is not provisioned",
-                )
-            })?;
-
-        let roles = state
-            .postgres
-            .get_user_roles_for_auth(&user_id_str, INSTANCE_SCOPE_TENANT_ID)
-            .await
-            .map_err(|err| {
-                error_json(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "role_lookup_failed",
-                    &err.to_string(),
-                )
-            })?;
-
-        let user_id = UserId::new(user_id_str).ok_or_else(|| {
-            error_json(
-                StatusCode::BAD_REQUEST,
-                "invalid_user_id",
-                "Invalid authenticated user identifier",
-            )
-        })?;
-
-        Ok((user_id, roles))
-    } else {
-        let user_id_str: String = headers
-            .get("x-user-id")
-            .and_then(|v| v.to_str().ok())
-            .filter(|s| !s.is_empty())
-            .unwrap_or(SYSTEM_USER_ID)
-            .chars()
-            .take(100)
-            .collect();
-        let roles = headers
-            .get("x-user-role")
-            .and_then(|v| v.to_str().ok())
-            .filter(|s| !s.is_empty())
-            .map(|s| vec![RoleIdentifier::from_str_flexible(s)])
-            .unwrap_or_default();
-        let user_id = UserId::new(user_id_str).ok_or_else(|| {
-            error_json(
-                StatusCode::BAD_REQUEST,
-                "invalid_user_id",
-                "Invalid X-User-ID header",
-            )
-        })?;
-        Ok((user_id, roles))
-    }
+    let (user_id, roles, _tenant_ids) = resolve_identity(state, headers).await?;
+    Ok((user_id, roles))
 }
 
 fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
