@@ -162,9 +162,22 @@ jobs:
             --debug > /tmp/manifest.yaml
           echo "Rendered $(wc -l < /tmp/manifest.yaml) lines across $(grep -c '^kind:' /tmp/manifest.yaml) K8s objects"
       - name: Install kubeconform
+        env:
+          KUBECONFORM_VERSION: v0.6.4
         run: |
-          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz | tar xz
-          sudo mv kubeconform /usr/local/bin/
+          set -euo pipefail
+          url="https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          # -f fails on 4xx/5xx (don't pipe HTML into tar); --retry survives
+          # transient GitHub CDN flakes that previously yielded
+          # "gzip: stdin: not in gzip format".
+          curl --fail --location --show-error --silent \
+               --retry 5 --retry-delay 3 --retry-all-errors \
+               --output /tmp/kubeconform.tar.gz "$url"
+          file /tmp/kubeconform.tar.gz | grep -q 'gzip compressed data' \
+            || { echo "Downloaded file is not gzip:"; file /tmp/kubeconform.tar.gz; head -c 200 /tmp/kubeconform.tar.gz; exit 1; }
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+          sudo mv /tmp/kubeconform /usr/local/bin/
+          kubeconform -v
       - name: Kubeconform (strict, ignore-missing-schemas)
         run: |
           kubeconform \
