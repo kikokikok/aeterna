@@ -190,10 +190,8 @@ fn spa_index_response(body: Arc<Vec<u8>>) -> Response {
     );
     // Do NOT cache the shell — ETag-free so clients always re-fetch to pick
     // up new hashed asset URLs referenced from within.
-    resp.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("no-cache"),
-    );
+    resp.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
     resp
 }
 
