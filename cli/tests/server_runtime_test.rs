@@ -3745,3 +3745,108 @@ async fn govern_approve_reject_path_order() {
     assert_ne!(resp.status(), StatusCode::METHOD_NOT_ALLOWED);
     assert_ne!(resp.status(), StatusCode::NOT_FOUND);
 }
+
+/// #44.d §2.2 — GET /user with `?tenant=*` / `?tenant=all` / `?tenant=<slug>`:
+/// verifies the authorization and scope-resolution branches that fire
+/// BEFORE any database work. This test is schema-independent — it covers
+/// only the pre-DB gates and does not depend on which `users` table
+/// variant (Main / IdpSync / none) is present in the runtime fixture.
+#[tokio::test]
+async fn list_users_cross_tenant_scope_gates_and_aliases() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    // Case 1: ?tenant=* as a non-admin → 403 forbidden_scope.
+    // This MUST fire before any users-table probe, independent of schema.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/user?tenant=*")
+                .header("x-user-id", "developer-user")
+                .header("x-user-role", "developer")
+                .header("x-tenant-id", "default")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "forbidden_scope");
+
+    // Case 2: ?tenant=<slug> as PlatformAdmin → 501 NotImplemented.
+    // This is the "deferred to PR #65" path; we want it to return a
+    // stable, discoverable error so clients know to use ?tenant=* today.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/user?tenant=acme")
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "scope_not_implemented");
+
+    // Case 3: ?tenant=all (deprecated alias) → treated as `*` by
+    // PlatformAdmin: reaches the cross-tenant branch. With no users
+    // table in the fixture, this yields 503 user_schema_unsupported
+    // (same code path as the tenant-scoped baseline). The important
+    // assertion is "not 403/501" — the alias was accepted.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/user?tenant=all")
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(resp.status(), StatusCode::FORBIDDEN);
+    assert_ne!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+    // Accepts either the cross-tenant success envelope OR the 503 that
+    // the existing `detect_user_table_variant` helper emits when the
+    // users table isn't provisioned — both prove the alias was
+    // accepted and PlatformAdmin was permitted.
+    let status = resp.status();
+    assert!(
+        status == StatusCode::OK || status == StatusCode::SERVICE_UNAVAILABLE,
+        "unexpected status for ?tenant=all PlatformAdmin: {status}"
+    );
+    if status == StatusCode::OK {
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(body["scope"], "all");
+        assert_eq!(body["success"], true);
+        assert!(body["items"].is_array());
+    }
+}

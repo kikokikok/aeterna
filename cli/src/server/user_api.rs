@@ -20,6 +20,14 @@ struct UserListQuery {
     org: Option<String>,
     team: Option<String>,
     role: Option<String>,
+    /// `?tenant=` parameter (see #44.d RFC):
+    /// - omitted → tenant-scoped (backward compat, returns bare array)
+    /// - `*`     → cross-tenant (PlatformAdmin only, returns envelope)
+    /// - `all`   → deprecated alias for `*`
+    /// - `<slug>` → NotImplemented for now (deferred to PR #65)
+    tenant: Option<String>,
+    /// Retained for backward compatibility with pre-RFC experimental clients.
+    /// Not read; deprecated in favor of `?tenant=*`.
     #[allow(dead_code)]
     all: Option<bool>,
 }
@@ -287,6 +295,40 @@ async fn list_users(
     headers: HeaderMap,
     Query(query): Query<UserListQuery>,
 ) -> impl IntoResponse {
+    // #44.d — cross-tenant listing branch.
+    // The existing tenant-scoped path below is untouched when `?tenant` is
+    // absent, preserving pre-RFC response shape for every existing client.
+    if let Some(raw) = query.tenant.as_deref() {
+        let trimmed = raw.trim();
+        let is_all_star = trimmed == "*";
+        let is_all_alias = trimmed.eq_ignore_ascii_case("all");
+        if !is_all_star && !is_all_alias {
+            // `?tenant=<slug>` is part of the RFC but its wiring for /user
+            // is deferred to PR #65 so this change stays reviewable.
+            return error_response(
+                StatusCode::NOT_IMPLEMENTED,
+                "scope_not_implemented",
+                "?tenant=<slug> is not yet supported on /user; use ?tenant=* for cross-tenant listing or omit the parameter",
+            );
+        }
+        if is_all_alias {
+            tracing::warn!(
+                target: "compat",
+                param = "?tenant=all",
+                replacement = "?tenant=*",
+                "deprecated tenant scope alias — clients should migrate to ?tenant=*"
+            );
+        }
+        let req_ctx = match context::request_context(&state, &headers).await {
+            Ok(c) => c,
+            Err(r) => return r,
+        };
+        if !req_ctx.is_platform_admin {
+            return context::forbidden_scope_response("PlatformAdmin");
+        }
+        return list_users_cross_tenant(&state, &query).await;
+    }
+
     let ctx = match require_admin_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
@@ -420,6 +462,163 @@ async fn list_users(
     }
 
     Json(users).into_response()
+}
+
+/// Cross-tenant user listing (`?tenant=*`, PlatformAdmin only).
+///
+/// Returns one item per `(user, tenant)` pair for every tenant the user
+/// holds roles in. The same user can appear multiple times when they are
+/// members of multiple tenants — this is the intended "who has access
+/// where" semantics for platform admin views.
+///
+/// NOTE: roles are currently returned as `[]` in this mode. Proper per-
+/// tenant role aggregation is deferred to a follow-up (PR #66) to keep
+/// this change reviewable. Callers that need role data today should
+/// issue a tenant-scoped call per row.
+async fn list_users_cross_tenant(
+    state: &AppState,
+    query: &UserListQuery,
+) -> axum::response::Response {
+    let variant = match detect_user_table_variant(state).await {
+        Ok(variant) => variant,
+        Err(response) => return response,
+    };
+
+    // Filter application: each filter is scoped to the SAME tenant as the
+    // (user, tenant) row being considered — preserving the per-tenant
+    // meaning of `?org=&team=&role=` from the existing tenant-scoped path.
+    let rows = match variant {
+        UserTableVariant::Main => sqlx::query(
+            r"
+            SELECT DISTINCT
+                u.id::text         AS user_id,
+                u.email            AS email,
+                COALESCE(u.name, u.email) AS display_name,
+                u.status           AS status,
+                u.avatar_url       AS avatar_url,
+                u.settings         AS settings,
+                u.created_at       AS created_at,
+                u.updated_at       AS updated_at,
+                ur.tenant_id       AS tenant_id,
+                t.slug             AS tenant_slug,
+                t.name             AS tenant_name
+            FROM users u
+            INNER JOIN user_roles ur ON ur.user_id IN (u.id::text, u.email)
+            INNER JOIN tenants   t  ON t.id = ur.tenant_id
+            WHERE u.deleted_at IS NULL
+              AND ($1::text IS NULL OR EXISTS (
+                    SELECT 1 FROM user_roles ur2
+                    WHERE ur2.tenant_id = ur.tenant_id
+                      AND ur2.unit_id   = $1
+                      AND ur2.user_id IN (u.id::text, u.email)
+              ))
+              AND ($2::text IS NULL OR EXISTS (
+                    SELECT 1 FROM user_roles ur3
+                    WHERE ur3.tenant_id = ur.tenant_id
+                      AND ur3.unit_id   = $2
+                      AND ur3.user_id IN (u.id::text, u.email)
+              ))
+              AND ($3::text IS NULL OR EXISTS (
+                    SELECT 1 FROM user_roles ur4
+                    WHERE ur4.tenant_id      = ur.tenant_id
+                      AND lower(ur4.role)    = lower($3)
+                      AND ur4.user_id IN (u.id::text, u.email)
+              ))
+            ORDER BY ur.tenant_id, u.created_at DESC
+            ",
+        )
+        .bind(query.org.as_deref())
+        .bind(query.team.as_deref())
+        .bind(query.role.as_deref())
+        .fetch_all(state.postgres.pool())
+        .await,
+        UserTableVariant::IdpSync => sqlx::query(
+            r"
+            SELECT DISTINCT
+                u.id::text         AS user_id,
+                u.email            AS email,
+                COALESCE(u.display_name, NULLIF(CONCAT_WS(' ', u.first_name, u.last_name), ''), u.email) AS display_name,
+                CASE WHEN u.is_active THEN 'active' ELSE 'inactive' END AS status,
+                NULL::text         AS avatar_url,
+                '{}'::jsonb        AS settings,
+                u.created_at       AS created_at,
+                u.updated_at       AS updated_at,
+                ur.tenant_id       AS tenant_id,
+                t.slug             AS tenant_slug,
+                t.name             AS tenant_name
+            FROM users u
+            INNER JOIN user_roles ur ON ur.user_id IN (u.id::text, u.email)
+            INNER JOIN tenants   t  ON t.id = ur.tenant_id
+            WHERE TRUE
+              AND ($1::text IS NULL OR EXISTS (
+                    SELECT 1 FROM user_roles ur2
+                    WHERE ur2.tenant_id = ur.tenant_id
+                      AND ur2.unit_id   = $1
+                      AND ur2.user_id IN (u.id::text, u.email)
+              ))
+              AND ($2::text IS NULL OR EXISTS (
+                    SELECT 1 FROM user_roles ur3
+                    WHERE ur3.tenant_id = ur.tenant_id
+                      AND ur3.unit_id   = $2
+                      AND ur3.user_id IN (u.id::text, u.email)
+              ))
+              AND ($3::text IS NULL OR EXISTS (
+                    SELECT 1 FROM user_roles ur4
+                    WHERE ur4.tenant_id      = ur.tenant_id
+                      AND lower(ur4.role)    = lower($3)
+                      AND ur4.user_id IN (u.id::text, u.email)
+              ))
+            ORDER BY ur.tenant_id, u.created_at DESC
+            ",
+        )
+        .bind(query.org.as_deref())
+        .bind(query.team.as_deref())
+        .bind(query.role.as_deref())
+        .fetch_all(state.postgres.pool())
+        .await,
+    };
+
+    let rows = match rows {
+        Ok(rows) => rows,
+        Err(err) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "user_list_failed",
+                &err.to_string(),
+            );
+        }
+    };
+
+    let items: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|row| {
+            json!({
+                "id":          row.get::<String, _>("user_id"),
+                "email":       row.get::<String, _>("email"),
+                "name":        row.get::<String, _>("display_name"),
+                "status":      row.get::<String, _>("status"),
+                "avatarUrl":   row.get::<Option<String>, _>("avatar_url"),
+                "settings":    row.get::<serde_json::Value, _>("settings"),
+                "createdAt":   row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+                "updatedAt":   row.get::<chrono::DateTime<chrono::Utc>, _>("updated_at"),
+                "tenantId":    row.get::<String, _>("tenant_id"),
+                "tenantSlug":  row.get::<String, _>("tenant_slug"),
+                "tenantName":  row.get::<String, _>("tenant_name"),
+                // See docstring: per-tenant role aggregation deferred to PR #66.
+                "roles":       Vec::<serde_json::Value>::new(),
+            })
+        })
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "scope":   "all",
+            "items":   items,
+        })),
+    )
+        .into_response()
 }
 
 async fn show_user(
