@@ -122,6 +122,22 @@ Currently used by 6 CLI code paths and 20 handler-side reads. After #44.d:
 3. **Flat pagination across the union**, keyset cursor over `(tenant_id, id)`. Per-tenant continuation tokens are explicitly rejected (complex client API, undefined cross-tenant ordering, 3 of 4 real-world workflows want a single flat stream). Workflows needing per-tenant bucketing will get dedicated endpoints (e.g. `/admin/errors/top-per-tenant?limit=10`).
 4. **`403 forbidden_scope`** is a new distinct error code for non-admins attempting `?tenant=*`. Kept separate from `forbidden_tenant` so clients can differentiate "you can't see *any* tenant besides yours" from "you can't do cross-tenant operations at all". Response body carries `required_role: "PlatformAdmin"`.
 
+## Target paths (amendment, 2026-04-18)
+
+Initial drafts of this proposal assumed five parallel `/admin/*` list endpoints. Implementation discovered only `/admin/tenants` exists; the other four concepts live at tenant-scoped routes. Creating parallel `/admin/{users,projects,orgs,audit}` endpoints would double the surface area without adding capability.
+
+**Locked decision:** extend the existing list endpoints to accept `?tenant=<slug|*>` when the caller is a `PlatformAdmin`. The distinguishing axis for cross-tenant reads is the query parameter, **not** the URL prefix.
+
+| Resource  | Route                | Migration target                            |
+|-----------|----------------------|---------------------------------------------|
+| Tenants   | `GET /admin/tenants` | Refactor to `list_scope` (already cross-tenant) |
+| Users     | `GET /user`          | Add `?tenant=<slug\|*>` via `list_scope`    |
+| Projects  | `GET /project`       | Add `?tenant=<slug\|*>` via `list_scope`    |
+| Orgs      | `GET /org`           | Add `?tenant=<slug\|*>` via `list_scope`    |
+| Audit     | `GET /govern/audit`  | Add `?tenant=<slug\|*>` via `list_scope`    |
+
+Backward compatibility: tenant-scoped calls (no `?tenant`, or `?tenant=<own-slug>`) return the existing response body unchanged. The new `scope` + `tenant` envelope is emitted **only** when `?tenant=*` is used.
+
 ## RLS interaction
 
 This change intentionally operates on **non-RLS tables**: `users`, `projects`, `orgs`, `tenants`, `referential_audit_log`, `governance_audit_log`. Those tables isolate tenants via application-level `WHERE tenant_id = ?` clauses only. Therefore the flat cross-tenant `SELECT ... FROM <table> ORDER BY (tenant_id, id)` design is valid.
