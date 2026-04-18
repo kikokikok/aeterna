@@ -358,6 +358,38 @@ curl http://localhost:6333/collections
 
 ---
 
+## Cross-Tenant Operations (#44.d)
+
+PlatformAdmins can list resources across every tenant on the instance by passing `?tenant=*` to any of the migrated list endpoints:
+
+| Endpoint                | Effect of `?tenant=*`                                      |
+|-------------------------|------------------------------------------------------------|
+| `GET /admin/tenants`    | Lists all tenants (was always cross-tenant).               |
+| `GET /user`             | Users from every tenant, decorated with `tenantId`/`tenantSlug`. |
+| `GET /project`          | Project organizational units, same decoration.             |
+| `GET /org`              | Organization units, same decoration.                       |
+| `GET /govern/audit`     | Audit log across tenants (no per-row tenant decoration — see canonical doc). |
+
+**Who can call it?** PlatformAdmin only. Non-admins get `403 forbidden_scope`. Callers without the `?tenant=` param see the legacy tenant-scoped behavior unchanged.
+
+**Response envelope:** `{ "success": true, "scope": "all", "items": [...] }`. Every item (except on `/govern/audit`) has a non-empty `tenantId` and `tenantSlug` — this is locked by the §4.1 contract test in `cli/tests/server_runtime_test.rs`.
+
+**Safety net:** `storage/tests/rls_boundary_test.rs` fails if any cross-tenant-readable table is ever accidentally RLS-enabled (which would silently return empty results instead of data). If you touch migrations for `tenants` / `users` / `organizational_units` / `governance_audit_log` / `referential_audit_log`, run this test locally.
+
+**Planned work:**
+- `?tenant=<slug>` (single-foreign-tenant listing): currently `501 scope_not_implemented`, scheduled in the cross-tenant listing change.
+- CLI flags: `--all-tenants` and `--tenant <slug>` on `aeterna admin {users,projects,orgs,audit} list` — see [tasks §6](../openspec/changes/add-cross-tenant-admin-listing/tasks.md#6-cli-updates-separate-pr-tracked-here-for-cross-reference).
+- Per-row tenant decoration for `/govern/audit` once `acting_as_tenant_id` is surfaced in `AuditRow`.
+
+**Canonical reference:** [`docs/api/admin.md`](api/admin.md) documents the full grammar, error codes, envelope guarantees, and ordering invariants. Any OpenAPI schema we generate in the future should use that document as its source of truth.
+
+**Common debugging tip:** if `?tenant=*` returns an empty `items[]` array but you expect data, check:
+1. The caller actually has the `platform_admin` role (not just an `admin` role scoped to a single tenant).
+2. No migration has RLS-enabled one of the tables (the RLS boundary test catches this).
+3. The target tenants are `status = 'active'` in `tenants` (soft-deleted tenants are excluded from `?tenant=*`).
+
+---
+
 ## Key Specs
 
 Before working on a specific area, read the relevant OpenSpec specification:
