@@ -3746,6 +3746,114 @@ async fn govern_approve_reject_path_order() {
     assert_ne!(resp.status(), StatusCode::NOT_FOUND);
 }
 
+/// #44.d §2.3 — GET /project with `?tenant=*` / `?tenant=all` / `?tenant=<slug>`:
+/// same gate-layer coverage as the /user test, for the project endpoint.
+#[tokio::test]
+async fn list_projects_cross_tenant_scope_gates_and_aliases() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    // Case 1: ?tenant=* as non-admin → 403 forbidden_scope.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/project?tenant=*")
+                .header("x-user-id", "developer-user")
+                .header("x-user-role", "developer")
+                .header("x-tenant-id", "default")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "forbidden_scope");
+
+    // Case 2: ?tenant=<slug> as PlatformAdmin → 501 NotImplemented.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/project?tenant=acme")
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "scope_not_implemented");
+
+    // Case 3: ?tenant=* as PlatformAdmin → 200 with scope=all envelope.
+    // Unlike /user, /project doesn't depend on a schema variant so this
+    // should always return 200 (empty items in a fresh fixture).
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/project?tenant=*")
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["success"], true);
+    assert_eq!(body["scope"], "all");
+    assert!(body["items"].is_array());
+
+    // Case 4: ?tenant=all (deprecated alias) → same behavior as *.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/project?tenant=all")
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["scope"], "all");
+}
+
 /// #44.d §2.2 — GET /user with `?tenant=*` / `?tenant=all` / `?tenant=<slug>`:
 /// verifies the authorization and scope-resolution branches that fire
 /// BEFORE any database work. This test is schema-independent — it covers
