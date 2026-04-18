@@ -152,11 +152,11 @@ async fn list_projects(
 /// `single_tenant=None`) and `?tenant=<slug>` (PlatformAdmin,
 /// `single_tenant=Some(...)`).
 ///
-/// The only difference between the two modes is (a) an additional row-level
-/// filter when `single_tenant` is Some, and (b) the envelope's `scope` field
-/// + an echoed `tenant` object so clients can tell which tenant they are
-/// looking at. Per-item decoration (`tenantId`/`tenantSlug`/`tenantName`) is
-/// identical in both modes — this keeps the items-array contract uniform.
+/// The only difference between the two modes is an additional row-level
+/// filter when `single_tenant` is Some, plus the envelope's `scope` field
+/// and an echoed `tenant` object so clients can tell which tenant they are
+/// looking at. Per-item decoration (`tenantId`/`tenantSlug`/`tenantName`)
+/// is identical in both modes — this keeps the items-array contract uniform.
 async fn list_projects_cross_tenant(
     state: &AppState,
     query: &ProjectListQuery,

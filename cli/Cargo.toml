@@ -81,3 +81,5 @@ predicates = "3.1"
 testing.workspace = true
 wiremock.workspace = true
 serde_json.workspace = true
+# #44.d §5.6 — deprecation log capture for ?tenant=all compat-warning test.
+tracing-test = "0.2"

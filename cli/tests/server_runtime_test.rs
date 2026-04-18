@@ -4454,3 +4454,455 @@ async fn cross_tenant_envelope_contract_user_best_effort() {
         other => panic!("/user?tenant=*: unexpected status {other}"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// #44.d §5 — Integration test matrix for ?tenant= across /user /project /org.
+//
+// Each test below maps to a specific task in the cross-tenant listing change
+// (openspec/changes/add-cross-tenant-admin-listing/tasks.md). Keeping them
+// grouped here (rather than spread across per-endpoint modules) ensures the
+// matrix is easy to audit as a single coherent contract.
+//
+// Convention: tests gracefully skip when Docker is unavailable, following
+// the same pattern as the surrounding suite. Postgres-only behaviors (e.g.
+// seeded tenants, 404 tenant_not_found) therefore fall through in
+// headless-CI variants instead of panicking.
+// ---------------------------------------------------------------------------
+
+/// #44.d §5.3 — Without ?tenant=, list endpoints preserve legacy behavior.
+///
+/// This locks the most important backward-compat guarantee of the feature:
+/// clients that never adopt ?tenant= see BYTE-IDENTICAL responses to the
+/// pre-RFC world. We verify by asserting the response is a bare JSON array
+/// (not the new envelope), which is how all three endpoints shaped their
+/// legacy body. If a future PR accidentally wraps the legacy path in the
+/// new envelope, this test fails.
+#[tokio::test]
+async fn cross_tenant_s5_3_no_tenant_param_preserves_legacy_shape() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping §5.3: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    for endpoint in ["/api/v1/user", "/api/v1/project", "/api/v1/org"] {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(endpoint)
+                    .header("x-user-id", "platform-admin")
+                    .header("x-user-role", "platform_admin")
+                    .header("x-tenant-id", "default")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        // 200 when fixture supplies the endpoint's backing data; 503 is
+        // acceptable when the variant's cross-query path is unimplemented
+        // (mirrors the best-effort pattern used elsewhere in this suite).
+        if resp.status() == StatusCode::SERVICE_UNAVAILABLE {
+            eprintln!("§5.3: {endpoint} returned 503 (fixture variant skip)");
+            continue;
+        }
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "{endpoint}: legacy path (no ?tenant) must return 200"
+        );
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            body.is_array(),
+            "{endpoint}: legacy path must return a bare array, not the envelope. \
+             The envelope would BREAK every pre-RFC client. Got: {body}"
+        );
+    }
+}
+
+/// #44.d §5.4 — PlatformAdmin + ?tenant=<slug> returns ONLY that tenant.
+///
+/// Seeds two tenants with distinguishable units, issues `?tenant=<slug-a>`,
+/// and asserts (a) the new `scope: "tenant"` envelope, (b) the echoed
+/// `tenant` object, and (c) every returned item belongs to tenant A only.
+#[tokio::test]
+async fn cross_tenant_s5_4_slug_returns_only_that_tenant() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping §5.4: Docker not available");
+        return;
+    };
+    let suffix = uuid::Uuid::new_v4().simple().to_string();
+    let slug_a = format!("s5-4-a-{}", &suffix[..8]);
+    let slug_b = format!("s5-4-b-{}", &suffix[..8]);
+    let tenant_a = state
+        .tenant_store
+        .create_tenant(&slug_a, "S5.4 Tenant A")
+        .await
+        .expect("create tenant A");
+    let tenant_b = state
+        .tenant_store
+        .create_tenant(&slug_b, "S5.4 Tenant B")
+        .await
+        .expect("create tenant B");
+    for t in [&tenant_a, &tenant_b] {
+        let tid = TenantId::new(t.id.as_str().to_string()).unwrap();
+        seed_unit_of_type(
+            &state,
+            &tid,
+            mk_core::types::UnitType::Project,
+            &format!("proj-{}", t.slug),
+        )
+        .await;
+        seed_unit_of_type(
+            &state,
+            &tid,
+            mk_core::types::UnitType::Organization,
+            &format!("org-{}", t.slug),
+        )
+        .await;
+    }
+    let app = router::build_router(state);
+
+    for (endpoint_base, expected_unit_name) in [
+        ("/api/v1/project", format!("proj-{slug_a}")),
+        ("/api/v1/org", format!("org-{slug_a}")),
+    ] {
+        let uri = format!("{endpoint_base}?tenant={slug_a}");
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(&uri)
+                    .header("x-user-id", "platform-admin")
+                    .header("x-user-role", "platform_admin")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "{uri}: expected 200");
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(body["success"], true, "{uri}: success must be true");
+        assert_eq!(
+            body["scope"], "tenant",
+            "{uri}: scope must be 'tenant' for slug path, got {}",
+            body["scope"]
+        );
+        assert_eq!(
+            body["tenant"]["slug"], slug_a,
+            "{uri}: echoed tenant.slug must match requested slug"
+        );
+        assert_eq!(
+            body["tenant"]["id"],
+            tenant_a.id.as_str(),
+            "{uri}: echoed tenant.id must match resolved tenant"
+        );
+        let items = body["items"].as_array().expect("items array");
+        // Every item must belong to tenant A. This is the CORE guarantee
+        // of the slug path — if any item leaks from tenant B we have a
+        // cross-tenant isolation bug (silent data leak to PlatformAdmin).
+        assert!(
+            !items.is_empty(),
+            "{uri}: expected at least the seeded {expected_unit_name} unit, got empty. body={body}"
+        );
+        for (i, item) in items.iter().enumerate() {
+            assert_eq!(
+                item["tenantId"],
+                tenant_a.id.as_str(),
+                "{uri}: items[{i}].tenantId must be tenant A only, item={item}"
+            );
+            assert_eq!(
+                item["tenantSlug"], slug_a,
+                "{uri}: items[{i}].tenantSlug must be slug A only, item={item}"
+            );
+        }
+    }
+}
+
+/// #44.d §5.5 — PlatformAdmin + ?tenant=<nonexistent> returns 404 tenant_not_found.
+///
+/// Must happen AFTER authorization (PlatformAdmin required) so unauthenticated
+/// callers can't probe for tenant existence — they see forbidden_scope first.
+/// Here we assert the admin case hits the 404 cleanly.
+#[tokio::test]
+async fn cross_tenant_s5_5_nonexistent_slug_returns_404() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping §5.5: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+    // Slug guaranteed not to exist — UUID-suffixed + explicit "nope" prefix.
+    let ghost = format!("nope-{}", uuid::Uuid::new_v4().simple());
+
+    for endpoint in ["/api/v1/user", "/api/v1/project", "/api/v1/org"] {
+        let uri = format!("{endpoint}?tenant={ghost}");
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(&uri)
+                    .header("x-user-id", "platform-admin")
+                    .header("x-user-role", "platform_admin")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::NOT_FOUND,
+            "{uri}: expected 404 for nonexistent tenant slug"
+        );
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            body["error"], "tenant_not_found",
+            "{uri}: error code must be tenant_not_found, body={body}"
+        );
+        assert!(
+            body["message"].as_str().unwrap_or("").contains(&ghost),
+            "{uri}: 404 message should echo the requested slug for debuggability, got {}",
+            body["message"]
+        );
+    }
+}
+
+/// #44.d §5.6 — ?tenant=all emits a deprecation warning + resolves like *.
+///
+/// Uses tracing-test to capture logs emitted during the request. The test
+/// fails if EITHER the log line is missing (client-facing behavior drift)
+/// OR the request is rejected (semantic drift from the ?tenant=* alias).
+#[tokio::test]
+#[tracing_test::traced_test]
+async fn cross_tenant_s5_6_all_alias_emits_deprecation_log() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping §5.6: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/project?tenant=all")
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "?tenant=all must resolve identically to ?tenant=* (same 200)"
+    );
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        body["scope"], "all",
+        "?tenant=all must emit scope=all envelope, body={body}"
+    );
+    // The compat log target carries structured fields; tracing-test lets
+    // us assert the message fragment is present. We look for the endpoint
+    // label + the parameter + the replacement hint — three independent
+    // signals so the test doesn't brittle-bind to exact wording.
+    assert!(
+        logs_contain("deprecated tenant scope alias"),
+        "expected compat warning for ?tenant=all; check tracing::warn target='compat'"
+    );
+    assert!(
+        logs_contain("?tenant=*"),
+        "compat warning must hint the canonical replacement"
+    );
+    assert!(
+        logs_contain("/project"),
+        "compat warning must tag the endpoint label for log filtering"
+    );
+}
+
+/// #44.d §5.7 — Pagination ordering is stable across ?tenant=* responses.
+///
+/// Not true pagination (the endpoints don't implement offset/limit today),
+/// but the STABLE-ORDERING contract the docs promise:
+///   (tenant_id ASC, name ASC, id ASC)
+/// Any repeated call must return items in the exact same order, and any
+/// two consecutive items must respect the total ordering. If a future PR
+/// adds real pagination, this test is the first line of defense against
+/// ordering drift between pages.
+#[tokio::test]
+async fn cross_tenant_s5_7_stable_ordering_across_calls() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping §5.7: Docker not available");
+        return;
+    };
+    // Seed 3 tenants × 2 projects each so we have enough data for the
+    // ordering predicate to be non-trivial. 6 items, 3 tenant buckets.
+    let suffix = uuid::Uuid::new_v4().simple().to_string();
+    for i in 0..3 {
+        let slug = format!("s5-7-{i}-{}", &suffix[..8]);
+        let tenant = state
+            .tenant_store
+            .create_tenant(&slug, &format!("S5.7 Tenant {i}"))
+            .await
+            .expect("create tenant");
+        let tid = TenantId::new(tenant.id.as_str().to_string()).unwrap();
+        for name in ["alpha", "beta"] {
+            seed_unit_of_type(
+                &state,
+                &tid,
+                mk_core::types::UnitType::Project,
+                &format!("{name}-{slug}"),
+            )
+            .await;
+        }
+    }
+    let app = router::build_router(state);
+
+    let fetch_items = || async {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/project?tenant=*")
+                    .header("x-user-id", "platform-admin")
+                    .header("x-user-role", "platform_admin")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        body["items"].as_array().cloned().unwrap_or_default()
+    };
+
+    let first = fetch_items().await;
+    let second = fetch_items().await;
+    assert_eq!(
+        first, second,
+        "/project?tenant=* must return items in the same order across calls"
+    );
+
+    // Verify the ordering predicate holds: (tenant_id, name, id) ASC.
+    for pair in first.windows(2) {
+        let a = &pair[0];
+        let b = &pair[1];
+        let key = |v: &serde_json::Value| {
+            (
+                v["tenantId"].as_str().unwrap_or("").to_string(),
+                v["name"].as_str().unwrap_or("").to_string(),
+                v["id"].as_str().unwrap_or("").to_string(),
+            )
+        };
+        let ka = key(a);
+        let kb = key(b);
+        assert!(
+            ka <= kb,
+            "ordering violated: {ka:?} > {kb:?}. The (tenant_id, name, id) \
+             ordering is part of the documented envelope contract \
+             (docs/api/admin.md)."
+        );
+    }
+}
+
+/// #44.d §5.8 — POST ?tenant=* returns 400 scope_not_allowed_for_write.
+///
+/// ?tenant=* is a READ-side broadening. Allowing writes under it would
+/// either (a) silently collapse to the caller's tenant — bad, it looks
+/// like you got what you asked for when you didn't — or (b) fan out to
+/// every tenant, which is a bulk-write superpower that deserves its own
+/// explicit API. Both are wrong; 400 at the entry point is correct.
+#[tokio::test]
+async fn cross_tenant_s5_8_post_with_tenant_star_rejected() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping §5.8: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    // Body shape is irrelevant — the guard fires BEFORE request-body
+    // parsing. Using a plausible-looking payload avoids accidental early
+    // returns that would mask the guard regression.
+    let cases: &[(&str, serde_json::Value)] = &[
+        (
+            "/api/v1/user?tenant=*",
+            json!({ "email": "x@example.com", "name": "x" }),
+        ),
+        (
+            "/api/v1/project?tenant=*",
+            json!({ "name": "x", "parent_id": null }),
+        ),
+        (
+            "/api/v1/org?tenant=*",
+            json!({ "name": "x", "parent_id": null }),
+        ),
+        // ?tenant=all (alias) must be rejected symmetrically; otherwise
+        // clients using the deprecated alias would find a write hole.
+        (
+            "/api/v1/project?tenant=all",
+            json!({ "name": "x", "parent_id": null }),
+        ),
+    ];
+    for (uri, body_json) in cases {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(*uri)
+                    .header("x-user-id", "platform-admin")
+                    .header("x-user-role", "platform_admin")
+                    .header("x-tenant-id", "default")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(body_json).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::BAD_REQUEST,
+            "{uri}: POST with cross-tenant scope must be rejected with 400"
+        );
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            body["error"], "scope_not_allowed_for_write",
+            "{uri}: error code must be scope_not_allowed_for_write, body={body}"
+        );
+    }
+}

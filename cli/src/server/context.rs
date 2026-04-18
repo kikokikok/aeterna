@@ -299,15 +299,15 @@ pub enum ListDispatch {
 ///
 /// Grammar (see RFC):
 ///
-/// - absent               → [`ListDispatch::TenantScoped`]
-/// - `*`                  → [`ListDispatch::CrossTenant`] (PlatformAdmin
-///                          required; otherwise `403 forbidden_scope`)
-/// - `all` (case-insensitive) → deprecated alias for `*`; logs a compat
-///                          warning and resolves identically
-/// - anything else        → `501 scope_not_implemented` (wiring for
-///                          `?tenant=<slug>` is deferred to a later PR
-///                          cluster; the 501 is a stable, documented
-///                          response that clients can detect)
+/// - absent: [`ListDispatch::TenantScoped`]
+/// - `*`: [`ListDispatch::CrossTenant`] — PlatformAdmin required, else
+///   `403 forbidden_scope`.
+/// - `all` (case-insensitive): deprecated alias for `*`, logs a compat
+///   warning and resolves identically.
+/// - anything else (slug or uuid): when `supports_single = true`,
+///   resolves via the tenant store to [`ListDispatch::CrossTenantSingle`]
+///   (PlatformAdmin required, `404 tenant_not_found` on miss). When
+///   `supports_single = false`, returns `501 scope_not_implemented`.
 ///
 /// `endpoint_label` is surfaced in error bodies to help clients discover
 /// which endpoint they hit (e.g. `"/user"`, `"/project"`, `"/org"`).
