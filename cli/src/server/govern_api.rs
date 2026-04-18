@@ -70,6 +70,14 @@ struct AuditQuery {
     actor: Option<String>,
     target_type: Option<String>,
     limit: Option<usize>,
+    /// `?tenant=` — see #44.d RFC. Accepts `*` / `all` / `<slug>`.
+    /// Domain note: `governance_audit_log` has no row-level `tenant_id`;
+    /// it is an instance-scope event stream. `?tenant=*` switches to the
+    /// RFC envelope shape but does NOT filter differently from the bare
+    /// admin call (which already spans all tenants by construction).
+    /// Full per-row tenant decoration requires exposing
+    /// `acting_as_tenant_id` in `AuditRow` and is deferred.
+    tenant: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -506,6 +514,26 @@ async fn list_audit(
     headers: HeaderMap,
     Query(query): Query<AuditQuery>,
 ) -> impl IntoResponse {
+    // #44.d §2.5 — cross-tenant listing dispatch via shared helper.
+    //
+    // Domain note (see AuditQuery::tenant doc): governance_audit_log is
+    // intrinsically instance-scope — the existing bare-admin call already
+    // returns rows across all tenants. `?tenant=*` therefore does NOT widen
+    // the data set; it only changes the response shape to the RFC envelope
+    // and applies the formal gate (403 for non-admin, 501 for <slug>).
+    let wrap_in_envelope = match super::context::resolve_list_scope(
+        &state,
+        &headers,
+        query.tenant.as_deref(),
+        "/govern/audit",
+    )
+    .await
+    {
+        super::context::ListDispatch::CrossTenant => true,
+        super::context::ListDispatch::TenantScoped => false,
+        super::context::ListDispatch::Response(resp) => return resp,
+    };
+
     let _ctx = match require_admin_context(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
@@ -528,6 +556,9 @@ async fn list_audit(
         .as_deref()
         .and_then(|value| Uuid::parse_str(value).ok());
 
+    // ?actor and ?since compose with ?tenant=* — filters are applied by the
+    // storage layer regardless of envelope shape. This is the §2.5 "compose"
+    // requirement from tasks.md.
     match storage
         .list_audit_logs(&AuditFilters {
             action: query.action,
@@ -538,7 +569,27 @@ async fn list_audit(
         })
         .await
     {
-        Ok(entries) => Json(entries).into_response(),
+        Ok(entries) => {
+            if wrap_in_envelope {
+                // Envelope shape for cross-tenant mode. Intentionally omits
+                // per-item tenantId/tenantSlug because the underlying row
+                // lacks a reliable tenant attribution (see AuditQuery::tenant
+                // doc). Clients needing tenant context must join via
+                // actor_id → user's tenant membership at read time, or wait
+                // for the deferred PR that surfaces acting_as_tenant_id.
+                (
+                    StatusCode::OK,
+                    Json(json!({
+                        "success": true,
+                        "scope":   "all",
+                        "items":   entries,
+                    })),
+                )
+                    .into_response()
+            } else {
+                Json(entries).into_response()
+            }
+        }
         Err(err) => error_response(
             StatusCode::BAD_REQUEST,
             "govern_audit_failed",

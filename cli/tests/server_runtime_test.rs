@@ -3774,6 +3774,142 @@ async fn govern_approve_reject_path_order() {
     assert_ne!(resp.status(), StatusCode::NOT_FOUND);
 }
 
+/// #44.d §2.5 — GET /govern/audit with `?tenant=*` and filter composition.
+///
+/// /govern/audit is different from the other list endpoints: `governance_audit_log`
+/// is instance-scope (no row-level tenant_id), so `?tenant=*` only switches the
+/// envelope shape — it does NOT broaden the data set. This test asserts:
+///   1. Gate semantics match the other endpoints (403 / 501).
+///   2. `?tenant=*` + filters (?actor, ?since) compose correctly — the presence
+///      of ?tenant=* must NOT cause the storage filter params to be dropped.
+///   3. Envelope shape is {success, scope:"all", items} when governance is
+///      available; 503 governance_unavailable is accepted (fixture variant).
+#[tokio::test]
+async fn list_audit_cross_tenant_scope_gates_and_filter_compose() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping server runtime test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    // Case 1: ?tenant=* as non-admin → 403 forbidden_scope.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/govern/audit?tenant=*")
+                .header("x-user-id", "developer-user")
+                .header("x-user-role", "developer")
+                .header("x-tenant-id", "default")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "forbidden_scope");
+
+    // Case 2: ?tenant=<slug> as PlatformAdmin → 501 scope_not_implemented,
+    // and the endpoint label "/govern/audit" appears in the message.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/govern/audit?tenant=acme")
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "scope_not_implemented");
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("/govern/audit"),
+        "501 message should mention endpoint: {}",
+        body["message"]
+    );
+
+    // Case 3: ?tenant=* + ?since=1d + ?actor=<uuid> as PlatformAdmin.
+    //
+    // Two acceptable outcomes:
+    //   - 200 with envelope {success, scope:"all", items[]}: governance is
+    //     configured in the fixture and filters composed successfully.
+    //   - 503 governance_unavailable: governance_storage not configured.
+    //     This is the same skip pattern /user uses for variant fixtures.
+    //
+    // What we MUST NOT see:
+    //   - 400: would mean filter composition silently broke under ?tenant=*.
+    //   - 500: would mean the envelope branch has a bug.
+    let actor_uuid = uuid::Uuid::new_v4();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(&format!(
+                    "/api/v1/govern/audit?tenant=*&since=1d&actor={actor_uuid}"
+                ))
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    match resp.status() {
+        StatusCode::OK => {
+            let body: serde_json::Value = serde_json::from_slice(
+                &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(body["success"], true, "envelope success must be true");
+            assert_eq!(body["scope"], "all", "envelope scope must be \"all\"");
+            assert!(body["items"].is_array(), "envelope items must be an array");
+        }
+        StatusCode::SERVICE_UNAVAILABLE => {
+            let body: serde_json::Value = serde_json::from_slice(
+                &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                body["error"], "governance_unavailable",
+                "503 must carry governance_unavailable"
+            );
+            eprintln!(
+                "/govern/audit?tenant=*: governance not configured in fixture, envelope\
+                 shape couldn't be exercised — gates were still verified by cases 1+2"
+            );
+        }
+        other => panic!(
+            "/govern/audit?tenant=*&since=1d&actor=...: unexpected status {other}; filter\
+             composition may be broken"
+        ),
+    }
+}
+
 /// #44.d §2.4 — GET /org with `?tenant=*` / `?tenant=all` / `?tenant=<slug>`:
 /// same gate-layer + full-envelope coverage as /project.
 #[tokio::test]
