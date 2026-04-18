@@ -660,6 +660,13 @@ async fn admin_session_handler(
         .iter()
         .any(|r| r == &RoleIdentifier::Known(mk_core::types::Role::TenantAdmin));
 
+    let default_tenant_id = state
+        .postgres
+        .get_user_default_tenant(&user_id)
+        .await
+        .ok()
+        .flatten();
+
     let tenants = if is_platform_admin {
         match state.tenant_store.list_tenants(false).await {
             Ok(t) => t
@@ -706,6 +713,9 @@ async fn admin_session_handler(
             "is_platform_admin": is_platform_admin,
             "is_tenant_admin": is_tenant_admin,
             "active_tenant_id": identity.tenant_id,
+            // #44.b: surface the persistent preference so the admin UI can
+            // restore the tenant selector on load without an extra call.
+            "default_tenant_id": default_tenant_id,
         })),
     )
 }

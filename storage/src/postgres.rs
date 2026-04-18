@@ -1370,6 +1370,72 @@ impl PostgresBackend {
         Ok(roles)
     }
 
+    /// Returns the caller-configured default tenant for a user, or `None`
+    /// if no preference is set.
+    ///
+    /// The column is populated via [`set_user_default_tenant`]; the migration
+    /// `023_users_default_tenant.sql` declares it as
+    /// `default_tenant_id UUID NULL REFERENCES tenants(id) ON DELETE SET NULL`,
+    /// which guarantees the returned value still points to an active tenant
+    /// row at read time (the FK nulls the column when the tenant is deleted).
+    ///
+    /// Added in OpenSpec change `refactor-platform-admin-impersonation` (#44.b)
+    /// to back the `GET /api/v1/user/me/default-tenant` endpoint.
+    pub async fn get_user_default_tenant(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<String>, PostgresError> {
+        use sqlx::Row;
+        let row = sqlx::query(
+            "SELECT default_tenant_id::text AS tid FROM users WHERE id = $1::uuid",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.and_then(|r| r.try_get::<Option<String>, _>("tid").ok().flatten()))
+    }
+
+    /// Persist the caller-configured default tenant for a user.
+    ///
+    /// The tenant must exist and the caller is expected to have already
+    /// verified membership in it before calling this method. The FK
+    /// constraint rejects orphan IDs at write time.
+    pub async fn set_user_default_tenant(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+    ) -> Result<(), PostgresError> {
+        let res = sqlx::query(
+            "UPDATE users SET default_tenant_id = $2::uuid, updated_at = NOW() WHERE id = $1::uuid",
+        )
+        .bind(user_id)
+        .bind(tenant_id)
+        .execute(&self.pool)
+        .await?;
+        if res.rows_affected() == 0 {
+            return Err(PostgresError::NotFound(format!(
+                "user {user_id} not found"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Clear the caller-configured default tenant for a user.
+    pub async fn clear_user_default_tenant(&self, user_id: &str) -> Result<(), PostgresError> {
+        let res = sqlx::query(
+            "UPDATE users SET default_tenant_id = NULL, updated_at = NOW() WHERE id = $1::uuid",
+        )
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+        if res.rows_affected() == 0 {
+            return Err(PostgresError::NotFound(format!(
+                "user {user_id} not found"
+            )));
+        }
+        Ok(())
+    }
+
     /// Returns the distinct non-root tenant IDs that a user has any role in.
     ///
     /// Used for implicit tenant resolution: when a request carries no `X-Tenant-ID`

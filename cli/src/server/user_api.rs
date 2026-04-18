@@ -12,6 +12,7 @@ use serde_json::json;
 use sqlx::Row;
 use uuid::Uuid;
 
+use super::context::{self, RequestContext};
 use super::{AppState, tenant_scoped_context};
 
 #[derive(Debug, Deserialize)]
@@ -67,6 +68,12 @@ pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/user", get(list_users).post(register_user))
         .route("/user/invite", axum::routing::post(invite_user))
+        .route(
+            "/user/me/default-tenant",
+            get(get_default_tenant)
+                .put(set_default_tenant)
+                .delete(clear_default_tenant),
+        )
         .route("/user/{user_id}", get(show_user))
         .route(
             "/user/{user_id}/roles",
@@ -74,6 +81,205 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/user/{user_id}/roles/{role}", delete(revoke_user_role))
         .with_state(state)
+}
+
+// ---------------------------------------------------------------------------
+// GET/PUT/DELETE /user/me/default-tenant
+//
+// Persists a caller's preferred default tenant in `users.default_tenant_id`
+// (migration 023). Consumed by `context::request_context` as step 2 of the
+// tenant resolution chain. See OpenSpec `refactor-platform-admin-impersonation`
+// (#44.b).
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DefaultTenantResponse {
+    tenant_id: String,
+    slug: String,
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetDefaultTenantRequest {
+    /// Tenant slug or UUID. Must be a tenant the caller is a member of
+    /// (PlatformAdmin may set it to any active tenant).
+    tenant_id: String,
+}
+
+async fn get_default_tenant(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    let ctx: RequestContext = match context::request_context(&state, &headers).await {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
+
+    match state
+        .postgres
+        .get_user_default_tenant(ctx.user_id.as_str())
+        .await
+    {
+        Ok(None) => (StatusCode::NO_CONTENT, Json(json!({}))).into_response(),
+        Ok(Some(tid)) => match state.tenant_store.get_tenant(&tid).await {
+            Ok(Some(t)) => (
+                StatusCode::OK,
+                Json(DefaultTenantResponse {
+                    tenant_id: t.id.into_inner(),
+                    slug: t.slug,
+                    name: t.name,
+                }),
+            )
+                .into_response(),
+            Ok(None) => {
+                // FK ON DELETE SET NULL should prevent this; treat as unset.
+                (StatusCode::NO_CONTENT, Json(json!({}))).into_response()
+            }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "tenant_lookup_failed",
+                    "message": e.to_string(),
+                })),
+            )
+                .into_response(),
+        },
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "default_tenant_read_failed",
+                "message": e.to_string(),
+            })),
+        )
+            .into_response(),
+    }
+}
+
+async fn set_default_tenant(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(payload): Json<SetDefaultTenantRequest>,
+) -> axum::response::Response {
+    let ctx: RequestContext = match context::request_context(&state, &headers).await {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
+
+    let target_ref = payload.tenant_id.trim();
+    if target_ref.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": "invalid_tenant_id",
+                "message": "tenantId must be a non-empty slug or UUID",
+            })),
+        )
+            .into_response();
+    }
+
+    // Resolve slug-or-uuid to a concrete tenant record.
+    let record = match state.tenant_store.get_tenant(target_ref).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "error": "tenant_not_found",
+                    "message": format!("No tenant matches '{target_ref}'"),
+                })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "tenant_lookup_failed",
+                    "message": e.to_string(),
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    // Membership check. PlatformAdmin exempt.
+    if !ctx.is_platform_admin {
+        let is_member = ctx
+            .available_tenants
+            .iter()
+            .any(|t| t.id.as_str() == record.id.as_str());
+        if !is_member {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "error": "forbidden_tenant",
+                    "message": "You are not a member of the requested tenant",
+                })),
+            )
+                .into_response();
+        }
+    }
+
+    if let Err(e) = state
+        .postgres
+        .set_user_default_tenant(ctx.user_id.as_str(), record.id.as_str())
+        .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "default_tenant_write_failed",
+                "message": e.to_string(),
+            })),
+        )
+            .into_response();
+    }
+
+    tracing::info!(
+        user_id = %ctx.user_id,
+        tenant_id = %record.id,
+        "user default tenant set"
+    );
+
+    (
+        StatusCode::OK,
+        Json(DefaultTenantResponse {
+            tenant_id: record.id.into_inner(),
+            slug: record.slug,
+            name: record.name,
+        }),
+    )
+        .into_response()
+}
+
+async fn clear_default_tenant(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    let ctx: RequestContext = match context::request_context(&state, &headers).await {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
+
+    if let Err(e) = state
+        .postgres
+        .clear_user_default_tenant(ctx.user_id.as_str())
+        .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "default_tenant_clear_failed",
+                "message": e.to_string(),
+            })),
+        )
+            .into_response();
+    }
+
+    tracing::info!(user_id = %ctx.user_id, "user default tenant cleared");
+    StatusCode::NO_CONTENT.into_response()
 }
 
 async fn list_users(

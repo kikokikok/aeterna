@@ -2,6 +2,7 @@ pub mod admin_sync;
 pub mod auth_middleware;
 pub mod backup_api;
 pub mod bootstrap;
+pub mod context;
 pub mod govern_api;
 pub mod health;
 pub mod k8s_auth;
@@ -150,6 +151,168 @@ pub(crate) async fn lookup_roles_for_idp(
         return Ok(Vec::new());
     };
     postgres.get_user_roles_for_auth(&user_id, tenant_id).await
+}
+
+/// Extract the authenticated identity without resolving a tenant.
+///
+/// Returns `(user_id, instance_scope_roles, known_tenant_ids)` where the
+/// roles are evaluated at `INSTANCE_SCOPE_TENANT_ID` (so PlatformAdmin is
+/// visible) and `known_tenant_ids` is the distinct set of tenants the user
+/// has any role in. For dev-header auth mode, `known_tenant_ids` is empty
+/// and the caller must resolve tenant via configured defaults.
+///
+/// Added for OpenSpec change `refactor-platform-admin-impersonation` (#44)
+/// to support the new `context::request_context` resolver without
+/// duplicating the multi-provider auth dance.
+pub(crate) async fn resolve_identity(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<(UserId, Vec<RoleIdentifier>, Vec<String>), axum::response::Response> {
+    let any_provider_configured =
+        state.plugin_auth_state.config.enabled || state.k8s_auth_config.enabled;
+
+    enum Resolution {
+        Provider {
+            provider: &'static str,
+            subject: String,
+        },
+        DevHeaders {
+            user_id: String,
+            roles: Vec<RoleIdentifier>,
+        },
+    }
+
+    let resolution = if any_provider_configured {
+        let bearer_token = extract_bearer_token(headers).ok_or_else(|| {
+            error_json(
+                StatusCode::UNAUTHORIZED,
+                "missing_bearer_token",
+                "Authorization: Bearer token required",
+            )
+        })?;
+
+        if state.plugin_auth_state.config.enabled {
+            let secret =
+                state
+                    .plugin_auth_state
+                    .config
+                    .jwt_secret
+                    .as_deref()
+                    .ok_or_else(|| {
+                        error_json(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "configuration_error",
+                            "Plugin auth JWT secret is not configured",
+                        )
+                    })?;
+            if let Some(identity) = plugin_auth::validate_plugin_bearer(headers, secret) {
+                Resolution::Provider {
+                    provider: PROVIDER_GITHUB,
+                    subject: identity.github_login,
+                }
+            } else if state.k8s_auth_config.enabled
+                && let Some(identity) =
+                    k8s_auth::validate_k8s_bearer(bearer_token, &state.k8s_auth_config).await
+            {
+                Resolution::Provider {
+                    provider: PROVIDER_KUBERNETES,
+                    subject: identity.username,
+                }
+            } else {
+                return Err(error_json(
+                    StatusCode::UNAUTHORIZED,
+                    "invalid_bearer_token",
+                    "Bearer token was not accepted by any configured provider",
+                ));
+            }
+        } else if let Some(identity) =
+            k8s_auth::validate_k8s_bearer(bearer_token, &state.k8s_auth_config).await
+        {
+            Resolution::Provider {
+                provider: PROVIDER_KUBERNETES,
+                subject: identity.username,
+            }
+        } else {
+            return Err(error_json(
+                StatusCode::UNAUTHORIZED,
+                "invalid_bearer_token",
+                "Bearer token was not accepted by any configured provider",
+            ));
+        }
+    } else {
+        Resolution::DevHeaders {
+            user_id: headers
+                .get("x-user-id")
+                .and_then(|v| v.to_str().ok())
+                .filter(|s| !s.is_empty())
+                .unwrap_or(SYSTEM_USER_ID)
+                .chars()
+                .take(100)
+                .collect(),
+            roles: headers
+                .get("x-user-role")
+                .and_then(|v| v.to_str().ok())
+                .filter(|s| !s.is_empty())
+                .map(|s| vec![RoleIdentifier::from_str_flexible(s)])
+                .unwrap_or_default(),
+        }
+    };
+
+    let (user_id_str, instance_roles, tenant_ids) = match resolution {
+        Resolution::Provider { provider, subject } => {
+            let uid = state
+                .postgres
+                .resolve_user_id_by_idp(provider, &subject)
+                .await
+                .map_err(|err| {
+                    error_json(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "identity_lookup_failed",
+                        &err.to_string(),
+                    )
+                })?
+                .ok_or_else(|| {
+                    error_json(
+                        StatusCode::UNAUTHORIZED,
+                        "identity_not_provisioned",
+                        "Authenticated identity is not provisioned",
+                    )
+                })?;
+
+            let root_roles = state
+                .postgres
+                .get_user_roles_for_auth(&uid, INSTANCE_SCOPE_TENANT_ID)
+                .await
+                .map_err(|err| {
+                    error_json(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "role_lookup_failed",
+                        &err.to_string(),
+                    )
+                })?;
+
+            let tenant_ids = state.postgres.get_user_tenant_ids(&uid).await.map_err(|err| {
+                error_json(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "tenant_lookup_failed",
+                    &err.to_string(),
+                )
+            })?;
+
+            (uid, root_roles, tenant_ids)
+        }
+        Resolution::DevHeaders { user_id, roles } => (user_id, roles, Vec::new()),
+    };
+
+    let user_id = UserId::new(user_id_str).ok_or_else(|| {
+        error_json(
+            StatusCode::BAD_REQUEST,
+            "invalid_user_id",
+            "Invalid authenticated user identifier",
+        )
+    })?;
+
+    Ok((user_id, instance_roles, tenant_ids))
 }
 
 pub async fn authenticated_tenant_context(
