@@ -28,8 +28,16 @@ pub enum TenantCommand {
     #[command(about = "Deactivate a tenant")]
     Deactivate(TenantDeactivateArgs),
 
-    #[command(about = "Set default tenant for current context")]
+    #[command(about = "Set default tenant for current context (local .aeterna/context.toml)")]
     Use(TenantUseArgs),
+
+    #[command(
+        about = "Switch the server-side default tenant for your user (persists across devices)"
+    )]
+    Switch(TenantSwitchArgs),
+
+    #[command(about = "Show the currently selected tenant (server preference + local context)")]
+    Current(TenantCurrentArgs),
 
     #[command(
         name = "domain-map",
@@ -187,6 +195,33 @@ pub struct TenantDeactivateArgs {
 pub struct TenantUseArgs {
     /// Tenant slug to set as default context
     pub tenant: String,
+}
+
+#[derive(Args, Debug)]
+pub struct TenantSwitchArgs {
+    /// Tenant slug or UUID to persist as the caller's server-side default.
+    ///
+    /// When present, overrides any X-Tenant-ID header on subsequent
+    /// requests that do not carry an explicit tenant hint. Requires
+    /// membership in the target tenant (PlatformAdmin exempt).
+    pub tenant: String,
+
+    /// Clear the server-side default instead of setting one. The `tenant`
+    /// positional is ignored when this flag is present (use `--clear` with
+    /// any dummy value, e.g. `aeterna tenant switch none --clear`).
+    #[arg(long)]
+    pub clear: bool,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct TenantCurrentArgs {
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -406,6 +441,8 @@ pub async fn run(cmd: TenantCommand) -> anyhow::Result<()> {
         TenantCommand::Update(args) => run_update(args).await,
         TenantCommand::Deactivate(args) => run_deactivate(args).await,
         TenantCommand::Use(args) => run_use(args).await,
+        TenantCommand::Switch(args) => run_switch(args).await,
+        TenantCommand::Current(args) => run_current(args).await,
         TenantCommand::DomainMap(args) => run_domain_map(args).await,
         TenantCommand::RepoBinding(sub) => match sub {
             TenantRepoBindingCommand::Show(args) => run_repo_binding_show(args).await,
@@ -945,6 +982,189 @@ async fn run_use(args: TenantUseArgs) -> anyhow::Result<()> {
     println!("  tenant_id = \"{}\"", args.tenant);
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// `aeterna tenant switch` / `aeterna tenant current` (#45)
+//
+// These commands wrap the server-side `/api/v1/user/me/default-tenant`
+// endpoints (landed with the RequestContext resolver in #44.b). Unlike
+// `tenant use` which is a local-only `.aeterna/context.toml` write, the
+// switch/clear round-trip persists the preference in `users.default_tenant_id`
+// so it follows the user across devices and sessions.
+// ---------------------------------------------------------------------------
+
+async fn run_switch(args: TenantSwitchArgs) -> anyhow::Result<()> {
+    let Some(client) = get_live_client().await else {
+        return tenant_server_required(
+            "tenant switch",
+            "The server-side default-tenant preference requires a connected control plane.",
+        );
+    };
+
+    if args.clear {
+        client.user_default_tenant_clear().await.inspect_err(|e| {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "error": e.to_string()})
+                    )
+                    .unwrap()
+                );
+            } else {
+                ux_error::UxError::new(e.to_string())
+                    .why("Failed to clear the server-side default tenant")
+                    .fix("Confirm your session is active: aeterna auth status")
+                    .display();
+            }
+        })?;
+
+        if args.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "success": true,
+                    "action": "cleared",
+                }))
+                .unwrap()
+            );
+        } else {
+            output::header("Default Tenant Cleared");
+            println!();
+            println!("  ✓ Server-side default preference removed");
+            println!("  Subsequent requests will fall back to X-Tenant-ID header or auto-select");
+        }
+        return Ok(());
+    }
+
+    let resp = client
+        .user_default_tenant_set(&args.tenant)
+        .await
+        .inspect_err(|e| {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "tenant": args.tenant, "error": e.to_string()})
+                    )
+                    .unwrap()
+                );
+            } else {
+                ux_error::UxError::new(e.to_string())
+                    .why("Failed to set the server-side default tenant")
+                    .fix(format!(
+                        "Verify you are a member of '{}' with: aeterna tenant list",
+                        args.tenant
+                    ))
+                    .fix("Confirm your session is active: aeterna auth status")
+                    .display();
+            }
+        })?;
+
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": true,
+                "action": "switched",
+                "tenant": resp,
+            }))
+            .unwrap()
+        );
+    } else {
+        let slug = resp
+            .get("slug")
+            .and_then(Value::as_str)
+            .unwrap_or(&args.tenant);
+        let name = resp.get("name").and_then(Value::as_str).unwrap_or("");
+        let id = resp.get("tenantId").and_then(Value::as_str).unwrap_or("");
+
+        output::header("Switched Default Tenant");
+        println!();
+        println!("  Tenant: {slug}");
+        if !name.is_empty() {
+            println!("  Name:   {name}");
+        }
+        if !id.is_empty() {
+            println!("  ID:     {id}");
+        }
+        println!();
+        println!("  ✓ Preference persisted server-side");
+        println!("  ✓ Subsequent requests without X-Tenant-ID will target this tenant");
+    }
+
+    Ok(())
+}
+
+async fn run_current(args: TenantCurrentArgs) -> anyhow::Result<()> {
+    // Always read the local context file (best-effort) so we can show it
+    // even when the server is unreachable.
+    let local = read_local_context_tenant();
+
+    let server_default = match get_live_client().await {
+        Some(client) => match client.user_default_tenant_get().await {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::debug!("could not fetch server default tenant: {e}");
+                None
+            }
+        },
+        None => None,
+    };
+
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "local": local,
+                "server_default": server_default.clone().unwrap_or(None),
+            }))
+            .unwrap()
+        );
+        return Ok(());
+    }
+
+    output::header("Current Tenant Selection");
+    println!();
+    match server_default {
+        Some(Some(v)) => {
+            let slug = v.get("slug").and_then(Value::as_str).unwrap_or("?");
+            let name = v.get("name").and_then(Value::as_str).unwrap_or("");
+            println!(
+                "  Server default: {slug}{}",
+                if name.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({name})")
+                }
+            );
+        }
+        Some(None) => {
+            println!("  Server default: (none set)");
+        }
+        None => {
+            println!("  Server default: (server unreachable — cannot determine)");
+        }
+    }
+    match local {
+        Some(t) => println!("  Local context:  {t}"),
+        None => println!("  Local context:  (none set)"),
+    }
+    println!();
+    println!("  Precedence on next request: X-Tenant-ID header > server default > auto-select");
+
+    Ok(())
+}
+
+fn read_local_context_tenant() -> Option<String> {
+    let path = Path::new(".aeterna").join("context.toml");
+    let content = fs::read_to_string(path).ok()?;
+    let value: toml::Value = toml::from_str(&content).ok()?;
+    value
+        .get("tenant_id")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned)
 }
 
 async fn run_domain_map(args: TenantDomainMapArgs) -> anyhow::Result<()> {
@@ -2181,5 +2401,63 @@ mod tests {
             json: false,
         };
         assert_eq!(args.target_tenant.as_deref(), Some("admin-context"));
+    }
+
+    // -----------------------------------------------------------------------
+    // #45: server-backed switch / current
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_tenant_switch_args_basic() {
+        let args = TenantSwitchArgs {
+            tenant: "acme".to_string(),
+            clear: false,
+            json: false,
+        };
+        assert_eq!(args.tenant, "acme");
+        assert!(!args.clear);
+    }
+
+    #[test]
+    fn test_tenant_switch_args_clear_flag() {
+        let args = TenantSwitchArgs {
+            tenant: "ignored".to_string(),
+            clear: true,
+            json: true,
+        };
+        assert!(args.clear);
+        assert!(args.json);
+    }
+
+    #[test]
+    fn test_tenant_current_args_json() {
+        let args = TenantCurrentArgs { json: true };
+        assert!(args.json);
+    }
+
+    #[test]
+    fn test_read_local_context_tenant_absent() {
+        // Runs in a temp dir with no .aeterna/context.toml.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(tmp.path()).unwrap();
+        let result = read_local_context_tenant();
+        std::env::set_current_dir(cwd).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_read_local_context_tenant_present() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let aeterna = tmp.path().join(".aeterna");
+        std::fs::create_dir_all(&aeterna).unwrap();
+        std::fs::write(aeterna.join("context.toml"), "tenant_id = \"acme\"\n").unwrap();
+
+        let cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(tmp.path()).unwrap();
+        let result = read_local_context_tenant();
+        std::env::set_current_dir(cwd).unwrap();
+
+        assert_eq!(result.as_deref(), Some("acme"));
     }
 }
