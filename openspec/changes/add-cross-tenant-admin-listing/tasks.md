@@ -22,7 +22,7 @@
 - [~] 2.2 `GET /user` — accept `?tenant=<slug|uuid|*>`; return `scope`+`tenant`+`items[]` envelope **only when `scope=all`**, otherwise keep existing body (backward compat); decorate each item with `tenantId`+`tenantSlug` in `scope=all` mode. **Partial:** `?tenant=*` and `?tenant=all` (deprecated) implemented; `?tenant=<slug>` returns `501 scope_not_implemented` pending PR #65. Per-tenant role aggregation in All mode returns `[]` with TODO → PR #66.
 - [~] 2.3 `GET /project` — same treatment. **Partial:** `?tenant=*`/`all` implemented; `?tenant=<slug>` returns `501 scope_not_implemented` pending PR #65 cluster.
 - [~] 2.4 `GET /org` — same treatment. **Partial:** `?tenant=*`/`all` implemented; `?tenant=<slug>` returns `501 scope_not_implemented` pending PR #65 cluster.
-- [ ] 2.5 `GET /govern/audit` — same treatment, plus ensure audit filters (`?actor`, `?since`) compose with `?tenant=*`.
+- [~] 2.5 `GET /govern/audit` — **Partial:** gates + envelope wrapper + `?actor`/`?since` filter composition implemented. Per-item `tenantId`/`tenantSlug` decoration is **explicitly deferred**: `governance_audit_log` has no row-level `tenant_id` (only the nullable `acting_as_tenant_id` from migration 023, which isn't exposed in `AuditRow`). Full tenant decoration requires a follow-up PR that (a) surfaces `acting_as_tenant_id` in `AuditRow` + the SQL, and (b) arguably adds a proper `tenant_id` column via migration + backfill. `?tenant=<slug>` returns `501 scope_not_implemented`. Excluded from the §4.1 `tenantId+tenantSlug` contract test for this reason.
 - [ ] 2.6 Add `tenant_filter` param + new envelope to OpenAPI/Redoc schema for each of the 5.
 
 ## 3. Cross-tenant repository layer
