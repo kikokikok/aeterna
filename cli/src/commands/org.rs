@@ -60,6 +60,10 @@ pub struct OrgListArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
+
+    /// #44.d §6 — cross-tenant scoping (`--all-tenants` / `--tenant <slug>`).
+    #[command(flatten)]
+    pub scope: super::tenant_scope::TenantScopeArgs,
 }
 
 #[derive(Args)]
@@ -311,8 +315,9 @@ async fn run_create(args: OrgCreateArgs) -> anyhow::Result<()> {
 
 async fn run_list(args: OrgListArgs) -> anyhow::Result<()> {
     if let Some(client) = get_live_client().await {
+        let scope = args.scope.to_query_param();
         let result = client
-            .org_list(args.company.as_deref(), args.all)
+            .org_list(args.company.as_deref(), args.all, scope.as_deref())
             .await
             .inspect_err(|e| {
                 if args.json {
@@ -331,23 +336,35 @@ async fn run_list(args: OrgListArgs) -> anyhow::Result<()> {
             })?;
 
         if args.json {
+            // JSON mode emits the server payload verbatim — envelope or
+            // array. Automation callers need the exact server shape so
+            // they can distinguish scope=all / scope=tenant themselves.
             println!("{}", serde_json::to_string_pretty(&result)?);
         } else {
+            let payload = super::tenant_scope::ListPayload::from_json(&result);
             output::header("Organizations");
+            if let Some(banner) = &payload.banner {
+                println!("  {banner}");
+            }
             println!();
-            if let Some(orgs) = result.as_array() {
-                if orgs.is_empty() {
-                    println!("  (no organizations found)");
-                } else {
-                    for org in orgs {
-                        let id = get_str(org, &["id"]).unwrap_or("?");
-                        let name = get_str(org, &["name"]).unwrap_or("?");
-                        let company = get_str(org, &["parentId", "parent_id"]).unwrap_or("-");
+            if payload.items.is_empty() {
+                println!("  (no organizations found)");
+            } else {
+                for org in &payload.items {
+                    let id = get_str(org, &["id"]).unwrap_or("?");
+                    let name = get_str(org, &["name"]).unwrap_or("?");
+                    let company = get_str(org, &["parentId", "parent_id"]).unwrap_or("-");
+                    // In cross-tenant views decorate with the tenant slug
+                    // so operators can see WHICH tenant each row belongs
+                    // to — otherwise the listing is ambiguous (two orgs
+                    // can legitimately share a name across tenants).
+                    if args.scope.is_cross_tenant() {
+                        let tenant = get_str(org, &["tenantSlug"]).unwrap_or("-");
+                        println!("  [{tenant:<16}] {id:<24} {name:<32} {company}");
+                    } else {
                         println!("  {id:<24} {name:<32} {company}");
                     }
                 }
-            } else {
-                println!("{}", serde_json::to_string_pretty(&result)?);
             }
             println!();
         }

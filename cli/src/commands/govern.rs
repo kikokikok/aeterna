@@ -194,6 +194,16 @@ pub struct GovernAuditArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
+
+    /// #44.d §6 — cross-tenant scoping (`--all-tenants` / `--tenant <slug>`).
+    ///
+    /// On `/govern/audit` specifically: `--all-tenants` is supported and
+    /// returns the cross-tenant envelope. `--tenant <slug>` returns `501
+    /// scope_not_implemented` pending the per-row `acting_as_tenant_id`
+    /// column work (#44.d §2.5 deferral). The CLI will surface the 501
+    /// response body as a normal error.
+    #[command(flatten)]
+    pub scope: super::tenant_scope::TenantScopeArgs,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -1101,6 +1111,7 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
         } else {
             Some(args.action.as_str())
         };
+        let scope = args.scope.to_query_param();
         let result = client
             .govern_audit(
                 action,
@@ -1108,6 +1119,7 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
                 args.actor.as_deref(),
                 args.target_type.as_deref(),
                 args.limit,
+                scope.as_deref(),
             )
             .await
             .inspect_err(|e| {
@@ -1126,7 +1138,13 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
                 }
             })?;
 
-        let filtered: Vec<_> = result.as_array().cloned().unwrap_or_default();
+        // /govern/audit can return either the legacy bare array (no
+        // ?tenant=) or the #44.d cross-tenant envelope (?tenant=*). Use
+        // the shared normalizer so the rest of the rendering path stays
+        // envelope-agnostic.
+        let payload = super::tenant_scope::ListPayload::from_json(&result);
+        let filtered: Vec<serde_json::Value> = payload.items.iter().map(|v| (*v).clone()).collect();
+        let cross_tenant_banner = payload.banner.clone();
 
         match args.export {
             ExportFormat::None => {
@@ -1139,6 +1157,9 @@ async fn run_audit(args: GovernAuditArgs) -> anyhow::Result<()> {
                     println!("{}", serde_json::to_string_pretty(&output)?);
                 } else {
                     output::header(&format!("Governance Audit Trail (last {})", args.since));
+                    if let Some(banner) = &cross_tenant_banner {
+                        println!("  {banner}");
+                    }
                     println!();
 
                     if filtered.is_empty() {
@@ -1728,6 +1749,7 @@ mod tests {
             export: ExportFormat::None,
             output: None,
             json: false,
+            scope: Default::default(),
         };
         assert_eq!(args.action, "all");
         assert_eq!(args.since, "7d");
@@ -1745,6 +1767,7 @@ mod tests {
             export: ExportFormat::Json,
             output: Some("audit.json".to_string()),
             json: false,
+            scope: Default::default(),
         };
         assert_eq!(args.action, "approve");
         assert!(args.actor.is_some());
@@ -1761,6 +1784,7 @@ mod tests {
             export: ExportFormat::Csv,
             output: Some("audit.csv".to_string()),
             json: false,
+            scope: Default::default(),
         };
         matches!(args.export, ExportFormat::Csv);
         assert!(args.output.is_some());

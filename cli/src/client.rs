@@ -823,13 +823,27 @@ impl AeternaClient {
     // Org endpoints
     // -----------------------------------------------------------------------
 
-    pub async fn org_list(&self, company: Option<&str>, all: bool) -> Result<serde_json::Value> {
+    /// List organizations.
+    ///
+    /// When `tenant_scope` is `Some(value)`, the value is forwarded as the
+    /// `?tenant=` query parameter verbatim (see `docs/api/admin.md` for
+    /// the grammar: `*`, case-insensitive `all`, or a slug/uuid). `None`
+    /// preserves the pre-#44.d behavior (tenant-scoped listing).
+    pub async fn org_list(
+        &self,
+        company: Option<&str>,
+        all: bool,
+        tenant_scope: Option<&str>,
+    ) -> Result<serde_json::Value> {
         let mut params: Vec<(&str, String)> = Vec::new();
         if let Some(c) = company {
             params.push(("company", c.to_string()));
         }
         if all {
             params.push(("all", "true".to_string()));
+        }
+        if let Some(t) = tenant_scope {
+            params.push(("tenant", t.to_string()));
         }
         let path = build_path("/api/v1/org", &params);
         parse_json_response(self.get(&path).await?).await
@@ -959,12 +973,16 @@ impl AeternaClient {
     // User endpoints
     // -----------------------------------------------------------------------
 
+    /// List users.
+    ///
+    /// See [`Self::org_list`] for the `tenant_scope` semantics.
     pub async fn user_list(
         &self,
         org: Option<&str>,
         team: Option<&str>,
         role: Option<&str>,
         all: bool,
+        tenant_scope: Option<&str>,
     ) -> Result<serde_json::Value> {
         let mut params: Vec<(&str, String)> = Vec::new();
         if let Some(o) = org {
@@ -978,6 +996,9 @@ impl AeternaClient {
         }
         if all {
             params.push(("all", "true".to_string()));
+        }
+        if let Some(t) = tenant_scope {
+            params.push(("tenant", t.to_string()));
         }
         let path = build_path("/api/v1/user", &params);
         parse_json_response(self.get(&path).await?).await
@@ -1106,6 +1127,13 @@ impl AeternaClient {
         .await
     }
 
+    /// Fetch governance audit entries.
+    ///
+    /// See [`Self::org_list`] for the `tenant_scope` semantics. Note that
+    /// `/govern/audit` currently only supports `?tenant=*` (via
+    /// `--all-tenants`); `?tenant=<slug>` returns `501 scope_not_implemented`
+    /// pending the per-row `acting_as_tenant_id` column work — see
+    /// #44.d §2.5.
     pub async fn govern_audit(
         &self,
         action: Option<&str>,
@@ -1113,6 +1141,7 @@ impl AeternaClient {
         actor: Option<&str>,
         target_type: Option<&str>,
         limit: usize,
+        tenant_scope: Option<&str>,
     ) -> Result<serde_json::Value> {
         let mut params: Vec<(&str, String)> = Vec::new();
         if let Some(a) = action {
@@ -1128,6 +1157,9 @@ impl AeternaClient {
             params.push(("target_type", t.to_string()));
         }
         params.push(("limit", limit.to_string()));
+        if let Some(t) = tenant_scope {
+            params.push(("tenant", t.to_string()));
+        }
         let path = build_path("/api/v1/govern/audit", &params);
         parse_json_response(self.get(&path).await?).await
     }
