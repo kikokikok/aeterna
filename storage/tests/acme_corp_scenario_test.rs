@@ -1478,6 +1478,7 @@ async fn test_audit_log_governance_action() {
                 "decision": "approve",
                 "comment": "Looks good"
             }),
+            None,
         )
         .await
         .unwrap();
@@ -1514,6 +1515,7 @@ async fn test_audit_log_list_with_filters() {
             Some(actor1_id),
             None,
             serde_json::json!({"role": "Admin"}),
+            None,
         )
         .await
         .unwrap();
@@ -1528,6 +1530,7 @@ async fn test_audit_log_list_with_filters() {
             Some(actor2_id),
             None,
             serde_json::json!({"policy": "new-policy"}),
+            None,
         )
         .await
         .unwrap();
@@ -1542,6 +1545,7 @@ async fn test_audit_log_list_with_filters() {
             None,
             None,
             serde_json::json!({"role": "Developer", "auto": true}),
+            None,
         )
         .await
         .unwrap();
@@ -1553,6 +1557,7 @@ async fn test_audit_log_list_with_filters() {
             target_type: None,
             since: Utc::now() - chrono::Duration::hours(1),
             limit: Some(100),
+            acting_as_tenant_id: None,
         })
         .await
         .unwrap();
@@ -1565,6 +1570,7 @@ async fn test_audit_log_list_with_filters() {
             target_type: None,
             since: Utc::now() - chrono::Duration::hours(1),
             limit: Some(100),
+            acting_as_tenant_id: None,
         })
         .await
         .unwrap();
@@ -1577,6 +1583,7 @@ async fn test_audit_log_list_with_filters() {
             target_type: None,
             since: Utc::now() - chrono::Duration::hours(1),
             limit: Some(100),
+            acting_as_tenant_id: None,
         })
         .await
         .unwrap();
@@ -1778,6 +1785,7 @@ async fn test_memory_promotion_request_workflow() {
                 "to_layer": "team",
                 "approved_by": techlead_id
             }),
+            None,
         )
         .await
         .unwrap();

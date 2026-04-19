@@ -196,12 +196,8 @@ pub struct GovernAuditArgs {
     pub json: bool,
 
     /// #44.d §6 — cross-tenant scoping (`--all-tenants` / `--tenant <slug>`).
-    ///
-    /// On `/govern/audit` specifically: `--all-tenants` is supported and
-    /// returns the cross-tenant envelope. `--tenant <slug>` returns `501
-    /// scope_not_implemented` pending the per-row `acting_as_tenant_id`
-    /// column work (#44.d §2.5 deferral). The CLI will surface the 501
-    /// response body as a normal error.
+    /// Since Bundle D both modes are fully supported on `/govern/audit`
+    /// (rows are filtered by `acting_as_tenant_id` server-side).
     #[command(flatten)]
     pub scope: super::tenant_scope::TenantScopeArgs,
 }

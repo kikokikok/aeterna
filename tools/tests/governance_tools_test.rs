@@ -330,6 +330,7 @@ impl MockGovernanceStorage {
             details,
             old_values: None,
             new_values: None,
+            acting_as_tenant_id: None,
             created_at: Utc::now(),
         };
 
@@ -1131,6 +1132,7 @@ mod audit_log_tests {
             target_type: None,
             since: Utc::now() - Duration::hours(1),
             limit: Some(50),
+            acting_as_tenant_id: None,
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 1);
@@ -1143,6 +1145,7 @@ mod audit_log_tests {
             target_type: None,
             since: Utc::now() - Duration::hours(1),
             limit: Some(50),
+            acting_as_tenant_id: None,
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 2);
@@ -1154,6 +1157,7 @@ mod audit_log_tests {
             target_type: Some("role".to_string()),
             since: Utc::now() - Duration::hours(1),
             limit: Some(50),
+            acting_as_tenant_id: None,
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 1);
@@ -1187,6 +1191,7 @@ mod audit_log_tests {
             target_type: None,
             since: Utc::now() - Duration::hours(1),
             limit: Some(3),
+            acting_as_tenant_id: None,
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 3);
@@ -1462,6 +1467,7 @@ mod edge_case_tests {
             target_type: None,
             since: Utc::now() - Duration::hours(1),
             limit: Some(50),
+            acting_as_tenant_id: None,
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert!(results.is_empty());

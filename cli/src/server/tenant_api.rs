@@ -2137,6 +2137,16 @@ async fn audit_tenant_action(
     };
 
     let actor_id = uuid::Uuid::parse_str(ctx.user_id.as_str()).ok();
+    // #44.d §2.5 — `acting_as_tenant_id` is the tenant the action operated
+    // against: the impersonated tenant when set, otherwise the actor's own
+    // membership. Drives `/govern/audit?tenant=<slug>` filtering.
+    let acting_as = uuid::Uuid::parse_str(
+        ctx.target_tenant_id
+            .as_ref()
+            .map(mk_core::TenantId::as_str)
+            .unwrap_or(ctx.tenant_id.as_str()),
+    )
+    .ok();
     let _ = storage
         .log_audit(
             action,
@@ -2151,6 +2161,7 @@ async fn audit_tenant_action(
                 "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(mk_core::TenantId::as_str),
                 "details": details,
             }),
+            acting_as,
         )
         .await;
 }
@@ -2167,6 +2178,13 @@ async fn audit_hierarchy_action(
     };
 
     let actor_id = uuid::Uuid::parse_str(ctx.user_id.as_str()).ok();
+    let acting_as = uuid::Uuid::parse_str(
+        ctx.target_tenant_id
+            .as_ref()
+            .map(mk_core::TenantId::as_str)
+            .unwrap_or(ctx.tenant_id.as_str()),
+    )
+    .ok();
     let _ = storage
         .log_audit(
             action,
@@ -2181,6 +2199,7 @@ async fn audit_hierarchy_action(
                 "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(mk_core::TenantId::as_str),
                 "details": details,
             }),
+            acting_as,
         )
         .await;
 }
@@ -2197,6 +2216,13 @@ async fn audit_membership_action(
     };
 
     let actor_id = uuid::Uuid::parse_str(ctx.user_id.as_str()).ok();
+    let acting_as = uuid::Uuid::parse_str(
+        ctx.target_tenant_id
+            .as_ref()
+            .map(mk_core::TenantId::as_str)
+            .unwrap_or(ctx.tenant_id.as_str()),
+    )
+    .ok();
     let _ = storage
         .log_audit(
             action,
@@ -2211,6 +2237,7 @@ async fn audit_membership_action(
                 "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(mk_core::TenantId::as_str),
                 "details": details,
             }),
+            acting_as,
         )
         .await;
 }

@@ -1,6 +1,6 @@
 # Admin API — Cross-Tenant Listing
 
-> Status: **stable** for `?tenant=*` / `?tenant=all` on the endpoints listed below. The `?tenant=<slug>` path is **planned** and currently returns `501 scope_not_implemented`.
+> Status: **stable** for all four values of `?tenant=` (`*`, `all`, `<slug>`, `<uuid>`) on every endpoint listed below.
 >
 > Shipped in [RFC #56](https://github.com/kikokikok/aeterna/pull/56) · Tracked in [#44.d](https://github.com/kikokikok/aeterna/issues/44).
 
@@ -14,7 +14,7 @@ This document is the canonical reference for the `?tenant=` query parameter acro
 | `GET /user`      | #64      | §2.2 | ✅                    | ✅                               |
 | `GET /project`   | #65      | §2.3 | ✅                    | ✅                               |
 | `GET /org`       | #66      | §2.4 | ✅                    | ✅                               |
-| `GET /govern/audit` | #68   | §2.5 | ✅                    | ❌ (see [Audit exception](#audit-exception)) |
+| `GET /govern/audit` | #68 + Bundle D | §2.5 | ✅                    | ✅ (see [Audit notes](#audit-notes)) |
 
 ## The `?tenant=` grammar
 
@@ -23,7 +23,7 @@ This document is the canonical reference for the `?tenant=` query parameter acro
 | _absent_ or `?tenant=`     | Tenant-scoped to the caller's tenant (from `X-Tenant-ID` / default).    | Existing auth gate      | Legacy bare array (unchanged)  |
 | `?tenant=*`                | Cross-tenant listing — items from every active tenant.                  | **PlatformAdmin**       | Envelope (see below)           |
 | `?tenant=all`              | Deprecated alias for `*`. Emits a `compat` warning log. Will be removed in a future minor. | **PlatformAdmin** | Envelope                       |
-| `?tenant=<slug-or-uuid>`   | **Not yet implemented.** Reserved for single-foreign-tenant listing.   | PlatformAdmin (planned) | `501 scope_not_implemented`    |
+| `?tenant=<slug-or-uuid>`   | Single-foreign-tenant listing. Resolves via the tenant store; unknown values → `404 tenant_not_found`. | **PlatformAdmin** (or member of the target tenant) | Envelope with `scope:"tenant"` |
 
 ## The cross-tenant response envelope
 
@@ -48,7 +48,7 @@ When `?tenant=*` (or its alias) resolves successfully, the response body uses a 
 
 ### Contract guarantees
 
-For every endpoint except `/govern/audit`, the following are locked by the [§4.1 contract test](../../cli/tests/server_runtime_test.rs) (search `assert_cross_tenant_envelope_contract`):
+For `/user`, `/project`, and `/org`, the following are locked by the [§4.1 contract test](../../cli/tests/server_runtime_test.rs) (search `assert_cross_tenant_envelope_contract`):
 
 1. HTTP status is `200`.
 2. `body.success == true`.
@@ -60,16 +60,24 @@ For every endpoint except `/govern/audit`, the following are locked by the [§4.
 
 Ordering is stable across pages: `(tenant_id ASC, name ASC, id ASC)`.
 
-### Audit exception
+### Audit notes
 
-`GET /govern/audit?tenant=*` emits the envelope but items intentionally **omit** `tenantId` / `tenantSlug`. The `governance_audit_log` table has no row-level tenant column (only a nullable `acting_as_tenant_id` from migration 023 that isn't in the current `SELECT`). Surfacing a misleading tenant would be worse than omitting one. A follow-up will graduate the audit endpoint to the full contract once the storage layer exposes `acting_as_tenant_id` — see the deferred tenant-decoration PR referenced in [#44.d tasks §2.5](../../openspec/changes/add-cross-tenant-admin-listing/tasks.md).
+`GET /govern/audit` carries per-row tenant attribution via `governance_audit_log.acting_as_tenant_id` (populated on every tenant-scoped governance write since Bundle D — see [#44.d tasks §2.5](../../openspec/changes/add-cross-tenant-admin-listing/tasks.md)). The wire shape matches the cross-tenant envelope (`tenantId`, `tenantSlug`, `actingAsTenantId` on each item), and `?tenant=<slug>` filters rows via the same column.
+
+Two backward-compatibility notes specific to this endpoint:
+
+- **Pre-Bundle-D rows** (rows written before `acting_as_tenant_id` was threaded through every `log_audit` call site) have `acting_as_tenant_id = NULL`. Under `?tenant=*` they surface with `tenantId: null` / `tenantSlug: null` / `actingAsTenantId: null`; under `?tenant=<slug>` they are filtered out by the SQL `= $tenant_id` clause. This is the only correct behavior — the write-time attribution does not exist so the read layer cannot fabricate it.
+- **Tools-layer writes** (callers from the `mk-tools` crate that aren't attached to a request tenant) pass `acting_as_tenant_id = None` deliberately; those rows behave identically to pre-Bundle-D rows (visible under `scope=all`, excluded from `scope=tenant`).
+
+The audit endpoint has a dedicated test (`list_audit_cross_tenant_scope_gates_and_filter_compose`) rather than using the shared §4.1 helper, because the helper asserts every item carries non-empty tenant decoration — a property the audit endpoint cannot uphold in the presence of NULL-attributed rows.
 
 ## Error responses
 
 | HTTP | `error` code             | When                                                                |
 |------|--------------------------|---------------------------------------------------------------------|
 | `403` | `forbidden_scope`       | `?tenant=*` or `?tenant=all` called by a non-PlatformAdmin.         |
-| `501` | `scope_not_implemented` | `?tenant=<slug>` on any endpoint (message identifies which one).    |
+| `404` | `tenant_not_found`      | `?tenant=<slug-or-uuid>` resolved to no active tenant.              |
+| `501` | `scope_not_implemented` | Reserved for future endpoints that haven't yet implemented `?tenant=<slug>`. All five shipped endpoints support it. |
 | `400` | `scope_not_allowed_for_write` | Future guard for write operations under `?tenant=*` (§5.8).   |
 
 All error bodies follow the standard error envelope:
@@ -115,7 +123,7 @@ Commands that honor these flags today:
 
 - `aeterna user list [--all-tenants | --tenant <slug>]`
 - `aeterna org list  [--all-tenants | --tenant <slug>]`
-- `aeterna govern audit [--all-tenants]` — `--tenant <slug>` currently returns `501 scope_not_implemented` (see §2.5 note above).
+- `aeterna govern audit [--all-tenants | --tenant <slug>]`
 
 Combining the two flags is rejected at parse time (clap `conflicts_with`) — combining them is always a client bug.
 

@@ -967,6 +967,10 @@ impl Tool for GovernanceApproveTool {
                     "current_approvals": updated_request.current_approvals,
                     "required_approvals": updated_request.required_approvals
                 }),
+                // #44.d §2.5 — tools-layer governance is instance-scoped:
+                // there is no request-scoped TenantContext here. Platform-
+                // scope attribution (NULL) is the correct semantic.
+                None,
             )
             .await;
 
@@ -1098,6 +1102,7 @@ impl Tool for GovernanceRejectTool {
                     "decision": "reject",
                     "reason": p.reason
                 }),
+                None, // #44.d §2.5 — tools-layer (see approve path).
             )
             .await;
 
@@ -1356,6 +1361,9 @@ impl Tool for GovernanceAuditListTool {
             target_type: p.target_type,
             since,
             limit: p.limit,
+            // #44.d §2.5 — tools-layer audit queries are instance-scoped:
+            // no request-time tenant filter applied here.
+            acting_as_tenant_id: None,
         };
 
         let entries = self.storage.list_audit_logs(&filters).await?;
@@ -1480,6 +1488,7 @@ impl Tool for GovernanceRoleAssignTool {
                     "principal_type": p.principal_type,
                     "principal_id": p.principal_id
                 }),
+                None, // #44.d §2.5 — tools-layer (see approve path).
             )
             .await;
 
@@ -1558,6 +1567,7 @@ impl Tool for GovernanceRoleRevokeTool {
                     "role": p.role,
                     "principal_id": p.principal_id
                 }),
+                None, // #44.d §2.5 — tools-layer (see approve path).
             )
             .await;
 
