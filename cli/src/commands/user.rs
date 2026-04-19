@@ -80,6 +80,10 @@ pub struct UserListArgs {
 
     #[arg(long)]
     pub json: bool,
+
+    /// #44.d §6 — cross-tenant scoping (`--all-tenants` / `--tenant <slug>`).
+    #[command(flatten)]
+    pub scope: super::tenant_scope::TenantScopeArgs,
 }
 
 #[derive(Args)]
@@ -297,12 +301,14 @@ async fn run_register(args: UserRegisterArgs) -> anyhow::Result<()> {
 
 async fn run_list(args: UserListArgs) -> anyhow::Result<()> {
     if let Some(client) = get_live_client().await {
+        let scope = args.scope.to_query_param();
         let result = client
             .user_list(
                 args.org.as_deref(),
                 args.team.as_deref(),
                 args.role.as_deref(),
                 args.all,
+                scope.as_deref(),
             )
             .await
             .inspect_err(|e| {
@@ -322,15 +328,36 @@ async fn run_list(args: UserListArgs) -> anyhow::Result<()> {
             })?;
 
         if args.json {
+            // JSON mode: emit the server envelope verbatim.
             println!("{}", serde_json::to_string_pretty(&result)?);
         } else {
+            let payload = super::tenant_scope::ListPayload::from_json(&result);
             output::header("Users");
+            if let Some(banner) = &payload.banner {
+                println!("  {banner}");
+            }
             println!();
-            if let Some(users) = result.as_array() {
-                if users.is_empty() {
-                    println!("  (no users found)");
-                } else {
-                    for user in users {
+            if payload.items.is_empty() {
+                println!("  (no users found)");
+            } else {
+                for user in &payload.items {
+                    if args.scope.is_cross_tenant() {
+                        // Prefix each row with the tenant slug — cross-tenant
+                        // views can return two users with the same email
+                        // living in different tenants, and the tenant is
+                        // the disambiguator.
+                        let tenant = user
+                            .get("tenantSlug")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("-");
+                        println!(
+                            "  [{:<16}] {:<36} {:<24} {}",
+                            tenant,
+                            user["email"].as_str().unwrap_or("?"),
+                            user["name"].as_str().unwrap_or("?"),
+                            user["status"].as_str().unwrap_or("?")
+                        );
+                    } else {
                         println!(
                             "  {:<36} {:<24} {}",
                             user["email"].as_str().unwrap_or("?"),
@@ -339,8 +366,6 @@ async fn run_list(args: UserListArgs) -> anyhow::Result<()> {
                         );
                     }
                 }
-            } else {
-                println!("{}", serde_json::to_string_pretty(&result)?);
             }
             println!();
         }
@@ -967,6 +992,7 @@ mod tests {
             role: None,
             all: false,
             json: false,
+            scope: Default::default(),
         };
         assert!(args.org.is_none());
         assert!(args.team.is_none());
@@ -983,6 +1009,7 @@ mod tests {
             role: Some("developer".to_string()),
             all: true,
             json: true,
+            scope: Default::default(),
         };
         assert_eq!(args.org, Some("engineering".to_string()));
         assert_eq!(args.team, Some("backend".to_string()));
@@ -1199,6 +1226,7 @@ mod tests {
             role: None,
             all: true,
             json: false,
+            scope: Default::default(),
         };
         assert!(args.all);
     }
@@ -1287,6 +1315,7 @@ mod tests {
             role: None,
             all: false,
             json: false,
+            scope: Default::default(),
         };
         assert!(args.org.is_some());
         assert!(args.team.is_none());
@@ -1301,6 +1330,7 @@ mod tests {
             role: None,
             all: false,
             json: false,
+            scope: Default::default(),
         };
         assert!(args.team.is_some());
         assert!(args.org.is_none());
@@ -1314,6 +1344,7 @@ mod tests {
             role: Some("admin".to_string()),
             all: false,
             json: true,
+            scope: Default::default(),
         };
         assert!(args.role.is_some());
         assert!(args.json);

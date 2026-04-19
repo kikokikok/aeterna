@@ -197,11 +197,7 @@ async fn tenant_context_from_identity(
 
     let user_id = UserId::new(user_id_str)?;
 
-    let target_tenant_id = headers
-        .get("x-target-tenant-id")
-        .and_then(|v| v.to_str().ok())
-        .filter(|s| !s.is_empty())
-        .and_then(|s| TenantId::new(s.chars().take(100).collect()));
+    let target_tenant_id = extract_deprecated_target_tenant(headers);
 
     Some(TenantContext {
         tenant_id,
@@ -210,6 +206,40 @@ async fn tenant_context_from_identity(
         roles,
         target_tenant_id,
     })
+}
+
+/// Extract the legacy `X-Target-Tenant-Id` header and emit a deprecation
+/// warning if present.
+///
+/// #44.d §8 — `X-Target-Tenant-Id` is the pre-RFC header used for ad-hoc
+/// PlatformAdmin impersonation. It has been superseded by the `?tenant=`
+/// query parameter grammar (see `docs/api/admin.md`) which is:
+/// - explicit at the call site (URL, not header)
+/// - gated consistently across all list endpoints (`forbidden_scope` /
+///   `scope_not_implemented` / `tenant_not_found`)
+/// - locked by the §4.1 envelope contract test
+///
+/// We still HONOR the header to avoid breaking any in-flight client, but
+/// emit a `tracing::warn!` with `target = "compat"` so operators can find
+/// stragglers in log aggregation and migrate them off. Removal is planned
+/// for a future minor — see #44.e.
+pub(super) fn extract_deprecated_target_tenant(
+    headers: &axum::http::HeaderMap,
+) -> Option<TenantId> {
+    let raw = headers
+        .get("x-target-tenant-id")
+        .and_then(|v| v.to_str().ok())
+        .filter(|s| !s.is_empty())?;
+
+    tracing::warn!(
+        target: "compat",
+        header = "X-Target-Tenant-Id",
+        replacement = "?tenant=<slug-or-*>",
+        raw_value_prefix = %raw.chars().take(16).collect::<String>(),
+        "deprecated cross-tenant header — clients should migrate to the ?tenant= query parameter; removal planned in a future minor"
+    );
+
+    TenantId::new(raw.chars().take(100).collect())
 }
 
 /// Build a synthetic `TenantContext` from legacy headers for development mode.
@@ -236,11 +266,7 @@ fn dev_context_from_headers(headers: &axum::http::HeaderMap) -> TenantContext {
         .map(|s| vec![RoleIdentifier::from_str_flexible(s)])
         .unwrap_or_default();
 
-    let target_tenant_id = headers
-        .get("x-target-tenant-id")
-        .and_then(|v| v.to_str().ok())
-        .filter(|s| !s.is_empty())
-        .and_then(|s| TenantId::new(s.chars().take(100).collect()));
+    let target_tenant_id = extract_deprecated_target_tenant(headers);
 
     TenantContext {
         tenant_id: TenantId::new(tenant_str.chars().take(100).collect())

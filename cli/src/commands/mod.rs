@@ -20,6 +20,7 @@ pub mod status;
 pub mod sync;
 pub mod team;
 pub mod tenant;
+pub mod tenant_scope;
 pub mod user;
 
 use clap::{Parser, Subcommand};

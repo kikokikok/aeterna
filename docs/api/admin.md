@@ -99,4 +99,34 @@ Endpoint-specific query parameters (e.g. `?actor=`, `?since=`, `?action=` on `/g
 - Resolver implementation: [`cli/src/server/context.rs`](../../cli/src/server/context.rs) (search `resolve_list_scope`)
 - Contract test: [`cli/tests/server_runtime_test.rs`](../../cli/tests/server_runtime_test.rs) (search `assert_cross_tenant_envelope_contract`)
 - RLS boundary guard: [`storage/tests/rls_boundary_test.rs`](../../storage/tests/rls_boundary_test.rs)
-- CLI integration (planned): [#44.d §6](../../openspec/changes/add-cross-tenant-admin-listing/tasks.md#6-cli-updates-separate-pr-tracked-here-for-cross-reference)
+- CLI integration: see [CLI flags](#cli-flags) below.
+
+## CLI flags
+
+The `?tenant=` grammar is surfaced to the `aeterna` CLI via two mutually-exclusive flags, flattened into every list command that supports cross-tenant scoping:
+
+| Flag              | Server query                 | Envelope emitted        |
+|-------------------|------------------------------|-------------------------|
+| (none)            | `GET /…` (no `?tenant=`)     | legacy bare array       |
+| `--all-tenants`   | `GET /…?tenant=*`            | `scope: "all"`          |
+| `--tenant <slug>` | `GET /…?tenant=<slug>`       | `scope: "tenant"`       |
+
+Commands that honor these flags today:
+
+- `aeterna user list [--all-tenants | --tenant <slug>]`
+- `aeterna org list  [--all-tenants | --tenant <slug>]`
+- `aeterna govern audit [--all-tenants]` — `--tenant <slug>` currently returns `501 scope_not_implemented` (see §2.5 note above).
+
+Combining the two flags is rejected at parse time (clap `conflicts_with`) — combining them is always a client bug.
+
+In cross-tenant views the human-readable output grows a leading `[tenant]` column so items that would otherwise look ambiguous (e.g. two orgs with the same name in different tenants) stay distinguishable. `--json` mode emits the raw server envelope unchanged so automation can rely on the exact contract documented above.
+
+## Deprecated: `X-Target-Tenant-Id` header
+
+Prior to #44.d, PlatformAdmins could target a foreign tenant by setting the `X-Target-Tenant-Id` request header. That path is now **deprecated** in favor of the `?tenant=<slug>` query parameter documented above.
+
+- The header is **still honored** — existing CI scripts and support tools won't break when this change ships.
+- Each request carrying the header emits a `tracing::warn!(target = "compat", header = "X-Target-Tenant-Id", replacement = "?tenant=<slug-or-*>", ...)` log line including a prefix of the raw value so operators can correlate with client traffic and find stragglers.
+- Removal is planned for a future minor version — tracked in the follow-up §8 work. Clients should migrate to `?tenant=<slug>` / `?tenant=*` at their earliest convenience.
+
+Why replace it: the header was opaque at the URL level (invisible in access logs, browser devtools, curl transcripts) and bypassed the per-endpoint scope-gate that `?tenant=` now enforces uniformly (`forbidden_scope` / `scope_not_implemented` / `tenant_not_found`). The query parameter is explicit, testable, and subject to the §4.1 envelope contract test.

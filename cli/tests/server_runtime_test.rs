@@ -4744,6 +4744,83 @@ async fn cross_tenant_s5_6_all_alias_emits_deprecation_log() {
     );
 }
 
+/// #44.d §8 — Legacy `X-Target-Tenant-Id` header still works, but emits a
+/// deprecation warning every time.
+///
+/// Behavioral contract (what we can NOT break without a major version):
+///
+/// 1. Requests carrying `X-Target-Tenant-Id` continue to be honored.
+///    Existing clients (CI scripts, support tools, etc.) must not break
+///    the day we ship this PR — removal is planned for a separate later
+///    minor.
+/// 2. Every such request logs a `tracing::warn!(target = "compat", ...)`
+///    line naming (a) the header, (b) the replacement grammar, and (c)
+///    enough of the raw value that log aggregation can correlate with
+///    client traffic and identify stragglers.
+///
+/// This test exercises the happy path — auth succeeds with the header
+/// set, a downstream endpoint returns 200 — and asserts the warn line is
+/// present. If a future refactor stops honoring the header OR stops
+/// emitting the warning, this test fails loudly with a precise message.
+#[tokio::test]
+#[tracing_test::traced_test]
+async fn cross_tenant_s8_legacy_target_tenant_header_emits_deprecation_log() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping §8: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    // Use a GET that only needs auth (not cross-tenant scoping) so the
+    // compat::warn signal we assert on is UNAMBIGUOUSLY from the
+    // `X-Target-Tenant-Id` path, not from a `?tenant=*` alias code path.
+    // `/api/v1/project` with plain tenant headers is sufficient.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/project")
+                .header("x-user-id", "platform-admin")
+                .header("x-user-role", "platform_admin")
+                .header("x-tenant-id", "default")
+                // The legacy header we want to verify. A realistic client
+                // would pass a tenant slug or id here. We use a visually
+                // distinctive value so we can assert the log line echoed
+                // its prefix (operators need this to grep log streams and
+                // find which clients are still sending it).
+                .header("x-target-tenant-id", "legacy-client-abc123")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "X-Target-Tenant-Id must remain honored — removal requires a minor bump"
+    );
+
+    // Three independent fragments — if ANY of them is missing, the log
+    // line has drifted and operators' compat dashboards will break.
+    assert!(
+        logs_contain("deprecated cross-tenant header"),
+        "expected compat warning naming the deprecation"
+    );
+    assert!(
+        logs_contain("X-Target-Tenant-Id"),
+        "compat warning must name the exact header for grep-ability"
+    );
+    assert!(
+        logs_contain("?tenant="),
+        "compat warning must point clients at the replacement grammar"
+    );
+    assert!(
+        logs_contain("legacy-client-abc123"),
+        "compat warning must echo the raw value prefix so operators can correlate with client traffic"
+    );
+}
+
 /// #44.d §5.7 — Pagination ordering is stable across ?tenant=* responses.
 ///
 /// Not true pagination (the endpoints don't implement offset/limit today),
