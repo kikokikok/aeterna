@@ -1728,9 +1728,9 @@ impl PostgresBackend {
         let unit_id = unit_id.to_string();
         let tenant_id = ctx.tenant_id.clone();
         self.with_tenant_context(ctx, move |tx| {
-            Box::pin(async move {
-                Self::assign_role(tx, &user_id, &tenant_id, &unit_id, role).await
-            })
+            Box::pin(
+                async move { Self::assign_role(tx, &user_id, &tenant_id, &unit_id, role).await },
+            )
         })
         .await
     }
@@ -1750,9 +1750,9 @@ impl PostgresBackend {
         let tenant_id = tenant_id.clone();
         let unit_id = unit_id.to_string();
         self.with_admin_context(admin_ctx, action, move |tx| {
-            Box::pin(async move {
-                Self::assign_role(tx, &user_id, &tenant_id, &unit_id, role).await
-            })
+            Box::pin(
+                async move { Self::assign_role(tx, &user_id, &tenant_id, &unit_id, role).await },
+            )
         })
         .await
     }
@@ -1768,9 +1768,9 @@ impl PostgresBackend {
         let unit_id = unit_id.to_string();
         let tenant_id = ctx.tenant_id.clone();
         self.with_tenant_context(ctx, move |tx| {
-            Box::pin(async move {
-                Self::remove_role(tx, &user_id, &tenant_id, &unit_id, role).await
-            })
+            Box::pin(
+                async move { Self::remove_role(tx, &user_id, &tenant_id, &unit_id, role).await },
+            )
         })
         .await
     }
@@ -2802,9 +2802,9 @@ impl StorageBackend for PostgresBackend {
         let tenant_id = tenant_id.clone();
         let unit_id = unit_id.to_string();
         self.with_bootstrap_context(move |tx| {
-            Box::pin(async move {
-                Self::assign_role(tx, &user_id, &tenant_id, &unit_id, role).await
-            })
+            Box::pin(
+                async move { Self::assign_role(tx, &user_id, &tenant_id, &unit_id, role).await },
+            )
         })
         .await
     }
@@ -2820,9 +2820,9 @@ impl StorageBackend for PostgresBackend {
         let tenant_id = tenant_id.clone();
         let unit_id = unit_id.to_string();
         self.with_bootstrap_context(move |tx| {
-            Box::pin(async move {
-                Self::remove_role(tx, &user_id, &tenant_id, &unit_id, role).await
-            })
+            Box::pin(
+                async move { Self::remove_role(tx, &user_id, &tenant_id, &unit_id, role).await },
+            )
         })
         .await
     }

@@ -58,3 +58,6 @@ vertex-ai = ["dep:reqwest"]
 databricks = ["dep:reqwest"]
 weaviate = ["dep:reqwest"]
 mongodb = ["dep:mongodb"]
+
+[lints]
+workspace = true

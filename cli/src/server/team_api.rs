@@ -194,11 +194,7 @@ async fn list_members(
         return response;
     }
 
-    match state
-        .postgres
-        .list_unit_roles_scoped(&ctx, &team_id)
-        .await
-    {
+    match state.postgres.list_unit_roles_scoped(&ctx, &team_id).await {
         Ok(entries) => Json(
             entries
                 .into_iter()
@@ -308,11 +304,7 @@ async fn remove_member(
             "Invalid user id",
         );
     };
-    let existing = match state
-        .postgres
-        .list_unit_roles_scoped(&ctx, &team_id)
-        .await
-    {
+    let existing = match state.postgres.list_unit_roles_scoped(&ctx, &team_id).await {
         Ok(entries) => entries,
         Err(err) => {
             return error_response(
@@ -386,11 +378,7 @@ async fn set_member_role(
         Ok(role) => role,
         Err(response) => return response,
     };
-    let existing = match state
-        .postgres
-        .list_unit_roles_scoped(&ctx, &team_id)
-        .await
-    {
+    let existing = match state.postgres.list_unit_roles_scoped(&ctx, &team_id).await {
         Ok(entries) => entries,
         Err(err) => {
             return error_response(
@@ -561,8 +549,7 @@ async fn audit_action(
     let acting_as = Uuid::parse_str(
         ctx.target_tenant_id
             .as_ref()
-            .map(mk_core::TenantId::as_str)
-            .unwrap_or(ctx.tenant_id.as_str()),
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
     )
     .ok();
     let _ = storage

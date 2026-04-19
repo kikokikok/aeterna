@@ -8,3 +8,6 @@ description = "Error handling framework for the Memory-Knowledge system"
 thiserror.workspace = true
 serde.workspace = true
 tracing.workspace = true
+
+[lints]
+workspace = true

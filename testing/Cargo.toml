@@ -16,3 +16,6 @@ async-trait = { workspace = true }
 dashmap = { workspace = true }
 storage = { workspace = true }
 sqlx = { workspace = true }
+
+[lints]
+workspace = true

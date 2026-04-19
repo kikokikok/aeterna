@@ -132,6 +132,7 @@ async fn sync_tenant_github(
 
     let same_tenant = ctx.tenant_id.as_str() == tenant_record.0.to_string()
         || ctx.tenant_id.as_str() == tenant_record.1;
+    #[allow(clippy::nonminimal_bool)] // Current form is clearer than De Morgan alternative
     if !ctx.has_known_role(&Role::PlatformAdmin)
         && !(ctx.has_known_role(&Role::TenantAdmin) && same_tenant)
     {
@@ -838,8 +839,8 @@ mod tests {
         let provider = Arc::new(KubernetesTenantConfigProvider::new("default".to_string()));
         let state = test_app_state(provider).await;
 
-        let config = build_github_config_for_tenant_with_lookup(&tenant_id, &state, |key| {
-            let value = match key {
+        let config =
+            build_github_config_for_tenant_with_lookup(&tenant_id, &state, |key| match key {
                 "AETERNA_GITHUB_ORG_NAME" => Some("env-org".to_string()),
                 "AETERNA_GITHUB_APP_ID" => Some("123".to_string()),
                 "AETERNA_GITHUB_INSTALLATION_ID" => Some("456".to_string()),
@@ -847,11 +848,9 @@ mod tests {
                 "AETERNA_GITHUB_TEAM_FILTER" => Some("^platform-".to_string()),
                 "AETERNA_GITHUB_SYNC_REPOS_AS_PROJECTS" => Some("true".to_string()),
                 _ => None,
-            };
-            value
-        })
-        .await
-        .unwrap();
+            })
+            .await
+            .unwrap();
 
         assert_eq!(config.org_name, "env-org");
         assert_eq!(config.app_id, 123);

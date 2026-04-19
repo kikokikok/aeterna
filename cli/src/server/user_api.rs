@@ -865,8 +865,7 @@ async fn invite_user(
         let acting_as = Uuid::parse_str(
             ctx.target_tenant_id
                 .as_ref()
-                .map(mk_core::TenantId::as_str)
-                .unwrap_or(ctx.tenant_id.as_str()),
+                .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
         )
         .ok();
         let _ = storage

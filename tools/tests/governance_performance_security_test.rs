@@ -113,6 +113,12 @@ pub struct MockPolicyStorage {
     pub policies: Arc<RwLock<HashMap<String, Policy>>>,
 }
 
+impl Default for MockPolicyStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockPolicyStorage {
     pub fn new() -> Self {
         Self {
@@ -210,6 +216,12 @@ pub struct MockGovernanceStorage {
     roles: Arc<RwLock<Vec<GovernanceRole>>>,
     audit_logs: Arc<RwLock<Vec<GovernanceAuditEntry>>>,
     request_counter: Arc<RwLock<u64>>,
+}
+
+impl Default for MockGovernanceStorage {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockGovernanceStorage {
@@ -407,7 +419,7 @@ impl MockGovernanceStorage {
             r.principal_id == principal_id
                 && r.role == role
                 && r.revoked_at.is_none()
-                && r.expires_at.map_or(true, |exp| exp > now)
+                && r.expires_at.is_none_or(|exp| exp > now)
                 && (company_id.is_none() || r.company_id == company_id)
                 && (org_id.is_none() || r.org_id == org_id)
                 && (team_id.is_none() || r.team_id == team_id)

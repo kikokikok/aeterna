@@ -501,7 +501,7 @@ pub async fn request_context(
             }
         }
     } else {
-        for tid in known_tenant_ids.iter() {
+        for tid in &known_tenant_ids {
             if let Ok(Some(t)) = state.tenant_store.get_tenant(tid).await {
                 available.push(ResolvedTenant {
                     id: t.id,
@@ -516,7 +516,7 @@ pub async fn request_context(
     let explicit = headers
         .get("x-tenant-id")
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.trim())
+        .map(str::trim)
         .filter(|s| !s.is_empty());
 
     if let Some(hint) = explicit {
@@ -632,8 +632,7 @@ pub fn select_tenant_response(available: &[ResolvedTenant], headers: &HeaderMap)
     let legacy = headers
         .get("accept-error-legacy")
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+        .is_some_and(|s| s.eq_ignore_ascii_case("true"));
 
     if legacy {
         // Pre-#44 shape; kept for one deprecation window.

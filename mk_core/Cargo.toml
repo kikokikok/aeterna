@@ -22,3 +22,6 @@ regex.workspace = true
 sha2 = "0.10"
 hex = "0.4"
 xxhash-rust.workspace = true
+
+[lints]
+workspace = true

@@ -1720,7 +1720,11 @@ async fn list_hierarchy_descendants(
         Err(response) => return response,
     };
 
-    match state.postgres.get_unit_descendants_scoped(&ctx, &unit).await {
+    match state
+        .postgres
+        .get_unit_descendants_scoped(&ctx, &unit)
+        .await
+    {
         Ok(units) => (
             StatusCode::OK,
             Json(json!({ "success": true, "units": units })),
@@ -2135,8 +2139,7 @@ async fn audit_tenant_action(
     let acting_as = uuid::Uuid::parse_str(
         ctx.target_tenant_id
             .as_ref()
-            .map(mk_core::TenantId::as_str)
-            .unwrap_or(ctx.tenant_id.as_str()),
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
     )
     .ok();
     let _ = storage
@@ -2173,8 +2176,7 @@ async fn audit_hierarchy_action(
     let acting_as = uuid::Uuid::parse_str(
         ctx.target_tenant_id
             .as_ref()
-            .map(mk_core::TenantId::as_str)
-            .unwrap_or(ctx.tenant_id.as_str()),
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
     )
     .ok();
     let _ = storage
@@ -2211,8 +2213,7 @@ async fn audit_membership_action(
     let acting_as = uuid::Uuid::parse_str(
         ctx.target_tenant_id
             .as_ref()
-            .map(mk_core::TenantId::as_str)
-            .unwrap_or(ctx.tenant_id.as_str()),
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
     )
     .ok();
     let _ = storage
@@ -3905,7 +3906,11 @@ async fn provision_tenant(
                 created_at: now,
                 updated_at: now,
             };
-            if let Err(err) = state.postgres.create_unit_scoped(&tenant_ctx, &company_unit).await {
+            if let Err(err) = state
+                .postgres
+                .create_unit_scoped(&tenant_ctx, &company_unit)
+                .await
+            {
                 hierarchy_errors.push(format!("company '{}': {err}", company_unit.name));
                 continue;
             }
@@ -3937,7 +3942,11 @@ async fn provision_tenant(
                     created_at: now,
                     updated_at: now,
                 };
-                if let Err(err) = state.postgres.create_unit_scoped(&tenant_ctx, &org_unit).await {
+                if let Err(err) = state
+                    .postgres
+                    .create_unit_scoped(&tenant_ctx, &org_unit)
+                    .await
+                {
                     hierarchy_errors.push(format!("org '{}': {err}", org_unit.name));
                     continue;
                 }
@@ -4006,7 +4015,11 @@ async fn provision_tenant(
                         created_at: now,
                         updated_at: now,
                     };
-                    if let Err(err) = state.postgres.create_unit_scoped(&tenant_ctx, &team_unit).await {
+                    if let Err(err) = state
+                        .postgres
+                        .create_unit_scoped(&tenant_ctx, &team_unit)
+                        .await
+                    {
                         hierarchy_errors.push(format!("team '{}': {err}", team_unit.name));
                         continue;
                     }
@@ -4040,7 +4053,12 @@ async fn provision_tenant(
                             };
                         if let Err(err) = state
                             .postgres
-                            .assign_role_scoped(&tenant_ctx, &user_id, &team_id, member.role.clone())
+                            .assign_role_scoped(
+                                &tenant_ctx,
+                                &user_id,
+                                &team_id,
+                                member.role.clone(),
+                            )
                             .await
                         {
                             hierarchy_errors.push(format!(
@@ -4778,7 +4796,7 @@ mod tests {
         // First: GlobalAdmin plants a platform-owned secret via the global route
         let set_request = Request::builder()
             .method("PUT")
-            .uri(&format!(
+            .uri(format!(
                 "/admin/tenants/{}/secrets/platform.token",
                 tenant.id.as_str()
             ))
@@ -4975,7 +4993,7 @@ mod tests {
 
         let show_req = Request::builder()
             .method("GET")
-            .uri(&format!("/admin/git-provider-connections/{}", conn_id))
+            .uri(format!("/admin/git-provider-connections/{conn_id}"))
             .header("x-user-id", "platform-admin-user")
             .header("x-user-role", "platformAdmin")
             .header("x-tenant-id", "default")
@@ -5064,7 +5082,7 @@ mod tests {
         // Initially tenant cannot see connection
         let list_before = Request::builder()
             .method("GET")
-            .uri(&format!("/admin/tenants/{}/git-provider-connections", tid))
+            .uri(format!("/admin/tenants/{tid}/git-provider-connections"))
             .header("x-user-id", "platform-admin-user")
             .header("x-user-role", "platformAdmin")
             .header("x-tenant-id", "default")
@@ -5085,9 +5103,8 @@ mod tests {
         // Grant visibility
         let grant_req = Request::builder()
             .method("POST")
-            .uri(&format!(
-                "/admin/git-provider-connections/{}/tenants/{}",
-                conn_id, tid
+            .uri(format!(
+                "/admin/git-provider-connections/{conn_id}/tenants/{tid}"
             ))
             .header("x-user-id", "platform-admin-user")
             .header("x-user-role", "platformAdmin")
@@ -5104,7 +5121,7 @@ mod tests {
         // Tenant now sees the connection
         let list_after = Request::builder()
             .method("GET")
-            .uri(&format!("/admin/tenants/{}/git-provider-connections", tid))
+            .uri(format!("/admin/tenants/{tid}/git-provider-connections"))
             .header("x-user-id", "platform-admin-user")
             .header("x-user-role", "platformAdmin")
             .header("x-tenant-id", "default")
@@ -5127,9 +5144,8 @@ mod tests {
         // Revoke visibility
         let revoke_req = Request::builder()
             .method("DELETE")
-            .uri(&format!(
-                "/admin/git-provider-connections/{}/tenants/{}",
-                conn_id, tid
+            .uri(format!(
+                "/admin/git-provider-connections/{conn_id}/tenants/{tid}"
             ))
             .header("x-user-id", "platform-admin-user")
             .header("x-user-role", "platformAdmin")
@@ -5146,7 +5162,7 @@ mod tests {
         // Tenant no longer sees the connection
         let list_final = Request::builder()
             .method("GET")
-            .uri(&format!("/admin/tenants/{}/git-provider-connections", tid))
+            .uri(format!("/admin/tenants/{tid}/git-provider-connections"))
             .header("x-user-id", "platform-admin-user")
             .header("x-user-role", "platformAdmin")
             .header("x-tenant-id", "default")
@@ -5179,7 +5195,7 @@ mod tests {
         // Tenant binding with ungranted connection id must be rejected
         let bind_req = Request::builder()
             .method("POST")
-            .uri(&format!("/admin/tenants/{}/repository-binding", tid))
+            .uri(format!("/admin/tenants/{tid}/repository-binding"))
             .header("content-type", "application/json")
             .header("x-user-id", "platform-admin-user")
             .header("x-user-role", "platformAdmin")
@@ -5208,8 +5224,7 @@ mod tests {
                 .as_str()
                 .unwrap_or("")
                 .contains("git_provider_connection"),
-            "error should indicate connection visibility problem, got: {}",
-            json
+            "error should indicate connection visibility problem, got: {json}"
         );
     }
 
@@ -5225,9 +5240,8 @@ mod tests {
         let conn_id = create_connection(app.clone(), "Granted Connection").await;
         let grant_req = Request::builder()
             .method("POST")
-            .uri(&format!(
-                "/admin/git-provider-connections/{}/tenants/{}",
-                conn_id, tid
+            .uri(format!(
+                "/admin/git-provider-connections/{conn_id}/tenants/{tid}"
             ))
             .header("x-user-id", "platform-admin-user")
             .header("x-user-role", "platformAdmin")
@@ -5240,7 +5254,7 @@ mod tests {
         // Now the binding should succeed
         let bind_req = Request::builder()
             .method("POST")
-            .uri(&format!("/admin/tenants/{}/repository-binding", tid))
+            .uri(format!("/admin/tenants/{tid}/repository-binding"))
             .header("content-type", "application/json")
             .header("x-user-id", "platform-admin-user")
             .header("x-user-role", "platformAdmin")
@@ -5284,7 +5298,7 @@ mod tests {
             .clone()
             .oneshot(request_with_headers(
                 "PUT",
-                &format!("/admin/tenants/{}/config", tid),
+                &format!("/admin/tenants/{tid}/config"),
                 "platformAdmin",
                 Body::from(serde_json::to_vec(&config_body).unwrap()),
             ))
@@ -5301,7 +5315,7 @@ mod tests {
             .clone()
             .oneshot(request_with_headers(
                 "PUT",
-                &format!("/admin/tenants/{}/secrets/github.token", tid),
+                &format!("/admin/tenants/{tid}/secrets/github.token"),
                 "platformAdmin",
                 Body::from(
                     serde_json::to_vec(&serde_json::json!({
@@ -5332,7 +5346,7 @@ mod tests {
             .clone()
             .oneshot(request_with_headers(
                 "GET",
-                &format!("/admin/tenants/{}/config", tid),
+                &format!("/admin/tenants/{tid}/config"),
                 "platformAdmin",
                 Body::empty(),
             ))
@@ -5362,9 +5376,8 @@ mod tests {
         let conn_id = create_connection(app.clone(), "Bootstrap Test Connection").await;
         let grant = Request::builder()
             .method("POST")
-            .uri(&format!(
-                "/admin/git-provider-connections/{}/tenants/{}",
-                conn_id, tid
+            .uri(format!(
+                "/admin/git-provider-connections/{conn_id}/tenants/{tid}"
             ))
             .header("x-user-id", "platform-admin-user")
             .header("x-user-role", "platformAdmin")
@@ -5377,7 +5390,7 @@ mod tests {
         // 5. Verify tenant-side connection list reflects the grant
         let tenant_conns = Request::builder()
             .method("GET")
-            .uri(&format!("/admin/tenants/{}/git-provider-connections", tid))
+            .uri(format!("/admin/tenants/{tid}/git-provider-connections"))
             .header("x-user-id", "platform-admin-user")
             .header("x-user-role", "platformAdmin")
             .header("x-tenant-id", "default")
@@ -5474,7 +5487,7 @@ mod tests {
             api_version: "aeterna.io/v1".into(),
             kind: "TenantManifest".into(),
             tenant: ManifestTenant {
-                slug: "".into(),
+                slug: String::new(),
                 name: "Ok".into(),
                 domain_mappings: None,
             },
@@ -5598,11 +5611,11 @@ mod tests {
             secrets: None,
             repository: None,
             hierarchy: Some(vec![ManifestCompany {
-                name: "".into(),
+                name: String::new(),
                 orgs: Some(vec![ManifestOrg {
-                    name: "".into(),
+                    name: String::new(),
                     teams: Some(vec![ManifestTeam {
-                        name: "".into(),
+                        name: String::new(),
                         members: None,
                     }]),
                     members: None,
@@ -5823,7 +5836,7 @@ mod tests {
                 "viewer",
             ];
             for role in &expected_roles {
-                assert!(matrix.contains_key(*role), "matrix missing role '{}'", role);
+                assert!(matrix.contains_key(*role), "matrix missing role '{role}'");
             }
             assert_eq!(
                 matrix.len(),
@@ -5840,9 +5853,7 @@ mod tests {
                 for action in actions {
                     assert!(
                         valid.contains(action.as_str()),
-                        "role '{}' references unknown action '{}'",
-                        role,
-                        action
+                        "role '{role}' references unknown action '{action}'"
                     );
                 }
             }
@@ -5875,8 +5886,7 @@ mod tests {
             for action in CROSS_TENANT_ACTIONS {
                 assert!(
                     !ta.contains(&action.to_string()),
-                    "TenantAdmin must NOT have cross-tenant action '{}'",
-                    action
+                    "TenantAdmin must NOT have cross-tenant action '{action}'"
                 );
             }
         }
@@ -5955,8 +5965,7 @@ mod tests {
             for action in viewer {
                 assert!(
                     !write_actions.contains(action.as_str()),
-                    "Viewer must NOT have write action '{}'",
-                    action
+                    "Viewer must NOT have write action '{action}'"
                 );
             }
         }
@@ -5970,9 +5979,7 @@ mod tests {
                 for ct_action in CROSS_TENANT_ACTIONS {
                     assert!(
                         !actions.contains(&ct_action.to_string()),
-                        "Role '{}' must NOT have cross-tenant action '{}'",
-                        role,
-                        ct_action
+                        "Role '{role}' must NOT have cross-tenant action '{ct_action}'"
                     );
                 }
             }
@@ -5991,8 +5998,7 @@ mod tests {
             for role in &roles_with_assign {
                 assert!(
                     matches!(*role, "platformAdmin" | "tenantAdmin" | "admin"),
-                    "Only Admin+ roles may have AssignRoles, but '{}' has it",
-                    role
+                    "Only Admin+ roles may have AssignRoles, but '{role}' has it"
                 );
             }
         }
@@ -6022,19 +6028,21 @@ mod tests {
             ];
 
             for (higher, lower) in &hierarchy {
-                let higher_set: HashSet<&str> =
-                    matrix[*higher].iter().map(|s| s.as_str()).collect();
-                let lower_set: HashSet<&str> = matrix[*lower].iter().map(|s| s.as_str()).collect();
+                let higher_set: HashSet<&str> = matrix[*higher]
+                    .iter()
+                    .map(std::string::String::as_str)
+                    .collect();
+                let lower_set: HashSet<&str> = matrix[*lower]
+                    .iter()
+                    .map(std::string::String::as_str)
+                    .collect();
                 let missing: Vec<&&str> = lower_set
                     .iter()
                     .filter(|a| !higher_set.contains(**a))
                     .collect();
                 assert!(
                     missing.is_empty(),
-                    "Role '{}' must be a superset of '{}', but is missing: {:?}",
-                    higher,
-                    lower,
-                    missing
+                    "Role '{higher}' must be a superset of '{lower}', but is missing: {missing:?}"
                 );
             }
         }

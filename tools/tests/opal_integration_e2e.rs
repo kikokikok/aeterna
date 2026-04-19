@@ -390,10 +390,10 @@ async fn test_e2e_load_1000_concurrent_authorization_requests() {
     // Collect results
     let mut success_count = 0;
     while let Some(result) = join_set.join_next().await {
-        if let Ok((_, success)) = result {
-            if success {
-                success_count += 1;
-            }
+        if let Ok((_, success)) = result
+            && success
+        {
+            success_count += 1;
         }
     }
 

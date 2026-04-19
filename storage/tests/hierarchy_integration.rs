@@ -3,9 +3,9 @@
 //! These tests verify the strict hierarchy enforcement and recursive navigation
 //! logic.
 
+use mk_core::traits::StorageBackend;
 use mk_core::types::{OrganizationalUnit, RecordSource, TenantContext, TenantId, UnitType, UserId};
 use std::collections::HashMap;
-use mk_core::traits::StorageBackend;
 use storage::postgres::PostgresBackend;
 use testing::postgres;
 
@@ -177,14 +177,20 @@ async fn test_recursive_hierarchy_navigation() {
     assert_eq!(ancestors[2].id, "comp-2");
 
     // Test Descendants of Company
-    let descendants = backend.get_unit_descendants_scoped(&ctx, "comp-2").await.unwrap();
+    let descendants = backend
+        .get_unit_descendants_scoped(&ctx, "comp-2")
+        .await
+        .unwrap();
     assert_eq!(descendants.len(), 3);
     assert_eq!(descendants[0].id, "org-2");
     assert_eq!(descendants[1].id, "team-2");
     assert_eq!(descendants[2].id, "proj-2");
 
     // Test Descendants of Organization
-    let descendants_org = backend.get_unit_descendants_scoped(&ctx, "org-2").await.unwrap();
+    let descendants_org = backend
+        .get_unit_descendants_scoped(&ctx, "org-2")
+        .await
+        .unwrap();
     assert_eq!(descendants_org.len(), 2);
     assert_eq!(descendants_org[0].id, "team-2");
     assert_eq!(descendants_org[1].id, "proj-2");

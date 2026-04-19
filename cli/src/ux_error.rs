@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn test_ux_error_display() {
         let err = UxError::new("test error");
-        assert_eq!(format!("{}", err), "test error");
+        assert_eq!(format!("{err}"), "test error");
     }
 
     #[test]

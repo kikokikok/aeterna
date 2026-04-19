@@ -309,8 +309,7 @@ async fn approve_request(
     let acting_as = Uuid::parse_str(
         ctx.target_tenant_id
             .as_ref()
-            .map(mk_core::TenantId::as_str)
-            .unwrap_or(ctx.tenant_id.as_str()),
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
     )
     .ok();
     let _ = storage
@@ -383,8 +382,7 @@ async fn reject_request(
     let acting_as = Uuid::parse_str(
         ctx.target_tenant_id
             .as_ref()
-            .map(mk_core::TenantId::as_str)
-            .unwrap_or(ctx.tenant_id.as_str()),
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
     )
     .ok();
     let _ = storage
@@ -505,8 +503,7 @@ async fn update_config(
     let acting_as = Uuid::parse_str(
         ctx.target_tenant_id
             .as_ref()
-            .map(mk_core::TenantId::as_str)
-            .unwrap_or(ctx.tenant_id.as_str()),
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
     )
     .ok();
     match storage.upsert_config(&config).await {

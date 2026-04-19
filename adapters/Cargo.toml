@@ -30,3 +30,6 @@ cedar-policy.workspace = true
 tools.workspace = true
 wiremock.workspace = true
 tempfile.workspace = true
+
+[lints]
+workspace = true

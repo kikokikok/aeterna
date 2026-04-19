@@ -353,7 +353,7 @@ async fn test_merge_strategy_merge_accumulates_rules() {
     let result = engine.validate(KnowledgeLayer::Org, &context_both);
     assert!(!result.is_valid);
     assert!(
-        result.violations.len() >= 1,
+        !result.violations.is_empty(),
         "Both rules should be evaluated"
     );
 }

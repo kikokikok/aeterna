@@ -495,11 +495,16 @@ async fn test_postgres_backend_unit_policy() {
         .await
         .unwrap();
 
-    let policies = backend.get_unit_policies_scoped(&ctx, &comp_id).await.unwrap();
+    let policies = backend
+        .get_unit_policies_scoped(&ctx, &comp_id)
+        .await
+        .unwrap();
     assert_eq!(policies.len(), 1);
     assert_eq!(policies[0].id, "policy-1");
 
-    let nonexistent_result = backend.add_unit_policy_scoped(&ctx, "nonexistent", &policy).await;
+    let nonexistent_result = backend
+        .add_unit_policy_scoped(&ctx, "nonexistent", &policy)
+        .await;
     assert!(matches!(
         nonexistent_result,
         Err(PostgresError::NotFound(_))
@@ -639,7 +644,10 @@ async fn test_postgres_backend_unit_operations() {
     let mut updated_company = company.clone();
     updated_company.name = "Updated Company".to_string();
     updated_company.updated_at = chrono::Utc::now().timestamp();
-    backend.update_unit_scoped(&ctx, &updated_company).await.unwrap();
+    backend
+        .update_unit_scoped(&ctx, &updated_company)
+        .await
+        .unwrap();
 
     let updated = backend.get_unit_scoped(&ctx, &comp_id).await.unwrap();
     assert_eq!(updated.unwrap().name, "Updated Company");
