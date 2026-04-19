@@ -3774,16 +3774,21 @@ async fn govern_approve_reject_path_order() {
     assert_ne!(resp.status(), StatusCode::NOT_FOUND);
 }
 
-/// #44.d §2.5 — GET /govern/audit with `?tenant=*` and filter composition.
+/// #44.d §2.5 — GET /govern/audit with the full `?tenant=` grammar.
 ///
-/// /govern/audit is different from the other list endpoints: `governance_audit_log`
-/// is instance-scope (no row-level tenant_id), so `?tenant=*` only switches the
-/// envelope shape — it does NOT broaden the data set. This test asserts:
-///   1. Gate semantics match the other endpoints (403 / 501).
-///   2. `?tenant=*` + filters (?actor, ?since) compose correctly — the presence
-///      of ?tenant=* must NOT cause the storage filter params to be dropped.
-///   3. Envelope shape is {success, scope:"all", items} when governance is
-///      available; 503 governance_unavailable is accepted (fixture variant).
+/// Since Bundle D `governance_audit_log.acting_as_tenant_id` carries per-row
+/// tenant attribution, so `/govern/audit` supports the same `?tenant=`
+/// grammar as /user / /project / /org. This test asserts:
+///   1. Gate semantics match the other endpoints (`?tenant=*` as non-admin
+///      → 403 forbidden_scope).
+///   2. `?tenant=<slug>` as PlatformAdmin returns the `scope:"tenant"`
+///      envelope (with governance) or 503 governance_unavailable (fixture
+///      variant) — crucially NOT 501 (was the pre-Bundle-D response).
+///   3. `?tenant=*` + filters (?actor, ?since) compose correctly — the
+///      presence of ?tenant=* must NOT cause the storage filter params
+///      to be dropped.
+///   4. Envelope shape is {success, scope:"all", items} when governance is
+///      available; 503 governance_unavailable is accepted.
 #[tokio::test]
 async fn list_audit_cross_tenant_scope_gates_and_filter_compose() {
     let Some((state, _tmp)) = test_app_state().await else {
@@ -3816,8 +3821,17 @@ async fn list_audit_cross_tenant_scope_gates_and_filter_compose() {
     .unwrap();
     assert_eq!(body["error"], "forbidden_scope");
 
-    // Case 2: ?tenant=<slug> as PlatformAdmin → 501 scope_not_implemented,
-    // and the endpoint label "/govern/audit" appears in the message.
+    // Case 2 (Bundle D): ?tenant=<slug> as PlatformAdmin must NOT return 501.
+    //
+    // Acceptable outcomes:
+    //   - 200 with envelope {success, scope:"tenant", tenant:{id,slug,name},
+    //     items:[...]}: governance configured + slug resolved.
+    //   - 404 tenant_not_found: slug "acme" not seeded in this fixture
+    //     (common — tests use random slugs). Still proves §2.5 dispatches
+    //     via the resolver rather than short-circuiting to 501.
+    //   - 503 governance_unavailable: governance_storage not configured.
+    //
+    // What we MUST NOT see: 501 scope_not_implemented (pre-Bundle-D response).
     let resp = app
         .clone()
         .oneshot(
@@ -3831,22 +3845,35 @@ async fn list_audit_cross_tenant_scope_gates_and_filter_compose() {
         )
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+    let status = resp.status();
     let body: serde_json::Value = serde_json::from_slice(
         &axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(body["error"], "scope_not_implemented");
-    assert!(
-        body["message"]
-            .as_str()
-            .unwrap_or("")
-            .contains("/govern/audit"),
-        "501 message should mention endpoint: {}",
-        body["message"]
+    assert_ne!(
+        status,
+        StatusCode::NOT_IMPLEMENTED,
+        "Bundle D graduates §2.5: ?tenant=<slug> must no longer return 501; body={body}"
     );
+    match status {
+        StatusCode::OK => {
+            assert_eq!(body["scope"], "tenant", "envelope scope must be \"tenant\"");
+            assert!(
+                body["tenant"].is_object(),
+                "envelope.tenant must be present"
+            );
+            assert!(body["items"].is_array(), "envelope.items must be an array");
+        }
+        StatusCode::NOT_FOUND => {
+            assert_eq!(body["error"], "tenant_not_found");
+        }
+        StatusCode::SERVICE_UNAVAILABLE => {
+            assert_eq!(body["error"], "governance_unavailable");
+        }
+        other => panic!("/govern/audit?tenant=acme: unexpected status {other}; body={body}"),
+    }
 
     // Case 3: ?tenant=* + ?since=1d + ?actor=<uuid> as PlatformAdmin.
     //
@@ -4248,8 +4275,11 @@ async fn list_users_cross_tenant_scope_gates_and_aliases() {
 // =============================================================================
 //
 // Lock down the scope=all envelope shape so it cannot silently drift between
-// endpoints. Applied to the 3 migrated list endpoints today (/user, /project,
-// /org) and intended to be a one-liner to add when /govern/audit lands.
+// endpoints. Covers /user, /project, /org. /govern/audit has its own dedicated
+// dispatch test (`list_audit_cross_tenant_scope_gates_and_filter_compose`)
+// because pre-Bundle-D rows have `acting_as_tenant_id = NULL` and therefore
+// surface without tenant decoration, which breaks the "every item must carry
+// tenantId+tenantSlug" invariant this helper enforces.
 //
 // Per tasks.md §4.1: "for every scope=all response across the 5 endpoints,
 // every item MUST contain non-empty tenantId and tenantSlug. Failing this
