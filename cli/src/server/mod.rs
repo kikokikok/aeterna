@@ -48,7 +48,7 @@ use mk_core::traits::{AuthorizationService, EventPublisher, KnowledgeRepository}
 use mk_core::types::INSTANCE_SCOPE_TENANT_ID;
 use mk_core::types::SYSTEM_USER_ID;
 use mk_core::types::{PROVIDER_GITHUB, PROVIDER_KUBERNETES};
-use mk_core::types::{RoleIdentifier, TenantContext, TenantId, UserId};
+use mk_core::types::{RoleIdentifier, TenantContext, UserId};
 use serde_json::json;
 use storage::events::EventError;
 use storage::git_provider_connection_store::GitProviderConnectionError;
@@ -394,11 +394,10 @@ pub async fn authenticated_tenant_context(
         ctx.roles.clone()
     };
 
-    let target_tenant_id = headers
-        .get("x-target-tenant-id")
-        .and_then(|v| v.to_str().ok())
-        .filter(|s| !s.is_empty())
-        .and_then(|s| TenantId::new(s.chars().take(100).collect()));
+    // #44.d §8 — X-Target-Tenant-Id is deprecated in favor of ?tenant=<slug>.
+    // Delegate to the shared extractor so the compat::warn log line is
+    // emitted uniformly from every entry point that still honors the header.
+    let target_tenant_id = auth_middleware::extract_deprecated_target_tenant(headers);
 
     Ok(TenantContext {
         tenant_id: tenant.id,
