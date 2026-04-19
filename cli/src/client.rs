@@ -1129,11 +1129,11 @@ impl AeternaClient {
 
     /// Fetch governance audit entries.
     ///
-    /// See [`Self::org_list`] for the `tenant_scope` semantics. Note that
-    /// `/govern/audit` currently only supports `?tenant=*` (via
-    /// `--all-tenants`); `?tenant=<slug>` returns `501 scope_not_implemented`
-    /// pending the per-row `acting_as_tenant_id` column work — see
-    /// #44.d §2.5.
+    /// See [`Self::org_list`] for the `tenant_scope` semantics. Since
+    /// #44.d Bundle D, `/govern/audit` supports the full `?tenant=` grammar
+    /// (`*`, `all`, `<slug>`, `<uuid>`) — rows are filtered by
+    /// `acting_as_tenant_id` and the envelope carries per-item
+    /// `tenantId`/`tenantSlug` decoration.
     pub async fn govern_audit(
         &self,
         action: Option<&str>,

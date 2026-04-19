@@ -71,12 +71,14 @@ struct AuditQuery {
     target_type: Option<String>,
     limit: Option<usize>,
     /// `?tenant=` — see #44.d RFC. Accepts `*` / `all` / `<slug>`.
-    /// Domain note: `governance_audit_log` has no row-level `tenant_id`;
-    /// it is an instance-scope event stream. `?tenant=*` switches to the
-    /// RFC envelope shape but does NOT filter differently from the bare
-    /// admin call (which already spans all tenants by construction).
-    /// Full per-row tenant decoration requires exposing
-    /// `acting_as_tenant_id` in `AuditRow` and is deferred.
+    ///
+    /// Per-row tenant attribution is via `governance_audit_log.acting_as_tenant_id`
+    /// (migration 023, populated by every tenant-scoped `log_audit` call site
+    /// since Bundle D). `?tenant=<slug>` filters on that column; `?tenant=*`
+    /// returns the full cross-tenant stream in envelope form with each row
+    /// decorated with `tenantId`/`tenantSlug`. Rows written before Bundle D
+    /// have `acting_as_tenant_id = NULL` and are therefore excluded by slug
+    /// filters (they remain visible under `?tenant=*`).
     tenant: Option<String>,
 }
 
@@ -538,35 +540,43 @@ async fn update_config(
     }
 }
 
+/// `AuditScope` captures the #44.d-resolved request shape after the
+/// `?tenant=` parser has run. It decides both the response envelope shape
+/// and the `acting_as_tenant_id` filter applied at the storage layer.
+enum AuditScope {
+    /// No `?tenant=` parameter — pre-Bundle-D wire shape (bare JSON array),
+    /// no per-item tenant decoration, no row filter.
+    Legacy,
+    /// `?tenant=*` (or deprecated `all`) — envelope with `scope:"all"`,
+    /// per-item tenant decoration, no row filter.
+    All,
+    /// `?tenant=<slug|uuid>` — envelope with `scope:"tenant"`, per-item
+    /// tenant decoration, `acting_as_tenant_id` filter applied.
+    Single(super::context::ResolvedTenant),
+}
+
 async fn list_audit(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Query(query): Query<AuditQuery>,
 ) -> impl IntoResponse {
-    // #44.d §2.5 — cross-tenant listing dispatch via shared helper.
-    //
-    // Domain note (see AuditQuery::tenant doc): governance_audit_log is
-    // intrinsically instance-scope — the existing bare-admin call already
-    // returns rows across all tenants. `?tenant=*` therefore does NOT widen
-    // the data set; it only changes the response shape to the RFC envelope
-    // and applies the formal gate (403 for non-admin, 501 for <slug>).
-    let wrap_in_envelope = match super::context::resolve_list_scope(
+    // #44.d §2.5 (Bundle D) — /govern/audit now supports the full ?tenant=
+    // grammar. Since Bundle D, `governance_audit_log.acting_as_tenant_id`
+    // carries per-row tenant attribution for every write path (migration
+    // 023 + the Bundle-D log_audit call-site sweep), so `?tenant=<slug>`
+    // can filter deterministically instead of returning 501.
+    let scope = match super::context::resolve_list_scope(
         &state,
         &headers,
         query.tenant.as_deref(),
         "/govern/audit",
-        // /govern/audit can't attribute rows to a tenant (see §2.5 notes) —
-        // ?tenant=<slug> therefore stays 501 here until acting_as_tenant_id
-        // is surfaced in AuditRow + SELECT.
-        false,
+        /* supports_single = */ true,
     )
     .await
     {
-        super::context::ListDispatch::CrossTenant => true,
-        super::context::ListDispatch::TenantScoped => false,
-        super::context::ListDispatch::CrossTenantSingle(_) => unreachable!(
-            "supports_single=false → resolve_list_scope cannot return CrossTenantSingle"
-        ),
+        super::context::ListDispatch::TenantScoped => AuditScope::Legacy,
+        super::context::ListDispatch::CrossTenant => AuditScope::All,
+        super::context::ListDispatch::CrossTenantSingle(t) => AuditScope::Single(t),
         super::context::ListDispatch::Response(resp) => return resp,
     };
 
@@ -592,48 +602,102 @@ async fn list_audit(
         .as_deref()
         .and_then(|value| Uuid::parse_str(value).ok());
 
-    // ?actor and ?since compose with ?tenant=* — filters are applied by the
-    // storage layer regardless of envelope shape. This is the §2.5 "compose"
-    // requirement from tasks.md.
-    match storage
+    // ?actor, ?since, ?tenant all compose via AND at the storage layer.
+    // This is the §2.5 "compose" requirement from tasks.md.
+    let acting_as_tenant_id = match &scope {
+        AuditScope::Single(t) => Uuid::parse_str(t.id.as_str()).ok(),
+        AuditScope::All | AuditScope::Legacy => None,
+    };
+    let entries = match storage
         .list_audit_logs(&AuditFilters {
             action: query.action,
             actor_id,
             target_type: query.target_type,
             since,
             limit: query.limit.map(|value| value as i32),
-            // Wired through in the §2.5 Bundle D commit (next).
-            acting_as_tenant_id: None,
+            acting_as_tenant_id,
         })
         .await
     {
-        Ok(entries) => {
-            if wrap_in_envelope {
-                // Envelope shape for cross-tenant mode. Intentionally omits
-                // per-item tenantId/tenantSlug because the underlying row
-                // lacks a reliable tenant attribution (see AuditQuery::tenant
-                // doc). Clients needing tenant context must join via
-                // actor_id → user's tenant membership at read time, or wait
-                // for the deferred PR that surfaces acting_as_tenant_id.
-                (
-                    StatusCode::OK,
-                    Json(json!({
-                        "success": true,
-                        "scope":   "all",
-                        "items":   entries,
-                    })),
-                )
-                    .into_response()
-            } else {
-                Json(entries).into_response()
-            }
+        Ok(entries) => entries,
+        Err(err) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "govern_audit_failed",
+                &err.to_string(),
+            );
         }
-        Err(err) => error_response(
-            StatusCode::BAD_REQUEST,
-            "govern_audit_failed",
-            &err.to_string(),
-        ),
+    };
+
+    // Legacy shape: no envelope, no decoration — byte-identical to pre-#44.d.
+    if matches!(scope, AuditScope::Legacy) {
+        return Json(entries).into_response();
     }
+
+    // Envelope modes (`all` / `tenant`): decorate rows with
+    // `tenantId`/`tenantSlug`/`tenantName` looked up from the tenant store.
+    // Rows written before Bundle D have `acting_as_tenant_id = NULL` and
+    // therefore surface without tenant decoration under `scope=all`
+    // (and are filtered out entirely under `scope=tenant` by the SQL
+    // clause above).
+    let tenant_records = match state.tenant_store.list_tenants(true).await {
+        Ok(ts) => ts,
+        Err(err) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "tenant_lookup_failed",
+                &err.to_string(),
+            );
+        }
+    };
+    let tenant_by_uuid: std::collections::HashMap<Uuid, &mk_core::types::TenantRecord> =
+        tenant_records
+            .iter()
+            .filter_map(|t| Uuid::parse_str(t.id.as_str()).ok().map(|u| (u, t)))
+            .collect();
+
+    let items: Vec<serde_json::Value> = entries
+        .into_iter()
+        .map(|entry| {
+            let tenant = entry
+                .acting_as_tenant_id
+                .and_then(|id| tenant_by_uuid.get(&id).copied());
+            json!({
+                "id":                entry.id,
+                "action":            entry.action,
+                "requestId":         entry.request_id,
+                "targetType":        entry.target_type,
+                "targetId":          entry.target_id,
+                "actorType":         entry.actor_type,
+                "actorId":           entry.actor_id,
+                "actorEmail":        entry.actor_email,
+                "details":           entry.details,
+                "oldValues":         entry.old_values,
+                "newValues":         entry.new_values,
+                "createdAt":         entry.created_at,
+                "actingAsTenantId":  entry.acting_as_tenant_id,
+                "tenantId":          entry.acting_as_tenant_id,
+                "tenantSlug":        tenant.map(|t| t.slug.clone()),
+                "tenantName":        tenant.map(|t| t.name.clone()),
+            })
+        })
+        .collect();
+
+    let body = match &scope {
+        AuditScope::Legacy => unreachable!("handled above"),
+        AuditScope::All => json!({
+            "success": true,
+            "scope":   "all",
+            "items":   items,
+        }),
+        AuditScope::Single(t) => json!({
+            "success": true,
+            "scope":   "tenant",
+            "tenant":  { "id": t.id, "slug": t.slug, "name": t.name },
+            "items":   items,
+        }),
+    };
+    (StatusCode::OK, Json(body)).into_response()
 }
 
 async fn list_roles(State(state): State<Arc<AppState>>, headers: HeaderMap) -> impl IntoResponse {
