@@ -2,74 +2,76 @@
 
 ## 1. Decision ratification
 
-- [ ] 1.1 Review `proposal.md` and `design.md` with Christian / Kyriba security reviewer
-- [ ] 1.2 Record the accept/decline decision on issue #58 as a top-level comment referencing this change
-- [ ] 1.3 Lock the threat model (see `design.md` §2): "compromised or buggy handler on a live production request MUST NOT be able to read another tenant's rows." Subsequent bundles inherit this.
+- [ ] 1.1 Review `proposal.md` and `design.md` with reviewing architect
+- [ ] 1.2 Record the decision on issue #58 as a top-level comment referencing this change
+- [ ] 1.3 Lock the dual-role/dual-pool design (see `design.md` §4) as the target state
 
-## 2. Bundle A.1 — Hazard fixes (P0 prerequisite, independently shippable)
+## 2. Bundle A.1 — Hazard fixes (prerequisite, independently shippable)
 
-**Goal:** close Hazards H1 and H2 before any role flip. Safe to merge immediately; no behavior change under BYPASSRLS, essential invariant once BYPASSRLS is revoked. Target: 1 PR, ≤ 1 week.
+**Goal:** close H1 and H2 before the role flip. No behavior change under BYPASSRLS; essential invariant once BYPASSRLS is gone. Target: 1 PR, ≤ 1 week.
 
-- [ ] 2.1 **H1 — session-scope leak in `storage/src/postgres.rs:63`.** Change `set_config('app.tenant_id', $1, false)` → `set_config('app.tenant_id', $1, true)` and make `activate_tenant_context` require an open transaction. Caller contract documented via rustdoc; a `debug_assert!` at entry checks the connection is inside a transaction (via `SELECT current_setting('transaction_isolation')` side-effect semantics or equivalent).
-- [ ] 2.2 **H1 — `cli/src/server/backup_api.rs:1597`.** Same fix; the handler already opens a transaction for the backup export, so this is a one-character change plus moving the `set_config` call inside the existing `BEGIN` scope.
-- [ ] 2.3 **H1 — `cli/src/server/gdpr.rs:407,490,580`.** Audit each call: `true` is already passed (good), but verify each is inside an explicit transaction and add a module-level `// INVARIANT:` comment pinning the expectation for future edits.
-- [ ] 2.4 **H2 — dual-GUC normalization.** Grep every `set_config` and `current_setting` call in the codebase for the four variants (`app.tenant_id`, `app.company_id`, `app.current_tenant_id`, `app.current_company_id`). Normalize every code-side write to `app.tenant_id`. Every code-side read to `app.tenant_id`. Migration 024 already normalized the policies; this closes the read/write side.
-- [ ] 2.5 **H1 regression test.** `storage/tests/session_variable_hygiene.rs` — acquire a connection from the pool, set `app.tenant_id` via `activate_tenant_context`, return it to the pool, acquire a fresh connection, assert `current_setting('app.tenant_id', true)` returns empty. Fails if anyone reverts to session-scope `set_config`.
-- [ ] 2.6 **H2 regression test.** `storage/tests/guc_namespace.rs` — grep assertion (compile-time via `include_str!`) that no source file outside of `storage/migrations/` contains `app.company_id` or `app.current_tenant_id`. Fails if a new handler re-introduces the legacy namespace.
+- [ ] 2.1 **H1 — `storage/src/postgres.rs:63`.** Change `set_config('app.tenant_id', $1, false)` → `set_config('app.tenant_id', $1, true)`. Document that `activate_tenant_context` requires an open transaction; add a `debug_assert!` at entry that verifies the connection is inside a transaction.
+- [ ] 2.2 **H1 — `cli/src/server/backup_api.rs:1597`.** Move the `set_config` call inside the existing `BEGIN` scope and flip the third argument to `true`.
+- [ ] 2.3 **H1 — `cli/src/server/gdpr.rs:407,490,580`.** `true` is already passed; verify each is inside an explicit transaction and add a module-level `// INVARIANT:` comment pinning the expectation.
+- [ ] 2.4 **H2 — dual-GUC normalization on the app side.** Grep the entire codebase for the four GUC names (`app.tenant_id`, `app.company_id`, `app.current_tenant_id`, `app.current_company_id`). Normalize every app-side `set_config` and `current_setting` call to `app.tenant_id`. Migration files are not touched (they're historical record).
+- [ ] 2.5 **H1 regression test — `storage/tests/session_variable_hygiene.rs`.** Acquire a connection, set `app.tenant_id` via `activate_tenant_context`, return it, acquire a fresh connection, assert `current_setting('app.tenant_id', true)` returns empty. Fails if anyone reverts to session-scope.
+- [ ] 2.6 **H2 regression test — `storage/tests/guc_namespace.rs`.** Compile-time grep (via `include_str!` over every `*.rs` under `cli/src/` and `storage/src/`) that asserts no legacy GUC name appears outside the migrations directory.
 
-## 3. Bundle A.2 — Dedicated non-BYPASSRLS role + migration + CI verification (independently shippable)
+## 3. Bundle A.2 — Roles, migrations, dual pools, CI verification (independently shippable)
 
-**Goal:** stand up the `aeterna_app` role, make it grant-complete, and wire a CI suite that runs every RLS-enabled table through it end-to-end. Prod `DATABASE_URL` is NOT changed. Target: 1 PR, ≤ 2 weeks.
+**Goal:** stand up both roles, wire both pools, land both helpers, ship the permanent RLS regression guard. `DATABASE_URL` stays on the current role. Target: 1 PR, ≤ 2 weeks.
 
-- [ ] 3.1 `storage/migrations/025_add_app_role.sql` — `CREATE ROLE aeterna_app LOGIN NOBYPASSRLS PASSWORD 'managed_via_secret'` (idempotent via `DO $$ … pg_roles WHERE rolname = 'aeterna_app' … $$`). Password is an `${APP_DB_PASSWORD}` placeholder consumed by the migration runner.
-- [ ] 3.2 `GRANT USAGE ON SCHEMA public TO aeterna_app`.
-- [ ] 3.3 `GRANT SELECT, INSERT, UPDATE, DELETE` on every table currently having `rowsecurity = true` (22 tables) to `aeterna_app`. Enumerated explicitly — no `GRANT … ON ALL TABLES` catch-all, so adding a new RLS-protected table without updating the grant fails the A.2.5 pre-flight.
-- [ ] 3.4 `GRANT USAGE, SELECT` on every sequence the granted tables depend on.
-- [ ] 3.5 Migration header documents: "Non-BYPASSRLS application role. Bundle A.4 flips `DATABASE_URL` to this role. See `openspec/changes/decide-rls-enforcement-model/proposal.md`."
-- [ ] 3.6 **CI suite — `cli/tests/rls_enforcement_test.rs`.** For every table with `rowsecurity = true`:
-  - [ ] 3.6.1 Pre-flight: enumerate `pg_tables WHERE rowsecurity = true`; assert each has been granted `SELECT` to `aeterna_app`; fail with a named-table error if a grant is missing.
-  - [ ] 3.6.2 Positive path: open a connection as `aeterna_app`, `BEGIN`, `set_config('app.tenant_id', tenant_a, true)`, `SELECT *` — assert only tenant_a's rows.
-  - [ ] 3.6.3 Negative path: same connection without `set_config` — assert zero rows returned.
-  - [ ] 3.6.4 Cross-tenant path: seed rows for tenants A and B, set context to A, attempt `SELECT` for B's rows by WHERE id — assert zero rows.
-- [ ] 3.7 **CI suite — handler-level `cli/tests/rls_handler_smoke.rs`.** Run `/user`, `/project`, `/org`, `/govern/audit` list endpoints against a test server whose pool connects as `aeterna_app`. Assert each list returns only the authenticated tenant's rows; assert a request with no resolved tenant context returns 400 `select_tenant` or an empty list (never foreign rows).
-- [ ] 3.8 Document in `DEVELOPER_GUIDE.md` how to run the A.2 suites locally (`docker compose -f docker-compose.rls.yml up` pattern).
+### 3.1 Migration
 
-## 4. Bundle A.3 — Repository call-site refactor (multi-PR, wave-by-wave)
+- [ ] 3.1.1 `storage/migrations/025_add_app_roles.sql`. Idempotent `CREATE ROLE` via `DO $$ … pg_roles WHERE rolname = … $$`.
+- [ ] 3.1.2 `CREATE ROLE aeterna_app LOGIN NOBYPASSRLS PASSWORD :'app_password'`.
+- [ ] 3.1.3 `CREATE ROLE aeterna_admin LOGIN BYPASSRLS PASSWORD :'admin_password'`.
+- [ ] 3.1.4 `GRANT USAGE ON SCHEMA public TO aeterna_app, aeterna_admin`.
+- [ ] 3.1.5 `GRANT SELECT, INSERT, UPDATE, DELETE` on every table currently having `rowsecurity = true` to `aeterna_app`. Enumerated explicitly (no `GRANT … ON ALL TABLES` catch-all) so missing a grant on a new RLS table fails the A.2.5.1 pre-flight.
+- [ ] 3.1.6 `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO aeterna_admin` — `aeterna_admin` is BYPASSRLS and operates globally, so a broad grant is correct.
+- [ ] 3.1.7 `GRANT USAGE, SELECT` on every sequence both roles need.
+- [ ] 3.1.8 Migration header documents the dual-role design and points to `openspec/changes/decide-rls-enforcement-model/proposal.md`.
 
-**Goal:** thread per-request transaction-scoped tenant context through every RLS-protected query. Each wave is a standalone PR, each wave is independently revertable, each wave runs against the A.2 CI suite so regressions surface immediately. Target: 4–6 PRs, ≤ 3 weeks.
+### 3.2 AppState + helpers
 
-- [ ] 4.1 **Helper — `storage/src/postgres.rs::with_tenant_context`.**
-  - Signature: `async fn with_tenant_context<F, T>(&self, ctx: &TenantContext, body: F) -> Result<T> where F: FnOnce(&mut PgConnection) -> BoxFuture<Result<T>>`.
-  - Implementation: `self.pool.begin()` → `SET LOCAL app.tenant_id = $1` → body(&mut tx) → `tx.commit()`.
-  - Rustdoc states every RLS-protected query MUST acquire its connection this way; direct `pool.acquire()` is forbidden on RLS paths and will be enforced by lint in Bundle A.5.
-- [ ] 4.2 **Wave 1 — `user_api.rs` + `team_api.rs` + `org_api.rs` + `project_api.rs` list/get/create/update/delete paths.** Refactor each call site. CI suite (A.2) proves per-request isolation post-refactor. PR size target: ~25 call sites.
-- [ ] 4.3 **Wave 2 — `govern_api.rs` + `govern_policy.rs` + audit write paths.** ~15 call sites.
-- [ ] 4.4 **Wave 3 — `memory_api.rs` + `knowledge_api.rs` + ingest paths.** ~20 call sites.
-- [ ] 4.5 **Wave 4 — `sync.rs` + `webhook.rs` + async worker paths.** Async workers need their own tenant-context acquisition pattern (they don't have a request); establish and document the pattern. ~15 call sites.
-- [ ] 4.6 **Wave 5 — `backup_api.rs` + `gdpr.rs` + admin paths.** These already did manual `set_config` (fixed in A.1); convert to the helper. ~10 call sites.
-- [ ] 4.7 **Wave 6 — sweep.** Audit tool: `storage/tools/find_unwrapped_queries.sh` that greps for `self.pool.acquire()` / `self.pool.begin()` outside of `with_tenant_context`. Any remaining sites either (a) are RLS-protected and the sweep wave fixes them, or (b) are documented as intentionally context-free (e.g., health checks) with an `#[allow(direct_pool_access)]` attribute and a justification comment.
-- [ ] 4.8 Add CI `deny_lint` (warn-level) that fails on direct `self.pool.acquire()` / `.begin()` outside the allowlist. Graduates to deny-level in Bundle A.5.
+- [ ] 3.2.1 `AppState` grows `admin_pool: PgPool` alongside the existing `pool: PgPool`.
+- [ ] 3.2.2 Admin pool size capped at 4 (`PgPoolOptions::new().max_connections(4)`) — admin operations are rare, constraining the pool makes accidental hot-loop use of the admin pool a visible error.
+- [ ] 3.2.3 Admin pool connection string sourced from `DATABASE_URL_ADMIN` env var. Default: same host/db as `DATABASE_URL`, credentials swapped to `aeterna_admin` / `APP_DB_ADMIN_PASSWORD`.
+- [ ] 3.2.4 `storage/src/postgres.rs::with_tenant_context` — signature `async fn with_tenant_context<F, T>(&self, ctx: &TenantContext, body: F) -> Result<T>` where `F: FnOnce(&mut Transaction<'_, Postgres>) -> BoxFuture<Result<T>>`. Implementation: `self.pool.begin()` → `SET LOCAL app.tenant_id = $1` → `body(&mut tx)` → `tx.commit()`. Rustdoc states this is the only valid way to reach `state.pool` on an RLS-protected path.
+- [ ] 3.2.5 `storage/src/postgres.rs::with_admin_context` — same shape but uses `self.admin_pool.begin()` and does NOT issue `SET LOCAL`. Rustdoc states every call is admin-only and is auto-audited per A.2.2.7.
+- [ ] 3.2.6 `TenantContext::system_ctx()` sentinel constructor — represents "no human actor, internal system." Carries `actor_type = 'system'` for audit attribution.
+- [ ] 3.2.7 `TenantContext::from_scheduled_job(tenant_id, job_id)` constructor — used by per-tenant scheduled work (see proposal.md "Scheduled jobs pattern").
+- [ ] 3.2.8 Admin audit wrapper: every `with_admin_context` call records an audit row with `actor_id`, `actor_type`, `admin_scope = true`, `acting_as_tenant_id = NULL`. Implementation goes in the helper itself so it cannot be bypassed.
 
-## 5. Bundle A.4 — Prod flip (feature-flagged, canary-first)
+### 3.3 CI verification suite
 
-**Goal:** change the prod connection role from the legacy BYPASSRLS user to `aeterna_app`. Rollback is a single env-var change. Target: 1 PR to land the flag, then operational rollout.
+- [ ] 3.3.1 `cli/tests/rls_enforcement_test.rs` — pre-flight: enumerate `pg_tables WHERE rowsecurity = true`; assert every such table has `SELECT` granted to `aeterna_app`; fail with a named-table error if any grant is missing.
+- [ ] 3.3.2 For every RLS table: positive path (connect as `aeterna_app`, `BEGIN`, `set_config('app.tenant_id', tenant_a, true)`, `SELECT *`, assert only tenant_a's rows).
+- [ ] 3.3.3 For every RLS table: negative path (same connection without `set_config`, assert zero rows).
+- [ ] 3.3.4 For every RLS table: cross-tenant path (seed rows for A and B, set context to A, `SELECT * WHERE id = $b_id`, assert zero rows).
+- [ ] 3.3.5 `cli/tests/rls_admin_surface_test.rs` — PlatformAdmin list endpoints (`/user`, `/project`, `/org`, `/govern/audit`) with `?tenant=*` exercised through a test server wired with both pools. Assert the admin pool is chosen (via a probe that checks the connection's `current_user`) and that cross-tenant rows are returned.
+- [ ] 3.3.6 `cli/tests/rls_handler_smoke.rs` — per-tenant list endpoints exercised with a test server whose default pool connects as `aeterna_app`. Assert each list returns only the authenticated tenant's rows; assert a request with no resolved tenant context returns `400 select_tenant` (middleware) or empty list (RLS).
+- [ ] 3.3.7 `cli/tests/admin_pool_access_lint.rs` — compile-time grep asserting no code path outside `with_admin_context` references `state.admin_pool` directly. Warn-level in A.2; graduates to deny in A.3's last wave.
 
-- [ ] 5.1 Add `AETERNA_DB_ROLE` env var (`bypassrls|rls`, default `bypassrls`) consumed in `cli/src/server/app_state.rs` when building the pool.
-- [ ] 5.2 `bypassrls` keeps the existing `DATABASE_URL` behavior.
-- [ ] 5.3 `rls` composes a new connection string pointing at `aeterna_app` with the password from `APP_DB_PASSWORD`.
-- [ ] 5.4 Startup log prints the effective role (`info!("db_role={role}")`) — searchable post-incident.
-- [ ] 5.5 Flag-land PR includes zero env changes in deployed config: prod keeps `bypassrls` at merge time.
-- [ ] 5.6 **Canary rollout** (ops-tracked, not a PR): flip `AETERNA_DB_ROLE=rls` in `dev` first, then `staging`, then per-region prod canaries. Minimum 2-week soak on staging before any prod region.
-- [ ] 5.7 **Rollback runbook** in `docs/ops/rls_rollback.md`: flip env var → rolling pool restart → verify log line — under 5 minutes per region.
-- [ ] 5.8 Post-flip observability: Grafana panel for `pg_stat_activity.state = 'active' transaction_duration_ms` distribution (detect BEGIN-per-request overhead regression).
+### 3.4 Docs
 
-## 6. Bundle A.5 — Remove escape hatch + ratchet (independently shippable)
+- [ ] 3.4.1 `DEVELOPER_GUIDE.md` — document the two-helper pattern, the scheduled-jobs pattern, and the `system_ctx` sentinel.
+- [ ] 3.4.2 `AGENTS.md` — add a short "RLS enforcement" section: RLS is authoritative, app-layer `WHERE tenant_id = ?` is required DiD, direct pool access is forbidden outside the two helpers.
 
-**Goal:** remove the `bypassrls` code path once all environments have soaked on `rls` for ≥ 4 weeks. Graduate the lint to deny. Close Hazard H3. Target: 1 PR.
+## 4. Bundle A.3 — Call-site refactor + cutover (multi-PR, wave-by-wave)
 
-- [ ] 6.1 Delete the `bypassrls` branch in the pool builder; `AETERNA_DB_ROLE` env var becomes a no-op (or is removed after a deprecation cycle).
-- [ ] 6.2 Delete the orphan `activate_tenant_context` calls in `cli/src/server/sync.rs:131,256` (Hazard H3) — they become redundant once every call site uses `with_tenant_context`.
-- [ ] 6.3 Graduate the A.3.8 `deny_lint` from warn to deny.
-- [ ] 6.4 Update `AGENTS.md` to describe the final two-layer model: RLS is authoritative, app-layer `WHERE tenant_id = ?` is defense in depth. Both remain required.
-- [ ] 6.5 Update `DEVELOPER_GUIDE.md` with the `with_tenant_context` pattern as the canonical query-acquisition idiom.
-- [ ] 6.6 Close issue #58 referencing the merged A.5 PR.
+**Goal:** thread every RLS-protected query through `with_tenant_context`; thread every admin-scope query through `with_admin_context`. Each wave is an independent PR, each wave runs against the A.2 CI suite. Final wave flips `DATABASE_URL` to `aeterna_app`. Target: 4–6 PRs, ≤ 3 weeks.
+
+- [ ] 4.1 **Wave 1 — `user_api.rs` + `team_api.rs` + `org_api.rs` + `project_api.rs`.** Refactor list/get/create/update/delete paths to `with_tenant_context`. Per-request admin paths (`?tenant=*`) route through `with_admin_context`. ~25 call sites.
+- [ ] 4.2 **Wave 2 — `govern_api.rs` + `govern_policy.rs` + audit write paths.** ~15 call sites. Audit write paths use whichever helper the originating handler is in — `with_tenant_context` for tenant-scoped writes, `with_admin_context` for admin writes.
+- [ ] 4.3 **Wave 3 — `memory_api.rs` + `knowledge_api.rs` + ingest paths.** ~20 call sites.
+- [ ] 4.4 **Wave 4 — `sync.rs` + `webhook.rs` + async worker paths.** Workers use `with_tenant_context(&TenantContext::from_scheduled_job(t, job_id), …)` for per-tenant work and `with_admin_context(&system_ctx, …)` for cross-tenant maintenance. ~15 call sites.
+- [ ] 4.5 **Wave 5 — `backup_api.rs` + `gdpr.rs` + admin paths.** Convert manual `set_config` call sites (now fixed by A.1) to the helper pattern. Global admin operations route through `with_admin_context`. ~10 call sites.
+- [ ] 4.6 **Wave 6 — sweep + cutover.** Final wave:
+  - [ ] 4.6.1 `storage/tools/find_unwrapped_queries.sh` audit — any remaining direct `self.pool.acquire()` / `self.pool.begin()` / `self.admin_pool.*` outside the helpers either (a) gets refactored or (b) carries `#[allow(direct_pool_access)]` with a justification comment.
+  - [ ] 4.6.2 Flip `DATABASE_URL` in `docker-compose.yml` and every `.env.example` to `postgres://aeterna_app:${APP_DB_PASSWORD}@…`.
+  - [ ] 4.6.3 Add `DATABASE_URL_ADMIN=postgres://aeterna_admin:${APP_DB_ADMIN_PASSWORD}@…` to every `.env.example`.
+  - [ ] 4.6.4 Delete the orphan `activate_tenant_context` calls in `cli/src/server/sync.rs:131,256` (Hazard H3).
+  - [ ] 4.6.5 Graduate both lints (direct-pool-access in A.2.3.7 and admin-pool-access) from warn to deny.
+  - [ ] 4.6.6 Update `AGENTS.md` to state the final model is in effect; update `DEVELOPER_GUIDE.md` with `with_tenant_context` / `with_admin_context` as canonical.
+  - [ ] 4.6.7 Close issue #58 referencing the merged wave 6 PR.
