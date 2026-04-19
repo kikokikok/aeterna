@@ -301,6 +301,16 @@ async fn approve_request(
             );
         }
     };
+    // #44.d §2.5 — `acting_as_tenant_id` = impersonated tenant if set, else
+    // actor's own tenant. Governance actions on a target tenant MUST be
+    // attributable to that tenant.
+    let acting_as = Uuid::parse_str(
+        ctx.target_tenant_id
+            .as_ref()
+            .map(mk_core::TenantId::as_str)
+            .unwrap_or(ctx.tenant_id.as_str()),
+    )
+    .ok();
     let _ = storage
         .log_audit(
             "approve",
@@ -311,6 +321,7 @@ async fn approve_request(
             Some(actor_uuid(ctx.user_id.as_str())),
             None,
             json!({"comment": body.comment}),
+            acting_as,
         )
         .await;
 
@@ -366,6 +377,14 @@ async fn reject_request(
             );
         }
     };
+    // #44.d §2.5 — see `approve_request` for rationale.
+    let acting_as = Uuid::parse_str(
+        ctx.target_tenant_id
+            .as_ref()
+            .map(mk_core::TenantId::as_str)
+            .unwrap_or(ctx.tenant_id.as_str()),
+    )
+    .ok();
     let _ = storage
         .log_audit(
             "reject",
@@ -376,6 +395,7 @@ async fn reject_request(
             Some(actor_uuid(ctx.user_id.as_str())),
             None,
             json!({"reason": reason}),
+            acting_as,
         )
         .await;
 
@@ -479,6 +499,14 @@ async fn update_config(
     config.team_id = team_id;
     config.project_id = project_id;
 
+    // #44.d §2.5 — see `approve_request` for rationale.
+    let acting_as = Uuid::parse_str(
+        ctx.target_tenant_id
+            .as_ref()
+            .map(mk_core::TenantId::as_str)
+            .unwrap_or(ctx.tenant_id.as_str()),
+    )
+    .ok();
     match storage.upsert_config(&config).await {
         Ok(id) => {
             let _ = storage
@@ -497,6 +525,7 @@ async fn update_config(
                         "autoApproveLowRisk": config.auto_approve_low_risk,
                         "escalationContact": config.escalation_contact,
                     }),
+                    acting_as,
                 )
                 .await;
             Json(json!({"id": id, "config": config})).into_response()
@@ -573,6 +602,8 @@ async fn list_audit(
             target_type: query.target_type,
             since,
             limit: query.limit.map(|value| value as i32),
+            // Wired through in the §2.5 Bundle D commit (next).
+            acting_as_tenant_id: None,
         })
         .await
     {

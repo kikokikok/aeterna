@@ -889,6 +889,15 @@ async fn audit_action(
         return;
     };
     let actor_id = Uuid::parse_str(ctx.user_id.as_str()).ok();
+    // #44.d §2.5 — `acting_as_tenant_id` = impersonated tenant if set, else
+    // the actor's own tenant.
+    let acting_as = Uuid::parse_str(
+        ctx.target_tenant_id
+            .as_ref()
+            .map(mk_core::TenantId::as_str)
+            .unwrap_or(ctx.tenant_id.as_str()),
+    )
+    .ok();
     let _ = storage
         .log_audit(
             action,
@@ -899,6 +908,7 @@ async fn audit_action(
             actor_id,
             None,
             json!({"actorTenantId": ctx.tenant_id.as_str(), "details": details}),
+            acting_as,
         )
         .await;
 }

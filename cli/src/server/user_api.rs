@@ -870,6 +870,15 @@ async fn invite_user(
     };
 
     if let Some(storage) = &state.governance_storage {
+        // #44.d §2.5 — attribute the audit row to the tenant the invite
+        // lands in. `target_tenant_id` when impersonating, else own tenant.
+        let acting_as = Uuid::parse_str(
+            ctx.target_tenant_id
+                .as_ref()
+                .map(mk_core::TenantId::as_str)
+                .unwrap_or(ctx.tenant_id.as_str()),
+        )
+        .ok();
         let _ = storage
             .log_audit(
                 "user_invite",
@@ -885,6 +894,7 @@ async fn invite_user(
                     "role": role.to_string().to_lowercase(),
                     "message": req.message,
                 }),
+                acting_as,
             )
             .await;
     }
