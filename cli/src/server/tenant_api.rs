@@ -2047,7 +2047,7 @@ async fn list_user_memberships(
 
     match state
         .postgres
-        .get_user_roles(&user_id, &ctx.tenant_id)
+        .get_user_roles_scoped(&ctx, &user_id, &ctx.tenant_id)
         .await
     {
         Ok(entries) => {

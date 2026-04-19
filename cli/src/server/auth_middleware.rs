@@ -179,7 +179,7 @@ async fn tenant_context_from_identity(
     let (user_id_str, roles) = match &auth_state.postgres {
         Some(postgres) => {
             let resolved = postgres
-                .resolve_user_id_by_idp(&identity.idp_provider, &identity.github_login)
+                .resolve_user_id_by_idp_bootstrap(&identity.idp_provider, &identity.github_login)
                 .await
                 .ok()??;
             let roles = lookup_roles_for_idp(

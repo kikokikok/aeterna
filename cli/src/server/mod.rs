@@ -131,11 +131,16 @@ pub(crate) async fn lookup_roles_for_idp_subject(
     idp_subject: &str,
     tenant_id: &str,
 ) -> Result<Vec<RoleIdentifier>, storage::postgres::PostgresError> {
-    let Some(user_id) = postgres.resolve_user_id_by_idp_subject(idp_subject).await? else {
+    let Some(user_id) = postgres
+        .resolve_user_id_by_idp_subject_bootstrap(idp_subject)
+        .await?
+    else {
         return Ok(Vec::new());
     };
 
-    postgres.get_user_roles_for_auth(&user_id, tenant_id).await
+    postgres
+        .get_user_roles_for_auth_bootstrap(&user_id, tenant_id)
+        .await
 }
 
 pub(crate) async fn lookup_roles_for_idp(
@@ -145,12 +150,14 @@ pub(crate) async fn lookup_roles_for_idp(
     tenant_id: &str,
 ) -> Result<Vec<RoleIdentifier>, storage::postgres::PostgresError> {
     let Some(user_id) = postgres
-        .resolve_user_id_by_idp(idp_provider, idp_subject)
+        .resolve_user_id_by_idp_bootstrap(idp_provider, idp_subject)
         .await?
     else {
         return Ok(Vec::new());
     };
-    postgres.get_user_roles_for_auth(&user_id, tenant_id).await
+    postgres
+        .get_user_roles_for_auth_bootstrap(&user_id, tenant_id)
+        .await
 }
 
 /// Extract the authenticated identity without resolving a tenant.
@@ -261,7 +268,7 @@ pub(crate) async fn resolve_identity(
         Resolution::Provider { provider, subject } => {
             let uid = state
                 .postgres
-                .resolve_user_id_by_idp(provider, &subject)
+                .resolve_user_id_by_idp_bootstrap(provider, &subject)
                 .await
                 .map_err(|err| {
                     error_json(
@@ -280,7 +287,7 @@ pub(crate) async fn resolve_identity(
 
             let root_roles = state
                 .postgres
-                .get_user_roles_for_auth(&uid, INSTANCE_SCOPE_TENANT_ID)
+                .get_user_roles_for_auth_bootstrap(&uid, INSTANCE_SCOPE_TENANT_ID)
                 .await
                 .map_err(|err| {
                     error_json(
@@ -292,7 +299,7 @@ pub(crate) async fn resolve_identity(
 
             let tenant_ids = state
                 .postgres
-                .get_user_tenant_ids(&uid)
+                .get_user_tenant_ids_bootstrap(&uid)
                 .await
                 .map_err(|err| {
                     error_json(
@@ -379,7 +386,7 @@ pub async fn authenticated_tenant_context(
     let roles = if any_provider_configured {
         state
             .postgres
-            .get_user_roles_for_auth(ctx.user_id.as_str(), tenant.id.as_str())
+            .get_user_roles_for_auth_bootstrap(ctx.user_id.as_str(), tenant.id.as_str())
             .await
             .map_err(|err| {
                 error_json(

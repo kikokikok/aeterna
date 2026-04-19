@@ -297,7 +297,11 @@ async fn test_postgres_backend_role_management() {
         .await
         .unwrap();
 
-    let roles = backend.get_user_roles(&user_id, &tenant_id).await.unwrap();
+    let ctx = TenantContext::new(tenant_id.clone(), user_id.clone());
+    let roles = backend
+        .get_user_roles_scoped(&ctx, &user_id, &tenant_id)
+        .await
+        .unwrap();
     assert_eq!(roles.len(), 1);
     assert_eq!(roles[0].0, comp_id);
     assert_eq!(roles[0].1, mk_core::types::Role::Admin.into());
@@ -312,7 +316,10 @@ async fn test_postgres_backend_role_management() {
         .await
         .unwrap();
 
-    let roles_after = backend.get_user_roles(&user_id, &tenant_id).await.unwrap();
+    let roles_after = backend
+        .get_user_roles_scoped(&ctx, &user_id, &tenant_id)
+        .await
+        .unwrap();
     assert_eq!(roles_after.len(), 0);
 }
 
@@ -338,14 +345,14 @@ async fn test_resolve_user_id_by_idp_subject_returns_matching_user() {
     .unwrap();
 
     let resolved = backend
-        .resolve_user_id_by_idp_subject(&idp_subject)
+        .resolve_user_id_by_idp_subject_bootstrap(&idp_subject)
         .await
         .unwrap();
 
     assert_eq!(resolved.as_deref(), Some(user_id.as_str()));
     assert_eq!(
         backend
-            .resolve_user_id_by_idp_subject("missing-subject")
+            .resolve_user_id_by_idp_subject_bootstrap("missing-subject")
             .await
             .unwrap(),
         None
@@ -435,7 +442,7 @@ async fn test_get_user_roles_for_auth_includes_instance_scope_and_deduplicates()
     .unwrap();
 
     let roles = backend
-        .get_user_roles_for_auth(&user_id, tenant_id.as_str())
+        .get_user_roles_for_auth_bootstrap(&user_id, tenant_id.as_str())
         .await
         .unwrap();
 

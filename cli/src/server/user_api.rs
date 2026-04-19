@@ -127,7 +127,7 @@ async fn get_default_tenant(
 
     match state
         .postgres
-        .get_user_default_tenant(ctx.user_id.as_str())
+        .get_user_default_tenant_bootstrap(ctx.user_id.as_str())
         .await
     {
         Ok(None) => (StatusCode::NO_CONTENT, Json(json!({}))).into_response(),
@@ -232,7 +232,7 @@ async fn set_default_tenant(
 
     if let Err(e) = state
         .postgres
-        .set_user_default_tenant(ctx.user_id.as_str(), record.id.as_str())
+        .set_user_default_tenant_bootstrap(ctx.user_id.as_str(), record.id.as_str())
         .await
     {
         return (
@@ -273,7 +273,7 @@ async fn clear_default_tenant(
 
     if let Err(e) = state
         .postgres
-        .clear_user_default_tenant(ctx.user_id.as_str())
+        .clear_user_default_tenant_bootstrap(ctx.user_id.as_str())
         .await
     {
         return (
@@ -939,7 +939,7 @@ async fn list_user_roles(
     };
     let roles = match state
         .postgres
-        .get_user_roles(&user_id, &ctx.tenant_id)
+        .get_user_roles_scoped(&ctx, &user_id, &ctx.tenant_id)
         .await
     {
         Ok(roles) => roles,
@@ -1031,7 +1031,7 @@ async fn revoke_user_role(
     };
     let roles = match state
         .postgres
-        .get_user_roles(&user_id, &ctx.tenant_id)
+        .get_user_roles_scoped(&ctx, &user_id, &ctx.tenant_id)
         .await
     {
         Ok(roles) => roles,
