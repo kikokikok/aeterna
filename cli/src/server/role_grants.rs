@@ -250,7 +250,7 @@ async fn handle_revoke_role(
 
     let existing = match state
         .postgres
-        .get_user_roles(&user_id, &ctx.tenant_id)
+        .get_user_roles_scoped(&ctx, &user_id, &ctx.tenant_id)
         .await
     {
         Ok(roles) => roles
@@ -319,7 +319,7 @@ async fn handle_list_grants(
 
         match state
             .postgres
-            .get_user_roles(&user_id, &ctx.tenant_id)
+            .get_user_roles_scoped(&ctx, &user_id, &ctx.tenant_id)
             .await
         {
             Ok(entries) => entries

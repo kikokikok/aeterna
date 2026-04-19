@@ -271,6 +271,46 @@ impl PostgresBackend {
         Ok(out)
     }
 
+    /// Run `body` inside a plain transaction with NO tenant context set and
+    /// NO admin audit write.
+    ///
+    /// This is the read-only helper for the **authentication bootstrap
+    /// path** — the narrow window before a `TenantContext` exists, where the
+    /// server is still resolving which user/tenant the caller belongs to.
+    /// Concrete use cases:
+    ///
+    /// - `resolve_user_id_by_idp` / `resolve_user_id_by_idp_subject`
+    /// - `get_user_roles_for_auth` at `INSTANCE_SCOPE_TENANT_ID`
+    /// - `get_user_tenant_ids`
+    /// - `get_user_default_tenant`
+    ///
+    /// These methods read from `users` / `user_roles`, which are NOT
+    /// RLS-enabled (verified in migrations 004, 006, 008, 012, 014, 016):
+    /// there is no `app.tenant_id` to set, and no admin-audit row is
+    /// warranted on the auth hot path (one per request would flood
+    /// `governance_audit_log`).
+    ///
+    /// # When NOT to use
+    ///
+    /// - Any write path — use `with_tenant_context` or `with_admin_context`.
+    /// - Anything touching an RLS-gated table — bootstrap tx does not set
+    ///   `app.tenant_id`, so those queries would silently match zero rows.
+    /// - Anything where a `TenantContext` is already available — prefer
+    ///   `with_tenant_context` for consistency.
+    pub async fn with_bootstrap_context<'a, F, T>(&self, body: F) -> Result<T, PostgresError>
+    where
+        F: for<'c> FnOnce(
+            &'c mut sqlx::Transaction<'_, Postgres>,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<T, PostgresError>> + Send + 'c>,
+        >,
+    {
+        let mut tx = self.pool.begin().await?;
+        let out = body(&mut tx).await?;
+        tx.commit().await?;
+        Ok(out)
+    }
+
     pub async fn initialize_schema(&self) -> Result<(), PostgresError> {
         // Enable pgcrypto extension for gen_random_uuid()
         sqlx::query("CREATE EXTENSION IF NOT EXISTS pgcrypto")
@@ -1458,7 +1498,7 @@ impl PostgresBackend {
     }
 
     pub async fn get_user_roles(
-        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
     ) -> Result<Vec<(String, RoleIdentifier)>, PostgresError> {
@@ -1467,7 +1507,7 @@ impl PostgresBackend {
         )
         .bind(user_id.as_str())
         .bind(tenant_id.as_str())
-        .fetch_all(&self.pool)
+        .fetch_all(&mut **tx)
         .await?;
 
         let mut roles = Vec::new();
@@ -1511,13 +1551,13 @@ impl PostgresBackend {
     /// Returns `None` when no matching user exists — callers should treat this as an anonymous /
     /// unauthenticated identity with no roles.
     pub async fn resolve_user_id_by_idp_subject(
-        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         idp_subject: &str,
     ) -> Result<Option<String>, PostgresError> {
         use sqlx::Row;
         let row = sqlx::query("SELECT id::text FROM users WHERE idp_subject = $1 LIMIT 1")
             .bind(idp_subject)
-            .fetch_optional(&self.pool)
+            .fetch_optional(&mut **tx)
             .await?;
         Ok(row.map(|r| r.get::<String, _>("id")))
     }
@@ -1527,7 +1567,7 @@ impl PostgresBackend {
     /// Both `idp_provider` and `idp_subject` must match.  Returns `None` when no
     /// matching user exists.
     pub async fn resolve_user_id_by_idp(
-        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         idp_provider: &str,
         idp_subject: &str,
     ) -> Result<Option<String>, PostgresError> {
@@ -1537,7 +1577,7 @@ impl PostgresBackend {
         )
         .bind(idp_provider)
         .bind(idp_subject)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut **tx)
         .await?;
         Ok(row.map(|r| r.get::<String, _>("id")))
     }
@@ -1547,7 +1587,7 @@ impl PostgresBackend {
     ///
     /// This is the authoritative role lookup for authentication context construction.
     pub async fn get_user_roles_for_auth(
-        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         user_id: &str,
         tenant_id: &str,
     ) -> Result<Vec<RoleIdentifier>, PostgresError> {
@@ -1559,7 +1599,7 @@ impl PostgresBackend {
         .bind(user_id)
         .bind(tenant_id)
         .bind(INSTANCE_SCOPE_TENANT_ID)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut **tx)
         .await?;
 
         let mut roles: Vec<RoleIdentifier> = rows
@@ -1586,14 +1626,14 @@ impl PostgresBackend {
     /// Added in OpenSpec change `refactor-platform-admin-impersonation` (#44.b)
     /// to back the `GET /api/v1/user/me/default-tenant` endpoint.
     pub async fn get_user_default_tenant(
-        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         user_id: &str,
     ) -> Result<Option<String>, PostgresError> {
         use sqlx::Row;
         let row =
             sqlx::query("SELECT default_tenant_id::text AS tid FROM users WHERE id = $1::uuid")
                 .bind(user_id)
-                .fetch_optional(&self.pool)
+                .fetch_optional(&mut **tx)
                 .await?;
         Ok(row.and_then(|r| r.try_get::<Option<String>, _>("tid").ok().flatten()))
     }
@@ -1604,7 +1644,7 @@ impl PostgresBackend {
     /// verified membership in it before calling this method. The FK
     /// constraint rejects orphan IDs at write time.
     pub async fn set_user_default_tenant(
-        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         user_id: &str,
         tenant_id: &str,
     ) -> Result<(), PostgresError> {
@@ -1613,7 +1653,7 @@ impl PostgresBackend {
         )
         .bind(user_id)
         .bind(tenant_id)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
         if res.rows_affected() == 0 {
             return Err(PostgresError::NotFound(format!("user {user_id} not found")));
@@ -1622,12 +1662,15 @@ impl PostgresBackend {
     }
 
     /// Clear the caller-configured default tenant for a user.
-    pub async fn clear_user_default_tenant(&self, user_id: &str) -> Result<(), PostgresError> {
+    pub async fn clear_user_default_tenant(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        user_id: &str,
+    ) -> Result<(), PostgresError> {
         let res = sqlx::query(
             "UPDATE users SET default_tenant_id = NULL, updated_at = NOW() WHERE id = $1::uuid",
         )
         .bind(user_id)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
         if res.rows_affected() == 0 {
             return Err(PostgresError::NotFound(format!("user {user_id} not found")));
@@ -1641,7 +1684,10 @@ impl PostgresBackend {
     /// header, the server can auto-select the tenant when the result is exactly one.
     /// When the result is empty or more than one, the caller must require an explicit
     /// `X-Tenant-ID`.
-    pub async fn get_user_tenant_ids(&self, user_id: &str) -> Result<Vec<String>, PostgresError> {
+    pub async fn get_user_tenant_ids(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        user_id: &str,
+    ) -> Result<Vec<String>, PostgresError> {
         use sqlx::Row;
         let rows = sqlx::query(
             "SELECT DISTINCT tenant_id FROM user_roles
@@ -1650,12 +1696,145 @@ impl PostgresBackend {
         )
         .bind(user_id)
         .bind(INSTANCE_SCOPE_TENANT_ID)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut **tx)
         .await?;
         Ok(rows
             .iter()
             .map(|r| r.get::<String, _>("tenant_id"))
             .collect())
+    }
+
+    // -- Auth / bootstrap convenience wrappers --------------------------------
+    //
+    // These thin wrappers drive the associated `resolve_user_id_by_idp*` /
+    // `get_user_roles_for_auth` / `get_user_tenant_ids` / `get_user_default_tenant`
+    // methods through [`Self::with_bootstrap_context`]. They exist because the
+    // authentication hot path runs before any `TenantContext` is known, so the
+    // normal `with_tenant_context` / `with_admin_context` wrappers do not apply
+    // (the former has no tenant, the latter would emit an admin-audit row per
+    // request).
+    //
+    // The underlying tables (`users`, `user_roles`) are not RLS-enabled; the tx
+    // is used purely for atomicity and consistency with the rest of the API.
+
+    /// Bootstrap variant of [`Self::resolve_user_id_by_idp_subject`].
+    pub async fn resolve_user_id_by_idp_subject_bootstrap(
+        &self,
+        idp_subject: &str,
+    ) -> Result<Option<String>, PostgresError> {
+        let idp_subject = idp_subject.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move { Self::resolve_user_id_by_idp_subject(tx, &idp_subject).await })
+        })
+        .await
+    }
+
+    /// Bootstrap variant of [`Self::resolve_user_id_by_idp`].
+    pub async fn resolve_user_id_by_idp_bootstrap(
+        &self,
+        idp_provider: &str,
+        idp_subject: &str,
+    ) -> Result<Option<String>, PostgresError> {
+        let idp_provider = idp_provider.to_string();
+        let idp_subject = idp_subject.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(
+                async move { Self::resolve_user_id_by_idp(tx, &idp_provider, &idp_subject).await },
+            )
+        })
+        .await
+    }
+
+    /// Bootstrap variant of [`Self::get_user_roles_for_auth`].
+    pub async fn get_user_roles_for_auth_bootstrap(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+    ) -> Result<Vec<RoleIdentifier>, PostgresError> {
+        let user_id = user_id.to_string();
+        let tenant_id = tenant_id.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move { Self::get_user_roles_for_auth(tx, &user_id, &tenant_id).await })
+        })
+        .await
+    }
+
+    /// Bootstrap variant of [`Self::get_user_tenant_ids`].
+    pub async fn get_user_tenant_ids_bootstrap(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<String>, PostgresError> {
+        let user_id = user_id.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move { Self::get_user_tenant_ids(tx, &user_id).await })
+        })
+        .await
+    }
+
+    /// Bootstrap variant of [`Self::get_user_default_tenant`].
+    pub async fn get_user_default_tenant_bootstrap(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<String>, PostgresError> {
+        let user_id = user_id.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move { Self::get_user_default_tenant(tx, &user_id).await })
+        })
+        .await
+    }
+
+    /// Bootstrap-pool write variant of [`Self::set_user_default_tenant`].
+    ///
+    /// `users.default_tenant_id` is user-level state, not tenant-scoped;
+    /// there is no RLS policy on the `users` table (verified in the
+    /// migration set). The bootstrap pool gives us tx-scoped atomicity
+    /// without emitting an admin-audit row on every preference change.
+    pub async fn set_user_default_tenant_bootstrap(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+    ) -> Result<(), PostgresError> {
+        let user_id = user_id.to_string();
+        let tenant_id = tenant_id.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move { Self::set_user_default_tenant(tx, &user_id, &tenant_id).await })
+        })
+        .await
+    }
+
+    /// Bootstrap-pool write variant of [`Self::clear_user_default_tenant`].
+    ///
+    /// See [`Self::set_user_default_tenant_bootstrap`] for rationale.
+    pub async fn clear_user_default_tenant_bootstrap(
+        &self,
+        user_id: &str,
+    ) -> Result<(), PostgresError> {
+        let user_id = user_id.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move { Self::clear_user_default_tenant(tx, &user_id).await })
+        })
+        .await
+    }
+
+    /// Tenant-scoped convenience variant of [`Self::get_user_roles`].
+    ///
+    /// Wraps the associated function in [`Self::with_tenant_context`] so
+    /// handler call sites don't need to `Box::pin` an async block each time.
+    /// The scoped tx is technically redundant today (`user_roles` is not
+    /// RLS-gated), but it's the right shape for the A.3 Wave 1 contract
+    /// and future-proofs against enabling RLS on `user_roles`.
+    pub async fn get_user_roles_scoped(
+        &self,
+        ctx: &TenantContext,
+        user_id: &mk_core::types::UserId,
+        tenant_id: &mk_core::types::TenantId,
+    ) -> Result<Vec<(String, RoleIdentifier)>, PostgresError> {
+        let user_id = user_id.clone();
+        let tenant_id = tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move { Self::get_user_roles(tx, &user_id, &tenant_id).await })
+        })
+        .await
     }
 
     /// Append a governance event inside an existing transaction.

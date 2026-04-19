@@ -610,7 +610,7 @@ async fn admin_session_handler(
 
     let user_id = match state
         .postgres
-        .resolve_user_id_by_idp(&identity.idp_provider, &identity.github_login)
+        .resolve_user_id_by_idp_bootstrap(&identity.idp_provider, &identity.github_login)
         .await
     {
         Ok(Some(id)) => id,
@@ -637,7 +637,7 @@ async fn admin_session_handler(
 
     let roles = match state
         .postgres
-        .get_user_roles_for_auth(&user_id, &identity.tenant_id)
+        .get_user_roles_for_auth_bootstrap(&user_id, &identity.tenant_id)
         .await
     {
         Ok(r) => r,
@@ -662,7 +662,7 @@ async fn admin_session_handler(
 
     let default_tenant_id = state
         .postgres
-        .get_user_default_tenant(&user_id)
+        .get_user_default_tenant_bootstrap(&user_id)
         .await
         .ok()
         .flatten();
@@ -683,7 +683,7 @@ async fn admin_session_handler(
             Err(_) => vec![],
         }
     } else {
-        match state.postgres.get_user_tenant_ids(&user_id).await {
+        match state.postgres.get_user_tenant_ids_bootstrap(&user_id).await {
             Ok(ids) => ids
                 .into_iter()
                 .map(|id| {

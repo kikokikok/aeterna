@@ -566,7 +566,7 @@ pub async fn request_context(
     // --- Step 2: users.default_tenant_id ---
     if let Ok(Some(default)) = state
         .postgres
-        .get_user_default_tenant(user_id.as_str())
+        .get_user_default_tenant_bootstrap(user_id.as_str())
         .await
     {
         // The FK ON DELETE SET NULL guarantees the tenant exists if the
