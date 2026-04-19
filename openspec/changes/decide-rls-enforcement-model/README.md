@@ -1,10 +1,12 @@
 # decide-rls-enforcement-model
 
-Architectural decision change: records the chosen PostgreSQL row-level security enforcement model for Aeterna. Resolves #58.
+**Decision: Option A** — activate RLS on every request-scoped connection.
 
-- `proposal.md` — Why, What Changes, capabilities touched, decision summary.
-- `design.md` — Full analysis of Options A / B / C, hazards surfaced by the analysis, recommendation rationale.
-- `specs/runtime-security-hardening/spec.md` — 1 MODIFIED + 2 ADDED requirements on the `runtime-security-hardening` capability.
-- `tasks.md` — Implementation tasks for the chosen option (C: RLS as CI-time gate).
+- `proposal.md` — why, decision summary, 5-bundle rollout plan.
+- `design.md` — threat model, option analysis, implementation strategy, risk register.
+- `tasks.md` — itemized work per bundle (A.1 hazard fixes → A.2 role + CI → A.3 repo refactor → A.4 prod flip → A.5 cleanup).
+- `specs/runtime-security-hardening/spec.md` — normative spec delta (final-state wording).
 
-**Decision:** Option C — RLS stays enabled and policies are authored, but prod connections remain BYPASSRLS; a dedicated non-BYPASSRLS role (`aeterna_app_rls`) is used by the integration test suite to convert the policies into a CI enforcement gate against missed `WHERE tenant_id = ?` clauses.
+Originally opened as Option C (RLS as a test-time gate). Architect override on threat-model grounds pivoted the decision to A. See commit trail.
+
+Tracks issue #58. Graduated via PR #72.

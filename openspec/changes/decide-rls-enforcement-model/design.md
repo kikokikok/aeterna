@@ -1,115 +1,110 @@
-# Design: RLS Enforcement Model
+# Design — Decide RLS Enforcement Model
 
-## 1. Current State
+## 1. Problem
 
-### 1.1 What exists on paper
+The codebase ships with a comprehensive RLS story on paper: 22 tables with `ENABLE ROW LEVEL SECURITY`, 5 with `FORCE`, and an explicit GUC `app.tenant_id` that every policy consults. The runtime behavior does not match the paper. `PostgresBackend::activate_tenant_context` is called in two places (both in `cli/src/server/sync.rs`, both currently effective no-ops); no migration creates a non-BYPASSRLS role; prod `DATABASE_URL` points at whatever role the operator provisioned, which in the shipped compose config is `postgres` (superuser, implicit BYPASSRLS).
 
-| Migration | Tables | Policy shape |
-|-----------|--------|--------------|
-| `004_enable_rls.sql` | `sync_state`, `memory_entries`, `knowledge_items` | `USING (tenant_id = current_setting('app.tenant_id', true)::uuid)` |
-| `016_governance_rls.sql` | `governance_configs`, `approval_requests`, `governance_roles`, `approval_decisions`, `escalation_queue` | `FORCE ROW LEVEL SECURITY` + scope helper functions keyed on `current_setting('app.company_id', true)` |
-| `024_normalize_rls_session_variables.sql` | `governance_events`, `event_delivery_metrics`, `event_consumer_state` | `USING (tenant_id = current_setting('app.tenant_id', true))` |
-| various intermediate migrations | 14 other tables | mix of `app.tenant_id` / `app.current_tenant_id` (normalization pass deferred) |
+The app-layer `WHERE tenant_id = $N` clauses scattered across the repository layer are the de facto isolation. If any handler forgets that clause on an RLS-protected table, the query returns cross-tenant rows in prod even though RLS appears enabled.
 
-Total: **22 tables, ENABLE; 5 of those additionally FORCE**.
+Three viable resolutions exist. Each is a complete answer; they are not cumulative.
 
-### 1.2 What exists in code
+## 2. Threat model (the deciding input)
 
-`activate_tenant_context` call sites (repo-wide grep):
+The threat model this change locks in, after architect override on the initial C recommendation:
+
+> **T1.** A buggy handler on a live production request — a missing `WHERE tenant_id = ?` clause, a typo in a join, a repository method that was written for admin-scope and re-used for user-scope — MUST NOT be able to read rows belonging to another tenant, even if it successfully reaches `self.pool.acquire()` and issues the query.
+>
+> **T2.** A compromised handler (SQL injection, deserialization RCE, dependency supply-chain) on a live production request MUST be constrained by the database's own isolation mechanism, not only by the handler's own SQL string.
+
+`T1` is within reach of Option C if we accept "regression caught in CI before merge" as sufficient. `T2` is not — a compromised handler in prod never ran against the CI role, and Option C's test-time enforcement is silent on that path. Option A is the only option that satisfies both.
+
+## 3. Option analysis
+
+### 3.1 Option A — Activate RLS on every request-scoped connection (chosen)
+
+**Shape.** App connects as a non-BYPASSRLS role (`aeterna_app`). Every request borrows a connection via `with_tenant_context(&ctx, |conn| …)`, which opens an explicit transaction, issues `SET LOCAL app.tenant_id = $1`, runs the body, and commits or rolls back. RLS policies evaluate against the live GUC on every statement; any query without the `WHERE` clause still returns only the current tenant's rows because the policy enforces the predicate.
+
+**Satisfies threat model.** Both `T1` and `T2`. The database itself is the final gate.
+
+**Cost.**
+- **4–6 weeks of engineering.** Helper implementation is 1–2 days; the 100-site repository refactor is 3–4 weeks spread across 4–6 waves; the canary rollout adds 2+ weeks of soak time that runs in parallel with cleanup work.
+- **Transaction-per-request overhead.** Every read path now incurs `BEGIN` … `COMMIT` round-trips. On pgbouncer with transaction-mode pooling the overhead is negligible (pgbouncer was already transaction-scoping connections); on session-mode pooling the overhead is larger. Current deployments use transaction-mode pgbouncer per `docker-compose.yml`, so this is a near-zero regression in practice.
+- **Hazard resolution required first.** H1 (session-scope `set_config(..., false)`) and H2 (dual GUC namespace) must be closed before the role flip, because revoking BYPASSRLS weaponizes both into live cross-tenant leaks. This is why Bundle A.1 is a hard prerequisite for Bundle A.4.
+
+**Rollback.** Per-bundle: A.1–A.3 are warn-level or CI-only, trivially revertable. A.4 is a single env-var change (`AETERNA_DB_ROLE=bypassrls`) plus a rolling pool restart, under 5 minutes per region. A.5 is the only non-revertable bundle and only lands after A.4 has soaked in prod for ≥ 4 weeks.
+
+### 3.2 Option B — Drop RLS entirely (rejected)
+
+**Shape.** `ALTER TABLE … DISABLE ROW LEVEL SECURITY` on all 22 tables, drop all policies, update docs to say "app-layer only."
+
+**Satisfies threat model.** Neither `T1` nor `T2`.
+
+**Cost.** ~1 week. Simplifies the mental model at the cost of losing every downstream defense. Also throws away migration 024 (the partial GUC normalization) as dead code.
+
+**Why rejected.** Unacceptable under the locked threat model. Also loses the ability to ever revisit defense-in-depth without reintroducing the same 22 policies from scratch.
+
+### 3.3 Option C — RLS as a test-time gate (rejected)
+
+**Shape.** Keep prod on BYPASSRLS; add a dedicated non-BYPASSRLS role used only by an integration test suite; every RLS-enabled table is exercised under that role on every CI run.
+
+**Satisfies threat model.** `T1` partially (catches regressions pre-merge), not `T2`.
+
+**Cost.** 1–2 weeks. The cheapest option that preserves some defense-in-depth value.
+
+**Why rejected.** The gap between "caught in CI" and "caught in prod" is exactly the window that matters for `T1`’s live-request variant, and all of `T2`. The architect's override on the initial C recommendation was explicit: the threat model includes prod-time compromise, not only pre-merge regression. The CI suite from Option C is preserved as a permanent regression guard (shipped inside Bundle A.2), so nothing is lost by choosing A.
+
+## 4. Implementation strategy
+
+### 4.1 Why staged, not big-bang
+
+A single PR that (a) ships the new role + grants, (b) refactors 100 query sites, (c) flips prod away from BYPASSRLS is unreviewable and unrevertable. It also couples the three hardest failure modes — grant gaps, refactor bugs, and transaction-per-request overhead — into one incident if anything goes wrong. The bundle structure exists to decouple them.
+
+### 4.2 Bundle ordering and independence
+
+Bundle A.1 and A.2 are **independent** — either can land first; neither changes runtime behavior under the current BYPASSRLS role. A.3 depends on A.2 (it needs the CI suite to prove the refactor). A.4 depends on A.1, A.2, A.3 all being complete — the role flip only works if hazards are closed, the role exists, and every query goes through the helper. A.5 depends on A.4 having soaked.
+
+The net property: **any subset of {A.1, A.2, A.3} landing in prod without A.4 introduces zero risk.** A.3 in particular is net-beneficial pre-flip (closes the `activate_tenant_context` gap and makes the transaction scope explicit) and net-neutral under BYPASSRLS (the `SET LOCAL` is harmless when the role bypasses the policy).
+
+### 4.3 The `with_tenant_context` helper
+
+The helper pattern is load-bearing. Each call site transforms roughly from:
 
 ```
-storage/src/postgres.rs:63        set_config('app.tenant_id', $1, false)  ← helper body
-storage/src/gdpr.rs:407,490,580   set_config('app.tenant_id', $1, true)
-cli/src/server/backup_api.rs:1597 set_config('app.tenant_id', $1, false)
-cli/src/server/sync.rs:131,256    activate_tenant_context(...)            ← only 2 high-level call sites
+let mut conn = self.pool.acquire().await?;
+let rows = sqlx::query_as::<_, Row>("SELECT … FROM users WHERE tenant_id = $1")
+    .bind(tenant_id).fetch_all(&mut *conn).await?;
 ```
 
-Repository-layer SELECTs against the 22 RLS tables: **100+ call sites** across `cli/src/server/user_api.rs`, `project_api.rs`, `org_api.rs`, `memory_api.rs`, `knowledge_api.rs`, `governance_api.rs`, `audit_api.rs`. None of them pre-activate a tenant context. All of them carry an explicit `WHERE tenant_id = $1` clause (the real enforcement).
+to:
 
-### 1.3 Prior-art hazards surfaced by this analysis
+```
+let rows = self.with_tenant_context(&ctx, |tx| async move {
+    sqlx::query_as::<_, Row>("SELECT … FROM users")   // WHERE clause now optional per RLS, kept for DiD
+        .fetch_all(&mut **tx).await
+        .map_err(Into::into)
+}).await?;
+```
 
-**Hazard H1 — session-scope `set_config`.** `storage/src/postgres.rs:63` and `cli/src/server/backup_api.rs:1597` both use `set_config('app.tenant_id', $1, false)`. The third argument `false` means *session-level* — the setting survives on the pooled connection after the query completes. The next request borrowing that connection inherits tenant A's `app.tenant_id` unless it explicitly resets. Under the current prod BYPASSRLS reality this has no blast radius; under Option A it becomes a cross-tenant leak. Either way the fix is the same: switch to `set_config(..., true)` (transaction-local) and wrap the query in an explicit BEGIN.
+The explicit `WHERE tenant_id = $N` stays as defense-in-depth — Bundle A.5's `AGENTS.md` update documents that this is required, not optional. The RLS policy is the floor; the `WHERE` clause is the ceiling; any query where the two disagree is a bug and `rls_enforcement_test.rs` surfaces it.
 
-**Hazard H2 — dual GUC namespace.** Older migrations use `app.company_id`; newer use `app.tenant_id`; the normalization pass (`024`) only converted three tables. A request that sets one GUC leaves the other stale on the connection. Again invisible under BYPASSRLS, weaponized under Option A.
+### 4.4 Async workers
 
-**Hazard H3 — orphan `activate_tenant_context` call sites in `sync.rs`.** The two call sites that DO activate context are themselves no-ops (they run as BYPASSRLS). They read as correct defense-in-depth code; they are actually dead code. This misleads contributors reviewing `sync.rs` as a reference for how to write RLS-aware code.
+Waves 4 and 5 of A.3 handle `sync.rs` / `webhook.rs` / backup / GDPR paths that don't have a request-scoped tenant. The pattern: each async task acquires its context from its own job record (`sync_jobs.tenant_id`, `backup_jobs.tenant_id`, …) and passes a synthesized `TenantContext::from_async_job(job_id, tenant_id)` into `with_tenant_context`. There is no "unscoped" escape hatch — a job without a tenant either doesn't need RLS-protected tables or is a bug.
 
-## 2. Options Considered
+## 5. Risk register
 
-### Option A — Make RLS real
+**H1 — session-scope `set_config(..., false)` on pooled connections.** Current behavior: `backup_api.rs:1597` and legacy call sites use session scope; the setting persists after `.release()` and leaks to whichever request next borrows that connection. Under BYPASSRLS this is silent. Under non-BYPASSRLS (post-A.4) this becomes a live cross-tenant leak. **Mitigation:** Bundle A.1 closes every instance and lands before A.4. Regression test in A.1.
 
-Prod enforcement via RLS. Shape:
+**H2 — dual GUC namespace.** Migration 024 normalized the policies to read `app.tenant_id`, but several app-side call sites still write `app.company_id` or `app.current_tenant_id`. Under BYPASSRLS this is silent. Under non-BYPASSRLS the policy reads the canonical var and finds NULL → zero rows returned → user-visible outage. **Mitigation:** Bundle A.1 grep-normalizes every app-side read/write; grep regression test in A.1.
 
-1. New migration: `CREATE ROLE aeterna_app_rls LOGIN NOBYPASSRLS PASSWORD …`; grant `USAGE` on schema + per-table DML.
-2. Prod `DATABASE_URL` switches to `aeterna_app_rls`. Deploy ordering: role exists before image flip.
-3. Auth middleware acquires a pool connection, `BEGIN`, `SET LOCAL app.tenant_id = $1`, runs handler, `COMMIT` (or `ROLLBACK` on error). Connection lifetime == request lifetime.
-4. The 100+ repository call sites DO NOT change — they continue to carry their `WHERE tenant_id = ?` clauses (belt-and-suspenders).
-5. Fix H1/H2/H3 as preconditions (mandatory; otherwise prod breaks under non-BYPASSRLS).
+**H3 — orphan `activate_tenant_context` calls in `sync.rs`.** Currently no-ops under BYPASSRLS; post-A.3 they double-`SET LOCAL` inside `with_tenant_context`, which is harmless but noisy. **Mitigation:** Bundle A.5 deletes them.
 
-**Pros.** Genuine defense in depth. A missed `WHERE tenant_id = ?` in app code is caught at the DB layer. Compliance narrative is real, not paper.
+**H4 — transaction-per-request overhead under session-mode pooling.** Not applicable to current deployments (transaction-mode pgbouncer), but documented so a future infra change doesn't regress. **Mitigation:** A.4.8 Grafana panel for transaction duration; alert threshold established during canary.
 
-**Cons.**
-- Transaction-per-request overhead. For read-mostly endpoints this roughly doubles round trips to the DB (BEGIN + query + COMMIT).
-- Connection handle must be threaded through every handler (or hidden in an axum Extension). Either way, the 100+ repository sites need to accept a `&mut PgConnection` or a `&mut Transaction` instead of a `&PgPool`. That is the ~100-site refactor.
-- `FORCE ROW LEVEL SECURITY` on governance tables means even the table owner (migration runner) is subject to policy — migrations need to `SET ROLE postgres` explicitly or we lose the ability to run DDL against those tables as any non-bypassing role.
-- The session-variable leak (H1) MUST be fixed first or every pooled connection becomes a cross-tenant time bomb.
+**H5 — missed grant on a newly-added RLS table.** A contributor adds a migration with `ENABLE ROW LEVEL SECURITY` but forgets to grant `aeterna_app` access → the table is empty under the RLS role. **Mitigation:** A.2.6.1 pre-flight query enumerates `pg_tables WHERE rowsecurity = true` and fails the test run with a named-table error if any grant is missing.
 
-**Effort.** 4–6 weeks of focused work, high coordination cost across storage + server + CI.
+## 6. Open questions
 
-### Option B — Drop RLS
-
-Remove all 22 `ENABLE ROW LEVEL SECURITY` / 5 `FORCE ROW LEVEL SECURITY`. Drop all policies. Delete `activate_tenant_context`. Document in `AGENTS.md` that tenant isolation is app-layer `WHERE tenant_id = ?`, enforced by code review and `sqlx` query macros.
-
-**Pros.** Honest. Cheap (one migration + code removal). No overhead. No session-variable leak to worry about.
-
-**Cons.** Loses the paper defense-in-depth story that Kyriba security / compliance reviews may require. Zero DB-layer safety net against a missed `WHERE` clause. Future Kyriba auditors will ask why a multi-tenant product has no RLS; answer ("application code enforces") is correct but unsatisfying.
-
-**Effort.** 1 week.
-
-### Option C — RLS as test-time gate
-
-Prod connection stays BYPASSRLS (no change to runtime). Integration tests run under a dedicated `aeterna_app_rls` role that is non-BYPASSRLS, and exercise the actual handler code under a real tenant context.
-
-Concrete shape:
-
-1. New migration: `CREATE ROLE aeterna_app_rls LOGIN NOBYPASSRLS PASSWORD 'test_only_insecure'`; grant minimal DML. Role is test-only; prod deploys do not use it.
-2. `cli/tests/rls_enforcement_test.rs` — new integration test file:
-   - Opens a second pool using `DATABASE_URL` with username replaced by `aeterna_app_rls`.
-   - For each RLS-protected table, runs two queries: (a) with `SELECT set_config('app.tenant_id', <tid>, true)` in a BEGIN → expect N rows; (b) without setting context → expect 0 rows.
-   - Additionally exercises the high-level list paths (`/user`, `/project`, `/org`, `/govern/audit`) against the RLS role to prove the handler + repository stack produces tenant-filtered results even with RLS actually enforced.
-3. Fix H1/H2/H3 opportunistically. H1 is a hard requirement for the test to pass without flakes.
-
-**Pros.**
-- Prod overhead unchanged (0 ms, 0 connection-lifecycle churn).
-- Real compile-time-ish guarantee: any future PR that introduces a query missing `WHERE tenant_id = ?` against an RLS-protected table fails CI. This is the main value RLS provides today; Option C captures that value at 5% of Option A's cost.
-- Kyriba security review answer: “RLS policies are authored, enforced in CI against a non-BYPASSRLS role, and additionally enforced at the application layer in prod for latency reasons.” That is a defensible posture.
-- Reversible. If threat model changes, we flip prod to `aeterna_app_rls` and we're in Option A with the session-variable bugs already fixed.
-
-**Cons.**
-- Not true defense in depth *in prod*. A prod-only regression (e.g. a hand-rolled query added via a migration-time admin script) could still leak across tenants.
-- Requires test discipline: the RLS test role must be kept in sync with per-table grants as migrations add tables. We guard this with a schema-introspection test that fails if a new RLS-enabled table lacks an explicit grant to `aeterna_app_rls`.
-
-**Effort.** 1–2 weeks.
-
-## 3. Recommendation — Option C
-
-Option A is technically the "right answer" for a product under a strict zero-trust threat model. Aeterna is not that product: it is an internal-tenant tool where the adversary is a buggy handler, not a malicious user of the public API. Against that threat model, Option A's runtime overhead and refactor cost buys us protection against a class of bug (missed `WHERE tenant_id = ?`) that Option C already catches in CI.
-
-Option B throws away the authored policies, which we would regret the first time a Kyriba security review asks "what stops a SQL injection from reading another tenant?". With Option C the answer is "the app's DB role has access to all tenants but every query carries `WHERE tenant_id = ?` and the CI suite runs under a role where missing that clause returns zero rows."
-
-Option C preserves the policies as a live artifact (they must compile, they must pass the test suite) and converts them from decorative to enforceable. It is reversible to Option A if the threat model changes.
-
-## 4. Spec Impact
-
-One MODIFIED and one ADDED requirement on `runtime-security-hardening`:
-
-- **MODIFIED** "Backend-Specific Persistence Isolation" — clarifies that on Postgres, tenant isolation is enforced by application-layer `WHERE tenant_id = ?` clauses; RLS policies are authored for CI enforcement, not prod.
-- **ADDED** "RLS Test-Time Enforcement" — normative requirement that a dedicated non-BYPASSRLS role exists, that the integration test suite exercises all RLS-protected tables under that role, and that schema introspection fails CI if a new RLS-enabled table lacks a grant to the test role.
-
-Spec delta lives in `specs/runtime-security-hardening/spec.md`.
-
-## 5. Rollout
-
-1. Land this change (proposal + design + spec delta + migration adding `aeterna_app_rls` role + test suite + H1 fixes).
-2. Archive it once the test suite is green and `AGENTS.md` / `DEVELOPER_GUIDE.md` are updated.
-3. If / when the threat model changes: file a new change `flip-prod-to-rls-enforced` that builds on this one. The role exists, the session-variable hygiene is fixed — that change becomes a middleware-wiring PR instead of a six-week architectural lift.
+- **pgbouncer auth plumbing.** Can pgbouncer's `auth_file` or `auth_query` resolve the `aeterna_app` password from the same secret store as the app, without duplicating credentials? Tracked for Bundle A.4; may require a small infra PR.
+- **Password rotation.** Initial plan is a secret-manager-backed password referenced as `${APP_DB_PASSWORD}`. Rotation cadence and procedure tracked as an ops ticket after A.4 lands.
+- **Read replicas.** Do read replicas inherit the RLS policies and the grants? Yes (replica replays the full catalog), but the `aeterna_app` role must exist on the replica's primary before failover. Covered by standard replica provisioning; flagged here so it's not forgotten during the A.4 rollout.
