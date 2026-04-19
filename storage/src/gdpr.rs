@@ -5,6 +5,31 @@
 /// - Data export (data portability)
 /// - Consent management
 /// - Audit trail for data access
+///
+/// # INVARIANT — transaction-scoped GUC hygiene
+///
+/// Every RLS-protected query in this module MUST rely on one of two
+/// isolation mechanisms:
+///
+///   1. An explicit `WHERE tenant_id = $1` (and, where applicable,
+///      `user_id = $2`) clause on the query itself. This is the current
+///      defense-in-depth in every method below. Do not remove it.
+///
+///   2. (Future, Bundle A.3 Wave 5) a `with_tenant_context(&ctx, |tx| …)`
+///      wrapper that opens a transaction, sets `app.tenant_id` on that
+///      transaction only, and runs every subsequent query through `&mut *tx`
+///      so they all share the same RLS-protected connection.
+///
+/// What this module MUST NOT do is call `SELECT set_config('app.tenant_id',
+/// …, true)` against `&self.pool` directly. `SET LOCAL` outside an active
+/// transaction is a silent no-op (H1 in the RLS enforcement RFC), and even
+/// if it weren't, the next query acquires a different pooled connection
+/// that has never seen the setting. Three such calls previously lived at
+/// lines 407, 490, 580 of this file and were removed in the A.1 hazard-fix
+/// bundle (issue #58) — exactly as the analogous call in `backup_api.rs`
+/// was removed in issue #57. The explicit `WHERE` clauses in every method
+/// were always the real isolation mechanism; the `set_config` lines were
+/// dead code.
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -404,10 +429,10 @@ impl GdprOperations for PostgresGdprStorage {
         user_id: &str,
         redis: &redis::aio::ConnectionManager,
     ) -> Result<GdprDeleteResult, GdprError> {
-        sqlx::query("SELECT set_config('app.tenant_id', $1, true)")
-            .bind(tenant_id)
-            .execute(&self.pool)
-            .await?;
+        // RLS activation via `with_tenant_context` is deferred to Bundle A.3
+        // Wave 5 (issue #58). Every query below filters by `tenant_id`
+        // explicitly, which is the real defense-in-depth mechanism. See the
+        // module-level INVARIANT comment for rationale.
 
         self.log_data_access(
             tenant_id,
@@ -486,11 +511,9 @@ impl GdprOperations for PostgresGdprStorage {
         tenant_id: &str,
         user_id: &str,
     ) -> Result<UserDataExport, GdprError> {
-        // Set tenant context for RLS
-        sqlx::query("SELECT set_config('app.tenant_id', $1, true)")
-            .bind(tenant_id)
-            .execute(&self.pool)
-            .await?;
+        // RLS activation via `with_tenant_context` is deferred to Bundle A.3
+        // Wave 5 (issue #58). Every query below filters by `tenant_id`
+        // explicitly. See the module-level INVARIANT comment.
 
         // Export memories
         let memories: Vec<serde_json::Value> = sqlx::query_scalar(
@@ -576,11 +599,9 @@ impl GdprOperations for PostgresGdprStorage {
         user_id: &str,
         strategy: AnonymizationStrategy,
     ) -> Result<(), GdprError> {
-        // Set tenant context for RLS
-        sqlx::query("SELECT set_config('app.tenant_id', $1, true)")
-            .bind(tenant_id)
-            .execute(&self.pool)
-            .await?;
+        // RLS activation via `with_tenant_context` is deferred to Bundle A.3
+        // Wave 5 (issue #58). Every query below filters by `tenant_id`
+        // explicitly. See the module-level INVARIANT comment.
 
         // Log the anonymization action
         self.log_data_access(

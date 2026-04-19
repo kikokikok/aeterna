@@ -171,7 +171,7 @@ mod postgres_isolation {
         let approver_id = Uuid::new_v4();
 
         let mut owner_conn = backend.pool().acquire().await.expect("owner connection");
-        sqlx::query("SELECT set_config('app.company_id', $1, false)")
+        sqlx::query("SELECT set_config('app.tenant_id', $1, false)")
             .bind(company_a.to_string())
             .execute(owner_conn.as_mut())
             .await
@@ -235,7 +235,7 @@ mod postgres_isolation {
         assert_eq!(visible_to_owner, (1, 1, 1, 1));
 
         let mut attacker_conn = backend.pool().acquire().await.expect("attacker connection");
-        sqlx::query("SELECT set_config('app.company_id', $1, false)")
+        sqlx::query("SELECT set_config('app.tenant_id', $1, false)")
             .bind(company_b.to_string())
             .execute(attacker_conn.as_mut())
             .await

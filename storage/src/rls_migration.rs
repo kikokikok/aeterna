@@ -62,7 +62,12 @@ async fn enable_company_rls_for_table(pool: &PgPool, table: &str) -> Result<(), 
         .await
         .ok();
 
-    let company_scope = "company_id = current_setting('app.company_id', true)::uuid";
+    // H2 normalization (issue #58 Bundle A.1): the single canonical app-side
+    // GUC is `app.tenant_id`. Tables with a `company_id` column (where
+    // company_id == tenant UUID) scope their RLS policy on that GUC. The old
+    // legacy-company GUC name is retired on the app side; see the H2
+    // regression test `storage/tests/guc_namespace.rs` for the tripwire.
+    let company_scope = "company_id = current_setting('app.tenant_id', true)::uuid";
     let create_policy = format!(
         "CREATE POLICY {} ON {} FOR ALL USING ({}) WITH CHECK ({})",
         policy_name, table, company_scope, company_scope
@@ -90,7 +95,8 @@ async fn enable_company_rls_for_approval_decisions(pool: &PgPool) -> Result<(), 
         .await
         .ok();
 
-    let company_scope = "EXISTS (SELECT 1 FROM approval_requests ar WHERE ar.id = approval_decisions.request_id AND ar.company_id = current_setting('app.company_id', true)::uuid)";
+    // H2 normalization: see note in `enable_company_rls_for_<prev>` above.
+    let company_scope = "EXISTS (SELECT 1 FROM approval_requests ar WHERE ar.id = approval_decisions.request_id AND ar.company_id = current_setting('app.tenant_id', true)::uuid)";
     let create_policy = format!(
         "CREATE POLICY {} ON {} FOR ALL USING ({}) WITH CHECK ({})",
         policy_name, table, company_scope, company_scope

@@ -8036,6 +8036,7 @@ dependencies = [
  "tracing",
  "utils",
  "uuid",
+ "walkdir",
  "wiremock",
 ]
 
