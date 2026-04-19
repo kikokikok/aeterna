@@ -3373,8 +3373,17 @@ impl StorageBackend for PostgresBackend {
 }
 
 impl PostgresBackend {
-    pub async fn create_error_signature(
-        &self,
+    // ──────────────────────────────────────────────────────────────────────
+    // Error signatures & resolutions (A.3 Wave 1 — Cluster 4)
+    //
+    // Transaction-scoped variants take `&mut Transaction<'_, Postgres>` so
+    // callers can compose multiple operations atomically. Convenience
+    // wrappers (without `_tx` suffix) open a pool transaction internally
+    // and commit on success, preserving the previous calling convention.
+    // ──────────────────────────────────────────────────────────────────────
+
+    pub async fn create_error_signature_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         signature: &mk_core::types::ErrorSignature,
     ) -> Result<String, PostgresError> {
@@ -3399,14 +3408,25 @@ impl PostgresBackend {
         .bind(now)
         .bind(now)
         .bind(now)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(id)
     }
 
-    pub async fn get_error_signature(
+    pub async fn create_error_signature(
         &self,
+        tenant_id: &str,
+        signature: &mk_core::types::ErrorSignature,
+    ) -> Result<String, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let id = Self::create_error_signature_tx(&mut tx, tenant_id, signature).await?;
+        tx.commit().await?;
+        Ok(id)
+    }
+
+    pub async fn get_error_signature_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         id: &str,
     ) -> Result<Option<mk_core::types::ErrorSignature>, PostgresError> {
@@ -3416,7 +3436,7 @@ impl PostgresBackend {
         )
         .bind(id)
         .bind(tenant_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut **tx)
         .await?;
 
         match row {
@@ -3434,22 +3454,44 @@ impl PostgresBackend {
         }
     }
 
-    pub async fn delete_error_signature(
+    pub async fn get_error_signature(
         &self,
+        tenant_id: &str,
+        id: &str,
+    ) -> Result<Option<mk_core::types::ErrorSignature>, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let sig = Self::get_error_signature_tx(&mut tx, tenant_id, id).await?;
+        tx.commit().await?;
+        Ok(sig)
+    }
+
+    pub async fn delete_error_signature_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         id: &str,
     ) -> Result<bool, PostgresError> {
         let result = sqlx::query("DELETE FROM error_signatures WHERE id = $1 AND tenant_id = $2")
             .bind(id)
             .bind(tenant_id)
-            .execute(&self.pool)
+            .execute(&mut **tx)
             .await?;
 
         Ok(result.rows_affected() > 0)
     }
 
-    pub async fn create_resolution(
+    pub async fn delete_error_signature(
         &self,
+        tenant_id: &str,
+        id: &str,
+    ) -> Result<bool, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let deleted = Self::delete_error_signature_tx(&mut tx, tenant_id, id).await?;
+        tx.commit().await?;
+        Ok(deleted)
+    }
+
+    pub async fn create_resolution_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         resolution: &mk_core::types::Resolution,
     ) -> Result<(), PostgresError> {
@@ -3474,14 +3516,25 @@ impl PostgresBackend {
         })
         .bind(now)
         .bind(now)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(())
     }
 
-    pub async fn get_resolution(
+    pub async fn create_resolution(
         &self,
+        tenant_id: &str,
+        resolution: &mk_core::types::Resolution,
+    ) -> Result<(), PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        Self::create_resolution_tx(&mut tx, tenant_id, resolution).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn get_resolution_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         id: &str,
     ) -> Result<Option<mk_core::types::Resolution>, PostgresError> {
@@ -3491,7 +3544,7 @@ impl PostgresBackend {
         )
         .bind(id)
         .bind(tenant_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut **tx)
         .await?;
 
         match row {
@@ -3511,8 +3564,19 @@ impl PostgresBackend {
         }
     }
 
-    pub async fn get_resolutions_for_error(
+    pub async fn get_resolution(
         &self,
+        tenant_id: &str,
+        id: &str,
+    ) -> Result<Option<mk_core::types::Resolution>, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let res = Self::get_resolution_tx(&mut tx, tenant_id, id).await?;
+        tx.commit().await?;
+        Ok(res)
+    }
+
+    pub async fn get_resolutions_for_error_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         error_signature_id: &str,
     ) -> Result<Vec<mk_core::types::Resolution>, PostgresError> {
@@ -3524,7 +3588,7 @@ impl PostgresBackend {
         )
         .bind(error_signature_id)
         .bind(tenant_id)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut **tx)
         .await?;
 
         let mut resolutions = Vec::new();
@@ -3544,18 +3608,41 @@ impl PostgresBackend {
         Ok(resolutions)
     }
 
-    pub async fn delete_resolution(
+    pub async fn get_resolutions_for_error(
         &self,
+        tenant_id: &str,
+        error_signature_id: &str,
+    ) -> Result<Vec<mk_core::types::Resolution>, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let resolutions =
+            Self::get_resolutions_for_error_tx(&mut tx, tenant_id, error_signature_id).await?;
+        tx.commit().await?;
+        Ok(resolutions)
+    }
+
+    pub async fn delete_resolution_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         id: &str,
     ) -> Result<bool, PostgresError> {
         let result = sqlx::query("DELETE FROM resolutions WHERE id = $1 AND tenant_id = $2")
             .bind(id)
             .bind(tenant_id)
-            .execute(&self.pool)
+            .execute(&mut **tx)
             .await?;
 
         Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn delete_resolution(
+        &self,
+        tenant_id: &str,
+        id: &str,
+    ) -> Result<bool, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let deleted = Self::delete_resolution_tx(&mut tx, tenant_id, id).await?;
+        tx.commit().await?;
+        Ok(deleted)
     }
 
     pub async fn create_hindsight_note(
