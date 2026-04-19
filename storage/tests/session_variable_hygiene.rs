@@ -42,11 +42,10 @@ async fn session_variable_does_not_leak_across_pooled_connections() {
             .expect("activate_tenant_context should succeed");
 
         // Sanity: inside the transaction, the setting IS visible.
-        let (inside,): (String,) =
-            sqlx::query_as("SELECT current_setting('app.tenant_id', true)")
-                .fetch_one(&mut *tx)
-                .await
-                .expect("inside-tx current_setting must succeed");
+        let (inside,): (String,) = sqlx::query_as("SELECT current_setting('app.tenant_id', true)")
+            .fetch_one(&mut *tx)
+            .await
+            .expect("inside-tx current_setting must succeed");
         assert_eq!(
             inside, MARKER_TENANT,
             "inside the transaction the GUC must reflect what we set"
@@ -61,11 +60,10 @@ async fn session_variable_does_not_leak_across_pooled_connections() {
     // connection ever leaks this setting," not "the very next acquire."
     let pool = backend.pool().clone();
     for attempt in 0..16 {
-        let (leaked,): (String,) =
-            sqlx::query_as("SELECT current_setting('app.tenant_id', true)")
-                .fetch_one(&pool)
-                .await
-                .expect("phase-2 current_setting must succeed");
+        let (leaked,): (String,) = sqlx::query_as("SELECT current_setting('app.tenant_id', true)")
+            .fetch_one(&pool)
+            .await
+            .expect("phase-2 current_setting must succeed");
         assert_eq!(
             leaked, "",
             "H1 regression on attempt {attempt}: a pooled connection observed \

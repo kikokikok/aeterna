@@ -50,7 +50,10 @@ fn is_rust_source(path: &Path) -> bool {
 #[test]
 fn no_legacy_guc_names_in_app_side_source() {
     let root = workspace_root();
-    let scan_dirs = [root.join("cli").join("src"), root.join("storage").join("src")];
+    let scan_dirs = [
+        root.join("cli").join("src"),
+        root.join("storage").join("src"),
+    ];
 
     let forbidden = forbidden_guc_tokens();
     let mut offenders: Vec<(PathBuf, String, usize)> = Vec::new();
@@ -76,11 +79,7 @@ fn no_legacy_guc_names_in_app_side_source() {
             for (line_no, line) in contents.lines().enumerate() {
                 for token in &forbidden {
                     if line.contains(token.as_str()) {
-                        offenders.push((
-                            path.to_path_buf(),
-                            token.clone(),
-                            line_no + 1,
-                        ));
+                        offenders.push((path.to_path_buf(), token.clone(), line_no + 1));
                     }
                 }
             }
