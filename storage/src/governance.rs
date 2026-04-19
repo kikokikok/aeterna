@@ -433,6 +433,15 @@ pub struct GovernanceAuditEntry {
     pub old_values: Option<serde_json::Value>,
     pub new_values: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
+    /// Tenant the actor was operating in (impersonating) when this event was
+    /// recorded. `NULL` means platform-scoped (PlatformAdmin without a target
+    /// tenant); any other value is a direct reference to `tenants.id`.
+    ///
+    /// Column added in migration 023. Populated by `log_audit` call sites
+    /// from `TenantContext::tenant_id` — see the §2.5 decoration path in
+    /// `cli/src/server/govern_api.rs::list_audit`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acting_as_tenant_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -540,6 +549,7 @@ struct AuditRow {
     old_values: Option<serde_json::Value>,
     new_values: Option<serde_json::Value>,
     created_at: DateTime<Utc>,
+    acting_as_tenant_id: Option<Uuid>,
 }
 
 pub struct GovernanceStorage {
@@ -868,6 +878,15 @@ impl GovernanceStorage {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Insert a row into `governance_audit_log`.
+    ///
+    /// `acting_as_tenant_id` is the tenant the actor was operating in at the
+    /// time of the action; pass `None` only for genuinely platform-scoped
+    /// actions (PlatformAdmin operating without a target tenant). Every
+    /// tenant-scoped handler MUST populate this from its
+    /// `TenantContext::tenant_id` so `/govern/audit?tenant=<slug>` can filter
+    /// accurately. See `openspec/changes/add-cross-tenant-admin-listing`
+    /// §2.5 (Bundle D).
     pub async fn log_audit(
         &self,
         action: &str,
@@ -878,13 +897,15 @@ impl GovernanceStorage {
         actor_id: Option<Uuid>,
         actor_email: Option<&str>,
         details: serde_json::Value,
+        acting_as_tenant_id: Option<Uuid>,
     ) -> Result<Uuid, sqlx::Error> {
         let row: (Uuid,) = sqlx::query_as(
             r#"
             INSERT INTO governance_audit_log (
                 action, request_id, target_type, target_id,
-                actor_type, actor_id, actor_email, details
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                actor_type, actor_id, actor_email, details,
+                acting_as_tenant_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id
             "#,
         )
@@ -896,6 +917,7 @@ impl GovernanceStorage {
         .bind(actor_id)
         .bind(actor_email)
         .bind(details)
+        .bind(acting_as_tenant_id)
         .fetch_one(&self.pool)
         .await?;
 
@@ -906,6 +928,10 @@ impl GovernanceStorage {
         &self,
         filters: &AuditFilters,
     ) -> Result<Vec<GovernanceAuditEntry>, sqlx::Error> {
+        // #44.d §2.5 — `acting_as_tenant_id` filter composes via AND with
+        // the pre-existing action/actor/target_type/since clauses. NULL
+        // (the common case) disables the filter and preserves pre-Bundle-D
+        // "match everything" semantics.
         let rows: Vec<AuditRow> = sqlx::query_as(
             r#"
             SELECT * FROM governance_audit_log
@@ -913,6 +939,7 @@ impl GovernanceStorage {
               AND ($2::uuid IS NULL OR actor_id = $2)
               AND ($3::text IS NULL OR target_type = $3)
               AND created_at >= $4
+              AND ($6::uuid IS NULL OR acting_as_tenant_id = $6)
             ORDER BY created_at DESC
             LIMIT $5
             "#,
@@ -922,6 +949,7 @@ impl GovernanceStorage {
         .bind(&filters.target_type)
         .bind(filters.since)
         .bind(filters.limit.unwrap_or(50) as i64)
+        .bind(filters.acting_as_tenant_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -940,6 +968,7 @@ impl GovernanceStorage {
                 old_values: row.old_values,
                 new_values: row.new_values,
                 created_at: row.created_at,
+                acting_as_tenant_id: row.acting_as_tenant_id,
             })
             .collect())
     }
@@ -1113,6 +1142,16 @@ pub struct AuditFilters {
     pub target_type: Option<String>,
     pub since: DateTime<Utc>,
     pub limit: Option<i32>,
+    /// `#44.d §2.5` — when `Some`, restricts the result set to rows whose
+    /// `acting_as_tenant_id` equals the given UUID. `None` (the default)
+    /// preserves the pre-Bundle-D behavior of returning every row the
+    /// caller is authorized to see.
+    ///
+    /// Composes with the other filters via `AND`; the storage layer does
+    /// not reinterpret or widen the filter. Non-admin callers MUST NOT be
+    /// able to set this to a tenant they are not a member of — that check
+    /// lives in the handler, not here.
+    pub acting_as_tenant_id: Option<Uuid>,
 }
 
 #[cfg(test)]
