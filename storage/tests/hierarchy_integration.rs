@@ -5,6 +5,7 @@
 
 use mk_core::types::{OrganizationalUnit, RecordSource, TenantContext, TenantId, UnitType, UserId};
 use std::collections::HashMap;
+use mk_core::traits::StorageBackend;
 use storage::postgres::PostgresBackend;
 use testing::postgres;
 
@@ -169,21 +170,21 @@ async fn test_recursive_hierarchy_navigation() {
     backend.create_unit(&project).await.unwrap();
 
     // Test Ancestors of Project
-    let ancestors = backend.get_unit_ancestors(&ctx, "proj-2").await.unwrap();
+    let ancestors = backend.get_ancestors_scoped(&ctx, "proj-2").await.unwrap();
     assert_eq!(ancestors.len(), 3);
     assert_eq!(ancestors[0].id, "team-2");
     assert_eq!(ancestors[1].id, "org-2");
     assert_eq!(ancestors[2].id, "comp-2");
 
     // Test Descendants of Company
-    let descendants = backend.get_unit_descendants(&ctx, "comp-2").await.unwrap();
+    let descendants = backend.get_unit_descendants_scoped(&ctx, "comp-2").await.unwrap();
     assert_eq!(descendants.len(), 3);
     assert_eq!(descendants[0].id, "org-2");
     assert_eq!(descendants[1].id, "team-2");
     assert_eq!(descendants[2].id, "proj-2");
 
     // Test Descendants of Organization
-    let descendants_org = backend.get_unit_descendants(&ctx, "org-2").await.unwrap();
+    let descendants_org = backend.get_unit_descendants_scoped(&ctx, "org-2").await.unwrap();
     assert_eq!(descendants_org.len(), 2);
     assert_eq!(descendants_org[0].id, "team-2");
     assert_eq!(descendants_org[1].id, "proj-2");

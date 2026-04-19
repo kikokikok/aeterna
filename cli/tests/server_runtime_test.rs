@@ -17,7 +17,7 @@ use knowledge::repository::{GitRepository, RepositoryError};
 use knowledge::tenant_repo_resolver::TenantRepositoryResolver;
 use memory::manager::MemoryManager;
 use memory::reasoning::ReflectiveReasoner;
-use mk_core::traits::{AuthorizationService, KnowledgeRepository};
+use mk_core::traits::{AuthorizationService, KnowledgeRepository, StorageBackend};
 use mk_core::types::{
     KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, ReasoningStrategy,
     ReasoningTrace, Role, RoleIdentifier, TenantContext, TenantId, UserId,

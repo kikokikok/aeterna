@@ -310,6 +310,7 @@ mod tests {
     use axum::body::Body;
     use axum::http::{Request, header::AUTHORIZATION};
     use axum::routing::get;
+    use mk_core::traits::StorageBackend;
     use mk_core::types::{
         INSTANCE_SCOPE_TENANT_ID, OrganizationalUnit, RecordSource, TenantId, UnitType,
     };

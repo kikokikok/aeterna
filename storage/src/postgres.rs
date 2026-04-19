@@ -1025,10 +1025,12 @@ impl PostgresBackend {
         Ok(())
     }
 
-    pub async fn create_unit(&self, unit: &OrganizationalUnit) -> Result<(), PostgresError> {
+    pub async fn create_unit(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        unit: &OrganizationalUnit,
+    ) -> Result<(), PostgresError> {
         if let Some(ref parent_id) = unit.parent_id {
-            let parent = self
-                .get_unit_by_id(parent_id, &unit.tenant_id.to_string())
+            let parent = Self::get_unit_by_id_tx(tx, parent_id, &unit.tenant_id.to_string())
                 .await?
                 .ok_or_else(|| PostgresError::NotFound(parent_id.clone()))?;
 
@@ -1065,7 +1067,7 @@ impl PostgresBackend {
         .bind(serde_json::to_value(&unit.metadata)?)
         .bind(unit.created_at)
         .bind(unit.updated_at)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(())
@@ -1109,8 +1111,8 @@ impl PostgresBackend {
         })
     }
 
-    async fn get_unit_by_id(
-        &self,
+    async fn get_unit_by_id_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         id: &str,
         tenant_id: &str,
     ) -> Result<Option<OrganizationalUnit>, PostgresError> {
@@ -1120,7 +1122,7 @@ impl PostgresBackend {
         )
         .bind(id)
         .bind(tenant_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut **tx)
         .await?;
 
         if let Some(row) = row {
@@ -1158,8 +1160,8 @@ impl PostgresBackend {
     }
 
     pub async fn get_unit(
-        &self,
-        ctx: &TenantContext,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tenant_id: &mk_core::types::TenantId,
         id: &str,
     ) -> Result<Option<OrganizationalUnit>, PostgresError> {
         let row = sqlx::query(
@@ -1167,8 +1169,8 @@ impl PostgresBackend {
              FROM organizational_units WHERE id = $1 AND tenant_id = $2",
         )
         .bind(id)
-        .bind(ctx.tenant_id.as_str())
-        .fetch_optional(&self.pool)
+        .bind(tenant_id.as_str())
+        .fetch_optional(&mut **tx)
         .await?;
 
         if let Some(row) = row {
@@ -1206,8 +1208,8 @@ impl PostgresBackend {
     }
 
     pub async fn list_children(
-        &self,
-        ctx: &TenantContext,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tenant_id: &mk_core::types::TenantId,
         parent_id: &str,
     ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
         let rows = sqlx::query(
@@ -1215,8 +1217,8 @@ impl PostgresBackend {
              FROM organizational_units WHERE parent_id = $1 AND tenant_id = $2",
         )
         .bind(parent_id)
-        .bind(ctx.tenant_id.as_str())
-        .fetch_all(&self.pool)
+        .bind(tenant_id.as_str())
+        .fetch_all(&mut **tx)
         .await?;
 
         let mut units = Vec::new();
@@ -1251,8 +1253,8 @@ impl PostgresBackend {
     }
 
     pub async fn get_ancestors(
-        &self,
-        ctx: &TenantContext,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tenant_id: &mk_core::types::TenantId,
         id: &str,
     ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
         let rows = sqlx::query(
@@ -1269,8 +1271,8 @@ impl PostgresBackend {
             SELECT * FROM ancestors WHERE id != $1",
         )
         .bind(id)
-        .bind(ctx.tenant_id.as_str())
-        .fetch_all(&self.pool)
+        .bind(tenant_id.as_str())
+        .fetch_all(&mut **tx)
         .await?;
 
         let mut units = Vec::new();
@@ -1305,16 +1307,16 @@ impl PostgresBackend {
     }
 
     pub async fn get_unit_ancestors(
-        &self,
-        ctx: &TenantContext,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tenant_id: &mk_core::types::TenantId,
         id: &str,
     ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
-        self.get_ancestors(ctx, id).await
+        Self::get_ancestors(tx, tenant_id, id).await
     }
 
     pub async fn get_unit_descendants(
-        &self,
-        ctx: &TenantContext,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tenant_id: &mk_core::types::TenantId,
         id: &str,
     ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
         let rows = sqlx::query(
@@ -1331,8 +1333,8 @@ impl PostgresBackend {
             SELECT * FROM descendants WHERE id != $1",
         )
         .bind(id)
-        .bind(ctx.tenant_id.as_str())
-        .fetch_all(&self.pool)
+        .bind(tenant_id.as_str())
+        .fetch_all(&mut **tx)
         .await?;
 
         let mut units = Vec::new();
@@ -1367,8 +1369,8 @@ impl PostgresBackend {
     }
 
     pub async fn update_unit(
-        &self,
-        ctx: &TenantContext,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tenant_id: &mk_core::types::TenantId,
         unit: &OrganizationalUnit,
     ) -> Result<(), PostgresError> {
         sqlx::query(
@@ -1377,39 +1379,43 @@ impl PostgresBackend {
              WHERE id = $1 AND tenant_id = $2",
         )
         .bind(&unit.id)
-        .bind(ctx.tenant_id.as_str())
+        .bind(tenant_id.as_str())
         .bind(&unit.name)
         .bind(unit.unit_type.to_string().to_lowercase())
         .bind(&unit.parent_id)
         .bind(serde_json::to_value(&unit.metadata)?)
         .bind(unit.updated_at)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(())
     }
 
-    pub async fn delete_unit(&self, ctx: &TenantContext, id: &str) -> Result<(), PostgresError> {
+    pub async fn delete_unit(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tenant_id: &mk_core::types::TenantId,
+        id: &str,
+    ) -> Result<(), PostgresError> {
         sqlx::query("DELETE FROM organizational_units WHERE id = $1 AND tenant_id = $2")
             .bind(id)
-            .bind(ctx.tenant_id.as_str())
-            .execute(&self.pool)
+            .bind(tenant_id.as_str())
+            .execute(&mut **tx)
             .await?;
 
         Ok(())
     }
 
     pub async fn add_unit_policy(
-        &self,
-        ctx: &TenantContext,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
         policy: &mk_core::types::Policy,
     ) -> Result<(), PostgresError> {
         let exists: Option<(i32,)> =
             sqlx::query_as("SELECT 1 FROM organizational_units WHERE id = $1 AND tenant_id = $2")
                 .bind(unit_id)
-                .bind(ctx.tenant_id.as_str())
-                .fetch_optional(&self.pool)
+                .bind(tenant_id.as_str())
+                .fetch_optional(&mut **tx)
                 .await?;
 
         if exists.is_none() {
@@ -1426,14 +1432,14 @@ impl PostgresBackend {
         .bind(serde_json::to_value(policy)?)
         .bind(chrono::Utc::now().timestamp())
         .bind(chrono::Utc::now().timestamp())
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
         Ok(())
     }
 
     pub async fn get_unit_policies(
-        &self,
-        ctx: &TenantContext,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
     ) -> Result<Vec<mk_core::types::Policy>, PostgresError> {
         let rows = sqlx::query(
@@ -1443,8 +1449,8 @@ impl PostgresBackend {
              WHERE p.unit_id = $1 AND u.tenant_id = $2",
         )
         .bind(unit_id)
-        .bind(ctx.tenant_id.as_str())
-        .fetch_all(&self.pool)
+        .bind(tenant_id.as_str())
+        .fetch_all(&mut **tx)
         .await?;
 
         let mut policies = Vec::new();
@@ -1456,7 +1462,7 @@ impl PostgresBackend {
     }
 
     pub async fn assign_role(
-        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
@@ -1472,13 +1478,13 @@ impl PostgresBackend {
         .bind(unit_id)
         .bind(role.to_string().to_lowercase())
         .bind(chrono::Utc::now().timestamp())
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
         Ok(())
     }
 
     pub async fn remove_role(
-        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         user_id: &mk_core::types::UserId,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
@@ -1492,7 +1498,7 @@ impl PostgresBackend {
         .bind(tenant_id.as_str())
         .bind(unit_id)
         .bind(role.to_string().to_lowercase())
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
         Ok(())
     }
@@ -1521,7 +1527,7 @@ impl PostgresBackend {
     }
     /// Lists all (user_id, role) pairs assigned within a specific organisational unit.
     pub async fn list_unit_roles(
-        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &mk_core::types::TenantId,
         unit_id: &str,
     ) -> Result<Vec<(mk_core::types::UserId, RoleIdentifier)>, PostgresError> {
@@ -1531,7 +1537,7 @@ impl PostgresBackend {
         )
         .bind(tenant_id.as_str())
         .bind(unit_id)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut **tx)
         .await?;
 
         let mut result = Vec::new();
@@ -1544,6 +1550,229 @@ impl PostgresBackend {
             }
         }
         Ok(result)
+    }
+
+    // ---------------------------------------------------------------------
+    // A.3 Wave 1 / Cluster 1 — inherent convenience wrappers
+    //
+    // Call-site ergonomic helpers around the `&mut Transaction`-first
+    // associated functions above. Each wrapper opens a single tx via the
+    // appropriate context helper and calls the associated fn.
+    //
+    //   *_scoped  — requires a `&TenantContext`, uses `with_tenant_context`
+    //               (handler path, inside an RLS-gated tenant scope).
+    //   *_admin   — cross-tenant write, uses `with_admin_context`
+    //               (tenant provisioning, governance, etc. — audited).
+    //
+    // Target tables (organizational_units, unit_policies, user_roles) are
+    // not RLS-enabled today; the tx contract gives atomicity and future-
+    // proofs for when RLS lands on these tables.
+    // ---------------------------------------------------------------------
+
+    /// Create a unit inside an existing tenant context (RLS-scoped).
+    pub async fn create_unit_scoped(
+        &self,
+        ctx: &TenantContext,
+        unit: &OrganizationalUnit,
+    ) -> Result<(), PostgresError> {
+        let unit = unit.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move { Self::create_unit(tx, &unit).await })
+        })
+        .await
+    }
+
+    /// Create a unit from the admin path (cross-tenant, audited).
+    /// Used by tenant bootstrap flows that seed a new tenant's initial units
+    /// before a full `TenantContext` for the target tenant is available.
+    pub async fn create_unit_admin(
+        &self,
+        admin_ctx: &TenantContext,
+        action: &str,
+        unit: &OrganizationalUnit,
+    ) -> Result<(), PostgresError> {
+        let unit = unit.clone();
+        self.with_admin_context(admin_ctx, action, move |tx| {
+            Box::pin(async move { Self::create_unit(tx, &unit).await })
+        })
+        .await
+    }
+
+    pub async fn get_unit_scoped(
+        &self,
+        ctx: &TenantContext,
+        id: &str,
+    ) -> Result<Option<OrganizationalUnit>, PostgresError> {
+        let id = id.to_string();
+        let tenant_id = ctx.tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move { Self::get_unit(tx, &tenant_id, &id).await })
+        })
+        .await
+    }
+
+    pub async fn list_children_scoped(
+        &self,
+        ctx: &TenantContext,
+        parent_id: &str,
+    ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
+        let parent_id = parent_id.to_string();
+        let tenant_id = ctx.tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move { Self::list_children(tx, &tenant_id, &parent_id).await })
+        })
+        .await
+    }
+
+    pub async fn get_ancestors_scoped(
+        &self,
+        ctx: &TenantContext,
+        id: &str,
+    ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
+        let id = id.to_string();
+        let tenant_id = ctx.tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move { Self::get_ancestors(tx, &tenant_id, &id).await })
+        })
+        .await
+    }
+
+    pub async fn get_unit_descendants_scoped(
+        &self,
+        ctx: &TenantContext,
+        id: &str,
+    ) -> Result<Vec<OrganizationalUnit>, PostgresError> {
+        let id = id.to_string();
+        let tenant_id = ctx.tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move { Self::get_unit_descendants(tx, &tenant_id, &id).await })
+        })
+        .await
+    }
+
+    pub async fn update_unit_scoped(
+        &self,
+        ctx: &TenantContext,
+        unit: &OrganizationalUnit,
+    ) -> Result<(), PostgresError> {
+        let unit = unit.clone();
+        let tenant_id = ctx.tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move { Self::update_unit(tx, &tenant_id, &unit).await })
+        })
+        .await
+    }
+
+    pub async fn delete_unit_scoped(
+        &self,
+        ctx: &TenantContext,
+        id: &str,
+    ) -> Result<(), PostgresError> {
+        let id = id.to_string();
+        let tenant_id = ctx.tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move { Self::delete_unit(tx, &tenant_id, &id).await })
+        })
+        .await
+    }
+
+    pub async fn add_unit_policy_scoped(
+        &self,
+        ctx: &TenantContext,
+        unit_id: &str,
+        policy: &mk_core::types::Policy,
+    ) -> Result<(), PostgresError> {
+        let unit_id = unit_id.to_string();
+        let policy = policy.clone();
+        let tenant_id = ctx.tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move { Self::add_unit_policy(tx, &tenant_id, &unit_id, &policy).await })
+        })
+        .await
+    }
+
+    pub async fn get_unit_policies_scoped(
+        &self,
+        ctx: &TenantContext,
+        unit_id: &str,
+    ) -> Result<Vec<mk_core::types::Policy>, PostgresError> {
+        let unit_id = unit_id.to_string();
+        let tenant_id = ctx.tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move { Self::get_unit_policies(tx, &tenant_id, &unit_id).await })
+        })
+        .await
+    }
+
+    pub async fn list_unit_roles_scoped(
+        &self,
+        ctx: &TenantContext,
+        unit_id: &str,
+    ) -> Result<Vec<(mk_core::types::UserId, RoleIdentifier)>, PostgresError> {
+        let unit_id = unit_id.to_string();
+        let tenant_id = ctx.tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move { Self::list_unit_roles(tx, &tenant_id, &unit_id).await })
+        })
+        .await
+    }
+
+    pub async fn assign_role_scoped(
+        &self,
+        ctx: &TenantContext,
+        user_id: &mk_core::types::UserId,
+        unit_id: &str,
+        role: RoleIdentifier,
+    ) -> Result<(), PostgresError> {
+        let user_id = user_id.clone();
+        let unit_id = unit_id.to_string();
+        let tenant_id = ctx.tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move {
+                Self::assign_role(tx, &user_id, &tenant_id, &unit_id, role).await
+            })
+        })
+        .await
+    }
+
+    /// Admin variant of [`Self::assign_role_scoped`] for cross-tenant
+    /// provisioning flows (e.g. bootstrapping a new tenant's initial admins).
+    pub async fn assign_role_admin(
+        &self,
+        admin_ctx: &TenantContext,
+        action: &str,
+        tenant_id: &mk_core::types::TenantId,
+        user_id: &mk_core::types::UserId,
+        unit_id: &str,
+        role: RoleIdentifier,
+    ) -> Result<(), PostgresError> {
+        let user_id = user_id.clone();
+        let tenant_id = tenant_id.clone();
+        let unit_id = unit_id.to_string();
+        self.with_admin_context(admin_ctx, action, move |tx| {
+            Box::pin(async move {
+                Self::assign_role(tx, &user_id, &tenant_id, &unit_id, role).await
+            })
+        })
+        .await
+    }
+
+    pub async fn remove_role_scoped(
+        &self,
+        ctx: &TenantContext,
+        user_id: &mk_core::types::UserId,
+        unit_id: &str,
+        role: RoleIdentifier,
+    ) -> Result<(), PostgresError> {
+        let user_id = user_id.clone();
+        let unit_id = unit_id.to_string();
+        let tenant_id = ctx.tenant_id.clone();
+        self.with_tenant_context(ctx, move |tx| {
+            Box::pin(async move {
+                Self::remove_role(tx, &user_id, &tenant_id, &unit_id, role).await
+            })
+        })
+        .await
     }
 
     /// Looks up a user's internal UUID by their identity-provider subject (e.g. GitHub login or email).
@@ -2363,7 +2592,7 @@ impl StorageBackend for PostgresBackend {
         ctx: TenantContext,
         unit_id: &str,
     ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
-        self.get_unit_ancestors(&ctx, unit_id).await
+        self.get_ancestors_scoped(&ctx, unit_id).await
     }
 
     async fn get_descendants(
@@ -2371,7 +2600,12 @@ impl StorageBackend for PostgresBackend {
         ctx: TenantContext,
         unit_id: &str,
     ) -> Result<Vec<OrganizationalUnit>, Self::Error> {
-        self.get_unit_descendants(&ctx, unit_id).await
+        let tenant_id = ctx.tenant_id.clone();
+        let unit_id = unit_id.to_string();
+        self.with_tenant_context(&ctx, move |tx| {
+            Box::pin(async move { Self::get_unit_descendants(tx, &tenant_id, &unit_id).await })
+        })
+        .await
     }
 
     async fn get_unit_policies(
@@ -2379,11 +2613,15 @@ impl StorageBackend for PostgresBackend {
         ctx: TenantContext,
         unit_id: &str,
     ) -> Result<Vec<mk_core::types::Policy>, Self::Error> {
-        self.get_unit_policies(&ctx, unit_id).await
+        self.get_unit_policies_scoped(&ctx, unit_id).await
     }
 
     async fn create_unit(&self, unit: &OrganizationalUnit) -> Result<(), Self::Error> {
-        self.create_unit(unit).await
+        let unit = unit.clone();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move { Self::create_unit(tx, &unit).await })
+        })
+        .await
     }
 
     async fn get_unit_by_id(
@@ -2391,45 +2629,35 @@ impl StorageBackend for PostgresBackend {
         unit_id: &str,
         tenant_id: &str,
     ) -> Result<Option<OrganizationalUnit>, Self::Error> {
-        PostgresBackend::get_unit_by_id(self, unit_id, tenant_id).await
+        let unit_id = unit_id.to_string();
+        let tenant_id = tenant_id.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move { Self::get_unit_by_id_tx(tx, &unit_id, &tenant_id).await })
+        })
+        .await
     }
 
     async fn update_unit(&self, unit: &OrganizationalUnit) -> Result<(), Self::Error> {
-        let user_id = mk_core::types::UserId::new(SYSTEM_USER_ID.to_string()).ok_or_else(|| {
-            PostgresError::Database(sqlx::Error::Decode("Invalid system user_id".into()))
-        })?;
-
-        let ctx = TenantContext {
-            tenant_id: unit.tenant_id.clone(),
-            user_id,
-            agent_id: None,
-            roles: Vec::new(),
-            target_tenant_id: None,
-        };
-
-        self.update_unit(&ctx, unit).await
+        let tenant_id = unit.tenant_id.clone();
+        let unit = unit.clone();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move { Self::update_unit(tx, &tenant_id, &unit).await })
+        })
+        .await
     }
 
     async fn delete_unit(&self, unit_id: &str, tenant_id: &str) -> Result<(), Self::Error> {
-        let parsed_tenant_id = tenant_id.parse().map_err(|e| {
+        let parsed_tenant_id: mk_core::types::TenantId = tenant_id.parse().map_err(|e| {
             PostgresError::Database(sqlx::Error::Decode(
                 format!("Invalid tenant_id: {}", e).into(),
             ))
         })?;
 
-        let user_id = mk_core::types::UserId::new(SYSTEM_USER_ID.to_string()).ok_or_else(|| {
-            PostgresError::Database(sqlx::Error::Decode("Invalid system user_id".into()))
-        })?;
-
-        let ctx = TenantContext {
-            tenant_id: parsed_tenant_id,
-            user_id,
-            agent_id: None,
-            roles: Vec::new(),
-            target_tenant_id: None,
-        };
-
-        self.delete_unit(&ctx, unit_id).await
+        let unit_id = unit_id.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move { Self::delete_unit(tx, &parsed_tenant_id, &unit_id).await })
+        })
+        .await
     }
 
     async fn list_unit_members(
@@ -2437,13 +2665,17 @@ impl StorageBackend for PostgresBackend {
         unit_id: &str,
         tenant_id: &str,
     ) -> Result<Vec<(mk_core::types::UserId, RoleIdentifier)>, Self::Error> {
-        let parsed_tenant_id = tenant_id.parse().map_err(|e| {
+        let parsed_tenant_id: mk_core::types::TenantId = tenant_id.parse().map_err(|e| {
             PostgresError::Database(sqlx::Error::Decode(
                 format!("Invalid tenant_id: {}", e).into(),
             ))
         })?;
 
-        self.list_unit_roles(&parsed_tenant_id, unit_id).await
+        let unit_id = unit_id.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move { Self::list_unit_roles(tx, &parsed_tenant_id, &unit_id).await })
+        })
+        .await
     }
 
     async fn assign_team_to_project(
@@ -2556,7 +2788,7 @@ impl StorageBackend for PostgresBackend {
         unit_id: &str,
         policy: &mk_core::types::Policy,
     ) -> Result<(), Self::Error> {
-        self.add_unit_policy(ctx, unit_id, policy).await
+        self.add_unit_policy_scoped(ctx, unit_id, policy).await
     }
 
     async fn assign_role(
@@ -2566,7 +2798,15 @@ impl StorageBackend for PostgresBackend {
         unit_id: &str,
         role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
-        self.assign_role(user_id, tenant_id, unit_id, role).await
+        let user_id = user_id.clone();
+        let tenant_id = tenant_id.clone();
+        let unit_id = unit_id.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move {
+                Self::assign_role(tx, &user_id, &tenant_id, &unit_id, role).await
+            })
+        })
+        .await
     }
 
     async fn remove_role(
@@ -2576,7 +2816,15 @@ impl StorageBackend for PostgresBackend {
         unit_id: &str,
         role: RoleIdentifier,
     ) -> Result<(), Self::Error> {
-        self.remove_role(user_id, tenant_id, unit_id, role).await
+        let user_id = user_id.clone();
+        let tenant_id = tenant_id.clone();
+        let unit_id = unit_id.to_string();
+        self.with_bootstrap_context(move |tx| {
+            Box::pin(async move {
+                Self::remove_role(tx, &user_id, &tenant_id, &unit_id, role).await
+            })
+        })
+        .await
     }
 
     async fn store_drift_result(

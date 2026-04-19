@@ -2,6 +2,7 @@ use mk_core::types::{
     CodeChange, ErrorSignature, HindsightNote, OrganizationalUnit, RecordSource, Resolution,
     TenantId, UnitType,
 };
+use mk_core::traits::StorageBackend;
 use storage::postgres::PostgresBackend;
 use testing::{postgres, unique_id};
 use tokio::sync::OnceCell;

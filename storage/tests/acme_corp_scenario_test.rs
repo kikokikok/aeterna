@@ -423,7 +423,7 @@ async fn test_acme_corp_hierarchy_ancestors_from_project() {
     };
 
     let ancestors = storage
-        .get_ancestors(&ctx, &hierarchy.payments_service_id.to_string())
+        .get_ancestors(ctx.clone(), &hierarchy.payments_service_id.to_string())
         .await
         .unwrap();
 
@@ -514,7 +514,7 @@ async fn test_tenant_isolation_different_tenants_cannot_see_each_other() {
     };
 
     let ancestors = storage
-        .get_ancestors(&ctx2, &hierarchy1.payments_service_id.to_string())
+        .get_ancestors(ctx2.clone(), &hierarchy1.payments_service_id.to_string())
         .await
         .unwrap();
 

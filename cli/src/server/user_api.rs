@@ -740,12 +740,7 @@ async fn register_user(
         }
         if let Err(err) = state
             .postgres
-            .assign_role(
-                &membership_user_id,
-                &ctx.tenant_id,
-                org,
-                Role::Developer.into(),
-            )
+            .assign_role_scoped(&ctx, &membership_user_id, org, Role::Developer.into())
             .await
         {
             return error_response(
@@ -762,12 +757,7 @@ async fn register_user(
         }
         if let Err(err) = state
             .postgres
-            .assign_role(
-                &membership_user_id,
-                &ctx.tenant_id,
-                team,
-                Role::Developer.into(),
-            )
+            .assign_role_scoped(&ctx, &membership_user_id, team, Role::Developer.into())
             .await
         {
             return error_response(
@@ -839,7 +829,7 @@ async fn invite_user(
         }
         if let Err(err) = state
             .postgres
-            .assign_role(&membership_user_id, &ctx.tenant_id, team, role.clone())
+            .assign_role_scoped(&ctx, &membership_user_id, team, role.clone())
             .await
         {
             return error_response(
@@ -855,7 +845,7 @@ async fn invite_user(
         }
         if let Err(err) = state
             .postgres
-            .assign_role(&membership_user_id, &ctx.tenant_id, org, role.clone())
+            .assign_role_scoped(&ctx, &membership_user_id, org, role.clone())
             .await
         {
             return error_response(
@@ -994,7 +984,7 @@ async fn grant_user_role(
 
     match state
         .postgres
-        .assign_role(&user_id, &ctx.tenant_id, &unit_id, role.clone())
+        .assign_role_scoped(&ctx, &user_id, &unit_id, role.clone())
         .await
     {
         Ok(()) => Json(
@@ -1072,7 +1062,7 @@ async fn revoke_user_role(
         )
             .into_response();
     }
-    match state.postgres.remove_role(&user_id, &ctx.tenant_id, &matches[0], role.clone()).await {
+    match state.postgres.remove_role_scoped(&ctx, &user_id, &matches[0], role.clone()).await {
         Ok(()) => Json(json!({"success": true, "userId": user_id.as_str(), "role": role, "unitId": matches[0]})).into_response(),
         Err(err) => error_response(StatusCode::BAD_REQUEST, "user_role_revoke_failed", &err.to_string()),
     }
@@ -1324,7 +1314,7 @@ async fn ensure_unit_type(
     unit_id: &str,
     expected: UnitType,
 ) -> Result<(), axum::response::Response> {
-    match state.postgres.get_unit(ctx, unit_id).await {
+    match state.postgres.get_unit_scoped(ctx, unit_id).await {
         Ok(Some(unit)) if unit.unit_type == expected => Ok(()),
         Ok(Some(_)) => Err(error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -1377,7 +1367,7 @@ async fn resolve_unit_scope(
     ctx: &TenantContext,
     unit_id: &str,
 ) -> Result<String, axum::response::Response> {
-    match state.postgres.get_unit(ctx, unit_id).await {
+    match state.postgres.get_unit_scoped(ctx, unit_id).await {
         Ok(Some(unit)) => Ok(match unit.unit_type {
             UnitType::Company => "company".to_string(),
             UnitType::Organization => format!("org:{}", unit.id),

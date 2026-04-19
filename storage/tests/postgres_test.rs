@@ -491,15 +491,15 @@ async fn test_postgres_backend_unit_policy() {
     };
 
     backend
-        .add_unit_policy(&ctx, &comp_id, &policy)
+        .add_unit_policy_scoped(&ctx, &comp_id, &policy)
         .await
         .unwrap();
 
-    let policies = backend.get_unit_policies(&ctx, &comp_id).await.unwrap();
+    let policies = backend.get_unit_policies_scoped(&ctx, &comp_id).await.unwrap();
     assert_eq!(policies.len(), 1);
     assert_eq!(policies[0].id, "policy-1");
 
-    let nonexistent_result = backend.add_unit_policy(&ctx, "nonexistent", &policy).await;
+    let nonexistent_result = backend.add_unit_policy_scoped(&ctx, "nonexistent", &policy).await;
     assert!(matches!(
         nonexistent_result,
         Err(PostgresError::NotFound(_))
@@ -632,20 +632,20 @@ async fn test_postgres_backend_unit_operations() {
     };
     backend.create_unit(&company).await.unwrap();
 
-    let retrieved = backend.get_unit(&ctx, &comp_id).await.unwrap();
+    let retrieved = backend.get_unit_scoped(&ctx, &comp_id).await.unwrap();
     assert!(retrieved.is_some());
     assert_eq!(retrieved.unwrap().name, "Company 1");
 
     let mut updated_company = company.clone();
     updated_company.name = "Updated Company".to_string();
     updated_company.updated_at = chrono::Utc::now().timestamp();
-    backend.update_unit(&ctx, &updated_company).await.unwrap();
+    backend.update_unit_scoped(&ctx, &updated_company).await.unwrap();
 
-    let updated = backend.get_unit(&ctx, &comp_id).await.unwrap();
+    let updated = backend.get_unit_scoped(&ctx, &comp_id).await.unwrap();
     assert_eq!(updated.unwrap().name, "Updated Company");
 
-    backend.delete_unit(&ctx, &comp_id).await.unwrap();
-    let deleted = backend.get_unit(&ctx, &comp_id).await.unwrap();
+    backend.delete_unit_scoped(&ctx, &comp_id).await.unwrap();
+    let deleted = backend.get_unit_scoped(&ctx, &comp_id).await.unwrap();
     assert!(deleted.is_none());
 }
 
@@ -701,7 +701,7 @@ async fn test_postgres_backend_list_children() {
     };
     backend.create_unit(&org2).await.unwrap();
 
-    let children = backend.list_children(&ctx, &comp_id).await.unwrap();
+    let children = backend.list_children_scoped(&ctx, &comp_id).await.unwrap();
     assert_eq!(children.len(), 2);
 }
 
@@ -802,7 +802,7 @@ async fn test_postgres_backend_hierarchy_validation() {
     };
     backend.create_unit(&team).await.unwrap();
 
-    let retrieved_org = backend.get_unit(&ctx, &org_id).await.unwrap();
+    let retrieved_org = backend.get_unit_scoped(&ctx, &org_id).await.unwrap();
     assert!(retrieved_org.is_some());
     assert_eq!(retrieved_org.unwrap().parent_id, Some(comp_id));
 }

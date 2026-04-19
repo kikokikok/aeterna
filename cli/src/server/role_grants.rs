@@ -171,7 +171,7 @@ async fn handle_grant_role(
 
     match state
         .postgres
-        .assign_role(&user_id, &ctx.tenant_id, &req.resource_id, req.role.clone())
+        .assign_role_scoped(&ctx, &user_id, &req.resource_id, req.role.clone())
         .await
     {
         Ok(()) => Json(ScopedRoleGrant {
@@ -275,7 +275,7 @@ async fn handle_revoke_role(
 
     match state
         .postgres
-        .remove_role(&user_id, &ctx.tenant_id, &req.resource_id, req.role)
+        .remove_role_scoped(&ctx, &user_id, &req.resource_id, req.role)
         .await
     {
         Ok(()) => (StatusCode::OK, Json(json!({ "success": true }))).into_response(),

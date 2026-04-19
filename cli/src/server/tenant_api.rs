@@ -1492,7 +1492,7 @@ async fn list_hierarchy_units(
     };
 
     let result = if let Some(parent_id) = query.parent_id.as_deref() {
-        state.postgres.list_children(&ctx, parent_id).await
+        state.postgres.list_children_scoped(&ctx, parent_id).await
     } else {
         state.postgres.list_all_units().await.map(|units| {
             let mut units: Vec<_> = units
@@ -1541,7 +1541,7 @@ async fn create_hierarchy_unit(
         updated_at: now,
     };
 
-    match state.postgres.create_unit(&unit).await {
+    match state.postgres.create_unit_scoped(&ctx, &unit).await {
         Ok(()) => {
             persist_governance_event(
                 state.as_ref(),
@@ -1592,7 +1592,7 @@ async fn show_hierarchy_unit(
         Err(response) => return response,
     };
 
-    match state.postgres.get_unit(&ctx, &unit).await {
+    match state.postgres.get_unit_scoped(&ctx, &unit).await {
         Ok(Some(unit)) => (
             StatusCode::OK,
             Json(json!({ "success": true, "unit": unit })),
@@ -1622,7 +1622,7 @@ async fn update_hierarchy_unit(
         Err(response) => return response,
     };
 
-    let Some(mut existing) = (match state.postgres.get_unit(&ctx, &unit).await {
+    let Some(mut existing) = (match state.postgres.get_unit_scoped(&ctx, &unit).await {
         Ok(unit) => unit,
         Err(err) => {
             return error_response(
@@ -1647,7 +1647,7 @@ async fn update_hierarchy_unit(
     }
     existing.updated_at = chrono::Utc::now().timestamp();
 
-    match state.postgres.update_unit(&ctx, &existing).await {
+    match state.postgres.update_unit_scoped(&ctx, &existing).await {
         Ok(()) => {
             persist_governance_event(
                 state.as_ref(),
@@ -1696,7 +1696,7 @@ async fn list_hierarchy_ancestors(
         Err(response) => return response,
     };
 
-    match state.postgres.get_ancestors(&ctx, &unit).await {
+    match state.postgres.get_ancestors_scoped(&ctx, &unit).await {
         Ok(units) => (
             StatusCode::OK,
             Json(json!({ "success": true, "units": units })),
@@ -1720,7 +1720,7 @@ async fn list_hierarchy_descendants(
         Err(response) => return response,
     };
 
-    match state.postgres.get_unit_descendants(&ctx, &unit).await {
+    match state.postgres.get_unit_descendants_scoped(&ctx, &unit).await {
         Ok(units) => (
             StatusCode::OK,
             Json(json!({ "success": true, "units": units })),
@@ -1744,7 +1744,7 @@ async fn list_unit_members(
         Err(response) => return response,
     };
 
-    match state.postgres.get_unit(&ctx, &unit).await {
+    match state.postgres.get_unit_scoped(&ctx, &unit).await {
         Ok(Some(_)) => {}
         Ok(None) => {
             return error_response(
@@ -1762,7 +1762,7 @@ async fn list_unit_members(
         }
     }
 
-    match state.postgres.list_unit_roles(&ctx.tenant_id, &unit).await {
+    match state.postgres.list_unit_roles_scoped(&ctx, &unit).await {
         Ok(entries) => {
             let members: Vec<_> = entries
                 .into_iter()
@@ -1828,7 +1828,7 @@ async fn assign_unit_role(
         );
     }
 
-    match state.postgres.get_unit(&ctx, &unit).await {
+    match state.postgres.get_unit_scoped(&ctx, &unit).await {
         Ok(Some(_)) => {}
         Ok(None) => {
             return error_response(
@@ -1859,7 +1859,7 @@ async fn assign_unit_role(
 
     match state
         .postgres
-        .assign_role(&user_id, &ctx.tenant_id, &unit, req.role.clone())
+        .assign_role_scoped(&ctx, &user_id, &unit, req.role.clone())
         .await
     {
         Ok(()) => {
@@ -1944,7 +1944,7 @@ async fn remove_unit_role(
         }
     }
 
-    match state.postgres.get_unit(&ctx, &unit).await {
+    match state.postgres.get_unit_scoped(&ctx, &unit).await {
         Ok(Some(_)) => {}
         Ok(None) => {
             return error_response(
@@ -1984,7 +1984,7 @@ async fn remove_unit_role(
 
     match state
         .postgres
-        .remove_role(&user_id, &ctx.tenant_id, &unit, role.clone())
+        .remove_role_scoped(&ctx, &user_id, &unit, role.clone())
         .await
     {
         Ok(()) => {
@@ -3905,7 +3905,7 @@ async fn provision_tenant(
                 created_at: now,
                 updated_at: now,
             };
-            if let Err(err) = state.postgres.create_unit(&company_unit).await {
+            if let Err(err) = state.postgres.create_unit_scoped(&tenant_ctx, &company_unit).await {
                 hierarchy_errors.push(format!("company '{}': {err}", company_unit.name));
                 continue;
             }
@@ -3937,7 +3937,7 @@ async fn provision_tenant(
                     created_at: now,
                     updated_at: now,
                 };
-                if let Err(err) = state.postgres.create_unit(&org_unit).await {
+                if let Err(err) = state.postgres.create_unit_scoped(&tenant_ctx, &org_unit).await {
                     hierarchy_errors.push(format!("org '{}': {err}", org_unit.name));
                     continue;
                 }
@@ -3971,7 +3971,7 @@ async fn provision_tenant(
                         };
                     if let Err(err) = state
                         .postgres
-                        .assign_role(&user_id, &tenant_id, &org_id, member.role.clone())
+                        .assign_role_scoped(&tenant_ctx, &user_id, &org_id, member.role.clone())
                         .await
                     {
                         hierarchy_errors.push(format!(
@@ -4006,7 +4006,7 @@ async fn provision_tenant(
                         created_at: now,
                         updated_at: now,
                     };
-                    if let Err(err) = state.postgres.create_unit(&team_unit).await {
+                    if let Err(err) = state.postgres.create_unit_scoped(&tenant_ctx, &team_unit).await {
                         hierarchy_errors.push(format!("team '{}': {err}", team_unit.name));
                         continue;
                     }
@@ -4040,7 +4040,7 @@ async fn provision_tenant(
                             };
                         if let Err(err) = state
                             .postgres
-                            .assign_role(&user_id, &tenant_id, &team_id, member.role.clone())
+                            .assign_role_scoped(&tenant_ctx, &user_id, &team_id, member.role.clone())
                             .await
                         {
                             hierarchy_errors.push(format!(
@@ -4098,7 +4098,7 @@ async fn provision_tenant(
             // Resolve unit: if a unit name/id is given look it up; otherwise use
             // the tenant's root by using the tenant_id string as the unit scope.
             let unit_id: String = if let Some(unit_ref) = &assignment.unit {
-                match state.postgres.get_unit(&tenant_ctx, unit_ref).await {
+                match state.postgres.get_unit_scoped(&tenant_ctx, unit_ref).await {
                     Ok(Some(u)) => u.id,
                     Ok(None) => {
                         role_errors.push(format!(
@@ -4119,7 +4119,7 @@ async fn provision_tenant(
 
             match state
                 .postgres
-                .assign_role(&user_id, &tenant_id, &unit_id, assignment.role.clone())
+                .assign_role_scoped(&tenant_ctx, &user_id, &unit_id, assignment.role.clone())
                 .await
             {
                 Ok(()) => {
