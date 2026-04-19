@@ -407,3 +407,100 @@ Before working on a specific area, read the relevant OpenSpec specification:
 | Server runtime | `openspec/specs/server-runtime/` |
 
 Use `openspec show <spec-name>` to view any spec, or browse the `openspec/specs/` directory directly.
+
+## RLS Enforcement & the Dual-Pool Model (issue #58)
+
+*Added in Bundle A.2 of the RLS enforcement change. See `openspec/changes/decide-rls-enforcement-model/design.md` for the architectural rationale.*
+
+### Two roles, two pools, two helpers
+
+| Layer | Tenant path | Admin path |
+|-------|-------------|------------|
+| PG role | `aeterna_app` (NOBYPASSRLS) | `aeterna_admin` (BYPASSRLS) |
+| Pool | `backend.pool()` | `backend.admin_pool()` |
+| Helper | `with_tenant_context(&ctx, \|tx\| …)` | `with_admin_context(&ctx, action, \|tx\| …)` |
+| Sets `app.tenant_id` | Yes (`SET LOCAL`) | No |
+| Auto-audits | No | Yes (`admin_scope = TRUE`) |
+| Use for | 99% of tenant-scoped traffic | PlatformAdmin cross-tenant / scheduled cross-tenant / migrations |
+
+### Writing a tenant-scoped handler
+
+```rust
+let rows = backend.with_tenant_context(&ctx, |tx| {
+    Box::pin(async move {
+        sqlx::query_as::<_, Row>("SELECT … FROM users WHERE tenant_id = $1")
+            .bind(&tenant_id)
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(Into::into)
+    })
+}).await?;
+```
+
+The `WHERE tenant_id = $1` clause stays — RLS is the floor, the explicit filter is the required defense-in-depth ceiling. `storage/tests/rls_enforcement_test.rs` surfaces any divergence.
+
+### Writing an admin-scope handler
+
+```rust
+let rows = backend.with_admin_context(&ctx, "admin.user.list", |tx| {
+    Box::pin(async move {
+        sqlx::query_as::<_, Row>("SELECT … FROM users")  // no WHERE tenant_id
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(Into::into)
+    })
+}).await?;
+```
+
+`action` (the second argument) is the audit event name (e.g. `"admin.user.list"`). It lands in `governance_audit_log.action` alongside `admin_scope = TRUE` and `acting_as_tenant_id` from `ctx.target_tenant_id`.
+
+### Scheduled-jobs pattern
+
+Scheduled cross-tenant work:
+
+```rust
+backend.with_admin_context(
+    &TenantContext::system_ctx(),
+    "sched.global_audit_compaction",
+    |tx| Box::pin(async move { /* cross-tenant sweep */ Ok(()) }),
+).await?;
+```
+
+Scheduled per-tenant work — enumerate via admin, dispatch via tenant:
+
+```rust
+let tenant_ids = backend.with_admin_context(
+    &TenantContext::system_ctx(),
+    "sched.enumerate_tenants",
+    |tx| Box::pin(async move {
+        sqlx::query_scalar::<_, String>("SELECT id FROM tenants WHERE active")
+            .fetch_all(&mut **tx).await.map_err(Into::into)
+    }),
+).await?;
+
+for tid in tenant_ids {
+    let ctx = TenantContext::from_scheduled_job(TenantId::new(tid)?, "nightly_reindex");
+    backend.with_tenant_context(&ctx, |tx| {
+        Box::pin(async move { /* per-tenant work */ Ok(()) })
+    }).await?;
+}
+```
+
+`TenantContext::system_ctx()` is the sentinel for no-human-actor scheduler work (`user_id = "system"`, `tenant_id = "__root__"`). `TenantContext::from_scheduled_job(tenant, job_id)` encodes the job name into `user_id` as `system:<job_id>` so the audit trail distinguishes different scheduled jobs hitting the same tenant.
+
+### Local dev setup
+
+Migration `025_add_app_roles.sql` creates both roles with `PASSWORD NULL`. After running migrations locally, set passwords:
+
+```bash
+psql $DATABASE_URL -c "ALTER ROLE aeterna_app WITH PASSWORD 'devapp'"
+psql $DATABASE_URL -c "ALTER ROLE aeterna_admin WITH PASSWORD 'devadmin'"
+export DATABASE_URL_ADMIN="postgres://aeterna_admin:devadmin@localhost:5432/aeterna"
+```
+
+Until Bundle A.3 Wave 6 flips `DATABASE_URL` to `aeterna_app`, you can leave `DATABASE_URL_ADMIN` unset — both pools will then share the current role and the helpers remain behaviorally correct (they still `BEGIN`/`COMMIT` and `SET LOCAL`, just without the RLS gate).
+
+### Forbidden patterns
+
+- `backend.pool()` or `backend.admin_pool()` outside the two helpers — blocked by `storage/tests/admin_pool_access_lint.rs` (and tenant-pool equivalent in Wave 6).
+- `SET` / `SET SESSION` of `app.tenant_id` — session-scope is pool-leakable. Always `SET LOCAL` inside a transaction. Enforced by the grep test added in Bundle A.1.

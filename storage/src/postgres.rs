@@ -19,19 +19,71 @@ pub enum PostgresError {
     NotFound(String),
 }
 
+/// Application-facing Postgres backend.
+///
+/// Carries two connection pools:
+///
+/// - `pool` — the **tenant pool**. In production (post-A.3 Wave 6) this
+///   opens connections as `aeterna_app` (NOBYPASSRLS). All per-tenant
+///   request traffic runs through it, and every tenant-scoped query must
+///   be wrapped in [`with_tenant_context`](Self::with_tenant_context) so
+///   the `app.tenant_id` GUC is set for the RLS policy.
+///
+/// - `admin_pool` — the **admin pool**. Opens connections as
+///   `aeterna_admin` (BYPASSRLS). Reserved for the narrow admin surface:
+///   PlatformAdmin cross-tenant list endpoints, scheduled cross-tenant
+///   maintenance, and the migration runner. Capped at 4 connections on
+///   purpose — admin operations are rare, and a tight pool makes
+///   accidental hot-loop use of the admin path a visible failure rather
+///   than a silent cross-tenant leak. Access must go through
+///   [`with_admin_context`](Self::with_admin_context), which records an
+///   audit row automatically.
+///
+/// Direct access to either pool outside the two helpers is a latent
+/// RLS-bypass hazard and is policed by `cli/tests/admin_pool_access_lint.rs`.
+/// See `openspec/changes/decide-rls-enforcement-model/design.md` §4 for
+/// the full rationale.
 pub struct PostgresBackend {
     pool: Pool<Postgres>,
+    admin_pool: Pool<Postgres>,
 }
 
 impl PostgresBackend {
+    /// Tenant-scope pool. Direct use is forbidden outside
+    /// [`with_tenant_context`](Self::with_tenant_context); callers that
+    /// reach for it bypass the RLS session-variable invariant.
     pub fn pool(&self) -> &Pool<Postgres> {
         &self.pool
     }
 
-    pub fn from_pool(pool: Pool<Postgres>) -> Self {
-        Self { pool }
+    /// Admin-scope pool. Direct use is forbidden outside
+    /// [`with_admin_context`](Self::with_admin_context); callers that
+    /// reach for it bypass both the transaction boundary and the audit
+    /// write.
+    pub fn admin_pool(&self) -> &Pool<Postgres> {
+        &self.admin_pool
     }
 
+    /// Construct from a pre-built tenant pool, reusing the same pool as
+    /// the admin pool. Intended for tests and single-pool dev
+    /// environments. Production paths should prefer
+    /// [`new_with_admin`](Self::new_with_admin).
+    pub fn from_pool(pool: Pool<Postgres>) -> Self {
+        Self {
+            admin_pool: pool.clone(),
+            pool,
+        }
+    }
+
+    /// Construct with separate tenant and admin pools. Production path.
+    pub fn from_pools(pool: Pool<Postgres>, admin_pool: Pool<Postgres>) -> Self {
+        Self { pool, admin_pool }
+    }
+
+    /// Convenience constructor for tests and single-role dev setups:
+    /// opens one pool and uses it for both tenant and admin work.
+    ///
+    /// In production, use [`new_with_admin`](Self::new_with_admin).
     pub async fn new(connection_url: &str) -> Result<Self, PostgresError> {
         use sqlx::postgres::PgPoolOptions;
         use std::time::Duration;
@@ -41,7 +93,33 @@ impl PostgresBackend {
             .acquire_timeout(Duration::from_secs(30))
             .connect(connection_url)
             .await?;
-        Ok(Self { pool })
+        Ok(Self {
+            admin_pool: pool.clone(),
+            pool,
+        })
+    }
+
+    /// Production constructor: opens two separate pools.
+    ///
+    /// `tenant_url` should point at `aeterna_app`; `admin_url` at
+    /// `aeterna_admin`. Admin pool is capped at 4 connections as a
+    /// deliberate constraint (see the type-level doc-comment for the
+    /// rationale).
+    pub async fn new_with_admin(tenant_url: &str, admin_url: &str) -> Result<Self, PostgresError> {
+        use sqlx::postgres::PgPoolOptions;
+        use std::time::Duration;
+
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(Duration::from_secs(30))
+            .connect(tenant_url)
+            .await?;
+        let admin_pool = PgPoolOptions::new()
+            .max_connections(4)
+            .acquire_timeout(Duration::from_secs(30))
+            .connect(admin_url)
+            .await?;
+        Ok(Self { pool, admin_pool })
     }
 
     /// Arm the Postgres transaction-level RLS context for the given tenant.
@@ -95,6 +173,102 @@ impl PostgresBackend {
             .execute(&mut **tx)
             .await?;
         Ok(())
+    }
+
+    /// Run `body` inside a tenant-scoped transaction with
+    /// `app.tenant_id` set for the duration.
+    ///
+    /// This is the ONLY valid way to reach [`Self::pool`] on an
+    /// RLS-protected code path. Every row-security policy keyed on
+    /// `current_setting('app.tenant_id', true)` will evaluate correctly
+    /// for the transaction's lifetime; on `COMMIT` or `ROLLBACK`
+    /// PostgreSQL discards the setting, so a returned-to-pool connection
+    /// cannot leak tenant context into a subsequent request.
+    ///
+    /// # Shape
+    ///
+    /// ```ignore
+    /// let rows = backend.with_tenant_context(&ctx, |tx| {
+    ///     Box::pin(async move {
+    ///         sqlx::query_as::<_, Row>("SELECT \u2026 FROM users")
+    ///             .fetch_all(&mut **tx).await.map_err(Into::into)
+    ///     })
+    /// }).await?;
+    /// ```
+    ///
+    /// The explicit `WHERE tenant_id = $N` defense-in-depth clause
+    /// should remain in place on the inner query (RLS is the floor, the
+    /// `WHERE` clause is the ceiling; `cli/tests/rls_enforcement_test.rs`
+    /// surfaces any divergence).
+    pub async fn with_tenant_context<'a, F, T>(
+        &self,
+        ctx: &TenantContext,
+        body: F,
+    ) -> Result<T, PostgresError>
+    where
+        F: for<'c> FnOnce(
+            &'c mut sqlx::Transaction<'_, Postgres>,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<T, PostgresError>> + Send + 'c>,
+        >,
+    {
+        let tenant_id = ctx.tenant_id.to_string();
+        debug_assert!(
+            !tenant_id.is_empty(),
+            "with_tenant_context invoked with empty tenant_id — RLS policies \
+             will evaluate against '' and silently match zero rows"
+        );
+
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("SELECT set_config('app.tenant_id', $1, true)")
+            .bind(&tenant_id)
+            .execute(&mut *tx)
+            .await?;
+        let out = body(&mut tx).await?;
+        tx.commit().await?;
+        Ok(out)
+    }
+
+    /// Run `body` inside an admin-scoped transaction on the BYPASSRLS
+    /// pool, recording a `governance_audit_log` row on success.
+    ///
+    /// This is the ONLY valid way to reach [`Self::admin_pool`]. Every
+    /// call records an audit event with `admin_scope = TRUE` and the
+    /// actor's identity pulled from `ctx`. `acting_as_tenant_id` is
+    /// populated from `ctx.target_tenant_id` when the admin is
+    /// impersonating a single tenant; NULL for cross-tenant-all
+    /// operations.
+    ///
+    /// The audit write lives **inside** the same transaction as `body`:
+    /// the admin action and its audit row commit atomically or not at
+    /// all. This is the single most important invariant of the helper.
+    ///
+    /// # When to use
+    ///
+    /// - PlatformAdmin list endpoints with `?tenant=*`.
+    /// - Scheduled cross-tenant jobs (audit compaction, global sweeps).
+    /// - The migration runner.
+    ///
+    /// Everything else should use
+    /// [`with_tenant_context`](Self::with_tenant_context).
+    pub async fn with_admin_context<'a, F, T>(
+        &self,
+        ctx: &TenantContext,
+        action: &str,
+        body: F,
+    ) -> Result<T, PostgresError>
+    where
+        F: for<'c> FnOnce(
+            &'c mut sqlx::Transaction<'_, Postgres>,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<T, PostgresError>> + Send + 'c>,
+        >,
+    {
+        let mut tx = self.admin_pool.begin().await?;
+        let out = body(&mut tx).await?;
+        audit_admin_access(&mut tx, ctx, action).await?;
+        tx.commit().await?;
+        Ok(out)
     }
 
     pub async fn initialize_schema(&self) -> Result<(), PostgresError> {
@@ -3322,6 +3496,74 @@ impl PostgresBackend {
 
         Ok(trajectories)
     }
+}
+
+// ---------------------------------------------------------------------------
+// Admin-scope audit writer
+// ---------------------------------------------------------------------------
+
+/// Write a `governance_audit_log` row marking an admin-scope action.
+///
+/// Called from [`PostgresBackend::with_admin_context`] inside the same
+/// transaction as the admin work itself: the admin action and its audit
+/// row commit atomically or not at all. That property is load-bearing
+/// — an admin write that succeeds without an audit row is an
+/// unattributed BYPASSRLS access, which is the exact failure mode this
+/// helper exists to prevent.
+///
+/// Field mapping:
+/// - `actor_type`  \u2190 `'system'` if `ctx.user_id == SYSTEM_USER_ID`
+///                   (scheduled jobs), else `'user'`.
+/// - `actor_email` \u2190 derived from `ctx.user_id` display string
+///                   (audit_log has no first-class email lookup here;
+///                   ctx carries what the middleware resolved).
+/// - `admin_scope` \u2190 always `TRUE`. The column is the primary filter
+///                   for \"show me every cross-tenant administrative
+///                   access\" queries.
+/// - `acting_as_tenant_id` \u2190 `ctx.target_tenant_id` when set
+///                   (single-tenant impersonation), else NULL
+///                   (cross-tenant-all).
+/// - `details`     \u2190 JSONB with the action name and a `source =
+///                   'with_admin_context'` marker so filters can
+///                   distinguish helper-generated rows from call-site
+///                   log_audit writes.
+async fn audit_admin_access(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    ctx: &TenantContext,
+    action: &str,
+) -> Result<(), PostgresError> {
+    let actor_type = if ctx.user_id.as_str() == SYSTEM_USER_ID {
+        "system"
+    } else {
+        "user"
+    };
+    let actor_email = format!("{}", ctx.user_id);
+    let acting_as_tenant_id: Option<uuid::Uuid> = ctx
+        .target_tenant_id
+        .as_ref()
+        .and_then(|t| uuid::Uuid::parse_str(&t.to_string()).ok());
+    let details = serde_json::json!({
+        "source": "with_admin_context",
+        "action": action,
+    });
+
+    sqlx::query(
+        r#"
+        INSERT INTO governance_audit_log (
+            action, actor_type, actor_email, details,
+            admin_scope, acting_as_tenant_id
+        ) VALUES ($1, $2, $3, $4, TRUE, $5)
+        "#,
+    )
+    .bind(action)
+    .bind(actor_type)
+    .bind(actor_email)
+    .bind(details)
+    .bind(acting_as_tenant_id)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
 }
 
 #[cfg(test)]
