@@ -479,6 +479,52 @@ impl TenantContext {
             RoleIdentifier::Custom(_) => 0,
         })
     }
+
+    /// Sentinel context for scheduler-owned, no-human-actor work.
+    ///
+    /// Used by scheduled cross-tenant jobs (audit compaction, global
+    /// rate-limit sweeps, \u2026) that pass through
+    /// `with_admin_context`. The context carries no tenant and no human
+    /// user: `tenant_id` is the instance-scope sentinel `__root__`,
+    /// `user_id` is the well-known `system` constant.
+    ///
+    /// Callers MUST NOT use this for per-tenant scheduled work — use
+    /// [`Self::from_scheduled_job`] instead so the audit trail correctly
+    /// attributes the tenant.
+    ///
+    /// See `openspec/changes/decide-rls-enforcement-model/design.md`
+    /// §4.4 for the scheduled-jobs routing pattern.
+    pub fn system_ctx() -> Self {
+        Self {
+            tenant_id: TenantId(INSTANCE_SCOPE_TENANT_ID.to_string()),
+            user_id: UserId(SYSTEM_USER_ID.to_string()),
+            agent_id: None,
+            roles: Vec::new(),
+            target_tenant_id: None,
+        }
+    }
+
+    /// Context for scheduled per-tenant work.
+    ///
+    /// `tenant_id` is the tenant the job is running for. `user_id`
+    /// encodes the job identifier as `system:<job_id>` so the audit
+    /// log can distinguish different scheduled jobs touching the same
+    /// tenant without needing a separate column.
+    ///
+    /// Used by the scheduler after it has enumerated its target tenants
+    /// through `with_admin_context(&system_ctx, \u2026)`; each per-tenant
+    /// step then runs through `with_tenant_context(&ctx, \u2026)` where
+    /// `ctx` comes from this constructor.
+    pub fn from_scheduled_job(tenant_id: TenantId, job_id: impl Into<String>) -> Self {
+        let job_id = job_id.into();
+        Self {
+            tenant_id,
+            user_id: UserId(format!("{}:{}", SYSTEM_USER_ID, job_id)),
+            agent_id: None,
+            roles: Vec::new(),
+            target_tenant_id: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]

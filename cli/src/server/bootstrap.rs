@@ -53,7 +53,19 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     validate_required_env()?;
 
     let config = Arc::new(config::load_from_env()?);
-    let postgres = Arc::new(PostgresBackend::new(&postgres_connection_url(&config)).await?);
+    let tenant_url = postgres_connection_url(&config);
+    // Dual-pool config (issue #58, RLS enforcement).
+    //
+    // DATABASE_URL_ADMIN points the admin pool at the BYPASSRLS aeterna_admin
+    // role. If the env var is unset we fall back to the tenant URL \u2014 in
+    // pre-Wave-6 environments both URLs point at the same role (typically
+    // `postgres`), so a single pool is behaviourally correct. The split
+    // becomes meaningful once Wave 6 flips DATABASE_URL to aeterna_app.
+    let admin_url = std::env::var("DATABASE_URL_ADMIN").ok();
+    let postgres = Arc::new(match admin_url {
+        Some(admin) => PostgresBackend::new_with_admin(&tenant_url, &admin).await?,
+        None => PostgresBackend::new(&tenant_url).await?,
+    });
     postgres.initialize_schema().await?;
 
     seed_platform_admin(postgres.pool(), &config.admin_bootstrap).await?;

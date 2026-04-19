@@ -147,6 +147,21 @@ pub const MIGRATIONS: &[EmbeddedMigration] = &[
         name: "022_drop_dead_vector_columns",
         sql: include_str!("../migrations/022_drop_dead_vector_columns.sql"),
     },
+    EmbeddedMigration {
+        version: 23,
+        name: "023_platform_admin_impersonation",
+        sql: include_str!("../migrations/023_platform_admin_impersonation.sql"),
+    },
+    EmbeddedMigration {
+        version: 24,
+        name: "024_normalize_rls_session_variables",
+        sql: include_str!("../migrations/024_normalize_rls_session_variables.sql"),
+    },
+    EmbeddedMigration {
+        version: 25,
+        name: "025_add_app_roles",
+        sql: include_str!("../migrations/025_add_app_roles.sql"),
+    },
 ];
 
 /// Apply every embedded migration in order, transactionally.

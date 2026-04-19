@@ -57,3 +57,4 @@ config.workspace = true
 metrics-util.workspace = true
 wiremock.workspace = true
 anyhow.workspace = true
+url = "2"

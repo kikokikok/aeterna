@@ -268,3 +268,20 @@ openspec archive <change-id> --yes   # Archive after deployment
 3. **Archive**: Move to `changes/archive/` after deployment
 
 See `openspec/` directory and the OpenSpec CLI for full workflow documentation.
+
+---
+
+## RLS Enforcement (issue #58)
+
+Row-Level Security is authoritative tenant isolation at runtime, not a paper artifact. Every query against an RLS-protected table flows through one of two helpers on `PostgresBackend`:
+
+- **`with_tenant_context(&ctx, |tx| …)`** — the default. Opens a transaction on the tenant pool (`aeterna_app`, NOBYPASSRLS), issues `SET LOCAL app.tenant_id = $1`, runs the body, commits. Every tenant-scoped handler MUST use this helper.
+- **`with_admin_context(&ctx, action, |tx| …)`** — narrow. Opens a transaction on the admin pool (`aeterna_admin`, BYPASSRLS), runs the body, writes an `admin_scope = TRUE` audit row, commits. Used ONLY for PlatformAdmin cross-tenant endpoints (`?tenant=*`), scheduled cross-tenant jobs, and the migration runner.
+
+### Rules
+
+1. **Direct pool access is forbidden.** `backend.pool()` and `backend.admin_pool()` MUST NOT be used outside the two helpers. `cli/tests/admin_pool_access_lint.rs` + `storage/tests/admin_pool_access_lint.rs` enforce this (warn-level today; deny-level once Bundle A.3 Wave 6 lands).
+2. **`WHERE tenant_id = ?` stays.** The explicit app-layer tenant filter is required defense in depth on top of RLS. RLS is the floor; the `WHERE` clause is the ceiling. Any query where they disagree is a bug surfaced by `storage/tests/rls_enforcement_test.rs`.
+3. **Scheduled jobs pick explicitly.** Scheduled cross-tenant work uses `with_admin_context(&TenantContext::system_ctx(), …)`. Scheduled per-tenant work enumerates tenants via admin, then dispatches each tenant through `with_tenant_context(&TenantContext::from_scheduled_job(id, job), …)`.
+
+See `openspec/changes/decide-rls-enforcement-model/design.md` for the full rationale.
