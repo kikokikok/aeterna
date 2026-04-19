@@ -3645,8 +3645,12 @@ impl PostgresBackend {
         Ok(deleted)
     }
 
-    pub async fn create_hindsight_note(
-        &self,
+    // ──────────────────────────────────────────────────────────────────────
+    // Hindsight notes (A.3 Wave 1 — Cluster 5)
+    // ──────────────────────────────────────────────────────────────────────
+
+    pub async fn create_hindsight_note_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         note: &mk_core::types::HindsightNote,
     ) -> Result<(), PostgresError> {
@@ -3665,14 +3669,25 @@ impl PostgresBackend {
         .bind(serde_json::to_value(&resolution_ids)?)
         .bind(note.created_at)
         .bind(note.updated_at)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(())
     }
 
-    pub async fn get_hindsight_note(
+    pub async fn create_hindsight_note(
         &self,
+        tenant_id: &str,
+        note: &mk_core::types::HindsightNote,
+    ) -> Result<(), PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        Self::create_hindsight_note_tx(&mut tx, tenant_id, note).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn get_hindsight_note_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         id: &str,
     ) -> Result<Option<mk_core::types::HindsightNote>, PostgresError> {
@@ -3687,7 +3702,7 @@ impl PostgresBackend {
         )
         .bind(id)
         .bind(tenant_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut **tx)
         .await?;
 
         match row {
@@ -3696,7 +3711,9 @@ impl PostgresBackend {
                     serde_json::from_value(row.get("resolution_ids"))?;
                 let mut resolutions = Vec::new();
                 for res_id in resolution_ids {
-                    if let Some(resolution) = self.get_resolution(tenant_id, &res_id).await? {
+                    if let Some(resolution) =
+                        Self::get_resolution_tx(tx, tenant_id, &res_id).await?
+                    {
                         resolutions.push(resolution);
                     }
                 }
@@ -3733,8 +3750,19 @@ impl PostgresBackend {
         }
     }
 
-    pub async fn update_hindsight_note(
+    pub async fn get_hindsight_note(
         &self,
+        tenant_id: &str,
+        id: &str,
+    ) -> Result<Option<mk_core::types::HindsightNote>, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let note = Self::get_hindsight_note_tx(&mut tx, tenant_id, id).await?;
+        tx.commit().await?;
+        Ok(note)
+    }
+
+    pub async fn update_hindsight_note_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         note: &mk_core::types::HindsightNote,
     ) -> Result<bool, PostgresError> {
@@ -3751,8 +3779,33 @@ impl PostgresBackend {
         .bind(serde_json::to_value(&note.tags)?)
         .bind(serde_json::to_value(&resolution_ids)?)
         .bind(note.updated_at)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn update_hindsight_note(
+        &self,
+        tenant_id: &str,
+        note: &mk_core::types::HindsightNote,
+    ) -> Result<bool, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let updated = Self::update_hindsight_note_tx(&mut tx, tenant_id, note).await?;
+        tx.commit().await?;
+        Ok(updated)
+    }
+
+    pub async fn delete_hindsight_note_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tenant_id: &str,
+        id: &str,
+    ) -> Result<bool, PostgresError> {
+        let result = sqlx::query("DELETE FROM hindsight_notes WHERE id = $1 AND tenant_id = $2")
+            .bind(id)
+            .bind(tenant_id)
+            .execute(&mut **tx)
+            .await?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -3762,17 +3815,14 @@ impl PostgresBackend {
         tenant_id: &str,
         id: &str,
     ) -> Result<bool, PostgresError> {
-        let result = sqlx::query("DELETE FROM hindsight_notes WHERE id = $1 AND tenant_id = $2")
-            .bind(id)
-            .bind(tenant_id)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(result.rows_affected() > 0)
+        let mut tx = self.pool.begin().await?;
+        let deleted = Self::delete_hindsight_note_tx(&mut tx, tenant_id, id).await?;
+        tx.commit().await?;
+        Ok(deleted)
     }
 
-    pub async fn list_hindsight_notes(
-        &self,
+    pub async fn list_hindsight_notes_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         limit: i64,
         offset: i64,
@@ -3786,13 +3836,13 @@ impl PostgresBackend {
         .bind(tenant_id)
         .bind(limit)
         .bind(offset)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut **tx)
         .await?;
 
+        let ids: Vec<String> = rows.iter().map(|r| r.get("id")).collect();
         let mut notes = Vec::new();
-        for row in rows {
-            let id: String = row.get("id");
-            if let Some(note) = self.get_hindsight_note(tenant_id, &id).await? {
+        for id in ids {
+            if let Some(note) = Self::get_hindsight_note_tx(tx, tenant_id, &id).await? {
                 notes.push(note);
             }
         }
@@ -3800,9 +3850,25 @@ impl PostgresBackend {
         Ok(notes)
     }
 
-    /// Save decomposition policy weights to database.
-    pub async fn save_decomposition_weights(
+    pub async fn list_hindsight_notes(
         &self,
+        tenant_id: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<mk_core::types::HindsightNote>, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let notes = Self::list_hindsight_notes_tx(&mut tx, tenant_id, limit, offset).await?;
+        tx.commit().await?;
+        Ok(notes)
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Decomposition policy / trajectories (A.3 Wave 1 — Cluster 5)
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// Save decomposition policy weights (tx-scoped).
+    pub async fn save_decomposition_weights_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         action_type: &str,
         weight: f32,
@@ -3824,15 +3890,28 @@ impl PostgresBackend {
         .bind(weight)
         .bind(now)
         .bind(now)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(())
     }
 
-    /// Load decomposition policy weights from database.
-    pub async fn load_decomposition_weights(
+    /// Save decomposition policy weights to database.
+    pub async fn save_decomposition_weights(
         &self,
+        tenant_id: &str,
+        action_type: &str,
+        weight: f32,
+    ) -> Result<(), PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        Self::save_decomposition_weights_tx(&mut tx, tenant_id, action_type, weight).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Load decomposition policy weights (tx-scoped).
+    pub async fn load_decomposition_weights_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
     ) -> Result<Vec<(String, f32)>, PostgresError> {
         let rows = sqlx::query(
@@ -3841,7 +3920,7 @@ impl PostgresBackend {
              ORDER BY action_type",
         )
         .bind(tenant_id)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut **tx)
         .await?;
 
         let mut weights = Vec::new();
@@ -3854,10 +3933,21 @@ impl PostgresBackend {
         Ok(weights)
     }
 
-    /// Save decomposition policy state to database.
-    #[allow(clippy::too_many_arguments)]
-    pub async fn save_decomposition_policy_state(
+    /// Load decomposition policy weights from database.
+    pub async fn load_decomposition_weights(
         &self,
+        tenant_id: &str,
+    ) -> Result<Vec<(String, f32)>, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let weights = Self::load_decomposition_weights_tx(&mut tx, tenant_id).await?;
+        tx.commit().await?;
+        Ok(weights)
+    }
+
+    /// Save decomposition policy state (tx-scoped).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn save_decomposition_policy_state_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         epsilon: f32,
         step_count: i32,
@@ -3892,15 +3982,43 @@ impl PostgresBackend {
         .bind(efficiency_weight)
         .bind(now)
         .bind(now)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(())
     }
 
-    /// Load decomposition policy state from database.
-    pub async fn load_decomposition_policy_state(
+    /// Save decomposition policy state to database.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn save_decomposition_policy_state(
         &self,
+        tenant_id: &str,
+        epsilon: f32,
+        step_count: i32,
+        learning_rate: f32,
+        gamma: f32,
+        success_weight: f32,
+        efficiency_weight: f32,
+    ) -> Result<(), PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        Self::save_decomposition_policy_state_tx(
+            &mut tx,
+            tenant_id,
+            epsilon,
+            step_count,
+            learning_rate,
+            gamma,
+            success_weight,
+            efficiency_weight,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Load decomposition policy state (tx-scoped).
+    pub async fn load_decomposition_policy_state_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
     ) -> Result<Option<(f32, i32, f32, f32, f32, f32)>, PostgresError> {
         let row = sqlx::query(
@@ -3909,7 +4027,7 @@ impl PostgresBackend {
              WHERE tenant_id = $1",
         )
         .bind(tenant_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut **tx)
         .await?;
 
         if let Some(row) = row {
@@ -3933,10 +4051,21 @@ impl PostgresBackend {
         }
     }
 
-    /// Save decomposition trajectory to database.
-    #[allow(clippy::too_many_arguments)]
-    pub async fn save_decomposition_trajectory(
+    /// Load decomposition policy state from database.
+    pub async fn load_decomposition_policy_state(
         &self,
+        tenant_id: &str,
+    ) -> Result<Option<(f32, i32, f32, f32, f32, f32)>, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let state = Self::load_decomposition_policy_state_tx(&mut tx, tenant_id).await?;
+        tx.commit().await?;
+        Ok(state)
+    }
+
+    /// Save decomposition trajectory (tx-scoped).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn save_decomposition_trajectory_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         trajectory_id: &str,
         query: &str,
@@ -3967,15 +4096,49 @@ impl PostgresBackend {
         .bind(max_depth)
         .bind(actions)
         .bind(now)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(())
     }
 
-    /// Load recent decomposition trajectories from database.
-    pub async fn load_recent_decomposition_trajectories(
+    /// Save decomposition trajectory to database.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn save_decomposition_trajectory(
         &self,
+        tenant_id: &str,
+        trajectory_id: &str,
+        query: &str,
+        started_at: i64,
+        completed_at: Option<i64>,
+        outcome: Option<serde_json::Value>,
+        reward: Option<f32>,
+        tokens_used: i32,
+        max_depth: i32,
+        actions: serde_json::Value,
+    ) -> Result<(), PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        Self::save_decomposition_trajectory_tx(
+            &mut tx,
+            tenant_id,
+            trajectory_id,
+            query,
+            started_at,
+            completed_at,
+            outcome,
+            reward,
+            tokens_used,
+            max_depth,
+            actions,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Load recent decomposition trajectories (tx-scoped).
+    pub async fn load_recent_decomposition_trajectories_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &str,
         limit: i32,
     ) -> Result<Vec<serde_json::Value>, PostgresError> {
@@ -3989,7 +4152,7 @@ impl PostgresBackend {
         )
         .bind(tenant_id)
         .bind(limit)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut **tx)
         .await?;
 
         let mut trajectories = Vec::new();
@@ -4040,6 +4203,19 @@ impl PostgresBackend {
             trajectories.push(serde_json::Value::Object(map));
         }
 
+        Ok(trajectories)
+    }
+
+    /// Load recent decomposition trajectories from database.
+    pub async fn load_recent_decomposition_trajectories(
+        &self,
+        tenant_id: &str,
+        limit: i32,
+    ) -> Result<Vec<serde_json::Value>, PostgresError> {
+        let mut tx = self.pool.begin().await?;
+        let trajectories =
+            Self::load_recent_decomposition_trajectories_tx(&mut tx, tenant_id, limit).await?;
+        tx.commit().await?;
         Ok(trajectories)
     }
 }
