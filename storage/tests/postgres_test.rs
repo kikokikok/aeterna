@@ -516,7 +516,12 @@ async fn test_postgres_backend_governance_events() {
         timestamp: chrono::Utc::now().timestamp(),
     };
 
-    backend.log_event(&event).await.unwrap();
+    backend
+        .with_tenant_context(&ctx, |tx| {
+            Box::pin(async move { PostgresBackend::log_event(tx, &event).await })
+        })
+        .await
+        .unwrap();
 
     let events = backend.get_governance_events(ctx, 0, 10).await.unwrap();
     assert_eq!(events.len(), 1);
@@ -584,7 +589,12 @@ async fn test_postgres_backend_governance_event_types() {
     ];
 
     for event in events {
-        backend.log_event(&event).await.unwrap();
+        backend
+            .with_tenant_context(&ctx, |tx| {
+                Box::pin(async move { PostgresBackend::log_event(tx, &event).await })
+            })
+            .await
+            .unwrap();
     }
 
     let retrieved_events = backend.get_governance_events(ctx, 0, 10).await.unwrap();
@@ -834,9 +844,14 @@ async fn test_postgres_backend_event_publisher_subscribe() {
         timestamp: chrono::Utc::now().timestamp(),
     };
 
-    backend.log_event(&event).await.unwrap();
-
     let ctx = TenantContext::new(tenant_id, UserId::default());
+    backend
+        .with_tenant_context(&ctx, |tx| {
+            Box::pin(async move { PostgresBackend::log_event(tx, &event).await })
+        })
+        .await
+        .unwrap();
+
     let events = backend.get_governance_events(ctx, 0, 10).await.unwrap();
     assert!(!events.is_empty());
 }

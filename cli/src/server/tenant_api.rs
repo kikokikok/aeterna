@@ -891,11 +891,7 @@ async fn create_tenant(
                 tenant_id: record.id.clone(),
                 timestamp: now,
             };
-            let _ = state.postgres.log_event(&tenant_event).await;
-            let _ = state
-                .postgres
-                .persist_event(PersistentEvent::new(tenant_event))
-                .await;
+            persist_governance_event(&state, &ctx, &tenant_event).await;
             audit_tenant_action(
                 &state,
                 &ctx,
@@ -1017,11 +1013,7 @@ async fn update_tenant(
                 tenant_id: record.id.clone(),
                 timestamp: now,
             };
-            let _ = state.postgres.log_event(&tenant_event).await;
-            let _ = state
-                .postgres
-                .persist_event(PersistentEvent::new(tenant_event))
-                .await;
+            persist_governance_event(&state, &ctx, &tenant_event).await;
             audit_tenant_action(
                 &state,
                 &ctx,
@@ -1070,11 +1062,7 @@ async fn deactivate_tenant(
                 tenant_id: record.id.clone(),
                 timestamp: now,
             };
-            let _ = state.postgres.log_event(&tenant_event).await;
-            let _ = state
-                .postgres
-                .persist_event(PersistentEvent::new(tenant_event))
-                .await;
+            persist_governance_event(&state, &ctx, &tenant_event).await;
             audit_tenant_action(
                 &state,
                 &ctx,
@@ -1387,7 +1375,7 @@ async fn set_tenant_repository_binding(
                     timestamp: now,
                 }
             };
-            persist_governance_event(state.as_ref(), &event).await;
+            persist_governance_event(state.as_ref(), &ctx, &event).await;
             state.tenant_repo_resolver.invalidate(&binding.tenant_id);
             audit_tenant_action(
                 state.as_ref(),
@@ -1557,6 +1545,7 @@ async fn create_hierarchy_unit(
         Ok(()) => {
             persist_governance_event(
                 state.as_ref(),
+                &ctx,
                 &GovernanceEvent::UnitCreated {
                     unit_id: unit.id.clone(),
                     unit_type: unit.unit_type,
@@ -1662,6 +1651,7 @@ async fn update_hierarchy_unit(
         Ok(()) => {
             persist_governance_event(
                 state.as_ref(),
+                &ctx,
                 &GovernanceEvent::UnitUpdated {
                     unit_id: existing.id.clone(),
                     tenant_id: ctx.tenant_id.clone(),
@@ -1876,6 +1866,7 @@ async fn assign_unit_role(
             let now = chrono::Utc::now().timestamp();
             persist_governance_event(
                 state.as_ref(),
+                &ctx,
                 &GovernanceEvent::RoleAssigned {
                     user_id: user_id.clone(),
                     unit_id: unit.clone(),
@@ -2000,6 +1991,7 @@ async fn remove_unit_role(
             let now = chrono::Utc::now().timestamp();
             persist_governance_event(
                 state.as_ref(),
+                &ctx,
                 &GovernanceEvent::RoleRemoved {
                     user_id: user_id.clone(),
                     unit_id: unit.clone(),
@@ -2242,8 +2234,29 @@ async fn audit_membership_action(
         .await;
 }
 
-async fn persist_governance_event(state: &AppState, event: &GovernanceEvent) {
-    let _ = state.postgres.log_event(event).await;
+async fn persist_governance_event(
+    state: &AppState,
+    ctx: &mk_core::types::TenantContext,
+    event: &GovernanceEvent,
+) {
+    // Tenant provisioning / admin-surface events: write via the admin pool.
+    // `with_admin_context` records the admin's action in
+    // `governance_audit_log` atomically with the `governance_events` row,
+    // giving us a unified audit trail without requiring `app.tenant_id`
+    // to match (the event's tenant_id may be the *managed* tenant, not
+    // the admin's own).
+    //
+    // Clone so the boxed future owns the event and satisfies the `'static`
+    // bound required by `with_admin_context`'s HRTB.
+    let event_owned = event.clone();
+    let _ = state
+        .postgres
+        .with_admin_context(ctx, "log_governance_event", move |tx| {
+            Box::pin(async move {
+                storage::postgres::PostgresBackend::log_event(tx, &event_owned).await
+            })
+        })
+        .await;
     let _ = state
         .postgres
         .persist_event(PersistentEvent::new(event.clone()))
@@ -3150,7 +3163,7 @@ async fn create_git_provider_connection(
                 tenant_id: ctx.tenant_id.clone(),
                 timestamp: now,
             };
-            persist_governance_event(state.as_ref(), &event).await;
+            persist_governance_event(state.as_ref(), &ctx, &event).await;
             audit_tenant_action(
                 state.as_ref(),
                 &ctx,
@@ -3253,7 +3266,7 @@ async fn grant_git_provider_connection_to_tenant(
                 tenant_id: tenant_record.id.clone(),
                 timestamp: now,
             };
-            persist_governance_event(state.as_ref(), &event).await;
+            persist_governance_event(state.as_ref(), &ctx, &event).await;
             audit_tenant_action(
                 state.as_ref(),
                 &ctx,
@@ -3307,7 +3320,7 @@ async fn revoke_git_provider_connection_from_tenant(
                 tenant_id: tenant_record.id.clone(),
                 timestamp: now,
             };
-            persist_governance_event(state.as_ref(), &event).await;
+            persist_governance_event(state.as_ref(), &ctx, &event).await;
             audit_tenant_action(
                 state.as_ref(),
                 &ctx,
@@ -3623,6 +3636,7 @@ async fn provision_tenant(
             if record.created_at == record.updated_at {
                 persist_governance_event(
                     state.as_ref(),
+                    &ctx,
                     &GovernanceEvent::TenantCreated {
                         record_id: record.id.as_str().to_string(),
                         slug: record.slug.clone(),
@@ -3829,6 +3843,7 @@ async fn provision_tenant(
                         let now = chrono::Utc::now().timestamp();
                         persist_governance_event(
                             state.as_ref(),
+                            &ctx,
                             &GovernanceEvent::RepositoryBindingCreated {
                                 binding_id: binding.id.clone(),
                                 tenant_id: tenant_id.clone(),
@@ -3896,6 +3911,7 @@ async fn provision_tenant(
             }
             persist_governance_event(
                 state.as_ref(),
+                &ctx,
                 &GovernanceEvent::UnitCreated {
                     unit_id: company_unit.id.clone(),
                     unit_type: company_unit.unit_type,
@@ -3927,6 +3943,7 @@ async fn provision_tenant(
                 }
                 persist_governance_event(
                     state.as_ref(),
+                    &ctx,
                     &GovernanceEvent::UnitCreated {
                         unit_id: org_unit.id.clone(),
                         unit_type: org_unit.unit_type,
@@ -3964,6 +3981,7 @@ async fn provision_tenant(
                     } else {
                         persist_governance_event(
                             state.as_ref(),
+                            &ctx,
                             &GovernanceEvent::RoleAssigned {
                                 user_id: user_id.clone(),
                                 unit_id: org_id.clone(),
@@ -3994,6 +4012,7 @@ async fn provision_tenant(
                     }
                     persist_governance_event(
                         state.as_ref(),
+                        &ctx,
                         &GovernanceEvent::UnitCreated {
                             unit_id: team_unit.id.clone(),
                             unit_type: team_unit.unit_type,
@@ -4031,6 +4050,7 @@ async fn provision_tenant(
                         } else {
                             persist_governance_event(
                                 state.as_ref(),
+                                &ctx,
                                 &GovernanceEvent::RoleAssigned {
                                     user_id: user_id.clone(),
                                     unit_id: team_id.clone(),
@@ -4105,6 +4125,7 @@ async fn provision_tenant(
                 Ok(()) => {
                     persist_governance_event(
                         state.as_ref(),
+                        &ctx,
                         &GovernanceEvent::RoleAssigned {
                             user_id: user_id.clone(),
                             unit_id: unit_id.clone(),

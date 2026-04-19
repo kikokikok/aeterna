@@ -153,6 +153,7 @@ async fn create_team(
         Ok(()) => {
             persist_event(
                 &state,
+                &ctx,
                 &GovernanceEvent::UnitCreated {
                     unit_id: unit.id.clone(),
                     unit_type: unit.unit_type,
@@ -253,6 +254,7 @@ async fn add_member(
         Ok(()) => {
             persist_event(
                 &state,
+                &ctx,
                 &GovernanceEvent::RoleAssigned {
                     user_id: user_id.clone(),
                     unit_id: team_id.clone(),
@@ -520,8 +522,23 @@ fn parse_team_role(value: &str) -> Result<RoleIdentifier, axum::response::Respon
     Ok(role)
 }
 
-async fn persist_event(state: &AppState, event: &GovernanceEvent) {
-    let _ = state.postgres.log_event(event).await;
+async fn persist_event(state: &AppState, ctx: &TenantContext, event: &GovernanceEvent) {
+    // Write the governance event inside a per-tenant transaction so the
+    // `governance_events` RLS policy (keyed on `app.tenant_id`) admits the
+    // INSERT. See `PostgresBackend::log_event` rustdoc for the contract.
+    //
+    // We clone `event` into the closure so the boxed future owns its
+    // payload and satisfies the `'static` bound required by
+    // `with_tenant_context`'s HRTB.
+    let event_owned = event.clone();
+    let _ = state
+        .postgres
+        .with_tenant_context(ctx, move |tx| {
+            Box::pin(async move {
+                storage::postgres::PostgresBackend::log_event(tx, &event_owned).await
+            })
+        })
+        .await;
     let _ = state
         .postgres
         .persist_event(PersistentEvent::new(event.clone()))
