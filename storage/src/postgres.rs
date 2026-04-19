@@ -69,10 +69,27 @@ impl PostgresBackend {
     ///   across pooled connections.
     /// - Issue #58: policies may still be a no-op in prod if the connection
     ///   role has `BYPASSRLS` — orthogonal, deferred.
+    ///
+    /// # Hazard H1 status
+    ///
+    /// The "SET LOCAL outside a transaction is a silent no-op" hazard (H1 in
+    /// the RLS enforcement RFC) is now **compile-time impossible** on this
+    /// function: the `&mut Transaction` parameter type cannot be constructed
+    /// outside an active `begin()`. Any legacy caller that passed a raw
+    /// `&PgPool` or `PoolConnection` will fail to compile. The
+    /// `debug_assert!` below guards against another regression class
+    /// (empty tenant_id producing a policy-evaluating-against-empty-string
+    /// that silently matches nothing).
     pub async fn activate_tenant_context(
         tx: &mut sqlx::Transaction<'_, Postgres>,
         tenant_id: &str,
     ) -> Result<(), PostgresError> {
+        debug_assert!(
+            !tenant_id.is_empty(),
+            "activate_tenant_context called with empty tenant_id — this would \
+             make every RLS policy evaluate against an empty string and \
+             silently match zero rows. Upstream bug in context resolution."
+        );
         sqlx::query("SELECT set_config('app.tenant_id', $1, true)")
             .bind(tenant_id)
             .execute(&mut **tx)

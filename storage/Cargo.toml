@@ -51,6 +51,7 @@ anyhow.workspace = true
 [dev-dependencies]
 testing.workspace = true
 tokio-test = "0.4"
+walkdir.workspace = true
 adapters.workspace = true
 knowledge.workspace = true
 config.workspace = true
