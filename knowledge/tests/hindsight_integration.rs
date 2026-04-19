@@ -1,3 +1,4 @@
+use mk_core::traits::StorageBackend;
 use mk_core::types::{
     CodeChange, ErrorSignature, HindsightNote, OrganizationalUnit, RecordSource, Resolution,
     TenantId, UnitType,

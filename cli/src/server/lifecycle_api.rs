@@ -398,7 +398,7 @@ mod tests {
 
     #[test]
     fn approve_body_without_notes() {
-        let json_str = r#"{}"#;
+        let json_str = r"{}";
         let body: ApproveBody = serde_json::from_str(json_str).unwrap();
         assert!(body.notes.is_none());
     }
@@ -412,7 +412,7 @@ mod tests {
 
     #[test]
     fn list_params_defaults_to_pending() {
-        let json_str = r#"{}"#;
+        let json_str = r"{}";
         let params: ListParams = serde_json::from_str(json_str).unwrap();
         assert!(params.all.is_none());
     }
@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn dead_letter_list_params_defaults() {
-        let json_str = r#"{}"#;
+        let json_str = r"{}";
         let params: DeadLetterListParams = serde_json::from_str(json_str).unwrap();
         assert!(params.all.is_none());
         assert!(params.tenant_id.is_none());

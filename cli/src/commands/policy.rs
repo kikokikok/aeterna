@@ -1168,7 +1168,7 @@ mod tests {
             strict: false,
             json: false,
         };
-        assert!(args.policy.contains("/"));
+        assert!(args.policy.contains('/'));
         assert!(args.policy.ends_with(".cedar"));
     }
 
@@ -1179,7 +1179,7 @@ mod tests {
             strict: false,
             json: false,
         };
-        assert!(!args.policy.contains("/"));
+        assert!(!args.policy.contains('/'));
         assert!(!args.policy.ends_with(".cedar"));
     }
 }

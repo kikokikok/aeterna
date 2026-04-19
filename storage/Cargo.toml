@@ -59,3 +59,6 @@ metrics-util.workspace = true
 wiremock.workspace = true
 anyhow.workspace = true
 url = "2"
+
+[lints]
+workspace = true

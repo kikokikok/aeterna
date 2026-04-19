@@ -1493,13 +1493,13 @@ mod tests {
         let actions = ["approve", "reject", "escalate", "expire"];
         for action in actions {
             let entry = AuditEntry {
-                id: format!("aud_{}", action),
+                id: format!("aud_{action}"),
                 timestamp: "2024-01-15T10:00:00Z".to_string(),
                 action: action.to_string(),
                 actor: "system".to_string(),
                 target_type: "policy".to_string(),
                 target_id: "req_123".to_string(),
-                details: format!("Action: {}", action),
+                details: format!("Action: {action}"),
             };
             assert_eq!(entry.action, action);
         }
@@ -1788,7 +1788,7 @@ mod tests {
 
     #[test]
     fn test_filter_pending_requests_by_type() {
-        let requests = vec![
+        let requests = [
             PendingRequest {
                 id: "req_1".to_string(),
                 request_type: "policy".to_string(),
@@ -1823,7 +1823,7 @@ mod tests {
 
     #[test]
     fn test_filter_pending_requests_by_layer() {
-        let requests = vec![
+        let requests = [
             PendingRequest {
                 id: "req_1".to_string(),
                 request_type: "policy".to_string(),
@@ -1851,7 +1851,7 @@ mod tests {
         let layer_filter = Some("company".to_string());
         let filtered: Vec<_> = requests
             .iter()
-            .filter(|r| layer_filter.as_ref().map_or(true, |l| &r.layer == l))
+            .filter(|r| layer_filter.as_ref().is_none_or(|l| &r.layer == l))
             .collect();
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].id, "req_2");
@@ -1859,7 +1859,7 @@ mod tests {
 
     #[test]
     fn test_filter_audit_entries_by_action() {
-        let entries = vec![
+        let entries = [
             AuditEntry {
                 id: "aud_1".to_string(),
                 timestamp: "2024-01-15T14:30:00Z".to_string(),
@@ -1891,7 +1891,7 @@ mod tests {
 
     #[test]
     fn test_filter_audit_entries_by_actor() {
-        let entries = vec![
+        let entries = [
             AuditEntry {
                 id: "aud_1".to_string(),
                 timestamp: "2024-01-15T14:30:00Z".to_string(),
@@ -1915,7 +1915,7 @@ mod tests {
         let actor_filter = Some("bob".to_string());
         let filtered: Vec<_> = entries
             .iter()
-            .filter(|e| actor_filter.as_ref().map_or(true, |a| &e.actor == a))
+            .filter(|e| actor_filter.as_ref().is_none_or(|a| &e.actor == a))
             .collect();
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].actor, "bob");

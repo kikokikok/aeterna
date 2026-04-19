@@ -115,6 +115,6 @@ async fn test_recursive_hierarchy_queries() {
         target_tenant_id: None,
     };
 
-    let ancestors_t2 = storage.get_ancestors(&ctx2, &proj_id).await.unwrap();
+    let ancestors_t2 = storage.get_ancestors(ctx2.clone(), &proj_id).await.unwrap();
     assert_eq!(ancestors_t2.len(), 0);
 }

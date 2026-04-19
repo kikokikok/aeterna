@@ -17,7 +17,7 @@ use knowledge::repository::{GitRepository, RepositoryError};
 use knowledge::tenant_repo_resolver::TenantRepositoryResolver;
 use memory::manager::MemoryManager;
 use memory::reasoning::ReflectiveReasoner;
-use mk_core::traits::{AuthorizationService, KnowledgeRepository};
+use mk_core::traits::{AuthorizationService, KnowledgeRepository, StorageBackend};
 use mk_core::types::{
     KnowledgeEntry, KnowledgeLayer, KnowledgeStatus, KnowledgeType, ReasoningStrategy,
     ReasoningTrace, Role, RoleIdentifier, TenantContext, TenantId, UserId,
@@ -3892,7 +3892,7 @@ async fn list_audit_cross_tenant_scope_gates_and_filter_compose() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!(
+                .uri(format!(
                     "/api/v1/govern/audit?tenant=*&since=1d&actor={actor_uuid}"
                 ))
                 .header("x-user-id", "platform-admin")

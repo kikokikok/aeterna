@@ -171,7 +171,7 @@ async fn handle_grant_role(
 
     match state
         .postgres
-        .assign_role(&user_id, &ctx.tenant_id, &req.resource_id, req.role.clone())
+        .assign_role_scoped(&ctx, &user_id, &req.resource_id, req.role.clone())
         .await
     {
         Ok(()) => Json(ScopedRoleGrant {
@@ -275,7 +275,7 @@ async fn handle_revoke_role(
 
     match state
         .postgres
-        .remove_role(&user_id, &ctx.tenant_id, &req.resource_id, req.role)
+        .remove_role_scoped(&ctx, &user_id, &req.resource_id, req.role)
         .await
     {
         Ok(()) => (StatusCode::OK, Json(json!({ "success": true }))).into_response(),
@@ -342,15 +342,15 @@ async fn handle_list_grants(
         {
             Ok(db_rows) => db_rows
                 .into_iter()
-                .filter_map(|row| {
+                .map(|row| {
                     let user_id: String = row.get("user_id");
                     let resource_id: String = row.get("unit_id");
                     let role_str: String = row.get("role");
-                    Some((
+                    (
                         user_id,
                         resource_id,
                         RoleIdentifier::from_str_flexible(&role_str),
-                    ))
+                    )
                 })
                 .collect::<Vec<_>>(),
             Err(err) => {

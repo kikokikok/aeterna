@@ -867,6 +867,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::clone_on_copy)] // Explicitly testing Clone impl
     fn test_job_skip_reason_clone() {
         let reason = JobSkipReason::RecentlyCompleted;
         let cloned = reason.clone();

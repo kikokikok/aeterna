@@ -42,3 +42,6 @@ testing.workspace = true
 default = []
 llm-integration = []  # Enables tests requiring LLM services
 embedding-integration = []  # Enables tests requiring embedding services
+
+[lints]
+workspace = true

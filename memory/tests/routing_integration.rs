@@ -132,7 +132,7 @@ fn test_threshold_adjustment() {
 
     // With low threshold, should route; with high threshold, should not route
     // (unless complexity is above 0.9, which is unlikely)
-    if low_complexity >= 0.05 && low_complexity < 0.9 {
+    if (0.05..0.9).contains(&low_complexity) {
         assert!(low_should_route, "Should route with low threshold (0.05)");
         assert!(
             !high_should_route,

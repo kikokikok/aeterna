@@ -1758,8 +1758,7 @@ mod tests {
             let check = check_component_health(component, 30).await;
             assert_eq!(
                 check.status, "not_connected",
-                "component '{}' should report not_connected when server is absent",
-                component
+                "component '{component}' should report not_connected when server is absent"
             );
             assert!(
                 check.message.contains("not connected")
@@ -2204,7 +2203,7 @@ mod tests {
     #[test]
     fn test_colored_status_yellow() {
         let result = colored_status("!", "yellow");
-        assert!(result.contains("!"));
+        assert!(result.contains('!'));
     }
 
     #[test]
@@ -2216,7 +2215,7 @@ mod tests {
     #[test]
     fn test_colored_status_white_default() {
         let result = colored_status("?", "unknown");
-        assert!(result.contains("?"));
+        assert!(result.contains('?'));
     }
 
     #[tokio::test]
@@ -2226,8 +2225,7 @@ mod tests {
             let check = check_component_health(component, 30).await;
             assert!(
                 check.details.is_empty(),
-                "component '{}' must not have fake details when disconnected",
-                component
+                "component '{component}' must not have fake details when disconnected"
             );
         }
     }

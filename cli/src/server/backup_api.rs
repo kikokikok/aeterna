@@ -3199,7 +3199,7 @@ mod tests {
         let req: ImportConfirmRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.mode, Some("replace".into()));
 
-        let json_empty = r#"{}"#;
+        let json_empty = r"{}";
         let req2: ImportConfirmRequest = serde_json::from_str(json_empty).unwrap();
         assert!(req2.mode.is_none());
     }

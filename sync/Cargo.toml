@@ -33,3 +33,6 @@ axum.workspace = true
 tempfile = "3.10"
 proptest = "1.4"
 testing.workspace = true
+
+[lints]
+workspace = true

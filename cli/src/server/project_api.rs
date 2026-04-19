@@ -311,7 +311,7 @@ async fn create_project(
         source_owner: mk_core::types::RecordSource::Admin,
     };
 
-    match state.postgres.create_unit(&unit).await {
+    match state.postgres.create_unit_scoped(&ctx, &unit).await {
         Ok(()) => {
             persist_event(
                 &state,
@@ -358,7 +358,7 @@ async fn list_members(
 
     match state
         .postgres
-        .list_unit_roles(&ctx.tenant_id, &project_id)
+        .list_unit_roles_scoped(&ctx, &project_id)
         .await
     {
         Ok(entries) => Json(
@@ -410,7 +410,7 @@ async fn add_member(
 
     match state
         .postgres
-        .assign_role(&user_id, &ctx.tenant_id, &project_id, role.clone())
+        .assign_role_scoped(&ctx, &user_id, &project_id, role.clone())
         .await
     {
         Ok(()) => {
@@ -472,7 +472,7 @@ async fn remove_member(
     };
     let existing = match state
         .postgres
-        .list_unit_roles(&ctx.tenant_id, &project_id)
+        .list_unit_roles_scoped(&ctx, &project_id)
         .await
     {
         Ok(entries) => entries,
@@ -499,7 +499,7 @@ async fn remove_member(
     for role in &current_roles {
         if let Err(err) = state
             .postgres
-            .remove_role(&user_id, &ctx.tenant_id, &project_id, role.clone())
+            .remove_role_scoped(&ctx, &user_id, &project_id, role.clone())
             .await
         {
             return error_response(
@@ -550,7 +550,7 @@ async fn set_member_role(
     };
     let existing = match state
         .postgres
-        .list_unit_roles(&ctx.tenant_id, &project_id)
+        .list_unit_roles_scoped(&ctx, &project_id)
         .await
     {
         Ok(entries) => entries,
@@ -569,7 +569,7 @@ async fn set_member_role(
     {
         if let Err(err) = state
             .postgres
-            .remove_role(&user_id, &ctx.tenant_id, &project_id, current_role)
+            .remove_role_scoped(&ctx, &user_id, &project_id, current_role)
             .await
         {
             return error_response(
@@ -581,7 +581,7 @@ async fn set_member_role(
     }
     match state
         .postgres
-        .assign_role(&user_id, &ctx.tenant_id, &project_id, role.clone())
+        .assign_role_scoped(&ctx, &user_id, &project_id, role.clone())
         .await
     {
         Ok(()) => {
@@ -837,7 +837,7 @@ async fn get_unit_of_type(
     unit_id: &str,
     expected: UnitType,
 ) -> Result<OrganizationalUnit, axum::response::Response> {
-    match state.postgres.get_unit(ctx, unit_id).await {
+    match state.postgres.get_unit_scoped(ctx, unit_id).await {
         Ok(Some(unit)) if unit.unit_type == expected => Ok(unit),
         Ok(Some(_)) => Err(error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -907,8 +907,7 @@ async fn audit_action(
     let acting_as = Uuid::parse_str(
         ctx.target_tenant_id
             .as_ref()
-            .map(mk_core::TenantId::as_str)
-            .unwrap_or(ctx.tenant_id.as_str()),
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
     )
     .ok();
     let _ = storage

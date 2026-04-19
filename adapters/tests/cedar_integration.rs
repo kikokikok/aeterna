@@ -584,7 +584,7 @@ mod hierarchical_permissions {
 
         // Team member can only view their team
         let member_ctx = create_tenant_context("tenant1", "team1-member");
-        assert!(!member_ctx.agent_id.is_some()); // Sanity check - no agent
+        assert!(member_ctx.agent_id.is_none()); // Sanity check - no agent
         assert!(
             !authorizer
                 .check_permission(&member_ctx, "View", "Unit::\"org\"")

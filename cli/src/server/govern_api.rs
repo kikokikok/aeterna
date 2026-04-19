@@ -309,8 +309,7 @@ async fn approve_request(
     let acting_as = Uuid::parse_str(
         ctx.target_tenant_id
             .as_ref()
-            .map(mk_core::TenantId::as_str)
-            .unwrap_or(ctx.tenant_id.as_str()),
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
     )
     .ok();
     let _ = storage
@@ -383,8 +382,7 @@ async fn reject_request(
     let acting_as = Uuid::parse_str(
         ctx.target_tenant_id
             .as_ref()
-            .map(mk_core::TenantId::as_str)
-            .unwrap_or(ctx.tenant_id.as_str()),
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
     )
     .ok();
     let _ = storage
@@ -505,8 +503,7 @@ async fn update_config(
     let acting_as = Uuid::parse_str(
         ctx.target_tenant_id
             .as_ref()
-            .map(mk_core::TenantId::as_str)
-            .unwrap_or(ctx.tenant_id.as_str()),
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
     )
     .ok();
     match storage.upsert_config(&config).await {
@@ -1000,7 +997,7 @@ async fn resolve_company_scope(
                 updated_at: chrono::Utc::now().timestamp(),
             };
             let id = new_unit.id.clone();
-            if let Err(err) = state.postgres.create_unit(&new_unit).await {
+            if let Err(err) = state.postgres.create_unit_scoped(ctx, &new_unit).await {
                 return Err(error_response(
                     StatusCode::NOT_FOUND,
                     "company_not_found",
@@ -1111,7 +1108,7 @@ async fn list_policies(
     };
     match state
         .postgres
-        .get_unit_policies(&ctx, company_id.to_string().as_str())
+        .get_unit_policies_scoped(&ctx, company_id.to_string().as_str())
         .await
     {
         Ok(policies) => Json(json!({ "policies": policies })).into_response(),
@@ -1173,7 +1170,7 @@ async fn create_policy(
     let policy_id = policy.id.clone();
     match state
         .postgres
-        .add_unit_policy(&ctx, company_id.to_string().as_str(), &policy)
+        .add_unit_policy_scoped(&ctx, company_id.to_string().as_str(), &policy)
         .await
     {
         Ok(()) => (

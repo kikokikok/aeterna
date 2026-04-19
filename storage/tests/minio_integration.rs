@@ -306,7 +306,7 @@ async fn test_s3_partition_budget_exhaustion_defers_remaining() {
     let load_result = result.unwrap();
 
     assert!(
-        load_result.deferred_partitions.len() > 0 || load_result.partitions_loaded > 0,
+        !load_result.deferred_partitions.is_empty() || load_result.partitions_loaded > 0,
         "Either some partitions loaded or some were deferred"
     );
 

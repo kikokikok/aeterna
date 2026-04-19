@@ -164,8 +164,7 @@ impl StorageBackend for MockGovernanceStorage {
         let results = self.drift_results.read().await;
         Ok(results
             .iter()
-            .filter(|r| r.project_id == project_id)
-            .last()
+            .rfind(|r| r.project_id == project_id)
             .cloned())
     }
 

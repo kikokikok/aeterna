@@ -1157,8 +1157,7 @@ mod tests {
         for email in valid_emails {
             assert!(
                 email.contains('@') && email.contains('.'),
-                "Email should be valid: {}",
-                email
+                "Email should be valid: {email}"
             );
         }
     }
@@ -1170,9 +1169,8 @@ mod tests {
             let is_valid = email.contains('@') && email.contains('.');
             if email == "user@example" || email == "user@" {
                 assert!(
-                    !is_valid || !email.split('@').last().unwrap_or("").contains('.'),
-                    "Email should be invalid: {}",
-                    email
+                    !is_valid || !email.split('@').next_back().unwrap_or("").contains('.'),
+                    "Email should be invalid: {email}"
                 );
             }
         }

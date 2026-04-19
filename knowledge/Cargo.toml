@@ -52,3 +52,6 @@ rustls = { version = "0.23", features = ["aws_lc_rs"] }
 memory.workspace = true
 testing.workspace = true
 tower.workspace = true
+
+[lints]
+workspace = true
