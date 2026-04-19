@@ -498,6 +498,7 @@ async fn test_audit_logging_and_role_assignment_lifecycle() {
             Some(actor_id),
             Some("auditor@example.com"),
             json!({"title": request.title}),
+            None,
         )
         .await
         .unwrap();
@@ -510,6 +511,7 @@ async fn test_audit_logging_and_role_assignment_lifecycle() {
             target_type: Some("policy".to_string()),
             since: Utc::now() - chrono::Duration::hours(1),
             limit: Some(10),
+            acting_as_tenant_id: None,
         })
         .await
         .unwrap();
@@ -720,6 +722,7 @@ async fn test_governance_audit_entry_struct() {
         details: json!({"policy_name": "test"}),
         old_values: None,
         new_values: Some(json!({"status": "active"})),
+        acting_as_tenant_id: None,
         created_at: Utc::now(),
     };
 

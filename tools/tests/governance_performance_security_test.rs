@@ -439,6 +439,7 @@ impl MockGovernanceStorage {
             details,
             old_values: None,
             new_values: None,
+            acting_as_tenant_id: None,
             created_at: Utc::now(),
         };
 
