@@ -1658,8 +1658,29 @@ impl PostgresBackend {
             .collect())
     }
 
+    /// Append a governance event inside an existing transaction.
+    ///
+    /// # RLS contract
+    ///
+    /// `governance_events` has RLS enabled and is keyed on `tenant_id`.
+    /// The caller MUST ensure `app.tenant_id` is SET LOCAL to a value
+    /// matching `event`'s tenant before invoking this function. In
+    /// practice this means calling it from within either:
+    ///
+    /// - [`Self::with_tenant_context`] with a matching `TenantContext`
+    ///   (the typical tenant-scoped handler path), or
+    /// - [`Self::with_admin_context`] (tenant provisioning / admin
+    ///   cross-tenant paths — BYPASSRLS applies).
+    ///
+    /// # Shape
+    ///
+    /// ```ignore
+    /// state.postgres.with_tenant_context(&ctx, |tx| Box::pin(async move {
+    ///     PostgresBackend::log_event(tx, &event).await
+    /// })).await?;
+    /// ```
     pub async fn log_event(
-        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
         event: &mk_core::types::GovernanceEvent,
     ) -> Result<(), PostgresError> {
         let (event_type, tenant_id, _timestamp) = match event {
@@ -1830,7 +1851,7 @@ impl PostgresBackend {
         .bind(event_type)
         .bind(tenant_id.as_str())
         .bind(serde_json::to_value(event)?)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(())
@@ -2078,7 +2099,18 @@ impl mk_core::traits::EventPublisher for PostgresBackend {
     type Error = PostgresError;
 
     async fn publish(&self, event: mk_core::types::GovernanceEvent) -> Result<(), Self::Error> {
-        self.log_event(&event).await
+        // `log_event` is tx-scoped and must run inside a session where
+        // `app.tenant_id` matches the event's tenant (RLS on
+        // `governance_events`). The event carries its own tenant_id;
+        // construct a minimal context and wrap in `with_tenant_context`.
+        let ctx = mk_core::types::TenantContext::new(
+            event.tenant_id().clone(),
+            mk_core::types::UserId::default(),
+        );
+        self.with_tenant_context(&ctx, move |tx| {
+            Box::pin(async move { Self::log_event(tx, &event).await })
+        })
+        .await
     }
 
     async fn subscribe(
