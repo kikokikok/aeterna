@@ -42,6 +42,7 @@ rand = "0.8.5"
 aes-gcm = "0.10"
 base64 = "0.22"
 aws-sdk-kms = "1.57"
+zeroize.workspace = true
 
 # Metrics and observability (Task 8)
 metrics.workspace = true

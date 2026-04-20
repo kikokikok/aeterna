@@ -8040,6 +8040,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "wiremock",
+ "zeroize",
 ]
 
 [[package]]

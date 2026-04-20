@@ -28,6 +28,7 @@ pub mod repo_manager;
 pub mod retention;
 pub mod rlm_weights;
 pub mod rls_migration;
+pub mod secret_backend;
 pub mod secret_provider;
 pub mod shard_manager;
 pub mod shard_router;
