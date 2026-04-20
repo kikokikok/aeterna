@@ -9,6 +9,7 @@ pub mod gdpr;
 pub mod git_provider_connection_store;
 pub mod governance;
 pub mod graph;
+pub mod kms;
 pub mod graph_duckdb;
 pub mod graphrag;
 pub mod kms_integration;
