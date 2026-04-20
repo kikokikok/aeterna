@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Network, ChevronRight, ChevronDown, Users, Plus, Loader2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -78,16 +78,17 @@ function CreateOrgDialog({
   const queryClient = useQueryClient()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [companyId, setCompanyId] = useState<string>("")
+  // User-overridden companyId. Empty string means "let the component pick the
+  // default". The actual value used at submit time is `companyId` below, which
+  // is derived (not synced) from `selectedCompanyId` + the available companies
+  // so we don't run into the `react-hooks/set-state-in-effect` anti-pattern.
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("")
 
-  // Default-select the first company whenever the set of available companies
-  // changes (or the dialog re-opens). The backend requires `companyId` to
-  // reference an existing Company unit in the target tenant.
-  useEffect(() => {
-    if (open && !companyId && companies.length > 0) {
-      setCompanyId(companies[0].id)
-    }
-  }, [open, companyId, companies])
+  // Effective companyId: user choice if set, otherwise first available company.
+  // The backend requires `companyId` to reference an existing Company unit in
+  // the target tenant (see cli/src/server/org_api.rs::CreateOrgRequest).
+  const companyId =
+    selectedCompanyId || (companies.length > 0 ? companies[0].id : "")
 
   // Backend contract (cli/src/server/org_api.rs::CreateOrgRequest):
   //   { name: string, description?: string, companyId: string }
@@ -146,7 +147,7 @@ function CreateOrgDialog({
               <select
                 id="org-company"
                 value={companyId}
-                onChange={(e) => setCompanyId(e.target.value)}
+                onChange={(e) => setSelectedCompanyId(e.target.value)}
                 required
                 disabled={noCompanies}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:disabled:bg-gray-800"
