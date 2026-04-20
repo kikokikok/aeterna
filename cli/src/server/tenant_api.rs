@@ -3417,22 +3417,115 @@ async fn list_tenant_git_provider_connections(
 
 /// Versioned manifest schema.  `apiVersion` must be `"aeterna.io/v1"` and
 /// `kind` must be `"TenantManifest"`.
+///
+/// ### `metadata.generation`
+///
+/// Optional monotonic revision counter owned by the caller. When present, it
+/// MUST strictly increase on every apply. `provision_tenant` rejects an apply
+/// whose `generation` is `<= current generation`. When absent, the server
+/// treats the apply as `current + 1` and writes that back.
+///
+/// ### `providers`
+///
+/// Optional declarative provider block. Replaces the imperative
+/// `POST /admin/tenants/{slug}/providers/llm` / `.../embedding` calls with a
+/// field inside the manifest. Each provider entry carries a logical
+/// `secret_ref` pointing into `config.secret_references` for any sensitive
+/// material (API keys, service-account JSON). Plaintext secrets never appear
+/// in a provider declaration; they travel only through `secrets` (inline,
+/// stripped from the canonical hash) or through a pre-existing
+/// `SecretReference` in the tenant's `tenant_secrets` rows.
+///
+/// Fields are optional for backward compatibility: a manifest without
+/// `metadata` or `providers` still parses and applies.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TenantManifest {
     pub api_version: String,
     pub kind: String,
+    /// Optional metadata block. See type docs.
+    #[serde(default)]
+    pub metadata: Option<ManifestMetadata>,
     pub tenant: ManifestTenant,
     #[serde(default)]
     pub config: Option<ManifestConfig>,
     #[serde(default)]
     pub secrets: Option<Vec<ManifestSecret>>,
+    /// Optional declarative provider block (LLM / embedding / memory layers).
+    /// See type docs on [`TenantManifest`].
+    #[serde(default)]
+    pub providers: Option<ManifestProviders>,
     #[serde(default)]
     pub repository: Option<SetTenantRepositoryBindingRequest>,
     #[serde(default)]
     pub hierarchy: Option<Vec<ManifestCompany>>,
     #[serde(default)]
     pub roles: Option<Vec<ManifestRoleAssignment>>,
+}
+
+/// Manifest metadata. All fields optional; `generation` is the only one with
+/// defined semantics today — see [`TenantManifest`].
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestMetadata {
+    /// Caller-owned monotonic counter. `provision_tenant` enforces strict
+    /// increase across applies; when absent, the server auto-increments
+    /// `last_generation + 1`.
+    #[serde(default)]
+    pub generation: Option<u64>,
+    /// Free-form labels for operator use. Not interpreted by the server; part
+    /// of the canonical hash so label drift counts as a manifest change.
+    #[serde(default)]
+    pub labels: BTreeMap<String, String>,
+    /// Free-form annotations (k8s-style). Same semantics as `labels`.
+    #[serde(default)]
+    pub annotations: BTreeMap<String, String>,
+}
+
+/// Declarative provider block inside a manifest. Every sensitive field is a
+/// `secretRef` (logical name) resolved against `config.secret_references`;
+/// plaintext never travels inside a provider declaration.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestProviders {
+    /// LLM provider declaration. `None` means "not managed declaratively".
+    #[serde(default)]
+    pub llm: Option<ManifestProvider>,
+    /// Embedding provider declaration.
+    #[serde(default)]
+    pub embedding: Option<ManifestProvider>,
+    /// Memory-layer providers keyed by layer name (e.g. `"episodic"`,
+    /// `"semantic"`). Each entry is the same shape as the LLM/embedding
+    /// block; specific `kind` values are validated by the layer wiring code.
+    #[serde(default)]
+    pub memory_layers: BTreeMap<String, ManifestProvider>,
+}
+
+/// A single provider declaration (LLM, embedding, or memory-layer).
+///
+/// `kind` is a free-form string matched against the factory for the relevant
+/// layer (e.g. `"openai"`, `"anthropic"`, `"qdrant"`). Unknown `kind` values
+/// surface at wire-time, not here.
+///
+/// `secret_ref`, when present, MUST refer to a logical name declared in
+/// `config.secret_references` of the same manifest. Unknown refs are caught
+/// by [`validate_manifest`].
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestProvider {
+    pub kind: String,
+    #[serde(default)]
+    pub model: Option<String>,
+    /// Logical name into `config.secret_references`. Absent = provider takes
+    /// no secret (e.g. local-only embedding model).
+    #[serde(default)]
+    pub secret_ref: Option<String>,
+    /// Provider-specific config key/value pairs. Non-sensitive only; anything
+    /// sensitive must go through `secret_ref`. Values are strings by
+    /// convention (numbers / booleans encoded as strings) so the canonical
+    /// hash is stable across JSON-number vs string drift.
+    #[serde(default)]
+    pub config: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3608,6 +3701,72 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
                     "PlatformAdmin cannot be assigned as a tenant-scoped role in a manifest".into(),
                 );
             }
+        }
+    }
+
+    // ── providers block: every secret_ref must resolve in config.secret_references
+    //    (missing config.secret_references is fine — it just means no refs are
+    //    available, so any secret_ref at all is a miss).
+    if let Some(providers) = &m.providers {
+        let declared_refs: std::collections::HashSet<&str> = m
+            .config
+            .as_ref()
+            .map(|c| c.secret_references.keys().map(String::as_str).collect())
+            .unwrap_or_default();
+
+        fn check_provider(
+            slot: &str,
+            p: &ManifestProvider,
+            declared_refs: &std::collections::HashSet<&str>,
+            errors: &mut Vec<String>,
+        ) {
+            if p.kind.trim().is_empty() {
+                errors.push(format!("providers.{slot}.kind must not be empty"));
+            }
+            if let Some(ref_name) = &p.secret_ref {
+                if !declared_refs.contains(ref_name.as_str()) {
+                    let declared_list = if declared_refs.is_empty() {
+                        "none".to_string()
+                    } else {
+                        let mut v: Vec<&str> = declared_refs.iter().copied().collect();
+                        v.sort();
+                        v.join(", ")
+                    };
+                    errors.push(format!(
+                        "providers.{slot}.secretRef '{ref_name}' does not resolve in \
+                         config.secretReferences (declared: {declared_list})"
+                    ));
+                }
+            }
+        }
+
+        if let Some(llm) = &providers.llm {
+            check_provider("llm", llm, &declared_refs, &mut errors);
+        }
+        if let Some(emb) = &providers.embedding {
+            check_provider("embedding", emb, &declared_refs, &mut errors);
+        }
+        for (layer, p) in &providers.memory_layers {
+            if layer.trim().is_empty() {
+                errors.push("providers.memoryLayers has an entry with an empty key".into());
+            }
+            check_provider(
+                &format!("memoryLayers.{layer}"),
+                p,
+                &declared_refs,
+                &mut errors,
+            );
+        }
+    }
+
+    // ── metadata.generation must be non-zero when present (0 is a common
+    //    sentinel for "unset" and rejecting it catches accidental `0` from
+    //    serializers that default numbers).
+    if let Some(meta) = &m.metadata {
+        if meta.generation == Some(0) {
+            errors.push(
+                "metadata.generation must be >= 1 when set (use omit for auto-assign)".into(),
+            );
         }
     }
 
@@ -5444,6 +5603,8 @@ mod tests {
         let m = TenantManifest {
             api_version: "aeterna.io/v1".into(),
             kind: "TenantManifest".into(),
+            metadata: None,
+            providers: None,
             tenant: ManifestTenant {
                 slug: "my-tenant".into(),
                 name: "My Tenant".into(),
@@ -5464,6 +5625,8 @@ mod tests {
         let m = TenantManifest {
             api_version: "v2".into(),
             kind: "TenantManifest".into(),
+            metadata: None,
+            providers: None,
             tenant: ManifestTenant {
                 slug: "ok".into(),
                 name: "Ok".into(),
@@ -5487,6 +5650,8 @@ mod tests {
         let m = TenantManifest {
             api_version: "aeterna.io/v1".into(),
             kind: "WrongKind".into(),
+            metadata: None,
+            providers: None,
             tenant: ManifestTenant {
                 slug: "ok".into(),
                 name: "Ok".into(),
@@ -5510,6 +5675,8 @@ mod tests {
         let m = TenantManifest {
             api_version: "aeterna.io/v1".into(),
             kind: "TenantManifest".into(),
+            metadata: None,
+            providers: None,
             tenant: ManifestTenant {
                 slug: String::new(),
                 name: "Ok".into(),
@@ -5533,6 +5700,8 @@ mod tests {
         let m = TenantManifest {
             api_version: "aeterna.io/v1".into(),
             kind: "TenantManifest".into(),
+            metadata: None,
+            providers: None,
             tenant: ManifestTenant {
                 slug: "My_Tenant".into(),
                 name: "My Tenant".into(),
@@ -5556,6 +5725,8 @@ mod tests {
         let m = TenantManifest {
             api_version: "aeterna.io/v1".into(),
             kind: "TenantManifest".into(),
+            metadata: None,
+            providers: None,
             tenant: ManifestTenant {
                 slug: "-leading".into(),
                 name: "Ok".into(),
@@ -5576,6 +5747,8 @@ mod tests {
         let m = TenantManifest {
             api_version: "aeterna.io/v1".into(),
             kind: "TenantManifest".into(),
+            metadata: None,
+            providers: None,
             tenant: ManifestTenant {
                 slug: "ok".into(),
                 name: "   ".into(),
@@ -5599,6 +5772,8 @@ mod tests {
         let m = TenantManifest {
             api_version: "aeterna.io/v1".into(),
             kind: "TenantManifest".into(),
+            metadata: None,
+            providers: None,
             tenant: ManifestTenant {
                 slug: "ok".into(),
                 name: "Ok".into(),
@@ -5626,6 +5801,8 @@ mod tests {
         let m = TenantManifest {
             api_version: "aeterna.io/v1".into(),
             kind: "TenantManifest".into(),
+            metadata: None,
+            providers: None,
             tenant: ManifestTenant {
                 slug: "ok".into(),
                 name: "Ok".into(),
@@ -5692,6 +5869,151 @@ mod tests {
             "tenantId must be present"
         );
         assert_eq!(json["slug"], "provision-test");
+    }
+
+    // ─── metadata / providers schema regressions ─────────────────────────
+
+    #[test]
+    fn manifest_deserializes_without_metadata_or_providers() {
+        // Backward-compat: pre-B2 manifests (no metadata, no providers) must
+        // still round-trip through serde without errors.
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "legacy", "name": "Legacy" }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).expect("legacy manifest must parse");
+        assert!(m.metadata.is_none());
+        assert!(m.providers.is_none());
+        assert!(validate_manifest(&m).is_empty());
+    }
+
+    #[test]
+    fn manifest_deserializes_with_metadata_generation() {
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "metadata": { "generation": 7, "labels": { "env": "prod" } },
+            "tenant": { "slug": "gen", "name": "Gen" }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        let meta = m.metadata.as_ref().unwrap();
+        assert_eq!(meta.generation, Some(7));
+        assert_eq!(meta.labels.get("env"), Some(&"prod".to_string()));
+        assert!(validate_manifest(&m).is_empty());
+    }
+
+    #[test]
+    fn validate_manifest_rejects_generation_zero() {
+        let m = TenantManifest {
+            api_version: "aeterna.io/v1".into(),
+            kind: "TenantManifest".into(),
+            metadata: Some(ManifestMetadata {
+                generation: Some(0),
+                ..Default::default()
+            }),
+            providers: None,
+            tenant: ManifestTenant {
+                slug: "gz".into(),
+                name: "Gz".into(),
+                domain_mappings: None,
+            },
+            config: None,
+            secrets: None,
+            repository: None,
+            hierarchy: None,
+            roles: None,
+        };
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("generation")),
+            "expected generation error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn manifest_deserializes_with_providers_block() {
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "p", "name": "P" },
+            "config": {
+                "secretReferences": {
+                    "openai.key": {
+                        "logicalName": "openai.key",
+                        "ownership": "tenant",
+                        "kind": "postgres",
+                        "secretId": "11111111-1111-1111-1111-111111111111"
+                    }
+                }
+            },
+            "providers": {
+                "llm": {
+                    "kind": "openai",
+                    "model": "gpt-4o",
+                    "secretRef": "openai.key",
+                    "config": { "baseUrl": "https://api.openai.com/v1" }
+                },
+                "embedding": {
+                    "kind": "openai",
+                    "model": "text-embedding-3-small",
+                    "secretRef": "openai.key"
+                },
+                "memoryLayers": {
+                    "episodic": { "kind": "qdrant", "config": { "collection": "ep" } }
+                }
+            }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        let providers = m.providers.as_ref().unwrap();
+        assert_eq!(providers.llm.as_ref().unwrap().kind, "openai");
+        assert_eq!(
+            providers.llm.as_ref().unwrap().secret_ref.as_deref(),
+            Some("openai.key")
+        );
+        assert!(providers.memory_layers.contains_key("episodic"));
+        assert!(
+            validate_manifest(&m).is_empty(),
+            "a manifest with secret_ref that resolves must validate clean"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_unresolved_provider_secret_ref() {
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "p", "name": "P" },
+            "providers": {
+                "llm": { "kind": "openai", "secretRef": "does.not.exist" }
+            }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        let errors = validate_manifest(&m);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("does.not.exist") && e.contains("secretRef")),
+            "expected unresolved-secretRef error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_provider_empty_kind() {
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "p", "name": "P" },
+            "providers": {
+                "llm": { "kind": "" }
+            }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("providers.llm.kind")),
+            "expected empty-kind error, got: {errors:?}"
+        );
     }
 
     #[tokio::test]
