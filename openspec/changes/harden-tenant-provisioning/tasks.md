@@ -14,7 +14,7 @@
 ## 0. Resolve design conflicts (blocking all other groups)
 
 - [!] 0.1 Decide `SecretResolver` shape: extend existing closure-based alias in `memory/src/provider_registry.rs` **or** introduce a kind-dispatched trait and migrate. Document in `design.md` under a new "Secret resolver model" section. _(blocks 3.*)_
-- [!] 0.2 Decide provider wiring model: keep **lazy per-request resolution** (current architecture) with state transitions driven by first-use, or switch to **eager startup wiring** as originally proposed. Document in `design.md`. _(blocks 5.2, 5.3, 5.4, 6.2)_
+- [x] 0.2 ~~Decide provider wiring model~~ **RESOLVED** in `design.md` §D5: **Eager** (boot loop + Dragonfly pub/sub `tenant:changed` fan-out + lazy fallback on registry miss). Failure policy per-tenant by default, strict mode opt-in. Acceptance: freshly provisioned tenant is usable cluster-wide with no pod restart; zero user-visible 500s on race windows.
 - [!] 0.3 Define `TenantSecretReference` migration path: introduce `TenantSecretReferenceV2` sum type alongside the existing flat struct, with a deprecation window — or commit to a single breaking bump of `mk_core`. Document in `design.md`. _(blocks 1.2, 3.2-3.4)_
 - [!] 0.4 Decide CLI `validate` placement: top-level `tenant validate` subsumes the existing nested `tenant repo-binding validate` and `tenant config validate`, or coexists. Document in `design.md`. _(blocks 7.4, 7.6)_
 

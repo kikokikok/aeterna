@@ -89,20 +89,116 @@ pub trait SecretBackend: Send + Sync {
 
 Concrete impl in B1: `PostgresSecretBackend { pool: PgPool, kms: Arc<dyn KmsProvider> }`. The git-provider-connection store migrates to this backend with `logical_name = format!("git_token:{}", connection_id)`.
 
-### D5 — Eager provider wiring at startup
+### D5 — Eager provider wiring, multi-pod, hot-swap on provision (resolves 0.2)
 
-On boot, after DB is up:
-1. Query all persisted tenants.
-2. For each tenant, set `TenantRuntimeState::Loading`.
-3. Resolve the manifest's provider declarations (memory layers, LLM, embedding). Resolve secret references via `SecretBackend::get`.
-4. Register providers into `MemoryManager` via `register_provider`.
-5. On success: `TenantRuntimeState::Available`. On failure: `TenantRuntimeState::LoadingFailed { reason }`. Never `panic`.
+**Resolves decision 0.2** (`tasks.md`): lazy vs eager. The answer is **eager by default with three triggers**, accounting for multi-replica deployments and the "new tenant must be usable immediately after UI/CLI provisioning, with no pod restart" requirement.
 
-`/ready` stays `503` until **every** tenant is `Available` or `LoadingFailed`. `Loading` → `503`. This ensures the pod does not accept traffic until tenant wiring is deterministic.
+#### Trigger matrix
 
-Tenant-scoped request paths check `TenantRuntimeState` for the target tenant. `LoadingFailed` or unknown → `503 tenant_unavailable`.
+| Trigger | When it fires | Which pods |
+|---|---|---|
+| **Boot loop** | `main()` after Postgres + vector + `SecretBackend` are up | The pod that just started |
+| **Pub/sub** `tenant:changed` | In-process immediately after `provision_tenant` / `update_tenant` / `delete_tenant` commits to Postgres | Every *other* replica, via `SUBSCRIBE` |
+| **Lazy fallback on registry miss** | Tenant-scoped request arrives on a pod whose registry does not know the tenant, but the tenant exists in Postgres | The pod handling that one request |
 
-Late-created tenants (provisioned after boot) transition `Loading` → `Available` inside `provision_tenant` itself.
+Default path is **eager**: boot-loop on pod start, pub/sub on provision/update. The lazy fallback exists only to close the race window between `COMMIT` on Pod A and the `SUBSCRIBE` callback firing on Pod B (milliseconds), and to self-heal a pod whose subscriber connection was flapping when a notification was emitted.
+
+#### Pub/sub transport: Dragonfly (Redis-compatible), not Postgres LISTEN
+
+The chart already ships Dragonfly (`charts/aeterna-prereqs/templates/dragonfly.yaml`) and the codebase already uses it for distributed locks, embedding/reasoning caches, and governance event publishing (`tools/src/redis_publisher.rs`). Reusing the existing Redis pub/sub channel for tenant invalidation is strictly better than introducing a parallel coordination plane via Postgres `LISTEN/NOTIFY`:
+
+- one coordination plane for all cross-pod signalling,
+- no long-lived `LISTEN` pgbouncer-slot cost,
+- an existing publisher pattern (`tools/src/redis_publisher.rs`) and subscriber HA story to reuse,
+- decouples invalidation from the write transaction in the failure direction we want: a flapping Dragonfly delays invalidation but does not block writes; lazy fallback catches stragglers.
+
+Channel: `tenant:changed`. Message: `{ "slug": "<slug>", "rev": <generation>, "op": "upsert" | "delete" }`.
+
+#### Wiring pipeline (shared by all three triggers)
+
+Given a tenant slug, the wiring function:
+
+1. Set `TenantRuntimeState::Loading { since }` in the pod-local registry.
+2. Read the tenant row from Postgres (source of truth — do **not** trust a cache for this).
+3. Resolve every `SecretReference` via `SecretBackend::get()` → KMS unwrap → decrypted `SecretBytes` held in pod memory, zeroize-on-drop.
+4. Instantiate LLM + embedding HTTP clients (with connection pools, rate-limit tokens).
+5. Register providers into `MemoryManager::register_provider`.
+6. On success: `TenantRuntimeState::Available { rev, wired_at }`. On failure: `TenantRuntimeState::LoadingFailed { reason, last_attempt_at, retry_count }`.
+7. On rewire for an existing tenant: swap providers atomically (new instance built first, then swapped into the registry under a write lock, then old instance's clients dropped). Never a window where the tenant has no providers registered.
+
+All wiring runs on a `tokio::task::JoinSet` bounded by `Semaphore(AETERNA_TENANT_WIRE_CONCURRENCY)` (default 16). Each tenant has a per-wiring deadline of `AETERNA_TENANT_WIRE_TIMEOUT_SECONDS` (default 30). Timeout → `LoadingFailed { reason: "wire_timeout" }`.
+
+#### Failure policy: per-tenant, not per-pod
+
+A `LoadingFailed` tenant **does not** prevent the pod from serving traffic for other tenants. It does:
+
+- make `/ready` return `503` only while **any** tenant is in `Loading` (not `LoadingFailed`),
+- make tenant-scoped routes (`/api/v1/memory/*`, `/api/v1/tenants/{slug}/*`) for that specific tenant return `503 {error: "tenant_unavailable", slug, reason}`,
+- fire `aeterna_tenant_state{state="loading_failed"}` for alerting,
+- trigger a background re-wire loop with exponential backoff (1m, 5m, 15m, 1h, then hourly) until `Available` or the tenant is deleted.
+
+Strict mode — "any `LoadingFailed` tenant fails the pod" — is available via `AETERNA_TENANT_WIRE_STRICT=true` for environments that want one-broken-tenant-blocks-the-pod semantics. Default is off.
+
+#### Provision flow (resolves "new tenant usable immediately")
+
+```
+UI/CLI → Pod A: POST /api/v1/admin/tenants/provision
+Pod A:
+  1. validate manifest, BEGIN tx
+  2. INSERT INTO tenants (+ tenant_secrets rows via SecretBackend.put)
+  3. COMMIT
+  4. redis_publisher.publish("tenant:changed", {slug, rev, op: "upsert"})
+  5. wire(slug) synchronously            ← caller waits for this
+  6. 200 OK with tenant summary
+Pod B, Pod C (subscribed to tenant:changed):
+  on recv → wire(slug) in background
+```
+
+Acceptance criterion: the moment Pod A returns `200`, the tenant is usable on Pod A. Within the pub/sub fan-out window (sub-second on a healthy Dragonfly), it is usable on every pod. The lazy fallback handles the race window on a per-request basis so **no user-visible 500 can occur** for a freshly-provisioned tenant, on any pod, ever.
+
+No pod restart. No operator action. No warm-up delay the user can perceive.
+
+#### Update / delete flows
+
+`PUT /tenants/{slug}` publishes `tenant:changed {op: "upsert"}` → every pod re-runs wire(slug), atomically swapping providers.
+
+`DELETE /tenants/{slug}` publishes `tenant:changed {op: "delete"}` → every pod drops the tenant from its registry, zeroizes in-memory secrets, drops HTTP client pools. Subsequent requests for the deleted tenant hit "tenant not found" in Postgres and return `404`.
+
+#### Configuration surface
+
+```
+AETERNA_TENANT_WIRE_CONCURRENCY=16         # bounded parallelism on boot
+AETERNA_TENANT_WIRE_TIMEOUT_SECONDS=30     # per-tenant deadline
+AETERNA_TENANT_WIRE_STRICT=false           # strict mode: LoadingFailed fails the pod
+AETERNA_TENANT_REWIRE_BACKOFF_MIN=60       # retry floor, seconds
+AETERNA_TENANT_REWIRE_BACKOFF_MAX=3600     # retry ceiling, seconds
+AETERNA_REDIS_CHANNEL_TENANT_CHANGED=tenant:changed  # overridable for tests
+```
+
+#### Observability
+
+- `aeterna_tenant_state{slug, state}` — gauge, state ∈ {loading, available, loading_failed}
+- `aeterna_tenant_wiring_duration_seconds{slug, trigger, outcome}` — histogram, trigger ∈ {boot, pubsub, lazy, rewire}
+- `aeterna_tenant_wiring_failures_total{slug, reason}` — counter
+- `aeterna_tenant_rewire_attempts_total{slug}` — counter
+- `aeterna_tenant_pubsub_lag_seconds` — histogram, time from `PUBLISH` to `SUBSCRIBE` handler entry
+
+Default alert: any tenant in `loading_failed` for > 5 minutes.
+
+#### Why not pure lazy
+
+Pure lazy technically meets "new tenant usable immediately" because the first request wires on demand. It fails on two non-negotiables:
+
+1. A misconfigured manifest (bad secret reference, missing provider, unreachable LLM) is detected only when a user hits the tenant. The `POST /provision` call returns `200` on an unwireable tenant. Eager wiring inside the handler surfaces this synchronously and returns `422`.
+2. `/ready` cannot honestly report cluster health for tenants. Every rolling restart lets the LB route traffic to a pod that has never touched any tenant, producing cold-start 500s across the fleet.
+
+#### Why not eager without pub/sub
+
+"Just wire at boot" solves the restart case but not the "new tenant without restart" case. Without cross-pod invalidation, Pod A knows about new tenant `acme` but Pod B does not, and the UI redirect lands on Pod B and 500s. Pub/sub closes this.
+
+#### Why not pure pub/sub without lazy fallback
+
+Pub/sub has an unavoidable race window between `COMMIT` on Pod A and the subscriber callback firing on Pod B (typically milliseconds). A UI redirect firing inside that window would hit Pod B before its wire completes. Lazy fallback on-miss closes this at the cost of one ~100ms request the first time. Without the fallback, the "zero user-visible 500s" invariant cannot be guaranteed.
 
 ### D6 — Manifest hash-based idempotent re-apply
 
