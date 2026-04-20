@@ -65,7 +65,7 @@ Return the image reference
 {{- define "aeterna.image" -}}
 {{- $registry := .Values.global.imageRegistry | default "" -}}
 {{- $repository := .Values.aeterna.image.repository -}}
-{{- $tag := .Values.aeterna.image.tag | default .Chart.AppVersion -}}
+{{- $tag := .Values.aeterna.image.tag | default (printf "v%s" .Chart.AppVersion) -}}
 {{- if $registry }}
 {{- printf "%s/%s:%s" $registry $repository $tag }}
 {{- else }}

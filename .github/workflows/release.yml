@@ -315,12 +315,15 @@ jobs:
         id: meta
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}-admin-ui
-          # Tags use NO leading `v` to match Chart.AppVersion (which is
-          # the default used by .Values.adminUi.image.tag in the chart).
+          # Tag convention: leading `v` prefix to match the main `aeterna`
+          # image (which is published as `v<version>` by the docker-merge
+          # job above). The Helm chart derives both image tags from
+          # `v<Chart.AppVersion>` — keeping the two pipelines in lockstep
+          # so `helm install --version X.Y.Z` works with zero --set flags.
           tags: |
-            type=raw,value=${{ needs.resolve-version.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.resolve-version.outputs.version }}
-            type=semver,pattern={{major}},value=${{ needs.resolve-version.outputs.version }}
+            type=raw,value=v${{ needs.resolve-version.outputs.version }}
+            type=semver,pattern=v{{major}}.{{minor}},value=v${{ needs.resolve-version.outputs.version }}
+            type=semver,pattern=v{{major}},value=v${{ needs.resolve-version.outputs.version }}
             type=raw,value=latest
             type=sha,prefix=sha-
       - name: Build & push (multi-arch)
