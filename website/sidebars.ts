@@ -23,6 +23,7 @@ const sidebars: SidebarsConfig = {
         'specs/overview',
         'specs/core-concepts',
         'architecture-overview',
+        'architecture/secret-backend',
         'sequence-diagrams',
         'comprehensive-ux-dx-guide',
       ],
@@ -100,6 +101,7 @@ const sidebars: SidebarsConfig = {
         'helm/security',
         'helm/external-secrets',
         'helm/sops-secrets',
+        'helm/kms',
         'helm/secrets-reference',
         'helm/upgrade',
         'helm/cnpg-upgrade',
@@ -115,6 +117,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'guides/ha-deployment',
         'guides/disaster-recovery-runbook',
+        'guides/secret-rotation',
         'guides/observability-runbook',
         'guides/managed-observability',
         'guides/cost-optimization',

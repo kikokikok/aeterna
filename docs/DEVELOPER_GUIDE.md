@@ -390,6 +390,64 @@ PlatformAdmins can list resources across every tenant on the instance by passing
 
 ---
 
+## Tenant Secrets & KMS
+
+Tenant-scoped secret material (OpenAI keys, GitHub tokens, embedding-provider credentials) lives in the envelope-encrypted `tenant_secrets` Postgres table. Three layers back it:
+
+| Layer | Crate | Summary |
+|---|---|---|
+| `SecretBytes` + `SecretReference` | `mk_core::secret` | Zeroize-on-drop plaintext carrier + tagged enum reference |
+| `KmsProvider` (trait) + `AwsKmsProvider` / `LocalKmsProvider` | `storage::kms` | Wraps/unwraps per-row 32-byte DEKs |
+| `SecretBackend` (trait) + `PostgresSecretBackend` | `storage::secret_backend` | put/get/delete/list; AES-256-GCM rows + KMS-wrapped DEK |
+
+### In application code
+
+```rust
+use storage::secret_backend::build_secret_backend_from_env;
+use mk_core::SecretBytes;
+
+let backend = build_secret_backend_from_env(pool.clone()).await?;
+
+// write
+let reference = backend
+    .put(tenant_db_id, "openai-api-key", SecretBytes::from_string(api_key))
+    .await?;
+
+// read (plaintext is only alive inside `SecretBytes` — drop it promptly)
+let plaintext = backend.get(&reference).await?;
+client.set_api_key(plaintext.expose());
+drop(plaintext);
+```
+
+### In tests
+
+Prefer `InMemorySecretBackend` for unit tests; it avoids KMS and Postgres entirely. Integration tests that exercise the real path gate on `testcontainers` + Docker availability (see `storage/tests/secret_backend_integration.rs`).
+
+### Runtime configuration
+
+| Env | Meaning |
+|---|---|
+| `AETERNA_KMS_PROVIDER=aws\|local` | Selects KMS backend (default: `local`) |
+| `AETERNA_KMS_AWS_KEY_ARN` | CMK ARN when `provider=aws` |
+| `AETERNA_LOCAL_KMS_KEY` | Base64-encoded 32 bytes when `provider=local` |
+
+In Kubernetes these are all produced from the Helm `kms:` values block. See `website/docs/helm/kms.md`.
+
+### Don'ts
+
+- **Do not** `format!("{plaintext:?}")` or JSON-serialize a `SecretBytes` expecting the bytes to appear — they will always render as `<redacted>`. Use `.expose()` explicitly when bytes are actually needed.
+- **Do not** cache `SecretBytes` in a long-lived struct — the zeroize guarantee is undermined if the value outlives its use.
+- **Do not** invent new secret-bearing structs. If you need to persist something sensitive, store it through `SecretBackend` and hold a `SecretReference`.
+
+### Pointers
+
+- Concept page: `docs/architecture/secret-backend.md`
+- Operator Helm guide: `website/docs/helm/kms.md`
+- Rotation runbook: `docs/guides/secret-rotation.md`
+- Design decisions: `openspec/changes/harden-tenant-provisioning/design.md` (D1–D8)
+
+---
+
 ## Key Specs
 
 Before working on a specific area, read the relevant OpenSpec specification:

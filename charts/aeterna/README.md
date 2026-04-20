@@ -355,6 +355,26 @@ kubectl create secret generic postgres-credentials \
   --from-literal=postgres-password='...'
 ```
 
+### Tenant-Secret Envelope Encryption (KMS)
+
+Tenant-scoped secrets stored in the `tenant_secrets` Postgres table are **envelope-encrypted**: every row carries its own AES-256-GCM data key, and the data keys are wrapped by the CMK you select via `kms.provider`.
+
+| Mode | `kms.provider` | Use |
+|---|---|---|
+| AWS KMS | `"aws"` | Production. Required when handling real tenant data. |
+| Local | `"local"` (default) | Development, CI, DR drills. Emits a `WARN` on every boot. |
+
+```yaml
+kms:
+  provider: "aws"
+  aws:
+    keyArn: "arn:aws:kms:<region>:<account-id>:alias/aeterna-tenant-secrets"
+    auth: "irsa"                                     # or "static"
+    roleArn: "arn:aws:iam::<account-id>:role/aeterna-kms"
+```
+
+The chart fails fast when required fields are missing (`kms.provider=aws` without `keyArn`, `auth=static` without `existingSecret`, `kms.local.generate=false` without `existingSecret`). Full operator reference: the **KMS** page in the docs site — `website/docs/helm/kms.md`.
+
 ## Multi-Tenant Administration
 
 Aeterna supports hierarchical multi-tenancy. Two administrative roles operate at distinct scopes:
