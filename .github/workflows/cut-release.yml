@@ -82,9 +82,32 @@ jobs:
           git push origin "release/v${{ inputs.version }}"
 
       - name: Open PR
+        # NOTE: We deliberately use a PAT here instead of the default
+        # ${{ secrets.GITHUB_TOKEN }}. The kikokikok org policy
+        # "Allow GitHub Actions to create and approve pull requests" is
+        # disabled (see Settings → Actions → General), which causes
+        # `gh pr create` with GITHUB_TOKEN to fail with:
+        #   "GitHub Actions is not permitted to create or approve pull
+        #    requests (createPullRequest)"
+        #
+        # Required repo secret: RELEASE_BOT_PAT
+        #   - Classic PAT with `repo` scope, OR
+        #   - Fine-grained PAT scoped to this repo with:
+        #       Contents: Read & Write
+        #       Pull requests: Read & Write
+        #   - Owner must have push access (a maintainer, or a bot account).
+        #
+        # If the secret is missing, the step fails loudly with a clear
+        # message instead of the cryptic GraphQL error above.
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_BOT_PAT }}
         run: |
+          if [[ -z "${GH_TOKEN}" ]]; then
+              echo "::error::Repo secret RELEASE_BOT_PAT is not set."
+              echo "::error::Create a PAT (contents:write + pull-requests:write) and add it as RELEASE_BOT_PAT."
+              echo "::error::See the comment above this step in cut-release.yml for details."
+              exit 1
+          fi
           gh pr create \
             --base master \
             --head "release/v${{ inputs.version }}" \
