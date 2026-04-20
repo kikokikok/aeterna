@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Network, ChevronRight, ChevronDown, Users, Plus, Loader2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -66,22 +66,48 @@ function OrgNode({ unit, children, allUnits, onSelect, selectedId }: OrgNodeProp
   )
 }
 
-function CreateOrgDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function CreateOrgDialog({
+  open,
+  onClose,
+  companies,
+}: {
+  open: boolean
+  onClose: () => void
+  companies: OrganizationalUnit[]
+}) {
   const queryClient = useQueryClient()
   const [name, setName] = useState("")
-  const [unitType, setUnitType] = useState("Organization")
+  const [description, setDescription] = useState("")
+  const [companyId, setCompanyId] = useState<string>("")
 
+  // Default-select the first company whenever the set of available companies
+  // changes (or the dialog re-opens). The backend requires `companyId` to
+  // reference an existing Company unit in the target tenant.
+  useEffect(() => {
+    if (open && !companyId && companies.length > 0) {
+      setCompanyId(companies[0].id)
+    }
+  }, [open, companyId, companies])
+
+  // Backend contract (cli/src/server/org_api.rs::CreateOrgRequest):
+  //   { name: string, description?: string, companyId: string }
+  // The endpoint hardcodes `UnitType::Organization`, so we do NOT send a
+  // `unit_type` field. See issue #86 for the original schema-drift bug.
   const create = useMutation({
-    mutationFn: (data: { name: string; unit_type: string }) =>
+    mutationFn: (data: { name: string; description?: string; companyId: string }) =>
       apiClient.post("/api/v1/org", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["organizations"] })
       setName("")
+      setDescription("")
       onClose()
     },
   })
 
   if (!open) return null
+
+  const errorMessage = create.error instanceof Error ? create.error.message : null
+  const noCompanies = companies.length === 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -90,20 +116,67 @@ function CreateOrgDialog({ open, onClose }: { open: boolean; onClose: () => void
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Create Organization
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button
+            onClick={onClose}
+            aria-label="Close dialog"
+            className="text-gray-400 hover:text-gray-600"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            create.mutate({ name, unit_type: unitType })
+            if (!companyId) return
+            create.mutate({
+              name,
+              description: description.trim() ? description.trim() : undefined,
+              companyId,
+            })
           }}
         >
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+              <label
+                htmlFor="org-company"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Parent Company
+              </label>
+              <select
+                id="org-company"
+                value={companyId}
+                onChange={(e) => setCompanyId(e.target.value)}
+                required
+                disabled={noCompanies}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:disabled:bg-gray-800"
+              >
+                {noCompanies ? (
+                  <option value="">No companies available — create a Company unit first</option>
+                ) : (
+                  companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))
+                )}
+              </select>
+              {noCompanies && (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  An Organization must be attached to a Company. Ask a platform admin to
+                  provision a Company unit for this tenant first.
+                </p>
+              )}
+            </div>
+            <div>
+              <label
+                htmlFor="org-name"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Name
+              </label>
               <input
+                id="org-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -112,20 +185,25 @@ function CreateOrgDialog({ open, onClose }: { open: boolean; onClose: () => void
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Type</label>
-              <select
-                value={unitType}
-                onChange={(e) => setUnitType(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              <label
+                htmlFor="org-description"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
-                <option value="Organization">Organization</option>
-                <option value="Team">Team</option>
-                <option value="Project">Project</option>
-              </select>
+                Description <span className="text-gray-400">(optional)</span>
+              </label>
+              <textarea
+                id="org-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              />
             </div>
           </div>
           {create.isError && (
-            <p className="mt-2 text-sm text-red-600">Failed to create. Please try again.</p>
+            <p role="alert" className="mt-2 text-sm text-red-600">
+              Failed to create: {errorMessage ?? "please try again."}
+            </p>
           )}
           <div className="mt-6 flex justify-end gap-3">
             <button
@@ -137,7 +215,7 @@ function CreateOrgDialog({ open, onClose }: { open: boolean; onClose: () => void
             </button>
             <button
               type="submit"
-              disabled={create.isPending}
+              disabled={create.isPending || noCompanies}
               className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -211,6 +289,9 @@ export default function OrgTreePage() {
 
   const units: OrganizationalUnit[] = Array.isArray(data) ? data : (data?.items ?? [])
   const roots = units.filter((u) => !u.parentId)
+  // Backend requires `companyId` on org creation. Collect companies from the
+  // already-loaded tree instead of issuing a second request.
+  const companies = units.filter((u) => u.unitType === "Company")
 
   return (
     <div>
@@ -274,7 +355,11 @@ export default function OrgTreePage() {
         </div>
       )}
 
-      <CreateOrgDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      <CreateOrgDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        companies={companies}
+      />
     </div>
   )
 }
