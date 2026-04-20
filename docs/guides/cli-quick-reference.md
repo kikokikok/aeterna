@@ -10,7 +10,7 @@ This is a concise cheat sheet. For detailed tenancy-management workflows, also s
 
 ```bash
 # Install latest supported release for your platform
-curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/master/install.sh | sh
 
 # Or build from source
 git clone https://github.com/kikokikok/aeterna.git
@@ -44,7 +44,7 @@ aeterna auth status --json
 
 | Step | Command |
 |------|---------|
-| Install CLI | `curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/main/install.sh | sh` |
+| Install CLI | `curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/master/install.sh | sh` |
 | Log in | `aeterna auth login --profile dev --server-url https://aeterna.example.com` |
 | Verify auth | `aeterna auth status --profile dev` |
 | Inspect config | `aeterna config show --profile dev` |

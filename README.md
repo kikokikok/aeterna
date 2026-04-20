@@ -525,7 +525,7 @@ Aeterna addresses **93 production readiness gaps** identified across enterprise 
 **Prebuilt binary (recommended):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/kikokikok/aeterna/master/install.sh | sh
 ```
 
 Platforms: Linux `x86_64` / `aarch64` (gnu), macOS `x86_64` / `aarch64`. See the

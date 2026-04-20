@@ -69,4 +69,4 @@ aeterna tenant connection grant acme --connection <id>
 
 For the repo version of this guide with the longer operator walkthrough, see:
 
-- [`docs/guides/tenant-admin-control-plane.md`](../../../docs/guides/tenant-admin-control-plane.md)
+- [`docs/guides/tenant-admin-control-plane.md`](https://github.com/kikokikok/aeterna/blob/master/docs/guides/tenant-admin-control-plane.md) on GitHub
