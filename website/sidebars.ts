@@ -82,6 +82,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Security',
       items: [
+        'architecture/secret-backend',
         'security/rbac-matrix',
         'security/rbac-testing-procedures',
         'security/tenant-isolation-testing',
