@@ -234,6 +234,34 @@ spec:
                   key: github-app-pem
                   optional: true
             {{- end }}
+            ## KMS / tenant-secret envelope encryption
+            - name: AETERNA_KMS_PROVIDER
+              value: {{ .Values.kms.provider | quote }}
+            {{- if eq .Values.kms.provider "aws" }}
+            {{- if not .Values.kms.aws.keyArn }}
+              {{- fail "kms.provider=aws requires kms.aws.keyArn to be set" }}
+            {{- end }}
+            - name: AETERNA_KMS_AWS_KEY_ARN
+              value: {{ .Values.kms.aws.keyArn | quote }}
+            {{- if eq .Values.kms.aws.auth "static" }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "kms.aws.existingSecret is required when kms.aws.auth=static" .Values.kms.aws.existingSecret }}
+                  key: {{ .Values.kms.aws.accessKeyIdKey | default "aws-access-key-id" }}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.kms.aws.existingSecret }}
+                  key: {{ .Values.kms.aws.secretAccessKeyKey | default "aws-secret-access-key" }}
+            {{- end }}
+            {{- else if eq .Values.kms.provider "local" }}
+            - name: AETERNA_LOCAL_KMS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.kms.local.generate }}{{ include "aeterna.fullname" . }}-kms-local{{ else }}{{ required "kms.local.existingSecret is required when kms.local.generate=false" .Values.kms.local.existingSecret }}{{ end }}
+                  key: {{ .Values.kms.local.secretKey | default "kms-local-key" }}
+            {{- end }}
             - name: RUST_LOG
               value: {{ .Values.observability.logging.level | default "info" | quote }}
             - name: LOG_FORMAT
