@@ -6,84 +6,87 @@ How AI agents interact with the Aeterna memory and knowledge framework.
 
 ## 🔴 HARD CONSTRAINT — Public vs Internal Repository Split
 
-**This repository (`kikokikok/aeterna`) is PUBLIC.** It is OSS code only.
+**This repository is a PUBLIC OSS codebase.** A **separate internal repository**
+owns everything related to deploying it on company infrastructure.
 
-A **separate internal repository** owns everything related to deploying Aeterna
-on Kyriba infrastructure. Agents MUST respect this split at all times — in
-code, configuration, commit messages, PR titles, PR bodies, issue bodies,
-review comments, filenames, and inline code comments.
+Agents MUST respect this split at all times — in code, configuration, commit
+messages, PR titles, PR bodies, issue bodies, review comments, filenames,
+and inline code comments and docstrings.
 
-### What MUST NEVER appear in this public repo
+### Categories that MUST NOT appear in this public repo
 
-- Internal environment / cluster identifiers (e.g. `ci-dev-NN`, `kyriba-eng`,
-  `prod-eu`, tenant-specific names)
-- Any `*.kyriba.io`, `*.kyriba.internal`, or other internal domains / hostnames
-- Internal IP ranges, VPC/subnet IDs, VPN endpoints
-- AWS account IDs, ARNs, S3 bucket names, RDS identifiers, EKS cluster names
-- Vault paths, KMS key IDs, IAM role names/ARNs
-- ArgoCD application names, Helm release names tied to specific environments
-- Namespace names, service account names, ingress hostnames for specific envs
-- Internal Jira/Confluence/Slack channel names, internal URLs
-- Customer names, tenant slugs, or any production data (even anonymised
-  without review)
-- References to internal incident IDs, ticket numbers, or runbooks
+No specific forbidden strings are enumerated here on purpose — listing them
+would itself be a leak. The **authoritative list** is maintained in the
+internal repo and enforced mechanically by the leak-guard (see below).
+Categorically, nothing from any of these classes belongs here:
+
+- Any identifier naming a specific company-operated environment, cluster,
+  namespace, tenant, customer, region, or availability zone
+- Any company-owned domain, hostname, subdomain, or private DNS zone
+- Any company-owned IP range, CIDR block, VPC/subnet identifier, or VPN
+  endpoint
+- Cloud account identifiers, resource ARNs/URNs, bucket names, database
+  identifiers, managed-cluster names
+- Secret-management paths, key-management identifiers, IAM role/policy
+  identifiers
+- GitOps/CD application names, release names, or pipeline identifiers tied
+  to specific environments
+- Internal ticket/incident identifiers, runbook names, internal URLs to
+  wikis/dashboards/observability tools
+- Production data of any kind, even if it looks anonymised
 
 ### What belongs in the INTERNAL repo instead
 
-- Helm values overlays per environment (`values-<env>.yaml`)
-- Terraform / Pulumi modules describing AWS/GCP resources
-- ArgoCD Application manifests pointing at specific clusters
-- Secret references (SealedSecrets, ExternalSecrets, SOPS)
-- Deployment runbooks, incident playbooks, on-call docs
-- Anything mentioning a specific Kyriba environment by name
+- Environment-specific Helm/Kustomize overlays
+- IaC (Terraform / Pulumi / CDK) describing real cloud resources
+- GitOps application manifests targeting real clusters
+- Secret references (SealedSecrets, ExternalSecrets, SOPS-encrypted files)
+- Runbooks, playbooks, on-call docs, incident post-mortems
+- Anything mentioning a real environment by name
 
-### What is OK in this public repo
+### What IS OK in this public repo
 
 - Generic, environment-agnostic code and configuration
-- Example/sample values files with placeholder hostnames
-  (`example.com`, `<your-host>`, `localhost`)
-- Generic terms: "the dev cluster", "a staging environment", "an internal
-  deployment" (no identifiers)
-- Fictional test fixtures (`acme`, `Acme Corp`, `test@example.com`)
+- Sample values files using placeholder hostnames drawn from IANA-reserved
+  examples (see RFC 2606 / RFC 5737)
+- Abstract wording ("a development environment", "the staging cluster",
+  "an internal deployment") — never bound to a specific real target
+- Fictional test fixtures that don't resemble anything real
 
-### Agent pre-commit checklist
+### Before any commit or PR
 
-Before running `git commit` or `gh pr create` in this repo, agents MUST
-verify that none of the material being introduced (diff + message + PR body)
-matches any of these patterns:
+Agents MUST, before `git commit` / `gh pr create`:
 
-```
-ci-dev-\d+          prod-\w+           staging-\w+
-\.kyriba\.           \.internal$
-\d+\.\d+\.\d+\.\d+   (non-documentation IPs)
-arn:aws:             AKIA[0-9A-Z]{16}   eyJ[A-Za-z0-9_-]{20,}
-```
+1. Run the leak-guard (see `docs/leak-guard.md`) against the staged diff
+   AND the commit message AND any PR/issue body drafted. This checks both
+   generic shape-based rules (committed in-repo) and a project-specific
+   denylist loaded from outside the repo.
+2. If anything matches, stop. Either scrub the draft or move the topic to
+   the internal repo. Do NOT commit first and "clean up later" — rewriting
+   public history is a partial mitigation, not a fix.
 
-If a genuine deployment topic needs to be tracked, the agent MUST:
+### Remediation if a leak does ship
 
-1. Stop the public commit/PR.
-2. Tell the user and ask whether the work should move to the internal repo.
-3. Scrub the draft before proceeding, or abandon it.
-
-### Remediation if a leak is committed
-
-- PR bodies/titles: `gh pr edit <n> --body-file <scrubbed.md>` — no history
-  rewrite needed, change is immediate.
-- Commit messages on a branch: `git rebase -i` + reword, then force-push.
+- PR bodies/titles: `gh pr edit <n> --body-file <scrubbed.md>` (immediate,
+  no history rewrite).
+- Commit messages on an unmerged branch: `git rebase -i` + reword,
+  force-push.
 - Commit messages already on `master`: `git filter-branch --msg-filter`
-  scoped to the affected commits + `git push --force-with-lease` after
-  human approval. Note: rewriting public history is loud and partially
-  ineffective (GitHub may still serve old SHAs via the events API and
-  third-party mirrors may retain them). Prevention > cure.
-- **Secrets** (tokens, keys, credentials): treat as rotated immediately —
-  rewriting history does NOT remove them from third-party caches. Rotate
-  the secret in its source system first, then clean up the repo.
+  scoped to the affected range, then `git push --force-with-lease` after
+  explicit human approval. This is loud and partial — GitHub retains
+  old SHAs via the events/timeline API, and third-party mirrors/archives
+  may have already captured the content. Prevention > cure.
+- **Credentials** (tokens, keys, passwords, session cookies): history
+  rewrites do not erase them from third-party caches. Rotate the credential
+  at its source system immediately; clean up the repo as a secondary step.
 
-### Code comments specifically
+### Code comments and docstrings
 
-Inline comments (`// ...`, `# ...`, `/* ... */`) and doc strings are part
-of the public surface of the repo and subject to all rules above. Do not
-leave "note to self" references to internal infra in source files.
+Inline comments and doc strings are part of the public surface and subject
+to every rule above. No "note to self" references to internal systems in
+source files.
+
+See `docs/leak-guard.md` for the enforcement mechanism (CI + local hook).
 
 ---
 

@@ -9,7 +9,8 @@ Aeterna provides hierarchical memory storage and governed organizational knowled
 > lives in a separate internal repository and must **never** be mentioned here — not in
 > code, commit messages, PR bodies, issues, or comments. See
 > [`AGENTS.md` § Public vs Internal Repository Split](./AGENTS.md#-hard-constraint--public-vs-internal-repository-split)
-> for the full rulebook and pre-commit checklist.
+> for the policy and [`docs/leak-guard.md`](./docs/leak-guard.md) for the enforcement
+> (CI + local pre-commit hook).
 
 ---
 

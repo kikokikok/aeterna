@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Pre-commit hook: runs the leak-guard against the staged diff + commit
+# message. Enable locally with:
+#
+#   git config core.hooksPath .githooks
+#
+# See docs/leak-guard.md for the denylist setup.
+set -euo pipefail
+REPO_ROOT=$(git rev-parse --show-toplevel)
+exec "$REPO_ROOT/scripts/leak-guard.sh" staged

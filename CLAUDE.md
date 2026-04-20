@@ -1,13 +1,14 @@
 # Aeterna — Claude Code Memory
 
-> **🔴 PUBLIC REPO — READ FIRST:** This repository is public OSS code only.
-> Everything related to deploying on Kyriba infrastructure lives in a
-> separate internal repository. **Never** introduce internal environment
-> names (e.g. `ci-dev-NN`), `*.kyriba.io` hostnames, AWS ARNs, cluster IDs,
-> tenant slugs, or similar identifiers into commits, PR bodies, issue
-> comments, or source-file comments here. See the full rulebook and
-> pre-commit checklist in [`AGENTS.md § Public vs Internal Repository
-> Split`](./AGENTS.md#-hard-constraint--public-vs-internal-repository-split).
+> **🔴 PUBLIC REPO — READ FIRST:** This is a public OSS codebase.
+> Everything related to deploying on real company infrastructure lives
+> in a separate internal repository. **Never** introduce identifiers
+> naming real environments, hostnames, cloud resources, tenants,
+> credentials, or any similar operational artefacts into commits,
+> PR/issue bodies, or source-file comments here. The full rulebook,
+> enforcement, and remediation recipe are in
+> [`AGENTS.md § Public vs Internal Repository Split`](./AGENTS.md#-hard-constraint--public-vs-internal-repository-split)
+> and the mechanical guard is documented in [`docs/leak-guard.md`](./docs/leak-guard.md).
 
 ## Project Purpose
 
