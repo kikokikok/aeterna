@@ -4,6 +4,89 @@ How AI agents interact with the Aeterna memory and knowledge framework.
 
 ---
 
+## 🔴 HARD CONSTRAINT — Public vs Internal Repository Split
+
+**This repository (`kikokikok/aeterna`) is PUBLIC.** It is OSS code only.
+
+A **separate internal repository** owns everything related to deploying Aeterna
+on Kyriba infrastructure. Agents MUST respect this split at all times — in
+code, configuration, commit messages, PR titles, PR bodies, issue bodies,
+review comments, filenames, and inline code comments.
+
+### What MUST NEVER appear in this public repo
+
+- Internal environment / cluster identifiers (e.g. `ci-dev-NN`, `kyriba-eng`,
+  `prod-eu`, tenant-specific names)
+- Any `*.kyriba.io`, `*.kyriba.internal`, or other internal domains / hostnames
+- Internal IP ranges, VPC/subnet IDs, VPN endpoints
+- AWS account IDs, ARNs, S3 bucket names, RDS identifiers, EKS cluster names
+- Vault paths, KMS key IDs, IAM role names/ARNs
+- ArgoCD application names, Helm release names tied to specific environments
+- Namespace names, service account names, ingress hostnames for specific envs
+- Internal Jira/Confluence/Slack channel names, internal URLs
+- Customer names, tenant slugs, or any production data (even anonymised
+  without review)
+- References to internal incident IDs, ticket numbers, or runbooks
+
+### What belongs in the INTERNAL repo instead
+
+- Helm values overlays per environment (`values-<env>.yaml`)
+- Terraform / Pulumi modules describing AWS/GCP resources
+- ArgoCD Application manifests pointing at specific clusters
+- Secret references (SealedSecrets, ExternalSecrets, SOPS)
+- Deployment runbooks, incident playbooks, on-call docs
+- Anything mentioning a specific Kyriba environment by name
+
+### What is OK in this public repo
+
+- Generic, environment-agnostic code and configuration
+- Example/sample values files with placeholder hostnames
+  (`example.com`, `<your-host>`, `localhost`)
+- Generic terms: "the dev cluster", "a staging environment", "an internal
+  deployment" (no identifiers)
+- Fictional test fixtures (`acme`, `Acme Corp`, `test@example.com`)
+
+### Agent pre-commit checklist
+
+Before running `git commit` or `gh pr create` in this repo, agents MUST
+verify that none of the material being introduced (diff + message + PR body)
+matches any of these patterns:
+
+```
+ci-dev-\d+          prod-\w+           staging-\w+
+\.kyriba\.           \.internal$
+\d+\.\d+\.\d+\.\d+   (non-documentation IPs)
+arn:aws:             AKIA[0-9A-Z]{16}   eyJ[A-Za-z0-9_-]{20,}
+```
+
+If a genuine deployment topic needs to be tracked, the agent MUST:
+
+1. Stop the public commit/PR.
+2. Tell the user and ask whether the work should move to the internal repo.
+3. Scrub the draft before proceeding, or abandon it.
+
+### Remediation if a leak is committed
+
+- PR bodies/titles: `gh pr edit <n> --body-file <scrubbed.md>` — no history
+  rewrite needed, change is immediate.
+- Commit messages on a branch: `git rebase -i` + reword, then force-push.
+- Commit messages already on `master`: `git filter-branch --msg-filter`
+  scoped to the affected commits + `git push --force-with-lease` after
+  human approval. Note: rewriting public history is loud and partially
+  ineffective (GitHub may still serve old SHAs via the events API and
+  third-party mirrors may retain them). Prevention > cure.
+- **Secrets** (tokens, keys, credentials): treat as rotated immediately —
+  rewriting history does NOT remove them from third-party caches. Rotate
+  the secret in its source system first, then clean up the repo.
+
+### Code comments specifically
+
+Inline comments (`// ...`, `# ...`, `/* ... */`) and doc strings are part
+of the public surface of the repo and subject to all rules above. Do not
+leave "note to self" references to internal infra in source files.
+
+---
+
 ## MCP Tools
 
 Aeterna exposes tools via the Model Context Protocol (MCP), defined in `tools/src/server.rs` and implemented across `tools/src/`. Tools are registered in the `ToolRegistry` and served over HTTP at `/mcp/*`.

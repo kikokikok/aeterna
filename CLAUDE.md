@@ -1,5 +1,14 @@
 # Aeterna — Claude Code Memory
 
+> **🔴 PUBLIC REPO — READ FIRST:** This repository is public OSS code only.
+> Everything related to deploying on Kyriba infrastructure lives in a
+> separate internal repository. **Never** introduce internal environment
+> names (e.g. `ci-dev-NN`), `*.kyriba.io` hostnames, AWS ARNs, cluster IDs,
+> tenant slugs, or similar identifiers into commits, PR bodies, issue
+> comments, or source-file comments here. See the full rulebook and
+> pre-commit checklist in [`AGENTS.md § Public vs Internal Repository
+> Split`](./AGENTS.md#-hard-constraint--public-vs-internal-repository-split).
+
 ## Project Purpose
 
 Universal Memory & Knowledge Framework for Enterprise AI Agent Systems. Provides hierarchical memory storage, governed organizational knowledge, and a pluggable adapter architecture for AI agents at scale (LangChain, AutoGen, CrewAI, OpenCode).
