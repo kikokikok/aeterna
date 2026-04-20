@@ -34,7 +34,7 @@ spec:
       initContainers:
         {{- if and .Values.adminUi.enabled .Values.adminUi.image.repository }}
         - name: admin-ui-init
-          image: {{ .Values.adminUi.image.repository }}:{{ .Values.adminUi.image.tag }}
+          image: {{ .Values.adminUi.image.repository }}:{{ .Values.adminUi.image.tag | default (printf "v%s" .Chart.AppVersion) }}
           imagePullPolicy: {{ .Values.adminUi.image.pullPolicy }}
           command: ["/bin/sh", "-c", "cp -r /usr/share/nginx/html/. /mnt/admin-ui/"]
           volumeMounts:

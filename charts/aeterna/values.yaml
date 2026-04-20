@@ -386,7 +386,9 @@ adminUi:
   image:
     ## @param adminUi.image.repository Image repository (empty = use assets baked into main image)
     repository: ""
-    ## @param adminUi.image.tag Image tag
+    ## @param adminUi.image.tag Image tag (default: v<Chart.AppVersion>, e.g. v0.8.0-rc.2)
+    ## Leave empty to use the chart's AppVersion with a `v` prefix (matches what the
+    ## release pipeline publishes). Override only for local / pinning / preview images.
     tag: ""
     ## @param adminUi.image.pullPolicy Image pull policy
     pullPolicy: IfNotPresent
