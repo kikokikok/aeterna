@@ -213,11 +213,14 @@ async fn search_handler(
             )
                 .into_response()
         }
-        Err(err) => error_response(
-            StatusCode::BAD_GATEWAY,
-            "memory_search_failed",
-            &err.to_string(),
-        ),
+        Err(err) => {
+            tracing::error!(error = %err, "memory search failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "memory_search_failed",
+                &err.to_string(),
+            )
+        }
     }
 }
 
@@ -245,11 +248,14 @@ async fn add_handler(
             }),
         )
             .into_response(),
-        Err(err) => error_response(
-            StatusCode::BAD_GATEWAY,
-            "memory_add_failed",
-            &err.to_string(),
-        ),
+        Err(err) => {
+            tracing::error!(error = %err, layer = %req.layer, "memory add failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "memory_add_failed",
+                &err.to_string(),
+            )
+        }
     }
 }
 
@@ -281,11 +287,14 @@ async fn list_handler(
             )
                 .into_response()
         }
-        Err(err) => error_response(
-            StatusCode::BAD_GATEWAY,
-            "memory_list_failed",
-            &err.to_string(),
-        ),
+        Err(err) => {
+            tracing::error!(error = %err, layer = %req.layer, "memory list failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "memory_list_failed",
+                &err.to_string(),
+            )
+        }
     }
 }
 
@@ -332,11 +341,19 @@ async fn feedback_handler(
             }),
         )
             .into_response(),
-        Err(err) => error_response(
-            StatusCode::BAD_GATEWAY,
-            "memory_feedback_failed",
-            &err.to_string(),
-        ),
+        Err(err) => {
+            tracing::error!(
+                error = %err,
+                memory_id = %req.memory_id,
+                layer = %req.layer,
+                "memory feedback failed"
+            );
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "memory_feedback_failed",
+                &err.to_string(),
+            )
+        }
     }
 }
 
@@ -369,11 +386,19 @@ async fn delete_handler(
             }),
         )
             .into_response(),
-        Err(err) => error_response(
-            StatusCode::BAD_GATEWAY,
-            "memory_delete_failed",
-            &err.to_string(),
-        ),
+        Err(err) => {
+            tracing::error!(
+                error = %err,
+                memory_id = %memory_id,
+                layer = %req.layer,
+                "memory delete failed"
+            );
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "memory_delete_failed",
+                &err.to_string(),
+            )
+        }
     }
 }
 
