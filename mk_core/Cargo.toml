@@ -21,6 +21,7 @@ chrono.workspace = true
 regex.workspace = true
 sha2 = "0.10"
 hex = "0.4"
+zeroize.workspace = true
 xxhash-rust.workspace = true
 
 [lints]

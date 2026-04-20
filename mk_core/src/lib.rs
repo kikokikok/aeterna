@@ -17,11 +17,13 @@
 //! - M-CANONICAL-DOCS documentation format
 
 pub mod hints;
+pub mod secret;
 pub mod traits;
 pub mod types;
 
 // Re-export commonly used types for convenience
 pub use hints::{HintPreset, HintsConfig, OperationHints};
+pub use secret::{SecretBytes, SecretReference};
 pub use types::{
     BranchPolicy, ConstraintOperator, ConstraintSeverity, ConstraintTarget, CredentialKind,
     HierarchyPath, KnowledgeEntry, KnowledgeEntryWithRelations, KnowledgeLayer,

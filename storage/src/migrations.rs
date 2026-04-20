@@ -162,6 +162,11 @@ pub const MIGRATIONS: &[EmbeddedMigration] = &[
         name: "025_add_app_roles",
         sql: include_str!("../migrations/025_add_app_roles.sql"),
     },
+    EmbeddedMigration {
+        version: 26,
+        name: "026_tenant_secrets",
+        sql: include_str!("../migrations/026_tenant_secrets.sql"),
+    },
 ];
 
 /// Apply every embedded migration in order, transactionally.

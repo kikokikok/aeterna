@@ -54,6 +54,10 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 cd "$REPO_ROOT"
 
 # ---- prepare a temp file holding the payload to scan ------------
+# Initialise PATTERNS_FILE_INTERNAL up-front so the EXIT trap is
+# safe under `set -u` even on early failure paths (e.g. gitleaks
+# findings) that trigger the trap before step 2 assigns it.
+PATTERNS_FILE_INTERNAL=""
 PAYLOAD=$(mktemp -t leakguard.XXXXXX)
 trap 'rm -f "$PAYLOAD" "$PATTERNS_FILE_INTERNAL" 2>/dev/null || true' EXIT
 
@@ -105,7 +109,6 @@ if [[ "${AETERNA_GUARD_SKIP_GITLEAKS:-0}" != "1" ]]; then
 fi
 
 # ---- step 2: project denylist (private, never in-repo) ----------
-PATTERNS_FILE_INTERNAL=""
 if [[ -n "${AETERNA_GUARD_PATTERNS_FILE:-}" && -r "$AETERNA_GUARD_PATTERNS_FILE" ]]; then
   PATTERNS_FILE_INTERNAL=$AETERNA_GUARD_PATTERNS_FILE
 elif [[ -n "${AETERNA_GUARD_PATTERNS:-}" ]]; then
