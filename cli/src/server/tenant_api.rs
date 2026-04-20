@@ -4712,8 +4712,8 @@ mod tests {
                 "repo.token": {
                     "logicalName": "repo.token",
                     "ownership": "tenant",
-                    "secretName": "aeterna-tenant-11111111-1111-1111-1111-111111111111-secret",
-                    "secretKey": "repo.token"
+                    "kind": "postgres",
+                    "secretId": "22222222-2222-2222-2222-222222222222"
                 }
             }
         }))
