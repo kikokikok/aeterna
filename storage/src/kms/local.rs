@@ -64,9 +64,9 @@ impl LocalKmsProvider {
                 "AETERNA_LOCAL_KMS_KEY not set; required when kms.provider=local".into(),
             )
         })?;
-        let bytes = general_purpose::STANDARD
-            .decode(b64.trim())
-            .map_err(|e| KmsError::Config(format!("AETERNA_LOCAL_KMS_KEY is not valid base64: {e}")))?;
+        let bytes = general_purpose::STANDARD.decode(b64.trim()).map_err(|e| {
+            KmsError::Config(format!("AETERNA_LOCAL_KMS_KEY is not valid base64: {e}"))
+        })?;
         Self::from_bytes(&bytes, "local:env")
     }
 

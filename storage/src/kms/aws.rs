@@ -17,8 +17,8 @@
 //! # Key ARN format
 //!
 //! Accepts any form the AWS KMS `Encrypt` API accepts:
-//! - Full key ARN: `arn:aws:kms:us-east-1:111122223333:key/1234abcd-...`
-//! - Alias ARN:    `arn:aws:kms:us-east-1:111122223333:alias/my-alias`
+//! - Full key ARN: `arn:aws:kms:<region>:<account-id>:key/<key-uuid>`
+//! - Alias ARN:    `arn:aws:kms:<region>:<account-id>:alias/<alias-name>`
 //! - Alias name:   `alias/my-alias`
 //! - Key ID:       `1234abcd-12ab-34cd-56ef-1234567890ab`
 //!
@@ -54,8 +54,9 @@ impl AwsKmsProvider {
                 "kms.aws.keyArn is empty; set it to a KMS key id, alias, or ARN".into(),
             ));
         }
-        let config =
-            aws_config::defaults(aws_config::BehaviorVersion::latest()).load().await;
+        let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .load()
+            .await;
         let client = aws_sdk_kms::Client::new(&config);
         tracing::info!(
             key_arn = %key_arn,

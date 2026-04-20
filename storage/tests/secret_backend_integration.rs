@@ -63,7 +63,9 @@ async fn put_then_get_roundtrips() {
 
 #[tokio::test]
 async fn ciphertext_is_not_plaintext_on_disk() {
-    let Some(pool) = fixture_pool().await else { return; };
+    let Some(pool) = fixture_pool().await else {
+        return;
+    };
     let tid = insert_tenant(&pool, "sb-atrest").await;
     let be = backend(pool.clone());
 
@@ -80,20 +82,32 @@ async fn ciphertext_is_not_plaintext_on_disk() {
         .unwrap();
     let ct: Vec<u8> = row.try_get("ciphertext").unwrap();
     let wd: Vec<u8> = row.try_get("wrapped_dek").unwrap();
-    assert!(!ct.windows(plaintext.len()).any(|w| w == plaintext),
-        "ciphertext must not contain plaintext bytes");
-    assert!(!wd.windows(plaintext.len()).any(|w| w == plaintext),
-        "wrapped DEK must not contain plaintext bytes");
+    assert!(
+        !ct.windows(plaintext.len()).any(|w| w == plaintext),
+        "ciphertext must not contain plaintext bytes"
+    );
+    assert!(
+        !wd.windows(plaintext.len()).any(|w| w == plaintext),
+        "wrapped DEK must not contain plaintext bytes"
+    );
 }
 
 #[tokio::test]
 async fn put_same_name_bumps_generation_and_rotates_dek() {
-    let Some(pool) = fixture_pool().await else { return; };
+    let Some(pool) = fixture_pool().await else {
+        return;
+    };
     let tid = insert_tenant(&pool, "sb-rotate").await;
     let be = backend(pool.clone());
 
-    let r1 = be.put(tid, "k", SecretBytes::from(b"v1".to_vec())).await.unwrap();
-    let r2 = be.put(tid, "k", SecretBytes::from(b"v2".to_vec())).await.unwrap();
+    let r1 = be
+        .put(tid, "k", SecretBytes::from(b"v1".to_vec()))
+        .await
+        .unwrap();
+    let r2 = be
+        .put(tid, "k", SecretBytes::from(b"v2".to_vec()))
+        .await
+        .unwrap();
     // Same reference id — upsert, not insert.
     assert_eq!(r1, r2);
     let out = be.get(&r2).await.unwrap();
@@ -102,26 +116,37 @@ async fn put_same_name_bumps_generation_and_rotates_dek() {
     let SecretReference::Postgres { secret_id } = r2;
     let row = sqlx::query("SELECT generation FROM tenant_secrets WHERE id = $1")
         .bind(secret_id)
-        .fetch_one(&pool).await.unwrap();
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     let generation: i64 = row.try_get("generation").unwrap();
     assert_eq!(generation, 2, "second put must bump generation");
 }
 
 #[tokio::test]
 async fn get_missing_returns_not_found() {
-    let Some(pool) = fixture_pool().await else { return; };
+    let Some(pool) = fixture_pool().await else {
+        return;
+    };
     let be = backend(pool);
-    let r = SecretReference::Postgres { secret_id: Uuid::new_v4() };
+    let r = SecretReference::Postgres {
+        secret_id: Uuid::new_v4(),
+    };
     let err = be.get(&r).await.unwrap_err();
     assert!(matches!(err, SecretBackendError::NotFound(_)));
 }
 
 #[tokio::test]
 async fn delete_is_idempotent() {
-    let Some(pool) = fixture_pool().await else { return; };
+    let Some(pool) = fixture_pool().await else {
+        return;
+    };
     let tid = insert_tenant(&pool, "sb-del").await;
     let be = backend(pool);
-    let r = be.put(tid, "k", SecretBytes::from(b"v".to_vec())).await.unwrap();
+    let r = be
+        .put(tid, "k", SecretBytes::from(b"v".to_vec()))
+        .await
+        .unwrap();
     be.delete(&r).await.expect("first delete");
     be.delete(&r).await.expect("second delete idempotent");
     let err = be.get(&r).await.unwrap_err();
@@ -130,26 +155,47 @@ async fn delete_is_idempotent() {
 
 #[tokio::test]
 async fn list_returns_tenant_scoped_entries() {
-    let Some(pool) = fixture_pool().await else { return; };
+    let Some(pool) = fixture_pool().await else {
+        return;
+    };
     let t1 = insert_tenant(&pool, "sb-list-a").await;
     let t2 = insert_tenant(&pool, "sb-list-b").await;
     let be = backend(pool);
-    be.put(t1, "llm_api_key", SecretBytes::from(b"x".to_vec())).await.unwrap();
-    be.put(t1, "embed_api_key", SecretBytes::from(b"y".to_vec())).await.unwrap();
-    be.put(t2, "llm_api_key", SecretBytes::from(b"z".to_vec())).await.unwrap();
+    be.put(t1, "llm_api_key", SecretBytes::from(b"x".to_vec()))
+        .await
+        .unwrap();
+    be.put(t1, "embed_api_key", SecretBytes::from(b"y".to_vec()))
+        .await
+        .unwrap();
+    be.put(t2, "llm_api_key", SecretBytes::from(b"z".to_vec()))
+        .await
+        .unwrap();
 
     let entries = be.list(t1).await.unwrap();
     let names: Vec<&str> = entries.iter().map(|(n, _)| n.as_str()).collect();
-    assert_eq!(names, vec!["embed_api_key", "llm_api_key"], "alpha order, t1 only");
+    assert_eq!(
+        names,
+        vec!["embed_api_key", "llm_api_key"],
+        "alpha order, t1 only"
+    );
 }
 
 #[tokio::test]
 async fn tenant_delete_cascades_secrets() {
-    let Some(pool) = fixture_pool().await else { return; };
+    let Some(pool) = fixture_pool().await else {
+        return;
+    };
     let tid = insert_tenant(&pool, "sb-cascade").await;
     let be = backend(pool.clone());
-    let r = be.put(tid, "k", SecretBytes::from(b"v".to_vec())).await.unwrap();
-    sqlx::query("DELETE FROM tenants WHERE id = $1").bind(tid).execute(&pool).await.unwrap();
+    let r = be
+        .put(tid, "k", SecretBytes::from(b"v".to_vec()))
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tenants WHERE id = $1")
+        .bind(tid)
+        .execute(&pool)
+        .await
+        .unwrap();
     let err = be.get(&r).await.unwrap_err();
     assert!(matches!(err, SecretBackendError::NotFound(_)));
 }

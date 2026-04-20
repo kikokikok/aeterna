@@ -137,7 +137,10 @@ impl PostgresSecretBackend {
         dek
     }
 
-    fn aead_seal(dek: &[u8; 32], plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>), SecretBackendError> {
+    fn aead_seal(
+        dek: &[u8; 32],
+        plaintext: &[u8],
+    ) -> Result<(Vec<u8>, Vec<u8>), SecretBackendError> {
         let key = Key::<Aes256Gcm>::from_slice(dek);
         let cipher = Aes256Gcm::new(key);
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);

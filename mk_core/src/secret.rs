@@ -204,7 +204,9 @@ mod tests {
 
     #[test]
     fn reference_kind() {
-        let r = SecretReference::Postgres { secret_id: Uuid::nil() };
+        let r = SecretReference::Postgres {
+            secret_id: Uuid::nil(),
+        };
         assert_eq!(r.kind(), "postgres");
     }
 
