@@ -342,11 +342,17 @@ export default function TenantDetailPage() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>("overview")
 
-  const { data: tenant, isLoading, error, refetch } = useQuery<TenantRecord>({
+  // Backend returns `{ success: true, tenant: TenantRecord }` (see
+  // cli/src/server/tenant_api.rs::show_tenant). Typing the query as
+  // `TenantRecord` directly caused `tenant.slug` to be undefined, which
+  // propagated into the Config/Providers/Repository tabs and produced
+  // requests to `/api/v1/admin/tenants/undefined/*` (404s in the console).
+  const { data, isLoading, error, refetch } = useQuery<{ tenant: TenantRecord }>({
     queryKey: ["tenant", id],
     queryFn: () => apiClient.get(`/api/v1/admin/tenants/${id}`),
     enabled: !!id,
   })
+  const tenant = data?.tenant
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
