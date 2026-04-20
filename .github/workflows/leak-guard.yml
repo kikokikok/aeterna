@@ -1,0 +1,61 @@
+name: leak-guard
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+concurrency:
+  group: leak-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Determine scan range
+        id: range
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "base=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # On fork PRs, secrets.LEAK_PATTERNS is empty. We still run the
+      # generic-shape scan; the project-specific scan is skipped with
+      # a warning (fork contributors don't have access to internal
+      # names anyway).
+      - name: Leak-guard (diff + commit messages)
+        env:
+          AETERNA_GUARD_PATTERNS: ${{ secrets.LEAK_PATTERNS }}
+          # On same-repo pushes/PRs require strict mode (fail if secret
+          # is missing). On fork PRs the secret will be empty, so keep
+          # non-strict there to avoid false positives on community PRs.
+          AETERNA_GUARD_STRICT: ${{ secrets.LEAK_PATTERNS != '' && '1' || '0' }}
+        run: |
+          ./scripts/leak-guard.sh diff "${{ steps.range.outputs.base }}" "${{ steps.range.outputs.head }}"
+
+      - name: Leak-guard (PR title + body)
+        if: github.event_name == 'pull_request'
+        env:
+          AETERNA_GUARD_PATTERNS: ${{ secrets.LEAK_PATTERNS }}
+          AETERNA_GUARD_STRICT: ${{ secrets.LEAK_PATTERNS != '' && '1' || '0' }}
+          AETERNA_GUARD_SKIP_GITLEAKS: '1'
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" | ./scripts/leak-guard.sh text

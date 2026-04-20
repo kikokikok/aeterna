@@ -1,0 +1,65 @@
+# Leak-guard public ruleset.
+#
+# Only generic, shape-based detectors live in this file. The
+# project-specific denylist (environment names, internal hostnames,
+# tenant slugs, etc.) is NEVER checked in here — it is loaded at
+# scan time from a separate, private source (see docs/leak-guard.md).
+#
+# Inherit gitleaks' built-in rules (covers most cloud provider keys,
+# OAuth tokens, certificate material, connection strings, etc.).
+[extend]
+useDefault = true
+
+# ---- extra generic shape rules -----------------------------------
+
+[[rules]]
+id = "generic-pem-private-key"
+description = "PEM-encoded private key material"
+regex = '''-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY( BLOCK)?-----'''
+tags = ["key", "generic"]
+
+[[rules]]
+id = "generic-jwt"
+description = "Compact-serialised JWT"
+regex = '''\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b'''
+tags = ["token", "generic"]
+
+[[rules]]
+id = "generic-cloud-arn"
+description = "Cloud resource ARN / URN shape"
+regex = '''\barn:[a-z0-9-]+:[a-z0-9-]*:[a-z0-9-]*:\d{4,}:[^\s"']+'''
+tags = ["infra", "generic"]
+
+[[rules]]
+id = "generic-non-doc-ipv4"
+description = "IPv4 address outside RFC 5737 documentation ranges"
+# Matches any IPv4; allowlist below excludes 0.0.0.0, 127.0.0.0/8,
+# 10.0.0.0/8 localhost-ish defaults, documentation ranges, and
+# 255.255.255.255. The goal is to block leaking specific production
+# hosts; internal RFC1918 in dev config is permitted.
+regex = '''\b((?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b'''
+[rules.allowlist]
+regexTarget = "match"
+regexes = [
+  '''^0\.0\.0\.0$''',
+  '''^127(\.\d{1,3}){3}$''',
+  '''^10(\.\d{1,3}){3}$''',
+  '''^192\.168(\.\d{1,3}){2}$''',
+  '''^172\.(1[6-9]|2\d|3[0-1])(\.\d{1,3}){2}$''',
+  # RFC 5737 documentation blocks
+  '''^192\.0\.2(\.\d{1,3})?$''',
+  '''^198\.51\.100(\.\d{1,3})?$''',
+  '''^203\.0\.113(\.\d{1,3})?$''',
+  '''^255\.255\.255\.255$''',
+]
+
+# ---- global allowlist --------------------------------------------
+# Paths that are permitted to match generic rules (documentation,
+# this config itself, test fixtures).
+[allowlist]
+paths = [
+  '''^\.gitleaks\.toml$''',
+  '''^docs/leak-guard\.md$''',
+  '''^admin-ui/e2e/''',
+  '''(^|/)CHANGELOG\.md$''',
+]

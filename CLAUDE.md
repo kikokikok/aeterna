@@ -1,5 +1,15 @@
 # Aeterna — Claude Code Memory
 
+> **🔴 PUBLIC REPO — READ FIRST:** This is a public OSS codebase.
+> Everything related to deploying on real company infrastructure lives
+> in a separate internal repository. **Never** introduce identifiers
+> naming real environments, hostnames, cloud resources, tenants,
+> credentials, or any similar operational artefacts into commits,
+> PR/issue bodies, or source-file comments here. The full rulebook,
+> enforcement, and remediation recipe are in
+> [`AGENTS.md § Public vs Internal Repository Split`](./AGENTS.md#-hard-constraint--public-vs-internal-repository-split)
+> and the mechanical guard is documented in [`docs/leak-guard.md`](./docs/leak-guard.md).
+
 ## Project Purpose
 
 Universal Memory & Knowledge Framework for Enterprise AI Agent Systems. Provides hierarchical memory storage, governed organizational knowledge, and a pluggable adapter architecture for AI agents at scale (LangChain, AutoGen, CrewAI, OpenCode).

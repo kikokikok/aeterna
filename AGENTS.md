@@ -4,6 +4,92 @@ How AI agents interact with the Aeterna memory and knowledge framework.
 
 ---
 
+## 🔴 HARD CONSTRAINT — Public vs Internal Repository Split
+
+**This repository is a PUBLIC OSS codebase.** A **separate internal repository**
+owns everything related to deploying it on company infrastructure.
+
+Agents MUST respect this split at all times — in code, configuration, commit
+messages, PR titles, PR bodies, issue bodies, review comments, filenames,
+and inline code comments and docstrings.
+
+### Categories that MUST NOT appear in this public repo
+
+No specific forbidden strings are enumerated here on purpose — listing them
+would itself be a leak. The **authoritative list** is maintained in the
+internal repo and enforced mechanically by the leak-guard (see below).
+Categorically, nothing from any of these classes belongs here:
+
+- Any identifier naming a specific company-operated environment, cluster,
+  namespace, tenant, customer, region, or availability zone
+- Any company-owned domain, hostname, subdomain, or private DNS zone
+- Any company-owned IP range, CIDR block, VPC/subnet identifier, or VPN
+  endpoint
+- Cloud account identifiers, resource ARNs/URNs, bucket names, database
+  identifiers, managed-cluster names
+- Secret-management paths, key-management identifiers, IAM role/policy
+  identifiers
+- GitOps/CD application names, release names, or pipeline identifiers tied
+  to specific environments
+- Internal ticket/incident identifiers, runbook names, internal URLs to
+  wikis/dashboards/observability tools
+- Production data of any kind, even if it looks anonymised
+
+### What belongs in the INTERNAL repo instead
+
+- Environment-specific Helm/Kustomize overlays
+- IaC (Terraform / Pulumi / CDK) describing real cloud resources
+- GitOps application manifests targeting real clusters
+- Secret references (SealedSecrets, ExternalSecrets, SOPS-encrypted files)
+- Runbooks, playbooks, on-call docs, incident post-mortems
+- Anything mentioning a real environment by name
+
+### What IS OK in this public repo
+
+- Generic, environment-agnostic code and configuration
+- Sample values files using placeholder hostnames drawn from IANA-reserved
+  examples (see RFC 2606 / RFC 5737)
+- Abstract wording ("a development environment", "the staging cluster",
+  "an internal deployment") — never bound to a specific real target
+- Fictional test fixtures that don't resemble anything real
+
+### Before any commit or PR
+
+Agents MUST, before `git commit` / `gh pr create`:
+
+1. Run the leak-guard (see `docs/leak-guard.md`) against the staged diff
+   AND the commit message AND any PR/issue body drafted. This checks both
+   generic shape-based rules (committed in-repo) and a project-specific
+   denylist loaded from outside the repo.
+2. If anything matches, stop. Either scrub the draft or move the topic to
+   the internal repo. Do NOT commit first and "clean up later" — rewriting
+   public history is a partial mitigation, not a fix.
+
+### Remediation if a leak does ship
+
+- PR bodies/titles: `gh pr edit <n> --body-file <scrubbed.md>` (immediate,
+  no history rewrite).
+- Commit messages on an unmerged branch: `git rebase -i` + reword,
+  force-push.
+- Commit messages already on `master`: `git filter-branch --msg-filter`
+  scoped to the affected range, then `git push --force-with-lease` after
+  explicit human approval. This is loud and partial — GitHub retains
+  old SHAs via the events/timeline API, and third-party mirrors/archives
+  may have already captured the content. Prevention > cure.
+- **Credentials** (tokens, keys, passwords, session cookies): history
+  rewrites do not erase them from third-party caches. Rotate the credential
+  at its source system immediately; clean up the repo as a secondary step.
+
+### Code comments and docstrings
+
+Inline comments and doc strings are part of the public surface and subject
+to every rule above. No "note to self" references to internal systems in
+source files.
+
+See `docs/leak-guard.md` for the enforcement mechanism (CI + local hook).
+
+---
+
 ## MCP Tools
 
 Aeterna exposes tools via the Model Context Protocol (MCP), defined in `tools/src/server.rs` and implemented across `tools/src/`. Tools are registered in the `ToolRegistry` and served over HTTP at `/mcp/*`.

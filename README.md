@@ -4,6 +4,14 @@
 
 Aeterna provides hierarchical memory storage and governed organizational knowledge for AI agents at scale. Built for companies deploying AI coding assistants, autonomous agents, and intelligent automation across hundreds of engineers and thousands of projects.
 
+> **Contributors & AI agents:** This repository is the **public OSS codebase**. Internal
+> deployment configuration (environment overlays, cluster manifests, secrets, runbooks)
+> lives in a separate internal repository and must **never** be mentioned here — not in
+> code, commit messages, PR bodies, issues, or comments. See
+> [`AGENTS.md` § Public vs Internal Repository Split](./AGENTS.md#-hard-constraint--public-vs-internal-repository-split)
+> for the policy and [`docs/leak-guard.md`](./docs/leak-guard.md) for the enforcement
+> (CI + local pre-commit hook).
+
 ---
 
 ## Why Aeterna?

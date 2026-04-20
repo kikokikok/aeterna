@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Scan the commit message itself after it's been written.
+set -euo pipefail
+REPO_ROOT=$(git rev-parse --show-toplevel)
+exec "$REPO_ROOT/scripts/leak-guard.sh" file "$1"
