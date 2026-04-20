@@ -208,7 +208,7 @@ impl schemars::JsonSchema for SecretBytes {
 /// so future backends (external secret managers, cloud KV stores, etc.)
 /// can be added as additive variants.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum SecretReference {
     /// Encrypted blob stored in the `tenant_secrets` Postgres table. The row
     /// holds a KMS-wrapped DEK and an AES-256-GCM ciphertext.
@@ -285,5 +285,38 @@ mod tests {
         assert!(j.contains("\"kind\":\"postgres\""));
         let parsed: SecretReference = serde_json::from_str(&j).unwrap();
         assert_eq!(r, parsed);
+    }
+
+    /// Regression: the wire shape of every `SecretReference` variant field
+    /// must be camelCase, matching the outer `kind` tag and the flattening
+    /// context (`TenantSecretReference`). Without `rename_all_fields =
+    /// "camelCase"` on the enum, variant fields leak as snake_case, which
+    /// broke [`cli::server::tenant_api`] deserialization of
+    /// `UpsertTenantConfigRequest.secretReferences`.
+    #[test]
+    fn reference_variant_fields_are_camel_case_on_wire() {
+        let r = SecretReference::Postgres {
+            secret_id: Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap(),
+        };
+        let j = serde_json::to_string(&r).unwrap();
+        assert!(j.contains("\"secretId\""), "expected camelCase secretId on wire, got: {j}");
+        assert!(!j.contains("\"secret_id\""), "snake_case secret_id leaked on wire: {j}");
+
+        // Deserialize MUST accept camelCase (the canonical shape) and
+        // MUST reject snake_case so we do not have two valid wire shapes.
+        let good = serde_json::json!({
+            "kind": "postgres",
+            "secretId": "22222222-2222-2222-2222-222222222222"
+        });
+        assert!(serde_json::from_value::<SecretReference>(good).is_ok());
+
+        let bad = serde_json::json!({
+            "kind": "postgres",
+            "secret_id": "22222222-2222-2222-2222-222222222222"
+        });
+        assert!(
+            serde_json::from_value::<SecretReference>(bad).is_err(),
+            "snake_case secret_id must not be accepted (we ship only one wire shape)"
+        );
     }
 }
