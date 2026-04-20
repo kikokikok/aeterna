@@ -204,6 +204,7 @@ tracing = { version = "0.1", features = ["log"] }
 validator = { version = "0.20.0", features = ["derive"] }
 schemars = { version = "1.2.0", features = ["chrono04"] }
 async-trait = "0.1"
+zeroize = { version = "1.8", features = ["zeroize_derive"] }
 wiremock = "0.6"
 git2 = "0.20.3"
 walkdir = "2.4"
