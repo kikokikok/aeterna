@@ -526,9 +526,15 @@ jobs:
     needs: [resolve-version, docker-merge, docker-scan-sbom, cli-build, helm-release, npm-release, admin-ui-release]
     runs-on: ubuntu-latest
     steps:
+      # Only pull the artifacts we actually ship. docker/build-push-action v5+
+      # auto-uploads a `<repo>~<slug>.dockerbuild` metadata artifact per build
+      # matrix cell; those aren't used by the release step and their downloads
+      # occasionally flake on Azure Blob ("Artifact download failed after 5
+      # retries"), taking down the whole release job with them.
       - uses: actions/download-artifact@v4
         with:
           path: assets
+          pattern: '!*.dockerbuild'
       - name: Flatten assets
         run: |
           mkdir -p release-files
