@@ -41,7 +41,7 @@ use crate::kms::{KmsError, KmsProvider};
 /// The selector lives in `AETERNA_KMS_PROVIDER`:
 ///
 /// - `local` (default) \u2014 [`crate::kms::LocalKmsProvider`] seeded from
-///   `AETERNA_KMS_LOCAL_KEY` (32 bytes, base64 or hex). Logs a WARN on every
+///   `AETERNA_LOCAL_KMS_KEY` (base64-encoded 32 bytes). Logs a WARN on every
 ///   encrypt/decrypt and is intended for dev / CI only.
 /// - `aws` \u2014 [`crate::kms::AwsKmsProvider`] targeting the CMK ARN in
 ///   `AETERNA_KMS_AWS_KEY_ARN`. Uses the default AWS credential chain

@@ -361,6 +361,57 @@ tenantConfigProvider:
   enabled: true
   seedTenants: []
 
+## ==========================================================================
+## KMS (tenant-secret envelope encryption)
+## ==========================================================================
+## Drives storage::secret_backend::build_secret_backend_from_env. Every
+## `tenant_secrets` row is envelope-encrypted with a per-row DEK that is
+## wrapped by the configured CMK (aws) or a single in-process key (local).
+##
+## Maps to env vars:
+##   AETERNA_KMS_PROVIDER     (aws|local)
+##   AETERNA_KMS_AWS_KEY_ARN  (when provider=aws)
+##   AETERNA_LOCAL_KMS_KEY    (when provider=local; base64-encoded 32 bytes)
+##
+## Local provider emits a WARN on startup and is intended for
+## development, CI, and disaster-recovery only. Production deployments
+## MUST set kms.provider=aws.
+kms:
+  ## @param kms.provider KMS provider selector. One of: "aws" | "local".
+  provider: "local"
+
+  aws:
+    ## @param kms.aws.keyArn CMK ARN used to wrap tenant-secret DEKs.
+    ## Example: arn:aws:kms:<region>:<account-id>:key/<key-uuid>
+    ## Example: arn:aws:kms:<region>:<account-id>:alias/<alias-name>
+    keyArn: ""
+    ## @param kms.aws.auth Auth mode: "irsa" (default, uses pod SA
+    ## annotation) or "static" (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+    ## from existingSecret).
+    auth: "irsa"
+    ## IRSA: set on the aeterna ServiceAccount as
+    ## eks.amazonaws.com/role-arn. Required when auth=irsa.
+    ## @param kms.aws.roleArn IAM role ARN for IRSA (auth=irsa)
+    roleArn: ""
+    ## Static credentials path (auth=static). Never inline secrets here.
+    ## @param kms.aws.existingSecret Secret holding AWS credentials for auth=static
+    existingSecret: ""
+    ## @param kms.aws.accessKeyIdKey Key in existingSecret for the access key id
+    accessKeyIdKey: "aws-access-key-id"
+    ## @param kms.aws.secretAccessKeyKey Key in existingSecret for the secret access key
+    secretAccessKeyKey: "aws-secret-access-key"
+
+  local:
+    ## Local provider reads its key from an env var. Either let the chart
+    ## generate & stash a fresh key in a Secret (generate=true) or point at
+    ## an existing Secret that your operator manages out-of-band.
+    ## @param kms.local.generate Generate a random 32-byte key into a new chart-owned Secret
+    generate: true
+    ## @param kms.local.existingSecret Existing Secret name (used when generate=false)
+    existingSecret: ""
+    ## @param kms.local.secretKey Key inside the Secret holding the base64 key
+    secretKey: "kms-local-key"
+
 ## Plugin auth configuration
 ## Configures the OpenCode plugin authentication boundary (GitHub OAuth)
 pluginAuth:
