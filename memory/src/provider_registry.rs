@@ -390,8 +390,8 @@ impl TenantProviderRegistry {
 
         let provider_config = match provider.to_lowercase().as_str() {
             "openai" => {
-                let api_key = config_provider
-                    .get_secret_value(tenant_id, config_keys::LLM_API_KEY)
+                let api_key_bytes = config_provider
+                    .get_secret_bytes(tenant_id, config_keys::LLM_API_KEY)
                     .await
                     .map_err(|e| anyhow::anyhow!("Failed to read LLM API key: {e:?}"))?
                     .ok_or_else(|| {
@@ -400,6 +400,12 @@ impl TenantProviderRegistry {
                             config_keys::LLM_API_KEY
                         )
                     })?;
+                // OpenAI SDK takes an owned `String`. The `SecretBytes`
+                // container zeroizes when it drops at the end of this scope;
+                // the `String` we produce here lives for the duration of the
+                // request only and is not logged or persisted.
+                let api_key = String::from_utf8(api_key_bytes.expose().to_vec())
+                    .map_err(|_| anyhow::anyhow!("LLM API key is not valid UTF-8"))?;
                 LlmProviderConfig {
                     provider_type: LlmProviderType::Openai,
                     openai: Some(OpenAiLlmConfig {
@@ -471,8 +477,8 @@ impl TenantProviderRegistry {
 
         let provider_config = match provider.to_lowercase().as_str() {
             "openai" => {
-                let api_key = config_provider
-                    .get_secret_value(tenant_id, config_keys::EMBEDDING_API_KEY)
+                let api_key_bytes = config_provider
+                    .get_secret_bytes(tenant_id, config_keys::EMBEDDING_API_KEY)
                     .await
                     .map_err(|e| anyhow::anyhow!("Failed to read embedding API key: {e:?}"))?
                     .ok_or_else(|| {
@@ -481,6 +487,10 @@ impl TenantProviderRegistry {
                             config_keys::EMBEDDING_API_KEY
                         )
                     })?;
+                // Same rationale as LLM above: owned `String` required by the
+                // downstream SDK; `SecretBytes` still zeroizes on drop.
+                let api_key = String::from_utf8(api_key_bytes.expose().to_vec())
+                    .map_err(|_| anyhow::anyhow!("Embedding API key is not valid UTF-8"))?;
                 EmbeddingProviderConfig {
                     provider_type: EmbeddingProviderType::Openai,
                     openai: Some(OpenAiEmbeddingConfig {
@@ -596,12 +606,19 @@ impl mk_core::traits::TenantConfigProvider for ClosureConfigAdapter {
         Err(ClosureAdapterError)
     }
 
-    async fn get_secret_value(
+    async fn get_secret_bytes(
         &self,
         tenant_id: &TenantId,
         logical_name: &str,
-    ) -> Result<Option<String>, Self::Error> {
-        Ok((self.secret_resolver)(tenant_id.clone(), logical_name.to_string()).await)
+    ) -> Result<Option<mk_core::SecretBytes>, Self::Error> {
+        // The existing `SecretResolver` closure type still yields an owned
+        // `String` (it's called from construction sites that load values
+        // from env / test fixtures). Wrap the returned string bytes into a
+        // `SecretBytes` so the post-boundary contract matches the new
+        // trait; the closure's original `String` value is dropped at the
+        // end of this function.
+        let raw = (self.secret_resolver)(tenant_id.clone(), logical_name.to_string()).await;
+        Ok(raw.map(|s| mk_core::SecretBytes::from(s.into_bytes())))
     }
 
     async fn validate(&self, _config: &TenantConfigDocument) -> Result<(), Self::Error> {
@@ -694,12 +711,16 @@ mod tests {
             Err(MockError("not implemented".into()))
         }
 
-        async fn get_secret_value(
+        async fn get_secret_bytes(
             &self,
             _tenant_id: &TenantId,
             logical_name: &str,
-        ) -> Result<Option<String>, Self::Error> {
-            Ok(self.secrets.get(logical_name).cloned())
+        ) -> Result<Option<mk_core::SecretBytes>, Self::Error> {
+            Ok(self
+                .secrets
+                .get(logical_name)
+                .cloned()
+                .map(|s| mk_core::SecretBytes::from(s.into_bytes())))
         }
 
         async fn validate(&self, _config: &TenantConfigDocument) -> Result<(), Self::Error> {

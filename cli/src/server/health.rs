@@ -392,9 +392,9 @@ mod tests {
             tenant_store,
             tenant_repository_binding_store,
             tenant_repo_resolver,
-            tenant_config_provider: Arc::new(KubernetesTenantConfigProvider::new(
-                "default".to_string(),
-            )),
+            tenant_config_provider: Arc::new(
+                KubernetesTenantConfigProvider::new_in_memory_for_tests("default".to_string()),
+            ),
             provider_registry: Arc::new(memory::provider_registry::TenantProviderRegistry::new(
                 None, None,
             )),

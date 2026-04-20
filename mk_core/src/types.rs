@@ -258,13 +258,23 @@ pub struct TenantConfigField {
     pub value: serde_json::Value,
 }
 
+/// Per-tenant secret reference stored inside a [`TenantConfigDocument`].
+///
+/// Pairs the ownership metadata (who administers this secret \u2014 platform vs
+/// tenant) with the storage-agnostic [`crate::secret::SecretReference`]
+/// that points at the actual ciphertext in the configured
+/// `storage::secret_backend::SecretBackend`.
+///
+/// Kept as a struct (rather than inlining `SecretReference` directly into
+/// `secret_references` map values) because ownership is a tenant-config-level
+/// concern that the secret backend itself does not know about.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TenantSecretReference {
     pub logical_name: String,
     pub ownership: TenantConfigOwnership,
-    pub secret_name: String,
-    pub secret_key: String,
+    #[serde(flatten)]
+    pub reference: crate::secret::SecretReference,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -275,12 +285,19 @@ pub struct TenantConfigDocument {
     pub secret_references: std::collections::BTreeMap<String, TenantSecretReference>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+/// Caller-supplied write-side secret payload. Accepted by
+/// [`crate::traits::TenantConfigProvider::set_secret_entry`]; the provider
+/// writes the bytes through `SecretBackend::put` and returns a
+/// [`TenantSecretReference`] for storage in the tenant config document.
+///
+/// `secret_value` is [`crate::SecretBytes`] (not `String`) so it zeroizes on
+/// drop and never prints in plaintext via `Debug` / `Display` / `Serialize`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TenantSecretEntry {
     pub logical_name: String,
     pub ownership: TenantConfigOwnership,
-    pub secret_value: String,
+    pub secret_value: crate::SecretBytes,
 }
 
 impl TenantConfigDocument {

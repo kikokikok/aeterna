@@ -166,8 +166,18 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     let platform_embedding = create_embedding_service_from_env()?;
     let platform_llm = llm_service.clone();
 
+    // Build the shared SecretBackend (envelope-encrypted Postgres rows with
+    // the DEK wrapped by a KMS provider selected via AETERNA_KMS_PROVIDER).
+    // The TenantConfigProvider delegates secret ops to this instance; other
+    // call sites (e.g. git token resolution in B2) will reuse the same Arc.
+    let secret_backend =
+        storage::secret_backend::build_secret_backend_from_env(postgres.pool().clone())
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to build tenant secret backend: {e}"))?;
+
     let tenant_config_provider = Arc::new(KubernetesTenantConfigProvider::new(
         tenant_config_provider_namespace_from_config(&config.k8s_auth),
+        secret_backend.clone(),
     ));
 
     let mut registry =
@@ -189,11 +199,18 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         let secret_resolver: SecretResolver = Arc::new(move |tenant_id, logical_name| {
             let provider = cp_for_secret.clone();
             Box::pin(async move {
-                provider
-                    .get_secret_value(&tenant_id, &logical_name)
+                // `SecretResolver` still yields `Option<String>` to its
+                // downstream consumers (LLM / embedding SDK configs). We
+                // unwrap the SecretBytes, copy to a String, and let the
+                // SecretBytes container drop (zeroizing) at the end of this
+                // closure. The resulting String lives only for the
+                // duration of the caller's request; it is never logged.
+                let bytes = provider
+                    .get_secret_bytes(&tenant_id, &logical_name)
                     .await
                     .ok()
-                    .flatten()
+                    .flatten()?;
+                String::from_utf8(bytes.expose().to_vec()).ok()
             })
         });
 

@@ -36,6 +36,38 @@ use uuid::Uuid;
 
 use crate::kms::{KmsError, KmsProvider};
 
+/// Build a production-ready [`SecretBackend`] from env configuration.
+///
+/// The selector lives in `AETERNA_KMS_PROVIDER`:
+///
+/// - `local` (default) \u2014 [`crate::kms::LocalKmsProvider`] seeded from
+///   `AETERNA_KMS_LOCAL_KEY` (32 bytes, base64 or hex). Logs a WARN on every
+///   encrypt/decrypt and is intended for dev / CI only.
+/// - `aws` \u2014 [`crate::kms::AwsKmsProvider`] targeting the CMK ARN in
+///   `AETERNA_KMS_AWS_KEY_ARN`. Uses the default AWS credential chain
+///   (static AK/SK, IRSA, or instance profile).
+///
+/// B2 tightens this (required env, startup self-test). For now the helper
+/// centralises the wiring so the CLI bootstrap call site stays a one-liner.
+pub async fn build_secret_backend_from_env(
+    pool: PgPool,
+) -> Result<Arc<dyn SecretBackend>, SecretBackendError> {
+    let selector = std::env::var("AETERNA_KMS_PROVIDER").unwrap_or_else(|_| "local".to_string());
+
+    let kms: Arc<dyn KmsProvider> = match selector.to_ascii_lowercase().as_str() {
+        "aws" => {
+            let arn = std::env::var("AETERNA_KMS_AWS_KEY_ARN")
+                .map_err(|_| SecretBackendError::UnsupportedReference("AETERNA_KMS_AWS_KEY_ARN"))?;
+            Arc::new(crate::kms::AwsKmsProvider::new(arn).await?)
+        }
+        // Anything else falls through to Local \u2014 including the empty string,
+        // which is how local-dev unit tests instantiate this.
+        _ => Arc::new(crate::kms::LocalKmsProvider::from_env()?),
+    };
+
+    Ok(Arc::new(PostgresSecretBackend::new(pool, kms)))
+}
+
 /// Errors raised by any [`SecretBackend`] implementation.
 #[derive(Debug, Error)]
 pub enum SecretBackendError {
@@ -268,6 +300,93 @@ impl SecretBackend for PostgresSecretBackend {
             let logical_name: String = row.try_get("logical_name")?;
             out.push((logical_name, SecretReference::Postgres { secret_id: id }));
         }
+        Ok(out)
+    }
+}
+
+/// In-memory [`SecretBackend`] for tests and CLI fixtures.
+///
+/// Stores plaintext in a `Mutex<HashMap>` keyed by `(tenant_db_id,
+/// logical_name) -> (secret_id, bytes)`. Issues `SecretReference::Postgres`
+/// references so it is swap-in compatible with the production backend.
+///
+/// NOT for production use: values are not encrypted, nothing is persisted,
+/// and the backend leaks memory for the lifetime of the process.
+#[derive(Default)]
+pub struct InMemorySecretBackend {
+    inner: std::sync::Mutex<
+        std::collections::HashMap<(Uuid, String), (Uuid, Vec<u8>)>, /* (tenant, logical) -> (secret_id, bytes) */
+    >,
+    by_id: std::sync::Mutex<std::collections::HashMap<Uuid, (Uuid, String)>>, /* secret_id -> (tenant, logical) */
+}
+
+impl InMemorySecretBackend {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[async_trait]
+impl SecretBackend for InMemorySecretBackend {
+    async fn put(
+        &self,
+        tenant_db_id: Uuid,
+        logical_name: &str,
+        value: SecretBytes,
+    ) -> Result<SecretReference, SecretBackendError> {
+        let mut map = self.inner.lock().expect("poisoned");
+        let mut by_id = self.by_id.lock().expect("poisoned");
+        let key = (tenant_db_id, logical_name.to_string());
+        let secret_id = map
+            .get(&key)
+            .map(|(id, _)| *id)
+            .unwrap_or_else(Uuid::new_v4);
+        map.insert(key.clone(), (secret_id, value.expose().to_vec()));
+        by_id.insert(secret_id, key);
+        Ok(SecretReference::Postgres { secret_id })
+    }
+
+    async fn get(&self, reference: &SecretReference) -> Result<SecretBytes, SecretBackendError> {
+        let SecretReference::Postgres { secret_id } = reference;
+        let by_id = self.by_id.lock().expect("poisoned");
+        let key = by_id
+            .get(secret_id)
+            .ok_or_else(|| SecretBackendError::NotFound(secret_id.to_string()))?
+            .clone();
+        drop(by_id);
+        let map = self.inner.lock().expect("poisoned");
+        let (_, bytes) = map
+            .get(&key)
+            .ok_or_else(|| SecretBackendError::NotFound(secret_id.to_string()))?;
+        Ok(SecretBytes::new(bytes.clone()))
+    }
+
+    async fn delete(&self, reference: &SecretReference) -> Result<(), SecretBackendError> {
+        let SecretReference::Postgres { secret_id } = reference;
+        let mut by_id = self.by_id.lock().expect("poisoned");
+        if let Some(key) = by_id.remove(secret_id) {
+            self.inner.lock().expect("poisoned").remove(&key);
+        }
+        Ok(())
+    }
+
+    async fn list(
+        &self,
+        tenant_db_id: Uuid,
+    ) -> Result<Vec<(String, SecretReference)>, SecretBackendError> {
+        let map = self.inner.lock().expect("poisoned");
+        let mut out: Vec<(String, SecretReference)> = map
+            .iter()
+            .filter_map(|((tid, name), (sid, _))| {
+                if *tid == tenant_db_id {
+                    Some((name.clone(), SecretReference::Postgres { secret_id: *sid }))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
         Ok(out)
     }
 }
