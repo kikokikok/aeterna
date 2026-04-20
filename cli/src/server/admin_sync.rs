@@ -390,11 +390,16 @@ where
             .fields
             .get(github_config_keys::INSTALLATION_ID)
             .and_then(|field| value_as_string(&field.value));
+        // Pull the GitHub App PEM as bytes, then materialize into a `String`
+        // for the octocrab client. The `SecretBytes` container zeroizes on
+        // drop; the resulting `String` lives only for the duration of this
+        // installation-credentials construction.
         let private_key_pem = state
             .tenant_config_provider
-            .get_secret_value(&tenant_id_typed, github_config_keys::APP_PEM)
+            .get_secret_bytes(&tenant_id_typed, github_config_keys::APP_PEM)
             .await
             .map_err(|err| anyhow::anyhow!("Failed to read tenant secret for {tenant_id}: {err}"))?
+            .and_then(|bytes| String::from_utf8(bytes.expose().to_vec()).ok())
             .filter(|value| !value.trim().is_empty());
 
         if let (
@@ -836,7 +841,9 @@ mod tests {
     #[serial]
     async fn build_github_config_for_tenant_falls_back_to_env() {
         let tenant_id = Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
-        let provider = Arc::new(KubernetesTenantConfigProvider::new("default".to_string()));
+        let provider = Arc::new(KubernetesTenantConfigProvider::new_in_memory_for_tests(
+            "default".to_string(),
+        ));
         let state = test_app_state(provider).await;
 
         let config =

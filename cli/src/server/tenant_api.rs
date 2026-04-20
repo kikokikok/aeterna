@@ -60,12 +60,18 @@ pub struct UpsertTenantConfigRequest {
     pub secret_references: BTreeMap<String, TenantSecretReference>,
 }
 
+/// Inbound API body for `PUT /tenants/:id/config/secrets/:name`.
+///
+/// `secret_value` is a [`mk_core::SecretBytes`] rather than a `String`: the
+/// plaintext is wrapped into the zeroize-on-drop container at the serde
+/// boundary (see the `Deserialize` impl on `SecretBytes`) so it never
+/// reaches normal logging or `Debug` output.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetTenantSecretRequest {
     #[serde(default = "default_tenant_ownership")]
     pub ownership: TenantConfigOwnership,
-    pub secret_value: String,
+    pub secret_value: mk_core::SecretBytes,
 }
 
 // ---------------------------------------------------------------------------
@@ -341,6 +347,18 @@ fn map_tenant_config_provider_error(
             &format!("tenant_config_{operation}_failed"),
             &message,
         ),
+        // Secret-backend failures (KMS unreachable, AEAD tampering, DB
+        // error) are internal. The message is intentionally generic so we
+        // do not leak KMS ARNs, key ids, or row shapes to API clients;
+        // the root cause lands in the structured log via `err`.
+        TenantConfigProviderError::Secret(err) => {
+            tracing::error!(operation, error = ?err, "tenant secret backend failure");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("tenant_config_{operation}_failed"),
+                "tenant secret backend is unavailable",
+            )
+        }
     }
 }
 
@@ -2492,7 +2510,7 @@ async fn set_tenant_llm_provider(
         let secret = TenantSecretEntry {
             logical_name: config_keys::LLM_API_KEY.to_string(),
             ownership: TenantConfigOwnership::Platform,
-            secret_value: api_key.clone(),
+            secret_value: mk_core::secret::SecretBytes::from(api_key.clone()),
         };
         if let Err(err) = state
             .tenant_config_provider
@@ -2628,7 +2646,7 @@ async fn set_tenant_embedding_provider(
         let secret = TenantSecretEntry {
             logical_name: config_keys::EMBEDDING_API_KEY.to_string(),
             ownership: TenantConfigOwnership::Platform,
-            secret_value: api_key.clone(),
+            secret_value: mk_core::secret::SecretBytes::from(api_key.clone()),
         };
         if let Err(err) = state
             .tenant_config_provider
@@ -3435,13 +3453,18 @@ pub struct ManifestConfig {
     pub secret_references: BTreeMap<String, TenantSecretReference>,
 }
 
+/// Inbound manifest sub-payload carrying a single tenant secret.
+///
+/// Same shape rationale as [`SetTenantSecretRequest`]: `secret_value` is a
+/// [`mk_core::SecretBytes`] to keep plaintext out of `Debug`, logs, and any
+/// accidental `Serialize` round-trip once the manifest request is parsed.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManifestSecret {
     pub logical_name: String,
     #[serde(default = "default_tenant_ownership")]
     pub ownership: TenantConfigOwnership,
-    pub secret_value: String,
+    pub secret_value: mk_core::SecretBytes,
 }
 
 #[derive(Debug, Deserialize)]
@@ -4440,8 +4463,9 @@ mod tests {
             )
             .with_connection_registry(git_provider_connection_registry.clone()),
         );
-        let tenant_config_provider =
-            Arc::new(KubernetesTenantConfigProvider::new("default".to_string()));
+        let tenant_config_provider = Arc::new(
+            KubernetesTenantConfigProvider::new_in_memory_for_tests("default".to_string()),
+        );
         let tenant = tenant_store.create_tenant("acme", "Acme Corp").await.ok()?;
 
         let state = Arc::new(AppState {
@@ -6218,8 +6242,9 @@ mod tests {
                 TenantSecretReference {
                     logical_name: config_keys::LLM_API_KEY.to_string(),
                     ownership: TenantConfigOwnership::Platform,
-                    secret_name: "test-secret".to_string(),
-                    secret_key: "api-key".to_string(),
+                    reference: mk_core::SecretReference::Postgres {
+                        secret_id: uuid::Uuid::nil(),
+                    },
                 },
             );
             let config = TenantConfigDocument {

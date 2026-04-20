@@ -18,7 +18,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use utoipa::ToSchema;
+use utoipa::{PartialSchema, ToSchema};
 use uuid::Uuid;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -116,6 +116,27 @@ impl Serialize for SecretBytes {
     }
 }
 
+/// Deserialize a plaintext string from the input into a `SecretBytes`.
+///
+/// This is the deliberate shape for **API input boundaries** (tenant secret
+/// writes in the admin API): the client sends the plaintext secret as a JSON
+/// string and the server wraps it into a [`SecretBytes`] immediately, so it
+/// zeroizes on drop and never leaks via `Debug`/`Display`/`Serialize`.
+///
+/// **Do not** use `Deserialize` to round-trip a previously serialized
+/// `SecretBytes`: `serialize` writes `"<redacted>"` on purpose; the only
+/// correct round-trip path for stored secrets is through [`SecretReference`]
+/// + a [`storage::secret_backend::SecretBackend`].
+impl<'de> Deserialize<'de> for SecretBytes {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(SecretBytes::from(s.into_bytes()))
+    }
+}
+
 impl PartialEq for SecretBytes {
     /// Constant-time equality on the underlying bytes.
     ///
@@ -135,6 +156,51 @@ impl PartialEq for SecretBytes {
 }
 
 impl Eq for SecretBytes {}
+
+// OpenAPI + JSON Schema: expose `SecretBytes` as a plain string on the wire.
+// This is accurate for both read and write shapes: inbound requests carry
+// plaintext strings, outbound responses redact to the literal `"<redacted>"`.
+impl PartialSchema for SecretBytes {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        String::schema()
+    }
+}
+
+impl ToSchema for SecretBytes {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("SecretBytes")
+    }
+}
+
+// `Uuid` does not implement `schemars::JsonSchema` in this workspace's
+// schemars feature set. We describe `SecretReference` manually as an
+// externally-tagged object: `{ "kind": "postgres", "secretId": "<uuid>" }`.
+impl schemars::JsonSchema for SecretReference {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("SecretReference")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "object",
+            "required": ["kind", "secretId"],
+            "properties": {
+                "kind": { "type": "string", "enum": ["postgres"] },
+                "secretId": { "type": "string", "format": "uuid" }
+            }
+        })
+    }
+}
+
+impl schemars::JsonSchema for SecretBytes {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("SecretBytes")
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        String::json_schema(generator)
+    }
+}
 
 /// A reference to secret material stored by a [`SecretBackend`].
 ///

@@ -571,15 +571,18 @@ pub trait TenantConfigProvider: Send + Sync {
         logical_name: &str,
     ) -> Result<bool, Self::Error>;
 
-    /// Retrieve the plaintext value of a tenant secret by its logical name.
+    /// Retrieve the plaintext bytes of a tenant secret by its logical name.
     ///
-    /// Returns `None` if no secret with the given logical name exists for this
-    /// tenant.  Implementations MUST NOT log or trace the returned value.
-    async fn get_secret_value(
+    /// Returns `None` if no secret with the given logical name exists for
+    /// this tenant. The returned [`crate::SecretBytes`] zeroizes on drop and
+    /// never leaks through `Debug` / `Display` / `Serialize` \u2014 callers MUST
+    /// consume the value directly and drop it; they MUST NOT copy it into
+    /// `String`, log it, or serialize it to another transport.
+    async fn get_secret_bytes(
         &self,
         tenant_id: &crate::types::TenantId,
         logical_name: &str,
-    ) -> Result<Option<String>, Self::Error>;
+    ) -> Result<Option<crate::SecretBytes>, Self::Error>;
 
     async fn validate(
         &self,
