@@ -2,3 +2,8 @@ node_modules/
 dist/
 .env.local
 *.tsbuildinfo
+
+# Playwright
+/playwright-report/
+/test-results/
+/playwright/.cache/
