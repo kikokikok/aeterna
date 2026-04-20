@@ -1,6 +1,6 @@
 # High Availability Deployment Guide
 
-> **⚠️ Reference Only** — The primary supported production deployment path is the **Helm chart** documented in [`INSTALL.md`](../../INSTALL.md). The manifests referenced below (`infrastructure/ha/`) are supplementary reference configurations for operators who need to customize HA storage independently of the chart. The Helm chart already includes HA sizing presets (`values-production.yaml`, `values-large.yaml`) that configure replicas, PDBs, and anti-affinity for production use.
+> **⚠️ Reference Only** — The primary supported production deployment path is the **Helm chart** documented in the [Helm quickstart](../helm/quickstart-local.md) (or [`INSTALL.md`](https://github.com/kikokikok/aeterna/blob/master/INSTALL.md) on GitHub). The manifests referenced below (`infrastructure/ha/`) are supplementary reference configurations for operators who need to customize HA storage independently of the chart. The Helm chart already includes HA sizing presets (`values-large.yaml` for production, `values-medium.yaml` for staging) that configure replicas, PDBs, and anti-affinity for production use.
 
 ## Overview
 
@@ -20,7 +20,7 @@ The HA setup consists of the following components:
 - Kubernetes cluster with at least 3 nodes across multiple Availability Zones (AZs).
 - `kubectl` and `helm` installed and configured.
 - The `infrastructure/ha/` directory in the Aeterna repository contains the reference manifests.
-- **For most deployments**: Use the Helm chart with `values-production.yaml` or `values-large.yaml` instead of deploying these manifests directly.
+- **For most deployments**: Use the Helm chart with `values-large.yaml` (production sizing) or `values-medium.yaml` (staging sizing) instead of deploying these manifests directly.
 
 ## Component Configuration
 

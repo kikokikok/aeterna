@@ -42,7 +42,7 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           routeBasePath: 'docs',
           editUrl:
-            'https://github.com/kikokikok/aeterna/tree/main/website/',
+            'https://github.com/kikokikok/aeterna/tree/master/website/',
         },
         blog: false,
         theme: {
