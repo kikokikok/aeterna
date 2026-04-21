@@ -358,7 +358,9 @@ async fn test_app_state_with_plugin_auth(
             tenant_runtime_state: std::sync::Arc::new(
                 aeterna::server::tenant_runtime_state::TenantRuntimeRegistry::new(),
             ),
-            bootstrap_tracker: std::sync::Arc::new(aeterna::server::bootstrap_tracker::BootstrapTracker::new()),
+            bootstrap_tracker: std::sync::Arc::new(
+                aeterna::server::bootstrap_tracker::BootstrapTracker::new(),
+            ),
         }),
         tempdir,
     ))
