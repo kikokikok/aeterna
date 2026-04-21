@@ -354,6 +354,9 @@ async fn test_app_state_with_plugin_auth(
             )),
             git_provider_connection_registry,
             redis_conn: None,
+            tenant_runtime_state: std::sync::Arc::new(
+                aeterna::server::tenant_runtime_state::TenantRuntimeRegistry::new(),
+            ),
         }),
         tempdir,
     ))

@@ -55,6 +55,12 @@ pub async fn run(args: ServeArgs) -> anyhow::Result<()> {
     let lifecycle_mgr = lifecycle::LifecycleManager::new();
     lifecycle_mgr.start(state.clone());
 
+    // Eager tenant wiring (B2 task 5.2 — design §D5 boot loop). Spawned
+    // detached; the HTTP server binds immediately and `/ready` (task 5.3)
+    // reports the progress. See
+    // `cli/src/server/tenant_eager_wire.rs` for failure policy.
+    crate::server::tenant_eager_wire::spawn_eager_wire(state.clone());
+
     let app_listener = TcpListener::bind(app_addr).await?;
     let metrics_listener = TcpListener::bind(metrics_addr).await?;
 
