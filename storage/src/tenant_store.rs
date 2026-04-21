@@ -467,9 +467,7 @@ impl TenantStore {
         .rows_affected();
 
         if rows_affected == 0 {
-            return Err(PostgresError::NotFound(format!(
-                "tenant not found: {slug}"
-            )));
+            return Err(PostgresError::NotFound(format!("tenant not found: {slug}")));
         }
         Ok(())
     }
@@ -499,9 +497,7 @@ impl TenantStore {
         .rows_affected();
 
         if rows_affected == 0 {
-            return Err(PostgresError::NotFound(format!(
-                "tenant not found: {slug}"
-            )));
+            return Err(PostgresError::NotFound(format!("tenant not found: {slug}")));
         }
         Ok(())
     }

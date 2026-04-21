@@ -932,11 +932,9 @@ impl PostgresBackend {
 
         // Backfill for test databases that pre-date the manifest-state
         // columns (production path: migration 027_tenant_manifest_state.sql).
-        sqlx::query(
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS last_applied_manifest_hash TEXT",
-        )
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS last_applied_manifest_hash TEXT")
+            .execute(&self.pool)
+            .await?;
         sqlx::query(
             "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS manifest_generation BIGINT NOT NULL DEFAULT 0",
         )

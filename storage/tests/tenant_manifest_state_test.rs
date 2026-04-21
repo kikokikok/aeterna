@@ -138,13 +138,11 @@ async fn db_rejects_malformed_hash_via_check_constraint() {
 
     // "sha256:" + only 63 hex chars --> must fail the CHECK.
     let bad = "sha256:abcd";
-    let res = sqlx::query(
-        "UPDATE tenants SET last_applied_manifest_hash = $1 WHERE slug = $2",
-    )
-    .bind(bad)
-    .bind(&slug)
-    .execute(&pool)
-    .await;
+    let res = sqlx::query("UPDATE tenants SET last_applied_manifest_hash = $1 WHERE slug = $2")
+        .bind(bad)
+        .bind(&slug)
+        .execute(&pool)
+        .await;
     assert!(
         res.is_err(),
         "DB must reject malformed manifest hash, but UPDATE succeeded"
