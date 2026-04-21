@@ -206,18 +206,22 @@ impl TenantRuntimeRegistry {
                 *entry = *rev;
             }
         }
-        guard.state.insert(slug.to_string(), state)
+        let prev = guard.state.insert(slug.to_string(), state.clone());
+        // B2 task 5.6: emit metrics under the write lock so the
+        // prev→next transition is observed atomically. See module doc
+        // on tenant_metrics for the rationale.
+        super::tenant_metrics::record_transition(slug, prev.as_ref(), Some(&state));
+        prev
     }
 
     /// Transition `slug` to `Loading { since = now }`. Idempotent —
     /// re-calling while already `Loading` refreshes the `since` stamp so
     /// long-running wirings can show progress via the status endpoint.
     pub async fn mark_loading(&self, slug: &str) {
-        self.inner
-            .write()
-            .await
-            .state
-            .insert(slug.to_string(), TenantRuntimeState::loading_now());
+        let mut guard = self.inner.write().await;
+        let next = TenantRuntimeState::loading_now();
+        let prev = guard.state.insert(slug.to_string(), next.clone());
+        super::tenant_metrics::record_transition(slug, prev.as_ref(), Some(&next));
     }
 
     /// Transition `slug` to `Available`. Increments `last_rev` under the
@@ -232,10 +236,9 @@ impl TenantRuntimeRegistry {
             .unwrap_or(0)
             .saturating_add(1);
         guard.last_rev.insert(slug.to_string(), next_rev);
-        guard.state.insert(
-            slug.to_string(),
-            TenantRuntimeState::available_now(next_rev),
-        );
+        let next = TenantRuntimeState::available_now(next_rev);
+        let prev = guard.state.insert(slug.to_string(), next.clone());
+        super::tenant_metrics::record_transition(slug, prev.as_ref(), Some(&next));
         next_rev
     }
 
@@ -252,14 +255,13 @@ impl TenantRuntimeRegistry {
             }
             _ => 1,
         };
-        guard.state.insert(
-            slug.to_string(),
-            TenantRuntimeState::LoadingFailed {
-                reason,
-                last_attempt_at: SystemTime::now(),
-                retry_count,
-            },
-        );
+        let next = TenantRuntimeState::LoadingFailed {
+            reason,
+            last_attempt_at: SystemTime::now(),
+            retry_count,
+        };
+        let prev = guard.state.insert(slug.to_string(), next.clone());
+        super::tenant_metrics::record_transition(slug, prev.as_ref(), Some(&next));
         retry_count
     }
 
@@ -272,7 +274,12 @@ impl TenantRuntimeRegistry {
     pub async fn forget(&self, slug: &str) -> Option<TenantRuntimeState> {
         let mut guard = self.inner.write().await;
         guard.last_rev.remove(slug);
-        guard.state.remove(slug)
+        let prev = guard.state.remove(slug);
+        // Zero out the per-slug gauges and log the absent transition.
+        // See tenant_metrics module doc on why series are zeroed rather
+        // than deleted.
+        super::tenant_metrics::record_transition(slug, prev.as_ref(), None);
+        prev
     }
 
     /// Snapshot the whole registry as `(slug, state)` pairs. Used by the
