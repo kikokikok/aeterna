@@ -24,6 +24,7 @@ pub mod team_api;
 pub mod tenant_api;
 pub mod tenant_eager_wire;
 pub mod tenant_lazy_wire;
+pub mod tenant_metrics;
 pub mod tenant_pubsub;
 pub mod tenant_runtime_state;
 pub mod tenant_wiring_api;
@@ -396,7 +397,22 @@ pub async fn authenticated_tenant_context(
         };
 
     let ctx = context::request_context(state, effective_headers).await?;
-    let tenant = ctx.require_target_tenant(effective_headers)?.clone();
+    // B2 task 5.4: gate every tenant-scoped handler on wiring state.
+    // `require_available_tenant` runs `require_target_tenant` internally
+    // (so `select_tenant` still fires when no target is bound) and then
+    // consults `TenantRuntimeRegistry`. Loading / LoadingFailed / absent
+    // tenants get a typed 503 `tenant_unavailable` with a `Retry-After`
+    // header — users never see a resolver stall or a confusing 500
+    // from an empty provider cache. Reasons stay out of the response;
+    // the PA status endpoint (task 5.5) is the authenticated surface
+    // that carries diagnostic detail. A single chokepoint here covers
+    // every caller of `authenticated_tenant_context` /
+    // `tenant_scoped_context`, which is every tenant-scoped handler in
+    // the server — no per-handler sweep needed.
+    let tenant = ctx
+        .require_available_tenant(state, effective_headers)
+        .await?
+        .clone();
 
     // Tenant-scoped roles: RequestContext carries *instance-scope* roles
     // (so PlatformAdmin is always visible); legacy handlers expect
