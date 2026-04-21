@@ -22,6 +22,7 @@ pub mod sessions;
 pub mod sync;
 pub mod team_api;
 pub mod tenant_api;
+pub mod tenant_runtime_state;
 pub mod user_api;
 pub mod webhooks;
 
