@@ -301,25 +301,25 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     a2a_auth_state.validate()?;
     // Build a Redis connection manager for shared state stores.
     // If Redis is available, use Redis-backed stores for HA; otherwise fall back to in-memory.
-    let redis_conn: Option<Arc<redis::aio::ConnectionManager>> = {
+    let (redis_conn, redis_url): (Option<Arc<redis::aio::ConnectionManager>>, Option<String>) = {
         let rc = &config.providers.redis;
         let url = format!("redis://{}:{}/{}", rc.host, rc.port, rc.db);
         match redis::Client::open(url.as_str()) {
             Ok(client) => match client.get_connection_manager().await {
                 Ok(cm) => {
                     tracing::info!("Redis connection manager established for shared state stores");
-                    Some(Arc::new(cm))
+                    (Some(Arc::new(cm)), Some(url))
                 }
                 Err(e) => {
                     tracing::warn!(
                         "Failed to connect to Redis ({url}): {e}. Falling back to in-memory stores."
                     );
-                    None
+                    (None, None)
                 }
             },
             Err(e) => {
                 tracing::warn!("Invalid Redis URL ({url}): {e}. Falling back to in-memory stores.");
-                None
+                (None, None)
             }
         }
     };
@@ -405,6 +405,7 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         provider_registry,
         git_provider_connection_registry,
         redis_conn,
+        redis_url,
         tenant_runtime_state: Arc::new(
             crate::server::tenant_runtime_state::TenantRuntimeRegistry::new(),
         ),

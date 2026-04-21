@@ -4357,6 +4357,23 @@ async fn provision_tenant(
         }
     }
 
+    // ── Post-apply: local re-wire + cross-pod broadcast ─────────────────
+    //
+    // Even a partial apply (`overall_ok == false`) can legitimately change
+    // provider config/secrets, so we broadcast on every provision attempt
+    // that at minimum ensured the tenant row (we returned early above if
+    // that failed). The handler is idempotent; over-broadcasting is
+    // cheap. The local `handle_event` call guarantees this pod's caches
+    // converge immediately without waiting for the pub/sub round-trip —
+    // important because the same HTTP client may hit this pod again on
+    // the very next request and deserves to see the new state.
+    let change = super::tenant_pubsub::TenantChangeEvent::new(
+        tenant_record.slug.clone(),
+        super::tenant_pubsub::TenantChangeKind::Provisioned,
+    );
+    super::tenant_pubsub::handle_event(state.as_ref(), change.clone()).await;
+    super::tenant_pubsub::publish(state.as_ref(), &change).await;
+
     // ── Final response ────────────────────────────────────────────────────
     let status = if overall_ok {
         StatusCode::OK
@@ -4671,6 +4688,7 @@ mod tests {
             )),
             git_provider_connection_registry,
             redis_conn: None,
+            redis_url: None,
             tenant_runtime_state: std::sync::Arc::new(
                 crate::server::tenant_runtime_state::TenantRuntimeRegistry::new(),
             ),
