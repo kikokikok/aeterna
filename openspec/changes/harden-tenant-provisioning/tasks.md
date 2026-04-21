@@ -38,7 +38,7 @@
 
 ### 5. Per-tenant provider state and readiness gate _(design per 0.2)_
 
-- [ ] 5.1 Define `TenantRuntimeState` enum `{ Loading, Available, LoadingFailed { reason } }`.
+- [x] 5.1 Define `TenantRuntimeState` enum `{ Loading, Available, LoadingFailed { reason } }`. _(PR: `feat/b2-tenant-runtime-state` — adds `cli/src/server/tenant_runtime_state.rs` with the enum, an async-safe `TenantRuntimeRegistry`, monotonic `rev` counter that survives Loading/Failed transitions, `retry_count` on consecutive failures, and 11 unit tests.)_
 - [!] 5.2 Implement the wiring model chosen in 0.2. If lazy: record first-resolution outcome per tenant and surface it. If eager: startup loop over persisted tenants.
 - [~] 5.3 Extend `/ready` (`cli/src/server/health.rs:40`, handler at L58) to include a tenant-state check in addition to current PG + vector checks. Return 503 until bootstrap completes AND all tenants resolved (per 0.2).
 - [ ] 5.4 In tenant-scoped routes (`/api/v1/memory/*` and siblings), short-circuit to HTTP 503 `{error: "tenant_unavailable", tenantSlug, reason}` when target tenant is `LoadingFailed`.
