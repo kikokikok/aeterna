@@ -160,31 +160,27 @@ pub(super) async fn wire_one(
     tenant_id: &mk_core::types::TenantId,
 ) -> anyhow::Result<()> {
     // The provider registry caches on success; a miss falls through to
-    // platform defaults and returns `None`, which is NOT an error. Only a
-    // resolution error (bad config, missing secret, unreachable endpoint)
-    // should mark the tenant failed.
+    // platform defaults and returns `Ok(None)`, which is NOT an error.
+    // Only a resolution error (config provider broken, tenant manifest
+    // references a missing secret, unknown provider type) should mark
+    // the tenant failed.
     //
-    // The current `get_*_service` API swallows resolution errors and
-    // returns `None` indistinguishably from "no override configured".
-    // Until that API grows a fallible variant, eager-wiring can only
-    // detect failures that surface as resolver panics or config-provider
-    // errors. This is acceptable for the first drop: the readiness
-    // signal is strictly better than the status quo (none), and the
-    // provider-level failure surface is a known follow-up (see TODO
-    // below).
-    //
-    // TODO(b2-5.2-followup): tighten `get_*_service` to return
-    // `Result<Option<_>, ResolutionError>` so real wiring failures
-    // bubble up here instead of being logged-and-swallowed inside the
-    // registry.
-    let _ = state
+    // B2 5.2 followup: switched from the Option-returning
+    // `get_*_service` to the fallible `try_get_*_service` so that
+    // `ResolverError::ConfigProviderFailed` and `BuildFailed` surface
+    // here as the cause of a `LoadingFailed{reason}` instead of being
+    // logged-and-swallowed inside the registry (which historically
+    // resulted in an inaccurate Available/platform-default fallback).
+    state
         .provider_registry
-        .get_llm_service(tenant_id, state.tenant_config_provider.as_ref())
-        .await;
-    let _ = state
+        .try_get_llm_service(tenant_id, state.tenant_config_provider.as_ref())
+        .await
+        .map_err(|e| anyhow::anyhow!("llm: {e}"))?;
+    state
         .provider_registry
-        .get_embedding_service(tenant_id, state.tenant_config_provider.as_ref())
-        .await;
+        .try_get_embedding_service(tenant_id, state.tenant_config_provider.as_ref())
+        .await
+        .map_err(|e| anyhow::anyhow!("embedding: {e}"))?;
     Ok(())
 }
 
