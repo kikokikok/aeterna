@@ -23,6 +23,7 @@ pub mod sync;
 pub mod team_api;
 pub mod tenant_api;
 pub mod tenant_eager_wire;
+pub mod tenant_pubsub;
 pub mod tenant_runtime_state;
 pub mod user_api;
 pub mod webhooks;
@@ -124,6 +125,13 @@ pub struct AppState {
     /// When present, backup job stores, dead-letter queue, remediation store,
     /// and lifecycle distributed locks use Redis instead of in-memory state.
     pub redis_conn: Option<Arc<redis::aio::ConnectionManager>>,
+    /// Redis connection URL, retained when [`Self::redis_conn`] is `Some`.
+    ///
+    /// Kept alongside the multiplexed manager because Redis Pub/Sub requires
+    /// a dedicated (non-multiplexed) connection per subscriber — the
+    /// manager cannot service `SUBSCRIBE`. Consumers wanting Pub/Sub must
+    /// reopen a client from this URL.
+    pub redis_url: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

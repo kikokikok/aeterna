@@ -1980,6 +1980,7 @@ mod tests {
             )),
             git_provider_connection_registry,
             redis_conn: None,
+            redis_url: None,
             tenant_runtime_state: std::sync::Arc::new(
                 crate::server::tenant_runtime_state::TenantRuntimeRegistry::new(),
             ),
@@ -2568,6 +2569,7 @@ mod tests {
             )),
             git_provider_connection_registry,
             redis_conn: None,
+            redis_url: None,
             tenant_runtime_state: std::sync::Arc::new(
                 crate::server::tenant_runtime_state::TenantRuntimeRegistry::new(),
             ),
