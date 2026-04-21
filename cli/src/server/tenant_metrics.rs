@@ -173,7 +173,48 @@ pub fn record_transition(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshotter};
+    use std::collections::HashMap;
     use std::time::Duration;
+
+    /// Run `f` with a fresh `DebuggingRecorder` installed as the
+    /// thread-local metrics recorder, returning the captured snapshot.
+    /// Using `with_local_recorder` keeps emission assertions parallel-safe:
+    /// the global recorder is untouched, so other tests running in parallel
+    /// do not race ours.
+    fn capture<F: FnOnce()>(f: F) -> Snapshotter {
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        metrics::with_local_recorder(&recorder, f);
+        snapshotter
+    }
+
+    /// Collapse a snapshot to a map keyed by `(metric_name, sorted_labels)`
+    /// so assertions can look up specific series by content regardless of
+    /// emission order.
+    fn index(snap: &Snapshotter) -> HashMap<(String, Vec<(String, String)>), DebugValue> {
+        let mut out = HashMap::new();
+        for (ck, _unit, _desc, val) in snap.snapshot().into_vec() {
+            let key = ck.key();
+            let name = key.name().to_string();
+            let mut labels: Vec<(String, String)> = key
+                .labels()
+                .map(|l| (l.key().to_string(), l.value().to_string()))
+                .collect();
+            labels.sort();
+            out.insert((name, labels), val);
+        }
+        out
+    }
+
+    fn labels<const N: usize>(pairs: [(&str, &str); N]) -> Vec<(String, String)> {
+        let mut v: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        v.sort();
+        v
+    }
 
     #[test]
     fn state_label_covers_all_variants() {
@@ -249,5 +290,334 @@ mod tests {
         assert!(!should_record(Some(&available), Some(&loading))); // rewire kickoff
         assert!(!should_record(Some(&failed), Some(&loading))); // retry kickoff
         assert!(!should_record(Some(&available), None)); // forget
+    }
+
+    // ========================================================================
+    // Emission-value assertions (B2 5.6 followup)
+    //
+    // The three tests above verify SELECTION logic (which metric to emit
+    // for which transition). The tests below install a `DebuggingRecorder`
+    // and verify that the metric values + labels actually written match
+    // the documented contract. Together they catch both logic bugs and
+    // recorder-integration bugs (wrong metric name, wrong label key,
+    // mis-ordered label args, accidental double-emit, ...).
+    // ========================================================================
+
+    /// Absent → Loading: the kickoff transition.
+    /// Expected emissions:
+    /// - counter `tenant_state_transitions_total{from=absent,to=loading}` = 1
+    /// - gauge   `tenant_state{slug,state=loading}` = 1
+    /// - gauge   `tenant_state{slug,state=available}` = 0
+    /// - gauge   `tenant_state{slug,state=loadingFailed}` = 0
+    /// - NO histogram sample (wiring has not completed yet)
+    #[test]
+    fn emits_kickoff_transition_absent_to_loading() {
+        let snap = capture(|| {
+            record_transition("acme", None, Some(&TenantRuntimeState::loading_now()));
+        });
+        let m = index(&snap);
+
+        assert_eq!(
+            m.get(&(
+                "tenant_state_transitions_total".into(),
+                labels([("from", "absent"), ("to", "loading")])
+            )),
+            Some(&DebugValue::Counter(1)),
+            "kickoff counter absent→loading must be 1"
+        );
+
+        assert_eq!(
+            m.get(&(
+                "tenant_state".into(),
+                labels([("slug", "acme"), ("state", "loading")])
+            )),
+            Some(&DebugValue::Gauge(1.0.into())),
+            "loading gauge must be 1 after kickoff"
+        );
+        assert_eq!(
+            m.get(&(
+                "tenant_state".into(),
+                labels([("slug", "acme"), ("state", "available")])
+            )),
+            Some(&DebugValue::Gauge(0.0.into())),
+            "available gauge must be 0 after kickoff"
+        );
+        assert_eq!(
+            m.get(&(
+                "tenant_state".into(),
+                labels([("slug", "acme"), ("state", "loadingFailed")])
+            )),
+            Some(&DebugValue::Gauge(0.0.into())),
+            "loadingFailed gauge must be 0 after kickoff"
+        );
+
+        // No histogram: wiring incomplete.
+        assert!(
+            !m.keys().any(|(n, _)| n == "tenant_wiring_duration_seconds"),
+            "histogram must NOT fire on absent→loading"
+        );
+    }
+
+    /// Loading → Available: success path.
+    /// Expected emissions:
+    /// - counter `tenant_state_transitions_total{from=loading,to=available}` = 1
+    /// - gauge   `tenant_state{slug,state=available}` = 1 (others 0)
+    /// - histogram `tenant_wiring_duration_seconds{result=success}` = 1 sample
+    ///   whose value is in the ballpark of the elapsed time since `since`
+    #[test]
+    fn emits_successful_wiring_completion() {
+        let since = SystemTime::now() - Duration::from_millis(120);
+        let snap = capture(|| {
+            record_transition(
+                "acme",
+                Some(&TenantRuntimeState::Loading { since }),
+                Some(&TenantRuntimeState::available_now(3)),
+            );
+        });
+        let m = index(&snap);
+
+        assert_eq!(
+            m.get(&(
+                "tenant_state_transitions_total".into(),
+                labels([("from", "loading"), ("to", "available")])
+            )),
+            Some(&DebugValue::Counter(1))
+        );
+        assert_eq!(
+            m.get(&(
+                "tenant_state".into(),
+                labels([("slug", "acme"), ("state", "available")])
+            )),
+            Some(&DebugValue::Gauge(1.0.into()))
+        );
+        assert_eq!(
+            m.get(&(
+                "tenant_state".into(),
+                labels([("slug", "acme"), ("state", "loading")])
+            )),
+            Some(&DebugValue::Gauge(0.0.into()))
+        );
+
+        // Histogram fires exactly once on the success bucket.
+        let hist = m
+            .get(&(
+                "tenant_wiring_duration_seconds".into(),
+                labels([("result", "success")]),
+            ))
+            .expect("wiring duration success histogram must be recorded");
+        match hist {
+            DebugValue::Histogram(samples) => {
+                assert_eq!(samples.len(), 1, "exactly one sample expected");
+                let v = samples[0].into_inner();
+                // Lower bound = the 120ms we slept; upper bound is
+                // intentionally generous (test-clock jitter, CI noise).
+                assert!(
+                    (0.100..=5.0).contains(&v),
+                    "duration sample {v}s should be ~0.12s"
+                );
+            }
+            other => panic!("expected histogram, got {other:?}"),
+        }
+
+        // No failure histogram recorded.
+        assert!(
+            !m.contains_key(&(
+                "tenant_wiring_duration_seconds".into(),
+                labels([("result", "failure")]),
+            )),
+            "failure histogram must not fire on success path"
+        );
+    }
+
+    /// Loading → LoadingFailed: resolver error path.
+    /// Expected: failure histogram sample + loadingFailed gauge = 1.
+    #[test]
+    fn emits_failed_wiring_completion() {
+        let since = SystemTime::now() - Duration::from_millis(40);
+        let snap = capture(|| {
+            record_transition(
+                "acme",
+                Some(&TenantRuntimeState::Loading { since }),
+                Some(&TenantRuntimeState::failed_now("resolver timeout")),
+            );
+        });
+        let m = index(&snap);
+
+        assert_eq!(
+            m.get(&(
+                "tenant_state_transitions_total".into(),
+                labels([("from", "loading"), ("to", "loadingFailed")])
+            )),
+            Some(&DebugValue::Counter(1))
+        );
+        assert_eq!(
+            m.get(&(
+                "tenant_state".into(),
+                labels([("slug", "acme"), ("state", "loadingFailed")])
+            )),
+            Some(&DebugValue::Gauge(1.0.into()))
+        );
+        assert!(
+            matches!(
+                m.get(&(
+                    "tenant_wiring_duration_seconds".into(),
+                    labels([("result", "failure")])
+                )),
+                Some(DebugValue::Histogram(samples)) if samples.len() == 1
+            ),
+            "exactly one failure-bucket histogram sample expected"
+        );
+    }
+
+    /// forget(slug): transition to `None`.
+    /// Expected: all three `tenant_state` series for this slug reset to 0;
+    /// no histogram; transition counter incremented with `to=absent`.
+    /// This test guards against the cardinality leak that would happen if
+    /// we stopped resetting the gauges — stale series would persist in the
+    /// TSDB until retention evicts them.
+    #[test]
+    fn emits_forget_resets_all_gauges_to_zero() {
+        let snap = capture(|| {
+            record_transition("acme", Some(&TenantRuntimeState::available_now(1)), None);
+        });
+        let m = index(&snap);
+
+        for state in ["loading", "available", "loadingFailed"] {
+            assert_eq!(
+                m.get(&(
+                    "tenant_state".into(),
+                    labels([("slug", "acme"), ("state", state)])
+                )),
+                Some(&DebugValue::Gauge(0.0.into())),
+                "gauge state={state} must reset to 0 on forget()"
+            );
+        }
+        assert_eq!(
+            m.get(&(
+                "tenant_state_transitions_total".into(),
+                labels([("from", "available"), ("to", "absent")])
+            )),
+            Some(&DebugValue::Counter(1))
+        );
+        assert!(
+            !m.keys().any(|(n, _)| n == "tenant_wiring_duration_seconds"),
+            "histogram must NOT fire on forget()"
+        );
+    }
+
+    /// Loading → Loading idempotent refresh: counter ticks, gauges stay,
+    /// histogram does NOT fire (match-arm returns `None` for `result`).
+    #[test]
+    fn idempotent_refresh_does_not_record_histogram() {
+        let snap = capture(|| {
+            record_transition(
+                "acme",
+                Some(&TenantRuntimeState::loading_now()),
+                Some(&TenantRuntimeState::loading_now()),
+            );
+        });
+        let m = index(&snap);
+
+        assert_eq!(
+            m.get(&(
+                "tenant_state_transitions_total".into(),
+                labels([("from", "loading"), ("to", "loading")])
+            )),
+            Some(&DebugValue::Counter(1))
+        );
+        assert!(
+            !m.keys().any(|(n, _)| n == "tenant_wiring_duration_seconds"),
+            "histogram must NOT fire on idempotent Loading→Loading refresh"
+        );
+    }
+
+    /// Fleet scenario: two slugs, multiple transitions — verifies the
+    /// counter accumulates across slugs (labels identical on counter),
+    /// while gauges are per-slug independent.
+    #[test]
+    fn accumulates_across_multiple_slugs_and_transitions() {
+        let snap = capture(|| {
+            // Slug A: full happy-path.
+            record_transition("acme", None, Some(&TenantRuntimeState::loading_now()));
+            record_transition(
+                "acme",
+                Some(&TenantRuntimeState::Loading {
+                    since: SystemTime::now() - Duration::from_millis(10),
+                }),
+                Some(&TenantRuntimeState::available_now(1)),
+            );
+            // Slug B: kickoff then fail.
+            record_transition("beta", None, Some(&TenantRuntimeState::loading_now()));
+            record_transition(
+                "beta",
+                Some(&TenantRuntimeState::Loading {
+                    since: SystemTime::now() - Duration::from_millis(15),
+                }),
+                Some(&TenantRuntimeState::failed_now("timeout")),
+            );
+        });
+        let m = index(&snap);
+
+        // Two absent→loading kickoffs.
+        assert_eq!(
+            m.get(&(
+                "tenant_state_transitions_total".into(),
+                labels([("from", "absent"), ("to", "loading")])
+            )),
+            Some(&DebugValue::Counter(2)),
+            "kickoff counter accumulates across slugs"
+        );
+        // One each of the two completion transitions.
+        assert_eq!(
+            m.get(&(
+                "tenant_state_transitions_total".into(),
+                labels([("from", "loading"), ("to", "available")])
+            )),
+            Some(&DebugValue::Counter(1))
+        );
+        assert_eq!(
+            m.get(&(
+                "tenant_state_transitions_total".into(),
+                labels([("from", "loading"), ("to", "loadingFailed")])
+            )),
+            Some(&DebugValue::Counter(1))
+        );
+
+        // Independent per-slug gauges.
+        assert_eq!(
+            m.get(&(
+                "tenant_state".into(),
+                labels([("slug", "acme"), ("state", "available")])
+            )),
+            Some(&DebugValue::Gauge(1.0.into()))
+        );
+        assert_eq!(
+            m.get(&(
+                "tenant_state".into(),
+                labels([("slug", "beta"), ("state", "loadingFailed")])
+            )),
+            Some(&DebugValue::Gauge(1.0.into()))
+        );
+        // Cross-check: beta should NOT be marked available.
+        assert_eq!(
+            m.get(&(
+                "tenant_state".into(),
+                labels([("slug", "beta"), ("state", "available")])
+            )),
+            Some(&DebugValue::Gauge(0.0.into()))
+        );
+
+        // Histograms: one sample in each result bucket.
+        for result in ["success", "failure"] {
+            match m.get(&(
+                "tenant_wiring_duration_seconds".into(),
+                labels([("result", result)]),
+            )) {
+                Some(DebugValue::Histogram(samples)) => {
+                    assert_eq!(samples.len(), 1, "one sample in {result} bucket");
+                }
+                other => panic!("expected histogram for {result}, got {other:?}"),
+            }
+        }
     }
 }

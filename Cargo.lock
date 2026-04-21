@@ -145,6 +145,7 @@ dependencies = [
  "memory",
  "metrics",
  "metrics-exporter-prometheus",
+ "metrics-util",
  "mk_core",
  "observability",
  "octocrab",
