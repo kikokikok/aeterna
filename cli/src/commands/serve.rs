@@ -61,6 +61,12 @@ pub async fn run(args: ServeArgs) -> anyhow::Result<()> {
     // `cli/src/server/tenant_eager_wire.rs` for failure policy.
     crate::server::tenant_eager_wire::spawn_eager_wire(state.clone());
 
+    // Cross-pod tenant invalidation subscriber (task 5.2b). No-op when
+    // Redis is unavailable; in single-pod mode local invalidation is
+    // handled directly by the mutating handler. See
+    // `cli/src/server/tenant_pubsub.rs`.
+    crate::server::tenant_pubsub::spawn_subscriber(state.clone());
+
     let app_listener = TcpListener::bind(app_addr).await?;
     let metrics_listener = TcpListener::bind(metrics_addr).await?;
 
