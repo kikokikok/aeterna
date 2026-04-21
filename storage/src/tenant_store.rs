@@ -391,6 +391,116 @@ impl TenantStore {
     pub fn pool(&self) -> &sqlx::PgPool {
         &self.pool
     }
+
+    // ──── Manifest state (B2, migration 027) ────────────────────────────
+    //
+    // The `tenants` table carries two extra columns introduced by
+    // `027_tenant_manifest_state.sql`:
+    //
+    //   - `last_applied_manifest_hash TEXT NULL`      SHA-256 fingerprint
+    //                                                 of the last apply
+    //   - `manifest_generation BIGINT NOT NULL = 0`   caller-owned revision
+    //
+    // The three methods below are the entire read/write surface. We keep
+    // them small and orthogonal because `provision_tenant` is the only
+    // caller today and the state model is narrow. Introducing a big
+    // `TenantManifestState` type would lock in a shape before we have
+    // more than one consumer.
+
+    /// Read the manifest state for a tenant by slug.
+    ///
+    /// Returns `(last_applied_manifest_hash, manifest_generation)`. A hash
+    /// of `None` means the tenant has never been applied via the B2
+    /// idempotent path; callers MUST treat this as "no short-circuit
+    /// possible" and run a full apply.
+    ///
+    /// Returns `PostgresError::NotFound` if the tenant row does not exist.
+    pub async fn get_manifest_state(
+        &self,
+        slug: &str,
+    ) -> Result<(Option<String>, i64), PostgresError> {
+        let row: Option<(Option<String>, i64)> = sqlx::query_as(
+            "SELECT last_applied_manifest_hash, manifest_generation \
+             FROM tenants WHERE slug = $1",
+        )
+        .bind(slug)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(PostgresError::from)?;
+
+        row.ok_or_else(|| PostgresError::NotFound(format!("tenant not found: {slug}")))
+    }
+
+    /// Atomically set the manifest state on a successful apply.
+    ///
+    /// This method is intentionally permissive on `generation`: callers are
+    /// expected to have performed the strict-monotonic check *before* calling
+    /// this, while holding whatever lock is appropriate (today: the tx
+    /// inside `provision_tenant`). The CHECK constraint from migration 027
+    /// enforces `manifest_generation >= 0` at the DB layer; anything finer
+    /// is application-level invariant.
+    ///
+    /// The hash argument is validated against the column CHECK constraint;
+    /// a malformed value surfaces as a `PostgresError` at write time rather
+    /// than being silently accepted.
+    ///
+    /// Returns `PostgresError::NotFound` if no tenant row exists for `slug`.
+    pub async fn set_manifest_state(
+        &self,
+        slug: &str,
+        hash: &str,
+        generation: i64,
+    ) -> Result<(), PostgresError> {
+        let rows_affected = sqlx::query(
+            "UPDATE tenants \
+             SET last_applied_manifest_hash = $1, \
+                 manifest_generation = $2, \
+                 updated_at = NOW() \
+             WHERE slug = $3",
+        )
+        .bind(hash)
+        .bind(generation)
+        .bind(slug)
+        .execute(&self.pool)
+        .await
+        .map_err(PostgresError::from)?
+        .rows_affected();
+
+        if rows_affected == 0 {
+            return Err(PostgresError::NotFound(format!("tenant not found: {slug}")));
+        }
+        Ok(())
+    }
+
+    /// Same as [`set_manifest_state`] but bound to an explicit tx. Used by
+    /// `provision_tenant` when the state update must commit atomically with
+    /// the manifest-body changes in the same transaction.
+    pub async fn set_manifest_state_tx<'c>(
+        tx: &mut sqlx::Transaction<'c, sqlx::Postgres>,
+        slug: &str,
+        hash: &str,
+        generation: i64,
+    ) -> Result<(), PostgresError> {
+        let rows_affected = sqlx::query(
+            "UPDATE tenants \
+             SET last_applied_manifest_hash = $1, \
+                 manifest_generation = $2, \
+                 updated_at = NOW() \
+             WHERE slug = $3",
+        )
+        .bind(hash)
+        .bind(generation)
+        .bind(slug)
+        .execute(&mut **tx)
+        .await
+        .map_err(PostgresError::from)?
+        .rows_affected();
+
+        if rows_affected == 0 {
+            return Err(PostgresError::NotFound(format!("tenant not found: {slug}")));
+        }
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------

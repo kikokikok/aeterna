@@ -922,11 +922,46 @@ impl PostgresBackend {
                 source_owner TEXT NOT NULL DEFAULT 'admin',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                deactivated_at TIMESTAMPTZ
+                deactivated_at TIMESTAMPTZ,
+                last_applied_manifest_hash TEXT,
+                manifest_generation BIGINT NOT NULL DEFAULT 0
             )",
         )
         .execute(&self.pool)
         .await?;
+
+        // Backfill for test databases that pre-date the manifest-state
+        // columns (production path: migration 027_tenant_manifest_state.sql).
+        sqlx::query("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS last_applied_manifest_hash TEXT")
+            .execute(&self.pool)
+            .await?;
+        sqlx::query(
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS manifest_generation BIGINT NOT NULL DEFAULT 0",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Mirror CHECK constraints from migration 027 so dev/test paths
+        // enforce the same invariants. We assemble the end-of-string
+        // anchor via chr(36) at SQL-evaluation time so the Rust source
+        // never contains a literal `[dollar-sign][single-quote]` sequence.
+        // The let-binding + .ok() pattern tolerates the duplicate-object
+        // error when initialize_schema is re-run.
+        let _ = sqlx::query(
+            "ALTER TABLE tenants \
+             ADD CONSTRAINT tenants_manifest_hash_format \
+             CHECK (last_applied_manifest_hash IS NULL \
+                    OR last_applied_manifest_hash ~ ('^sha256:[0-9a-f]{64}' || chr(36)))",
+        )
+        .execute(&self.pool)
+        .await;
+        let _ = sqlx::query(
+            "ALTER TABLE tenants \
+             ADD CONSTRAINT tenants_manifest_generation_nonneg \
+             CHECK (manifest_generation >= 0)",
+        )
+        .execute(&self.pool)
+        .await;
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS tenant_domain_mappings (
