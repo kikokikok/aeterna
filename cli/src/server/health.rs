@@ -7,6 +7,8 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use super::AppState;
+use super::tenant_eager_wire::is_strict_mode;
+use super::tenant_runtime_state::TenantRuntimeState;
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -24,6 +26,11 @@ pub(crate) struct ReadinessResponse {
 pub(crate) struct ReadinessChecks {
     postgres: CheckResult,
     vector_store: CheckResult,
+    /// Summary of per-tenant wiring state. See [`TenantCheck`].
+    ///
+    /// Added in B2 task 5.3. The field name is stable and monitored by
+    /// the SRE dashboard; renaming breaks external alerting rules.
+    tenants: TenantCheck,
 }
 
 #[derive(Serialize)]
@@ -31,6 +38,105 @@ pub(crate) struct CheckResult {
     status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<String>,
+}
+
+/// Observable summary of the pod-local tenant runtime registry.
+///
+/// # Semantics
+///
+/// * `status == "ok"`      \u2014 every known tenant is `Available` *or* there are
+///   no tenants at all (fresh cluster).
+/// * `status == "pending"` \u2014 at least one tenant is `Loading`, none failed.
+///   This happens during the eager-boot window and during pub/sub rewires;
+///   it does **not** flip the HTTP gate (see §Gate below).
+/// * `status == "degraded"`\u2014 at least one tenant is `LoadingFailed`. Flips
+///   the HTTP gate iff strict mode is on.
+///
+/// # Gate
+///
+/// `/ready` returns 503 when `failed > 0 && strictMode`. All other
+/// combinations return 200. In particular:
+///
+/// * A tenant in `Loading` does **not** cause 503 \u2014 rewires triggered by
+///   `tenant:changed` pub/sub would otherwise flap traffic off the pod.
+/// * Permissive mode (the default) never 503s on tenant state so
+///   single-tenant misconfiguration cannot take an entire cluster out
+///   of rotation. Operators opt in to strict mode per-environment via
+///   `AETERNA_EAGER_WIRE_STRICT=1`.
+///
+/// # Field stability
+///
+/// `total`, `available`, `loading`, `failed`, and `strictMode` are the
+/// wire contract monitored by alerts and the ops dashboard. Adding new
+/// fields is fine; renaming is not.
+///
+/// `failedSlugs` is populated only when `failed > 0` and contains the
+/// tenant slugs (never the failure reason strings, which may include
+/// upstream error details the caller isn't authorised to see \u2014 reasons
+/// are surfaced by the admin-only status endpoint in task 5.5).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TenantCheck {
+    status: &'static str,
+    total: usize,
+    available: usize,
+    loading: usize,
+    failed: usize,
+    /// Reflects the value of `AETERNA_EAGER_WIRE_STRICT` at *this request*.
+    /// Read each call so an operator toggling the env var doesn't need a
+    /// pod restart for the gate behaviour to change.
+    strict_mode: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    failed_slugs: Vec<String>,
+}
+
+impl TenantCheck {
+    /// Compute the check body from a snapshot of the registry.
+    ///
+    /// Sorts `failed_slugs` for deterministic output \u2014 avoids churning
+    /// monitoring diffs on every scrape when the set is stable.
+    fn from_snapshot(snapshot: Vec<(String, TenantRuntimeState)>, strict_mode: bool) -> Self {
+        let total = snapshot.len();
+        let mut available = 0usize;
+        let mut loading = 0usize;
+        let mut failed = 0usize;
+        let mut failed_slugs: Vec<String> = Vec::new();
+        for (slug, state) in snapshot {
+            match state {
+                TenantRuntimeState::Available { .. } => available += 1,
+                TenantRuntimeState::Loading { .. } => loading += 1,
+                TenantRuntimeState::LoadingFailed { .. } => {
+                    failed += 1;
+                    failed_slugs.push(slug);
+                }
+            }
+        }
+        failed_slugs.sort();
+        let status = if failed > 0 {
+            "degraded"
+        } else if loading > 0 {
+            "pending"
+        } else {
+            "ok"
+        };
+        Self {
+            status,
+            total,
+            available,
+            loading,
+            failed,
+            strict_mode,
+            failed_slugs,
+        }
+    }
+
+    /// True iff this check should gate the `/ready` response to 503.
+    ///
+    /// Intentionally narrow: only `failed > 0 && strict_mode`. See the
+    /// type-level docs for the rationale.
+    fn blocks_readiness(&self) -> bool {
+        self.failed > 0 && self.strict_mode
+    }
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -58,15 +164,20 @@ async fn liveness_handler() -> StatusCode {
 async fn readiness_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pg_check = check_postgres(&state).await;
     let vector_check = check_vector_store(&state).await;
+    let tenant_check = check_tenants(&state).await;
 
-    readiness_response(pg_check, vector_check)
+    readiness_response(pg_check, vector_check, tenant_check)
 }
 
 pub(crate) fn readiness_response(
     pg_check: CheckResult,
     vector_check: CheckResult,
+    tenant_check: TenantCheck,
 ) -> (StatusCode, Json<ReadinessResponse>) {
-    let all_healthy = pg_check.status == "ok" && vector_check.status == "ok";
+    // Backend checks gate unconditionally; tenant state gates only in
+    // strict mode with actual failures. See `TenantCheck::blocks_readiness`.
+    let backends_ok = pg_check.status == "ok" && vector_check.status == "ok";
+    let all_healthy = backends_ok && !tenant_check.blocks_readiness();
     let status_code = if all_healthy {
         StatusCode::OK
     } else {
@@ -78,10 +189,26 @@ pub(crate) fn readiness_response(
         checks: ReadinessChecks {
             postgres: pg_check,
             vector_store: vector_check,
+            tenants: tenant_check,
         },
     };
 
     (status_code, Json(response))
+}
+
+/// Build the `tenants` check body by snapshotting the runtime registry.
+///
+/// This is a read under the registry's `RwLock::read`; concurrent
+/// `mark_*` calls during a scrape yield a point-in-time snapshot, not a
+/// torn view. Duration is bounded by the number of tenants, which is
+/// single-digit thousands in practice \u2014 well within a probe's budget.
+#[tracing::instrument(skip_all)]
+async fn check_tenants(state: &AppState) -> TenantCheck {
+    let snapshot = state.tenant_runtime_state.snapshot().await;
+    // `is_strict_mode` is read every request so operators can flip
+    // `AETERNA_EAGER_WIRE_STRICT` without a pod restart when they need
+    // to bring a cluster back into rotation fast.
+    TenantCheck::from_snapshot(snapshot, is_strict_mode())
 }
 
 #[tracing::instrument(skip_all)]
@@ -488,36 +615,36 @@ mod tests {
         assert!(json.get("version").is_some());
     }
 
+    /// Shorthand helpers so the assertions stay readable.
+    fn ok_check() -> CheckResult {
+        CheckResult {
+            status: "ok",
+            message: None,
+        }
+    }
+    fn err_check(msg: &str) -> CheckResult {
+        CheckResult {
+            status: "error",
+            message: Some(msg.to_string()),
+        }
+    }
+    fn empty_tenants() -> TenantCheck {
+        TenantCheck::from_snapshot(Vec::new(), false)
+    }
+
     #[test]
     fn readiness_response_is_ready_when_all_checks_ok() {
-        let (status, Json(body)) = readiness_response(
-            CheckResult {
-                status: "ok",
-                message: None,
-            },
-            CheckResult {
-                status: "ok",
-                message: None,
-            },
-        );
-
+        let (status, Json(body)) = readiness_response(ok_check(), ok_check(), empty_tenants());
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body.status, "ready");
+        assert_eq!(body.checks.tenants.status, "ok");
+        assert_eq!(body.checks.tenants.total, 0);
     }
 
     #[test]
     fn readiness_response_is_not_ready_when_one_backend_fails() {
-        let (status, Json(body)) = readiness_response(
-            CheckResult {
-                status: "error",
-                message: Some("db down".to_string()),
-            },
-            CheckResult {
-                status: "ok",
-                message: None,
-            },
-        );
-
+        let (status, Json(body)) =
+            readiness_response(err_check("db down"), ok_check(), empty_tenants());
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(body.status, "not_ready");
         assert_eq!(body.checks.postgres.message.as_deref(), Some("db down"));
@@ -526,21 +653,148 @@ mod tests {
     #[test]
     fn readiness_response_is_not_ready_when_all_backends_fail() {
         let (status, Json(body)) = readiness_response(
-            CheckResult {
-                status: "error",
-                message: Some("db down".to_string()),
-            },
-            CheckResult {
-                status: "error",
-                message: Some("vector down".to_string()),
-            },
+            err_check("db down"),
+            err_check("vector down"),
+            empty_tenants(),
         );
-
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(body.status, "not_ready");
         assert_eq!(
             body.checks.vector_store.message.as_deref(),
             Some("vector down")
         );
+    }
+
+    // ── Tenant gate tests (B2 task 5.3) ─────────────────────────────────
+
+    /// Build a snapshot from `(slug, state)` tuples. Using the concrete
+    /// enum keeps the test expressive vs. constructing a full registry.
+    fn snap(entries: Vec<(&str, TenantRuntimeState)>) -> Vec<(String, TenantRuntimeState)> {
+        entries
+            .into_iter()
+            .map(|(s, st)| (s.to_string(), st))
+            .collect()
+    }
+
+    #[test]
+    fn tenant_check_all_available_is_ok() {
+        let snapshot = snap(vec![
+            ("alpha", TenantRuntimeState::available_now(3)),
+            ("beta", TenantRuntimeState::available_now(1)),
+        ]);
+        let c = TenantCheck::from_snapshot(snapshot, true);
+        assert_eq!(c.status, "ok");
+        assert_eq!((c.total, c.available, c.loading, c.failed), (2, 2, 0, 0));
+        assert!(c.failed_slugs.is_empty());
+        assert!(!c.blocks_readiness());
+    }
+
+    #[test]
+    fn tenant_check_loading_is_pending_and_not_blocking() {
+        // Critical for production: a rewire puts the tenant briefly in
+        // Loading; /ready MUST NOT flap to 503 during this window, even
+        // in strict mode, otherwise every pub/sub invalidation would
+        // kick the pod out of the LB rotation.
+        let snapshot = snap(vec![("alpha", TenantRuntimeState::loading_now())]);
+        let c = TenantCheck::from_snapshot(snapshot, true);
+        assert_eq!(c.status, "pending");
+        assert_eq!((c.total, c.available, c.loading, c.failed), (1, 0, 1, 0));
+        assert!(!c.blocks_readiness());
+    }
+
+    #[test]
+    fn tenant_check_failed_non_strict_is_degraded_but_not_blocking() {
+        let snapshot = snap(vec![(
+            "alpha",
+            TenantRuntimeState::failed_now("secret missing"),
+        )]);
+        let c = TenantCheck::from_snapshot(snapshot, false);
+        assert_eq!(c.status, "degraded");
+        assert_eq!(c.failed, 1);
+        assert_eq!(c.failed_slugs, vec!["alpha"]);
+        assert!(
+            !c.blocks_readiness(),
+            "permissive mode must not take the pod out of rotation"
+        );
+    }
+
+    #[test]
+    fn tenant_check_failed_strict_blocks_readiness() {
+        let snapshot = snap(vec![
+            ("alpha", TenantRuntimeState::available_now(1)),
+            ("beta", TenantRuntimeState::failed_now("dns nxdomain")),
+        ]);
+        let c = TenantCheck::from_snapshot(snapshot, true);
+        assert_eq!(c.status, "degraded");
+        assert_eq!(c.failed, 1);
+        assert!(c.blocks_readiness());
+
+        let (status, Json(body)) = readiness_response(ok_check(), ok_check(), c);
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(body.status, "not_ready");
+    }
+
+    #[test]
+    fn tenant_check_failed_slugs_are_sorted() {
+        // Deterministic output keeps monitoring diffs quiet on steady
+        // state; HashMap snapshot order is otherwise arbitrary.
+        let snapshot = snap(vec![
+            ("zulu", TenantRuntimeState::failed_now("x")),
+            ("alpha", TenantRuntimeState::failed_now("y")),
+            ("mike", TenantRuntimeState::failed_now("z")),
+        ]);
+        let c = TenantCheck::from_snapshot(snapshot, true);
+        assert_eq!(c.failed_slugs, vec!["alpha", "mike", "zulu"]);
+    }
+
+    #[test]
+    fn tenant_check_never_leaks_failure_reasons_to_wire() {
+        // The reason field may contain upstream error text not fit for
+        // unauthenticated probes; only slugs go on the wire.
+        let snapshot = snap(vec![(
+            "alpha",
+            TenantRuntimeState::failed_now("upstream api key XYZ rejected"),
+        )]);
+        let c = TenantCheck::from_snapshot(snapshot, false);
+        let wire = serde_json::to_string(&c).unwrap();
+        assert!(!wire.contains("XYZ"), "reason leaked: {wire}");
+        assert!(!wire.contains("rejected"), "reason leaked: {wire}");
+        assert!(wire.contains("\"failedSlugs\""));
+        assert!(wire.contains("alpha"));
+    }
+
+    #[test]
+    fn tenant_check_wire_fields_are_camel_case() {
+        // Wire contract: dashboards key on camelCase. Guard against a
+        // rename sneaking in.
+        let snapshot = snap(vec![("x", TenantRuntimeState::available_now(1))]);
+        let c = TenantCheck::from_snapshot(snapshot, true);
+        let v = serde_json::to_value(&c).unwrap();
+        for key in [
+            "status",
+            "total",
+            "available",
+            "loading",
+            "failed",
+            "strictMode",
+        ] {
+            assert!(v.get(key).is_some(), "missing key {key} in {v}");
+        }
+    }
+
+    #[test]
+    fn tenant_check_mixed_counts_are_exact() {
+        let snapshot = snap(vec![
+            ("a", TenantRuntimeState::available_now(1)),
+            ("b", TenantRuntimeState::available_now(2)),
+            ("c", TenantRuntimeState::loading_now()),
+            ("d", TenantRuntimeState::failed_now("x")),
+            ("e", TenantRuntimeState::failed_now("y")),
+        ]);
+        let c = TenantCheck::from_snapshot(snapshot, false);
+        assert_eq!((c.total, c.available, c.loading, c.failed), (5, 2, 1, 2));
+        // `degraded` wins over `pending` when both apply: operator
+        // attention should focus on failures first.
+        assert_eq!(c.status, "degraded");
     }
 }
