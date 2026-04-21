@@ -159,7 +159,10 @@ mod tests {
         // manifests (e.g. role-assignment order matters for audit)
         let a = json!({"x": [1, 2, 3]});
         let b = json!({"x": [3, 2, 1]});
-        assert_ne!(hash_manifest_value(&a).unwrap(), hash_manifest_value(&b).unwrap());
+        assert_ne!(
+            hash_manifest_value(&a).unwrap(),
+            hash_manifest_value(&b).unwrap()
+        );
     }
 
     #[test]
@@ -224,7 +227,10 @@ mod tests {
     fn hash_changes_when_non_secret_content_changes() {
         let v1 = json!({"tenant": {"slug": "a", "name": "A"}});
         let v2 = json!({"tenant": {"slug": "a", "name": "B"}});
-        assert_ne!(hash_manifest_value(&v1).unwrap(), hash_manifest_value(&v2).unwrap());
+        assert_ne!(
+            hash_manifest_value(&v1).unwrap(),
+            hash_manifest_value(&v2).unwrap()
+        );
     }
 
     #[test]
@@ -234,7 +240,10 @@ mod tests {
         // provision_tenant would short-circuit a version bump.
         let v1 = json!({"metadata": {"generation": 1}, "tenant": {"slug": "a", "name": "A"}});
         let v2 = json!({"metadata": {"generation": 2}, "tenant": {"slug": "a", "name": "A"}});
-        assert_ne!(hash_manifest_value(&v1).unwrap(), hash_manifest_value(&v2).unwrap());
+        assert_ne!(
+            hash_manifest_value(&v1).unwrap(),
+            hash_manifest_value(&v2).unwrap()
+        );
     }
 
     #[test]
@@ -261,7 +270,10 @@ mod tests {
         // "omit labels" become indistinguishable operations.
         let absent = json!({"tenant": {"slug": "x", "name": "X"}});
         let empty = json!({"tenant": {"slug": "x", "name": "X"}, "metadata": {}});
-        assert_ne!(hash_manifest_value(&absent).unwrap(), hash_manifest_value(&empty).unwrap());
+        assert_ne!(
+            hash_manifest_value(&absent).unwrap(),
+            hash_manifest_value(&empty).unwrap()
+        );
     }
 
     #[test]
@@ -278,8 +290,7 @@ mod tests {
         // Recomputed from the canonical bytes of the above object:
         //   {"apiVersion":"aeterna.io/v1","kind":"TenantManifest","tenant":{"name":"Acme","slug":"acme"}}
         assert_eq!(
-            h,
-            "sha256:c262fb0d40d2fafbef7d4f4bf277b74760ca87ead31efcbf1549650551c5a483",
+            h, "sha256:c262fb0d40d2fafbef7d4f4bf277b74760ca87ead31efcbf1549650551c5a483",
             "if this assertion fails, read the test body before changing the expected value"
         );
     }

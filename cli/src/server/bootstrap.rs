@@ -405,6 +405,9 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         provider_registry,
         git_provider_connection_registry,
         redis_conn,
+        tenant_runtime_state: Arc::new(
+            crate::server::tenant_runtime_state::TenantRuntimeRegistry::new(),
+        ),
     }))
 }
 
