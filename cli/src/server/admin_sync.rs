@@ -812,6 +812,7 @@ mod tests {
             tenant_runtime_state: std::sync::Arc::new(
                 crate::server::tenant_runtime_state::TenantRuntimeRegistry::new(),
             ),
+            bootstrap_tracker: std::sync::Arc::new(crate::server::bootstrap_tracker::BootstrapTracker::new()),
         })
     }
 
