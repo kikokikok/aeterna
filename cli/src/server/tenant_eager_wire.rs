@@ -155,7 +155,10 @@ async fn run_eager_wire(state: &AppState) -> anyhow::Result<()> {
 /// per-request today via the memory manager; 5.2's scope is limited to
 /// the provider registry. Widening to memory layers is a separate
 /// design decision because some layers are lazy by construction.
-async fn wire_one(state: &AppState, tenant_id: &mk_core::types::TenantId) -> anyhow::Result<()> {
+pub(super) async fn wire_one(
+    state: &AppState,
+    tenant_id: &mk_core::types::TenantId,
+) -> anyhow::Result<()> {
     // The provider registry caches on success; a miss falls through to
     // platform defaults and returns `None`, which is NOT an error. Only a
     // resolution error (bad config, missing secret, unreachable endpoint)
@@ -185,7 +188,7 @@ async fn wire_one(state: &AppState, tenant_id: &mk_core::types::TenantId) -> any
     Ok(())
 }
 
-fn truncate(s: &str, max: usize) -> String {
+pub(super) fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
     } else {

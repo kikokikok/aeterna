@@ -254,13 +254,28 @@ async fn subscribe_and_consume(state: &AppState, redis_url: &str) -> anyhow::Res
 pub(crate) async fn handle_event(state: &AppState, event: TenantChangeEvent) {
     debug!(slug = %event.slug, kind = ?event.kind, "tenant:changed handling");
 
-    // Resolve slug → TenantId. `TenantId` is itself a slug wrapper in
-    // this codebase (see memory crate), so we can construct directly.
-    // Using `new()` validates; a bad slug gets a warn and is dropped.
-    let tenant_id = match mk_core::types::TenantId::new(event.slug.clone()) {
-        Some(id) => id,
-        None => {
-            warn!(slug = %event.slug, "tenant:changed: invalid slug, dropping");
+    // Resolve slug → TenantId (UUID). `TenantId` wraps the UUID, NOT
+    // the slug — an earlier revision constructed `TenantId::new(slug)`
+    // which produced a value that would never match the
+    // provider-registry cache keyed on UUIDs. The tenant store
+    // round-trip is the authoritative mapping.
+    let tenant_id = match super::tenant_lazy_wire::resolve_slug_to_id(state, &event.slug).await {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            // Tenant row is gone (deletion on the publisher side, or a
+            // stale message for a slug that never existed on this
+            // cluster). Scrub any lingering runtime-state entry so
+            // `/ready` and status endpoints don't report a ghost.
+            warn!(slug = %event.slug, "tenant:changed: slug unknown, forgetting");
+            state.tenant_runtime_state.forget(&event.slug).await;
+            return;
+        }
+        Err(e) => {
+            warn!(
+                slug = %event.slug,
+                error = %e,
+                "tenant:changed: slug resolution failed, dropping event"
+            );
             return;
         }
     };
@@ -275,21 +290,30 @@ pub(crate) async fn handle_event(state: &AppState, event: TenantChangeEvent) {
         TenantChangeKind::Provisioned | TenantChangeKind::Updated | TenantChangeKind::Unknown => {
             state.provider_registry.invalidate_tenant(&tenant_id);
             state.tenant_runtime_state.mark_loading(&event.slug).await;
-            // Re-prime. We swallow the result: errors are already
-            // reflected in the runtime-state registry by
-            // `tenant_eager_wire::wire_one` behaviour when we reuse it.
-            // Inline the minimal resolve to avoid a cross-module call
-            // cycle.
-            let _ = state
-                .provider_registry
-                .get_llm_service(&tenant_id, state.tenant_config_provider.as_ref())
-                .await;
-            let _ = state
-                .provider_registry
-                .get_embedding_service(&tenant_id, state.tenant_config_provider.as_ref())
-                .await;
-            let rev = state.tenant_runtime_state.mark_available(&event.slug).await;
-            info!(slug = %event.slug, rev, kind = ?event.kind, "tenant re-wired");
+            // Re-prime via the shared wiring path so pub/sub,
+            // eager-boot, and lazy-fallback all converge through a
+            // single code path — one place to tighten error handling
+            // once `get_*_service` grows a fallible variant
+            // (see b2-5.2-followup in tenant_eager_wire).
+            match super::tenant_eager_wire::wire_one(state, &tenant_id).await {
+                Ok(()) => {
+                    let rev = state.tenant_runtime_state.mark_available(&event.slug).await;
+                    info!(slug = %event.slug, rev, kind = ?event.kind, "tenant re-wired");
+                }
+                Err(e) => {
+                    let reason = super::tenant_eager_wire::truncate(&format!("{e:#}"), 256);
+                    let retries = state
+                        .tenant_runtime_state
+                        .mark_failed(&event.slug, &reason)
+                        .await;
+                    warn!(
+                        slug = %event.slug,
+                        retry_count = retries,
+                        reason = %reason,
+                        "tenant re-wire failed after tenant:changed"
+                    );
+                }
+            }
         }
     }
 
