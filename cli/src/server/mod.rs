@@ -22,6 +22,7 @@ pub mod sessions;
 pub mod sync;
 pub mod team_api;
 pub mod tenant_api;
+pub mod tenant_eager_wire;
 pub mod tenant_runtime_state;
 pub mod user_api;
 pub mod webhooks;
@@ -110,6 +111,11 @@ pub struct AppState {
     pub tenant_config_provider: Arc<KubernetesTenantConfigProvider>,
     /// Per-tenant LLM/embedding provider registry with caching.
     pub provider_registry: Arc<TenantProviderRegistry>,
+    /// Per-tenant readiness state recorded by the eager boot loop and
+    /// rewire triggers. Consulted by `/ready` (task 5.3) and tenant-scoped
+    /// routes (task 5.4). See [`tenant_runtime_state`] for the state
+    /// machine.
+    pub tenant_runtime_state: Arc<tenant_runtime_state::TenantRuntimeRegistry>,
     /// Registry of platform-owned Git provider connections (task 3.4).
     pub git_provider_connection_registry:
         Arc<dyn GitProviderConnectionRegistry<Error = GitProviderConnectionError> + Send + Sync>,
