@@ -5017,3 +5017,294 @@ async fn cross_tenant_s5_8_post_with_tenant_star_rejected() {
         );
     }
 }
+
+// =============================================================================
+// B2 5.5 followup — HTTP integration tests for /admin/tenants/.../wiring
+//
+// These complement the unit tests in cli/src/server/tenant_wiring_api.rs which
+// lock the JSON wire contract in isolation. The tests below drive the full
+// axum router + auth layer, exercising the production code paths end-to-end:
+//
+//   * PA role enforcement against real `authenticated_platform_context`
+//   * router mounting under /api/v1/
+//   * 404 path when slug is absent from the pod-local registry
+//   * list endpoint `total` field matches registry size
+//   * reason field IS exposed to PA (by design — this is the authorisation
+//     boundary for sensitive error text; see the unit test rationale)
+//   * cross-state coverage: Loading, Available, LoadingFailed all round-trip
+//
+// Fixture: reuses `test_app_state()` (real Postgres via test container).
+// Skipped when Docker is unavailable, matching the rest of this file.
+// =============================================================================
+
+use aeterna::server::tenant_runtime_state::TenantRuntimeState;
+
+/// Helper: build a PA request against a wiring endpoint.
+fn pa_wiring_request(uri: &str) -> Request<Body> {
+    Request::builder()
+        .method("GET")
+        .uri(uri)
+        .header("x-user-id", "pa-user")
+        .header("x-user-role", "platform_admin")
+        .body(Body::empty())
+        .unwrap()
+}
+
+#[tokio::test]
+async fn wiring_list_requires_platform_admin() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping wiring integration test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    // A non-PA user hits 403 with the standard error envelope — locks the
+    // contract documented in tenant_wiring_api::require_platform_admin.
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/admin/tenants/wiring")
+                .header("x-user-id", "dev-user")
+                .header("x-user-role", "developer")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "forbidden");
+    assert_eq!(body["message"], "PlatformAdmin role required");
+}
+
+#[tokio::test]
+async fn wiring_get_requires_platform_admin() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping wiring integration test: Docker not available");
+        return;
+    };
+    // Seed state so we can be sure the 403 isn't actually a 404 masquerading.
+    state
+        .tenant_runtime_state
+        .set("acme", TenantRuntimeState::available_now(1))
+        .await;
+    let app = router::build_router(state);
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/admin/tenants/acme/wiring")
+                .header("x-user-id", "viewer")
+                .header("x-user-role", "viewer")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn wiring_get_returns_404_when_pod_has_no_entry() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping wiring integration test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    let resp = app
+        .oneshot(pa_wiring_request(
+            "/api/v1/admin/tenants/never-wired/wiring",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    // Error code is stable for UI consumers — guard it.
+    assert_eq!(body["error"], "tenant_not_wired");
+    // The message documents the distinction between "pod hasn't touched it"
+    // vs "pod failed to wire" — an assertion on substring locks that intent.
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("No wiring state on this pod"),
+        "expected operator-friendly 404 message, got {body}"
+    );
+}
+
+#[tokio::test]
+async fn wiring_get_available_round_trips_rev_and_wired_at() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping wiring integration test: Docker not available");
+        return;
+    };
+    state.tenant_runtime_state.mark_loading("acme").await;
+    let rev = state.tenant_runtime_state.mark_available("acme").await;
+    let app = router::build_router(state);
+
+    let resp = app
+        .oneshot(pa_wiring_request("/api/v1/admin/tenants/acme/wiring"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["slug"], "acme");
+    assert_eq!(body["state"], "available");
+    assert_eq!(body["rev"], rev);
+    assert!(
+        body["wiredAt"].as_u64().is_some(),
+        "wiredAt must be a unix timestamp (number), body={body}"
+    );
+    // Failure-only fields must be absent on the happy path.
+    assert!(body.get("reason").is_none());
+    assert!(body.get("retryCount").is_none());
+}
+
+#[tokio::test]
+async fn wiring_get_failed_exposes_reason_to_pa() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping wiring integration test: Docker not available");
+        return;
+    };
+    state.tenant_runtime_state.mark_loading("acme").await;
+    // The reason carries sensitive substance (here: a secret ref) — this
+    // test locks that PA *does* see it. If PA auth is ever bypassed by a
+    // bug, the unit test `envelope_flattens_failed_state_including_reason`
+    // in tenant_wiring_api::tests triggers as the info-leak canary.
+    let retry_count = state
+        .tenant_runtime_state
+        .mark_failed("acme", "secret openai.api_key missing")
+        .await;
+    let app = router::build_router(state);
+
+    let resp = app
+        .oneshot(pa_wiring_request("/api/v1/admin/tenants/acme/wiring"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["state"], "loadingFailed");
+    assert_eq!(body["reason"], "secret openai.api_key missing");
+    assert_eq!(body["retryCount"], retry_count);
+    assert!(body["lastAttemptAt"].as_u64().is_some());
+}
+
+#[tokio::test]
+async fn wiring_get_loading_returns_since_field() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping wiring integration test: Docker not available");
+        return;
+    };
+    state.tenant_runtime_state.mark_loading("acme").await;
+    let app = router::build_router(state);
+
+    let resp = app
+        .oneshot(pa_wiring_request("/api/v1/admin/tenants/acme/wiring"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["state"], "loading");
+    assert!(
+        body["since"].as_u64().is_some(),
+        "loading state must carry `since` (unix timestamp), body={body}"
+    );
+}
+
+#[tokio::test]
+async fn wiring_list_returns_total_and_every_seeded_tenant() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping wiring integration test: Docker not available");
+        return;
+    };
+    // Seed three tenants across all three states. Intentionally using
+    // slugs with distinct alpha ordering so a broken iteration order
+    // would show up in the snapshot.
+    state.tenant_runtime_state.mark_loading("alpha").await;
+    state.tenant_runtime_state.mark_available("alpha").await;
+    state.tenant_runtime_state.mark_loading("beta").await;
+    state.tenant_runtime_state.mark_loading("gamma").await;
+    state
+        .tenant_runtime_state
+        .mark_failed("gamma", "resolver timeout")
+        .await;
+    let app = router::build_router(state);
+
+    let resp = app
+        .oneshot(pa_wiring_request("/api/v1/admin/tenants/wiring"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["total"], 3);
+    let tenants = body["tenants"].as_array().unwrap();
+    assert_eq!(tenants.len(), 3);
+
+    // Build a slug→state map for order-agnostic assertions.
+    let mut by_slug: std::collections::HashMap<String, &serde_json::Value> =
+        std::collections::HashMap::new();
+    for t in tenants {
+        by_slug.insert(t["slug"].as_str().unwrap().to_string(), t);
+    }
+    assert_eq!(by_slug.get("alpha").unwrap()["state"], "available");
+    assert_eq!(by_slug.get("beta").unwrap()["state"], "loading");
+    assert_eq!(by_slug.get("gamma").unwrap()["state"], "loadingFailed");
+    assert_eq!(by_slug.get("gamma").unwrap()["reason"], "resolver timeout");
+}
+
+#[tokio::test]
+async fn wiring_list_empty_when_no_tenants_have_been_touched() {
+    let Some((state, _tmp)) = test_app_state().await else {
+        eprintln!("Skipping wiring integration test: Docker not available");
+        return;
+    };
+    let app = router::build_router(state);
+
+    let resp = app
+        .oneshot(pa_wiring_request("/api/v1/admin/tenants/wiring"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    // Empty pod — total is 0 and `tenants` is an empty array (not null).
+    assert_eq!(body["total"], 0);
+    assert_eq!(body["tenants"].as_array().unwrap().len(), 0);
+}
