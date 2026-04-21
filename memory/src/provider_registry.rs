@@ -98,6 +98,52 @@ pub type SecretResolver = Arc<
 /// Default cache TTL: 1 hour.
 const DEFAULT_CACHE_TTL: Duration = Duration::from_secs(3600);
 
+/// Error surface for the fallible resolver APIs (`try_get_llm_service`,
+/// `try_get_embedding_service`).
+///
+/// The historical `get_llm_service` / `get_embedding_service` methods collapse
+/// every failure mode into `None`, which is semantically indistinguishable
+/// from "the tenant has no custom provider configured and the platform has
+/// no default either". That's fine for request-time resolution, where the
+/// caller usually just wants "the service or nothing", but it is the wrong
+/// surface for the eager-wire / ready-gate path: those callers need to mark
+/// the tenant as `LoadingFailed{reason}` with an accurate reason when the
+/// config provider is broken or the tenant-configured provider fails to
+/// build. This enum is that surface.
+///
+/// B2 task 5.2 followup — addresses the `TODO(b2-5.2-followup)` in
+/// [`cli::server::tenant_eager_wire::wire_one`].
+#[derive(Debug, Clone)]
+pub enum ResolverError {
+    /// The injected [`TenantConfigProvider`] returned an error while looking
+    /// up the tenant config. Distinct from "tenant has no config" (which is
+    /// `Ok(None)` and not an error): this means the config source itself
+    /// (Postgres, Kubernetes CRD store, etc.) is unreachable or broken.
+    ///
+    /// The `String` payload is the upstream error rendered via `Debug`
+    /// (config-provider errors are generic `E: Debug`, so this is the best
+    /// we can do without introducing a thread-through trait bound).
+    ConfigProviderFailed(String),
+    /// The tenant DID configure a provider and the config was retrieved
+    /// successfully, but [`create_llm_service`] / [`create_embedding_service`]
+    /// failed — e.g. an unknown provider type, a missing required secret,
+    /// invalid endpoint URL. Distinct from `ConfigProviderFailed` because
+    /// the remedy is different: fix the tenant's manifest/secrets, not the
+    /// platform's config store.
+    BuildFailed(String),
+}
+
+impl std::fmt::Display for ResolverError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ConfigProviderFailed(e) => write!(f, "tenant config provider failed: {e}"),
+            Self::BuildFailed(e) => write!(f, "tenant provider build failed: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for ResolverError {}
+
 /// A cached service entry with a creation timestamp for TTL expiration.
 #[derive(Clone)]
 struct CachedEntry<T> {
@@ -211,18 +257,65 @@ impl TenantProviderRegistry {
     /// Get the LLM service for a tenant.
     ///
     /// Checks cache first, then builds from tenant config + secrets, then
-    /// falls back to the platform default.
+    /// falls back to the platform default. Returns `None` when the tenant
+    /// has no configured provider **and** no platform default is installed.
+    ///
+    /// This method collapses every failure mode (config-provider error,
+    /// build error) into `None` + a warn log. That is the right surface
+    /// for request-time resolution (callers just want "a service or
+    /// fall back"), but is lossy for wiring-state tracking. For the
+    /// latter, use [`Self::try_get_llm_service`], which surfaces
+    /// [`ResolverError`] so the caller can attach an accurate
+    /// `LoadingFailed{reason}`.
     pub async fn get_llm_service<E: std::fmt::Debug>(
         &self,
         tenant_id: &TenantId,
         config_provider: &dyn mk_core::traits::TenantConfigProvider<Error = E>,
     ) -> Option<BoxedLlmService> {
+        match self.try_get_llm_service(tenant_id, config_provider).await {
+            Ok(service) => service,
+            Err(e) => {
+                // The fallible variant logs at warn with structured fields;
+                // here we log the fallback decision at info so the two
+                // call sites have distinct, greppable signals.
+                tracing::warn!(
+                    tenant = %tenant_id.as_str(),
+                    error = %e,
+                    "LLM resolution error, falling back to platform default"
+                );
+                self.platform_llm.clone()
+            }
+        }
+    }
+
+    /// Fallible LLM service resolution.
+    ///
+    /// Surfaces the distinction the `Option`-returning
+    /// [`Self::get_llm_service`] collapses:
+    ///
+    /// | Return value                                | Meaning |
+    /// |---------------------------------------------|---------|
+    /// | `Ok(Some(svc))`                             | Resolved: tenant-specific OR platform default |
+    /// | `Ok(None)`                                  | No tenant config AND no platform default installed |
+    /// | `Err(ResolverError::ConfigProviderFailed)`  | Config source (DB/CRD) is broken or unreachable |
+    /// | `Err(ResolverError::BuildFailed)`           | Tenant IS configured but provider build failed (bad secret, unknown type, invalid URL, …) |
+    ///
+    /// Use this from wiring-state code paths (see
+    /// `cli::server::tenant_eager_wire::wire_one`) where the caller needs
+    /// to set an accurate `LoadingFailed{reason}` on a real failure
+    /// instead of a misleading `Available` via platform-default fallback.
+    pub async fn try_get_llm_service<E: std::fmt::Debug>(
+        &self,
+        tenant_id: &TenantId,
+        config_provider: &dyn mk_core::traits::TenantConfigProvider<Error = E>,
+    ) -> Result<Option<BoxedLlmService>, ResolverError> {
         let key = tenant_id.as_str().to_string();
 
-        // Check cache — remove if expired
+        // Check cache — remove if expired. A cache hit is always `Ok`:
+        // if it was cached, it was built successfully at some point.
         if let Some(entry) = self.tenant_llm_cache.get(&key) {
             if !entry.is_expired(self.cache_ttl) {
-                return Some(entry.service.clone());
+                return Ok(Some(entry.service.clone()));
             }
             drop(entry);
             self.tenant_llm_cache.remove(&key);
@@ -232,8 +325,22 @@ impl TenantProviderRegistry {
             );
         }
 
-        // Try to build from tenant config
-        if let Ok(Some(config)) = config_provider.get_config(tenant_id).await
+        // Config lookup. `Err` here is a provider-side failure (DB down,
+        // CRD unreachable), NOT a missing tenant — missing is `Ok(None)`.
+        let config = match config_provider.get_config(tenant_id).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(
+                    tenant = %tenant_id.as_str(),
+                    error = ?e,
+                    "LLM: tenant config provider returned error"
+                );
+                return Err(ResolverError::ConfigProviderFailed(format!("{e:?}")));
+            }
+        };
+
+        // Try to build from tenant config.
+        if let Some(config) = config
             && let Some(provider_str) = get_field_str(&config, config_keys::LLM_PROVIDER)
         {
             match self
@@ -248,38 +355,73 @@ impl TenantProviderRegistry {
                         provider = provider_str,
                         "Tenant-specific LLM service initialized"
                     );
-                    return Some(service);
+                    return Ok(Some(service));
                 }
-                Ok(None) => {}
+                Ok(None) => {
+                    // Provider was declared but build returned no service —
+                    // treated historically as "fall back silently". Keep
+                    // that semantics here (Ok path) because the tenant
+                    // manifest does not guarantee every field is present
+                    // and we don't want boot to fail on soft mis-config.
+                }
                 Err(e) => {
                     tracing::warn!(
                         tenant = %tenant_id.as_str(),
+                        provider = provider_str,
                         error = %e,
-                        "Failed to build tenant LLM service, falling back to platform default"
+                        "Failed to build tenant LLM service"
                     );
+                    return Err(ResolverError::BuildFailed(format!("{e}")));
                 }
             }
         }
 
-        // Fall back to platform default
-        self.platform_llm.clone()
+        // Fall back to platform default. `Ok(None)` is a legitimate
+        // outcome — it means "no tenant provider AND no platform default
+        // either" (bootstrap before any provider is installed).
+        Ok(self.platform_llm.clone())
     }
 
     /// Get the embedding service for a tenant.
     ///
-    /// Checks cache first, then builds from tenant config + secrets, then
-    /// falls back to the platform default.
+    /// See [`Self::get_llm_service`] for the rationale on the `Option`
+    /// surface. Use [`Self::try_get_embedding_service`] for the fallible
+    /// variant.
     pub async fn get_embedding_service<E: std::fmt::Debug>(
         &self,
         tenant_id: &TenantId,
         config_provider: &dyn mk_core::traits::TenantConfigProvider<Error = E>,
     ) -> Option<BoxedEmbeddingService> {
+        match self
+            .try_get_embedding_service(tenant_id, config_provider)
+            .await
+        {
+            Ok(service) => service,
+            Err(e) => {
+                tracing::warn!(
+                    tenant = %tenant_id.as_str(),
+                    error = %e,
+                    "embedding resolution error, falling back to platform default"
+                );
+                self.platform_embedding.clone()
+            }
+        }
+    }
+
+    /// Fallible embedding service resolution.
+    ///
+    /// See [`Self::try_get_llm_service`] for the full return-value
+    /// table — the semantics here are identical.
+    pub async fn try_get_embedding_service<E: std::fmt::Debug>(
+        &self,
+        tenant_id: &TenantId,
+        config_provider: &dyn mk_core::traits::TenantConfigProvider<Error = E>,
+    ) -> Result<Option<BoxedEmbeddingService>, ResolverError> {
         let key = tenant_id.as_str().to_string();
 
-        // Check cache — remove if expired
         if let Some(entry) = self.tenant_embedding_cache.get(&key) {
             if !entry.is_expired(self.cache_ttl) {
-                return Some(entry.service.clone());
+                return Ok(Some(entry.service.clone()));
             }
             drop(entry);
             self.tenant_embedding_cache.remove(&key);
@@ -289,8 +431,19 @@ impl TenantProviderRegistry {
             );
         }
 
-        // Try to build from tenant config
-        if let Ok(Some(config)) = config_provider.get_config(tenant_id).await
+        let config = match config_provider.get_config(tenant_id).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(
+                    tenant = %tenant_id.as_str(),
+                    error = ?e,
+                    "embedding: tenant config provider returned error"
+                );
+                return Err(ResolverError::ConfigProviderFailed(format!("{e:?}")));
+            }
+        };
+
+        if let Some(config) = config
             && let Some(provider_str) = get_field_str(&config, config_keys::EMBEDDING_PROVIDER)
         {
             match self
@@ -310,21 +463,22 @@ impl TenantProviderRegistry {
                         provider = provider_str,
                         "Tenant-specific embedding service initialized"
                     );
-                    return Some(service);
+                    return Ok(Some(service));
                 }
                 Ok(None) => {}
                 Err(e) => {
                     tracing::warn!(
                         tenant = %tenant_id.as_str(),
+                        provider = provider_str,
                         error = %e,
-                        "Failed to build tenant embedding service, falling back to platform default"
+                        "Failed to build tenant embedding service"
                     );
+                    return Err(ResolverError::BuildFailed(format!("{e}")));
                 }
             }
         }
 
-        // Fall back to platform default
-        self.platform_embedding.clone()
+        Ok(self.platform_embedding.clone())
     }
 
     /// Invalidate cached services for a tenant.
@@ -1037,5 +1191,194 @@ mod tests {
 
         assert!(registry.config_resolver.is_some());
         assert!(registry.secret_resolver.is_some());
+    }
+
+    // =======================================================================
+    // B2 5.2 followup — ResolverError surface tests
+    //
+    // The tests above exercise the historical Option-returning API, which
+    // collapses every failure into `None`. The tests below exercise the
+    // new fallible `try_*` API and assert that each failure mode maps to
+    // the correct `ResolverError` variant. This is what lets
+    // `tenant_eager_wire::wire_one` attach accurate `LoadingFailed{reason}`.
+    // =======================================================================
+
+    /// A mock provider whose `get_config` always errors — simulates an
+    /// unreachable or broken tenant config source (Postgres down, CRD
+    /// store 500, etc.). Distinct from "tenant has no config" which is
+    /// `Ok(None)` and must NOT be treated as an error.
+    struct FailingConfigProvider;
+
+    #[async_trait]
+    impl mk_core::traits::TenantConfigProvider for FailingConfigProvider {
+        type Error = MockError;
+
+        async fn get_config(
+            &self,
+            _tenant_id: &TenantId,
+        ) -> Result<Option<TenantConfigDocument>, Self::Error> {
+            Err(MockError("config store unreachable".into()))
+        }
+
+        async fn list_configs(&self) -> Result<Vec<TenantConfigDocument>, Self::Error> {
+            Err(MockError("config store unreachable".into()))
+        }
+
+        async fn upsert_config(
+            &self,
+            _config: TenantConfigDocument,
+        ) -> Result<TenantConfigDocument, Self::Error> {
+            Err(MockError("config store unreachable".into()))
+        }
+
+        async fn set_secret_entry(
+            &self,
+            _tenant_id: &TenantId,
+            _secret: TenantSecretEntry,
+        ) -> Result<TenantSecretReference, Self::Error> {
+            Err(MockError("config store unreachable".into()))
+        }
+
+        async fn delete_secret_entry(
+            &self,
+            _tenant_id: &TenantId,
+            _logical_name: &str,
+        ) -> Result<bool, Self::Error> {
+            Err(MockError("config store unreachable".into()))
+        }
+
+        async fn get_secret_bytes(
+            &self,
+            _tenant_id: &TenantId,
+            _logical_name: &str,
+        ) -> Result<Option<mk_core::SecretBytes>, Self::Error> {
+            Err(MockError("config store unreachable".into()))
+        }
+
+        async fn validate(&self, _config: &TenantConfigDocument) -> Result<(), Self::Error> {
+            Err(MockError("config store unreachable".into()))
+        }
+    }
+
+    #[tokio::test]
+    async fn try_get_llm_service_ok_none_when_no_tenant_config_and_no_platform_default() {
+        // Bootstrap state: no platform default, no tenant config.
+        // This is NOT an error — it's a legitimate quiescent state that
+        // the caller may or may not treat as ready. Must surface as
+        // `Ok(None)`, not `Err`.
+        let registry = TenantProviderRegistry::new(None, None);
+        let provider = MockConfigProvider::new();
+        let tid = test_tenant_id();
+
+        let r = registry.try_get_llm_service(&tid, &provider).await;
+        assert!(matches!(r, Ok(None)), "expected Ok(None)");
+
+        let r = registry.try_get_embedding_service(&tid, &provider).await;
+        assert!(matches!(r, Ok(None)), "expected Ok(None)");
+    }
+
+    #[tokio::test]
+    async fn try_get_llm_service_err_config_provider_failed_when_provider_errors() {
+        // Config provider itself errors (DB down / CRD unreachable).
+        // Must surface as `ConfigProviderFailed`, not as a silent
+        // platform-default fallback. The old Option API returned
+        // `platform_llm.clone()` here, which is misleading in the
+        // wiring path.
+        let registry = TenantProviderRegistry::new(None, None);
+        let provider = FailingConfigProvider;
+        let tid = test_tenant_id();
+
+        let r = registry.try_get_llm_service(&tid, &provider).await;
+        match r {
+            Err(ResolverError::ConfigProviderFailed(msg)) => {
+                assert!(
+                    msg.contains("config store unreachable"),
+                    "error message must carry upstream detail, got: {msg}"
+                );
+            }
+            Err(e) => panic!("expected ConfigProviderFailed, got Err({e})"),
+            Ok(_) => panic!("expected Err(ConfigProviderFailed), got Ok"),
+        }
+    }
+
+    #[tokio::test]
+    async fn try_get_embedding_service_err_config_provider_failed_when_provider_errors() {
+        let registry = TenantProviderRegistry::new(None, None);
+        let provider = FailingConfigProvider;
+        let tid = test_tenant_id();
+
+        let r = registry.try_get_embedding_service(&tid, &provider).await;
+        assert!(
+            matches!(r, Err(ResolverError::ConfigProviderFailed(_))),
+            "expected ConfigProviderFailed"
+        );
+    }
+
+    #[tokio::test]
+    async fn try_get_llm_service_err_build_failed_when_provider_type_unknown() {
+        // Tenant config says `llm_provider = "martian-wavelet-3000"` —
+        // no such thing. The build step errors. Must surface as
+        // `BuildFailed`, not ConfigProviderFailed (the config itself
+        // WAS fetched successfully) and not Ok(None) (which would
+        // mislead eager-wire into marking Available).
+        let registry = TenantProviderRegistry::new(None, None);
+        let tid = test_tenant_id();
+        let config = make_config_doc(
+            &tid,
+            vec![(config_keys::LLM_PROVIDER, "martian-wavelet-3000")],
+        );
+        let provider = MockConfigProvider::new().with_config(config);
+
+        let r = registry.try_get_llm_service(&tid, &provider).await;
+        match r {
+            Err(ResolverError::BuildFailed(msg)) => {
+                // Don't over-specify the message — the underlying
+                // factory may evolve — but at least ensure it mentions
+                // the unknown provider somewhere in the string for
+                // operator debuggability.
+                assert!(
+                    msg.to_lowercase().contains("martian-wavelet-3000")
+                        || msg.to_lowercase().contains("unknown")
+                        || msg.to_lowercase().contains("unsupported"),
+                    "BuildFailed message should reference the unknown provider: {msg}"
+                );
+            }
+            Err(e) => panic!("expected BuildFailed, got Err({e})"),
+            Ok(_) => panic!("expected Err(BuildFailed), got Ok"),
+        }
+    }
+
+    #[tokio::test]
+    async fn get_llm_service_still_returns_none_on_config_provider_error() {
+        // Back-compat: the Option-returning wrapper MUST keep silencing
+        // provider errors into `None` so existing request-time callers
+        // don't regress. The log line changes (now "resolution error,
+        // falling back"), but the shape of the return value is stable.
+        let registry = TenantProviderRegistry::new(None, None);
+        let provider = FailingConfigProvider;
+        let tid = test_tenant_id();
+
+        assert!(registry.get_llm_service(&tid, &provider).await.is_none());
+        assert!(
+            registry
+                .get_embedding_service(&tid, &provider)
+                .await
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn resolver_error_display_includes_upstream_message() {
+        // `ResolverError`'s Display impl is what tenant_eager_wire uses
+        // to populate `LoadingFailed { reason }` — the string needs to
+        // carry enough operator signal, not just the variant name.
+        let e = ResolverError::ConfigProviderFailed("postgres: conn refused".into());
+        let s = format!("{e}");
+        assert!(s.contains("postgres: conn refused"), "got: {s}");
+        assert!(s.to_lowercase().contains("config"), "got: {s}");
+
+        let e = ResolverError::BuildFailed("openai: invalid model 'foo'".into());
+        let s = format!("{e}");
+        assert!(s.contains("openai: invalid model 'foo'"), "got: {s}");
     }
 }
