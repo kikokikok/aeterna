@@ -3897,10 +3897,7 @@ async fn provision_tenant(
         }
     };
 
-    let caller_generation = manifest
-        .metadata
-        .as_ref()
-        .and_then(|m| m.generation);
+    let caller_generation = manifest.metadata.as_ref().and_then(|m| m.generation);
 
     let current_generation: i64 = prior_state.as_ref().map(|(_, g)| *g).unwrap_or(0);
 
@@ -6312,7 +6309,9 @@ mod tests {
         );
         assert_eq!(j2["slug"], "idempotent-test");
         assert!(
-            j2["hash"].as_str().is_some_and(|h| h.starts_with("sha256:")),
+            j2["hash"]
+                .as_str()
+                .is_some_and(|h| h.starts_with("sha256:")),
             "hash must be a sha256: fingerprint, got: {:?}",
             j2["hash"]
         );
@@ -6360,9 +6359,12 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(r1.status(), StatusCode::OK);
-        let j1: serde_json::Value =
-            serde_json::from_slice(&axum::body::to_bytes(r1.into_body(), usize::MAX).await.unwrap())
-                .unwrap();
+        let j1: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(r1.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(j1["status"], "applied");
         assert_eq!(j1["generation"], 1);
         let hash1 = j1["hash"].as_str().unwrap().to_string();
@@ -6378,13 +6380,19 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(r2.status(), StatusCode::OK);
-        let j2: serde_json::Value =
-            serde_json::from_slice(&axum::body::to_bytes(r2.into_body(), usize::MAX).await.unwrap())
-                .unwrap();
+        let j2: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(r2.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(j2["status"], "applied", "content change must run pipeline");
         assert_eq!(j2["generation"], 2, "omitted generation auto-increments");
         let hash2 = j2["hash"].as_str().unwrap();
-        assert_ne!(hash1, hash2, "differing manifests must produce differing hashes");
+        assert_ne!(
+            hash1, hash2,
+            "differing manifests must produce differing hashes"
+        );
     }
 
     #[tokio::test]
@@ -6439,9 +6447,12 @@ mod tests {
             StatusCode::CONFLICT,
             "stale generation must surface as 409"
         );
-        let j2: serde_json::Value =
-            serde_json::from_slice(&axum::body::to_bytes(r2.into_body(), usize::MAX).await.unwrap())
-                .unwrap();
+        let j2: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(r2.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(j2["error"], "generation_conflict");
         assert_eq!(j2["currentGeneration"], 1);
         assert_eq!(j2["submittedGeneration"], 1);
