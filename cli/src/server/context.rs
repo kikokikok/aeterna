@@ -97,6 +97,86 @@ impl RequestContext {
         }
     }
 
+    /// Like [`require_target_tenant`], but additionally gates on the
+    /// pod-local tenant runtime state (B2 task 5.4).
+    ///
+    /// Handlers that invoke tenant-scoped provider calls (LLM, embedding,
+    /// memory reads/writes) should use this instead of
+    /// [`require_target_tenant`] so callers observe a clean
+    /// `503 tenant_unavailable` rather than an opaque 500 when the
+    /// provider resolve would fail.
+    ///
+    /// # Behaviour
+    ///
+    /// 1. `self.tenant` must be set \u2014 otherwise `400 select_tenant`
+    ///    (same as [`require_target_tenant`]).
+    /// 2. [`tenant_lazy_wire::ensure_wired`] is invoked against the
+    ///    resolved slug. This is cheap when already `Available` and
+    ///    primes the pod on first touch (closes the boot/pub-sub race).
+    /// 3. Result mapping:
+    ///    * `Available`     \u2192 `Ok(&ResolvedTenant)` (happy path)
+    ///    * `Loading`       \u2192 `Err(503 tenant_unavailable)` with
+    ///                        `Retry-After: 1` \u2014 another task is already
+    ///                        wiring, a quick retry will succeed
+    ///    * `LoadingFailed` (reason = \"tenant not found\") \u2192 `404`.
+    ///    * `LoadingFailed` (any other reason) \u2192 `503 tenant_unavailable`
+    ///                        with a cooldown-aligned `Retry-After`
+    ///                        header (30s by default)
+    ///
+    /// # Security
+    ///
+    /// The response body carries `error`, `state`, and `retryAfterSeconds`
+    /// but **never the internal failure reason**. Reasons can contain
+    /// upstream error text not fit for the caller's trust boundary; they
+    /// are reachable only through the admin status endpoint (task 5.5).
+    pub async fn require_available_tenant<'a>(
+        &'a self,
+        state: &crate::server::AppState,
+        headers: &HeaderMap,
+    ) -> Result<&'a ResolvedTenant, Response> {
+        let tenant = self.require_target_tenant(headers)?;
+
+        use crate::server::tenant_lazy_wire;
+        use crate::server::tenant_runtime_state::TenantRuntimeState;
+
+        let rt = tenant_lazy_wire::ensure_wired(state, &tenant.slug).await;
+
+        match rt {
+            TenantRuntimeState::Available { .. } => Ok(tenant),
+            TenantRuntimeState::Loading { .. } => Err(tenant_unavailable_response(
+                &tenant.slug,
+                "loading",
+                // A Loading state means another task holds the wiring;
+                // it should complete within the resolver budget. 1s is
+                // a sensible client retry.
+                1,
+            )),
+            TenantRuntimeState::LoadingFailed { reason, .. } => {
+                // Stable marker from tenant_lazy_wire: the slug was
+                // unknown to the tenant store. Surface as 404 so the
+                // caller doesn't retry what will never succeed.
+                if reason == "tenant not found" {
+                    Err(error_response(
+                        StatusCode::NOT_FOUND,
+                        "tenant_not_found",
+                        &format!("No tenant matches slug '{}'", tenant.slug),
+                        None,
+                    ))
+                } else {
+                    Err(tenant_unavailable_response(
+                        &tenant.slug,
+                        "loadingFailed",
+                        // Must be >= the lazy-wire cooldown or the client
+                        // will retry inside the cooldown and get the
+                        // cached failure again. 30s matches the default
+                        // `AETERNA_LAZY_RETRY_COOLDOWN_SECS`.
+                        30,
+                    ))
+                }
+            }
+        }
+    }
+
     /// Convenience: build a `TenantContext` for call sites that still require
     /// the legacy shape. Emits `select_tenant` if no tenant is resolved.
     pub fn require_tenant_context(&self, headers: &HeaderMap) -> Result<TenantContext, Response> {
@@ -681,6 +761,34 @@ fn error_response(
     (status, Json(body)).into_response()
 }
 
+/// Canonical `503 tenant_unavailable` response used by the B2 task 5.4
+/// shield. Centralised so callers (the shield helper and future hand-
+/// crafted short-circuits) emit identical wire shape \u2014 the SRE
+/// dashboard keys on `retryAfterSeconds`.
+///
+/// `Retry-After` is set in seconds (HTTP/1.1 §7.1.3 delta-seconds form);
+/// clients that respect it (K8s Service mesh sidecars, most SDK
+/// retry layers) back off correctly without us coding the budget twice.
+fn tenant_unavailable_response(slug: &str, wiring_state: &str, retry_after_secs: u64) -> Response {
+    use axum::http::HeaderValue;
+    let extra = json!({
+        "tenant": slug,
+        "state": wiring_state,
+        "retryAfterSeconds": retry_after_secs,
+    });
+    let mut resp = error_response(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "tenant_unavailable",
+        &format!("Tenant '{slug}' is not ready to serve traffic on this pod"),
+        Some(extra),
+    );
+    if let Ok(v) = HeaderValue::from_str(&retry_after_secs.to_string()) {
+        resp.headers_mut()
+            .insert(axum::http::header::RETRY_AFTER, v);
+    }
+    resp
+}
+
 // Re-export for external use in tests.
 pub const INSTANCE_SCOPE: &str = INSTANCE_SCOPE_TENANT_ID;
 
@@ -841,5 +949,82 @@ mod tests {
             ScopeIntent::All { is_alias: true } => {}
             other => panic!("case-insensitive alias failed: {other:?}"),
         }
+    }
+
+    // ── B2 task 5.4 shield helpers ──────────────────────────────────────
+    //
+    // The end-to-end behaviour of `require_available_tenant` is exercised
+    // in `cli/tests/tenant_shield_integration_test.rs` because it needs a
+    // live `AppState` with a populated tenant store. The unit tests below
+    // cover the response-shape contract that integration tests would
+    // otherwise duplicate verbosely.
+
+    async fn body_json(resp: Response) -> serde_json::Value {
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice(&body).unwrap()
+    }
+
+    #[tokio::test]
+    async fn tenant_unavailable_response_loading_shape() {
+        let resp = tenant_unavailable_response("acme", "loading", 1);
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            resp.headers()
+                .get(axum::http::header::RETRY_AFTER)
+                .and_then(|v| v.to_str().ok()),
+            Some("1"),
+            "Retry-After header MUST be set in seconds (delta-seconds form)"
+        );
+        let body = body_json(resp).await;
+        assert_eq!(body["error"], "tenant_unavailable");
+        assert_eq!(body["tenant"], "acme");
+        assert_eq!(body["state"], "loading");
+        assert_eq!(body["retryAfterSeconds"], 1);
+    }
+
+    #[tokio::test]
+    async fn tenant_unavailable_response_failed_uses_cooldown_aligned_retry() {
+        // 30s matches the default lazy-wire cooldown. Clients retrying
+        // earlier would hit the cached failure and get nothing new.
+        let resp = tenant_unavailable_response("acme", "loadingFailed", 30);
+        assert_eq!(
+            resp.headers()
+                .get(axum::http::header::RETRY_AFTER)
+                .and_then(|v| v.to_str().ok()),
+            Some("30"),
+        );
+        let body = body_json(resp).await;
+        assert_eq!(body["state"], "loadingFailed");
+        assert_eq!(body["retryAfterSeconds"], 30);
+    }
+
+    #[tokio::test]
+    async fn tenant_unavailable_response_never_leaks_failure_reason() {
+        // The 503 shield body is designed so no call site CAN serialize
+        // the upstream failure reason \u2014 the function signature doesn't
+        // accept one. This test locks that in against a future signature
+        // change that might add a `reason: &str` parameter.
+        let resp = tenant_unavailable_response("acme", "loadingFailed", 30);
+        let body = body_json(resp).await;
+        let serialized = body.to_string();
+        assert!(
+            !serialized.to_lowercase().contains("reason"),
+            "body unexpectedly carries a 'reason' field: {serialized}"
+        );
+    }
+
+    #[tokio::test]
+    async fn tenant_unavailable_response_tolerates_large_retry_after() {
+        // HeaderValue::from_str can fail on NUL bytes; u64::MAX as a
+        // decimal string is 20 ASCII digits and must round-trip cleanly.
+        let resp = tenant_unavailable_response("acme", "loadingFailed", u64::MAX);
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(
+            resp.headers()
+                .get(axum::http::header::RETRY_AFTER)
+                .is_some()
+        );
     }
 }
