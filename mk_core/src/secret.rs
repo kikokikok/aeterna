@@ -208,7 +208,11 @@ impl schemars::JsonSchema for SecretBytes {
 /// so future backends (external secret managers, cloud KV stores, etc.)
 /// can be added as additive variants.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum SecretReference {
     /// Encrypted blob stored in the `tenant_secrets` Postgres table. The row
     /// holds a KMS-wrapped DEK and an AES-256-GCM ciphertext.
@@ -299,8 +303,14 @@ mod tests {
             secret_id: Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap(),
         };
         let j = serde_json::to_string(&r).unwrap();
-        assert!(j.contains("\"secretId\""), "expected camelCase secretId on wire, got: {j}");
-        assert!(!j.contains("\"secret_id\""), "snake_case secret_id leaked on wire: {j}");
+        assert!(
+            j.contains("\"secretId\""),
+            "expected camelCase secretId on wire, got: {j}"
+        );
+        assert!(
+            !j.contains("\"secret_id\""),
+            "snake_case secret_id leaked on wire: {j}"
+        );
 
         // Deserialize MUST accept camelCase (the canonical shape) and
         // MUST reject snake_case so we do not have two valid wire shapes.
