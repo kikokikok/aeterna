@@ -3809,9 +3809,75 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
 /// `Json<TenantManifest>` so the raw object is available for hashing. Typed
 /// deserialization happens just after, with the same `400 Bad Request`
 /// surface as the previous `Json<TenantManifest>` extractor.
+///
+/// ### Dry-run (`?dryRun=true`)
+///
+/// Task §2.1 of `harden-tenant-provisioning`. When `dryRun=true` the handler
+/// runs the full **read-only** preamble — typed parse, `validate_manifest`,
+/// canonical hash, manifest-state snapshot, and generation gate — then
+/// returns a structured [`ProvisionPlan`] without touching the tenant store,
+/// the config provider, the binding store, the governance log, or emitting
+/// any `TenantCreated`/`TenantConfigChanged` events. Idempotent
+/// short-circuit (hash match) and `generation_conflict` (409) surface
+/// identically in dry-run mode: callers opt in to "preview only" but not
+/// "skip validation".
+///
+/// This is the preview surface used by `aeterna tenant validate -f <file>`
+/// and by operator pre-change review. Because dry-run deliberately stops
+/// before any write, it cannot detect downstream failures (config provider
+/// rejecting a field, repository-binding credential mismatch, etc.) — the
+/// plan answers "**would this be accepted**", not "**would this succeed**".
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProvisionQuery {
+    /// When `true`, return a [`ProvisionPlan`] and skip all writes.
+    dry_run: Option<bool>,
+}
+
+/// Response body for `POST /admin/tenants/provision?dryRun=true`.
+///
+/// Shape is intentionally flat (no nested diff) — a full structural diff
+/// is task §2.4, which is blocked on the reverse-renderer reaching
+/// coverage parity with `provision_tenant`. `ProvisionPlan` answers the
+/// simpler question: *what effect would a non-dry-run apply have?* via
+/// the `status` classifier, the hash pair, and per-section presence
+/// flags.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProvisionPlan {
+    /// Always `true` for dry-run responses (explicit so clients that
+    /// persist the JSON cannot later mistake it for a real apply record).
+    dry_run: bool,
+    /// `"unchanged"` — the incoming hash matches `last_applied_manifest_hash`;
+    /// a non-dry-run apply of the same manifest would short-circuit.
+    /// `"create"` — no prior manifest state exists for this slug; the row
+    /// may or may not exist (tenant rows can predate the B2 manifest-state
+    /// column), but the pipeline would run end-to-end.
+    /// `"update"` — prior manifest state exists and the hash differs; the
+    /// pipeline would run and bump the generation to `nextGeneration`.
+    status: &'static str,
+    slug: String,
+    incoming_hash: String,
+    /// `None` for the `"create"` path; `Some` (possibly with inner `None`
+    /// if the row pre-dates B2) otherwise.
+    current_hash: Option<String>,
+    current_generation: i64,
+    next_generation: i64,
+    /// Config fields in the submitted manifest. Says nothing about how
+    /// many of these would be new vs updated — that is §2.4 territory.
+    config_field_count: usize,
+    secret_reference_count: usize,
+    has_repository_binding: bool,
+    has_domain_mappings: bool,
+    has_hierarchy: bool,
+    has_roles: bool,
+    has_providers: bool,
+}
+
 async fn provision_tenant(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
+    Query(query): Query<ProvisionQuery>,
     Json(raw): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     let ctx = match require_platform_admin(&state, &headers).await {
@@ -3908,15 +3974,24 @@ async fn provision_tenant(
     // `if Some(prior)` guard documents the intent.
     if let Some((Some(prior_hash), _)) = prior_state.as_ref() {
         if prior_hash == &incoming_hash {
+            let is_dry_run = query.dry_run.unwrap_or(false);
+            // Dry-run on an unchanged manifest audits a preview event,
+            // not a real unchanged-apply. Callers treat these separately
+            // (a preview does not imply the operator decided to proceed).
             audit_tenant_action(
                 state.as_ref(),
                 &ctx,
-                "tenant_provision_unchanged",
+                if is_dry_run {
+                    "tenant_provision_dry_run_unchanged"
+                } else {
+                    "tenant_provision_unchanged"
+                },
                 None,
                 json!({
                     "slug": manifest.tenant.slug,
                     "hash": incoming_hash,
                     "generation": current_generation,
+                    "dryRun": is_dry_run,
                 }),
             )
             .await;
@@ -3929,6 +4004,7 @@ async fn provision_tenant(
                     "hash": incoming_hash,
                     "generation": current_generation,
                     "steps": Vec::<ProvisionStep>::new(),
+                    "dryRun": is_dry_run,
                 })),
             )
                 .into_response();
@@ -3961,6 +4037,67 @@ async fn provision_tenant(
         }
         None => current_generation.saturating_add(1),
     };
+
+    // ── Dry-run short-circuit (§2.1) ─────────────────────────────────────
+    // All read-only checks have passed at this point: typed parse,
+    // `validate_manifest`, canonical hash, and the strict-monotonic
+    // generation gate. The next thing the non-dry-run path does is the
+    // first write (`ensure_tenant_with_source`); we stop here and return
+    // a plan instead. The plan is computed from `manifest` and the
+    // `prior_state` snapshot only — we do NOT re-read from the store,
+    // so a concurrent apply that lands between plan and apply is not
+    // reflected here (the race-guarded UPDATE at the tail of a real
+    // apply is what catches that; the plan is advisory only).
+    if query.dry_run.unwrap_or(false) {
+        let status = if prior_state.is_none() {
+            "create"
+        } else {
+            "update"
+        };
+        audit_tenant_action(
+            state.as_ref(),
+            &ctx,
+            "tenant_provision_dry_run",
+            None,
+            json!({
+                "slug": manifest.tenant.slug,
+                "status": status,
+                "incomingHash": incoming_hash,
+                "currentGeneration": current_generation,
+                "nextGeneration": new_generation,
+            }),
+        )
+        .await;
+        let plan = ProvisionPlan {
+            dry_run: true,
+            status,
+            slug: manifest.tenant.slug.clone(),
+            incoming_hash: incoming_hash.clone(),
+            current_hash: prior_state.as_ref().and_then(|(h, _)| h.clone()),
+            current_generation,
+            next_generation: new_generation,
+            config_field_count: manifest
+                .config
+                .as_ref()
+                .map(|c| c.fields.len())
+                .unwrap_or(0),
+            secret_reference_count: manifest
+                .config
+                .as_ref()
+                .map(|c| c.secret_references.len())
+                .unwrap_or(0),
+            has_repository_binding: manifest.repository.is_some(),
+            has_domain_mappings: manifest
+                .tenant
+                .domain_mappings
+                .as_ref()
+                .is_some_and(|d| !d.is_empty()),
+            has_hierarchy: manifest.hierarchy.as_ref().is_some_and(|h| !h.is_empty()),
+            has_roles: manifest.roles.as_ref().is_some_and(|r| !r.is_empty()),
+            has_providers: manifest.providers.is_some(),
+        };
+        return (StatusCode::OK, Json(plan)).into_response();
+    }
 
     let mut steps: Vec<ProvisionStep> = Vec::new();
     let mut overall_ok = true;
@@ -6530,6 +6667,323 @@ mod tests {
             "expected 403 or 401, got {}",
             response.status()
         );
+    }
+
+    // ── B3 §2.1 dry-run tests ────────────────────────────────────────────
+    // Docker-gated like the rest of the provision_* suite. Each test
+    // asserts both the wire shape of ProvisionPlan AND that dry-run did
+    // not leak state (via a follow-up non-dry-run apply observing
+    // `status: "applied"` with `generation: 1`, which could only happen
+    // if the dry-run left no row behind).
+
+    #[tokio::test]
+    async fn provision_tenant_dry_run_returns_create_plan_for_new_slug() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping dry-run create test: Docker not available");
+            return;
+        };
+
+        let manifest = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "dryrun-new", "name": "Dryrun New" },
+            "config": {
+                "fields": {
+                    "ui.theme": { "ownership": "tenant", "value": "dark" }
+                },
+                "secretReferences": {}
+            }
+        });
+
+        let resp = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision?dryRun=true",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&manifest).unwrap()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let j: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(j["dryRun"], true);
+        assert_eq!(j["status"], "create");
+        assert_eq!(j["slug"], "dryrun-new");
+        assert_eq!(j["currentGeneration"], 0);
+        assert_eq!(j["nextGeneration"], 1);
+        assert!(j["currentHash"].is_null(), "no prior state → null hash");
+        assert!(
+            j["incomingHash"]
+                .as_str()
+                .is_some_and(|h| h.starts_with("sha256:")),
+            "incomingHash must be sha256: fingerprint, got: {:?}",
+            j["incomingHash"]
+        );
+        assert_eq!(j["configFieldCount"], 1);
+        assert_eq!(j["secretReferenceCount"], 0);
+        assert_eq!(j["hasRepositoryBinding"], false);
+        assert_eq!(j["hasDomainMappings"], false);
+        assert_eq!(j["hasHierarchy"], false);
+        assert_eq!(j["hasRoles"], false);
+        assert_eq!(j["hasProviders"], false);
+
+        // Prove dry-run did not create the tenant: a subsequent real
+        // apply lands as a fresh creation with generation=1.
+        let resp2 = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&manifest).unwrap()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp2.status(), StatusCode::OK);
+        let j2: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp2.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            j2["status"], "applied",
+            "dry-run must not have persisted anything, so the real apply is a fresh create"
+        );
+        assert_eq!(j2["generation"], 1);
+    }
+
+    #[tokio::test]
+    async fn provision_tenant_dry_run_reports_update_for_existing_tenant() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping dry-run update test: Docker not available");
+            return;
+        };
+
+        let m1 = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "dryrun-update", "name": "Dryrun v1" }
+        });
+        let m2 = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "dryrun-update", "name": "Dryrun v2" }
+        });
+
+        // First: real apply of v1.
+        let r1 = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&m1).unwrap()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(r1.status(), StatusCode::OK);
+        let j1: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(r1.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let hash1 = j1["hash"].as_str().unwrap().to_string();
+
+        // Then: dry-run of v2 reports "update" with currentHash == hash1
+        // and nextGeneration == 2.
+        let r2 = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision?dryRun=true",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&m2).unwrap()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(r2.status(), StatusCode::OK);
+        let j2: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(r2.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(j2["dryRun"], true);
+        assert_eq!(j2["status"], "update");
+        assert_eq!(j2["currentHash"], hash1);
+        assert_eq!(j2["currentGeneration"], 1);
+        assert_eq!(j2["nextGeneration"], 2);
+        assert_ne!(
+            j2["incomingHash"], hash1,
+            "v2 must hash differently than v1"
+        );
+
+        // Prove dry-run did not bump the generation: a real re-apply of
+        // v1 is still "unchanged" at generation=1 (not 2 or 3).
+        let r3 = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&m1).unwrap()),
+            ))
+            .await
+            .unwrap();
+        let j3: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(r3.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(j3["status"], "unchanged");
+        assert_eq!(j3["generation"], 1, "dry-run must not bump generation");
+    }
+
+    #[tokio::test]
+    async fn provision_tenant_dry_run_unchanged_echoes_flag() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping dry-run unchanged test: Docker not available");
+            return;
+        };
+
+        let m = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "dryrun-unchanged", "name": "Dryrun Unchanged" }
+        });
+
+        let _ = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&m).unwrap()),
+            ))
+            .await
+            .unwrap();
+
+        // Same manifest, dry-run: exercises the short-circuit path which
+        // returns the unchanged envelope with dryRun=true echoed.
+        let r = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision?dryRun=true",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&m).unwrap()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::OK);
+        let j: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(r.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(j["status"], "unchanged");
+        assert_eq!(j["dryRun"], true);
+        assert_eq!(j["generation"], 1);
+    }
+
+    #[tokio::test]
+    async fn provision_tenant_dry_run_does_not_mask_validation_errors() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping dry-run validation test: Docker not available");
+            return;
+        };
+
+        // metadata.generation == 0 is rejected by validate_manifest.
+        // Dry-run must NOT swallow the rejection — preview still surfaces
+        // real errors.
+        let bad = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "metadata": { "generation": 0 },
+            "tenant": { "slug": "dryrun-invalid", "name": "Invalid" }
+        });
+
+        let r = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision?dryRun=true",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&bad).unwrap()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let j: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(r.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(j["error"], "manifest_validation_failed");
+    }
+
+    #[tokio::test]
+    async fn provision_tenant_dry_run_surfaces_generation_conflict() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping dry-run generation-conflict test: Docker not available");
+            return;
+        };
+
+        // Apply at generation=2, then dry-run at pinned generation=2:
+        // must surface 409 (dry-run preview includes the generation gate).
+        let m1 = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "metadata": { "generation": 2 },
+            "tenant": { "slug": "dryrun-conflict", "name": "Conflict v1" }
+        });
+        let m2_stale = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "metadata": { "generation": 2 },
+            "tenant": { "slug": "dryrun-conflict", "name": "Conflict v2" }
+        });
+
+        let _ = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&m1).unwrap()),
+            ))
+            .await
+            .unwrap();
+
+        let r = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision?dryRun=true",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&m2_stale).unwrap()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::CONFLICT);
+        let j: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(r.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(j["error"], "generation_conflict");
     }
 
     mod permission_matrix_tests {

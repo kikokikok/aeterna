@@ -58,7 +58,7 @@
 
 ### 2. Dry-run, diff, render endpoints
 
-- [ ] 2.1 Add `?dryRun=true` branch to `provision_tenant` (L3599) that runs every step in plan-only mode and returns the planned step list.
+- [x] 2.1 Add `?dryRun=true` branch to `provision_tenant` that runs every read-only check in plan-only mode and returns a structured `ProvisionPlan`. _(Shipped in PR #126. Branch lives **after** the generation gate and **before** the first write, so dry-run preserves validate_manifest + canonical hash + short-circuit + generation-conflict as real errors but emits no writes, no `TenantCreated`/`TenantConfigChanged` events, and a dedicated `tenant_provision_dry_run` audit action. Plan contains status classifier (`create`/`update`/`unchanged`), incoming/current hash pair, current/next generation, and per-section presence flags. Structural diff per section is §2.4's remit and is blocked on full-fidelity renderer.)_
 - [ ] 2.2 Implement `GET /api/v1/admin/tenants/{slug}/manifest` returning the rendered current-state manifest (secret values excluded; references only).
 - [ ] 2.3 Implement `?redact=true` mode (reference names replaced with opaque placeholders for `tenant:read`-only callers).
 - [ ] 2.4 Implement `POST /api/v1/admin/tenants/diff` returning structured delta between submitted manifest and current state.
