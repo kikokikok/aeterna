@@ -42,7 +42,7 @@ use sync::websocket::{AuthToken, TokenValidator, WsResult, WsServer};
 use tools::server::McpServer;
 
 use super::plugin_auth::{RefreshTokenStore, RefreshTokenStoreBackend};
-use super::{AppState, PluginAuthState};
+use super::{AppState, PluginAuthState, bootstrap_tracker};
 
 const DEFAULT_K8S_NAMESPACE: &str = "default";
 
@@ -50,9 +50,22 @@ const ENV_AUTH_BACKEND: &str = "AETERNA_AUTH_BACKEND";
 const AUTH_BACKEND_ALLOW_ALL: &str = "allow-all";
 
 pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
+    // Bootstrap phase tracker (B2 task 6.1). Instrumented across the
+    // major phases below; finalized with `mark_ready()` immediately
+    // before we hand the state back to `serve::run`. On error we
+    // deliberately do NOT call `mark_ready()` — the process is about to
+    // exit anyway (kubelet restart path) and leaving the tracker with
+    // a `running` overall state would only matter if someone attached
+    // a debugger mid-failure.
+    let bootstrap_tracker = Arc::new(bootstrap_tracker::BootstrapTracker::new());
+
+    bootstrap_tracker.begin("env_and_config");
     validate_required_env()?;
 
     let config = Arc::new(config::load_from_env()?);
+    bootstrap_tracker.complete("env_and_config");
+
+    bootstrap_tracker.begin("database");
     let tenant_url = postgres_connection_url(&config);
     // Dual-pool config (issue #58, RLS enforcement).
     //
@@ -70,7 +83,9 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
 
     seed_platform_admin(postgres.pool(), &config.admin_bootstrap).await?;
     seed_k8s_service_account(postgres.pool(), &config.admin_bootstrap).await?;
+    bootstrap_tracker.complete("database");
 
+    bootstrap_tracker.begin("knowledge_git");
     let governance_storage = Some(Arc::new(GovernanceStorage::new(postgres.pool().clone())));
 
     let git_provider: Option<Arc<dyn GitProvider>> = if let (Some(owner), Some(repo)) = (
@@ -129,7 +144,9 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         GitRepository::new_with_remote(knowledge_repo_path(), remote_config)
             .context("Failed to initialize knowledge repository")?,
     );
+    bootstrap_tracker.complete("knowledge_git");
 
+    bootstrap_tracker.begin("memory_and_providers");
     let auth_for_memory = build_boxed_auth_service()?;
     let auth_service = build_anyhow_auth_service()?;
 
@@ -253,7 +270,9 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     memory_manager = memory_manager.with_knowledge_manager(knowledge_manager.clone());
 
     let memory_manager = Arc::new(memory_manager);
+    bootstrap_tracker.complete("memory_and_providers");
 
+    bootstrap_tracker.begin("sync_and_protocols");
     let persister = Arc::new(DatabasePersister::new(postgres.clone(), "sync".to_string()));
     let sync_manager = Arc::new(
         SyncManager::new(
@@ -299,6 +318,9 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         trusted_identity: a2a_config.auth.trusted_identity.clone(),
     });
     a2a_auth_state.validate()?;
+    bootstrap_tracker.complete("sync_and_protocols");
+
+    bootstrap_tracker.begin("redis_and_auth_stores");
     // Build a Redis connection manager for shared state stores.
     // If Redis is available, use Redis-backed stores for HA; otherwise fall back to in-memory.
     let (redis_conn, redis_url): (Option<Arc<redis::aio::ConnectionManager>>, Option<String>) = {
@@ -341,7 +363,9 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
 
     // Initialize backup job stores (export/import) with Redis when available.
     super::backup_api::init_job_stores(redis_conn.as_ref());
+    bootstrap_tracker.complete("redis_and_auth_stores");
 
+    bootstrap_tracker.begin("assemble_state");
     let (idp_config, idp_client, idp_sync_service) = build_optional_idp_services(postgres.clone())?;
     let ws_server = Arc::new(WsServer::new(Arc::new(AllowAllTokenValidator {
         access_token_ttl_seconds: config.plugin_auth.access_token_ttl_seconds.unwrap_or(3600),
@@ -409,6 +433,15 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         tenant_runtime_state: Arc::new(
             crate::server::tenant_runtime_state::TenantRuntimeRegistry::new(),
         ),
+        bootstrap_tracker: {
+            // Close the final phase and finalize the tracker BEFORE
+            // handing the Arc<AppState> back. Post this point the
+            // `/admin/bootstrap/status` endpoint will report
+            // `state: "completed"` with all phase durations populated.
+            bootstrap_tracker.complete("assemble_state");
+            bootstrap_tracker.mark_ready();
+            bootstrap_tracker
+        },
     }))
 }
 

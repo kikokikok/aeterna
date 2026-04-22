@@ -2,6 +2,8 @@ pub mod admin_sync;
 pub mod auth_middleware;
 pub mod backup_api;
 pub mod bootstrap;
+pub mod bootstrap_api;
+pub mod bootstrap_tracker;
 pub mod context;
 pub mod govern_api;
 pub mod health;
@@ -135,6 +137,12 @@ pub struct AppState {
     /// manager cannot service `SUBSCRIBE`. Consumers wanting Pub/Sub must
     /// reopen a client from this URL.
     pub redis_url: Option<String>,
+    /// Per-pod bootstrap phase tracker (B2 task 6.1). Read by the
+    /// `/api/v1/admin/bootstrap/status` endpoint (see [`bootstrap_api`]).
+    /// Always present — populated by [`bootstrap::bootstrap`] during
+    /// startup and finalized with `mark_ready()` before the listener
+    /// binds.
+    pub bootstrap_tracker: Arc<bootstrap_tracker::BootstrapTracker>,
 }
 
 // ---------------------------------------------------------------------------

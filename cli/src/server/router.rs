@@ -16,9 +16,9 @@ use tower_http::trace::TraceLayer;
 
 use super::auth_middleware::AuthenticationLayer;
 use super::{
-    AppState, admin_sync, backup_api, govern_api, health, knowledge_api, lifecycle_api,
-    mcp_transport, memory_api, org_api, plugin_auth, project_api, role_grants, sessions, sync,
-    team_api, tenant_api, tenant_wiring_api, user_api, webhooks,
+    AppState, admin_sync, backup_api, bootstrap_api, govern_api, health, knowledge_api,
+    lifecycle_api, mcp_transport, memory_api, org_api, plugin_auth, project_api, role_grants,
+    sessions, sync, team_api, tenant_api, tenant_wiring_api, user_api, webhooks,
 };
 
 pub fn build_router(state: Arc<AppState>) -> Router {
@@ -39,6 +39,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(sessions::router(state.clone()))
         .merge(webhooks::router(state.clone()))
         .merge(admin_sync::router(state.clone()))
+        // B2 task 6.1: PA-only bootstrap introspection. Returns the
+        // per-pod phase log captured during startup.
+        .merge(bootstrap_api::router(state.clone()))
         // B2 task 5.5: PA-only wiring status endpoints. Mounted
         // alongside admin_sync so the /admin/tenants/... namespace
         // stays contiguous in the router.
