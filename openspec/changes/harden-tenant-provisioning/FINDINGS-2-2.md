@@ -13,7 +13,17 @@ them, I discovered they are **not reverse-renderer gaps — they are
 forward-path (apply) gaps**. Documenting the findings here so a future
 PR planner doesn't re-do the investigation.
 
-## Finding 1 — `providers`: validated but never persisted
+## Finding 1 — `providers`: validated but never persisted ✅ CLOSED (§2.2-A)
+
+> **Status update (2026-04-22):** Closed on PR #129 via the
+> `apply_manifest_providers_to_config` + `render_providers` commit
+> pair. Forward-apply flattens `manifest.providers.{llm,embedding}`
+> into `config_keys::{LLM_*,EMBEDDING_*}` during provision; reverse-
+> render reconstructs the block with operator-name recovery for
+> `secret_ref`. Top-level `providers` is out of `NOT_RENDERED_SECTIONS`;
+> `providers.memoryLayers` is still deferred (Finding 4 / §2.2-D).
+
+### Original description (kept for historical context)
 
 Path through the code:
 

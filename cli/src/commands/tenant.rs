@@ -2711,9 +2711,7 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let path = tmp.path().join("bad.json");
         std::fs::write(&path, "{not valid json").unwrap();
-        let err = read_manifest_input(path.to_str().unwrap())
-            .err()
-            .expect("expected parse error");
+        let err = read_manifest_input(path.to_str().unwrap()).expect_err("expected parse error");
         let msg = err.to_string();
         assert!(
             msg.contains("Invalid JSON") || msg.contains("invalid") || msg.contains("expected"),
