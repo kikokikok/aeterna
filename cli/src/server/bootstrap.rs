@@ -961,11 +961,24 @@ async fn seed_platform_admin(
     .await
     .context("upsert bootstrap tenants row")?;
 
+    // Fetch the tenant UUID. Needed now that migration 028 makes
+    // companies.tenant_id a NOT NULL FK to tenants(id); the companies
+    // INSERT below must carry it, and the ON CONFLICT target must be the
+    // new composite `(tenant_id, slug)` key rather than the defunct
+    // global `slug` UNIQUE.
+    let bootstrap_tenant_uuid: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM tenants WHERE slug = $1")
+            .bind(company_slug)
+            .fetch_one(&mut *tx)
+            .await
+            .context("fetch bootstrap tenant uuid")?;
+
     sqlx::query(
-        "INSERT INTO companies (slug, name, settings, created_at, updated_at)
-         VALUES ($1, $2, '{}', NOW(), NOW())
-         ON CONFLICT (slug) DO NOTHING",
+        "INSERT INTO companies (tenant_id, slug, name, settings, created_at, updated_at)
+         VALUES ($1, $2, $3, '{}', NOW(), NOW())
+         ON CONFLICT (tenant_id, slug) DO NOTHING",
     )
+    .bind(bootstrap_tenant_uuid)
     .bind(company_slug)
     .bind("Default")
     .execute(&mut *tx)
