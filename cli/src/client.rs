@@ -524,6 +524,46 @@ impl AeternaClient {
         parse_json_response(self.post("/api/v1/admin/tenants/provision", body).await?).await
     }
 
+    /// Submit a manifest to the provision endpoint with `dryRun=true`.
+    ///
+    /// Unlike [`tenant_provision`], this helper treats `HTTP 422
+    /// manifest_validation_failed` as a successful call whose body is
+    /// returned to the caller. Validation errors are a legitimate output
+    /// of the validate surface (`aeterna tenant validate`): the CLI
+    /// needs to render the `validationErrors` array to the operator,
+    /// not surface it as an anyhow error with the raw body inlined.
+    ///
+    /// Non-2xx / non-422 responses (auth failures, 5xx, generation
+    /// conflicts, etc.) still bail so operators see them as errors
+    /// rather than "invalid manifest" false positives.
+    ///
+    /// The returned JSON always carries a top-level `success` bool that
+    /// the caller can branch on:
+    ///
+    /// - `success: true`  → body is a `ProvisionPlan` (status / hashes /
+    ///   generation / section presence flags).
+    /// - `success: false` → body carries `error: "manifest_validation_failed"`
+    ///   and `validationErrors: [...]`.
+    pub async fn tenant_provision_dry_run(
+        &self,
+        manifest: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        let resp = self
+            .post("/api/v1/admin/tenants/provision?dryRun=true", manifest)
+            .await?;
+        let status = resp.status();
+        // 200 OK = dry-run plan; 422 Unprocessable = validation errors.
+        // Both carry a structured JSON body the caller renders.
+        if status.is_success() || status == reqwest::StatusCode::UNPROCESSABLE_ENTITY {
+            return resp
+                .json::<serde_json::Value>()
+                .await
+                .context("Invalid JSON response from dry-run provision");
+        }
+        let text = resp.text().await.unwrap_or_default();
+        bail!("Dry-run provision failed (HTTP {status}): {text}");
+    }
+
     pub async fn my_tenant_config_inspect(&self) -> Result<serde_json::Value> {
         parse_json_response(self.get("/api/v1/admin/tenant-config").await?).await
     }

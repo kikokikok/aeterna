@@ -89,7 +89,7 @@
 
 ### 7. CLI: apply, render, diff, validate, watch
 
-- [ ] 7.1 Add `TenantCommand::Apply(TenantApplyArgs)` with `-f/--file`, `--dry-run`, `--prune`, `--watch`, `--wait`.
+- [ ] 7.1 Add `TenantCommand::Apply(TenantApplyArgs)` with `-f/--file`, `--dry-run`, `--prune`, `--watch`, `--wait`. _(Partial: `aeterna tenant validate --file <path|->` shipped as the first CLI consumer of the dry-run endpoint — posts the manifest to `/admin/tenants/provision?dryRun=true`, renders the `ProvisionPlan` (status / hash pair / generation / section flags) on success, prints `validationErrors` and exits non-zero on HTTP 422. `tenant apply` proper — the non-dry-run variant with `--prune`/`--watch`/`--wait` — is the remaining scope of this task.)_
 - [ ] 7.2 Add `TenantCommand::Render(TenantRenderArgs)` with `--slug`, `--redact`, `-o`.
 - [ ] 7.3 Add `TenantCommand::Diff(TenantDiffArgs)` with `--slug`, `-f`, `-o unified|json`.
 - [!] 7.4 Add `TenantCommand::Validate` per the decision in 0.4. Reconcile with existing nested `tenant repo-binding validate` (L82) and `tenant config validate` (L94).
