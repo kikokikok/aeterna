@@ -2232,7 +2232,10 @@ async fn run_validate(args: TenantValidateArgs) -> anyhow::Result<()> {
         // `tenant_provision_dry_run` returns Ok on both 200 (plan) and
         // 422 (validation errors). The two cases are distinguished by
         // the top-level `success` field the server always sets.
-        let is_valid = body.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+        let is_valid = body
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         if args.json {
             println!("{}", serde_json::to_string_pretty(&body)?);
