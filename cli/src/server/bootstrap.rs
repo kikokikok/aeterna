@@ -939,11 +939,46 @@ async fn seed_platform_admin(
     .context("upsert organizational_units company")?;
 
     let company_slug = cfg.company_slug.as_str();
+
+    // Ensure a `tenants` row (migration 017 schema) exists before writing
+    // companies. Bootstrap has historically written `organizational_units`
+    // (legacy TEXT-id table) and `companies` (UUID PK, globally unique slug)
+    // but never the canonical `tenants` table. That was tolerable while no
+    // foreign key connected companies -> tenants, but §2.2-B (see
+    // openspec/changes/harden-tenant-provisioning/
+    // NOTES-hierarchy-migration-blast-radius.md) will add exactly that FK,
+    // so the invariant "bootstrap leaves a tenants row matching the
+    // company slug" needs to hold starting now. Idempotent via
+    // ON CONFLICT (slug); no-op on repeat bootstraps.
     sqlx::query(
-        "INSERT INTO companies (slug, name, settings, created_at, updated_at)
-         VALUES ($1, $2, '{}', NOW(), NOW())
+        "INSERT INTO tenants (slug, name, status, source_owner)
+         VALUES ($1, $2, 'active', 'admin')
          ON CONFLICT (slug) DO NOTHING",
     )
+    .bind(company_slug)
+    .bind("Default")
+    .execute(&mut *tx)
+    .await
+    .context("upsert bootstrap tenants row")?;
+
+    // Fetch the tenant UUID. Needed now that migration 028 makes
+    // companies.tenant_id a NOT NULL FK to tenants(id); the companies
+    // INSERT below must carry it, and the ON CONFLICT target must be the
+    // new composite `(tenant_id, slug)` key rather than the defunct
+    // global `slug` UNIQUE.
+    let bootstrap_tenant_uuid: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM tenants WHERE slug = $1")
+            .bind(company_slug)
+            .fetch_one(&mut *tx)
+            .await
+            .context("fetch bootstrap tenant uuid")?;
+
+    sqlx::query(
+        "INSERT INTO companies (tenant_id, slug, name, settings, created_at, updated_at)
+         VALUES ($1, $2, $3, '{}', NOW(), NOW())
+         ON CONFLICT (tenant_id, slug) DO NOTHING",
+    )
+    .bind(bootstrap_tenant_uuid)
     .bind(company_slug)
     .bind("Default")
     .execute(&mut *tx)

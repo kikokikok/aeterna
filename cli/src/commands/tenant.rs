@@ -64,6 +64,12 @@ pub enum TenantCommand {
         about = "Manage Git provider connection visibility for tenants (PlatformAdmin)"
     )]
     Connection(TenantConnectionCommand),
+
+    #[command(
+        name = "validate",
+        about = "Validate a tenant manifest against the server (dry-run; no state changes)"
+    )]
+    Validate(TenantValidateArgs),
 }
 
 // ---------------------------------------------------------------------------
@@ -415,6 +421,34 @@ pub struct TenantSecretSetArgs {
     pub json: bool,
 }
 
+/// Args for `aeterna tenant validate`.
+///
+/// Thin wrapper around `POST /api/v1/admin/tenants/provision?dryRun=true`
+/// (task §7.1). The command:
+///
+/// - Reads a `TenantManifest` JSON document from `--file` (use `-` for
+///   stdin) and POSTs it with `dryRun=true` so no server state changes.
+/// - Renders the `ProvisionPlan` response (status classifier + hash
+///   pair + generation + per-section presence flags) when the manifest
+///   is valid.
+/// - Renders the `validationErrors` array on HTTP 422, one per line,
+///   and exits non-zero so CI pipelines can gate on it.
+///
+/// This is the first CLI consumer of the provision-dry-run surface
+/// shipped in B2 §2.3 — follow-ups `tenant plan` (§7.2) and
+/// `tenant diff` (§7.3) will build on the same client helper.
+#[derive(Args)]
+pub struct TenantValidateArgs {
+    /// Path to a JSON manifest file. Use `-` to read from stdin.
+    #[arg(long)]
+    pub file: String,
+
+    /// Emit the raw JSON response (either the dry-run plan or the
+    /// validation-errors body) instead of the human table.
+    #[arg(long)]
+    pub json: bool,
+}
+
 #[derive(Args)]
 pub struct TenantSecretDeleteArgs {
     #[arg(long)]
@@ -463,6 +497,7 @@ pub async fn run(cmd: TenantCommand) -> anyhow::Result<()> {
             TenantConnectionCommand::Grant(args) => run_connection_grant(args).await,
             TenantConnectionCommand::Revoke(args) => run_connection_revoke(args).await,
         },
+        TenantCommand::Validate(args) => run_validate(args).await,
     }
 }
 
@@ -2062,6 +2097,177 @@ async fn run_connection_revoke(args: TenantConnectionRevokeArgs) -> anyhow::Resu
 }
 
 // ---------------------------------------------------------------------------
+// tenant validate (§7.1)
+// ---------------------------------------------------------------------------
+
+/// Read the manifest body either from a path or from stdin when `file == "-"`.
+///
+/// Stdin support exists so operators can pipe `cat manifest.json | aeterna
+/// tenant validate --file -` (matching how `kubectl apply -f -` works);
+/// CI pipelines that compose manifests in-memory would otherwise have
+/// to materialise a temp file just to feed the CLI.
+fn read_manifest_input(file: &str) -> anyhow::Result<Value> {
+    if file == "-" {
+        use std::io::Read;
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .map_err(|e| anyhow::anyhow!("Failed to read manifest from stdin: {e}"))?;
+        let payload: Value = serde_json::from_str(&buf)
+            .map_err(|e| anyhow::anyhow!("Invalid JSON on stdin: {e}"))?;
+        Ok(payload)
+    } else {
+        read_json_file(file)
+    }
+}
+
+/// Render a successful dry-run `ProvisionPlan` body as a human-readable
+/// table. Kept non-async and Value-typed so the render logic stays
+/// trivially unit-testable without standing up a server.
+fn render_provision_plan(plan: &Value) {
+    output::header("Tenant Manifest Validation");
+    println!();
+    println!("  Result: ✓ valid");
+    if let Some(slug) = plan.get("slug").and_then(|v| v.as_str()) {
+        println!("  Slug:   {slug}");
+    }
+    if let Some(status) = plan.get("status").and_then(|v| v.as_str()) {
+        // `status` is one of `unchanged` / `create` / `update` — all
+        // three are legitimate validate outcomes; we surface which
+        // pipeline a non-dry-run apply WOULD take so the operator
+        // knows whether they are editing an existing tenant or
+        // creating a new one.
+        println!("  Action: {status} (what a real apply would do)");
+    }
+    if let Some(incoming) = plan.get("incomingHash").and_then(|v| v.as_str()) {
+        println!("  Incoming hash: {incoming}");
+    }
+    match plan.get("currentHash") {
+        Some(v) if v.is_null() => println!("  Current hash:  (none — first apply)"),
+        Some(v) => {
+            if let Some(s) = v.as_str() {
+                println!("  Current hash:  {s}");
+            }
+        }
+        None => {}
+    }
+    if let (Some(cur), Some(next)) = (
+        plan.get("currentGeneration").and_then(|v| v.as_i64()),
+        plan.get("nextGeneration").and_then(|v| v.as_i64()),
+    ) {
+        println!("  Generation:    {cur} → {next}");
+    }
+    println!();
+    println!("  Sections present:");
+    let section = |key: &str, label: &str| {
+        let v = plan.get(key).and_then(|v| v.as_bool()).unwrap_or(false);
+        let icon = if v { "✓" } else { "·" };
+        println!("    {icon} {label}");
+    };
+    section("hasRepositoryBinding", "repositoryBinding");
+    section("hasDomainMappings", "domainMappings");
+    section("hasHierarchy", "hierarchy");
+    section("hasRoles", "roles");
+    section("hasProviders", "providers");
+    if let Some(fields) = plan.get("configFieldCount").and_then(|v| v.as_u64()) {
+        println!("    · config.fields: {fields}");
+    }
+    if let Some(refs) = plan.get("secretReferenceCount").and_then(|v| v.as_u64()) {
+        println!("    · config.secretReferences: {refs}");
+    }
+    println!();
+    output::hint("Re-run without --dry-run (via `aeterna tenant apply`) once available to apply.");
+}
+
+/// Render an HTTP 422 `manifest_validation_failed` body by listing every
+/// string in `validationErrors`. Returns `true` when errors were
+/// rendered so the caller can propagate a non-zero exit code.
+fn render_validation_errors(body: &Value) -> bool {
+    let errors: Vec<&str> = body
+        .get("validationErrors")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    output::header("Tenant Manifest Validation");
+    println!();
+    println!("  Result: ✗ invalid");
+    if errors.is_empty() {
+        if let Some(err) = body.get("error").and_then(|v| v.as_str()) {
+            println!("  Error: {err}");
+        }
+        println!();
+        return true;
+    }
+    println!("  {} error(s):", errors.len());
+    for e in &errors {
+        println!("    • {e}");
+    }
+    println!();
+    true
+}
+
+async fn run_validate(args: TenantValidateArgs) -> anyhow::Result<()> {
+    let manifest = read_manifest_input(&args.file)?;
+
+    if let Some(client) = get_live_client().await {
+        let body = client
+            .tenant_provision_dry_run(&manifest)
+            .await
+            .inspect_err(|e| {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &json!({ "success": false, "error": e.to_string() })
+                        )
+                        .unwrap()
+                    );
+                } else {
+                    ux_error::UxError::new(e.to_string())
+                        .fix("Run: aeterna auth login")
+                        .display();
+                }
+            })?;
+
+        // `tenant_provision_dry_run` returns Ok on both 200 (plan) and
+        // 422 (validation errors). The two cases are distinguished by
+        // the top-level `success` field the server always sets.
+        let is_valid = body
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&body)?);
+        } else if is_valid {
+            render_provision_plan(&body);
+        } else {
+            render_validation_errors(&body);
+        }
+
+        if !is_valid {
+            // Non-zero exit so CI gates on validation.
+            anyhow::bail!("tenant manifest is invalid");
+        }
+        return Ok(());
+    }
+
+    if args.json {
+        let out = json!({
+            "success": false,
+            "error": "server_not_connected",
+            "operation": "tenant_validate",
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        anyhow::bail!("Aeterna server not connected for operation: tenant_validate");
+    }
+    tenant_server_required(
+        "tenant_validate",
+        "Cannot validate tenant manifest: server not connected",
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Unit tests
 // ---------------------------------------------------------------------------
 
@@ -2459,5 +2665,85 @@ mod tests {
         std::env::set_current_dir(cwd).unwrap();
 
         assert_eq!(result.as_deref(), Some("acme"));
+    }
+
+    // ---------------------------------------------------------------
+    // tenant validate (§7.1)
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_tenant_validate_args_roundtrip() {
+        // No derived parse — we just assert the shape matches what the
+        // dispatcher wires up. If these field names drift, downstream
+        // doc/examples and shell scripts break, so the test is the
+        // canary for rename regressions.
+        let args = TenantValidateArgs {
+            file: "manifest.json".to_string(),
+            json: true,
+        };
+        assert_eq!(args.file, "manifest.json");
+        assert!(args.json);
+    }
+
+    #[test]
+    fn test_read_manifest_input_from_file() {
+        // A well-formed JSON file round-trips through read_manifest_input
+        // without mutation (no normalization, no re-serialization).
+        let tmp = tempfile::TempDir::new().unwrap();
+        let path = tmp.path().join("m.json");
+        std::fs::write(
+            &path,
+            r#"{"tenant":{"slug":"acme","name":"Acme"},"config":{}}"#,
+        )
+        .unwrap();
+        let v = read_manifest_input(path.to_str().unwrap()).unwrap();
+        assert_eq!(v["tenant"]["slug"], "acme");
+        assert_eq!(v["tenant"]["name"], "Acme");
+    }
+
+    #[test]
+    fn test_read_manifest_input_rejects_invalid_json() {
+        // Malformed JSON surfaces a clear error mentioning the path.
+        // This is the primary failure mode for CI pipelines that
+        // generate manifests from templates — if the template outputs
+        // a trailing comma, we want the error to be immediate and
+        // pointed, not a cryptic server-side 400.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let path = tmp.path().join("bad.json");
+        std::fs::write(&path, "{not valid json").unwrap();
+        let err = read_manifest_input(path.to_str().unwrap()).expect_err("expected parse error");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Invalid JSON") || msg.contains("invalid") || msg.contains("expected"),
+            "unexpected error message: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_render_validation_errors_returns_true_with_errors() {
+        // Validation-error renderer: returns true (caller gates exit
+        // code on it) and tolerates empty/missing arrays.
+        let body = json!({
+            "success": false,
+            "error": "manifest_validation_failed",
+            "validationErrors": [
+                "tenant.slug must not be empty",
+                "config.fields.foo: invalid UTF-8",
+            ],
+        });
+        assert!(render_validation_errors(&body));
+    }
+
+    #[test]
+    fn test_render_validation_errors_handles_missing_array() {
+        // Defensive: if the server returns 422 without a
+        // validationErrors array (unlikely but possible for
+        // future error codes), we still print something sensible
+        // and return true so the caller exits non-zero.
+        let body = json!({
+            "success": false,
+            "error": "something_else",
+        });
+        assert!(render_validation_errors(&body));
     }
 }

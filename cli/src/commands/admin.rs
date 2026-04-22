@@ -1708,20 +1708,30 @@ async fn run_sync_github(args: AdminSyncArgs) -> anyhow::Result<()> {
         std::env::var(crate::env_vars::AETERNA_TENANT_ID).unwrap_or_else(|_| "default".to_string());
     let tenant_id: uuid::Uuid = {
         let row: Option<(uuid::Uuid,)> =
-            sqlx::query_as("SELECT id FROM tenants WHERE name = $1 OR id::text = $1 LIMIT 1")
-                .bind(&tenant_str)
-                .fetch_optional(&pool)
-                .await?;
+            sqlx::query_as(
+                "SELECT id FROM tenants
+                 WHERE slug = $1 OR name = $1 OR id::text = $1
+                 LIMIT 1",
+            )
+            .bind(&tenant_str)
+            .fetch_optional(&pool)
+            .await?;
         if let Some((id,)) = row {
             id
         } else {
-            let id = uuid::Uuid::new_v4();
-            sqlx::query("INSERT INTO tenants (id, name, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id")
-                .bind(id)
-                .bind(&tenant_str)
-                .execute(&pool)
-                .await?;
-            id
+            // See admin_sync::slugify docstring; `tenants.slug` is NOT NULL
+            // UNIQUE so we must derive one from tenant_str.
+            let slug = crate::server::admin_sync::slugify(&tenant_str);
+            sqlx::query_scalar::<_, uuid::Uuid>(
+                "INSERT INTO tenants (id, slug, name) VALUES ($1, $2, $3)
+                 ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+                 RETURNING id",
+            )
+            .bind(uuid::Uuid::new_v4())
+            .bind(&slug)
+            .bind(&tenant_str)
+            .fetch_one(&pool)
+            .await?
         }
     };
 

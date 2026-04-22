@@ -300,6 +300,134 @@ fn tenant_config_from_request(
     }
 }
 
+/// Flatten `manifest.providers.{llm,embedding}` into the in-progress
+/// config document so the provider registry can resolve them the same
+/// way it resolves state written by `PUT /admin/tenants/{t}/providers/{llm,embedding}`.
+///
+/// Closes the forward half of FINDINGS-2-2 §2.2-A: before this helper,
+/// `validate_manifest` would accept a `providers:` block and
+/// `provision_tenant` would silently drop it, producing a tenant with
+/// no provider config even though the apply returned success.
+///
+/// What gets written (mirroring the dedicated `set_provider_llm` /
+/// `set_provider_embedding` handlers at lines 2441+ / 2580+):
+///
+/// - `llm_provider` / `embedding_provider`  ← `provider.kind`
+/// - `llm_model` / `embedding_model`        ← `provider.model` (skipped if absent)
+/// - `{llm,embedding}_google_project_id`    ← `provider.config["projectId"]`
+///   when `kind == "google"`
+/// - `{llm,embedding}_google_location`      ← `provider.config["location"]`
+///   when `kind == "google"`
+/// - `{llm,embedding}_bedrock_region`       ← `provider.config["region"]`
+///   when `kind == "bedrock"`
+///
+/// All fields are written with `TenantConfigOwnership::Platform` —
+/// consistent with the dedicated PUT handler (operators can't override
+/// provider selection via TenantAdmin config writes), and consistent
+/// with the ownership filter in the manifest validator.
+///
+/// Secret aliasing: if `provider.secret_ref` is set and resolves inside
+/// `doc.secret_references`, the resolved `TenantSecretReference` is
+/// cloned into the map under the canonical key the provider registry
+/// reads (`llm_api_key` / `embedding_api_key`). This gives us a
+/// functional API-key pointer without duplicating secret bytes — both
+/// the operator-friendly name (e.g. `openai_key`) and the canonical
+/// name point at the same backing `SecretReference` variant.
+///
+/// Memory layers are *not* handled here — see FINDINGS-2-2 §2.2-D;
+/// `providers.memory_layers` has no config-key convention in the
+/// codebase at all, and both forward and reverse sides need that
+/// decision before wiring.
+///
+/// `validate_manifest` is assumed to have run already; this helper
+/// does not re-validate `kind` non-empty or `secret_ref` resolution.
+fn apply_manifest_providers_to_config(
+    providers: &ManifestProviders,
+    doc: &mut TenantConfigDocument,
+) {
+    // Helper closure: write a single provider block under a given key
+    // prefix (e.g. "llm_" or "embedding_").
+    let mut apply_one = |prefix: &str, provider: &ManifestProvider| {
+        let pf = |suffix: &str| format!("{prefix}{suffix}");
+        // `TenantConfigOwnership` isn't `Copy`, so we construct a fresh
+        // `Platform` marker at each insertion site rather than
+        // cloning a local. The enum has no payload — construction is
+        // free and clearer than `.clone()` noise.
+        let platform = || TenantConfigOwnership::Platform;
+
+        doc.fields.insert(
+            pf("provider"),
+            TenantConfigField {
+                ownership: platform(),
+                value: serde_json::json!(provider.kind),
+            },
+        );
+
+        if let Some(model) = &provider.model {
+            doc.fields.insert(
+                pf("model"),
+                TenantConfigField {
+                    ownership: platform(),
+                    value: serde_json::json!(model),
+                },
+            );
+        }
+
+        // Google Vertex: project_id + location. Manifest uses camelCase
+        // in the `provider.config` map (projectId / location) to stay
+        // consistent with the rest of the manifest JSON convention;
+        // storage uses snake_case keys under `config_keys`.
+        if provider.kind == "google" {
+            if let Some(project_id) = provider.config.get("projectId") {
+                doc.fields.insert(
+                    pf("google_project_id"),
+                    TenantConfigField {
+                        ownership: platform(),
+                        value: serde_json::json!(project_id),
+                    },
+                );
+            }
+            if let Some(location) = provider.config.get("location") {
+                doc.fields.insert(
+                    pf("google_location"),
+                    TenantConfigField {
+                        ownership: platform(),
+                        value: serde_json::json!(location),
+                    },
+                );
+            }
+        }
+
+        // Bedrock: region.
+        if provider.kind == "bedrock"
+            && let Some(region) = provider.config.get("region")
+        {
+            doc.fields.insert(
+                pf("bedrock_region"),
+                TenantConfigField {
+                    ownership: platform(),
+                    value: serde_json::json!(region),
+                },
+            );
+        }
+
+        // Secret alias: canonical key → same reference as operator name.
+        if let Some(secret_ref) = &provider.secret_ref
+            && let Some(src) = doc.secret_references.get(secret_ref).cloned()
+        {
+            doc.secret_references.insert(pf("api_key"), src);
+        }
+    };
+
+    if let Some(llm) = &providers.llm {
+        apply_one("llm_", llm);
+    }
+    if let Some(embedding) = &providers.embedding {
+        apply_one("embedding_", embedding);
+    }
+    // providers.memory_layers: deferred (FINDINGS-2-2 §2.2-D).
+}
+
 fn reject_non_tenant_owned_config(
     doc: &TenantConfigDocument,
 ) -> Result<(), axum::response::Response> {
@@ -4281,13 +4409,24 @@ async fn provision_tenant(
     }
 
     // ── Step 3: Config fields ─────────────────────────────────────────────
-    if let Some(cfg) = &manifest.config {
-        if !cfg.fields.is_empty() || !cfg.secret_references.is_empty() {
-            let doc = TenantConfigDocument {
-                tenant_id: tenant_id.clone(),
-                fields: cfg.fields.clone(),
-                secret_references: cfg.secret_references.clone(),
-            };
+    // `manifest.providers` is flattened into the config document here so
+    // the apply is the ONLY write path that touches `config.fields`
+    // (instead of having a separate providers-upsert step that could
+    // race with the main config write or leave the tenant half-applied
+    // on a mid-sequence failure). See FINDINGS-2-2 §2.2-A for the bug
+    // this closes (manifest providers were validated but never persisted).
+    let has_providers = manifest.providers.is_some();
+    if manifest.config.is_some() || has_providers {
+        let cfg = manifest.config.as_ref();
+        let mut doc = TenantConfigDocument {
+            tenant_id: tenant_id.clone(),
+            fields: cfg.map(|c| c.fields.clone()).unwrap_or_default(),
+            secret_references: cfg.map(|c| c.secret_references.clone()).unwrap_or_default(),
+        };
+        if let Some(providers) = &manifest.providers {
+            apply_manifest_providers_to_config(providers, &mut doc);
+        }
+        if !doc.fields.is_empty() || !doc.secret_references.is_empty() {
             match state.tenant_config_provider.upsert_config(doc).await {
                 Ok(config) => {
                     audit_tenant_action(
@@ -6472,6 +6611,272 @@ mod tests {
             errors.iter().any(|e| e.contains("providers.llm.kind")),
             "expected empty-kind error, got: {errors:?}"
         );
+    }
+
+    // ── §2.2-A apply_manifest_providers_to_config tests ──────────────────
+    // These cover the forward-apply parity fix for FINDINGS-2-2 §2.2-A.
+    // Before this helper, `manifest.providers` was validated by
+    // `validate_manifest` but silently dropped by `provision_tenant`
+    // (bug reproduction described in openspec/changes/harden-tenant-
+    // provisioning/FINDINGS-2-2.md Finding 1).
+
+    fn empty_doc() -> TenantConfigDocument {
+        TenantConfigDocument {
+            tenant_id: mk_core::types::TenantId::new("t".to_string()).expect("'t' is a valid slug"),
+            fields: BTreeMap::new(),
+            secret_references: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn apply_providers_llm_writes_canonical_keys() {
+        // A minimal openai LLM block must produce the exact keys the
+        // provider registry reads in `memory/src/provider_registry.rs`
+        // (config_keys::LLM_PROVIDER / LLM_MODEL). If the registry's
+        // key names ever drift, this test fails loudly rather than
+        // silently leaving tenants without a provider.
+        let providers = ManifestProviders {
+            llm: Some(ManifestProvider {
+                kind: "openai".to_string(),
+                model: Some("gpt-4o".to_string()),
+                secret_ref: None,
+                config: BTreeMap::new(),
+            }),
+            embedding: None,
+            memory_layers: BTreeMap::new(),
+        };
+        let mut doc = empty_doc();
+        apply_manifest_providers_to_config(&providers, &mut doc);
+        assert_eq!(
+            doc.fields.get(config_keys::LLM_PROVIDER).map(|f| &f.value),
+            Some(&serde_json::json!("openai"))
+        );
+        assert_eq!(
+            doc.fields.get(config_keys::LLM_MODEL).map(|f| &f.value),
+            Some(&serde_json::json!("gpt-4o"))
+        );
+        // Embedding untouched because it wasn't declared.
+        assert!(!doc.fields.contains_key(config_keys::EMBEDDING_PROVIDER));
+        // All writes are Platform-owned (operator cannot override via
+        // TenantAdmin config writes — mirrors the set_provider_llm
+        // handler's ownership choice).
+        for key in [config_keys::LLM_PROVIDER, config_keys::LLM_MODEL] {
+            assert_eq!(
+                doc.fields.get(key).unwrap().ownership,
+                TenantConfigOwnership::Platform,
+                "field {key} should be platform-owned"
+            );
+        }
+    }
+
+    #[test]
+    fn apply_providers_model_is_optional() {
+        // `ManifestProvider.model: Option<String>` — absence means
+        // "no model override"; the provider key still gets written so
+        // downstream code knows the provider was declared.
+        let providers = ManifestProviders {
+            llm: Some(ManifestProvider {
+                kind: "openai".to_string(),
+                model: None,
+                secret_ref: None,
+                config: BTreeMap::new(),
+            }),
+            ..Default::default()
+        };
+        let mut doc = empty_doc();
+        apply_manifest_providers_to_config(&providers, &mut doc);
+        assert!(doc.fields.contains_key(config_keys::LLM_PROVIDER));
+        assert!(
+            !doc.fields.contains_key(config_keys::LLM_MODEL),
+            "absent model must not write an empty key"
+        );
+    }
+
+    #[test]
+    fn apply_providers_google_extras_flattened() {
+        // Google Vertex: the manifest carries camelCase projectId /
+        // location in the `config` map; storage uses snake_case under
+        // config_keys. The helper bridges the convention gap.
+        let providers = ManifestProviders {
+            llm: Some(ManifestProvider {
+                kind: "google".to_string(),
+                model: Some("gemini-1.5-pro".to_string()),
+                secret_ref: None,
+                config: BTreeMap::from([
+                    ("projectId".to_string(), "my-proj".to_string()),
+                    ("location".to_string(), "europe-west1".to_string()),
+                ]),
+            }),
+            ..Default::default()
+        };
+        let mut doc = empty_doc();
+        apply_manifest_providers_to_config(&providers, &mut doc);
+        assert_eq!(
+            doc.fields
+                .get(config_keys::LLM_GOOGLE_PROJECT_ID)
+                .map(|f| &f.value),
+            Some(&serde_json::json!("my-proj"))
+        );
+        assert_eq!(
+            doc.fields
+                .get(config_keys::LLM_GOOGLE_LOCATION)
+                .map(|f| &f.value),
+            Some(&serde_json::json!("europe-west1"))
+        );
+        // Bedrock region must NOT be written for a google provider.
+        assert!(
+            !doc.fields.contains_key(config_keys::LLM_BEDROCK_REGION),
+            "bedrock_region leaked into a google provider config"
+        );
+    }
+
+    #[test]
+    fn apply_providers_bedrock_region_flattened() {
+        let providers = ManifestProviders {
+            embedding: Some(ManifestProvider {
+                kind: "bedrock".to_string(),
+                model: Some("amazon.titan-embed-text-v2:0".to_string()),
+                secret_ref: None,
+                config: BTreeMap::from([("region".to_string(), "us-east-1".to_string())]),
+            }),
+            ..Default::default()
+        };
+        let mut doc = empty_doc();
+        apply_manifest_providers_to_config(&providers, &mut doc);
+        assert_eq!(
+            doc.fields
+                .get(config_keys::EMBEDDING_BEDROCK_REGION)
+                .map(|f| &f.value),
+            Some(&serde_json::json!("us-east-1"))
+        );
+        // Google-specific keys must stay absent for a bedrock provider.
+        assert!(
+            !doc.fields
+                .contains_key(config_keys::EMBEDDING_GOOGLE_PROJECT_ID)
+        );
+    }
+
+    #[test]
+    fn apply_providers_secret_ref_aliased_to_canonical() {
+        // Operator names their secret `openai_key`; the provider block
+        // points at it via `secret_ref: "openai_key"`. The helper must
+        // clone that TenantSecretReference under the canonical
+        // `llm_api_key` so provider_registry can resolve it, while
+        // leaving the operator-named entry intact (both keys point at
+        // the same underlying secret_id — no bytes duplicated).
+        let source_ref = TenantSecretReference {
+            logical_name: "openai_key".to_string(),
+            ownership: TenantConfigOwnership::Tenant,
+            reference: mk_core::secret::SecretReference::Postgres {
+                secret_id: uuid::Uuid::nil(),
+            },
+        };
+        let mut doc = empty_doc();
+        doc.secret_references
+            .insert("openai_key".to_string(), source_ref.clone());
+
+        let providers = ManifestProviders {
+            llm: Some(ManifestProvider {
+                kind: "openai".to_string(),
+                model: Some("gpt-4o".to_string()),
+                secret_ref: Some("openai_key".to_string()),
+                config: BTreeMap::new(),
+            }),
+            ..Default::default()
+        };
+        apply_manifest_providers_to_config(&providers, &mut doc);
+
+        assert!(
+            doc.secret_references.contains_key("openai_key"),
+            "operator name must remain so round-trip render can pick it back out"
+        );
+        let canonical = doc
+            .secret_references
+            .get(config_keys::LLM_API_KEY)
+            .expect("canonical alias must be registered");
+        // Clone, not move: underlying Postgres secret_id matches.
+        match (&canonical.reference, &source_ref.reference) {
+            (
+                mk_core::secret::SecretReference::Postgres { secret_id: a },
+                mk_core::secret::SecretReference::Postgres { secret_id: b },
+            ) => assert_eq!(a, b, "alias must point at same secret_id as source"),
+            _ => panic!("unexpected reference shape"),
+        }
+    }
+
+    #[test]
+    fn apply_providers_unresolvable_secret_ref_is_silent_skip() {
+        // If `secret_ref` names a secret that isn't in the document's
+        // secret_references map, the helper leaves the canonical alias
+        // unset. This path is unreachable in production because
+        // `validate_manifest` already rejects unresolvable refs — but
+        // we test it as a defense-in-depth against a validator bypass,
+        // and we must NEVER panic on bad input.
+        let providers = ManifestProviders {
+            llm: Some(ManifestProvider {
+                kind: "openai".to_string(),
+                model: None,
+                secret_ref: Some("not-in-map".to_string()),
+                config: BTreeMap::new(),
+            }),
+            ..Default::default()
+        };
+        let mut doc = empty_doc();
+        apply_manifest_providers_to_config(&providers, &mut doc);
+        // Provider key still written; alias NOT fabricated.
+        assert!(doc.fields.contains_key(config_keys::LLM_PROVIDER));
+        assert!(!doc.secret_references.contains_key(config_keys::LLM_API_KEY));
+    }
+
+    #[test]
+    fn apply_providers_empty_block_is_noop() {
+        // ManifestProviders::default() = all fields None / empty.
+        // Applying it must leave the document entirely unchanged so a
+        // tenant that doesn't declare any provider block in their
+        // manifest continues to work with whatever provider state
+        // was set via PUT /admin/tenants/{t}/providers/{llm,embedding}.
+        let mut doc = empty_doc();
+        doc.fields.insert(
+            "existing_key".to_string(),
+            TenantConfigField {
+                ownership: TenantConfigOwnership::Tenant,
+                value: serde_json::json!("keep-me"),
+            },
+        );
+        apply_manifest_providers_to_config(&ManifestProviders::default(), &mut doc);
+        assert_eq!(doc.fields.len(), 1);
+        assert_eq!(
+            doc.fields.get("existing_key").unwrap().value,
+            serde_json::json!("keep-me")
+        );
+    }
+
+    #[test]
+    fn apply_providers_memory_layers_are_not_written() {
+        // §2.2-D deferred. memoryLayers must not produce any config
+        // fields — the helper has no convention to map them to yet,
+        // and silently writing garbage keys would corrupt the
+        // canonical hash.
+        let providers = ManifestProviders {
+            memory_layers: BTreeMap::from([(
+                "episodic".to_string(),
+                ManifestProvider {
+                    kind: "qdrant".to_string(),
+                    model: None,
+                    secret_ref: None,
+                    config: BTreeMap::new(),
+                },
+            )]),
+            ..Default::default()
+        };
+        let mut doc = empty_doc();
+        apply_manifest_providers_to_config(&providers, &mut doc);
+        assert!(
+            doc.fields.is_empty(),
+            "memoryLayers wrote fields unexpectedly: {:?}",
+            doc.fields.keys().collect::<Vec<_>>()
+        );
+        assert!(doc.secret_references.is_empty());
     }
 
     // ── B1 §1.2 SecretReference variant validation tests ─────────────────
