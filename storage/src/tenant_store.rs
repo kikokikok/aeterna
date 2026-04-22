@@ -325,6 +325,43 @@ impl TenantStore {
         Ok(tenant)
     }
 
+    /// Returns every verified or unverified domain mapped to the given
+    /// tenant, sorted lexicographically.
+    ///
+    /// Used by the manifest renderer (`cli/src/server/manifest_render.rs`)
+    /// to populate `tenant.domainMappings` for
+    /// `GET /api/v1/admin/tenants/{slug}/manifest`. The sort order is part
+    /// of the contract — the renderer relies on it for deterministic output
+    /// across pods, and the eventual structural-diff endpoint (§2.4) relies
+    /// on it for stable comparison against submitted manifests.
+    ///
+    /// Returns an empty vec when the tenant exists but has no mappings.
+    /// Returns `NotFound` when the tenant reference (`slug` or id) does
+    /// not resolve.
+    pub async fn list_domain_mappings(
+        &self,
+        tenant_ref: &str,
+    ) -> Result<Vec<String>, PostgresError> {
+        let tenant = self
+            .get_tenant(tenant_ref)
+            .await?
+            .ok_or_else(|| PostgresError::NotFound(format!("tenant not found: {tenant_ref}")))?;
+
+        let rows: Vec<(String,)> = sqlx::query_as(
+            r#"
+            SELECT domain
+            FROM tenant_domain_mappings
+            WHERE tenant_id = $1::uuid
+            ORDER BY domain ASC
+            "#,
+        )
+        .bind(tenant.id.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|(d,)| d).collect())
+    }
+
     pub async fn resolve_verified_tenant(
         &self,
         explicit_tenant: Option<&str>,

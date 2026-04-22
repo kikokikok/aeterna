@@ -1707,15 +1707,14 @@ async fn run_sync_github(args: AdminSyncArgs) -> anyhow::Result<()> {
     let tenant_str =
         std::env::var(crate::env_vars::AETERNA_TENANT_ID).unwrap_or_else(|_| "default".to_string());
     let tenant_id: uuid::Uuid = {
-        let row: Option<(uuid::Uuid,)> =
-            sqlx::query_as(
-                "SELECT id FROM tenants
+        let row: Option<(uuid::Uuid,)> = sqlx::query_as(
+            "SELECT id FROM tenants
                  WHERE slug = $1 OR name = $1 OR id::text = $1
                  LIMIT 1",
-            )
-            .bind(&tenant_str)
-            .fetch_optional(&pool)
-            .await?;
+        )
+        .bind(&tenant_str)
+        .fetch_optional(&pool)
+        .await?;
         if let Some((id,)) = row {
             id
         } else {
