@@ -55,7 +55,31 @@ Recommended breakdown: **§2.2-A — providers forward-apply parity.**
 `memoryLayers` is a separate sub-finding (see Finding 4 below) since
 even its forward-apply path has no config-key convention yet.
 
-## Finding 2 — `hierarchy`: no backing storage
+## Finding 2 — `hierarchy`: storage exists but under pre-tenant design ⚠️ CORRECTED (2026-04-22)
+
+> **Correction (2026-04-22):** The original finding claimed no
+> `companies` / `organizations` / `teams` tables existed. **That was
+> wrong.** Migration `009_organizational_referential.sql` (which
+> pre-dates the `tenants` table by 8 migrations) creates all three
+> plus `projects`, `users`, `agents`, `memberships`, `v_hierarchy`,
+> `v_user_permissions`, audit triggers, and pattern-matching tables.
+>
+> The tables exist under an **incompatible design assumption** —
+> migration 009 line 8 states *"Each company is a separate tenant"*,
+> meaning `companies.slug UNIQUE` is a global constraint with no
+> reference to `tenants(id)`. `TenantManifest.hierarchy:
+> Vec<ManifestCompany>` assumes one tenant can own many companies,
+> requiring `UNIQUE (tenant_id, slug)` instead.
+>
+> Owner decision 2026-04-22 22:16 UTC: **Option (A) — add
+> `tenant_id` to `companies`, rewrite constraints and views to be
+> tenant-scoped.** Full blast radius, backfill plan, and per-commit
+> breakdown in
+> [`NOTES-hierarchy-migration-blast-radius.md`](./NOTES-hierarchy-migration-blast-radius.md).
+> Sequenced across four commits on PR #129 (B1 docs → B2 migration
+> → B3 store → B4 apply+render).
+
+### Original description (kept for historical context — note the incorrect claim about missing tables)
 
 Path through the code:
 
