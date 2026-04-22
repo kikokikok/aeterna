@@ -939,6 +939,28 @@ async fn seed_platform_admin(
     .context("upsert organizational_units company")?;
 
     let company_slug = cfg.company_slug.as_str();
+
+    // Ensure a `tenants` row (migration 017 schema) exists before writing
+    // companies. Bootstrap has historically written `organizational_units`
+    // (legacy TEXT-id table) and `companies` (UUID PK, globally unique slug)
+    // but never the canonical `tenants` table. That was tolerable while no
+    // foreign key connected companies -> tenants, but §2.2-B (see
+    // openspec/changes/harden-tenant-provisioning/
+    // NOTES-hierarchy-migration-blast-radius.md) will add exactly that FK,
+    // so the invariant "bootstrap leaves a tenants row matching the
+    // company slug" needs to hold starting now. Idempotent via
+    // ON CONFLICT (slug); no-op on repeat bootstraps.
+    sqlx::query(
+        "INSERT INTO tenants (slug, name, status, source_owner)
+         VALUES ($1, $2, 'active', 'admin')
+         ON CONFLICT (slug) DO NOTHING",
+    )
+    .bind(company_slug)
+    .bind("Default")
+    .execute(&mut *tx)
+    .await
+    .context("upsert bootstrap tenants row")?;
+
     sqlx::query(
         "INSERT INTO companies (slug, name, settings, created_at, updated_at)
          VALUES ($1, $2, '{}', NOW(), NOW())

@@ -498,22 +498,61 @@ pub(crate) async fn resolve_tenant_id_from_pool(pool: &sqlx::PgPool) -> anyhow::
     let tenant_str =
         std::env::var(crate::env_vars::AETERNA_TENANT_ID).unwrap_or_else(|_| "default".to_string());
     let row: Option<(Uuid,)> =
-        sqlx::query_as("SELECT id FROM tenants WHERE name = $1 OR id::text = $1 LIMIT 1")
-            .bind(&tenant_str)
-            .fetch_optional(pool)
-            .await?;
+        sqlx::query_as(
+            "SELECT id FROM tenants
+             WHERE slug = $1 OR name = $1 OR id::text = $1
+             LIMIT 1",
+        )
+        .bind(&tenant_str)
+        .fetch_optional(pool)
+        .await?;
 
     if let Some((id,)) = row {
         Ok(id)
     } else {
         tracing::info!(tenant = %tenant_str, "Tenant not found, creating default");
-        let id = Uuid::new_v4();
-        sqlx::query("INSERT INTO tenants (id, name, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id")
-            .bind(id)
-            .bind(&tenant_str)
-            .execute(pool)
-            .await?;
+        // Derive a slug: lowercase, non-alphanumerics -> '-', collapse runs.
+        // `slug` is NOT NULL UNIQUE in migration 017's tenants schema, so we
+        // must supply one; `name` stays as the human-friendly display form.
+        let slug = slugify(&tenant_str);
+        let id: Uuid = sqlx::query_scalar(
+            "INSERT INTO tenants (id, slug, name) VALUES ($1, $2, $3)
+             ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+             RETURNING id",
+        )
+        .bind(Uuid::new_v4())
+        .bind(&slug)
+        .bind(&tenant_str)
+        .fetch_one(pool)
+        .await?;
         Ok(id)
+    }
+}
+
+/// Convert an arbitrary human string into a slug that satisfies
+/// `tenants.slug UNIQUE NOT NULL` (migration 017). Lowercases, maps every
+/// non-alphanumeric character to '-', collapses runs of '-', and trims
+/// leading/trailing '-'. Returns `"tenant"` as a last-resort fallback if
+/// the input has no alphanumeric characters at all.
+pub(crate) fn slugify(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut last_dash = true; // treat start as "just saw a dash" to swallow leading dashes
+    for c in input.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            last_dash = false;
+        } else if !last_dash {
+            out.push('-');
+            last_dash = true;
+        }
+    }
+    while out.ends_with('-') {
+        out.pop();
+    }
+    if out.is_empty() {
+        "tenant".to_string()
+    } else {
+        out
     }
 }
 
@@ -525,6 +564,36 @@ fn error_response(status: StatusCode, error: &str, message: &str) -> axum::respo
 mod tests {
     use super::*;
     use crate::server::PluginAuthState;
+
+    #[test]
+    fn slugify_basic() {
+        assert_eq!(slugify("Acme Corp"), "acme-corp");
+    }
+
+    #[test]
+    fn slugify_collapses_and_trims_runs() {
+        assert_eq!(slugify("  Acme   Corp!!! "), "acme-corp");
+        assert_eq!(slugify("--foo--bar--"), "foo-bar");
+    }
+
+    #[test]
+    fn slugify_lowercases_and_strips_specials() {
+        assert_eq!(slugify("Hëllo_World@2026"), "h-llo-world-2026");
+    }
+
+    #[test]
+    fn slugify_empty_and_all_special_fall_back() {
+        assert_eq!(slugify(""), "tenant");
+        assert_eq!(slugify("!!!"), "tenant");
+        assert_eq!(slugify("   "), "tenant");
+    }
+
+    #[test]
+    fn slugify_preserves_valid_slugs() {
+        assert_eq!(slugify("already-a-slug"), "already-a-slug");
+        assert_eq!(slugify("tenant123"), "tenant123");
+    }
+
     use crate::server::plugin_auth::{RefreshTokenStore, RefreshTokenStoreBackend};
     use agent_a2a::config::TrustedIdentityConfig;
     use async_trait::async_trait;
