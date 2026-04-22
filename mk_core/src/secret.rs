@@ -202,11 +202,23 @@ impl schemars::JsonSchema for SecretBytes {
     }
 }
 
-/// A reference to secret material stored by a [`SecretBackend`].
+/// A reference to secret material.
 ///
-/// In B1 only the `Postgres` variant exists. The enum shape is intentional
-/// so future backends (external secret managers, cloud KV stores, etc.)
-/// can be added as additive variants.
+/// Covers every way a tenant manifest can describe "here is where this
+/// secret lives": inline plaintext on the wire, encrypted-at-rest in our
+/// own database, or an external reference that a backend resolves at
+/// runtime (env var, file on disk, Kubernetes `Secret`, HashiCorp Vault).
+///
+/// Serialized as a `#[serde(tag = "kind")]` tagged union, so the wire
+/// shape is self-describing and future variants add non-colliding shapes.
+///
+/// # Equality & hashing
+///
+/// `PartialEq`/`Eq` derive by-variant; notably, two `Inline` values with
+/// different plaintext are not equal. That is correct for config diffing
+/// (a secret rotation is a real change) but means you must not use
+/// `SecretReference` as a map key in places where the comparison would
+/// cross a hash boundary (we have no such usage today).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(
     tag = "kind",
@@ -214,11 +226,75 @@ impl schemars::JsonSchema for SecretBytes {
     rename_all_fields = "camelCase"
 )]
 pub enum SecretReference {
-    /// Encrypted blob stored in the `tenant_secrets` Postgres table. The row
-    /// holds a KMS-wrapped DEK and an AES-256-GCM ciphertext.
+    /// **Wire-only**: caller supplies plaintext directly in the manifest.
+    ///
+    /// The server accepts `Inline` on **input** (the CLI and REST callers
+    /// need a way to express "please store this new secret"), stores the
+    /// plaintext via [`crate::traits::SecretBackend::put`], and replaces
+    /// the `Inline` reference with [`SecretReference::Postgres`] before
+    /// the owning [`crate::types::TenantSecretReference`] is persisted.
+    ///
+    /// A rendered manifest (see `manifest_render`) **never** contains
+    /// `Inline` — the server has no way to recover plaintext from
+    /// encrypted storage. If you see `Inline` on the way out of a
+    /// rendered manifest, something is wrong.
+    ///
+    /// `plaintext` is [`SecretBytes`], which serializes as `"<redacted>"`.
+    /// That is a safety default: accidentally reserializing an `Inline`
+    /// reference cannot leak the plaintext. Use
+    /// [`Self::expose_inline_plaintext`] when you intentionally need the
+    /// bytes on the storage path.
+    Inline { plaintext: SecretBytes },
+
+    /// Encrypted blob stored in the `tenant_secrets` Postgres table. The
+    /// row holds a KMS-wrapped DEK and an AES-256-GCM ciphertext. This is
+    /// the only variant produced by the default storage backend.
     Postgres {
         /// Primary key of the `tenant_secrets` row.
         secret_id: Uuid,
+    },
+
+    /// Environment variable on the server process, resolved at read time.
+    ///
+    /// Suited to platform-wide secrets injected via a container runtime
+    /// (`DATABASE_URL`, `SLACK_BOT_TOKEN`, etc.). The variable name is
+    /// **not** confidential; the value never touches our database.
+    Env {
+        /// Env-var name (e.g. `"DATABASE_PASSWORD"`). Case-sensitive on
+        /// POSIX; validated non-empty and no embedded `=`/null bytes.
+        var: String,
+    },
+
+    /// File on disk readable by the server process, resolved at read time.
+    ///
+    /// Intended for Kubernetes / Docker secret volume mounts where the
+    /// platform injects the secret as a file.
+    File {
+        /// Absolute path. Validated non-empty and absolute at apply time.
+        path: String,
+    },
+
+    /// Reference to a Kubernetes `Secret` resource, resolved via the
+    /// cluster API at read time.
+    K8s {
+        /// `metadata.name` of the `Secret`.
+        name: String,
+        /// Key within the Secret's `data` map.
+        key: String,
+        /// `metadata.namespace`. `None` = the server process's own
+        /// namespace (derived from the pod's downward API at runtime).
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        namespace: Option<String>,
+    },
+
+    /// Reference to a HashiCorp Vault KV-v2 secret.
+    Vault {
+        /// Mount point of the KV-v2 engine (e.g. `"secret"`).
+        mount: String,
+        /// Path under the mount (e.g. `"tenants/acme/db"`).
+        path: String,
+        /// Field name within the secret document.
+        field: String,
     },
 }
 
@@ -227,7 +303,31 @@ impl SecretReference {
     #[must_use]
     pub fn kind(&self) -> &'static str {
         match self {
+            SecretReference::Inline { .. } => "inline",
             SecretReference::Postgres { .. } => "postgres",
+            SecretReference::Env { .. } => "env",
+            SecretReference::File { .. } => "file",
+            SecretReference::K8s { .. } => "k8s",
+            SecretReference::Vault { .. } => "vault",
+        }
+    }
+
+    /// True when this reference carries secret material **in the value
+    /// itself** (only `Inline`). Callers use this to decide whether they
+    /// must route through [`crate::traits::SecretBackend::put`] before
+    /// persisting the reference.
+    #[must_use]
+    pub fn carries_plaintext(&self) -> bool {
+        matches!(self, SecretReference::Inline { .. })
+    }
+
+    /// Extract the plaintext from an `Inline` variant. Returns `None` for
+    /// every other variant. Callers must not log the result.
+    #[must_use]
+    pub fn expose_inline_plaintext(&self) -> Option<&[u8]> {
+        match self {
+            SecretReference::Inline { plaintext } => Some(plaintext.expose()),
+            _ => None,
         }
     }
 }
@@ -272,6 +372,167 @@ mod tests {
         assert_eq!(s.expose(), b"plaintext");
     }
 
+    #[test]
+    fn reference_kind_for_every_variant() {
+        use std::collections::HashSet;
+        let all = [
+            SecretReference::Inline {
+                plaintext: SecretBytes::from(b"x".to_vec()),
+            },
+            SecretReference::Postgres {
+                secret_id: Uuid::nil(),
+            },
+            SecretReference::Env { var: "X".into() },
+            SecretReference::File { path: "/x".into() },
+            SecretReference::K8s {
+                name: "n".into(),
+                key: "k".into(),
+                namespace: None,
+            },
+            SecretReference::Vault {
+                mount: "m".into(),
+                path: "p".into(),
+                field: "f".into(),
+            },
+        ];
+        let kinds: HashSet<&str> = all.iter().map(SecretReference::kind).collect();
+        // Every variant has a distinct non-empty kind discriminator.
+        assert_eq!(kinds.len(), all.len(), "kind() must be unique per variant");
+        assert!(!kinds.iter().any(|k| k.is_empty()));
+    }
+
+    #[test]
+    fn carries_plaintext_is_only_inline() {
+        let cases = [
+            (
+                SecretReference::Inline {
+                    plaintext: SecretBytes::from(b"x".to_vec()),
+                },
+                true,
+            ),
+            (
+                SecretReference::Postgres {
+                    secret_id: Uuid::nil(),
+                },
+                false,
+            ),
+            (SecretReference::Env { var: "X".into() }, false),
+            (SecretReference::File { path: "/x".into() }, false),
+        ];
+        for (r, expected) in cases {
+            assert_eq!(r.carries_plaintext(), expected, "{:?}", r);
+        }
+    }
+
+    #[test]
+    fn expose_inline_plaintext_only_on_inline() {
+        let inline = SecretReference::Inline {
+            plaintext: SecretBytes::from(b"hunter2".to_vec()),
+        };
+        assert_eq!(inline.expose_inline_plaintext(), Some(&b"hunter2"[..]));
+        let pg = SecretReference::Postgres {
+            secret_id: Uuid::nil(),
+        };
+        assert_eq!(pg.expose_inline_plaintext(), None);
+    }
+
+    #[test]
+    fn roundtrip_postgres_wire_shape() {
+        let r = SecretReference::Postgres {
+            secret_id: Uuid::nil(),
+        };
+        let j = serde_json::to_value(&r).unwrap();
+        assert_eq!(j["kind"], "postgres");
+        assert!(j["secretId"].is_string());
+        let back: SecretReference = serde_json::from_value(j).unwrap();
+        assert_eq!(back, r);
+    }
+
+    #[test]
+    fn roundtrip_inline_redacts_on_serialize_preserves_on_deserialize() {
+        // Deserialize accepts plaintext …
+        let j = serde_json::json!({ "kind": "inline", "plaintext": "hunter2" });
+        let r: SecretReference = serde_json::from_value(j).unwrap();
+        assert_eq!(r.expose_inline_plaintext(), Some(&b"hunter2"[..]));
+
+        // … but serialize always emits <redacted> (safety default).
+        let j2 = serde_json::to_value(&r).unwrap();
+        assert_eq!(j2["kind"], "inline");
+        assert_eq!(j2["plaintext"], "<redacted>");
+    }
+
+    #[test]
+    fn roundtrip_env_wire_shape() {
+        let j = serde_json::json!({ "kind": "env", "var": "DATABASE_URL" });
+        let r: SecretReference = serde_json::from_value(j.clone()).unwrap();
+        assert_eq!(r.kind(), "env");
+        let back = serde_json::to_value(&r).unwrap();
+        assert_eq!(back, j);
+    }
+
+    #[test]
+    fn roundtrip_file_wire_shape() {
+        let j = serde_json::json!({ "kind": "file", "path": "/run/secrets/db" });
+        let r: SecretReference = serde_json::from_value(j.clone()).unwrap();
+        assert_eq!(r.kind(), "file");
+        assert_eq!(serde_json::to_value(&r).unwrap(), j);
+    }
+
+    #[test]
+    fn roundtrip_k8s_namespace_omitted_when_none() {
+        // namespace absent on wire when None (serde skip_serializing_if).
+        let r = SecretReference::K8s {
+            name: "db".into(),
+            key: "password".into(),
+            namespace: None,
+        };
+        let j = serde_json::to_value(&r).unwrap();
+        assert_eq!(j["kind"], "k8s");
+        assert_eq!(j["name"], "db");
+        assert_eq!(j["key"], "password");
+        assert!(
+            j.get("namespace").is_none(),
+            "namespace=None must omit the field, got {j}"
+        );
+
+        // namespace present when Some.
+        let r2 = SecretReference::K8s {
+            name: "db".into(),
+            key: "password".into(),
+            namespace: Some("aeterna".into()),
+        };
+        let j2 = serde_json::to_value(&r2).unwrap();
+        assert_eq!(j2["namespace"], "aeterna");
+        let back: SecretReference = serde_json::from_value(j2).unwrap();
+        assert_eq!(back, r2);
+    }
+
+    #[test]
+    fn roundtrip_vault_wire_shape() {
+        let j = serde_json::json!({
+            "kind": "vault",
+            "mount": "secret",
+            "path": "tenants/acme/db",
+            "field": "password"
+        });
+        let r: SecretReference = serde_json::from_value(j.clone()).unwrap();
+        assert_eq!(r.kind(), "vault");
+        assert_eq!(serde_json::to_value(&r).unwrap(), j);
+    }
+
+    #[test]
+    fn deserialize_rejects_unknown_kind() {
+        // #[serde(tag = "kind")] rejects tags it does not know about at
+        // deserialize time; validate_manifest never sees a reference it
+        // cannot classify. This test locks that contract so a future
+        // change to the enum's serde attributes (e.g. adding
+        // #[serde(other)]) is a deliberate decision and breaks this test.
+        let j = serde_json::json!({ "kind": "mysterybox", "magic": 42 });
+        let r: Result<SecretReference, _> = serde_json::from_value(j);
+        assert!(r.is_err(), "unknown kind must not deserialize");
+    }
+
+    // Legacy single-variant test, kept to lock the original wire shape.
     #[test]
     fn reference_kind() {
         let r = SecretReference::Postgres {

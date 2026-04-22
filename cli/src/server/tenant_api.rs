@@ -3770,6 +3770,99 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
         }
     }
 
+    // ── secret_references: per-variant well-formedness (B1 §1.2). The
+    //    serde `tag = "kind"` union already rejects unknown kinds at parse
+    //    time; here we check that the REQUIRED fields within a known kind
+    //    are non-empty and well-formed. An empty `var` on Env, empty
+    //    `path` on File, etc. would otherwise pass parse and blow up only
+    //    at resolution time — this surfaces them at apply as a 422.
+    //
+    //    Postgres is not user-authored (callers supply Inline; server
+    //    stores it and rewrites to Postgres before persisting) so we
+    //    skip it here — `set_secret_entry`'s write path already owns
+    //    the Uuid invariant.
+    if let Some(cfg) = &m.config {
+        for (ref_name, entry) in &cfg.secret_references {
+            if ref_name.trim().is_empty() {
+                errors.push("config.secretReferences has an entry with an empty key".into());
+            }
+            if entry.logical_name.trim().is_empty() {
+                errors.push(format!(
+                    "config.secretReferences.{ref_name}.logicalName must not be empty"
+                ));
+            }
+            match &entry.reference {
+                mk_core::SecretReference::Inline { plaintext } => {
+                    // SecretBytes::is_empty does not expose; just length-0 check.
+                    if plaintext.is_empty() {
+                        errors.push(format!(
+                            "config.secretReferences.{ref_name}: inline plaintext must not be empty"
+                        ));
+                    }
+                }
+                mk_core::SecretReference::Postgres { .. } => {
+                    // Not expected via manifest — Inline is rewritten to
+                    // Postgres server-side. Tolerate it (round-trip of a
+                    // rendered manifest would include it) without error.
+                }
+                mk_core::SecretReference::Env { var } => {
+                    if var.trim().is_empty() {
+                        errors.push(format!(
+                            "config.secretReferences.{ref_name}.var must not be empty"
+                        ));
+                    } else if var.contains('=') || var.contains('\0') {
+                        errors.push(format!(
+                            "config.secretReferences.{ref_name}.var must not contain '=' or null bytes"
+                        ));
+                    }
+                }
+                mk_core::SecretReference::File { path } => {
+                    if path.trim().is_empty() {
+                        errors.push(format!(
+                            "config.secretReferences.{ref_name}.path must not be empty"
+                        ));
+                    } else if !path.starts_with('/') {
+                        errors.push(format!(
+                            "config.secretReferences.{ref_name}.path must be absolute (start with '/')"
+                        ));
+                    }
+                }
+                mk_core::SecretReference::K8s {
+                    name,
+                    key,
+                    namespace,
+                } => {
+                    if name.trim().is_empty() {
+                        errors.push(format!(
+                            "config.secretReferences.{ref_name}.name must not be empty"
+                        ));
+                    }
+                    if key.trim().is_empty() {
+                        errors.push(format!(
+                            "config.secretReferences.{ref_name}.key must not be empty"
+                        ));
+                    }
+                    if let Some(ns) = namespace {
+                        if ns.trim().is_empty() {
+                            errors.push(format!(
+                                "config.secretReferences.{ref_name}.namespace, when set, must not be empty (omit to use the server's namespace)"
+                            ));
+                        }
+                    }
+                }
+                mk_core::SecretReference::Vault { mount, path, field } => {
+                    for (label, value) in [("mount", mount), ("path", path), ("field", field)] {
+                        if value.trim().is_empty() {
+                            errors.push(format!(
+                                "config.secretReferences.{ref_name}.{label} must not be empty"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     errors
 }
 
@@ -6238,6 +6331,250 @@ mod tests {
         assert!(
             errors.iter().any(|e| e.contains("providers.llm.kind")),
             "expected empty-kind error, got: {errors:?}"
+        );
+    }
+
+    // ── B1 §1.2 SecretReference variant validation tests ─────────────────
+    // These exercise validate_manifest's per-variant well-formedness
+    // checks. The #[serde(tag = "kind")] union handles unknown kinds at
+    // parse time; validate_manifest handles empty/malformed fields
+    // within known kinds.
+
+    #[test]
+    fn validate_manifest_accepts_all_secret_reference_variants() {
+        // One-shot coverage: every variant in its canonical well-formed
+        // shape must pass validate_manifest.
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "sr", "name": "SR" },
+            "config": {
+                "fields": {},
+                "secretReferences": {
+                    "inline-ok":   { "logicalName": "a", "ownership": "tenant",
+                                     "kind": "inline",   "plaintext": "hunter2" },
+                    "env-ok":      { "logicalName": "b", "ownership": "tenant",
+                                     "kind": "env",      "var": "DATABASE_PASSWORD" },
+                    "file-ok":     { "logicalName": "c", "ownership": "tenant",
+                                     "kind": "file",     "path": "/run/secrets/db" },
+                    "k8s-ok":      { "logicalName": "d", "ownership": "tenant",
+                                     "kind": "k8s",      "name": "db-secret",
+                                                         "key": "password" },
+                    "k8s-ns-ok":   { "logicalName": "e", "ownership": "tenant",
+                                     "kind": "k8s",      "name": "db-secret",
+                                                         "key": "password",
+                                                         "namespace": "aeterna" },
+                    "vault-ok":    { "logicalName": "f", "ownership": "tenant",
+                                     "kind": "vault",    "mount": "secret",
+                                                         "path": "tenants/acme/db",
+                                                         "field": "password" }
+                }
+            }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        assert!(
+            validate_manifest(&m).is_empty(),
+            "well-formed manifest must validate cleanly, got: {:?}",
+            validate_manifest(&m)
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_inline_empty_plaintext() {
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "sr", "name": "SR" },
+            "config": {
+                "fields": {},
+                "secretReferences": {
+                    "bad": { "logicalName": "a", "ownership": "tenant",
+                             "kind": "inline", "plaintext": "" }
+                }
+            }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("inline plaintext")),
+            "expected inline-empty error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_env_empty_var() {
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "sr", "name": "SR" },
+            "config": {
+                "fields": {},
+                "secretReferences": {
+                    "bad": { "logicalName": "a", "ownership": "tenant",
+                             "kind": "env", "var": "" }
+                }
+            }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        let errors = validate_manifest(&m);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("bad.var must not be empty")),
+            "expected env-empty error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_env_var_with_equals() {
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "sr", "name": "SR" },
+            "config": {
+                "fields": {},
+                "secretReferences": {
+                    "bad": { "logicalName": "a", "ownership": "tenant",
+                             "kind": "env", "var": "FOO=BAR" }
+                }
+            }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("'=' or null bytes")),
+            "expected env-malformed error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_file_relative_path() {
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "sr", "name": "SR" },
+            "config": {
+                "fields": {},
+                "secretReferences": {
+                    "bad": { "logicalName": "a", "ownership": "tenant",
+                             "kind": "file", "path": "relative/path" }
+                }
+            }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("must be absolute")),
+            "expected file-relative error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_k8s_empty_fields() {
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "sr", "name": "SR" },
+            "config": {
+                "fields": {},
+                "secretReferences": {
+                    "bad": { "logicalName": "a", "ownership": "tenant",
+                             "kind": "k8s", "name": "", "key": "" }
+                }
+            }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        let errors = validate_manifest(&m);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("bad.name must not be empty")),
+            "missing name error, got: {errors:?}"
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("bad.key must not be empty")),
+            "missing key error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_k8s_empty_namespace_when_set() {
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "sr", "name": "SR" },
+            "config": {
+                "fields": {},
+                "secretReferences": {
+                    "bad": { "logicalName": "a", "ownership": "tenant",
+                             "kind": "k8s", "name": "n", "key": "k",
+                             "namespace": "   " }
+                }
+            }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.iter().any(|e| e.contains("namespace, when set")),
+            "expected namespace-when-set error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_manifest_rejects_vault_partial_fields() {
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "sr", "name": "SR" },
+            "config": {
+                "fields": {},
+                "secretReferences": {
+                    "bad": { "logicalName": "a", "ownership": "tenant",
+                             "kind": "vault", "mount": "secret",
+                             "path": "", "field": "" }
+                }
+            }
+        });
+        let m: TenantManifest = serde_json::from_value(raw).unwrap();
+        let errors = validate_manifest(&m);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("bad.path must not be empty")),
+            "missing path error, got: {errors:?}"
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("bad.field must not be empty")),
+            "missing field error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn deserialize_rejects_unknown_secret_reference_kind_at_parse_time() {
+        // serde tag="kind" short-circuits before validate_manifest ever
+        // sees the value. This test locks that contract so a future
+        // change making the enum non-exhaustive (e.g. #[serde(other)])
+        // is a deliberate decision and breaks this test.
+        let raw = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "sr", "name": "SR" },
+            "config": {
+                "fields": {},
+                "secretReferences": {
+                    "bad": { "logicalName": "a", "ownership": "tenant",
+                             "kind": "mysterybox", "whatever": 1 }
+                }
+            }
+        });
+        let parsed: Result<TenantManifest, _> = serde_json::from_value(raw);
+        assert!(
+            parsed.is_err(),
+            "unknown secret-reference kind must fail at serde parse, not reach validate_manifest"
         );
     }
 

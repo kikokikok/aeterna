@@ -243,7 +243,10 @@ impl SecretBackend for PostgresSecretBackend {
     }
 
     async fn get(&self, reference: &SecretReference) -> Result<SecretBytes, SecretBackendError> {
-        let SecretReference::Postgres { secret_id } = reference;
+        let secret_id = match reference {
+            SecretReference::Postgres { secret_id } => secret_id,
+            other => return Err(SecretBackendError::UnsupportedReference(other.kind())),
+        };
         let row = sqlx::query(
             r#"SELECT wrapped_dek, ciphertext, nonce FROM tenant_secrets WHERE id = $1"#,
         )
@@ -274,7 +277,10 @@ impl SecretBackend for PostgresSecretBackend {
     }
 
     async fn delete(&self, reference: &SecretReference) -> Result<(), SecretBackendError> {
-        let SecretReference::Postgres { secret_id } = reference;
+        let secret_id = match reference {
+            SecretReference::Postgres { secret_id } => secret_id,
+            other => return Err(SecretBackendError::UnsupportedReference(other.kind())),
+        };
         sqlx::query("DELETE FROM tenant_secrets WHERE id = $1")
             .bind(secret_id)
             .execute(&self.pool)
@@ -348,7 +354,10 @@ impl SecretBackend for InMemorySecretBackend {
     }
 
     async fn get(&self, reference: &SecretReference) -> Result<SecretBytes, SecretBackendError> {
-        let SecretReference::Postgres { secret_id } = reference;
+        let secret_id = match reference {
+            SecretReference::Postgres { secret_id } => secret_id,
+            other => return Err(SecretBackendError::UnsupportedReference(other.kind())),
+        };
         let by_id = self.by_id.lock().expect("poisoned");
         let key = by_id
             .get(secret_id)
@@ -363,7 +372,10 @@ impl SecretBackend for InMemorySecretBackend {
     }
 
     async fn delete(&self, reference: &SecretReference) -> Result<(), SecretBackendError> {
-        let SecretReference::Postgres { secret_id } = reference;
+        let secret_id = match reference {
+            SecretReference::Postgres { secret_id } => secret_id,
+            other => return Err(SecretBackendError::UnsupportedReference(other.kind())),
+        };
         let mut by_id = self.by_id.lock().expect("poisoned");
         if let Some(key) = by_id.remove(secret_id) {
             self.inner.lock().expect("poisoned").remove(&key);

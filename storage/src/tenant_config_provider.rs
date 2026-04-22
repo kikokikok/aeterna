@@ -314,7 +314,10 @@ mod tests {
             &self,
             reference: &SecretReference,
         ) -> Result<SecretBytes, SecretBackendError> {
-            let SecretReference::Postgres { secret_id } = reference;
+            let secret_id = match reference {
+                SecretReference::Postgres { secret_id } => secret_id,
+                other => return Err(SecretBackendError::UnsupportedReference(other.kind())),
+            };
             self.store
                 .lock()
                 .unwrap()
@@ -324,7 +327,10 @@ mod tests {
         }
 
         async fn delete(&self, reference: &SecretReference) -> Result<(), SecretBackendError> {
-            let SecretReference::Postgres { secret_id } = reference;
+            let secret_id = match reference {
+                SecretReference::Postgres { secret_id } => secret_id,
+                other => return Err(SecretBackendError::UnsupportedReference(other.kind())),
+            };
             self.store.lock().unwrap().remove(secret_id);
             Ok(())
         }

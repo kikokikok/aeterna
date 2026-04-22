@@ -25,7 +25,10 @@
 ### 1. Manifest schema and hashing
 
 - [ ] 1.1 Extend `TenantManifest` with `metadata.generation: u64` and `providers: ManifestProviders` (memoryLayers, llm, embedding). _(`cli/src/server/tenant_api.rs:3404`)_
-- [ ] 1.2 Introduce `SecretReference` sum type per 0.3. Update `ManifestConfig.secret_references` accordingly.
+- [x] 1.2 Introduce `SecretReference` sum type per 0.3. Update `ManifestConfig.secret_references` accordingly.
+      Shipped full variant set (`Inline`, `Postgres`, `Env`, `File`, `K8s`, `Vault`) in one hard-cut PR.
+      Per-variant `validate_manifest` well-formedness checks; serde `tag="kind"` rejects unknown kinds at parse time.
+      `SecretBackend::{get,delete}` route non-Postgres variants to `UnsupportedReference(kind)` until dispatching backends land.
 - [ ] 1.3 Create `manifest_canonical` module: stable key order, inline secrets stripped.
 - [ ] 1.4 Implement `manifest_hash(&TenantManifest) -> String` returning `sha256:<hex>`.
 - [x] 1.5 Add `last_applied_manifest_hash: Option<String>` and `generation: u64` to the tenant record; write SQL migration. _(PR #105 — migration `027_tenant_manifest_state.sql`; `TenantStore::{get,set}_manifest_state` + `set_manifest_state_tx` with BYTEA↔hex helpers; 10 integration tests inc. idempotency, roundtrip, nonexistent-slug, tx rollback.)_

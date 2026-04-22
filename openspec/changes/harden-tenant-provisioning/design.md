@@ -5,19 +5,62 @@
 
 ## Decisions
 
-### D1 — SecretReference is a sum type
+### D1 — SecretReference is a sum type (full variant set, B1)
 
-Replace the flat `TenantSecretReference` struct in `mk_core/src/types.rs` with a tagged enum. Hard cut. No live data to migrate.
+`SecretReference` in `mk_core/src/secret.rs` is a `#[serde(tag = "kind")]`
+tagged enum. **Hard cut, no migration**: no production tenants exist yet,
+so we ship the full useful variant set in one go rather than dripping
+variants PR-by-PR.
 
 ```rust
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum SecretReference {
-    /// Encrypted blob stored in our own Postgres (default path)
+    /// Wire-only: plaintext in the manifest; server stores via
+    /// SecretBackend::put and rewrites to `Postgres` before persisting.
+    Inline { plaintext: SecretBytes },
+
+    /// Envelope-encrypted in `tenant_secrets` (default server-side shape).
     Postgres { secret_id: Uuid },
+
+    /// Env var on the server process, resolved at read time.
+    Env { var: String },
+
+    /// File on disk (k8s / Docker secret mount), resolved at read time.
+    File { path: String },
+
+    /// Kubernetes `Secret` resource, resolved via the cluster API.
+    K8s { name: String, key: String, #[serde(default)] namespace: Option<String> },
+
+    /// HashiCorp Vault KV-v2 secret.
+    Vault { mount: String, path: String, field: String },
 }
 ```
 
-Only one variant in B1. The enum shape is there so future variants (`External { provider, id }`, etc.) land as additive PRs without touching serialization of existing data.
+**Invariants:**
+
+- `Inline` is **wire-only**: it never reaches persistence. The apply path
+  detects `carries_plaintext()`, calls `SecretBackend::put`, and replaces
+  the reference with `Postgres { secret_id }` before writing the
+  `TenantConfigDocument`. A rendered manifest therefore never emits
+  `Inline` — if one is ever seen on the way out, that is a bug.
+- `SecretBytes` serializes as `"<redacted>"` always. Accidentally
+  reserializing an `Inline` value cannot leak plaintext; the dedicated
+  `expose_inline_plaintext()` accessor is the only way to retrieve the
+  bytes, and it is only used on the storage path.
+- The serde union is **exhaustive**: unknown kinds fail at
+  deserialization. `validate_manifest` therefore never sees an
+  unclassifiable reference; its job is to validate the **fields within**
+  a known variant (non-empty `var`, absolute `path`, etc.).
+- `SecretBackend::get`/`delete` accept only `Postgres` today. Non-Postgres
+  variants return `SecretBackendError::UnsupportedReference(kind)`.
+  Future backends (EnvSecretBackend, VaultSecretBackend, etc.) land as
+  additive impls of the same trait and a dispatch layer routes by kind.
+
+**Why breaking vs. additive-with-compat:** no prod tenants, no stored
+data to migrate, no public CLI users outside the dev team. Additive
+backward-compat shims would complicate every consumer (every backend,
+every diff, every render) for a constraint that does not exist. Ship
+the right shape; re-hash tests.
 
 ### D2 — Secret storage: Postgres with KMS-wrapped DEK envelope encryption
 
