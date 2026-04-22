@@ -74,7 +74,9 @@ async fn ciphertext_is_not_plaintext_on_disk() {
         .put(tid, "k", SecretBytes::from(plaintext.to_vec()))
         .await
         .expect("put");
-    let SecretReference::Postgres { secret_id } = r;
+    let SecretReference::Postgres { secret_id } = r else {
+        panic!("backend.put must return a Postgres reference")
+    };
     let row = sqlx::query("SELECT ciphertext, wrapped_dek FROM tenant_secrets WHERE id = $1")
         .bind(secret_id)
         .fetch_one(&pool)
@@ -113,7 +115,9 @@ async fn put_same_name_bumps_generation_and_rotates_dek() {
     let out = be.get(&r2).await.unwrap();
     assert_eq!(out.expose(), b"v2");
 
-    let SecretReference::Postgres { secret_id } = r2;
+    let SecretReference::Postgres { secret_id } = r2 else {
+        panic!("backend.put must return a Postgres reference")
+    };
     let row = sqlx::query("SELECT generation FROM tenant_secrets WHERE id = $1")
         .bind(secret_id)
         .fetch_one(&pool)
