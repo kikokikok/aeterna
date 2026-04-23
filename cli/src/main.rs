@@ -7,6 +7,7 @@ mod client;
 mod commands;
 mod credentials;
 pub mod env_vars;
+pub mod exit_code;
 mod offline;
 mod output;
 mod profile;

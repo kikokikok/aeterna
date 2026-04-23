@@ -575,7 +575,7 @@ async fn run_reject(args: GovernRejectArgs) -> anyhow::Result<()> {
                 args.request_id
             ))
             .display();
-        std::process::exit(1);
+        crate::exit_code::ExitCode::Usage.exit();
     }
 
     if !args.yes {
@@ -1093,7 +1093,7 @@ async fn run_roles(args: GovernRolesArgs) -> anyhow::Result<()> {
                 .fix("Use one of: list, assign, revoke")
                 .suggest("aeterna govern roles list")
                 .display();
-            std::process::exit(1);
+            crate::exit_code::ExitCode::Usage.exit();
         }
     }
 

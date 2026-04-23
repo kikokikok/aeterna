@@ -178,7 +178,7 @@ pub async fn run(args: CheckArgs) -> Result<()> {
         } else {
             output::error("Validation failed with errors");
         }
-        std::process::exit(1);
+        crate::exit_code::ExitCode::Usage.exit();
     } else {
         output::success("All checks passed");
     }
@@ -238,7 +238,7 @@ async fn run_json(args: CheckArgs, ctx: &context::ResolvedContext) -> Result<()>
     println!("{}", serde_json::to_string_pretty(&output)?);
 
     if has_violations {
-        std::process::exit(1);
+        crate::exit_code::ExitCode::Usage.exit();
     }
 
     Ok(())
