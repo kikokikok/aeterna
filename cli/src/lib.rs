@@ -7,5 +7,6 @@ pub mod exit_code;
 mod offline;
 pub mod output;
 mod profile;
+pub mod secret_input;
 pub mod server;
 pub mod ux_error;
