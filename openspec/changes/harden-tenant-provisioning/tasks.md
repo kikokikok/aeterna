@@ -13,10 +13,10 @@
 
 ## 0. Resolve design conflicts (blocking all other groups)
 
-- [!] 0.1 Decide `SecretResolver` shape: extend existing closure-based alias in `memory/src/provider_registry.rs` **or** introduce a kind-dispatched trait and migrate. Document in `design.md` under a new "Secret resolver model" section. _(blocks 3.*)_
+- [x] 0.1 ~~Decide `SecretResolver` shape~~ **RESOLVED** in `design.md` §D9: **kind-dispatched trait** (`SecretRefResolver` + `SecretResolverRegistry`). Migrated incrementally via a `LegacyClosureAdapter` so 3.1 lands with zero runtime behaviour change; closure typedef deleted in 3.5. _(unblocks 3.*)_
 - [x] 0.2 ~~Decide provider wiring model~~ **RESOLVED** in `design.md` §D5: **Eager** (boot loop + Dragonfly pub/sub `tenant:changed` fan-out + lazy fallback on registry miss). Failure policy per-tenant by default, strict mode opt-in. Acceptance: freshly provisioned tenant is usable cluster-wide with no pod restart; zero user-visible 500s on race windows.
 - [!] 0.3 Define `TenantSecretReference` migration path: introduce `TenantSecretReferenceV2` sum type alongside the existing flat struct, with a deprecation window — or commit to a single breaking bump of `mk_core`. Document in `design.md`. _(blocks 1.2, 3.2-3.4)_
-- [!] 0.4 Decide CLI `validate` placement: top-level `tenant validate` subsumes the existing nested `tenant repo-binding validate` and `tenant config validate`, or coexists. Document in `design.md`. _(blocks 7.4, 7.6)_
+- [x] 0.4 ~~Decide CLI `validate` placement~~ **RESOLVED** in `design.md` §D8: **top-level `tenant validate` subsumes nested** `tenant repo-binding validate` and `tenant config validate`. Nested subcommands kept as deprecated aliases emitting a stderr warning and routing to the top-level code path; removed after two minor versions. _(unblocks 7.4, 7.6)_
 
 ---
 
@@ -70,7 +70,7 @@
 
 ### 3. Secret reference resolution
 
-- [!] 3.1 Define resolver shape per 0.1 (trait or extended alias).
+- [x] 3.1 Define resolver shape per 0.1 (trait or extended alias). _(This PR — `memory/src/secret_resolver.rs`: `SecretRefResolver` async trait + `SecretResolverRegistry` dispatching by `SecretReference::kind()` + `LegacyClosureAdapter` bridging existing closures until 3.5. `ResolveError` covers `NotFound`, `BackendUnavailable`, `PermissionDenied`, `MalformedReference`, `WrongKind`. 15 unit tests — registration/overwrite, kind dispatch, unregistered-kind error surface, debug-stability, adapter kind mismatch, closure None→NotFound, inline refused, K8s/file logical-name round-trip, end-to-end registry with adapters, error-Display shape. No runtime wiring changes; closure typedef in `provider_registry.rs` stays intact until §3.5.)_
 - [ ] 3.2 `K8sSecretRefResolver` using the pod's in-cluster SA credentials.
 - [ ] 3.3 `FileRefResolver` that checks mode `<= 0600`.
 - [ ] 3.4 `EnvRefResolver` and `VaultRefResolver` (Vault feature-gated stub).

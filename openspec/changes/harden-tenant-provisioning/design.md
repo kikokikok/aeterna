@@ -265,9 +265,81 @@ Adds a `kms` section to `deploy/helm/aeterna/values.yaml` and templates that:
 
 Migration AK/SK → IRSA is chart-values-only, no code change (AWS SDK default chain handles both).
 
-### D8 — Top-level `tenant validate`, subsumes nested validates
+### D8 — Top-level `tenant validate`, subsumes nested validates (resolves 0.4)
 
 Delete `tenant repo-binding validate` and `tenant config validate`. `tenant validate -f manifest.yaml` becomes the single validation path.
+
+**Migration:** keep the two nested subcommands as deprecated aliases that emit `warning: 'aeterna tenant {repo-binding,config} validate' is deprecated; use 'aeterna tenant validate -f <manifest>' instead` on stderr and route internally to the same code path as `tenant validate`. Remove after two minor versions. No behavioural change for existing scripts in the interim.
+
+### D9 — SecretRefResolver is a kind-dispatched trait (resolves 0.1)
+
+**Decision:** replace the single `SecretResolver` closure type in `memory/src/provider_registry.rs:92` with a `SecretRefResolver` trait. Each backend (`Inline`, `Postgres`, `Env`, `File`, `K8s`, `Vault`) is its own type implementing the trait. A `SecretResolverRegistry` routes by `SecretReference::kind()` to the registered impl.
+
+**Rationale:**
+
+- The `SecretReference` sum type (D1) has 6 variants with very different security profiles — file mode 0600 checks, K8s SA credentials, Vault lease lifecycles, env-var resolution. A single closure collapsing all six into one `match` rots the first time one variant grows a side-concern (lease renewal, cert rotation, watch).
+- Matches the house style elsewhere in the codebase: `TenantConfigProvider`, `SecretBackend`, `KmsProvider` are all traits with per-backend impls. Adding another closure-typedef alias would be the outlier.
+- Per-backend testing becomes trivial: stub one impl, leave the other five alone.
+- Feature gating is structural: `#[cfg(feature = "vault")] impl SecretRefResolver for VaultResolver { ... }` — no conditional branches inside a shared closure.
+
+**Trait shape:**
+
+```rust
+#[async_trait]
+pub trait SecretRefResolver: Send + Sync {
+    /// The `SecretReference` kind this resolver handles (matches
+    /// `SecretReference::kind()`: "inline" | "postgres" | "env" | ...).
+    fn kind(&self) -> &'static str;
+
+    /// Resolve the reference to plaintext bytes. `SecretBytes` zeroizes
+    /// on drop; callers must not convert to `String` except at the
+    /// final consumer boundary.
+    async fn resolve(
+        &self,
+        tenant: &TenantId,
+        reference: &SecretReference,
+    ) -> Result<SecretBytes, ResolveError>;
+}
+```
+
+**Error surface** (`ResolveError`):
+
+- `NotFound` — reference well-formed, backend has no value.
+- `BackendUnavailable { kind, reason }` — K8s API down, Vault sealed, file missing.
+- `PermissionDenied { reason }` — e.g. file mode > 0600, K8s RBAC 403, Vault policy denies.
+- `MalformedReference { kind, reason }` — variant-specific validation failure at resolve time.
+- `WrongKind { expected, actual }` — defensive: resolver got a variant it doesn't handle (registry bug).
+
+**Registry:**
+
+```rust
+pub struct SecretResolverRegistry {
+    by_kind: HashMap<&'static str, Arc<dyn SecretRefResolver>>,
+}
+impl SecretResolverRegistry {
+    pub fn register(&mut self, r: Arc<dyn SecretRefResolver>) { ... }
+    pub async fn resolve(&self, tenant: &TenantId, r: &SecretReference)
+        -> Result<SecretBytes, ResolveError> { ... } // dispatches by r.kind()
+}
+```
+
+**Migration path (no big-bang):**
+
+1. **3.1 (this PR):** define the trait, the `ResolveError` enum, and `SecretResolverRegistry`. Ship a `LegacyClosureAdapter` that implements `SecretRefResolver` by delegating to the old `SecretResolver` closure for every kind, so existing `ProviderRegistry::set_resolvers` call-sites keep working byte-for-byte. Zero runtime behaviour change.
+2. **3.2:** `K8sSecretRefResolver` (reads K8s `Secret` objects via pod SA token).
+3. **3.3:** `FileRefResolver` (mode ≤ 0600 enforcement).
+4. **3.4:** `EnvRefResolver` + `VaultRefResolver` (Vault behind `#[cfg(feature = "vault")]`, stub by default).
+5. **3.5:** wire `SecretResolverRegistry` into the per-request secrets provider; remove `LegacyClosureAdapter` and the closure typedef in the same commit once no call sites remain.
+
+Each step is independently mergeable. The closure typedef (`SecretResolver`) is deprecated but kept through 3.4, deleted in 3.5.
+
+**What this explicitly does NOT change in 3.1:**
+
+- No call-site churn in `provider_registry.rs` or `memory::service` — they keep using `SecretResolver` closures via the adapter.
+- No changes to `ProviderRegistry::set_resolvers` signature.
+- No changes to how `get_secret_bytes` works on the `TenantConfigProvider` closure adapter.
+
+Pure additive surface in 3.1 — the trait exists, has tests, and is ready for 3.2 to drop in the first real impl.
 
 ## Out of scope for B1
 
