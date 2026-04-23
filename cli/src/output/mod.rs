@@ -1,5 +1,13 @@
 use colored::Colorize;
 
+pub mod renderer;
+
+// Re-exports for lib consumers; `allow` because the binary path does
+// not use them directly yet (migration of existing commands is a
+// follow-up PR).
+#[allow(unused_imports)]
+pub use renderer::{JsonPathError, OutputFormat, ParseFormatError, Renderer};
+
 pub fn header(title: &str) {
     println!("{}", title.bold().underline());
 }
