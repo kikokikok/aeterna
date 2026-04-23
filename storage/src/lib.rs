@@ -11,6 +11,7 @@ pub mod governance;
 pub mod graph;
 pub mod graph_duckdb;
 pub mod graphrag;
+pub mod hierarchy_store;
 pub mod kms;
 pub mod kms_integration;
 pub mod meta_governance;

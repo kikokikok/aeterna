@@ -270,10 +270,7 @@ async fn v_hierarchy_unknown_tenant_returns_empty_set_not_global_fallthrough() {
 // Agent-permissions isolation (migration 029 — added in this PR)
 // ---------------------------------------------------------------------
 
-async fn first_user_and_company_for_tenant(
-    pool: &sqlx::PgPool,
-    tenant_id: Uuid,
-) -> (Uuid, Uuid) {
+async fn first_user_and_company_for_tenant(pool: &sqlx::PgPool, tenant_id: Uuid) -> (Uuid, Uuid) {
     let row = sqlx::query(
         "SELECT u.id AS user_id, c.id AS company_id
          FROM users u
@@ -344,8 +341,16 @@ async fn v_agent_permissions_tenant_filter_isolates_cross_tenant_rows() {
     .await
     .expect("query tenant B agents");
 
-    assert_eq!(rows_a.len(), 1, "tenant A should see exactly its one agent, got {rows_a:?}");
-    assert_eq!(rows_b.len(), 1, "tenant B should see exactly its one agent, got {rows_b:?}");
+    assert_eq!(
+        rows_a.len(),
+        1,
+        "tenant A should see exactly its one agent, got {rows_a:?}"
+    );
+    assert_eq!(
+        rows_b.len(),
+        1,
+        "tenant B should see exactly its one agent, got {rows_b:?}"
+    );
     assert_eq!(rows_a[0].1, agent_a);
     assert_eq!(rows_b[0].1, agent_b);
     assert_eq!(rows_a[0].0, Some(tenant_a));
