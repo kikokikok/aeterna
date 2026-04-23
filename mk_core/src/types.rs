@@ -1616,6 +1616,45 @@ pub struct PolicyViolation {
     pub context: std::collections::HashMap<String, serde_json::Value>,
 }
 
+/// Wire-safe snapshot of a single bootstrap phase.
+///
+/// Mirrors the struct produced by
+/// `cli::server::bootstrap_tracker::BootstrapTracker::snapshot()` and
+/// lives in `mk_core` so event consumers (Postgres event store, Redis
+/// publisher, downstream audit tooling) can deserialize it without a
+/// dependency on the CLI crate.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BootstrapStepSnapshot {
+    pub name: String,
+    /// `running`, `success`, or `failure`.
+    pub state: String,
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// Present only when `state == "failure"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Wire-safe snapshot of bootstrap progress, returned verbatim by
+/// `GET /api/v1/admin/bootstrap/status` and embedded as the payload of
+/// [`GovernanceEvent::BootstrapCompleted`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BootstrapStatusSnapshot {
+    /// `running`, `completed`, or `failed`.
+    pub state: String,
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    pub steps: Vec<BootstrapStepSnapshot>,
+}
+
 /// Governance event types for auditing and real-time updates
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -1846,6 +1885,32 @@ pub enum GovernanceEvent {
         tenant_id: TenantId,
         timestamp: i64,
     },
+
+    /// Platform bootstrap completed successfully on this pod.
+    ///
+    /// Emitted exactly once per pod boot, right after `bootstrap()`
+    /// returns the fully-assembled `AppState` and the tracker has been
+    /// finalized with `mark_ready()`. Consumers get the complete
+    /// per-phase breakdown verbatim from `/api/v1/admin/bootstrap/status`
+    /// without a follow-up call.
+    ///
+    /// This is a **platform-level** event: `tenant_id` is always the
+    /// root sentinel [`INSTANCE_SCOPE_TENANT_ID`], because bootstrap is
+    /// not tenant-scoped (it runs before any tenant context exists).
+    ///
+    /// Tracking: B2 task 6.4 in
+    /// `openspec/changes/harden-tenant-provisioning/tasks.md`.
+    BootstrapCompleted {
+        /// Always [`INSTANCE_SCOPE_TENANT_ID`] (`__root__`).
+        tenant_id: TenantId,
+        /// Unix seconds — matches every other variant for wire
+        /// consistency, even though `snapshot.completed_at` is the
+        /// authoritative completion time (millisecond precision).
+        timestamp: i64,
+        /// Full per-phase snapshot, identical in shape to
+        /// `/api/v1/admin/bootstrap/status`.
+        snapshot: BootstrapStatusSnapshot,
+    },
 }
 
 impl GovernanceEvent {
@@ -1879,6 +1944,7 @@ impl GovernanceEvent {
             GovernanceEvent::KnowledgePromotionRetargeted { tenant_id, .. } => tenant_id,
             GovernanceEvent::KnowledgePromotionApplied { tenant_id, .. } => tenant_id,
             GovernanceEvent::KnowledgeRelationCreated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::BootstrapCompleted { tenant_id, .. } => tenant_id,
         }
     }
 }
@@ -2244,6 +2310,7 @@ impl PersistentEvent {
             GovernanceEvent::KnowledgeRelationCreated { .. } => {
                 "knowledge_relation_created".to_string()
             }
+            GovernanceEvent::BootstrapCompleted { .. } => "bootstrap_completed".to_string(),
         }
     }
 

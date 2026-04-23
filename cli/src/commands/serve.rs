@@ -40,6 +40,18 @@ pub async fn run(args: ServeArgs) -> anyhow::Result<()> {
     }
 
     let state = bootstrap::bootstrap().await?;
+
+    // B2 task 6.4 — emit `BootstrapCompleted` governance event exactly
+    // once per pod boot, immediately after the tracker is finalized.
+    //
+    // Non-fatal: a DB outage must not prevent the API from serving a
+    // pod that otherwise bootstrapped cleanly. The event is best-effort;
+    // `/admin/bootstrap/status` remains the authoritative per-pod
+    // readout for ops, and the `governance_events` row is just the
+    // async/durable copy for downstream consumers (audit dashboards,
+    // pub/sub subscribers).
+    emit_bootstrap_completed(state.as_ref()).await;
+
     let app = router::build_router(state.clone());
     let metrics_handle = metrics::create_recorder();
     let metrics_app = metrics::router(metrics_handle);
@@ -112,6 +124,80 @@ async fn await_shutdown(mut shutdown_rx: watch::Receiver<bool>) {
         if *shutdown_rx.borrow() {
             break;
         }
+    }
+}
+
+/// B2 task 6.4 — fire a one-shot `BootstrapCompleted` governance event
+/// after the tracker finalizes.
+///
+/// ## Scope
+///
+/// Platform-level: uses [`INSTANCE_SCOPE_TENANT_ID`] (`__root__`) as the
+/// tenant scope because bootstrap is not tenant-scoped. The payload is
+/// the full per-phase snapshot, byte-for-byte identical to what
+/// `/api/v1/admin/bootstrap/status` returns on the same pod.
+///
+/// ## Failure handling
+///
+/// Best-effort. Any error in writing the event is logged at `warn!`
+/// level and swallowed; the server continues to start normally. The
+/// tracker already populates `/admin/bootstrap/status` synchronously —
+/// the governance event is a durable copy for downstream consumers, not
+/// the authoritative record.
+///
+/// ## Idempotency
+///
+/// `PersistentEvent::new` generates a fresh UUID `event_id`, and the
+/// row's `idempotency_key` is `sha256(event_id:timestamp:tenant_id)`.
+/// Every pod boot therefore produces a unique row — we do not suppress
+/// repeat emissions on pod restart, which is the desired behaviour:
+/// each boot is independently observable.
+///
+/// ## No-op cases
+///
+/// - Tracker not ready (failed bootstrap): the server never reaches
+///   this call because `bootstrap()` returned `Err` upstream and the
+///   process exits. The `if` guard is belt-and-braces against future
+///   refactors that decouple tracker state from the `Result`.
+async fn emit_bootstrap_completed(state: &crate::server::AppState) {
+    use mk_core::types::{GovernanceEvent, INSTANCE_SCOPE_TENANT_ID, PersistentEvent, TenantId};
+
+    if !state.bootstrap_tracker.is_completed() {
+        // Defensive: bootstrap reported partial failure. Do not claim
+        // success in the event log.
+        tracing::debug!(
+            "skipping BootstrapCompleted emission — tracker is not in a completed state"
+        );
+        return;
+    }
+
+    let snapshot = state.bootstrap_tracker.snapshot();
+    let Some(tenant_id) = TenantId::new(INSTANCE_SCOPE_TENANT_ID.to_string()) else {
+        tracing::warn!(
+            "BootstrapCompleted emission skipped: INSTANCE_SCOPE_TENANT_ID did not satisfy \
+             TenantId::new (this should not happen — it is a compile-time constant)"
+        );
+        return;
+    };
+
+    let event = GovernanceEvent::BootstrapCompleted {
+        tenant_id,
+        timestamp: chrono::Utc::now().timestamp(),
+        snapshot,
+    };
+
+    use mk_core::traits::StorageBackend;
+    match state
+        .postgres
+        .persist_event(PersistentEvent::new(event))
+        .await
+    {
+        Ok(()) => tracing::info!("BootstrapCompleted governance event persisted"),
+        Err(err) => tracing::warn!(
+            error = %err,
+            "Failed to persist BootstrapCompleted governance event \
+             (server continues; /admin/bootstrap/status remains the primary readout)"
+        ),
     }
 }
 

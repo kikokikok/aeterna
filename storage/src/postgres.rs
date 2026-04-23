@@ -2285,6 +2285,11 @@ impl PostgresBackend {
                 timestamp,
                 ..
             } => ("knowledge_relation_created", tenant_id, *timestamp),
+            mk_core::types::GovernanceEvent::BootstrapCompleted {
+                tenant_id,
+                timestamp,
+                ..
+            } => ("bootstrap_completed", tenant_id, *timestamp),
         };
 
         sqlx::query(
