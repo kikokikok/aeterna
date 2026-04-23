@@ -364,10 +364,9 @@ pub fn jsonpath_extract(value: &Value, expr: &str) -> Result<Value, JsonPathErro
                     return Err(JsonPathError::NotAnArray { at: trail });
                 };
                 let len = arr.len();
-                current = arr.get(idx).ok_or(JsonPathError::IndexOutOfBounds {
-                    index: idx,
-                    len,
-                })?;
+                current = arr
+                    .get(idx)
+                    .ok_or(JsonPathError::IndexOutOfBounds { index: idx, len })?;
                 trail.push_str(&format!("[{idx}]"));
             }
         }
@@ -441,9 +440,7 @@ fn tokenize(expr: &str) -> Result<Vec<Token>, JsonPathError> {
                     ));
                 }
                 let idx = inner.parse::<usize>().map_err(|_| {
-                    JsonPathError::MalformedExpression(format!(
-                        "not a numeric index: `{inner}`"
-                    ))
+                    JsonPathError::MalformedExpression(format!("not a numeric index: `{inner}`"))
                 })?;
                 tokens.push(Token::Index(idx));
             }
@@ -500,7 +497,10 @@ mod tests {
     fn parse_rejects_unknown_keyword_with_full_help() {
         let err = OutputFormat::parse("toml").unwrap_err();
         assert!(matches!(err, ParseFormatError::Unknown(ref s) if s == "toml"));
-        assert!(err.to_string().contains("table, json, yaml, name, jsonpath"));
+        assert!(
+            err.to_string()
+                .contains("table, json, yaml, name, jsonpath")
+        );
     }
 
     #[test]
@@ -770,9 +770,6 @@ mod tests {
     #[test]
     fn jsonpath_field_with_underscore_and_hyphen_is_supported() {
         let v = json!({"my_field-name": 7});
-        assert_eq!(
-            jsonpath_extract(&v, ".my_field-name").unwrap(),
-            json!(7)
-        );
+        assert_eq!(jsonpath_extract(&v, ".my_field-name").unwrap(), json!(7));
     }
 }
