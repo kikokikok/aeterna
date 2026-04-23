@@ -17,8 +17,13 @@ use crate::error::Result;
 // ============================================================================
 
 /// Row from the `v_hierarchy` view.
+///
+/// `tenant_id` is surfaced by migration `028_tenant_scoped_hierarchy.sql`
+/// as the first column of the view. Handlers MUST filter by this column
+/// before returning rows to OPAL — see `handlers::get_hierarchy`.
 #[derive(Debug, Clone, FromRow)]
 pub struct HierarchyRow {
+    pub tenant_id: Uuid,
     pub company_id: Option<Uuid>,
     pub company_slug: Option<String>,
     pub company_name: Option<String>,
@@ -35,8 +40,13 @@ pub struct HierarchyRow {
 }
 
 /// Row from the `v_user_permissions` view.
+///
+/// `tenant_id` is surfaced by migration `028_tenant_scoped_hierarchy.sql`
+/// as the first column of the view. Handlers MUST filter by this column
+/// before returning rows to OPAL — see `handlers::get_users`.
 #[derive(Debug, Clone, FromRow)]
 pub struct UserPermissionRow {
+    pub tenant_id: Uuid,
     pub user_id: Uuid,
     pub email: String,
     pub user_name: Option<String>,
@@ -528,6 +538,7 @@ mod tests {
 
     fn sample_user_row() -> UserPermissionRow {
         UserPermissionRow {
+            tenant_id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
             email: "alice@acme.com".to_string(),
             user_name: Some("Alice".to_string()),
@@ -545,6 +556,7 @@ mod tests {
 
     fn sample_hierarchy_row() -> HierarchyRow {
         HierarchyRow {
+            tenant_id: Uuid::new_v4(),
             company_id: Some(Uuid::new_v4()),
             company_slug: Some("acme-corp".to_string()),
             company_name: Some("Acme Corporation".to_string()),

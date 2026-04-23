@@ -630,95 +630,31 @@ pub async fn initialize_github_sync_schema(pool: &PgPool) -> IdpSyncResult<()> {
     Ok(())
 }
 
+/// Initializes OPAL views that are NOT owned by the storage migration tree.
+///
+/// # History
+///
+/// Up to PR #129 this function also defined `v_hierarchy` and
+/// `v_user_permissions` against the legacy `organizational_units` table
+/// (with UUIDs synthesized via `uuid_generate_v5`). Those definitions
+/// raced migration `009_organizational_referential.sql` /
+/// `028_tenant_scoped_hierarchy.sql` via `CREATE OR REPLACE VIEW` —
+/// whichever ran last won, and any `aeterna admin sync github` call
+/// silently reverted the migration's tenant-scoped definition and
+/// pointed the view at synthesized UUIDs that didn't match the real
+/// `companies.id` values.
+///
+/// That race is resolved by PR #130: the migration is now the single
+/// canonical definer of `v_hierarchy` and `v_user_permissions`. This
+/// function retains ownership of views whose definitions are still
+/// idp-sync-specific:
+///
+/// - `v_agent_permissions` — joined across `agents` + `users`; no
+///   migration owns this yet. Tracked for relocation in #130.
+/// - `v_code_search_repositories` / `v_code_search_requests` /
+///   `v_code_search_identities` — empty-result stubs held here until
+///   the Code Search schema lands in its own migration.
 async fn initialize_opal_views(pool: &PgPool) -> IdpSyncResult<()> {
-    sqlx::query(
-        r"
-        CREATE OR REPLACE VIEW v_hierarchy AS
-        WITH RECURSIVE unit_tree AS (
-            SELECT
-                id,
-                name,
-                type,
-                slug,
-                parent_id,
-                tenant_id,
-                metadata,
-                id AS root_id
-            FROM organizational_units
-            WHERE type = 'company'
-
-            UNION ALL
-
-            SELECT
-                ou.id,
-                ou.name,
-                ou.type,
-                ou.slug,
-                ou.parent_id,
-                ou.tenant_id,
-                ou.metadata,
-                ut.root_id
-            FROM organizational_units ou
-            JOIN unit_tree ut ON ou.parent_id = ut.id
-        )
-        SELECT
-            uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, c.id) AS company_id,
-            c.slug AS company_slug,
-            c.name AS company_name,
-            CASE WHEN o.id IS NOT NULL THEN uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, o.id) END AS org_id,
-            o.slug AS org_slug,
-            o.name AS org_name,
-            CASE WHEN t.id IS NOT NULL THEN uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, t.id) END AS team_id,
-            t.slug AS team_slug,
-            t.name AS team_name,
-            CASE WHEN p.id IS NOT NULL THEN uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, p.id) END AS project_id,
-            p.slug AS project_slug,
-            p.name AS project_name,
-            p.metadata->>'git_remote' AS git_remote
-        FROM unit_tree c
-        LEFT JOIN unit_tree o ON o.parent_id = c.id AND o.type = 'organization'
-        LEFT JOIN unit_tree t ON t.parent_id = o.id AND t.type = 'team'
-        LEFT JOIN unit_tree p ON p.parent_id = t.id AND p.type = 'project'
-        WHERE c.type = 'company'
-        ",
-    )
-    .execute(pool)
-    .await
-    .map_err(IdpSyncError::DatabaseError)?;
-
-    sqlx::query(
-        r"
-        CREATE OR REPLACE VIEW v_user_permissions AS
-        SELECT
-            u.id AS user_id,
-            u.email,
-            u.display_name AS user_name,
-            CASE WHEN u.is_active THEN 'active' ELSE 'inactive' END AS user_status,
-            uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, team_ou.id) AS team_id,
-            COALESCE(gr.role, m.role) AS role,
-            COALESCE(gr_permissions.permissions, '[]'::JSONB) AS permissions,
-            uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, org_ou.id) AS org_id,
-            uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, company_ou.id) AS company_id,
-            company_ou.slug AS company_slug,
-            org_ou.slug AS org_slug,
-            team_ou.slug AS team_slug
-        FROM users u
-        JOIN memberships m ON m.user_id = u.id
-        JOIN organizational_units team_ou ON team_ou.id = m.team_id::TEXT
-        LEFT JOIN organizational_units org_ou ON org_ou.id = team_ou.parent_id AND org_ou.type IN ('organization', 'company')
-        LEFT JOIN organizational_units company_ou ON company_ou.id = org_ou.parent_id AND company_ou.type = 'company'
-        LEFT JOIN governance_roles gr ON gr.principal_id = u.id AND gr.principal_type = 'user'
-            AND gr.team_id = uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, team_ou.id)
-            AND gr.revoked_at IS NULL
-        LEFT JOIN LATERAL (
-            SELECT '[]'::JSONB AS permissions
-        ) gr_permissions ON TRUE
-        ",
-    )
-    .execute(pool)
-    .await
-    .map_err(IdpSyncError::DatabaseError)?;
-
     sqlx::query(
         r"
         CREATE OR REPLACE VIEW v_agent_permissions AS
