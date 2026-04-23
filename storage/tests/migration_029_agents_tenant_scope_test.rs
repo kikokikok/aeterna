@@ -21,8 +21,8 @@
 use sqlx::Row;
 use sqlx::postgres::PgPoolOptions;
 use storage::migrations::MIGRATIONS;
-use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
+use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
 use uuid::Uuid;
 
@@ -55,9 +55,7 @@ async fn apply_up_to(pool: &sqlx::PgPool, exclusive_upper: i32) {
         sqlx::raw_sql(migration.sql)
             .execute(&mut *tx)
             .await
-            .unwrap_or_else(|e| {
-                panic!("apply migration {} failed: {e}", migration.name)
-            });
+            .unwrap_or_else(|e| panic!("apply migration {} failed: {e}", migration.name));
         tx.commit().await.expect("commit");
     }
 }
@@ -72,10 +70,7 @@ async fn apply_migration_029(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     tx.commit().await
 }
 
-async fn seed_tenant_with_company(
-    pool: &sqlx::PgPool,
-    slug: &str,
-) -> (Uuid, Uuid, Uuid) {
+async fn seed_tenant_with_company(pool: &sqlx::PgPool, slug: &str) -> (Uuid, Uuid, Uuid) {
     let tenant_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO tenants (id, slug, name, status, source_owner)
@@ -83,21 +78,31 @@ async fn seed_tenant_with_company(
     )
     .bind(tenant_id)
     .bind(slug)
-    .execute(pool).await.expect("insert tenant");
+    .execute(pool)
+    .await
+    .expect("insert tenant");
 
     let company_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO companies (id, tenant_id, slug, name)
          VALUES ($1, $2, 'acme', 'Acme')",
     )
-    .bind(company_id).bind(tenant_id).execute(pool).await.expect("insert company");
+    .bind(company_id)
+    .bind(tenant_id)
+    .execute(pool)
+    .await
+    .expect("insert company");
 
     let user_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO users (id, email, name, status)
          VALUES ($1, $2, 'User', 'active')",
     )
-    .bind(user_id).bind(format!("u+{slug}@acme.com")).execute(pool).await.expect("insert user");
+    .bind(user_id)
+    .bind(format!("u+{slug}@acme.com"))
+    .execute(pool)
+    .await
+    .expect("insert user");
 
     (tenant_id, company_id, user_id)
 }
@@ -140,12 +145,20 @@ async fn migration_029_backfills_single_tenant_agent() {
     let (tenant, company, user) = seed_tenant_with_company(&pool, "single").await;
     let agent = insert_pre_migration_agent(&pool, user, &[company], "active").await;
 
-    apply_migration_029(&pool).await.expect("migration should succeed");
+    apply_migration_029(&pool)
+        .await
+        .expect("migration should succeed");
 
     let row = sqlx::query("SELECT tenant_id FROM agents WHERE id = $1")
-        .bind(agent).fetch_one(&pool).await.expect("fetch agent");
+        .bind(agent)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch agent");
     let actual: Uuid = row.get("tenant_id");
-    assert_eq!(actual, tenant, "backfill should assign the company's tenant");
+    assert_eq!(
+        actual, tenant,
+        "backfill should assign the company's tenant"
+    );
 }
 
 #[tokio::test]
@@ -158,9 +171,9 @@ async fn migration_029_aborts_on_cross_tenant_agent() {
     let (_, company_b, _) = seed_tenant_with_company(&pool, "nu").await;
     let _agent = insert_pre_migration_agent(&pool, user, &[company_a, company_b], "active").await;
 
-    let err = apply_migration_029(&pool).await.expect_err(
-        "cross-tenant agent must abort migration",
-    );
+    let err = apply_migration_029(&pool)
+        .await
+        .expect_err("cross-tenant agent must abort migration");
     let msg = format!("{err}");
     assert!(
         msg.contains("spanning multiple tenants"),
@@ -178,9 +191,9 @@ async fn migration_029_aborts_on_unscoped_active_agent() {
     // Agent with empty allowed_* arrays — no derivable tenant.
     let _agent = insert_pre_migration_agent(&pool, user, &[], "active").await;
 
-    let err = apply_migration_029(&pool).await.expect_err(
-        "unscoped active agent must abort migration",
-    );
+    let err = apply_migration_029(&pool)
+        .await
+        .expect_err("unscoped active agent must abort migration");
     let msg = format!("{err}");
     assert!(
         msg.contains("no derivable tenant"),
@@ -199,10 +212,18 @@ async fn migration_029_leaves_revoked_agents_null() {
     // and should retain NULL tenant_id afterward.
     let agent = insert_pre_migration_agent(&pool, user, &[], "revoked").await;
 
-    apply_migration_029(&pool).await.expect("revoked unscoped agent should not abort");
+    apply_migration_029(&pool)
+        .await
+        .expect("revoked unscoped agent should not abort");
 
     let row = sqlx::query("SELECT tenant_id FROM agents WHERE id = $1")
-        .bind(agent).fetch_one(&pool).await.expect("fetch revoked");
+        .bind(agent)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch revoked");
     let actual: Option<Uuid> = row.get("tenant_id");
-    assert!(actual.is_none(), "revoked agent should retain NULL tenant_id, got {actual:?}");
+    assert!(
+        actual.is_none(),
+        "revoked agent should retain NULL tenant_id, got {actual:?}"
+    );
 }
