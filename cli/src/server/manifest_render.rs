@@ -59,6 +59,7 @@ pub const RENDERED_SECTIONS: &[&str] = &[
     "providers",
     "domainMappings",
     "hierarchy",
+    "roles",
 ];
 
 /// Sections a full `TenantManifest` can carry but this renderer does
@@ -92,7 +93,15 @@ pub const RENDERED_SECTIONS: &[&str] = &[
 ///   to [`RenderedCompany`]/[`RenderedOrg`]/[`RenderedTeam`] through
 ///   [`render_hierarchy`]. OU writes remain in place for backup/gdpr/
 ///   cascade back-compat but are *not* the reverse-render source.
-pub const NOT_RENDERED_SECTIONS: &[&str] = &["roles", "providers.memoryLayers"];
+///
+/// - **`roles`** closed in §2.2-C (this change). Forward-apply has
+///   always written `user_roles`; reverse-render now uses
+///   [`render_roles`] + a LEFT-JOIN query against `user_roles ×
+///   organizational_units` in [`render_current_manifest`].
+///   `unit_id == tenant_id` is the sentinel for "tenant-wide"
+///   (matching the forward-apply convention in `provision_tenant`
+///   Step 7) and maps to `unit: None` on render.
+pub const NOT_RENDERED_SECTIONS: &[&str] = &["providers.memoryLayers"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum RenderError {
@@ -128,6 +137,12 @@ pub struct RenderedManifest {
     /// manifest whose `hierarchy:` field was absent or empty.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hierarchy: Option<Vec<RenderedCompany>>,
+    /// §2.2-C reverse-render of `user_roles`. `None` (and therefore
+    /// elided from the rendered JSON) for tenants with no role
+    /// assignments, so the rendered manifest stays byte-identical to
+    /// an input manifest whose `roles:` was absent or empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roles: Option<Vec<RenderedRoleAssignment>>,
     pub not_rendered: Vec<&'static str>,
 }
 
@@ -163,6 +178,40 @@ pub struct RenderedTeam {
     pub name: String,
 }
 
+/// §2.2-C reverse-render shape mirroring `ManifestRoleAssignment`.
+///
+/// `unit` is `None` when the role is tenant-wide (forward-apply in
+/// `provision_tenant` Step 7 stores this as `unit_id = tenant_id`).
+/// Otherwise it's the OU's *name* (operator-facing identifier),
+/// falling back to the raw `unit_id` when the OU row has been deleted
+/// out from under `user_roles` — that fallback is deliberate: emitting
+/// an OU id keeps the rendered manifest losslessly round-trippable
+/// even over orphaned rows, and surfaces the integrity drift to the
+/// operator rather than silently dropping the grant.
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderedRoleAssignment {
+    pub user_id: String,
+    pub role: mk_core::types::RoleIdentifier,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+}
+
+/// Raw row shape emitted by the [`render_current_manifest`] roles
+/// query — exposed publicly so unit tests can cover the transform in
+/// isolation without a live DB.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RoleRow {
+    pub user_id: String,
+    pub unit_id: String,
+    pub role: String,
+    /// `Some(name)` when the matching `organizational_units` row
+    /// exists; `None` when the LEFT JOIN missed (either because
+    /// `unit_id == tenant_id` and there is no OU with that id, or
+    /// because the OU was deleted and only the grant remains).
+    pub unit_name: Option<String>,
+}
+
 /// Convert the `HierarchyStore` read shape into the manifest-render
 /// surface. Pure transform — no DB access, no redact-mode toggles
 /// (hierarchy carries no secrets).
@@ -188,6 +237,32 @@ pub fn render_hierarchy(companies: Vec<storage::hierarchy_store::Company>) -> Ve
                         .collect(),
                 })
                 .collect(),
+        })
+        .collect()
+}
+
+/// Transform `user_roles` rows (LEFT-JOINed with `organizational_units`)
+/// into the manifest reverse-render shape.
+///
+/// Pure; no DB access, no redact toggles (roles carry no secrets).
+///
+/// * `tenant_id_str` — the tenant id as stored in `user_roles.tenant_id`.
+///   Used to detect the tenant-wide sentinel (`unit_id == tenant_id`).
+/// * `rows` — consumed to avoid clones for fields we're moving into
+///   `RenderedRoleAssignment`.
+pub fn render_roles(tenant_id_str: &str, rows: Vec<RoleRow>) -> Vec<RenderedRoleAssignment> {
+    rows.into_iter()
+        .map(|r| {
+            let unit = if r.unit_id == tenant_id_str {
+                None
+            } else {
+                Some(r.unit_name.unwrap_or(r.unit_id))
+            };
+            RenderedRoleAssignment {
+                user_id: r.user_id,
+                role: mk_core::types::RoleIdentifier::from_str_flexible(&r.role),
+                unit,
+            }
         })
         .collect()
 }
@@ -397,6 +472,51 @@ pub async fn render_current_manifest(
         Err(_) => None,
     };
 
+    // §2.2-C reverse-render: query `user_roles` (LEFT-JOINed with
+    // `organizational_units` to recover friendly OU names) and
+    // transform via `render_roles`. Tenant-wide grants (`unit_id ==
+    // tenant_id`) surface as `unit: None` in the rendered manifest,
+    // matching the forward-apply convention in `provision_tenant`
+    // Step 7. Empty result → `roles: None` (elided from JSON) so
+    // tenants with no assignments render byte-identically to a
+    // manifest whose `roles:` was absent.
+    //
+    // Runs on the raw pool (admin-like). Render is called on both
+    // admin provision paths and on the tenant-scoped
+    // `GET /api/v1/admin/tenants/{slug}` path; in both cases the
+    // caller has already authorized, so no RLS double-check is
+    // needed here. If we ever expose render to a non-admin surface,
+    // this query is the place to add `with_tenant_context`.
+    let tenant_id_str = record.id.as_str();
+    let role_rows_raw: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
+        "SELECT ur.user_id, ur.unit_id, ur.role, ou.name AS unit_name
+           FROM user_roles ur
+      LEFT JOIN organizational_units ou
+             ON ou.id = ur.unit_id
+            AND ou.tenant_id = ur.tenant_id
+          WHERE ur.tenant_id = $1
+       ORDER BY ur.user_id, ur.unit_id, ur.role",
+    )
+    .bind(tenant_id_str)
+    .fetch_all(state.postgres.pool())
+    .await
+    .map_err(|e| RenderError::Storage(e.to_string()))?;
+
+    let role_rows: Vec<RoleRow> = role_rows_raw
+        .into_iter()
+        .map(|(user_id, unit_id, role, unit_name)| RoleRow {
+            user_id,
+            unit_id,
+            role,
+            unit_name,
+        })
+        .collect();
+    let rendered_roles = if role_rows.is_empty() {
+        None
+    } else {
+        Some(render_roles(tenant_id_str, role_rows))
+    };
+
     Ok(RenderedManifest {
         api_version: "aeterna.io/v1".to_string(),
         kind: "TenantManifest".to_string(),
@@ -418,6 +538,7 @@ pub async fn render_current_manifest(
         repository: rendered_repository,
         providers: rendered_providers,
         hierarchy,
+        roles: rendered_roles,
         not_rendered: NOT_RENDERED_SECTIONS.to_vec(),
     })
 }
@@ -711,6 +832,7 @@ mod tests {
             repository: None,
             providers: None,
             hierarchy: None,
+            roles: None,
             not_rendered: NOT_RENDERED_SECTIONS.to_vec(),
         };
         let v = serde_json::to_value(&m).unwrap();
@@ -757,6 +879,7 @@ mod tests {
             repository: None,
             providers: None,
             hierarchy: None,
+            roles: None,
             not_rendered: vec![],
         };
         let v = serde_json::to_value(&m).unwrap();
@@ -807,6 +930,7 @@ mod tests {
             repository: None,
             providers: None,
             hierarchy: None,
+            roles: None,
             not_rendered: vec![],
         };
         let v = serde_json::to_value(&m).unwrap();
@@ -818,15 +942,26 @@ mod tests {
 
     #[test]
     fn not_rendered_list_contains_every_expected_section() {
-        // Post §2.2-B (this PR): `hierarchy` has moved out of
-        // NOT_RENDERED into RENDERED via `render_hierarchy`. Only
-        // `roles` and `providers.memoryLayers` remain as gaps.
-        for section in ["roles", "providers.memoryLayers"] {
+        // Post §2.2-B + §2.2-C: both `hierarchy` and `roles` moved
+        // out of NOT_RENDERED via `render_hierarchy`/`render_roles`.
+        // Only `providers.memoryLayers` remains a gap on master at
+        // the time this PR merged (closing in §2.2-D / PR #142).
+        for section in ["providers.memoryLayers"] {
             assert!(
                 NOT_RENDERED_SECTIONS.contains(&section),
                 "section {section} missing from NOT_RENDERED"
             );
         }
+        // §2.2-B + §2.2-C regression guards — these must NOT be on
+        // the gap list anymore.
+        assert!(
+            !NOT_RENDERED_SECTIONS.contains(&"hierarchy"),
+            "hierarchy must not be a gap after §2.2-B"
+        );
+        assert!(
+            !NOT_RENDERED_SECTIONS.contains(&"roles"),
+            "roles must not be a gap after §2.2-C"
+        );
         for section in RENDERED_SECTIONS {
             assert!(
                 !NOT_RENDERED_SECTIONS.contains(section),
@@ -940,6 +1075,118 @@ mod tests {
         let out = render_hierarchy(input);
         let v = serde_json::to_value(&out).unwrap();
         assert!(v[0].get("orgs").is_none(), "empty orgs must be elided");
+    }
+
+    // ── §2.2-C render_roles unit tests ───────────────────────────────────
+
+    fn role_row(user: &str, unit_id: &str, role: &str, unit_name: Option<&str>) -> RoleRow {
+        RoleRow {
+            user_id: user.into(),
+            unit_id: unit_id.into(),
+            role: role.into(),
+            unit_name: unit_name.map(|s| s.into()),
+        }
+    }
+
+    #[test]
+    fn render_roles_empty_input_produces_empty_vec() {
+        let out = render_roles("t-1", vec![]);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn render_roles_tenant_wide_grant_maps_to_unit_none() {
+        // Forward-apply convention: when the manifest has no `unit`,
+        // the row is stored with `unit_id = tenant_id`. Reverse-render
+        // must detect that sentinel and emit `unit: None` so the
+        // rendered manifest is byte-identical to the input.
+        let tenant = "t-42";
+        let rows = vec![role_row("u-1", tenant, "admin", None)];
+        let out = render_roles(tenant, rows);
+        assert_eq!(out.len(), 1);
+        assert!(
+            out[0].unit.is_none(),
+            "tenant-wide grant must render with unit=None"
+        );
+        assert_eq!(out[0].user_id, "u-1");
+    }
+
+    #[test]
+    fn render_roles_scoped_grant_emits_friendly_unit_name() {
+        // When the grant scopes to a real OU and the LEFT JOIN
+        // resolved a name, render emits the *name* (operator-facing
+        // identifier) — not the internal OU id.
+        let tenant = "t-1";
+        let rows = vec![role_row(
+            "u-1",
+            "ou-platform-uuid",
+            "member",
+            Some("Platform"),
+        )];
+        let out = render_roles(tenant, rows);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].unit.as_deref(), Some("Platform"));
+    }
+
+    #[test]
+    fn render_roles_orphaned_grant_falls_back_to_unit_id() {
+        // OU was deleted, but the `user_roles` row survived. We emit
+        // the raw unit_id rather than silently dropping the grant —
+        // the rendered manifest stays losslessly round-trippable and
+        // surfaces the integrity drift to the operator.
+        let tenant = "t-1";
+        let rows = vec![role_row("u-1", "ou-ghost-uuid", "admin", None)];
+        let out = render_roles(tenant, rows);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            out[0].unit.as_deref(),
+            Some("ou-ghost-uuid"),
+            "orphaned grant must fall back to raw unit_id, not None"
+        );
+    }
+
+    #[test]
+    fn render_roles_preserves_order_and_handles_mixed_grants() {
+        // Query layer ORDER BYs user_id, unit_id, role. We assert the
+        // transform preserves that ordering end-to-end across a mix
+        // of tenant-wide, scoped-with-name, and orphaned grants.
+        let tenant = "t-42";
+        let rows = vec![
+            role_row("u-1", "ou-a", "admin", Some("Alpha")),
+            role_row("u-1", tenant, "member", None),
+            role_row("u-2", "ou-ghost", "admin", None),
+        ];
+        let out = render_roles(tenant, rows);
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[0].user_id, "u-1");
+        assert_eq!(out[0].unit.as_deref(), Some("Alpha"));
+        assert_eq!(out[1].user_id, "u-1");
+        assert!(out[1].unit.is_none(), "tenant-wide sentinel");
+        assert_eq!(out[2].user_id, "u-2");
+        assert_eq!(out[2].unit.as_deref(), Some("ou-ghost"));
+    }
+
+    #[test]
+    fn render_roles_custom_role_string_preserved() {
+        // Unknown role strings flow through `RoleIdentifier::from_str_flexible`
+        // as `Custom(..)` — the renderer must not reject them.
+        let tenant = "t-1";
+        let rows = vec![role_row("u-1", tenant, "custom_role_foo_bar", None)];
+        let out = render_roles(tenant, rows);
+        assert_eq!(out.len(), 1);
+        // Round-trip through serde to verify the `untagged` enum emits
+        // the raw string, i.e. the wire shape matches the input form.
+        let v = serde_json::to_value(&out[0].role).unwrap();
+        assert_eq!(v, serde_json::json!("custom_role_foo_bar"));
+    }
+
+    #[test]
+    fn render_roles_elides_empty_unit_in_json() {
+        let tenant = "t-1";
+        let rows = vec![role_row("u-1", tenant, "admin", None)];
+        let out = render_roles(tenant, rows);
+        let v = serde_json::to_value(&out[0]).unwrap();
+        assert!(v.get("unit").is_none(), "unit=None must be elided, got {v}");
     }
 
     // ── §2.2-A render_providers unit tests ───────────────────────────────
