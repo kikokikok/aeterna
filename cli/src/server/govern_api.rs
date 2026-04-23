@@ -613,6 +613,15 @@ async fn list_audit(
             since,
             limit: query.limit.map(|value| value as i32),
             acting_as_tenant_id,
+            // B2 §11.1 — the new filter dimensions are intentionally NOT
+            // surfaced on `/govern/audit` yet: the public query contract
+            // change goes through its own OpenAPI review. Leaving them
+            // None here preserves byte-identical pre-migration output.
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
         })
         .await
     {

@@ -1558,6 +1558,11 @@ async fn test_audit_log_list_with_filters() {
             since: Utc::now() - chrono::Duration::hours(1),
             limit: Some(100),
             acting_as_tenant_id: None,
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
         })
         .await
         .unwrap();
@@ -1571,6 +1576,11 @@ async fn test_audit_log_list_with_filters() {
             since: Utc::now() - chrono::Duration::hours(1),
             limit: Some(100),
             acting_as_tenant_id: None,
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
         })
         .await
         .unwrap();
@@ -1584,6 +1594,11 @@ async fn test_audit_log_list_with_filters() {
             since: Utc::now() - chrono::Duration::hours(1),
             limit: Some(100),
             acting_as_tenant_id: None,
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
         })
         .await
         .unwrap();

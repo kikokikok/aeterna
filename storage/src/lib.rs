@@ -47,10 +47,10 @@ pub use budget_storage::{BudgetStorage, BudgetStorageError, StoredBudget, Stored
 
 // Re-export governance types
 pub use governance::{
-    ApprovalDecision, ApprovalMode, ApprovalRequest, AuditFilters, CreateApprovalRequest,
-    CreateDecision, CreateGovernanceRole, Decision, GovernanceAuditEntry, GovernanceConfig,
-    GovernanceRole, GovernanceStorage, PrincipalType, RequestFilters, RequestStatus, RequestType,
-    RiskLevel,
+    ApprovalDecision, ApprovalMode, ApprovalRequest, AuditExtensions, AuditFilters,
+    CreateApprovalRequest, CreateDecision, CreateGovernanceRole, Decision, GovernanceAuditEntry,
+    GovernanceConfig, GovernanceRole, GovernanceStorage, PrincipalType, RequestFilters,
+    RequestStatus, RequestType, RiskLevel,
 };
 
 // Re-export approval workflow state machine

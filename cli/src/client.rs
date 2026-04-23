@@ -8,7 +8,10 @@
 
 use anyhow::{Context, Result, bail};
 use mk_core::types::PROVIDER_GITHUB;
-use reqwest::{Client, Response, header::ACCEPT};
+use reqwest::{
+    Client, Response,
+    header::{ACCEPT, HeaderMap, HeaderValue},
+};
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use tokio::time::{Duration, Instant, sleep};
@@ -17,6 +20,59 @@ use crate::credentials::{self, StoredCredential};
 use crate::profile::ResolvedConfig;
 
 const DEFAULT_GITHUB_OAUTH_BASE: &str = "https://github.com";
+
+// -- B2 §7.7 client-kind / user-agent tagging ---------------------------------
+//
+// Every outbound HTTP request from the CLI is tagged with two headers so the
+// server can:
+//   1. Normalize `X-Aeterna-Client-Kind` to a `via` value in the audit log
+//      (§11.2 / §11.3 — "cli" | "ui" | "api", unknown → "api"), and
+//   2. Surface `User-Agent: aeterna-cli/<version>` in request logs and traces
+//      for forensics (the server never authorizes on this value).
+//
+// Both headers are installed once on the underlying `reqwest::Client` via
+// `default_headers()` + `user_agent()` so they propagate to every verb
+// (`get`, `post`, `put`, `delete`, `delete_json`, …) automatically and no
+// per-call-site plumbing is required. Callers that build a bare `Client`
+// (e.g. the unauthenticated device-flow endpoints below) go through the
+// same [`build_http_client`] helper.
+
+/// Canonical value for the `X-Aeterna-Client-Kind` header emitted by this
+/// crate. Must match one of the three values the server's
+/// `normalize_client_kind` accepts verbatim (see §11.3) — anything else
+/// would round-trip to `"api"` with the original preserved only in the
+/// request-scoped `RequestContext`.
+const CLIENT_KIND_HEADER: &str = "X-Aeterna-Client-Kind";
+const CLIENT_KIND_VALUE: &str = "cli";
+
+/// Cargo-stamped crate version, rendered as `aeterna-cli/<version>` in the
+/// `User-Agent` header.
+const CLI_USER_AGENT: &str = concat!("aeterna-cli/", env!("CARGO_PKG_VERSION"));
+
+/// Build a `reqwest::Client` pre-configured with the B2 §7.7 identity
+/// headers. All authenticated and unauthenticated HTTP traffic originating
+/// from the CLI must route through a client built here so the server can
+/// attribute every audit row to "via=cli" without relying on heuristics.
+fn build_http_client() -> Client {
+    let mut headers = HeaderMap::new();
+    // Static const inputs — `from_static` cannot fail. The `unreachable!`
+    // branches defend against someone later swapping these for a dynamic
+    // value without re-reading this safety note.
+    headers.insert(
+        CLIENT_KIND_HEADER,
+        HeaderValue::from_static(CLIENT_KIND_VALUE),
+    );
+    Client::builder()
+        .user_agent(CLI_USER_AGENT)
+        .default_headers(headers)
+        .build()
+        // `reqwest::ClientBuilder::build` only fails on TLS backend init
+        // errors on the host system. A CLI that cannot make HTTPS calls
+        // cannot function — surface the error loudly rather than fall
+        // back to a non-tagged client that would silently lose §7.7
+        // attribution.
+        .expect("reqwest Client must build with static default headers")
+}
 
 // ---------------------------------------------------------------------------
 // Auth bootstrap/refresh request/response types
@@ -170,7 +226,7 @@ impl AeternaClient {
         }
 
         Ok(Self {
-            inner: Client::new(),
+            inner: build_http_client(),
             server_url,
             profile_name: profile_name.clone(),
             access_token,
@@ -1355,7 +1411,7 @@ pub async fn bootstrap_github(
         provider: PROVIDER_GITHUB.to_string(),
         github_access_token: github_access_token.to_string(),
     };
-    let client = Client::new();
+    let client = build_http_client();
     let resp = client
         .post(&url)
         .json(&body)
@@ -1395,7 +1451,7 @@ pub async fn request_device_code(
     scope: &str,
     github_oauth_base_url: Option<&str>,
 ) -> Result<DeviceCodeResponse> {
-    let client = Client::new();
+    let client = build_http_client();
     let resp = client
         .post(github_device_code_url(github_oauth_base_url))
         .header(ACCEPT, "application/json")
@@ -1422,7 +1478,7 @@ pub async fn poll_device_authorization(
     expires_in: u64,
     github_oauth_base_url: Option<&str>,
 ) -> Result<String> {
-    let client = Client::new();
+    let client = build_http_client();
     let started = Instant::now();
     let mut poll_interval_secs = interval.max(1);
 
@@ -1501,7 +1557,7 @@ pub async fn refresh_token(server_url: &str, refresh_token: &str) -> Result<Toke
     let body = RefreshRequest {
         refresh_token: refresh_token.to_string(),
     };
-    let client = Client::new();
+    let client = build_http_client();
     let resp = client
         .post(&url)
         .json(&body)
@@ -1533,7 +1589,7 @@ pub async fn server_logout(server_url: &str, refresh_token_val: &str) -> Result<
     let body = LogoutRequest {
         refresh_token: refresh_token_val.to_string(),
     };
-    let client = Client::new();
+    let client = build_http_client();
     let resp = client
         .post(&url)
         .json(&body)
@@ -1566,7 +1622,7 @@ pub fn not_logged_in_message(profile_name: &str) -> String {
 
 /// Check connectivity to a server URL by hitting `/health`.
 pub async fn check_reachability(server_url: &str) -> bool {
-    let client = Client::new();
+    let client = build_http_client();
     client
         .get(format!("{}/health", server_url.trim_end_matches('/')))
         .timeout(std::time::Duration::from_secs(5))

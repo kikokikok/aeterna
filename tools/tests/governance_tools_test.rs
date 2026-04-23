@@ -331,6 +331,11 @@ impl MockGovernanceStorage {
             old_values: None,
             new_values: None,
             acting_as_tenant_id: None,
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
             created_at: Utc::now(),
         };
 
@@ -1133,6 +1138,11 @@ mod audit_log_tests {
             since: Utc::now() - Duration::hours(1),
             limit: Some(50),
             acting_as_tenant_id: None,
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 1);
@@ -1146,6 +1156,11 @@ mod audit_log_tests {
             since: Utc::now() - Duration::hours(1),
             limit: Some(50),
             acting_as_tenant_id: None,
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 2);
@@ -1158,6 +1173,11 @@ mod audit_log_tests {
             since: Utc::now() - Duration::hours(1),
             limit: Some(50),
             acting_as_tenant_id: None,
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 1);
@@ -1192,6 +1212,11 @@ mod audit_log_tests {
             since: Utc::now() - Duration::hours(1),
             limit: Some(3),
             acting_as_tenant_id: None,
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert_eq!(results.len(), 3);
@@ -1468,6 +1493,11 @@ mod edge_case_tests {
             since: Utc::now() - Duration::hours(1),
             limit: Some(50),
             acting_as_tenant_id: None,
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
         };
         let results = storage.list_audit_logs(&filters).await.unwrap();
         assert!(results.is_empty());

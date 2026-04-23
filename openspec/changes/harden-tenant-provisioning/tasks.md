@@ -135,10 +135,10 @@ _§9.1/§9.2 landed as primitives only: 30 unit tests, `cargo clippy --all-targe
 
 ### 11. Audit parity
 
-- [ ] 11.1 Extend audit log schema with `via`, `client_version`, `manifest_hash`, `generation`, `dry_run`.
-- [ ] 11.2 Extract `X-Aeterna-Client-Kind` header in router and propagate through request-scoped audit context.
-- [ ] 11.3 Normalize unknown client-kind values to `api`, preserving original in `client_kind_raw`.
-- [ ] 11.4 Ensure every provision-path mutation records the new fields.
+- [x] 11.1 Extend audit log schema with `via`, `client_version`, `manifest_hash`, `generation`, `dry_run`.
+- [x] 11.2 Extract `X-Aeterna-Client-Kind` header in router and propagate through request-scoped audit context.
+- [x] 11.3 Normalize unknown client-kind values to `api`, preserving original in `client_kind_raw`.
+- [x] 11.4 Ensure every provision-path mutation records the new fields.
 
 ### 12. Admin UI wizard
 

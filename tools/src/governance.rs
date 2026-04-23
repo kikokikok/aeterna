@@ -1364,6 +1364,15 @@ impl Tool for GovernanceAuditListTool {
             // #44.d §2.5 — tools-layer audit queries are instance-scoped:
             // no request-time tenant filter applied here.
             acting_as_tenant_id: None,
+            // B2 §11.1 — MCP tool callers don't surface the new filter
+            // dimensions today; leaving them None preserves pre-migration
+            // list behaviour. Expose via dedicated params once the tool
+            // contract explicitly calls for it.
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
         };
 
         let entries = self.storage.list_audit_logs(&filters).await?;

@@ -442,6 +442,75 @@ pub struct GovernanceAuditEntry {
     /// `cli/src/server/govern_api.rs::list_audit`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub acting_as_tenant_id: Option<Uuid>,
+
+    // --- B2 §11.1 request-context extensions (migration 030) -------------
+    //
+    // The five fields below are populated by the §11.2 auth middleware +
+    // §11.4 provision-path call sites. Every field is `Option` because
+    // (a) the columns are nullable in Postgres and (b) non-provision audit
+    // actions legitimately have no manifest/generation/dry-run context.
+    //
+    // `skip_serializing_if = "Option::is_none"` keeps the JSON surface of
+    // `/govern/audit` backward-compatible: pre-migration rows and non-
+    // provision events still render as they did before Bundle-E.
+    /// Normalized client kind at request time: `"cli"` | `"ui"` | `"api"`.
+    /// See [`crate::request_context::normalize_client_kind`] in the CLI
+    /// crate for the canonical normalization table (§11.3). Unknown values
+    /// are normalized to `"api"` with the original preserved *in the
+    /// request-scoped context but not in this column*.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
+
+    /// Self-reported client version string (e.g. `"aeterna-cli/0.8.0-rc.3"`).
+    /// Forensic-only — not validated, not used for authorization.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_version: Option<String>,
+
+    /// `tenant_manifest_state.hash` at record time. Plain TEXT / no FK so
+    /// audit rows survive tenant deletion.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manifest_hash: Option<String>,
+
+    /// `tenant_manifest_state.generation` at record time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generation: Option<i64>,
+
+    /// `true` for validation / dry-run calls that did not mutate state.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+}
+
+/// Request-context extensions written to `governance_audit_log` alongside
+/// the primary audit payload. Bundled into a single struct (rather than 5
+/// extra `log_audit` arguments) because most non-provision call sites need
+/// none of them and should stay on the zero-ceremony path.
+///
+/// Added in B2 §11.1. Populated from the [`crate::request_context::RequestContext`]
+/// middleware extension on the provision path.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AuditExtensions {
+    /// Normalized client kind: `"cli"` / `"ui"` / `"api"`. `None` when the
+    /// action was initiated by a background job that never saw an HTTP
+    /// request (deliberately distinguished from `"api"`).
+    pub via: Option<String>,
+    pub client_version: Option<String>,
+    pub manifest_hash: Option<String>,
+    pub generation: Option<i64>,
+    pub dry_run: Option<bool>,
+}
+
+impl AuditExtensions {
+    /// Convenience: empty extensions — the value [`log_audit`] passes when
+    /// delegating to [`log_audit_with_extensions`].
+    pub const fn empty() -> Self {
+        Self {
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -550,6 +619,13 @@ struct AuditRow {
     new_values: Option<serde_json::Value>,
     created_at: DateTime<Utc>,
     acting_as_tenant_id: Option<Uuid>,
+    // B2 §11.1 (migration 030). All nullable — see struct-level rationale
+    // on `GovernanceAuditEntry`.
+    via: Option<String>,
+    client_version: Option<String>,
+    manifest_hash: Option<String>,
+    generation: Option<i64>,
+    dry_run: Option<bool>,
 }
 
 pub struct GovernanceStorage {
@@ -899,13 +975,57 @@ impl GovernanceStorage {
         details: serde_json::Value,
         acting_as_tenant_id: Option<Uuid>,
     ) -> Result<Uuid, sqlx::Error> {
+        // Delegate to the extension-aware variant so there is a single SQL
+        // statement to maintain. Callers on the non-provision path don't
+        // populate any B2 §11.1 field — `AuditExtensions::empty()` is
+        // equivalent to the pre-migration-030 behaviour.
+        self.log_audit_with_extensions(
+            action,
+            request_id,
+            target_type,
+            target_id,
+            actor_type,
+            actor_id,
+            actor_email,
+            details,
+            acting_as_tenant_id,
+            AuditExtensions::empty(),
+        )
+        .await
+    }
+
+    /// Extension-aware variant of [`Self::log_audit`] that also persists the
+    /// five B2 §11.1 request-context columns (migration 030). Provision-path
+    /// handlers should call this variant so the new columns are populated;
+    /// every other caller can keep using [`Self::log_audit`] without change.
+    ///
+    /// The five extension columns are NULLABLE at the schema level, so an
+    /// empty [`AuditExtensions`] produces exactly the same SQL effect as
+    /// the pre-migration-030 `log_audit` — meaning this is safe to make
+    /// the sole concrete insertion path.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn log_audit_with_extensions(
+        &self,
+        action: &str,
+        request_id: Option<Uuid>,
+        target_type: Option<&str>,
+        target_id: Option<&str>,
+        actor_type: PrincipalType,
+        actor_id: Option<Uuid>,
+        actor_email: Option<&str>,
+        details: serde_json::Value,
+        acting_as_tenant_id: Option<Uuid>,
+        ext: AuditExtensions,
+    ) -> Result<Uuid, sqlx::Error> {
         let row: (Uuid,) = sqlx::query_as(
             r#"
             INSERT INTO governance_audit_log (
                 action, request_id, target_type, target_id,
                 actor_type, actor_id, actor_email, details,
-                acting_as_tenant_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                acting_as_tenant_id,
+                via, client_version, manifest_hash, generation, dry_run
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+                      $10, $11, $12, $13, $14)
             RETURNING id
             "#,
         )
@@ -918,6 +1038,11 @@ impl GovernanceStorage {
         .bind(actor_email)
         .bind(details)
         .bind(acting_as_tenant_id)
+        .bind(ext.via)
+        .bind(ext.client_version)
+        .bind(ext.manifest_hash)
+        .bind(ext.generation)
+        .bind(ext.dry_run)
         .fetch_one(&self.pool)
         .await?;
 
@@ -932,6 +1057,11 @@ impl GovernanceStorage {
         // the pre-existing action/actor/target_type/since clauses. NULL
         // (the common case) disables the filter and preserves pre-Bundle-D
         // "match everything" semantics.
+        // B2 §11.1 — the five new predicates ($7..$11) AND with the pre-
+        // existing ones. Every `IS NULL OR col = $N` pair preserves the
+        // pre-migration behaviour when the filter is omitted. Kept as a
+        // single static statement (rather than a dynamic query builder)
+        // so `EXPLAIN ANALYZE` plans stay stable across call sites.
         let rows: Vec<AuditRow> = sqlx::query_as(
             r#"
             SELECT * FROM governance_audit_log
@@ -940,6 +1070,11 @@ impl GovernanceStorage {
               AND ($3::text IS NULL OR target_type = $3)
               AND created_at >= $4
               AND ($6::uuid IS NULL OR acting_as_tenant_id = $6)
+              AND ($7::text    IS NULL OR via            = $7)
+              AND ($8::text    IS NULL OR client_version = $8)
+              AND ($9::text    IS NULL OR manifest_hash  = $9)
+              AND ($10::bigint IS NULL OR generation     = $10)
+              AND ($11::bool   IS NULL OR dry_run        = $11)
             ORDER BY created_at DESC
             LIMIT $5
             "#,
@@ -950,6 +1085,11 @@ impl GovernanceStorage {
         .bind(filters.since)
         .bind(filters.limit.unwrap_or(50) as i64)
         .bind(filters.acting_as_tenant_id)
+        .bind(&filters.via)
+        .bind(&filters.client_version)
+        .bind(&filters.manifest_hash)
+        .bind(filters.generation)
+        .bind(filters.dry_run)
         .fetch_all(&self.pool)
         .await?;
 
@@ -969,6 +1109,15 @@ impl GovernanceStorage {
                 new_values: row.new_values,
                 created_at: row.created_at,
                 acting_as_tenant_id: row.acting_as_tenant_id,
+                // B2 §11.1 — nullable columns from migration 030. Old
+                // rows inserted before migration 030 surface as None on
+                // every field, which the `#[serde(skip_serializing_if)]`
+                // attributes elide from the JSON payload.
+                via: row.via,
+                client_version: row.client_version,
+                manifest_hash: row.manifest_hash,
+                generation: row.generation,
+                dry_run: row.dry_run,
             })
             .collect())
     }
@@ -1152,6 +1301,28 @@ pub struct AuditFilters {
     /// able to set this to a tenant they are not a member of — that check
     /// lives in the handler, not here.
     pub acting_as_tenant_id: Option<Uuid>,
+
+    // --- B2 §11.1 request-context filters (migration 030) ----------------
+    //
+    // All five are additive `AND` predicates: `None` means "don't filter",
+    // which preserves pre-migration semantics (the column can be NULL and
+    // rows are returned regardless). Handlers decide which of these are
+    // safe to expose on the public `/govern/audit` query string — the
+    // storage layer is dumb here on purpose.
+    /// Filter on normalized client kind: `"cli"` | `"ui"` | `"api"`. Backed
+    /// by the `governance_audit_log_via_check` CHECK constraint in the DB.
+    pub via: Option<String>,
+    /// Filter on self-reported client version string (exact match). Useful
+    /// for "blast-radius on CLI 0.8.0-rc.2".
+    pub client_version: Option<String>,
+    /// Filter on `tenant_manifest_state.hash` at record time — the "what
+    /// was applied at t" forensics query.
+    pub manifest_hash: Option<String>,
+    /// Filter on manifest generation counter at record time.
+    pub generation: Option<i64>,
+    /// Filter on dry-run marker: `Some(false)` strips validation noise out
+    /// of compliance exports; `Some(true)` surfaces only dry-run activity.
+    pub dry_run: Option<bool>,
 }
 
 #[cfg(test)]
