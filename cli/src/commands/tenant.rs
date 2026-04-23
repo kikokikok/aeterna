@@ -70,6 +70,12 @@ pub enum TenantCommand {
         about = "Validate a tenant manifest against the server (dry-run; no state changes)"
     )]
     Validate(TenantValidateArgs),
+
+    #[command(
+        name = "render",
+        about = "Render the server's current-state manifest for a tenant"
+    )]
+    Render(TenantRenderArgs),
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +485,61 @@ pub struct TenantValidateArgs {
     pub json: bool,
 }
 
+/// Args for `aeterna tenant render` (B2 §7.2).
+///
+/// Surfaces the server-side `GET /admin/tenants/{slug}/manifest`
+/// endpoint to operators as a stable CLI entry point. Outputs the
+/// rendered JSON manifest either to stdout or to a file.
+///
+/// Flags mirror the task spec verbatim:
+/// - `--slug <slug>` — which tenant to render. Optional; when absent
+///   we resolve through the same context-lookup path `tenant show`
+///   uses (env → CLI flag → local context.toml → user default).
+/// - `--redact` — pass `redact=true` to the server so secret
+///   reference *names* are replaced with opaque placeholders and the
+///   repository binding's `credentialRef` is elided. Plaintext is
+///   never emitted regardless of this flag (the server has no access
+///   to unwrapped values); `--redact` only hides operator-chosen
+///   logical names from over-the-shoulder readers.
+/// - `-o / --output <path>` — write the rendered manifest to a file
+///   instead of stdout. Useful for piping into `aeterna tenant diff`
+///   (§7.3) once that lands, or into git-tracked snapshots for
+///   drift detection.
+///
+/// This CLI is the second consumer of the manifest-render surface
+/// (after the in-server roundtrip in `ManifestGet`). It deliberately
+/// has zero transformation logic of its own — the server is the
+/// source of truth for the rendered shape, the CLI just serialises
+/// it back out.
+#[derive(Args)]
+pub struct TenantRenderArgs {
+    /// Tenant slug or ID to render. Falls back to the active
+    /// context's tenant (env / flag / local / server default) when
+    /// omitted, matching the resolution order used by `tenant show`.
+    #[arg(long)]
+    pub slug: Option<String>,
+
+    /// Replace secret-reference *names* with opaque placeholders and
+    /// elide the repository binding's `credentialRef`. Plaintext is
+    /// never exposed regardless of this flag.
+    #[arg(long)]
+    pub redact: bool,
+
+    /// Write the rendered manifest to this path instead of stdout.
+    /// The file is created (or truncated) with the default umask;
+    /// callers that need a mode guarantee should `umask 077`
+    /// beforehand.
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<std::path::PathBuf>,
+
+    /// Target a specific tenant context (PlatformAdmin only — for
+    /// cross-tenant operations). Kept for symmetry with `tenant show`
+    /// / `tenant validate` so operators have one mental model across
+    /// read-shaped commands.
+    #[arg(long)]
+    pub target_tenant: Option<String>,
+}
+
 #[derive(Args)]
 pub struct TenantSecretDeleteArgs {
     #[arg(long)]
@@ -528,6 +589,7 @@ pub async fn run(cmd: TenantCommand) -> anyhow::Result<()> {
             TenantConnectionCommand::Revoke(args) => run_connection_revoke(args).await,
         },
         TenantCommand::Validate(args) => run_validate(args).await,
+        TenantCommand::Render(args) => run_render(args).await,
     }
 }
 
@@ -2339,6 +2401,113 @@ async fn run_validate(args: TenantValidateArgs) -> anyhow::Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// tenant render (§7.2)
+// ---------------------------------------------------------------------------
+
+/// Resolve the tenant slug to render against.
+///
+/// `--slug` is the explicit override and wins unconditionally. When
+/// absent we fall back to the CLI's active context — `get_live_client`
+/// has already consulted env / `.aeterna/context.toml` / server
+/// defaults, so we ask the user. This intentionally mirrors the
+/// resolution order `tenant show` uses so the two commands feel
+/// identical from an operator standpoint.
+///
+/// Returns `None` when neither `--slug` nor an active context tenant
+/// is available; the caller surfaces this as a user-facing error
+/// rather than silently rendering nothing.
+fn resolve_render_slug(args_slug: Option<&str>) -> Option<String> {
+    if let Some(s) = args_slug {
+        return Some(s.to_string());
+    }
+    // Active-context lookup — identical shape to other read commands
+    // (`get_live_client_for` runs the same `load_resolved(None, None)`
+    // call, so reading `tenant_id` off the resolved config picks up
+    // the same value the HTTP client uses).
+    crate::profile::load_resolved(None, None)
+        .ok()
+        .and_then(|cfg| cfg.tenant_id)
+}
+
+/// Serialise the rendered manifest `Value` as pretty JSON. Factored
+/// out so unit tests can lock the byte shape without spinning up an
+/// HTTP server.
+fn serialize_rendered_manifest(manifest: &serde_json::Value) -> anyhow::Result<String> {
+    // `to_string_pretty` emits LF-only line endings and no trailing
+    // newline. We add a trailing newline so the file is POSIX-text-
+    // file-compliant — `cat | diff` and `git` both prefer trailing
+    // newlines, and the cost is one byte.
+    let mut s = serde_json::to_string_pretty(manifest)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize manifest: {e}"))?;
+    s.push('\n');
+    Ok(s)
+}
+
+async fn run_render(args: TenantRenderArgs) -> anyhow::Result<()> {
+    // §7.2 slug resolution — explicit flag wins, then fall back to
+    // active context. Fail loudly when neither is available rather
+    // than rendering against an arbitrary default.
+    let slug = resolve_render_slug(args.slug.as_deref()).ok_or_else(|| {
+        anyhow::anyhow!(
+            "No tenant specified. Pass --slug <slug> or set an active tenant with `aeterna tenant use <slug>`."
+        )
+    })?;
+
+    let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await else {
+        // `get_live_client_for` returns None only when the user is not
+        // logged in; the helper has already surfaced a UX-friendly
+        // error. Propagate a non-zero exit code so CI pipelines fail.
+        anyhow::bail!("Not logged in — run `aeterna auth login` first.");
+    };
+
+    let manifest = client
+        .tenant_manifest(&slug, args.redact)
+        .await
+        .inspect_err(|e| {
+            // We deliberately do not emit JSON on failure here — unlike
+            // `tenant validate`, the render command's happy path is
+            // always pure-JSON output (to stdout or to `-o`), so an
+            // error dressed as JSON would be indistinguishable from a
+            // successful render at the shell level. Keep errors on
+            // stderr via the UxError renderer.
+            ux_error::UxError::new(e.to_string())
+                .fix("Run: aeterna auth login")
+                .display();
+        })?;
+
+    let rendered = serialize_rendered_manifest(&manifest)?;
+
+    match args.output.as_deref() {
+        Some(path) => {
+            // Write atomically — create (or truncate) the target path.
+            // We do NOT stage-via-temp-and-rename here because the
+            // render endpoint is idempotent and safe to re-run; a
+            // partial write is recoverable by rerunning the command.
+            std::fs::write(path, &rendered).map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to write rendered manifest to {}: {e}",
+                    path.display()
+                )
+            })?;
+            output::success(&format!(
+                "Rendered manifest for tenant '{slug}' → {}",
+                path.display()
+            ));
+        }
+        None => {
+            // Raw JSON to stdout — `print!` (no trailing newline
+            // injection) because `serialize_rendered_manifest` already
+            // added one. This keeps the byte output identical to a
+            // file written via `-o`, so `aeterna tenant render --slug X
+            // > x.json` and `aeterna tenant render --slug X -o x.json`
+            // produce identical files.
+            print!("{rendered}");
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Unit tests
 // ---------------------------------------------------------------------------
 
@@ -2718,9 +2887,25 @@ mod tests {
         assert!(args.json);
     }
 
+    // `test_read_local_context_tenant_{absent,present}` both mutate
+    // the process-wide cwd (`std::env::set_current_dir`), which Rust
+    // runs tests in parallel against by default. Without a shared
+    // mutex, a second test can observe cwd mid-switch from a sibling
+    // and panic on a stale relative path. A static `Mutex` wrapping
+    // the critical section makes them `#[serial]`-equivalent without
+    // pulling in a new dev-dep.
+    fn cwd_guard() -> &'static std::sync::Mutex<()> {
+        use std::sync::{Mutex, OnceLock};
+        static GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+        GUARD.get_or_init(|| Mutex::new(()))
+    }
+
     #[test]
     fn test_read_local_context_tenant_absent() {
         // Runs in a temp dir with no .aeterna/context.toml.
+        // We guard on `cwd_guard()` because `set_current_dir` is a
+        // process-global side effect and `cargo test` parallelises.
+        let _g = cwd_guard().lock().unwrap_or_else(|e| e.into_inner());
         let tmp = tempfile::TempDir::new().unwrap();
         let cwd = std::env::current_dir().unwrap();
         std::env::set_current_dir(tmp.path()).unwrap();
@@ -2731,6 +2916,8 @@ mod tests {
 
     #[test]
     fn test_read_local_context_tenant_present() {
+        // Same cwd-mutex contract as the `_absent` sibling above.
+        let _g = cwd_guard().lock().unwrap_or_else(|e| e.into_inner());
         let tmp = tempfile::TempDir::new().unwrap();
         let aeterna = tmp.path().join(".aeterna");
         std::fs::create_dir_all(&aeterna).unwrap();
@@ -2822,5 +3009,100 @@ mod tests {
             "error": "something_else",
         });
         assert!(render_validation_errors(&body));
+    }
+
+    // ── §7.2 tenant render unit tests ────────────────────────────────────
+
+    #[test]
+    fn render_slug_explicit_flag_wins_over_context() {
+        // When `--slug` is passed it must be used verbatim, regardless
+        // of whatever the active context might have set. Without this
+        // guarantee a CI operator setting AETERNA_TENANT_ID in env
+        // would accidentally override an explicit `--slug prod`.
+        let got = resolve_render_slug(Some("explicit-slug"));
+        assert_eq!(got.as_deref(), Some("explicit-slug"));
+    }
+
+    // NOTE: the "slug=None → fall back to active context" path is
+    // covered by integration tests that pin the cwd; unit-testing it
+    // here would race with `test_read_local_context_tenant_present`
+    // which calls `std::env::set_current_dir` (`load_resolved` reads
+    // `current_dir()` and would pick up that test's temp dir).
+
+    #[test]
+    fn serialize_rendered_manifest_emits_pretty_json_with_trailing_newline() {
+        // Lock the byte shape: 2-space indent (serde_json default),
+        // LF line endings, exactly one trailing newline so `git` /
+        // `diff` / `cat` treat the output as a well-formed text file.
+        let v = json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": {"slug": "acme"},
+        });
+        let s = serialize_rendered_manifest(&v).unwrap();
+        assert!(s.ends_with('\n'), "output must end with exactly one newline: {s:?}");
+        assert!(!s.ends_with("\n\n"), "no double newline: {s:?}");
+        // Indent check — `to_string_pretty` uses two spaces.
+        assert!(s.contains("  \"apiVersion\""), "expected 2-space indent: {s}");
+        // Round-trips back to the same JSON.
+        let v2: serde_json::Value = serde_json::from_str(&s).unwrap();
+        assert_eq!(v, v2);
+    }
+
+    #[test]
+    fn serialize_rendered_manifest_handles_nested_structures() {
+        // Regression guard for a real rendered manifest shape —
+        // nested objects, arrays, nulls, numbers. The serializer has
+        // no business-logic awareness, but this test locks that we
+        // don't accidentally reach for a BTreeMap or re-sort keys
+        // somewhere down the line and silently change the wire order.
+        let v = json!({
+            "apiVersion": "aeterna.io/v1",
+            "metadata": {"generation": 7, "manifestHash": null},
+            "tenant": {
+                "id": "t-1",
+                "domainMappings": ["acme.com", "beta.acme.com"],
+            },
+            "roles": [
+                {"userId": "u-1", "role": "admin"},
+                {"userId": "u-2", "role": "member", "unit": "Platform"},
+            ],
+            "notRendered": [],
+        });
+        let s = serialize_rendered_manifest(&v).unwrap();
+        assert!(s.ends_with('\n'));
+        // Preserves insertion order in the serialized form.
+        let api_idx = s.find("\"apiVersion\"").expect("apiVersion present");
+        let roles_idx = s.find("\"roles\"").expect("roles present");
+        assert!(api_idx < roles_idx, "apiVersion must render before roles");
+    }
+
+    #[test]
+    fn tenant_render_args_defaults() {
+        let args = TenantRenderArgs {
+            slug: None,
+            redact: false,
+            output: None,
+            target_tenant: None,
+        };
+        assert!(args.slug.is_none());
+        assert!(!args.redact);
+        assert!(args.output.is_none());
+    }
+
+    #[test]
+    fn tenant_render_args_with_all_flags() {
+        let args = TenantRenderArgs {
+            slug: Some("acme".into()),
+            redact: true,
+            output: Some(std::path::PathBuf::from("/tmp/acme.json")),
+            target_tenant: Some("prod".into()),
+        };
+        assert_eq!(args.slug.as_deref(), Some("acme"));
+        assert!(args.redact);
+        assert_eq!(
+            args.output.as_deref(),
+            Some(std::path::Path::new("/tmp/acme.json"))
+        );
     }
 }

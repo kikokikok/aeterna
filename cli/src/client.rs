@@ -377,6 +377,29 @@ impl AeternaClient {
         parse_json_response(self.get(&format!("/api/v1/admin/tenants/{tenant}")).await?).await
     }
 
+    /// B2 §7.2 — fetch the server-rendered current-state manifest for a
+    /// tenant. Calls `GET /api/v1/admin/tenants/{slug}/manifest`,
+    /// appending `?redact=true` when the operator requested the
+    /// secret-safe variant (opaque placeholders instead of logical
+    /// secret names, no `credentialRef` on the repository binding).
+    ///
+    /// The server never emits plaintext regardless of `redact`; the
+    /// flag only controls whether the *names* of the secret refs are
+    /// visible. This matches the `RenderQuery` contract in
+    /// `manifest_api.rs`.
+    pub async fn tenant_manifest(
+        &self,
+        tenant: &str,
+        redact: bool,
+    ) -> Result<serde_json::Value> {
+        let path = if redact {
+            format!("/api/v1/admin/tenants/{tenant}/manifest?redact=true")
+        } else {
+            format!("/api/v1/admin/tenants/{tenant}/manifest")
+        };
+        parse_json_response(self.get(&path).await?).await
+    }
+
     pub async fn tenant_update(
         &self,
         tenant: &str,
