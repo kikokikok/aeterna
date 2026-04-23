@@ -62,8 +62,21 @@ pub struct UserPermissionRow {
 }
 
 /// Row from the `v_agent_permissions` view.
+/// Row from the `v_agent_permissions` view.
+///
+/// `tenant_id` is surfaced by migration `029_agents_tenant_scope.sql`
+/// as the first column of the view, mirroring the pattern established
+/// by migration 028 for `v_hierarchy` and `v_user_permissions`. The
+/// column is nullable on the view because soft-deleted / revoked
+/// agents retain `NULL` tenant_id (they are historical rows kept for
+/// audit). Active agents always have a tenant — the migration's CHECK
+/// constraint enforces this.
+///
+/// Handlers MUST filter by this column before returning rows to OPAL.
+/// See `handlers::get_agents`.
 #[derive(Debug, Clone, FromRow)]
 pub struct AgentPermissionRow {
+    pub tenant_id: Option<Uuid>,
     pub agent_id: Uuid,
     pub agent_name: String,
     pub agent_type: String,
@@ -811,6 +824,7 @@ mod tests {
         let team_id = Uuid::new_v4();
 
         let row = AgentPermissionRow {
+            tenant_id: Some(Uuid::new_v4()),
             agent_id,
             agent_name: "OpenCode Assistant".to_string(),
             agent_type: "opencode".to_string(),
@@ -854,6 +868,7 @@ mod tests {
         let delegating_agent_id = Uuid::new_v4();
 
         let row = AgentPermissionRow {
+            tenant_id: Some(Uuid::new_v4()),
             agent_id,
             agent_name: "Sub-Agent".to_string(),
             agent_type: "custom".to_string(),

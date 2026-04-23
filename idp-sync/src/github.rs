@@ -630,57 +630,36 @@ pub async fn initialize_github_sync_schema(pool: &PgPool) -> IdpSyncResult<()> {
     Ok(())
 }
 
-/// Initializes OPAL views that are NOT owned by the storage migration tree.
+/// Initializes Code Search stub views (`v_code_search_repositories`,
+/// `v_code_search_requests`, `v_code_search_identities`) that the Code
+/// Search feature has not yet populated with its own schema.
 ///
 /// # History
 ///
-/// Up to PR #129 this function also defined `v_hierarchy` and
-/// `v_user_permissions` against the legacy `organizational_units` table
-/// (with UUIDs synthesized via `uuid_generate_v5`). Those definitions
-/// raced migration `009_organizational_referential.sql` /
-/// `028_tenant_scoped_hierarchy.sql` via `CREATE OR REPLACE VIEW` —
-/// whichever ran last won, and any `aeterna admin sync github` call
-/// silently reverted the migration's tenant-scoped definition and
-/// pointed the view at synthesized UUIDs that didn't match the real
-/// `companies.id` values.
+/// Up to PR #129 this function defined five views, including
+/// `v_hierarchy`, `v_user_permissions`, and `v_agent_permissions`. All
+/// three raced the storage migrations via `CREATE OR REPLACE VIEW`;
+/// whichever ran last won, and `aeterna admin sync github` could
+/// silently revert migration-owned definitions. The relocation was done
+/// in two steps:
 ///
-/// That race is resolved by PR #130: the migration is now the single
-/// canonical definer of `v_hierarchy` and `v_user_permissions`. This
-/// function retains ownership of views whose definitions are still
-/// idp-sync-specific:
+/// - PR #131 moved `v_hierarchy` and `v_user_permissions` ownership to
+///   migration `028_tenant_scoped_hierarchy.sql`, and additionally
+///   fixed a latent bug where the idp-sync definitions pointed at the
+///   legacy `organizational_units` table with `uuid_generate_v5`-
+///   synthesized IDs that didn't match real `companies.id` values.
+/// - PR #132 (this PR) moves `v_agent_permissions` ownership to
+///   migration `029_agents_tenant_scope.sql`, which also adds
+///   `agents.tenant_id` (backfilled + enforced) so that the view can
+///   surface a tenant column for opal-fetcher's isolation filter. The
+///   idp-sync definition additionally had `u.display_name` referenced,
+///   which never existed on the `users` table — the migration uses
+///   `u.name` correctly.
 ///
-/// - `v_agent_permissions` — joined across `agents` + `users`; no
-///   migration owns this yet. Tracked for relocation in #130.
-/// - `v_code_search_repositories` / `v_code_search_requests` /
-///   `v_code_search_identities` — empty-result stubs held here until
-///   the Code Search schema lands in its own migration.
+/// This function now owns only the Code Search stubs, which are
+/// empty-result placeholders until the Code Search schema lands in its
+/// own migration.
 async fn initialize_opal_views(pool: &PgPool) -> IdpSyncResult<()> {
-    sqlx::query(
-        r"
-        CREATE OR REPLACE VIEW v_agent_permissions AS
-        SELECT
-            a.id AS agent_id,
-            a.name AS agent_name,
-            a.agent_type,
-            a.delegated_by_user_id,
-            a.delegated_by_agent_id,
-            a.delegation_depth,
-            a.capabilities,
-            a.allowed_company_ids,
-            a.allowed_org_ids,
-            a.allowed_team_ids,
-            a.allowed_project_ids,
-            a.status AS agent_status,
-            u.email AS delegating_user_email,
-            u.display_name AS delegating_user_name
-        FROM agents a
-        LEFT JOIN users u ON u.id = a.delegated_by_user_id
-        ",
-    )
-    .execute(pool)
-    .await
-    .map_err(IdpSyncError::DatabaseError)?;
-
     sqlx::query(
         r"
         CREATE OR REPLACE VIEW v_code_search_repositories AS
