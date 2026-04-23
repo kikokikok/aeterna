@@ -272,11 +272,63 @@ pub struct PluginTokenClaims {
     pub github_id: u64,
     pub email: Option<String>,
     pub kind: String,
+
+    // ── B2 §10.1 — scoped-token foundation claims ────────────────────────
+    //
+    // `token_type` disambiguates *who minted the token* — a human user flow
+    // (§10 §10.2–§10.4 issuance by PlatformAdmin), a service identity
+    // (§10.2 `POST /api/v1/auth/tokens`), or a refresh token. It deliberately
+    // does NOT overlap with `kind`, which captures the token's *audience
+    // contract* ("plugin-access" gates /plugin endpoints).
+    //
+    // `scopes` carries the capability list the middleware in §10.5 checks
+    // against each route's required scope. Empty list is the user-caller
+    // fallback path (scope-required routes defer to the role check).
+    //
+    // Both fields are `#[serde(default)]` so JWTs minted by pre-§10.1
+    // builds still decode without `{token_type,scopes}_missing` errors —
+    // critical for rolling deploys where old and new pods coexist.
+    /// Token-kind discriminator: `"user"` for human-auth tokens
+    /// (current OAuth flows), `"service"` for PlatformAdmin-issued
+    /// service identities (§10.2), `"refresh"` for refresh tokens.
+    /// Defaults to `"user"` when absent so legacy tokens behave as
+    /// user tokens.
+    #[serde(default = "PluginTokenClaims::default_token_type")]
+    pub token_type: String,
+
+    /// List of capability scopes granted to this token. Middleware
+    /// (§10.5) checks these against each route's required scope.
+    /// For user tokens this is empty and the middleware falls back
+    /// to role-based checks — matching the pre-§10 behaviour.
+    #[serde(default)]
+    pub scopes: Vec<String>,
 }
 
 impl PluginTokenClaims {
     pub const AUDIENCE: &'static str = "aeterna-plugin";
     pub const KIND: &'static str = "plugin-access";
+
+    /// Human-auth token produced by the OAuth flow. This is the
+    /// default every pre-§10.1 token decodes as, matching what the
+    /// system has always minted.
+    pub const TOKEN_TYPE_USER: &'static str = "user";
+
+    /// PlatformAdmin-issued service-identity token. Follow-up §10.2
+    /// will be the first minter; this constant is the canonical value
+    /// used there and by §10.5's middleware scope check.
+    pub const TOKEN_TYPE_SERVICE: &'static str = "service";
+
+    /// Refresh token used by the OAuth refresh flow. Reserved for
+    /// future refresh-token audit trails.
+    pub const TOKEN_TYPE_REFRESH: &'static str = "refresh";
+
+    /// Serde default for `token_type` when absent from a legacy
+    /// JWT payload. A free function (`fn() -> String`) is required
+    /// by `#[serde(default = "…")]`; a `const &'static str` can't
+    /// be passed directly.
+    fn default_token_type() -> String {
+        Self::TOKEN_TYPE_USER.to_string()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +344,17 @@ pub struct PluginIdentity {
     pub github_id: u64,
     pub email: Option<String>,
     pub jti: String,
+
+    // ── B2 §10.1 — scope-check inputs for middleware (§10.5) ─────────
+    /// Token-kind discriminator copied from the JWT `token_type` claim.
+    /// Downstream authorization (§10.5) distinguishes `"user"` tokens —
+    /// which defer to role checks — from `"service"` tokens, whose
+    /// authority is expressed purely through `scopes`.
+    pub token_type: String,
+
+    /// Capability scopes carried by the token (§10.5). Empty for
+    /// user tokens; populated for service tokens in §10.2.
+    pub scopes: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -747,6 +810,8 @@ pub fn validate_plugin_token(token: &str, jwt_secret: &str) -> Option<PluginIden
             github_id: data.claims.github_id,
             email: data.claims.email,
             jti: data.claims.jti,
+            token_type: data.claims.token_type,
+            scopes: data.claims.scopes,
         }),
         Ok(_) => {
             tracing::debug!("Plugin token rejected: unexpected kind");
@@ -886,6 +951,10 @@ fn mint_access_token(
         github_id: user.id,
         email: user.email.clone(),
         kind: PluginTokenClaims::KIND.to_string(),
+        // Human OAuth flow → `"user"`. Authorization (§10.5) defers to
+        // role checks for user tokens; `scopes` is intentionally empty.
+        token_type: PluginTokenClaims::TOKEN_TYPE_USER.to_string(),
+        scopes: Vec::new(),
     };
 
     let key = EncodingKey::from_secret(jwt_secret.as_bytes());
@@ -1312,6 +1381,114 @@ mod tests {
         assert_eq!(identity.github_id, 42);
         assert_eq!(identity.email.as_deref(), Some("testuser@example.com"));
         assert!(!identity.jti.is_empty());
+    }
+
+    // ── B2 §10.1 — scoped-token claim coverage ──────────────────────────
+
+    /// OAuth flow mints tokens as `token_type="user"` with an empty
+    /// `scopes` list. Middleware (§10.5) relies on this contract to
+    /// distinguish user tokens (defer to role check) from service
+    /// tokens (evaluate scopes).
+    #[test]
+    fn minted_user_token_has_user_type_and_empty_scopes() {
+        let token = mint_access_token(&secret(), "aeterna", "default", &user(), 3600).unwrap();
+        let identity = validate_plugin_token(&token, &secret()).unwrap();
+        assert_eq!(identity.token_type, PluginTokenClaims::TOKEN_TYPE_USER);
+        assert!(
+            identity.scopes.is_empty(),
+            "user tokens must not carry scopes; got {:?}",
+            identity.scopes
+        );
+    }
+
+    /// Rolling deploy guarantee: a JWT minted by a pre-§10.1 build
+    /// (no `token_type`, no `scopes` in payload) MUST still decode,
+    /// and MUST surface the documented defaults — `"user"` and `[]`.
+    /// Without this, any cluster with mixed pod versions would 401
+    /// half its traffic during the rollout.
+    #[test]
+    fn validate_legacy_token_without_new_claims_defaults_to_user() {
+        use jsonwebtoken::{EncodingKey, Header};
+
+        // Minimal payload that mirrors the pre-§10.1 `PluginTokenClaims`
+        // shape — deliberately omits `token_type` and `scopes`.
+        #[derive(Serialize)]
+        struct LegacyClaims<'a> {
+            sub: &'a str,
+            idp_provider: &'a str,
+            tenant_id: &'a str,
+            iss: &'a str,
+            aud: Vec<&'a str>,
+            iat: i64,
+            exp: i64,
+            jti: &'a str,
+            github_id: u64,
+            email: Option<&'a str>,
+            kind: &'a str,
+        }
+
+        let now = Utc::now().timestamp();
+        let legacy = LegacyClaims {
+            sub: "legacy-user",
+            idp_provider: PROVIDER_GITHUB,
+            tenant_id: "default",
+            iss: "aeterna",
+            aud: vec![PluginTokenClaims::AUDIENCE],
+            iat: now,
+            exp: now + 3600,
+            jti: "legacy-jti",
+            github_id: 7,
+            email: Some("legacy@example.com"),
+            kind: PluginTokenClaims::KIND,
+        };
+        let token = jsonwebtoken::encode(
+            &Header::new(jsonwebtoken::Algorithm::HS256),
+            &legacy,
+            &EncodingKey::from_secret(secret().as_bytes()),
+        )
+        .unwrap();
+
+        let identity = validate_plugin_token(&token, &secret())
+            .expect("legacy token without token_type/scopes must still decode");
+        assert_eq!(identity.token_type, PluginTokenClaims::TOKEN_TYPE_USER);
+        assert!(identity.scopes.is_empty());
+        assert_eq!(identity.github_login, "legacy-user");
+    }
+
+    /// Forward-compat: if a token is minted with an explicit
+    /// `token_type="service"` and non-empty `scopes`, both values
+    /// survive the decode round-trip verbatim. §10.2 will be the
+    /// first real caller; this locks the contract in now.
+    #[test]
+    fn service_token_with_scopes_round_trips() {
+        use jsonwebtoken::{EncodingKey, Header};
+
+        let now = Utc::now().timestamp();
+        let claims = PluginTokenClaims {
+            sub: "svc-ci-runner".to_string(),
+            idp_provider: "service".to_string(),
+            tenant_id: "tenant-a".to_string(),
+            iss: "aeterna".to_string(),
+            aud: vec![PluginTokenClaims::AUDIENCE.to_string()],
+            iat: now,
+            exp: now + 3600,
+            jti: "svc-jti".to_string(),
+            github_id: 0,
+            email: None,
+            kind: PluginTokenClaims::KIND.to_string(),
+            token_type: PluginTokenClaims::TOKEN_TYPE_SERVICE.to_string(),
+            scopes: vec!["tenants:read".to_string(), "agents:write".to_string()],
+        };
+        let token = jsonwebtoken::encode(
+            &Header::new(jsonwebtoken::Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(secret().as_bytes()),
+        )
+        .unwrap();
+
+        let identity = validate_plugin_token(&token, &secret()).unwrap();
+        assert_eq!(identity.token_type, PluginTokenClaims::TOKEN_TYPE_SERVICE);
+        assert_eq!(identity.scopes, vec!["tenants:read", "agents:write"]);
     }
 
     #[test]
