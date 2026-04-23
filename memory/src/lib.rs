@@ -30,6 +30,7 @@ pub mod reasoning;
 pub mod reasoning_cache;
 pub mod rlm;
 pub mod secret_resolver;
+pub mod secret_resolvers;
 pub mod telemetry;
 pub mod trainer;
 pub mod video_memory;

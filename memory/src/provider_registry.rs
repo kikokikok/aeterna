@@ -89,6 +89,27 @@ pub type ConfigResolver = Arc<
 /// Async closure that resolves a tenant secret value by logical name.
 ///
 /// Returns `None` when the secret is not set for the given tenant.
+///
+/// # Deprecation (B4 §3.5 Phase A)
+///
+/// This `(tenant_id, logical_name) -> Option<String>` closure predates
+/// the typed [`crate::secret_resolver::SecretResolverRegistry`] and is
+/// retained only until Phase B of the secret-resolver migration
+/// removes the single remaining internal call site
+/// (`TenantProviderRegistryPerRequest::resolve_secret` in this file).
+///
+/// New call sites MUST use
+/// [`TenantProviderRegistry::set_secret_resolver_registry`] + the
+/// typed [`crate::secret_resolver::SecretRefResolver`] impls in
+/// [`crate::secret_resolvers`] instead. Those are variant-dispatched,
+/// return `SecretBytes` (zeroized on drop), and preserve structured
+/// error kinds through [`crate::secret_resolver::ResolveError`].
+// NOTE (B4 §3.5): a `#[deprecated]` attribute is deliberately NOT
+// applied here yet — every use site, including the setter below and
+// the tests in this file, would fire a warning, and the workspace's
+// `warn(unused)` lint posture would pollute `cargo check` output.
+// Phase B removes the internal call site (see `resolve_secret`
+// below); at that point this typedef is deleted outright.
 pub type SecretResolver = Arc<
     dyn Fn(TenantId, String) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'static>>
         + Send
@@ -189,6 +210,12 @@ pub struct TenantProviderRegistry {
     config_resolver: Option<ConfigResolver>,
     /// Optional type-erased secret resolver for self-contained tenant lookups.
     secret_resolver: Option<SecretResolver>,
+    /// B4 §3.5 — typed, variant-dispatched secret resolver registry.
+    ///
+    /// Co-existing with `secret_resolver` during the migration window.
+    /// Phase A (this commit) plumbs the field + setter; Phase B migrates
+    /// the internal call site and removes `secret_resolver` entirely.
+    secret_resolver_registry: Option<Arc<crate::secret_resolver::SecretResolverRegistry>>,
 }
 
 impl TenantProviderRegistry {
@@ -211,6 +238,7 @@ impl TenantProviderRegistry {
             cache_ttl: DEFAULT_CACHE_TTL,
             config_resolver: None,
             secret_resolver: None,
+            secret_resolver_registry: None,
         }
     }
 
@@ -234,6 +262,7 @@ impl TenantProviderRegistry {
             cache_ttl,
             config_resolver: None,
             secret_resolver: None,
+            secret_resolver_registry: None,
         }
     }
 
@@ -252,6 +281,65 @@ impl TenantProviderRegistry {
     ) {
         self.config_resolver = Some(config_resolver);
         self.secret_resolver = Some(secret_resolver);
+    }
+
+    /// B4 §3.5 Phase A — install a typed
+    /// [`SecretResolverRegistry`](crate::secret_resolver::SecretResolverRegistry).
+    ///
+    /// The registry dispatches by [`mk_core::secret::SecretReference`]
+    /// variant kind (`env`, `file`, `k8s`, `vault`) and returns
+    /// zeroized [`mk_core::SecretBytes`]. This is the successor API to
+    /// [`Self::set_resolvers`]'s secret closure.
+    ///
+    /// Both APIs can co-exist during the migration window; Phase B
+    /// removes the legacy closure path.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use std::sync::Arc;
+    /// use memory::secret_resolver::SecretResolverRegistry;
+    /// use memory::secret_resolvers::{EnvRefResolver, FileRefResolver};
+    ///
+    /// let mut reg = SecretResolverRegistry::new();
+    /// reg.register(Arc::new(EnvRefResolver::new()));
+    /// reg.register(Arc::new(FileRefResolver::new()));
+    /// registry.set_secret_resolver_registry(Arc::new(reg));
+    /// ```
+    pub fn set_secret_resolver_registry(
+        &mut self,
+        registry: Arc<crate::secret_resolver::SecretResolverRegistry>,
+    ) {
+        self.secret_resolver_registry = Some(registry);
+    }
+
+    /// B4 §3.5 Phase A — resolve a [`SecretReference`] through the
+    /// typed registry, if one is installed.
+    ///
+    /// Returns [`ResolveError::BackendUnavailable`] with `kind="none"`
+    /// when no registry has been installed (distinct from the
+    /// per-backend `BackendUnavailable` returned by resolvers when
+    /// their backend is unreachable).
+    ///
+    /// This helper is additive; it does not touch the legacy
+    /// `secret_resolver` closure path. Phase B migrates internal
+    /// callers to this method.
+    ///
+    /// [`SecretReference`]: mk_core::secret::SecretReference
+    /// [`ResolveError::BackendUnavailable`]: crate::secret_resolver::ResolveError::BackendUnavailable
+    pub async fn resolve_secret_ref(
+        &self,
+        tenant: &TenantId,
+        reference: &mk_core::secret::SecretReference,
+    ) -> Result<mk_core::SecretBytes, crate::secret_resolver::ResolveError> {
+        match &self.secret_resolver_registry {
+            Some(reg) => reg.resolve(tenant, reference).await,
+            None => Err(crate::secret_resolver::ResolveError::BackendUnavailable {
+                kind: "none",
+                reason: "no SecretResolverRegistry installed on TenantProviderRegistry"
+                    .to_string(),
+            }),
+        }
     }
 
     /// Get the LLM service for a tenant.

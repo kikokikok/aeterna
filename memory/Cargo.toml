@@ -26,6 +26,7 @@ reqwest = { version = "0.13", features = ["json"], optional = true }
 aws-config = { version = "1.8", optional = true }
 aws-sdk-bedrockruntime = { version = "1.128.0", optional = true }
 gcp_auth = { version = "0.12", optional = true }
+base64 = { version = "0.22", optional = true }
 urlencoding = "2.1"
 uuid = { version = "1.0", features = ["v4", "v5", "serde"] }
 metrics-util.workspace = true
@@ -58,6 +59,13 @@ vertex-ai = ["dep:reqwest"]
 databricks = ["dep:reqwest"]
 weaviate = ["dep:reqwest"]
 mongodb = ["dep:mongodb"]
+# B4 §3.2 — enables the live Kubernetes Secret fetcher used by
+# `secret_resolvers::k8s::PodDownwardApiFetcher`. Without this feature,
+# `K8sRefResolver` can still be constructed with a custom fetcher (used
+# by tests and the in-process stub), but the pod-downward-api fetcher
+# will return `BackendUnavailable`. Enable for real server builds.
+k8s-secrets = ["dep:reqwest", "dep:base64"]
+vault = ["dep:reqwest"]
 
 [lints]
 workspace = true

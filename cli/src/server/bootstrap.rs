@@ -234,6 +234,54 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         registry.set_resolvers(config_resolver, secret_resolver);
     }
 
+    // B4 §3.5 Phase A — install the typed SecretResolverRegistry
+    // alongside the legacy closure. Phase A is additive; the closure
+    // continues to serve existing internal call sites. Phase B
+    // migrates those call sites and deletes the closure.
+    //
+    // Registered resolvers: env, file, k8s (pod-downward API),
+    // vault (stub unless built with --features vault). The k8s
+    // resolver uses a no-op fetcher when --features k8s-secrets is
+    // not enabled — from_pod_environment() returns a resolver whose
+    // fetch() emits BackendUnavailable with a clear diagnostic.
+    {
+        use memory::secret_resolver::SecretResolverRegistry;
+        use memory::secret_resolvers::{
+            EnvRefResolver, FileRefResolver, K8sRefResolver, PodDownwardApiFetcher,
+            VaultRefResolver,
+        };
+
+        let mut secret_registry = SecretResolverRegistry::new();
+        secret_registry.register(Arc::new(EnvRefResolver::new()));
+        secret_registry.register(Arc::new(FileRefResolver::new()));
+        secret_registry.register(Arc::new(VaultRefResolver::new()));
+
+        // K8s resolver: build the pod-downward-API fetcher + default
+        // namespace. from_pod_environment() only fails on feature-on
+        // builds outside a pod — log and skip registration in that
+        // case so non-pod dev environments still boot.
+        match PodDownwardApiFetcher::from_pod_environment() {
+            Ok(fetcher) => {
+                let default_ns = PodDownwardApiFetcher::read_pod_namespace().await;
+                let mut k8s = K8sRefResolver::new(fetcher);
+                if let Some(ns) = default_ns {
+                    k8s = k8s.with_default_namespace(ns);
+                }
+                secret_registry.register(Arc::new(k8s));
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "K8s secret resolver unavailable — SecretReference::K8s values will fail \
+                     to resolve. This is expected outside Kubernetes; in-cluster deployments \
+                     should investigate.",
+                );
+            }
+        }
+
+        registry.set_secret_resolver_registry(Arc::new(secret_registry));
+    }
+
     let provider_registry = Arc::new(registry);
 
     let mut memory_manager = MemoryManager::new()
