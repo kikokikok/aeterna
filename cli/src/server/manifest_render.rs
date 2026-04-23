@@ -82,9 +82,10 @@ pub const RENDERED_SECTIONS: &[&str] = &[
 ///   which allows the field to be absent). (PR #128)
 ///
 /// - **`providers`** (top-level) moved to [`RENDERED_SECTIONS`] in
-///   §2.2-A. Only its `memoryLayers` sub-section remains a gap below,
-///   deferred to §2.2-D because no canonical storage convention exists
-///   for it yet.
+///   §2.2-A. Its `memoryLayers` sub-section closes in §2.2-D (this
+///   change) — layer keys now live under
+///   `memory_layer.{layer}.{provider,model,api_key,…}` in the flat
+///   config namespace, reverse-recovered by `render_memory_layers`.
 ///
 /// - **`hierarchy`** moved to [`RENDERED_SECTIONS`] in §2.2-B (B3+B4).
 ///   Forward-apply writes the modern `companies`/`organizations`/`teams`
@@ -94,14 +95,17 @@ pub const RENDERED_SECTIONS: &[&str] = &[
 ///   [`render_hierarchy`]. OU writes remain in place for backup/gdpr/
 ///   cascade back-compat but are *not* the reverse-render source.
 ///
-/// - **`roles`** closed in §2.2-C (this change). Forward-apply has
-///   always written `user_roles`; reverse-render now uses
-///   [`render_roles`] + a LEFT-JOIN query against `user_roles ×
-///   organizational_units` in [`render_current_manifest`].
-///   `unit_id == tenant_id` is the sentinel for "tenant-wide"
-///   (matching the forward-apply convention in `provision_tenant`
-///   Step 7) and maps to `unit: None` on render.
-pub const NOT_RENDERED_SECTIONS: &[&str] = &["providers.memoryLayers"];
+/// - **`roles`** closed in §2.2-C (PR #145). Forward-apply has always
+///   written `user_roles`; reverse-render uses [`render_roles`] + a
+///   LEFT-JOIN query against `user_roles × organizational_units` in
+///   [`render_current_manifest`]. `unit_id == tenant_id` is the
+///   sentinel for "tenant-wide" (matching the forward-apply convention
+///   in `provision_tenant` Step 7) and maps to `unit: None` on render.
+///
+/// With §2.2-D (this change) every manifest section now round-trips;
+/// `NOT_RENDERED_SECTIONS` is empty and the structural-diff work in
+/// §2.4 is unblocked.
+pub const NOT_RENDERED_SECTIONS: &[&str] = &[];
 
 #[derive(Debug, thiserror::Error)]
 pub enum RenderError {
@@ -268,8 +272,9 @@ pub fn render_roles(tenant_id_str: &str, rows: Vec<RoleRow>) -> Vec<RenderedRole
 }
 
 /// Mirror of `ManifestProviders` used by the input side
-/// (`tenant_api::ManifestProviders`), minus `memoryLayers` which has
-/// no storage convention yet (see FINDINGS-2-2 §2.2-D).
+/// (`tenant_api::ManifestProviders`). As of §2.2-D, round-trip is
+/// complete: `llm`, `embedding`, and `memoryLayers` all forward-apply
+/// and reverse-render.
 ///
 /// We redeclare the type here instead of reusing the input type
 /// because the input type is `Deserialize`-only (no `Serialize`) and
@@ -284,6 +289,12 @@ pub struct RenderedProviders {
     pub llm: Option<RenderedProvider>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embedding: Option<RenderedProvider>,
+    /// Reconstructed from `memory_layer.{layer}.*` fields by
+    /// [`render_memory_layers`]. Elided entirely when no layer has
+    /// been declared for this tenant (keeps round-trip byte-identical
+    /// for tenants that don't use memoryLayers).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub memory_layers: BTreeMap<String, RenderedProvider>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -594,11 +605,92 @@ pub(crate) fn render_providers(
         ],
     );
 
-    if llm.is_none() && embedding.is_none() {
+    let memory_layers = render_memory_layers(fields, secret_references, redact);
+
+    if llm.is_none() && embedding.is_none() && memory_layers.is_empty() {
         None
     } else {
-        Some(RenderedProviders { llm, embedding })
+        Some(RenderedProviders {
+            llm,
+            embedding,
+            memory_layers,
+        })
     }
+}
+
+/// B3 §2.2-D — reverse-recover `providers.memoryLayers` from the flat
+/// config-field namespace.
+///
+/// Walks `fields` once looking for keys of the shape
+/// `memory_layer.{LAYER}.provider`; each one defines a layer that is
+/// then reconstructed through [`render_one_provider`] with dynamically
+/// computed key names. Uses the same `.provider` sentinel as the
+/// forward path — a layer missing the sentinel (e.g. someone wrote
+/// `memory_layer.foo.model` without `memory_layer.foo.provider`) is
+/// silently ignored, matching the forward-apply contract that `kind`
+/// (stored as `{prefix}provider`) is mandatory.
+///
+/// The returned `BTreeMap` is sorted by layer name (inherited from
+/// `BTreeMap`'s ordered iteration). Callers don't have to sort for
+/// deterministic output.
+fn render_memory_layers(
+    fields: &BTreeMap<String, TenantConfigField>,
+    secret_references: &BTreeMap<String, TenantSecretReference>,
+    redact: bool,
+) -> BTreeMap<String, RenderedProvider> {
+    const PREFIX: &str = "memory_layer.";
+    const PROVIDER_SUFFIX: &str = ".provider";
+
+    let mut out = BTreeMap::new();
+    for key in fields.keys() {
+        // Extract `{LAYER}` from `memory_layer.{LAYER}.provider`. We
+        // use `.provider` as the sentinel rather than any other
+        // suffix because (a) it is the only *mandatory* field written
+        // by `apply_one` so its presence uniquely defines a layer,
+        // and (b) it avoids double-counting layers that happen to
+        // have several optional fields set.
+        let Some(rest) = key.strip_prefix(PREFIX) else {
+            continue;
+        };
+        let Some(layer) = rest.strip_suffix(PROVIDER_SUFFIX) else {
+            continue;
+        };
+        // Defence in depth: the validator forbids `.` in layer names
+        // so the stripped middle must not contain a dot. Skip any
+        // malformed legacy row rather than misgrouping fields.
+        if layer.is_empty() || layer.contains('.') {
+            continue;
+        }
+
+        let layer_prefix = format!("{PREFIX}{layer}");
+        // Reuse the same apply_one contract: `{prefix}provider`,
+        // `{prefix}model`, `{prefix}google_project_id`, …. The dot
+        // separator lives in PREFIX; the inner suffixes still use
+        // flat snake_case as written by the forward path.
+        let provider_key = format!("{layer_prefix}.provider");
+        let model_key = format!("{layer_prefix}.model");
+        let api_key_key = format!("{layer_prefix}.api_key");
+        let gproj_key = format!("{layer_prefix}.google_project_id");
+        let gloc_key = format!("{layer_prefix}.google_location");
+        let breg_key = format!("{layer_prefix}.bedrock_region");
+
+        if let Some(rendered) = render_one_provider(
+            fields,
+            secret_references,
+            redact,
+            &provider_key,
+            &model_key,
+            &api_key_key,
+            &[
+                ("projectId", gproj_key.as_str()),
+                ("location", gloc_key.as_str()),
+                ("region", breg_key.as_str()),
+            ],
+        ) {
+            out.insert(layer.to_string(), rendered);
+        }
+    }
+    out
 }
 
 fn render_one_provider(
@@ -842,8 +934,8 @@ mod tests {
         assert_eq!(v["metadata"]["manifestHash"], "sha256:abc");
         assert_eq!(v["tenant"]["sourceOwner"], "admin");
         assert!(v["notRendered"].is_array());
-        // `providers` (the top-level section) is now rendered; only
-        // the `memoryLayers` sub-section is still in the gap list.
+        // After §2.2-A+D: neither `providers` nor
+        // `providers.memoryLayers` should be in the gap list.
         let not_rendered = v["notRendered"].as_array().unwrap();
         assert!(
             !not_rendered.contains(&json!("providers")),
@@ -851,8 +943,8 @@ mod tests {
              reverse-render landed in §2.2-A"
         );
         assert!(
-            not_rendered.contains(&json!("providers.memoryLayers")),
-            "memoryLayers still deferred to §2.2-D"
+            !not_rendered.contains(&json!("providers.memoryLayers")),
+            "memoryLayers storage convention landed in §2.2-D"
         );
     }
 
@@ -942,18 +1034,19 @@ mod tests {
 
     #[test]
     fn not_rendered_list_contains_every_expected_section() {
-        // Post §2.2-B + §2.2-C: both `hierarchy` and `roles` moved
-        // out of NOT_RENDERED via `render_hierarchy`/`render_roles`.
-        // Only `providers.memoryLayers` remains a gap on master at
-        // the time this PR merged (closing in §2.2-D / PR #142).
-        for section in ["providers.memoryLayers"] {
-            assert!(
-                NOT_RENDERED_SECTIONS.contains(&section),
-                "section {section} missing from NOT_RENDERED"
-            );
-        }
-        // §2.2-B + §2.2-C regression guards — these must NOT be on
-        // the gap list anymore.
+        // Post §2.2-B (hierarchy, PR #143/#148) + §2.2-C (roles,
+        // PR #145) + §2.2-D (providers.memoryLayers, this PR), every
+        // manifest section round-trips and `NOT_RENDERED_SECTIONS`
+        // is empty. This test is kept as a regression guard so that
+        // any future PR reintroducing a gap has to update the
+        // assertions deliberately (and trip the §2.4 diff contract).
+        assert!(
+            NOT_RENDERED_SECTIONS.is_empty(),
+            "NOT_RENDERED_SECTIONS must be empty after §2.2-B/C/D; found {:?}",
+            NOT_RENDERED_SECTIONS
+        );
+        // Explicit regression guards for each closed gap — these
+        // must NEVER reappear in NOT_RENDERED.
         assert!(
             !NOT_RENDERED_SECTIONS.contains(&"hierarchy"),
             "hierarchy must not be a gap after §2.2-B"
@@ -961,6 +1054,10 @@ mod tests {
         assert!(
             !NOT_RENDERED_SECTIONS.contains(&"roles"),
             "roles must not be a gap after §2.2-C"
+        );
+        assert!(
+            !NOT_RENDERED_SECTIONS.contains(&"providers.memoryLayers"),
+            "providers.memoryLayers must not be a gap after §2.2-D"
         );
         for section in RENDERED_SECTIONS {
             assert!(
@@ -1394,5 +1491,161 @@ mod tests {
             llm.model.is_none(),
             "non-string model value must not be silently serialized as a number"
         );
+    }
+
+    // ── B3 §2.2-D — memoryLayers reverse render ───────────────────────────
+
+    #[test]
+    fn render_memory_layers_none_when_no_layer_fields() {
+        // Tenants that never declared a layer must produce an empty
+        // BTreeMap — `skip_serializing_if = "BTreeMap::is_empty"` on
+        // the field makes that elide from JSON entirely, preserving
+        // byte-identity with the input manifest shape.
+        let layers = render_memory_layers(&BTreeMap::new(), &BTreeMap::new(), false);
+        assert!(layers.is_empty());
+    }
+
+    #[test]
+    fn render_memory_layers_reconstructs_single_layer() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "memory_layer.episodic.provider".to_string(),
+            platform_field("qdrant"),
+        );
+        fields.insert(
+            "memory_layer.episodic.model".to_string(),
+            platform_field("text-embedding-3-small"),
+        );
+        let layers = render_memory_layers(&fields, &BTreeMap::new(), false);
+        assert_eq!(layers.len(), 1);
+        let epi = layers.get("episodic").unwrap();
+        assert_eq!(epi.kind, "qdrant");
+        assert_eq!(epi.model.as_deref(), Some("text-embedding-3-small"));
+    }
+
+    #[test]
+    fn render_memory_layers_groups_multiple_layers_sorted() {
+        // BTreeMap ordering guarantees alphabetical output, which
+        // matters for deterministic manifest hashing.
+        let mut fields = BTreeMap::new();
+        for layer in ["semantic", "episodic", "procedural"] {
+            fields.insert(
+                format!("memory_layer.{layer}.provider"),
+                platform_field("qdrant"),
+            );
+        }
+        let layers = render_memory_layers(&fields, &BTreeMap::new(), false);
+        let keys: Vec<&String> = layers.keys().collect();
+        assert_eq!(keys, vec!["episodic", "procedural", "semantic"]);
+    }
+
+    #[test]
+    fn render_memory_layers_skips_orphaned_model_without_provider() {
+        // Apply-side contract: a layer IS the `.provider` sentinel.
+        // Legacy / hand-edited rows that have `.model` without
+        // `.provider` must not materialise a bogus half-populated
+        // layer.
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "memory_layer.ghost.model".to_string(),
+            platform_field("text-embedding-3-small"),
+        );
+        let layers = render_memory_layers(&fields, &BTreeMap::new(), false);
+        assert!(layers.is_empty());
+    }
+
+    #[test]
+    fn render_memory_layers_ignores_malformed_dotted_middle() {
+        // Defence-in-depth against the validator being bypassed:
+        // a key like `memory_layer.bad.name.provider` could either
+        // be layer `bad.name` (illegal) or layer `bad` with
+        // suffix `name.provider` (also illegal). The renderer
+        // skips both rather than misgrouping — the validator is
+        // the authoritative gate, this is just the fallback.
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "memory_layer.bad.name.provider".to_string(),
+            platform_field("qdrant"),
+        );
+        let layers = render_memory_layers(&fields, &BTreeMap::new(), false);
+        assert!(layers.is_empty());
+    }
+
+    #[test]
+    fn render_memory_layers_recovers_operator_secret_ref() {
+        // The canonical api_key alias for a layer is
+        // `memory_layer.{layer}.api_key`. Reverse recovery should
+        // return the operator-friendly name
+        // (`episodic_key` in this fixture) by reference-equality on
+        // the underlying SecretReference, same as llm/embedding.
+        let env_ref = TenantSecretReference {
+            logical_name: "episodic_key".to_string(),
+            ownership: TenantConfigOwnership::Platform,
+            reference: mk_core::secret::SecretReference::Env {
+                var: "AETERNA_EPISODIC".to_string(),
+            },
+        };
+        let canonical_ref = TenantSecretReference {
+            logical_name: "memory_layer.episodic.api_key".to_string(),
+            ownership: TenantConfigOwnership::Platform,
+            reference: env_ref.reference.clone(),
+        };
+        let mut secret_references = BTreeMap::new();
+        secret_references.insert("episodic_key".to_string(), env_ref);
+        secret_references.insert("memory_layer.episodic.api_key".to_string(), canonical_ref);
+
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "memory_layer.episodic.provider".to_string(),
+            platform_field("bedrock"),
+        );
+
+        let layers = render_memory_layers(&fields, &secret_references, false);
+        let epi = layers.get("episodic").unwrap();
+        assert_eq!(epi.secret_ref.as_deref(), Some("episodic_key"));
+    }
+
+    #[test]
+    fn render_memory_layers_elides_secret_ref_in_redact_mode() {
+        let env_ref = TenantSecretReference {
+            logical_name: "episodic_key".to_string(),
+            ownership: TenantConfigOwnership::Platform,
+            reference: mk_core::secret::SecretReference::Env {
+                var: "AETERNA_EPISODIC".to_string(),
+            },
+        };
+        let mut secret_references = BTreeMap::new();
+        secret_references.insert("memory_layer.episodic.api_key".to_string(), env_ref.clone());
+        secret_references.insert("episodic_key".to_string(), env_ref);
+
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "memory_layer.episodic.provider".to_string(),
+            platform_field("bedrock"),
+        );
+
+        let layers = render_memory_layers(&fields, &secret_references, true);
+        assert!(layers.get("episodic").unwrap().secret_ref.is_none());
+    }
+
+    #[test]
+    fn render_providers_emits_memory_layers_alongside_llm() {
+        // End-to-end: llm + memoryLayers coexist, both surface in
+        // the single `RenderedProviders` block, `memory_layers` map
+        // stays separate from the two optional singletons.
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            config_keys::LLM_PROVIDER.to_string(),
+            platform_field("openai"),
+        );
+        fields.insert(
+            "memory_layer.episodic.provider".to_string(),
+            platform_field("qdrant"),
+        );
+        let out = render_providers(&fields, &BTreeMap::new(), false).unwrap();
+        assert!(out.llm.is_some());
+        assert!(out.embedding.is_none());
+        assert_eq!(out.memory_layers.len(), 1);
+        assert_eq!(out.memory_layers.get("episodic").unwrap().kind, "qdrant");
     }
 }
