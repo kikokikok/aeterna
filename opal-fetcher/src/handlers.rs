@@ -1,8 +1,14 @@
 //! HTTP request handlers for the OPAL Data Fetcher.
 
-use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
-use serde::Serialize;
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::entities::{
     AgentPermissionRow, CedarEntitiesResponse, HierarchyRow, ProjectTeamAssignmentRow,
@@ -11,6 +17,18 @@ use crate::entities::{
 };
 use crate::error::Result;
 use crate::state::AppState;
+
+/// Query parameters carrying the tenant context for a fetcher request.
+///
+/// Every entity-returning endpoint requires a `tenant` UUID. Returning the
+/// globally-merged entity set would leak cross-tenant identifiers into the
+/// OPAL → Cedar pipeline and evaluate policies against mismatched
+/// principals (see issue #130). OPAL's data-source client is configured
+/// per-tenant; the tenant parameter is the wire expression of that scope.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TenantQuery {
+    pub tenant: Uuid,
+}
 
 /// Health check response.
 #[derive(Debug, Serialize)]
@@ -66,18 +84,31 @@ opal_fetcher_up 1
     (StatusCode::OK, metrics)
 }
 
-/// GET /v1/hierarchy
+/// GET /v1/hierarchy?tenant=<uuid>
 ///
 /// Returns the organizational hierarchy (Company → Organization → Team →
-/// Project) as Cedar entities for OPAL consumption.
+/// Project) as Cedar entities for OPAL consumption, scoped to a single
+/// tenant. The `tenant` query parameter is **required** — missing it
+/// returns 400 via `serde_urlencoded` deserialization failure, surfaced
+/// by axum's `Query` extractor.
+///
+/// Isolation contract: rows are filtered by `v_hierarchy.tenant_id = $1`
+/// (column exposed by migration `028_tenant_scoped_hierarchy.sql`) and
+/// `project_team_assignments.tenant_id = $1`. Cross-tenant rows are
+/// never returned even if a tenant UUID is guessed correctly for a
+/// different tenant's data — the filter is authoritative at the SQL
+/// layer, not at a policy layer downstream.
 pub async fn get_hierarchy(
     State(state): State<Arc<AppState>>,
+    Query(params): Query<TenantQuery>,
 ) -> Result<Json<CedarEntitiesResponse>> {
-    tracing::debug!("Fetching organizational hierarchy");
+    let tenant_id = params.tenant;
+    tracing::debug!(%tenant_id, "Fetching organizational hierarchy");
 
     let rows: Vec<HierarchyRow> = sqlx::query_as(
         r"
         SELECT
+            tenant_id,
             company_id,
             company_slug,
             company_name,
@@ -92,21 +123,25 @@ pub async fn get_hierarchy(
             project_name,
             git_remote
         FROM v_hierarchy
+        WHERE tenant_id = $1
         ",
     )
+    .bind(tenant_id)
     .fetch_all(&state.pool)
     .await?;
 
     let count = rows.len();
-    tracing::debug!(row_count = count, "Fetched hierarchy rows");
+    tracing::debug!(%tenant_id, row_count = count, "Fetched hierarchy rows");
 
     let mut entities = transform_hierarchy(rows)?;
     let assignment_rows: Vec<ProjectTeamAssignmentRow> = sqlx::query_as(
         r"
         SELECT project_id, team_id, tenant_id, assignment_type
         FROM project_team_assignments
+        WHERE tenant_id = $1::TEXT
         ",
     )
+    .bind(tenant_id.to_string())
     .fetch_all(&state.pool)
     .await?;
     let assignments = collect_project_team_assignments(assignment_rows);
@@ -115,6 +150,7 @@ pub async fn get_hierarchy(
     let response = CedarEntitiesResponse::new(entities);
 
     tracing::info!(
+        %tenant_id,
         entity_count = response.count,
         "Returning hierarchy entities"
     );
@@ -122,15 +158,24 @@ pub async fn get_hierarchy(
     Ok(Json(response))
 }
 
-/// GET /v1/users
+/// GET /v1/users?tenant=<uuid>
 ///
-/// Returns users with their team memberships and roles as Cedar entities.
-pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<Json<CedarEntitiesResponse>> {
-    tracing::debug!("Fetching user permissions");
+/// Returns users with their team memberships and roles as Cedar entities,
+/// scoped to a single tenant. The `tenant` query parameter is **required**.
+///
+/// Isolation contract: rows are filtered by `v_user_permissions.tenant_id
+/// = $1` (column exposed by migration `028_tenant_scoped_hierarchy.sql`).
+pub async fn get_users(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<TenantQuery>,
+) -> Result<Json<CedarEntitiesResponse>> {
+    let tenant_id = params.tenant;
+    tracing::debug!(%tenant_id, "Fetching user permissions");
 
     let rows: Vec<UserPermissionRow> = sqlx::query_as(
         r"
         SELECT
+            tenant_id,
             user_id,
             email,
             user_name,
@@ -144,30 +189,58 @@ pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<Json<CedarE
             org_slug,
             team_slug
         FROM v_user_permissions
+        WHERE tenant_id = $1
         ",
     )
+    .bind(tenant_id)
     .fetch_all(&state.pool)
     .await?;
 
     let count = rows.len();
-    tracing::debug!(row_count = count, "Fetched user permission rows");
+    tracing::debug!(%tenant_id, row_count = count, "Fetched user permission rows");
 
     let role_entities = transform_roles(&rows);
     let mut entities = transform_users(rows)?;
     entities.extend(role_entities);
     let response = CedarEntitiesResponse::new(entities);
 
-    tracing::info!(entity_count = response.count, "Returning user entities");
+    tracing::info!(
+        %tenant_id,
+        entity_count = response.count,
+        "Returning user entities"
+    );
 
     Ok(Json(response))
 }
 
-/// GET /v1/agents
+/// GET /v1/agents?tenant=<uuid>
 ///
 /// Returns agents with their delegation chains and capabilities as Cedar
 /// entities.
-pub async fn get_agents(State(state): State<Arc<AppState>>) -> Result<Json<CedarEntitiesResponse>> {
-    tracing::debug!("Fetching agent permissions");
+///
+/// # ⚠️ Known gap — tracked in issue #130 / follow-up
+///
+/// The `agents` table (migration `009_organizational_referential.sql`)
+/// has NO `tenant_id` column today. An agent's tenant is only knowable
+/// transitively via `agents.allowed_company_ids → companies.tenant_id`,
+/// and that set can in principle span multiple tenants. This handler
+/// therefore **requires** a `tenant` query param to match the contract
+/// of its siblings (so OPAL can be configured uniformly across all
+/// fetcher endpoints) but the current implementation still returns the
+/// full agent set and emits a WARN. The follow-up work to this PR adds
+/// `agents.tenant_id` + backfill + a filtered `v_agent_permissions`
+/// view; at that point this handler becomes a SQL-layer filter like
+/// `get_hierarchy` / `get_users` above and the WARN is removed.
+pub async fn get_agents(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<TenantQuery>,
+) -> Result<Json<CedarEntitiesResponse>> {
+    let tenant_id = params.tenant;
+    tracing::warn!(
+        %tenant_id,
+        "agent-permissions endpoint currently returns cross-tenant rows; \
+         tenant filtering pending agents.tenant_id schema work (see #130)"
+    );
 
     let rows: Vec<AgentPermissionRow> = sqlx::query_as(
         r"
@@ -193,49 +266,94 @@ pub async fn get_agents(State(state): State<Arc<AppState>>) -> Result<Json<Cedar
     .await?;
 
     let count = rows.len();
-    tracing::debug!(row_count = count, "Fetched agent permission rows");
+    tracing::debug!(
+        %tenant_id,
+        row_count = count,
+        "Fetched agent permission rows (unfiltered — see handler docs)"
+    );
 
     let entities = transform_agents(rows)?;
     let response = CedarEntitiesResponse::new(entities);
 
-    tracing::info!(entity_count = response.count, "Returning agent entities");
+    tracing::info!(
+        %tenant_id,
+        entity_count = response.count,
+        "Returning agent entities (unfiltered — see handler docs)"
+    );
 
     Ok(Json(response))
 }
 
-/// GET /v1/all
+/// GET /v1/all?tenant=<uuid>
 ///
-/// Returns all entities (hierarchy, users, agents, and Code Search) in a single response.
-/// Useful for initial full sync.
+/// Returns all entities (hierarchy, users, agents, and Code Search) in a
+/// single response, scoped to a single tenant. Useful for initial full
+/// sync of one tenant's OPAL data-source. The `tenant` query parameter
+/// is **required**.
+///
+/// Tenant-filtering applied: hierarchy, users, code-search repositories
+/// / requests / identities, and project-team assignments. Agents are
+/// NOT filtered — see `get_agents` docstring for the tracked gap.
 pub async fn get_all_entities(
     State(state): State<Arc<AppState>>,
+    Query(params): Query<TenantQuery>,
 ) -> Result<Json<CedarEntitiesResponse>> {
-    tracing::debug!("Fetching all entities");
+    let tenant_id = params.tenant;
+    let tenant_text = tenant_id.to_string();
+    tracing::debug!(%tenant_id, "Fetching all entities (tenant-scoped)");
 
     // Fetch all entity types in parallel
-    let (hierarchy_rows, user_rows, agent_rows, assignment_rows, codesearch_repo_rows, codesearch_req_rows, codesearch_id_rows) = tokio::try_join!(
+    let (
+        hierarchy_rows,
+        user_rows,
+        agent_rows,
+        assignment_rows,
+        codesearch_repo_rows,
+        codesearch_req_rows,
+        codesearch_id_rows,
+    ) = tokio::try_join!(
         sqlx::query_as::<_, HierarchyRow>(
-            r"SELECT company_id, company_slug, company_name, org_id, org_slug, org_name, team_id, team_slug, team_name, project_id, project_slug, project_name, git_remote FROM v_hierarchy"
-        ).fetch_all(&state.pool),
+            r"SELECT tenant_id, company_id, company_slug, company_name, org_id, org_slug, org_name, team_id, team_slug, team_name, project_id, project_slug, project_name, git_remote FROM v_hierarchy WHERE tenant_id = $1"
+        )
+        .bind(tenant_id)
+        .fetch_all(&state.pool),
         sqlx::query_as::<_, UserPermissionRow>(
-            r"SELECT user_id, email, user_name, user_status, team_id, role, permissions, org_id, company_id, company_slug, org_slug, team_slug FROM v_user_permissions"
-        ).fetch_all(&state.pool),
+            r"SELECT tenant_id, user_id, email, user_name, user_status, team_id, role, permissions, org_id, company_id, company_slug, org_slug, team_slug FROM v_user_permissions WHERE tenant_id = $1"
+        )
+        .bind(tenant_id)
+        .fetch_all(&state.pool),
+        // NOTE: agents unfiltered — tracked in #130, see get_agents docstring.
         sqlx::query_as::<_, AgentPermissionRow>(
             r"SELECT agent_id, agent_name, agent_type, delegated_by_user_id, delegated_by_agent_id, delegation_depth, capabilities, allowed_company_ids, allowed_org_ids, allowed_team_ids, allowed_project_ids, agent_status, delegating_user_email, delegating_user_name FROM v_agent_permissions"
-        ).fetch_all(&state.pool),
+        )
+        .fetch_all(&state.pool),
         sqlx::query_as::<_, ProjectTeamAssignmentRow>(
-            r"SELECT project_id, team_id, tenant_id, assignment_type FROM project_team_assignments"
-        ).fetch_all(&state.pool),
+            r"SELECT project_id, team_id, tenant_id, assignment_type FROM project_team_assignments WHERE tenant_id = $1"
+        )
+        .bind(&tenant_text)
+        .fetch_all(&state.pool),
         sqlx::query_as::<_, crate::entities::CodeSearchRepositoryRow>(
-            r"SELECT id, tenant_id, name, status, sync_strategy, current_branch FROM v_code_search_repositories"
-        ).fetch_all(&state.pool),
+            r"SELECT id, tenant_id, name, status, sync_strategy, current_branch FROM v_code_search_repositories WHERE tenant_id = $1"
+        )
+        .bind(&tenant_text)
+        .fetch_all(&state.pool),
         sqlx::query_as::<_, crate::entities::CodeSearchRequestRow>(
-            r"SELECT id, repository_id, requester_id, status, tenant_id FROM v_code_search_requests"
-        ).fetch_all(&state.pool),
+            r"SELECT id, repository_id, requester_id, status, tenant_id FROM v_code_search_requests WHERE tenant_id = $1"
+        )
+        .bind(&tenant_text)
+        .fetch_all(&state.pool),
         sqlx::query_as::<_, crate::entities::CodeSearchIdentityRow>(
-            r"SELECT id, tenant_id, name, provider FROM v_code_search_identities"
-        ).fetch_all(&state.pool),
+            r"SELECT id, tenant_id, name, provider FROM v_code_search_identities WHERE tenant_id = $1"
+        )
+        .bind(&tenant_text)
+        .fetch_all(&state.pool),
     )?;
+
+    tracing::warn!(
+        %tenant_id,
+        agent_row_count = agent_rows.len(),
+        "agent rows returned unfiltered — tenant filtering pending (#130)"
+    );
 
     // Transform all entities
     let mut all_entities = transform_hierarchy(hierarchy_rows)?;
@@ -260,8 +378,9 @@ pub async fn get_all_entities(
     let response = CedarEntitiesResponse::new(all_entities);
 
     tracing::info!(
+        %tenant_id,
         entity_count = response.count,
-        "Returning all entities (including Code Search)"
+        "Returning all entities (tenant-scoped, excluding agents)"
     );
 
     Ok(Json(response))
