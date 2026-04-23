@@ -549,6 +549,8 @@ mod tests {
             github_id: 42,
             email: Some("test@example.com".to_string()),
             kind: PluginTokenClaims::KIND.to_string(),
+            token_type: PluginTokenClaims::TOKEN_TYPE_USER.to_string(),
+            scopes: Vec::new(),
         };
         let token = jsonwebtoken::encode(
             &Header::new(jsonwebtoken::Algorithm::HS256),

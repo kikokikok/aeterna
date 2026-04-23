@@ -435,6 +435,8 @@ fn mint_test_plugin_bearer(secret: &str, tenant_id: &str, github_login: &str) ->
             github_id: 42,
             email: Some(format!("{github_login}@example.com")),
             kind: PluginTokenClaims::KIND.to_string(),
+            token_type: PluginTokenClaims::TOKEN_TYPE_USER.to_string(),
+            scopes: Vec::new(),
         },
         &EncodingKey::from_secret(secret.as_bytes()),
     )
