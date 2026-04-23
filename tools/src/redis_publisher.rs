@@ -141,6 +141,7 @@ impl RedisPublisher {
             GovernanceEvent::KnowledgePromotionRetargeted { tenant_id, .. } => tenant_id,
             GovernanceEvent::KnowledgePromotionApplied { tenant_id, .. } => tenant_id,
             GovernanceEvent::KnowledgeRelationCreated { tenant_id, .. } => tenant_id,
+            GovernanceEvent::BootstrapCompleted { tenant_id, .. } => tenant_id,
         };
 
         let stream_key = format!("{}:{}", base_stream_key, tenant_id.as_str());
@@ -479,6 +480,7 @@ mod tests {
                 GovernanceEvent::KnowledgePromotionRetargeted { tenant_id, .. } => tenant_id,
                 GovernanceEvent::KnowledgePromotionApplied { tenant_id, .. } => tenant_id,
                 GovernanceEvent::KnowledgeRelationCreated { tenant_id, .. } => tenant_id,
+                GovernanceEvent::BootstrapCompleted { tenant_id, .. } => tenant_id,
             };
             assert_eq!(extracted_tenant_id, &tenant_id);
         }

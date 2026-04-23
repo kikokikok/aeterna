@@ -36,37 +36,19 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
-use serde::Serialize;
 
-/// Snapshot of the bootstrap progress for the wire / tests.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BootstrapStatus {
-    pub state: &'static str,
-    pub started_at: DateTime<Utc>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub completed_at: Option<DateTime<Utc>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub duration_ms: Option<u64>,
-    pub steps: Vec<StepStatus>,
-}
-
-/// Single-phase record. One per call to [`BootstrapTracker::begin`].
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StepStatus {
-    pub name: &'static str,
-    /// `running` until terminated; then `success` or `failure`.
-    pub state: &'static str,
-    pub started_at: DateTime<Utc>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub completed_at: Option<DateTime<Utc>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub duration_ms: Option<u64>,
-    /// Non-None only when `state == "failure"`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
+// Wire shapes live in `mk_core::types` so governance-event consumers can
+// deserialize them without a dependency on the CLI crate. See the
+// [`GovernanceEvent::BootstrapCompleted`] variant (B2 task 6.4), which
+// carries a [`BootstrapStatusSnapshot`] as its payload.
+//
+// The re-export keeps call sites inside this crate unchanged — the
+// `/admin/bootstrap/status` handler and unit tests continue to use
+// `BootstrapStatus` / `StepStatus` as before; the emitted JSON is
+// identical.
+pub use mk_core::types::{
+    BootstrapStatusSnapshot as BootstrapStatus, BootstrapStepSnapshot as StepStatus,
+};
 
 #[derive(Debug)]
 struct Inner {
@@ -186,6 +168,13 @@ impl BootstrapTracker {
     }
 
     /// Deep-copy snapshot for the wire / tests.
+    ///
+    /// The returned value is `mk_core::types::BootstrapStatusSnapshot`
+    /// (re-exported as `BootstrapStatus` for readability). Its JSON
+    /// shape is byte-for-byte identical to the previous private
+    /// definition, so `/admin/bootstrap/status` consumers are
+    /// unaffected. The shared type is what
+    /// [`GovernanceEvent::BootstrapCompleted`] carries as payload.
     pub fn snapshot(&self) -> BootstrapStatus {
         let g = self.inner.lock().expect("bootstrap tracker poisoned");
         let state = if g.failed {
@@ -202,7 +191,7 @@ impl BootstrapTracker {
             .steps
             .iter()
             .map(|r| {
-                let state = match &r.outcome {
+                let step_state = match &r.outcome {
                     None => "running",
                     Some(Ok(())) => "success",
                     Some(Err(_)) => "failure",
@@ -215,8 +204,8 @@ impl BootstrapTracker {
                     _ => None,
                 };
                 StepStatus {
-                    name: r.name,
-                    state,
+                    name: r.name.to_string(),
+                    state: step_state.to_string(),
                     started_at: r.started_at_wall,
                     completed_at: r.completed_at_wall,
                     duration_ms,
@@ -225,7 +214,7 @@ impl BootstrapTracker {
             })
             .collect();
         BootstrapStatus {
-            state,
+            state: state.to_string(),
             started_at: g.started_at_wall,
             completed_at: g.completed_at_wall,
             duration_ms,
@@ -339,7 +328,7 @@ mod tests {
             t.complete(name);
         }
         let s = t.snapshot();
-        let names: Vec<&str> = s.steps.iter().map(|r| r.name).collect();
+        let names: Vec<String> = s.steps.iter().map(|r| r.name.clone()).collect();
         assert_eq!(names, vec!["a", "b", "c", "d"]);
     }
 
@@ -418,5 +407,68 @@ mod tests {
         assert!(!t.is_completed());
         t.mark_ready(); // mark_ready after failure does NOT flip to completed
         assert!(!t.is_completed());
+    }
+
+    /// B2 task 6.4 — the snapshot this module produces must drop
+    /// straight into the `BootstrapCompleted` governance event payload
+    /// with no lossy conversion. This pins both facts at once: (a) the
+    /// types are the same `mk_core` re-export, and (b) the value
+    /// round-trips cleanly through serde so it stores unchanged in
+    /// `governance_events.payload` / on the Redis stream.
+    #[test]
+    fn snapshot_type_matches_governance_event_payload_and_round_trips() {
+        use mk_core::types::{
+            BootstrapStatusSnapshot, GovernanceEvent, INSTANCE_SCOPE_TENANT_ID, TenantId,
+        };
+
+        let t = BootstrapTracker::new();
+        t.begin("db_connect");
+        t.complete("db_connect");
+        t.begin("assemble_state");
+        t.complete("assemble_state");
+        t.mark_ready();
+        assert!(t.is_completed());
+
+        let snapshot: BootstrapStatusSnapshot = t.snapshot();
+        assert_eq!(snapshot.state, "completed");
+        assert_eq!(snapshot.steps.len(), 2);
+
+        let tenant_id = TenantId::new(INSTANCE_SCOPE_TENANT_ID.to_string())
+            .expect("platform sentinel must be a valid TenantId");
+        let event = GovernanceEvent::BootstrapCompleted {
+            tenant_id: tenant_id.clone(),
+            timestamp: 1_700_000_000,
+            snapshot: snapshot.clone(),
+        };
+
+        // Event carries the platform sentinel (not whichever admin
+        // happened to be in scope — there is none during bootstrap).
+        assert_eq!(event.tenant_id(), &tenant_id);
+        assert_eq!(event.tenant_id().as_str(), INSTANCE_SCOPE_TENANT_ID);
+
+        // Full round-trip: event -> JSON -> event. The snapshot inside
+        // must compare equal, which proves no field was lost in the
+        // shared mk_core type.
+        let json = serde_json::to_value(&event).unwrap();
+        let roundtripped: GovernanceEvent = serde_json::from_value(json).unwrap();
+        match roundtripped {
+            GovernanceEvent::BootstrapCompleted {
+                snapshot: out,
+                timestamp,
+                tenant_id: tid,
+            } => {
+                assert_eq!(out, snapshot);
+                assert_eq!(timestamp, 1_700_000_000);
+                assert_eq!(tid, tenant_id);
+            }
+            other => panic!("expected BootstrapCompleted, got {other:?}"),
+        }
+
+        // PersistentEvent wrapper must resolve the right event_type
+        // string so the Postgres `event_type` column and the Redis
+        // stream key both derive deterministically.
+        let persistent = mk_core::types::PersistentEvent::new(event);
+        assert_eq!(persistent.event_type, "bootstrap_completed");
+        assert_eq!(persistent.tenant_id, tenant_id);
     }
 }
