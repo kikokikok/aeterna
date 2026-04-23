@@ -262,24 +262,41 @@ async fn test_hierarchy_mapper_flat_teams() {
     assert!(mappings.contains_key("platform"));
     assert!(mappings.contains_key("security"));
 
-    let company: (String, String) = sqlx::query_as(
-        "SELECT name, type FROM organizational_units WHERE tenant_id = $1 AND type = 'company'",
+    // PR #133: hierarchy now lands in companies/organizations/teams.
+    // A single synthetic `_synced` organization per company parents
+    // every GitHub team regardless of nesting depth, so we assert
+    // against that shape rather than the old OU type column.
+    let company_name: (String,) = sqlx::query_as(
+        "SELECT name FROM companies WHERE tenant_id = $1 AND idp_provider = 'github'",
     )
-    .bind(tenant_id.to_string())
+    .bind(tenant_id)
     .fetch_one(&pool)
     .await
     .expect("company row");
-    assert_eq!(company.0, "test-org");
-    assert_eq!(company.1, "company");
+    assert_eq!(company_name.0, "test-org");
 
-    let org_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM organizational_units WHERE tenant_id = $1 AND type = 'organization'",
+    let team_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM teams t \
+         JOIN organizations o ON o.id = t.org_id \
+         JOIN companies c ON c.id = o.company_id \
+         WHERE c.tenant_id = $1 AND t.idp_provider = 'github'",
     )
-    .bind(tenant_id.to_string())
+    .bind(tenant_id)
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(org_count.0, 2);
+    assert_eq!(team_count.0, 2, "2 GitHub teams → 2 teams rows");
+
+    let synced_org_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM organizations o \
+         JOIN companies c ON c.id = o.company_id \
+         WHERE c.tenant_id = $1 AND o.slug = '_synced'",
+    )
+    .bind(tenant_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(synced_org_count.0, 1, "exactly one synthetic _synced org");
 }
 
 #[tokio::test]
@@ -303,17 +320,29 @@ async fn test_hierarchy_mapper_two_level_nesting() {
     assert!(mappings.contains_key("api-team"));
     assert!(mappings.contains_key("frontend-team"));
 
-    let api_team: (String, Option<String>) = sqlx::query_as(
-        "SELECT type, parent_id FROM organizational_units WHERE tenant_id = $1 AND external_id = 'api-team'"
+    // PR #133: nested parentage is preserved as a string pointer in
+    // teams.settings.idp.parent_external_id rather than as a FK in
+    // organizational_units.parent_id, because the teams table has a
+    // flat `org_id` FK (under the synthetic `_synced` org) with no
+    // hierarchical parent column. The semantic remains: reconstruct
+    // the tree by joining on external_id.
+    let api_team: (serde_json::Value,) = sqlx::query_as(
+        "SELECT t.settings FROM teams t \
+         JOIN organizations o ON o.id = t.org_id \
+         JOIN companies c ON c.id = o.company_id \
+         WHERE c.tenant_id = $1 AND t.external_id = 'api-team'",
     )
-    .bind(tenant_id.to_string())
+    .bind(tenant_id)
     .fetch_one(&pool)
     .await
     .expect("api-team row");
-    assert_eq!(api_team.0, "team");
-
-    let platform_id = mappings.get("platform").unwrap().to_string();
-    assert_eq!(api_team.1.as_deref(), Some(platform_id.as_str()));
+    let parent_external_id = api_team
+        .0
+        .get("idp")
+        .and_then(|v| v.get("parent_external_id"))
+        .and_then(|v| v.as_str())
+        .expect("parent_external_id recorded in settings.idp");
+    assert_eq!(parent_external_id, "platform");
 }
 
 #[tokio::test]
@@ -334,28 +363,45 @@ async fn test_hierarchy_mapper_three_level_nesting() {
         .expect("hierarchy");
 
     assert_eq!(mappings.len(), 3);
+    let _engineering_id = mappings.get("engineering").unwrap();
 
-    let engineering_id = mappings.get("engineering").unwrap().to_string();
-    let platform_id = mappings.get("platform").unwrap().to_string();
+    // PR #133: verify nested parent_external_id pointers in
+    // teams.settings.idp rather than OU parent_id FKs (see
+    // `test_hierarchy_mapper_two_level_nesting` for rationale).
+    let platform_parent: Option<String> = parent_external_id_for(&pool, tenant_id, "platform")
+        .await
+        .expect("platform row");
+    assert_eq!(platform_parent.as_deref(), Some("engineering"));
 
-    let platform_row: (String, Option<String>) = sqlx::query_as(
-        "SELECT type, parent_id FROM organizational_units WHERE tenant_id = $1 AND external_id = 'platform'"
+    let api_parent: Option<String> = parent_external_id_for(&pool, tenant_id, "api-team")
+        .await
+        .expect("api-team row");
+    assert_eq!(api_parent.as_deref(), Some("platform"));
+}
+
+/// Helper for three-level nesting test — reads
+/// `teams.settings.idp.parent_external_id` by team external_id.
+async fn parent_external_id_for(
+    pool: &sqlx::PgPool,
+    tenant_id: Uuid,
+    external_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row: (serde_json::Value,) = sqlx::query_as(
+        "SELECT t.settings FROM teams t \
+         JOIN organizations o ON o.id = t.org_id \
+         JOIN companies c ON c.id = o.company_id \
+         WHERE c.tenant_id = $1 AND t.external_id = $2",
     )
-    .bind(tenant_id.to_string())
-    .fetch_one(&pool)
-    .await
-    .expect("platform row");
-    assert_eq!(platform_row.1.as_deref(), Some(engineering_id.as_str()));
-
-    let api_row: (String, Option<String>) = sqlx::query_as(
-        "SELECT type, parent_id FROM organizational_units WHERE tenant_id = $1 AND external_id = 'api-team'"
-    )
-    .bind(tenant_id.to_string())
-    .fetch_one(&pool)
-    .await
-    .expect("api-team row");
-    assert_eq!(api_row.0, "team");
-    assert_eq!(api_row.1.as_deref(), Some(platform_id.as_str()));
+    .bind(tenant_id)
+    .bind(external_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row
+        .0
+        .get("idp")
+        .and_then(|v| v.get("parent_external_id"))
+        .and_then(|v| v.as_str())
+        .map(str::to_owned))
 }
 
 #[tokio::test]
@@ -386,13 +432,29 @@ async fn test_hierarchy_mapper_idempotent_upsert() {
     );
     assert_eq!(first.get("security"), second.get("security"));
 
-    let count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM organizational_units WHERE tenant_id = $1")
-            .bind(tenant_id.to_string())
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(count.0, 3, "company + 2 orgs, no duplicates");
+    // PR #133: topology is 1 companies + 1 synthetic organizations +
+    // 2 teams = 4 rows across 3 tables, re-runnable with no
+    // duplicates via the partial-unique indexes from migration 030.
+    let companies_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM companies WHERE tenant_id = $1 AND idp_provider = 'github'",
+    )
+    .bind(tenant_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(companies_count.0, 1, "exactly 1 companies row");
+
+    let teams_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM teams t \
+         JOIN organizations o ON o.id = t.org_id \
+         JOIN companies c ON c.id = o.company_id \
+         WHERE c.tenant_id = $1 AND t.idp_provider = 'github'",
+    )
+    .bind(tenant_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(teams_count.0, 2, "2 teams, no duplicates after re-run");
 }
 
 #[tokio::test]
@@ -546,16 +608,25 @@ async fn test_full_sync_flow_creates_users_and_teams() {
             .unwrap();
     assert_eq!(user_count.0, 3);
 
-    let unit_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM organizational_units WHERE tenant_id = $1")
-            .bind(tenant_id.to_string())
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    // PR #133: count rows in the modern hierarchy. With
+    // mock_teams_nested we have:
+    //   1 company + 1 synthetic _synced organization + 4 teams
+    //   (platform, security, api-team, frontend-team) = 6 rows total.
+    // Use >= to stay forgiving if the fixture changes.
+    let teams_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM teams t \
+         JOIN organizations o ON o.id = t.org_id \
+         JOIN companies c ON c.id = o.company_id \
+         WHERE c.tenant_id = $1 AND t.idp_provider = 'github'",
+    )
+    .bind(tenant_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert!(
-        unit_count.0 >= 5,
-        "company + 2 orgs + 2 teams = at least 5, got {}",
-        unit_count.0
+        teams_count.0 >= 4,
+        "expected at least 4 teams (2 top-level + 2 nested), got {}",
+        teams_count.0
     );
 }
 

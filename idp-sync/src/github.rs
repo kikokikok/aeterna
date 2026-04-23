@@ -483,9 +483,23 @@ pub struct GitHubHierarchyMapper {
 
 /// Initialize the database schema required for GitHub org sync.
 ///
-/// This creates the idp-sync tables (`users`, `memberships`, `idp_group_mappings`)
-/// and extends `organizational_units` with `external_id` and `idp_provider` columns
-/// needed for GitHub-to-Aeterna hierarchy mapping.
+/// Creates the idp-sync-owned tables (`users`, `memberships`,
+/// `idp_group_mappings`, `agents`) used by the sync service and
+/// downstream OPAL views.
+///
+/// # History
+///
+/// Prior to PR #133 this function also extended
+/// `organizational_units` with `external_id` / `idp_provider` / `slug`
+/// columns and a partial-unique index on `(tenant_id, external_id,
+/// idp_provider)`, because idp-sync historically upserted the entire
+/// GitHub hierarchy into the legacy `organizational_units` table. As
+/// part of closing the last piece of #130, that write path now targets
+/// `companies` / `organizations` / `teams` (migration 009 +
+/// migration 030 for the idp columns), and the OU extensions are no
+/// longer needed by idp-sync. OU is still created and populated by
+/// `cli/src/server/bootstrap.rs` and other subsystems; retiring OU
+/// entirely is tracked as a separate cleanup.
 pub async fn initialize_github_sync_schema(pool: &PgPool) -> IdpSyncResult<()> {
     sqlx::query("CREATE EXTENSION IF NOT EXISTS pgcrypto")
         .execute(pool)
@@ -590,38 +604,11 @@ pub async fn initialize_github_sync_schema(pool: &PgPool) -> IdpSyncResult<()> {
     .await
     .map_err(IdpSyncError::DatabaseError)?;
 
-    sqlx::query(
-        r"
-        ALTER TABLE organizational_units
-            ADD COLUMN IF NOT EXISTS external_id TEXT,
-            ADD COLUMN IF NOT EXISTS idp_provider TEXT
-        ",
-    )
-    .execute(pool)
-    .await
-    .map_err(IdpSyncError::DatabaseError)?;
-
-    // Slug column — required for OPAL hierarchy view (company_slug, org_slug, team_slug)
-    sqlx::query(
-        r"
-        ALTER TABLE organizational_units
-            ADD COLUMN IF NOT EXISTS slug TEXT
-        ",
-    )
-    .execute(pool)
-    .await
-    .map_err(IdpSyncError::DatabaseError)?;
-
-    sqlx::query(
-        r"
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_org_units_tenant_external_provider
-            ON organizational_units (tenant_id, external_id, idp_provider)
-            WHERE external_id IS NOT NULL AND idp_provider IS NOT NULL
-        ",
-    )
-    .execute(pool)
-    .await
-    .map_err(IdpSyncError::DatabaseError)?;
+    // NOTE: previous versions of this function ALTERed `organizational_units`
+    // with external_id / idp_provider / slug columns + a partial-unique
+    // index. The equivalent columns + indexes now live on the modern
+    // hierarchy tables (companies / organizations / teams) via
+    // migration `030_idp_external_ids.sql`. See the doc comment above.
 
     initialize_opal_views(pool).await?;
     initialize_notify_triggers(pool).await?;
@@ -758,6 +745,53 @@ async fn initialize_notify_triggers(pool: &PgPool) -> IdpSyncResult<()> {
     .await
     .map_err(IdpSyncError::DatabaseError)?;
 
+    // Modern hierarchy triggers (companies / organizations / teams).
+    // idp-sync writes to these tables as of PR #133; the OU trigger
+    // below remains for bootstrap.rs and other subsystems that still
+    // write OU directly until OU is fully retired (future cleanup).
+    // sqlx 0.9-alpha's SqlSafeStr gate only accepts &'static str, so
+    // we unroll per-table rather than iterating with format!().
+    sqlx::query("DROP TRIGGER IF EXISTS trg_companies_entity_change ON companies")
+        .execute(pool)
+        .await
+        .map_err(IdpSyncError::DatabaseError)?;
+    sqlx::query(
+        "CREATE TRIGGER trg_companies_entity_change \
+         AFTER INSERT OR UPDATE OR DELETE ON companies \
+         FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query("DROP TRIGGER IF EXISTS trg_organizations_entity_change ON organizations")
+        .execute(pool)
+        .await
+        .map_err(IdpSyncError::DatabaseError)?;
+    sqlx::query(
+        "CREATE TRIGGER trg_organizations_entity_change \
+         AFTER INSERT OR UPDATE OR DELETE ON organizations \
+         FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    sqlx::query("DROP TRIGGER IF EXISTS trg_teams_entity_change ON teams")
+        .execute(pool)
+        .await
+        .map_err(IdpSyncError::DatabaseError)?;
+    sqlx::query(
+        "CREATE TRIGGER trg_teams_entity_change \
+         AFTER INSERT OR UPDATE OR DELETE ON teams \
+         FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
+    )
+    .execute(pool)
+    .await
+    .map_err(IdpSyncError::DatabaseError)?;
+
+    // Legacy OU trigger — kept alive until OU is fully retired. See
+    // `initialize_github_sync_schema` docstring for the retirement plan.
     sqlx::query(
         "DROP TRIGGER IF EXISTS trg_organizational_units_entity_change ON organizational_units",
     )
@@ -808,21 +842,53 @@ impl GitHubHierarchyMapper {
         Self { db_pool, tenant_id }
     }
 
+    /// Materialize the GitHub org + teams as Aeterna hierarchy rows.
+    ///
+    /// # Shape
+    ///
+    /// - GitHub org → a row in `companies` (one per tenant).
+    /// - A single synthetic `organizations` row per company, slug
+    ///   `_synced`, acts as the parent of every GitHub team. This is an
+    ///   internal implementation detail: GitHub's team namespace is
+    ///   effectively flat (nesting is a soft parent-pointer, not a
+    ///   hierarchy level), whereas Aeterna requires every team to have
+    ///   an `org_id`. The synthetic org gives us a valid FK without
+    ///   forcing a bespoke 3-level interpretation onto GitHub's
+    ///   2-level model.
+    /// - Every GitHub team (both top-level and nested) → a row in
+    ///   `teams` under the synthetic org. Nesting information is
+    ///   preserved in `teams.metadata.parent_external_id` for future
+    ///   re-interpretation without schema pain.
+    ///
+    /// # Returned map
+    ///
+    /// `HashMap<github_team_id, teams.id>` — consumed by
+    /// `store_group_to_team_mappings` to populate `idp_group_mappings`,
+    /// which drives `memberships.team_id` via the sync service.
+    /// Callers should not assume these UUIDs live in any table other
+    /// than `teams`.
     pub async fn create_hierarchy(
         &self,
         org_name: &str,
         groups: &[IdpGroup],
     ) -> IdpSyncResult<HashMap<String, Uuid>> {
-        let company_id = self
-            .upsert_unit(org_name, "company", None, org_name, org_name)
-            .await?;
-        info!(company_id = %company_id, org = %org_name, "Company unit ensured");
+        let company_id = self.upsert_company(org_name, org_name).await?;
+        info!(company_id = %company_id, org = %org_name, "Company ensured");
 
-        let mut slug_to_unit_id: HashMap<String, Uuid> = HashMap::new();
+        let org_id = self.upsert_synced_organization(company_id).await?;
+        debug!(
+            org_id = %org_id,
+            company_id = %company_id,
+            "Synthetic synced organization ensured"
+        );
 
+        let mut slug_to_team_id: HashMap<String, Uuid> = HashMap::new();
+
+        // Partition purely to record parent_external_id for nested teams;
+        // both classes land in the same `teams` table under the same
+        // synthetic organization.
         let mut top_level: Vec<&IdpGroup> = Vec::new();
         let mut nested: Vec<&IdpGroup> = Vec::new();
-
         for group in groups {
             match group.group_type {
                 GroupType::GitHubTeam => top_level.push(group),
@@ -832,39 +898,39 @@ impl GitHubHierarchyMapper {
         }
 
         for team in &top_level {
-            let unit_id = self
-                .upsert_unit(
-                    &team.name,
-                    "organization",
-                    Some(company_id),
-                    &team.id,
-                    &team.id,
-                )
+            let team_id = self
+                .upsert_team(&team.name, org_id, &team.id, &team.id, None)
                 .await?;
-            slug_to_unit_id.insert(team.id.clone(), unit_id);
-            debug!(slug = %team.id, unit_id = %unit_id, "Organization unit ensured");
+            slug_to_team_id.insert(team.id.clone(), team_id);
+            debug!(slug = %team.id, team_id = %team_id, "Top-level team ensured");
         }
 
         for team in &nested {
-            let parent_slug = team
+            let parent_external_id = team
                 .description
                 .as_deref()
                 .and_then(|d| d.strip_prefix("parent:"))
-                .unwrap_or("");
+                .map(str::to_owned);
 
-            let parent_id = slug_to_unit_id
-                .get(parent_slug)
-                .copied()
-                .unwrap_or(company_id);
-
-            let unit_id = self
-                .upsert_unit(&team.name, "team", Some(parent_id), &team.id, &team.id)
+            let team_id = self
+                .upsert_team(
+                    &team.name,
+                    org_id,
+                    &team.id,
+                    &team.id,
+                    parent_external_id.as_deref(),
+                )
                 .await?;
-            slug_to_unit_id.insert(team.id.clone(), unit_id);
-            debug!(slug = %team.id, parent = %parent_slug, unit_id = %unit_id, "Team unit ensured");
+            slug_to_team_id.insert(team.id.clone(), team_id);
+            debug!(
+                slug = %team.id,
+                parent = parent_external_id.as_deref().unwrap_or("<none>"),
+                team_id = %team_id,
+                "Nested team ensured"
+            );
         }
 
-        Ok(slug_to_unit_id)
+        Ok(slug_to_team_id)
     }
 
     pub async fn store_group_to_team_mappings(
@@ -892,47 +958,124 @@ impl GitHubHierarchyMapper {
         Ok(())
     }
 
-    async fn upsert_unit(
-        &self,
-        name: &str,
-        unit_type: &str,
-        parent_id: Option<Uuid>,
-        external_id: &str,
-        slug: &str,
-    ) -> IdpSyncResult<Uuid> {
-        let now_epoch = Utc::now().timestamp();
-        let new_id = Uuid::new_v4().to_string();
-        let tenant_str = self.tenant_id.to_string();
-        let parent_str = parent_id.map(|p| p.to_string());
-
-        let row = sqlx::query_scalar::<_, String>(
+    /// Upsert a `companies` row keyed by (tenant_id, external_id, 'github').
+    ///
+    /// Migration 028 replaced the global `companies.slug UNIQUE` with a
+    /// tenant-scoped `(tenant_id, slug)` constraint, so we use the
+    /// GitHub org name directly as the slug. Idempotency on re-sync
+    /// comes from the partial unique index introduced in migration
+    /// 030 on `(tenant_id, external_id, idp_provider)`.
+    async fn upsert_company(&self, name: &str, external_id: &str) -> IdpSyncResult<Uuid> {
+        let row = sqlx::query_scalar::<_, Uuid>(
             r"
-            INSERT INTO organizational_units (id, tenant_id, name, type, parent_id, external_id, idp_provider, slug, metadata, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, 'github', $8, '{}', $7, $7)
-            ON CONFLICT (tenant_id, external_id, idp_provider) WHERE external_id IS NOT NULL AND idp_provider IS NOT NULL
+            INSERT INTO companies (tenant_id, slug, name, external_id, idp_provider)
+            VALUES ($1, $2, $3, $4, 'github')
+            ON CONFLICT (tenant_id, external_id, idp_provider)
+                WHERE external_id IS NOT NULL
+                  AND idp_provider IS NOT NULL
+                  AND deleted_at IS NULL
             DO UPDATE SET
                 name = EXCLUDED.name,
-                parent_id = EXCLUDED.parent_id,
-                type = EXCLUDED.type,
                 slug = EXCLUDED.slug,
-                updated_at = EXCLUDED.updated_at
+                updated_at = NOW()
             RETURNING id
             ",
         )
-        .bind(&new_id)
-        .bind(&tenant_str)
+        .bind(self.tenant_id)
+        .bind(external_id) // slug = GitHub org name, scoped by tenant_id per migration 028
         .bind(name)
-        .bind(unit_type)
-        .bind(&parent_str)
         .bind(external_id)
-        .bind(now_epoch)
-        .bind(slug)
         .fetch_one(&self.db_pool)
         .await
         .map_err(IdpSyncError::DatabaseError)?;
 
-        row.parse::<Uuid>()
-            .map_err(|e| IdpSyncError::ConfigError(format!("Invalid UUID in DB: {e}")))
+        Ok(row)
+    }
+
+    /// Upsert the synthetic `_synced` organization under a company.
+    ///
+    /// This row exists purely to give GitHub teams a valid `org_id`
+    /// FK target without asserting a semantic mapping between
+    /// top-level GitHub teams and Aeterna organizations. Idempotent
+    /// under `(company_id, slug)` from migration 009.
+    async fn upsert_synced_organization(&self, company_id: Uuid) -> IdpSyncResult<Uuid> {
+        const SYNTHETIC_SLUG: &str = "_synced";
+        const SYNTHETIC_NAME: &str = "Synced from GitHub";
+        const SYNTHETIC_EXTERNAL_ID: &str = "_synced";
+
+        let row = sqlx::query_scalar::<_, Uuid>(
+            r"
+            INSERT INTO organizations (company_id, slug, name, external_id, idp_provider)
+            VALUES ($1, $2, $3, $4, 'github')
+            ON CONFLICT (company_id, slug) DO UPDATE SET
+                name = EXCLUDED.name,
+                external_id = EXCLUDED.external_id,
+                idp_provider = EXCLUDED.idp_provider,
+                updated_at = NOW()
+            RETURNING id
+            ",
+        )
+        .bind(company_id)
+        .bind(SYNTHETIC_SLUG)
+        .bind(SYNTHETIC_NAME)
+        .bind(SYNTHETIC_EXTERNAL_ID)
+        .fetch_one(&self.db_pool)
+        .await
+        .map_err(IdpSyncError::DatabaseError)?;
+
+        Ok(row)
+    }
+
+    /// Upsert a `teams` row under the given organization.
+    ///
+    /// Idempotent on `(org_id, external_id, 'github')` via the partial
+    /// unique index from migration 030. `parent_external_id`, when
+    /// present, records GitHub's soft team-nesting relationship in
+    /// `teams.metadata.parent_external_id` for callers that want to
+    /// reconstruct the nested view without changing the schema.
+    async fn upsert_team(
+        &self,
+        name: &str,
+        org_id: Uuid,
+        external_id: &str,
+        slug: &str,
+        parent_external_id: Option<&str>,
+    ) -> IdpSyncResult<Uuid> {
+        // teams.settings is the only JSONB column on the row; use it
+        // to carry GitHub's soft parent-team pointer. Key is
+        // deliberately namespaced under `idp.` so unrelated governance
+        // settings don't collide.
+        let settings = match parent_external_id {
+            Some(p) => serde_json::json!({ "idp": { "parent_external_id": p } }),
+            None => serde_json::json!({}),
+        };
+
+        let row = sqlx::query_scalar::<_, Uuid>(
+            r"
+            INSERT INTO teams (org_id, slug, name, external_id, idp_provider, settings)
+            VALUES ($1, $2, $3, $4, 'github', $5)
+            ON CONFLICT (org_id, external_id, idp_provider)
+                WHERE external_id IS NOT NULL
+                  AND idp_provider IS NOT NULL
+                  AND deleted_at IS NULL
+            DO UPDATE SET
+                name = EXCLUDED.name,
+                slug = EXCLUDED.slug,
+                settings = EXCLUDED.settings,
+                updated_at = NOW()
+            RETURNING id
+            ",
+        )
+        .bind(org_id)
+        .bind(slug)
+        .bind(name)
+        .bind(external_id)
+        .bind(settings)
+        .fetch_one(&self.db_pool)
+        .await
+        .map_err(IdpSyncError::DatabaseError)?;
+
+        Ok(row)
     }
 }
 
@@ -981,9 +1124,16 @@ pub async fn bridge_sync_to_governance(
     pool: &PgPool,
     tenant_id: Uuid,
 ) -> IdpSyncResult<(usize, usize)> {
-    let tenant_uuid_expr =
-        format!("uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, '{tenant_id}')");
-    let _ = tenant_uuid_expr;
+    // PR #133 rewrote these joins. Previously the path was
+    //   memberships.team_id::TEXT → organizational_units.id
+    // which laundered UUIDs through OU's TEXT-keyed hierarchy purely
+    // because idp-sync wrote there. idp-sync now writes directly into
+    // `teams` (see `upsert_team` above), so we join `memberships →
+    // teams → organizations → companies.tenant_id` to scope the bridge
+    // to the caller's tenant without any type coercion.
+    //
+    // The optional `deleted_at IS NULL` guards keep soft-deleted rows
+    // from resurrecting governance rows on a re-sync.
 
     let roles_created = sqlx::query_scalar::<_, i64>(
         r"
@@ -999,12 +1149,15 @@ pub async fn bridge_sync_to_governance(
                 m.role,
                 NULL::UUID,
                 NULL::UUID,
-                uuid_generate_v5('6ba7b810-9dad-11d1-80b4-00c04fd430c8'::UUID, team_ou.id),
+                t.id,
                 u.id,
                 NOW()
             FROM users u
             JOIN memberships m ON m.user_id = u.id
-            JOIN organizational_units team_ou ON team_ou.id = m.team_id::TEXT
+            JOIN teams t ON t.id = m.team_id AND t.deleted_at IS NULL
+            JOIN organizations o ON o.id = t.org_id AND o.deleted_at IS NULL
+            JOIN companies c ON c.id = o.company_id AND c.deleted_at IS NULL
+            WHERE c.tenant_id = $1
             ON CONFLICT (
                 principal_type, principal_id, role,
                 COALESCE(company_id, '00000000-0000-0000-0000-000000000000'::UUID),
@@ -1018,23 +1171,34 @@ pub async fn bridge_sync_to_governance(
         SELECT COUNT(*) FROM synced
         ",
     )
+    .bind(tenant_id)
     .fetch_one(pool)
     .await
     .map_err(IdpSyncError::DatabaseError)?;
 
+    // user_roles is a legacy TEXT-keyed table still consumed by some
+    // code paths (cascade.rs, role_grants.rs). Keep writing to it here
+    // but materialize the tenant_id + unit_id from the modern hierarchy
+    // rather than from organizational_units. unit_id = teams.id::TEXT
+    // so downstream lookups against legacy OU-keyed data still find
+    // the same UUID (UUIDs are globally unique regardless of the table
+    // they were minted in).
     let user_roles_created = sqlx::query_scalar::<_, i64>(
         r"
         WITH synced AS (
             INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at)
             SELECT
                 u.id::TEXT,
-                team_ou.tenant_id,
-                team_ou.id,
+                c.tenant_id::TEXT,
+                t.id::TEXT,
                 m.role,
                 EXTRACT(EPOCH FROM NOW())::BIGINT
             FROM users u
             JOIN memberships m ON m.user_id = u.id
-            JOIN organizational_units team_ou ON team_ou.id = m.team_id::TEXT
+            JOIN teams t ON t.id = m.team_id AND t.deleted_at IS NULL
+            JOIN organizations o ON o.id = t.org_id AND o.deleted_at IS NULL
+            JOIN companies c ON c.id = o.company_id AND c.deleted_at IS NULL
+            WHERE c.tenant_id = $1
             ON CONFLICT (user_id, tenant_id, unit_id, role)
             DO NOTHING
             RETURNING 1
@@ -1042,6 +1206,7 @@ pub async fn bridge_sync_to_governance(
         SELECT COUNT(*) FROM synced
         ",
     )
+    .bind(tenant_id)
     .fetch_one(pool)
     .await
     .map_err(IdpSyncError::DatabaseError)?;

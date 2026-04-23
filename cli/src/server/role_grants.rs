@@ -10,6 +10,7 @@ use mk_core::types::{Role, RoleIdentifier, UnitType, UserId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
+use uuid::Uuid;
 
 use super::{AppState, authenticated_tenant_context};
 
@@ -400,6 +401,25 @@ async fn handle_list_grants(
     Json(grants).into_response()
 }
 
+/// Resolve a resource id to the `ResourceType` used by Cedar entity ids.
+///
+/// History: this used to read a `unit_type` string column from the
+/// legacy `organizational_units` table. PR #133 migrated idp-sync off
+/// OU onto `companies` / `organizations` / `teams` / `projects` (see
+/// migration 030), so resources minted via idp-sync no longer land in
+/// OU. We now:
+///
+///   1. Match `resource_id` against the tenant slug (fast path).
+///   2. Check the modern hierarchy tables in order
+///      (companies → organizations → teams → projects), returning the
+///      first hit.
+///   3. Fall back to the legacy `organizational_units` lookup for
+///      rows still created by bootstrap.rs, backup_api.rs, and other
+///      subsystems that have not yet migrated. The OU fallback can be
+///      removed once OU is fully retired.
+///
+/// `ResourceType::Instance` is the sentinel for "unknown id" —
+/// callers interpret this as an instance-level grant (tenant-agnostic).
 async fn resolve_resource_type(
     state: &Arc<AppState>,
     tenant_id: &mk_core::types::TenantId,
@@ -409,6 +429,70 @@ async fn resolve_resource_type(
         return Ok(ResourceType::Tenant);
     }
 
+    // Modern hierarchy lookups use UUIDs. If `resource_id` doesn't
+    // parse as a UUID it can only match OU (whose id is TEXT) or the
+    // tenant slug already handled above — skip the modern checks.
+    let uuid = Uuid::parse_str(resource_id).ok();
+
+    if let Some(uuid) = uuid {
+        let pool = state.postgres.pool();
+
+        // companies → Tenant. Scoped to the caller's tenant via the
+        // companies.tenant_id FK added in migration 028 so cross-tenant
+        // probing can't leak resource-type info.
+        let hit: Option<(bool,)> = sqlx::query_as(
+            "SELECT TRUE FROM companies c \
+             JOIN tenants tn ON tn.id = c.tenant_id \
+             WHERE c.id = $1 \
+               AND (tn.id::text = $2 OR tn.slug = $2 OR tn.name = $2) \
+               AND c.deleted_at IS NULL",
+        )
+        .bind(uuid)
+        .bind(tenant_id.as_str())
+        .fetch_optional(pool)
+        .await?;
+        if hit.is_some() {
+            return Ok(ResourceType::Tenant);
+        }
+
+        // organizations → Organization. Scope via parent company's tenant.
+        let hit: Option<(bool,)> = sqlx::query_as(
+            "SELECT TRUE FROM organizations o \
+             JOIN companies c ON c.id = o.company_id \
+             JOIN tenants tn ON tn.id = c.tenant_id \
+             WHERE o.id = $1 \
+               AND (tn.id::text = $2 OR tn.slug = $2 OR tn.name = $2) \
+               AND o.deleted_at IS NULL",
+        )
+        .bind(uuid)
+        .bind(tenant_id.as_str())
+        .fetch_optional(pool)
+        .await?;
+        if hit.is_some() {
+            return Ok(ResourceType::Organization);
+        }
+
+        // teams → Team.
+        let hit: Option<(bool,)> = sqlx::query_as(
+            "SELECT TRUE FROM teams t \
+             JOIN organizations o ON o.id = t.org_id \
+             JOIN companies c ON c.id = o.company_id \
+             JOIN tenants tn ON tn.id = c.tenant_id \
+             WHERE t.id = $1 \
+               AND (tn.id::text = $2 OR tn.slug = $2 OR tn.name = $2) \
+               AND t.deleted_at IS NULL",
+        )
+        .bind(uuid)
+        .bind(tenant_id.as_str())
+        .fetch_optional(pool)
+        .await?;
+        if hit.is_some() {
+            return Ok(ResourceType::Team);
+        }
+    }
+
+    // Legacy OU fallback. Kept until all subsystems (bootstrap,
+    // backup_api, gdpr, cascade) stop writing to OU.
     let maybe_unit_type =
         sqlx::query("SELECT unit_type FROM organizational_units WHERE tenant_id = $1 AND id = $2")
             .bind(tenant_id.as_str())
