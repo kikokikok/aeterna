@@ -1216,7 +1216,7 @@ async fn run_reject(args: KnowledgeRejectArgs) -> anyhow::Result<()> {
                 args.promotion_id
             ))
             .display();
-        std::process::exit(1);
+        crate::exit_code::ExitCode::Usage.exit();
     }
 
     if !args.yes {

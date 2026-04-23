@@ -109,8 +109,8 @@
 
 - [ ] 9.1 Extract `output::Renderer` supporting `table`, `json`, `yaml`, `name`, `jsonpath=<expr>`.
 - [ ] 9.2 Default to `table` on TTY, `json` otherwise, unless `-o` specified.
-- [ ] 9.3 Replace ad-hoc exit codes with a standard table (0/1/2/3/4/5); add `ExitCode` enum + unit tests.
-- [ ] 9.4 Map HTTP status codes to CLI exit codes consistently (401/403 → 2, 409 → 3, 5xx → 4/5, 4xx schema → 1).
+- [x] 9.3 Replace ad-hoc exit codes with a standard table (0/1/2/3/4/5); add `ExitCode` enum + unit tests. _(New `cli::exit_code::ExitCode` with `#[repr(u8)]` discriminants frozen to the documented table: `Success=0`, `Usage=1`, `AuthDenied=2`, `Conflict=3`, `ServerTransient=4`, `ServerFatal=5`. `ExitCode::exit()` centralises the `std::process::exit` call so `grep 'process::exit' cli/` stays a reliable audit surface. All 12 pre-existing `std::process::exit(1)` call sites in `commands/{check,govern,knowledge,admin}.rs` migrated to `ExitCode::Usage.exit()` — semantics preserved, the numbers now live in one place.)_
+- [x] 9.4 Map HTTP status codes to CLI exit codes consistently (401/403 → 2, 409 → 3, 5xx → 4/5, 4xx schema → 1). _(`ExitCode::from_http_status(u16)` takes a raw `u16` so callers do not need to drag `reqwest`/`http` into the exit-code module. Splits 5xx by retry semantics: `500/501` and unknown 5xx → `ServerFatal` (do not hot-loop), `502/503/504` → `ServerTransient` (safe to back off and retry). Explicit negative assertions pin `402`/`407`/`410`/`412` to `Usage` — close relatives of auth/conflict that scripts specifically must NOT confuse. 11 unit tests cover discriminant stability, every documented row of the table, and out-of-range defensive handling.)_
 
 ---
 

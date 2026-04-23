@@ -450,7 +450,7 @@ async fn run_validate(args: AdminValidateArgs) -> anyhow::Result<()> {
     }
 
     if has_errors {
-        std::process::exit(1);
+        crate::exit_code::ExitCode::Usage.exit();
     }
 
     Ok(())
@@ -516,7 +516,7 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
                             .suggest("aeterna admin migrate up --dry-run")
                             .display();
                     }
-                    std::process::exit(1);
+                    crate::exit_code::ExitCode::Usage.exit();
                 }
             };
             ensure_migration_table(&pool).await?;
@@ -550,7 +550,7 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
                     .fix("Add --force if you're sure you want to rollback")
                     .suggest("aeterna admin migrate down --force")
                     .display();
-                std::process::exit(1);
+                crate::exit_code::ExitCode::Usage.exit();
             }
 
             if args.json {
@@ -569,14 +569,14 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
                     .fix("Restore from backup if rollback is required")
                     .display();
             }
-            std::process::exit(1);
+            crate::exit_code::ExitCode::Usage.exit();
         }
         _ => {
             ux_error::UxError::new(format!("Invalid migration direction: {}", args.direction))
                 .fix("Use one of: up, down, status")
                 .suggest("aeterna admin migrate status")
                 .display();
-            std::process::exit(1);
+            crate::exit_code::ExitCode::Usage.exit();
         }
     }
 
@@ -1073,7 +1073,7 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
             .fix("Check the file path is correct")
             .fix("Ensure the file exists and is readable")
             .display();
-        std::process::exit(1);
+        crate::exit_code::ExitCode::Usage.exit();
     }
 
     // Open and validate the archive using the backup crate.
@@ -1284,7 +1284,7 @@ async fn run_backup_validate(args: AdminBackupValidateArgs) -> anyhow::Result<()
             .why("The specified archive file does not exist")
             .fix("Check the file path is correct")
             .display();
-        std::process::exit(1);
+        crate::exit_code::ExitCode::Usage.exit();
     }
 
     let report = validate_archive(&args.archive)?;
